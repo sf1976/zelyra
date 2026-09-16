@@ -1,7 +1,9 @@
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
 use zelyra_ast::{FormDef, TableDef, Type};
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
@@ -30,6 +32,7 @@ pub struct Response {
     pub content_type: String,
     pub body: String,
     pub location: Option<String>,
+    pub headers: Vec<(String, String)>,
 }
 
 impl Response {
@@ -40,18 +43,23 @@ impl Response {
             content_type: "text/html; charset=utf-8".into(),
             body: body.into(),
             location: None,
+            headers: Vec::new(),
         }
     }
 
     pub fn to_http(&self) -> String {
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
             self.location
                 .as_deref()
                 .map_or(String::new(), |location| format!("Location: {location}\r\n")),
+            self.headers
+                .iter()
+                .map(|(name, value)| format!("{name}: {value}\r\n"))
+                .collect::<String>(),
             self.body.len(),
             self.body
         )
@@ -70,7 +78,13 @@ impl Response {
             content_type: "text/plain; charset=utf-8".into(),
             body: String::new(),
             location: Some(location),
+            headers: Vec::new(),
         }
+    }
+
+    fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
     }
 }
 
@@ -141,6 +155,18 @@ pub struct CrudRoute {
 }
 
 #[derive(Clone, Debug)]
+pub struct AuthRoute {
+    pub table: String,
+    pub schema: Schema,
+    pub csrf: CsrfProtection,
+}
+
+#[derive(Clone, Debug)]
+struct Session {
+    permissions: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
     pub forms: Vec<FormRoute>,
@@ -148,6 +174,8 @@ pub struct WebApp {
     pub database_url: Option<String>,
     pub auth_token: Option<String>,
     pub auth_permissions: Vec<String>,
+    pub auth_route: Option<AuthRoute>,
+    sessions: Arc<Mutex<HashMap<String, Session>>>,
 }
 
 impl WebApp {
@@ -159,6 +187,8 @@ impl WebApp {
             database_url: None,
             auth_token: None,
             auth_permissions: Vec::new(),
+            auth_route: None,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -174,6 +204,8 @@ impl WebApp {
             database_url,
             auth_token: None,
             auth_permissions: Vec::new(),
+            auth_route: None,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -188,7 +220,20 @@ impl WebApp {
         self
     }
 
+    pub fn with_auth_route(mut self, auth_route: AuthRoute) -> Self {
+        self.auth_route = Some(auth_route);
+        self
+    }
+
     pub fn dispatch(&self, request: &Request) -> Response {
+        if let Some(auth_route) = &self.auth_route {
+            if request.path == "/login" {
+                return dispatch_login(self, auth_route, request, self.database_url.as_deref());
+            }
+            if request.path == "/logout" {
+                return dispatch_logout(self, request);
+            }
+        }
         for form in &self.forms {
             if let Some(path_params) = match_path(&form.path, &request.path) {
                 return dispatch_form(form, request, &path_params, self.database_url.as_deref());
@@ -255,7 +300,8 @@ fn authorize(
     if !requires_auth && permissions.is_empty() {
         return None;
     }
-    let authenticated = app
+    let session = session_from_request(app, request);
+    let bearer_authenticated = app
         .auth_token
         .as_deref()
         .zip(request.headers.get("authorization").map(String::as_str))
@@ -265,14 +311,18 @@ fn authorize(
             };
             constant_time_equal(expected.as_bytes(), token.as_bytes())
         });
+    let authenticated = session.is_some() || bearer_authenticated;
     if !authenticated {
         return Some(Response::html(
             401,
             "<h1>401 Unauthorized</h1><p>Authentication is required.</p>",
         ));
     }
+    let granted_permissions = session
+        .map(|session| session.permissions)
+        .unwrap_or_else(|| app.auth_permissions.clone());
     if let Some(permission) = permissions.iter().find(|permission| {
-        !app.auth_permissions
+        !granted_permissions
             .iter()
             .any(|granted| granted == *permission)
     }) {
@@ -282,6 +332,147 @@ fn authorize(
         ));
     }
     None
+}
+
+fn dispatch_login(
+    app: &WebApp,
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    match request.method.as_str() {
+        "GET" => Response::html(200, render_login(auth)),
+        "POST" => {
+            let Some(database_url) = database_url else {
+                return Response::html(
+                    503,
+                    "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for login.</p>",
+                );
+            };
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(error) => {
+                    return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+                }
+            };
+            if !auth
+                .csrf
+                .verify(input.get("_zelyra_csrf").map(String::as_str))
+            {
+                return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+            }
+            let email = input.get("email").cloned().unwrap_or_default();
+            let password = input.get("password").cloned().unwrap_or_default();
+            if email.is_empty() || password.is_empty() {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>Email and password are required.</p>",
+                );
+            }
+            let Some(table) = auth
+                .schema
+                .tables
+                .iter()
+                .find(|table| table.name == auth.table)
+            else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            let active_clause = if table.columns.iter().any(|column| column.name == "active") {
+                " AND active = true"
+            } else {
+                ""
+            };
+            let query = format!(
+                "SELECT id, email, password_hash FROM {} WHERE email = :email{} LIMIT 1",
+                quote_identifier(&auth.table),
+                active_clause
+            );
+            let result = match zelyra_database::execute_mariadb_query(
+                database_url,
+                &query,
+                vec![("email".into(), zelyra_database::QueryValue::String(email))],
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    eprintln!("zelyra web: login query failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            };
+            let valid_password = result.rows.first().is_some_and(|row| {
+                row.get(2)
+                    .and_then(|hash| PasswordHash::new(hash).ok())
+                    .is_some_and(|hash| {
+                        Argon2::default()
+                            .verify_password(password.as_bytes(), &hash)
+                            .is_ok()
+                    })
+            });
+            if !valid_password {
+                return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
+            }
+            let Ok(session_id) = CsrfProtection::generate().map(|csrf| csrf.token().to_owned())
+            else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            let Ok(mut sessions) = app.sessions.lock() else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
+            sessions.insert(
+                session_id.clone(),
+                Session {
+                    permissions: app.auth_permissions.clone(),
+                },
+            );
+            Response::redirect("/").with_header(
+                "Set-Cookie",
+                format!("zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax"),
+            )
+        }
+        _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
+    }
+}
+
+fn dispatch_logout(app: &WebApp, request: &Request) -> Response {
+    if request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    if let Some(session_id) = cookie_value(request, "zelyra_session") {
+        if let Ok(mut sessions) = app.sessions.lock() {
+            sessions.remove(&session_id);
+        }
+    }
+    Response::redirect("/login").with_header(
+        "Set-Cookie",
+        "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    )
+}
+
+fn render_login(auth: &AuthRoute) -> String {
+    format!(
+        "<main><h1>Login</h1><form method=\"post\" action=\"/login\">\
+         <input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\">\
+         <label for=\"email\">Email</label><input id=\"email\" name=\"email\" type=\"email\" required>\
+         <label for=\"password\">Password</label><input id=\"password\" name=\"password\" type=\"password\" required>\
+         <button type=\"submit\">Login</button></form></main>",
+        html_escape(auth.csrf.token())
+    )
+}
+
+fn cookie_value(request: &Request, name: &str) -> Option<String> {
+    request
+        .headers
+        .get("cookie")?
+        .split(';')
+        .map(str::trim)
+        .find_map(|cookie| {
+            let (cookie_name, value) = cookie.split_once('=')?;
+            (cookie_name == name).then(|| value.to_owned())
+        })
+}
+
+fn session_from_request(app: &WebApp, request: &Request) -> Option<Session> {
+    let session_id = cookie_value(request, "zelyra_session")?;
+    app.sessions.lock().ok()?.get(&session_id).cloned()
 }
 
 impl Router {

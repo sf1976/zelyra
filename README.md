@@ -38,6 +38,8 @@ Implemented today:
 - an initial CRUD resource with MariaDB search, configurable list/search/filter
   columns, sorting, pagination, generated Create/Edit forms, and
   CSRF-protected delete.
+- initial authentication guards, Argon2 login against a MariaDB user table,
+  HttpOnly sessions, logout, and permission checks.
 
 Full CRUD generation, database-backed authentication, APIs, contracts,
 verification, and production deployment tooling are still being developed. See the

@@ -38,6 +38,8 @@ Heute implementiert:
 - eine erste CRUD-Ressource mit MariaDB-Suche, konfigurierbaren Listen-,
   Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
   Formularen und CSRF-geschütztem Löschen.
+- erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
+  Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 
 Vollständige CRUD-Erzeugung, datenbankgestützte Authentifizierung, APIs,
 Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die

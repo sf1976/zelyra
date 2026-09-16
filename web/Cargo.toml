@@ -8,3 +8,4 @@ license.workspace = true
 zelyra-ast.workspace = true
 zelyra-database.workspace = true
 zelyra-forms.workspace = true
+argon2 = "0.5"

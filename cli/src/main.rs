@@ -9,7 +9,7 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute, execute_with_database};
-use zelyra_web::{serve_app, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
+use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -185,6 +185,29 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 auth.span.column,
             );
             valid = false;
+            continue;
+        }
+        let Some(table) = schema.tables.iter().find(|table| table.name == auth.table) else {
+            continue;
+        };
+        for required_column in ["id", "email", "password_hash"] {
+            if !table
+                .columns
+                .iter()
+                .any(|column| column.name == required_column)
+            {
+                diagnostic(
+                    path,
+                    "E-AUTH-004",
+                    &format!(
+                        "authentication table {} requires column {}",
+                        auth.table, required_column
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
         }
     }
     let protected = program
@@ -527,6 +550,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if !validate_auth(&path, &program, &schema) {
+        return ExitCode::from(1);
+    }
     if !validate_cruds(&path, &program, &schema) {
         return ExitCode::from(1);
     }
@@ -543,6 +569,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(1);
     }
     let mut form_routes = Vec::new();
+    let auth_route = if let Some(auth) = program.auth.first() {
+        let Some(csrf) = CsrfProtection::generate().ok() else {
+            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
+            return ExitCode::from(1);
+        };
+        Some(AuthRoute {
+            table: auth.table.clone(),
+            schema: schema.clone(),
+            csrf,
+        })
+    } else {
+        None
+    };
     for form in &program.forms {
         let Some(csrf) = CsrfProtection::generate().ok() else {
             eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
@@ -624,21 +663,24 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         });
     }
     eprintln!("Zelyra server listening on http://{address}");
-    match serve_app(
-        WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
-            .with_auth(
-                env::var("ZELYRA_AUTH_TOKEN").ok(),
-                env::var("ZELYRA_AUTH_PERMISSIONS")
-                    .unwrap_or_default()
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|permission| !permission.is_empty())
-                    .map(str::to_owned)
-                    .collect(),
-            )
-            .with_cruds(crud_routes),
-        &address,
-    ) {
+    let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+        .with_auth(
+            env::var("ZELYRA_AUTH_TOKEN").ok(),
+            env::var("ZELYRA_AUTH_PERMISSIONS")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|permission| !permission.is_empty())
+                .map(str::to_owned)
+                .collect(),
+        )
+        .with_cruds(crud_routes);
+    let app = if let Some(auth_route) = auth_route {
+        app.with_auth_route(auth_route)
+    } else {
+        app
+    };
+    match serve_app(app, &address) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");

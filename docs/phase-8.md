@@ -26,8 +26,17 @@ page "/admin" {
 
 The compiler validates that the configured user table exists and that
 protected routes have an auth definition. The web runtime denies protected
-routes by default. For the current bootstrap adapter, the server accepts a
-Bearer token only when ZELYRA_AUTH_TOKEN is explicitly configured. The
+routes by default. It now provides a database-backed login at /login. The
+configured user table must contain id, email, and password_hash columns;
+password_hash values use Argon2. An optional active column disables inactive
+users.
+
+Successful login creates an HttpOnly, SameSite session cookie. Logout is
+available as POST /logout. Sessions are kept in process memory for this
+initial implementation and are invalidated when the server stops.
+
+For deployments that authenticate users in a reverse proxy, the server also
+accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The
 server-side permission allowlist is configured with
 ZELYRA_AUTH_PERMISSIONS, for example:
 
@@ -48,7 +57,6 @@ Without the token the response is HTTP 401. With a valid token but without a
 declared permission the response is HTTP 403. Tokens and permissions are never
 stored in source code by the compiler.
 
-This is deliberately an initial authentication adapter, not the finished
-users/sessions system. Login, logout, password hashing, secure session cookies,
-roles, and database-backed permission lookup are the next authentication
-steps.
+This is the first working authentication slice. Database-backed roles and
+permission lookup, session persistence, login throttling, and a dedicated
+password-management command remain the next authentication steps.

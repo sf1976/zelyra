@@ -46,12 +46,12 @@ Das aktuelle Repository enthält:
 - einen ersten schemaabhängigen Formular-Parser und Validator;
 - erste CRUD-Listen mit MariaDB-Suche, Filtern, Sortierung, Pagination und
   CSRF-geschützten Löschaktionen.
+- ein erster datenbankgestützter Login mit Argon2-Passwortprüfung,
+  HttpOnly-Sessions, Logout und geschützten Routen.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, datenbankgestützter
-Login und Sessions, APIs, Capabilities, Contracts, formale Verifikation und
-Produktionspaketierung. Der aktuelle Authentifizierungsadapter schützt Routen,
-ist aber noch kein Benutzersystem. Ein erfolgreicher Befehl in diesem
-Leitfaden bedeutet nicht, dass diese späteren Funktionen bereits existieren.
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, persistente Sessions,
+Rollen und datenbankgestützte Berechtigungsabfragen, APIs, Capabilities,
+Contracts, formale Verifikation und Produktionspaketierung.
 
 ## 1. Voraussetzungen
 
@@ -571,5 +571,5 @@ Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
 Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare,
 konfigurierbare Spalten und eine CSRF-geschützte Löschaktion. Die nächsten
-Authentifizierungsschritte sind datenbankgestützter Login, sichere Sessions
-und Rollen-/Berechtigungsabfragen.
+Authentifizierungsschritte sind persistente Sessions sowie Rollen- und
+datenbankgestützte Berechtigungsabfragen.
