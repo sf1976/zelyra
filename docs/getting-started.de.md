@@ -47,7 +47,27 @@ Das Ergebnis ist:
 Mit `zelyra check program.zyl` kann ein Programm geprüft werden, ohne es
 auszuführen.
 
-## 3. Webserver-Konzept
+## 3. Datenbank ohne Framework-Konfiguration
+
+Für lokale Projekte kann Zelyra SQLite ohne separaten Server verwenden:
+
+```bash
+export DATABASE_URL='sqlite:///tmp/meine-app.sqlite3'
+zelyra db bootstrap examples/machine_management_sqlite.zyl
+zelyra db inspect examples/machine_management_sqlite.zyl
+```
+
+MariaDB wird ebenfalls direkt unterstützt. Die Zugangsdaten werden nur über
+`DATABASE_URL` oder einen Secret-Manager gesetzt:
+
+```bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/meine_app'
+zelyra db bootstrap examples/machine_management_mariadb.zyl
+```
+
+Damit sind für den Einstieg weder Apache noch ein separates ORM erforderlich.
+
+## 4. Webserver-Konzept
 
 Die Webplattform wird einen eingebauten Entwicklungsserver bereitstellen.
 Neue Benutzer können damit Anwendungen starten, ohne Apache, PHP, einen
@@ -67,7 +87,7 @@ Datenbankzugangsdaten bleiben ausdrücklich sichtbare Betriebsaufgaben.
 Die Befehle `zelyra dev`, `zelyra serve` und `zelyra web apache` sind für die
 Web-Core-Phasen vorgesehen. Phase 1 enthält bewusst noch keinen Webserver.
 
-## 4. Anforderungen an zukünftige Installer
+## 5. Anforderungen an zukünftige Installer
 
 Release-Versionen sollen plattformspezifische eigenständige Programme
 bereitstellen, damit Endbenutzer Rust nicht selbst installieren müssen.
@@ -81,7 +101,7 @@ download → zelyra new meine-app → zelyra dev
 Für eine benutzerlokale Installation soll kein Kontopasswort erforderlich
 sein.
 
-## 5. Dokumentationssprache
+## 6. Dokumentationssprache
 
 Die zentrale Dokumentation wird immer auf Deutsch und Englisch gepflegt. Neue
 Dokumente erhalten eine gleichnamige deutsche Variante mit dem Suffix `.de.md`

@@ -3,8 +3,9 @@
 [Deutsch](README.de.md) · English
 
 Zelyra is a statically typed language for business, database, and web applications.
-This repository contains the Phase 1 and Phase 2 language core: lexer, parser,
-AST, HIR/name resolution, static type checker, interpreter, and the `zelyra` CLI.
+This repository contains the Phase 1 and Phase 2 language core plus the Phase 3
+Database Core: lexer, parser, AST, HIR, static type checker, interpreter, schema
+compiler, and the `zelyra` CLI.
 
 ## Quick start
 
@@ -65,14 +66,15 @@ Phase 2 adds nominal types, `Option`/`Result`, and exhaustive pattern matching.
 See [docs/phase-2.md](docs/phase-2.md) or the
 [German Phase 2 guide](docs/phase-2.de.md).
 
-Phase 3 adds the PostgreSQL Database Core. See [docs/phase-3.md](docs/phase-3.md)
-or the [German Phase 3 guide](docs/phase-3.de.md).
+Phase 3 adds the Database Core for MariaDB, PostgreSQL, and SQLite. MariaDB is
+the default backend for new projects. See
+[docs/phase-3.md](docs/phase-3.md) or the [German Phase 3 guide](docs/phase-3.de.md).
 
 ## Current limitations
 
-The Phase 1 implementation is an interpreter-backed compiler prototype. It
-does not yet include database, SQL, web, forms, CRUD, capabilities, contracts,
-or code generation. Those belong to later phases of the specification.
+SQL, web, forms, CRUD, capabilities, contracts, and code generation belong to
+the following phases. The Database Core already supports schema DDL, inspection,
+diff, planning, and applying for PostgreSQL, MariaDB, and SQLite.
 
 ## Easy deployment principle
 

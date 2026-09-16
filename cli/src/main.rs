@@ -1,17 +1,20 @@
 use std::{env, fs, process::ExitCode};
-use zelyra_database::{apply_postgres, build_schema, diff, inspect_postgres, Risk, Schema};
+use zelyra_database::{
+    apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
+    inspect_mariadb, inspect_postgres, inspect_sqlite, Backend, Risk, Schema,
+};
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra db <create|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by inspect and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by bootstrap, inspect, plan, and apply."
     );
 }
 
@@ -171,8 +174,32 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             println!("{}", schema.create_sql());
             ExitCode::SUCCESS
         }
+        "bootstrap" => {
+            let Ok(url) = env::var("DATABASE_URL") else {
+                eprintln!("error[E-DB-003]: DATABASE_URL is required for db bootstrap");
+                return ExitCode::from(1);
+            };
+            let result = match schema.backend() {
+                Backend::MariaDb => create_mariadb_database(&url)
+                    .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
+                Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
+                Backend::Postgres => Err(zelyra_database::DatabaseError {
+                    message: "db bootstrap currently supports mariadb and sqlite; use db apply for postgres".into(),
+                }),
+            };
+            match result {
+                Ok(()) => {
+                    println!("database bootstrapped successfully");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("error[E-DB-005]: {error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         "inspect" => match env::var("DATABASE_URL") {
-            Ok(url) => match inspect_postgres(&url) {
+            Ok(url) => match inspect_for_backend(schema.backend(), &url) {
                 Ok(current) => {
                     println!("{}", current.summary());
                     ExitCode::SUCCESS
@@ -189,7 +216,7 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         },
         "plan" => {
             let current = match env::var("DATABASE_URL") {
-                Ok(url) => match inspect_postgres(&url) {
+                Ok(url) => match inspect_for_backend(schema.backend(), &url) {
                     Ok(current) => current,
                     Err(error) => {
                         eprintln!("error[E-DB-002]: {error}");
@@ -212,7 +239,7 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 eprintln!("error[E-DB-003]: DATABASE_URL is required for db apply");
                 return ExitCode::from(1);
             };
-            let current = match inspect_postgres(&url) {
+            let current = match inspect_for_backend(schema.backend(), &url) {
                 Ok(current) => current,
                 Err(error) => {
                     eprintln!("error[E-DB-002]: {error}");
@@ -228,7 +255,12 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             if plan.changes.is_empty() {
                 return ExitCode::SUCCESS;
             }
-            match apply_postgres(&url, &plan.sql()) {
+            let result = match schema.backend() {
+                Backend::Postgres => apply_postgres(&url, &plan.sql()),
+                Backend::MariaDb => apply_mariadb(&url, &plan.sql()),
+                Backend::Sqlite => apply_sqlite(&url, &plan.sql()),
+            };
+            match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("error[E-DB-005]: {error}");
@@ -240,6 +272,17 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             database_usage();
             ExitCode::from(2)
         }
+    }
+}
+
+fn inspect_for_backend(
+    backend: Backend,
+    database_url: &str,
+) -> Result<Schema, zelyra_database::DatabaseError> {
+    match backend {
+        Backend::Postgres => inspect_postgres(database_url),
+        Backend::MariaDb => inspect_mariadb(database_url),
+        Backend::Sqlite => inspect_sqlite(database_url),
     }
 }
 

@@ -44,7 +44,27 @@ The result is:
 
 Use `zelyra check program.zyl` to type-check without executing it.
 
-## 3. Web setup policy
+## 3. Database setup without framework configuration
+
+For local projects, Zelyra can use SQLite without a separate server:
+
+```bash
+export DATABASE_URL='sqlite:///tmp/my-app.sqlite3'
+zelyra db bootstrap examples/machine_management_sqlite.zyl
+zelyra db inspect examples/machine_management_sqlite.zyl
+```
+
+MariaDB is supported directly as well. Credentials are passed only through
+`DATABASE_URL` or a secret manager:
+
+```bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/my_app'
+zelyra db bootstrap examples/machine_management_mariadb.zyl
+```
+
+This keeps the first setup free of Apache and a separate ORM.
+
+## 4. Web setup policy
 
 The web platform will provide a built-in development server, so a new user
 will be able to start an application without installing Apache or configuring
@@ -63,7 +83,7 @@ deployment concerns and will not be hidden by the compiler.
 The commands `zelyra dev`, `zelyra serve`, and `zelyra web apache` are planned
 for the Web Core phases. Phase 1 intentionally has no web server yet.
 
-## 4. Design requirements for future installers
+## 5. Design requirements for future installers
 
 Release builds should provide a platform-specific standalone binary, allowing
 end users to install Zelyra without Rust. Package managers and container images
@@ -75,7 +95,7 @@ download → zelyra new my-app → zelyra dev
 
 No account password should be required for a user-local installation.
 
-## 5. Documentation languages
+## 6. Documentation languages
 
 Core documentation is maintained in both German and English. New documents
 should either be bilingual or have a matching German variant with the `.de.md`

@@ -1,6 +1,6 @@
 database main {
-    engine: mariadb
-    database: "machine_management"
+    engine: sqlite
+    database: "machine_management.sqlite3"
 }
 
 table departments {

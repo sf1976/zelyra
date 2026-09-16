@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
         let end = self.expect(TokenKind::RBrace, "`}` after database definition")?;
         Ok(DatabaseDef {
             name,
-            engine: engine.unwrap_or_else(|| "postgres".into()),
+            engine: engine.unwrap_or_else(|| "mariadb".into()),
             database,
             span: start.join(end),
         })
