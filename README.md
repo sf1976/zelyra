@@ -20,6 +20,17 @@ Zelyra 0.1 is an active early implementation. The repository is real,
 buildable, tested Rust code, but the complete long-term language specification
 is not implemented yet.
 
+## License and implementation
+
+Zelyra is implemented in Rust. Rust is used as the implementation language;
+Zelyra is not an official Rust project and does not use the Rust name or logo
+as a product mark.
+
+The Zelyra source is licensed under either the MIT License or the Apache
+License, Version 2.0, at the licensee's option. See [LICENSE-MIT](LICENSE-MIT)
+and [LICENSE](LICENSE). Third-party dependency information is collected in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 Implemented today:
 
 - language core with variables, functions, expressions, control flow, and
