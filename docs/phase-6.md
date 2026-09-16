@@ -43,6 +43,13 @@ Successful validation prints valid and invalid input returns field-specific
 diagnostics. This command performs local validation and does not need a live
 database connection.
 
+Forms are exposed automatically by the built-in server at
+/forms/FormName. GET renders a schema-aware HTML form with a per-server CSRF
+token. POST parses URL-encoded input, verifies the token, validates the fields,
+and renders field-specific errors with HTTP 422 when needed. A valid request
+returns HTTP 202 and confirms validation; it does not execute a database action
+yet.
+
 Form actions are parsed together with native SQL, success messages, and
-redirect targets. Rendering HTML forms, CSRF tokens, relationship select
-controls, and executing a validated action are the next integration steps.
+redirect targets. Executing a validated action, relationship select controls,
+sessions, and persistent CSRF secret management are the next integration steps.

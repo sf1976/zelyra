@@ -74,3 +74,8 @@ dependencies = [
 [[package]]
 name = "zelyra-web"
 version = "0.1.0"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-database",
+ "zelyra-forms",
+]

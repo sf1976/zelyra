@@ -42,11 +42,11 @@ Das aktuelle Repository enthält:
 - einen ersten eingebauten HTTP-Server und GET-Router;
 - einen ersten schemaabhängigen Formular-Parser und Validator.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, HTML-
-Formular-Rendering, POST-Verarbeitung, Sessions, CSRF, Authentifizierung,
-APIs, Capabilities, Contracts, formale Verifikation und
-Produktionspaketierung. Ein erfolgreicher Befehl in diesem Leitfaden bedeutet
-nicht, dass diese späteren Funktionen bereits existieren.
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, die Ausführung von
+Datenbankaktionen, Sessions, Authentifizierung, APIs, Capabilities, Contracts,
+formale Verifikation und Produktionspaketierung. Ein erfolgreicher Befehl in
+diesem Leitfaden bedeutet nicht, dass diese späteren Funktionen bereits
+existieren.
 
 ## 1. Voraussetzungen
 
@@ -431,9 +431,12 @@ Der Validator meldet das fehlende Pflichtfeld name und die ungültige
 E-Mail-Adresse. Zusätzlich werden unbekannte Felder, zu lange Werte, ungültige
 Zahlen, ungültige boolesche Werte und übermittelte Readonly-Felder abgelehnt.
 
-Der aktuelle Form-Befehl validiert Eingaben lokal. Er rendert noch kein
-HTML-Formular, verarbeitet keinen Browser-POST, erzeugt keine CSRF-Tokens und
-führt noch keine Datenbankaktion aus.
+Der eingebaute Server stellt jedes Formular zusätzlich unter /forms/FormName
+bereit. GET rendert ein HTML-Formular mit escaped Werten und einem CSRF-Token
+pro Serverstart. POST prüft das Token, parst URL-encoded Daten, validiert die
+Felder und liefert bei Fehlern feldbezogene Meldungen mit HTTP 422. Eine gültige
+Übermittlung liefert HTTP 202 als Validierungsbestätigung. Eine
+Datenbankaktion wird noch nicht ausgeführt.
 
 ## 11. Nützliche Befehle
 

@@ -41,10 +41,10 @@ The current repository contains:
 - an initial built-in HTTP server and GET router;
 - an initial schema-aware form parser and validator.
 
-The following are not complete yet: full CRUD generation, HTML form rendering,
-POST handling, sessions, CSRF, authentication, APIs, capabilities, contracts,
-formal verification, and production packaging. A successful command in this
-guide does not imply that those later features already exist.
+The following are not complete yet: full CRUD generation, database action
+execution, sessions, authentication, APIs, capabilities, contracts, formal
+verification, and production packaging. A successful command in this guide
+does not imply that those later features already exist.
 
 ## 1. Requirements
 
@@ -424,9 +424,11 @@ The validator reports the missing required name and the invalid email. It also
 rejects unknown fields, overlong values, invalid numbers, invalid booleans,
 and submitted readonly fields.
 
-The current form command validates input locally. It does not yet render an
-HTML form, process a browser POST, issue CSRF tokens, or execute a database
-action.
+The built-in server also exposes each form at /forms/FormName. GET renders an
+HTML form with escaped values and a per-server CSRF token. POST checks the
+token, parses URL-encoded data, validates the fields, and returns field errors
+with HTTP 422. A valid submission returns HTTP 202 as a validation
+confirmation. It does not execute a database action yet.
 
 ## 11. Useful commands
 

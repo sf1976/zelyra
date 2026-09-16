@@ -43,7 +43,14 @@ Bei erfolgreicher Prüfung wird valid ausgegeben. Ungültige Eingaben liefern
 feldbezogene Diagnosen. Dieser Befehl arbeitet lokal und benötigt keine aktive
 Datenbankverbindung.
 
+Formulare werden vom eingebauten Server automatisch unter
+/forms/FormName bereitgestellt. GET rendert ein schemaabhängiges HTML-Formular
+mit einem CSRF-Token pro Serverstart. POST parst URL-encoded Eingaben, prüft
+das Token, validiert die Felder und rendert bei Fehlern feldbezogene Meldungen
+mit HTTP 422. Eine gültige Anfrage liefert HTTP 202 und bestätigt die
+Validierung; eine Datenbankaktion wird noch nicht ausgeführt.
+
 Form-Aktionen werden zusammen mit nativem SQL, Erfolgsmeldungen und
-Weiterleitungszielen geparst. Das Rendern von HTML-Formularen, CSRF-Tokens,
-Select-Feldern für Beziehungen und das Ausführen validierter Aktionen sind die
-nächsten Integrationsschritte.
+Weiterleitungszielen geparst. Das Ausführen validierter Aktionen,
+Select-Felder für Beziehungen, Sessions und die dauerhafte Verwaltung von
+CSRF-Geheimnissen sind die nächsten Integrationsschritte.

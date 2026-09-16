@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use zelyra_ast::{FormDef, TableDef, Type};
+use zelyra_database::Schema;
+use zelyra_forms::{validate, FieldError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
@@ -15,6 +18,7 @@ pub struct Request {
     pub target: String,
     pub path: String,
     pub headers: HashMap<String, String>,
+    pub body: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +56,68 @@ pub struct Router {
     routes: Vec<Route>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CsrfProtection {
+    token: String,
+}
+
+impl CsrfProtection {
+    pub fn new(token: impl Into<String>) -> Self {
+        Self {
+            token: token.into(),
+        }
+    }
+
+    pub fn generate() -> io::Result<Self> {
+        let mut bytes = [0_u8; 32];
+        let mut source = std::fs::File::open("/dev/urandom")?;
+        source.read_exact(&mut bytes)?;
+        Ok(Self::new(hex_encode(&bytes)))
+    }
+
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
+    pub fn verify(&self, candidate: Option<&str>) -> bool {
+        let Some(candidate) = candidate else {
+            return false;
+        };
+        constant_time_equal(self.token.as_bytes(), candidate.as_bytes())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FormRoute {
+    pub path: String,
+    pub action: String,
+    pub form: FormDef,
+    pub table: Option<TableDef>,
+    pub schema: Option<Schema>,
+    pub csrf: CsrfProtection,
+}
+
+#[derive(Clone, Debug)]
+pub struct WebApp {
+    pub routes: Vec<Route>,
+    pub forms: Vec<FormRoute>,
+}
+
+impl WebApp {
+    pub fn new(routes: Vec<Route>, forms: Vec<FormRoute>) -> Self {
+        Self { routes, forms }
+    }
+
+    pub fn dispatch(&self, request: &Request) -> Response {
+        for form in &self.forms {
+            if match_path(&form.path, &request.path).is_some() {
+                return dispatch_form(form, request);
+            }
+        }
+        Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
+    }
+}
+
 impl Router {
     pub fn new(routes: Vec<Route>) -> Self {
         Self { routes }
@@ -85,7 +151,8 @@ impl fmt::Display for HttpError {
 impl std::error::Error for HttpError {}
 
 pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
-    let mut lines = raw.split("\r\n");
+    let (header_text, body) = raw.split_once("\r\n\r\n").unwrap_or((raw, ""));
+    let mut lines = header_text.split("\r\n");
     let request_line = lines.next().ok_or_else(|| HttpError {
         message: "request is empty".into(),
     })?;
@@ -125,6 +192,7 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         target: target.into(),
         path: path.into(),
         headers,
+        body: body.into(),
     })
 }
 
@@ -141,6 +209,263 @@ pub fn html_escape(value: &str) -> String {
         }
     }
     escaped
+}
+
+fn dispatch_form(form: &FormRoute, request: &Request) -> Response {
+    if request.method == "GET" {
+        return Response::html(200, render_form(form, &HashMap::new(), &[], None));
+    }
+    if request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !form
+        .csrf
+        .verify(input.get("_zelyra_csrf").map(String::as_str))
+    {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    let mut values = input;
+    values.remove("_zelyra_csrf");
+    let validation = validate(
+        &form.form,
+        form.table.as_ref(),
+        form.schema.as_ref(),
+        &values,
+    );
+    if !validation.is_valid() {
+        return Response::html(
+            422,
+            render_form(
+                form,
+                &values,
+                &validation.errors,
+                Some("Please correct the errors."),
+            ),
+        );
+    }
+    Response::html(
+        202,
+        render_form(
+            form,
+            &values,
+            &[],
+            Some("Input validated. Database action execution is not enabled yet."),
+        ),
+    )
+}
+
+pub fn render_form(
+    route: &FormRoute,
+    values: &HashMap<String, String>,
+    errors: &[FieldError],
+    notice: Option<&str>,
+) -> String {
+    let mut html = String::new();
+    html.push_str("<form method=\"post\" action=\"");
+    html.push_str(&html_escape(&route.action));
+    html.push_str("\">");
+    html.push_str("<input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+    html.push_str(&html_escape(route.csrf.token()));
+    html.push_str("\">");
+    if let Some(notice) = notice {
+        html.push_str("<p class=\"zelyra-notice\">");
+        html.push_str(&html_escape(notice));
+        html.push_str("</p>");
+    }
+    for field in &route.form.fields {
+        let label = field.label.clone().unwrap_or_else(|| humanize(&field.name));
+        let value = values.get(&field.name).map(String::as_str).unwrap_or("");
+        let field_errors = errors
+            .iter()
+            .filter(|error| error.field == field.name)
+            .collect::<Vec<_>>();
+        let input_type = input_type(route, field);
+        let required = is_required(route, field);
+        let max = field_max(route, field);
+        html.push_str("<div class=\"zelyra-field\">");
+        html.push_str("<label for=\"");
+        html.push_str(&html_escape(&field.name));
+        html.push_str("\">");
+        html.push_str(&html_escape(&label));
+        html.push_str("</label>");
+        html.push_str("<input id=\"");
+        html.push_str(&html_escape(&field.name));
+        html.push_str("\" name=\"");
+        html.push_str(&html_escape(&field.name));
+        html.push_str("\" type=\"");
+        html.push_str(input_type);
+        html.push('"');
+        if input_type == "checkbox" {
+            html.push_str(" value=\"true\"");
+            if matches!(value, "true" | "1") {
+                html.push_str(" checked");
+            }
+        } else {
+            html.push_str(" value=\"");
+            html.push_str(&html_escape(value));
+            html.push('"');
+        }
+        if required {
+            html.push_str(" required");
+        }
+        if let Some(max) = max {
+            html.push_str(" maxlength=\"");
+            html.push_str(&max.to_string());
+            html.push('"');
+        }
+        if let Some(placeholder) = &field.placeholder {
+            html.push_str(" placeholder=\"");
+            html.push_str(&html_escape(placeholder));
+            html.push('"');
+        }
+        if field.readonly {
+            html.push_str(" readonly");
+        }
+        html.push('>');
+        for error in field_errors {
+            html.push_str("<p class=\"zelyra-error\">");
+            html.push_str(&html_escape(&error.message));
+            html.push_str("</p>");
+        }
+        html.push_str("</div>");
+    }
+    html.push_str("<button type=\"submit\">Submit</button></form>");
+    html
+}
+
+fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'static str {
+    if let Some(widget) = field.widget.as_deref() {
+        return match widget {
+            "email" => "email",
+            "number" => "number",
+            "url" => "url",
+            "checkbox" => "checkbox",
+            "date" => "date",
+            "time" => "time",
+            _ => "text",
+        };
+    }
+    let ty = field.ty.as_ref().or_else(|| {
+        route.table.as_ref().and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == field.name)
+                .map(|column| &column.ty)
+        })
+    });
+    match ty {
+        Some(Type::Bool) => "checkbox",
+        Some(Type::Int | Type::UInt | Type::Float | Type::Decimal) => "number",
+        Some(Type::Named(name)) if name == "Email" => "email",
+        Some(Type::Named(name)) if name == "Url" => "url",
+        _ => "text",
+    }
+}
+
+fn is_required(route: &FormRoute, field: &zelyra_ast::FormField) -> bool {
+    if field.required {
+        return true;
+    }
+    let table_required = route.table.as_ref().and_then(|table| {
+        table
+            .columns
+            .iter()
+            .find(|column| column.name == field.name)
+            .map(|column| column.required || column.primary_key)
+    });
+    let schema_required = route.schema.as_ref().and_then(|schema| {
+        route.form.table.as_deref().and_then(|table_name| {
+            schema
+                .tables
+                .iter()
+                .find(|table| table.name == table_name)
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == field.name)
+                })
+                .map(|column| !column.nullable || column.primary_key)
+        })
+    });
+    table_required.unwrap_or(false) || schema_required.unwrap_or(false)
+}
+
+fn field_max(route: &FormRoute, field: &zelyra_ast::FormField) -> Option<u32> {
+    field.max.or_else(|| {
+        route.table.as_ref().and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == field.name)
+                .and_then(|column| column.length)
+        })
+    })
+}
+
+fn humanize(name: &str) -> String {
+    let mut result = name.replace('_', " ");
+    if let Some(first) = result.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    result
+}
+
+pub fn parse_urlencoded(body: &str) -> Result<HashMap<String, String>, HttpError> {
+    let mut values = HashMap::new();
+    if body.is_empty() {
+        return Ok(values);
+    }
+    for pair in body.split('&') {
+        let (key, value) = pair.split_once('=').ok_or_else(|| HttpError {
+            message: "malformed form field".into(),
+        })?;
+        if key.is_empty() {
+            return Err(HttpError {
+                message: "form field name is empty".into(),
+            });
+        }
+        values.insert(percent_decode(key)?, percent_decode(value)?);
+    }
+    Ok(values)
+}
+
+fn percent_decode(value: &str) -> Result<String, HttpError> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'+' => decoded.push(b' '),
+            b'%' if index + 2 < bytes.len() => {
+                let high = hex_value(bytes[index + 1]).ok_or_else(|| HttpError {
+                    message: "invalid percent encoding".into(),
+                })?;
+                let low = hex_value(bytes[index + 2]).ok_or_else(|| HttpError {
+                    message: "invalid percent encoding".into(),
+                })?;
+                decoded.push(high * 16 + low);
+                index += 2;
+            }
+            b'%' => {
+                return Err(HttpError {
+                    message: "invalid percent encoding".into(),
+                })
+            }
+            byte => decoded.push(byte),
+        }
+        index += 1;
+    }
+    String::from_utf8(decoded).map_err(|_| HttpError {
+        message: "form field is not valid UTF-8".into(),
+    })
 }
 
 fn match_path(pattern: &str, path: &str) -> Option<HashMap<String, String>> {
@@ -197,28 +522,63 @@ fn render_template(template: &str, params: &HashMap<String, String>) -> String {
     rendered
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut result = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        result.push(HEX[(byte >> 4) as usize] as char);
+        result.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    result
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
+    let mut difference = (left.len() ^ right.len()) as u8;
+    for index in 0..left.len().max(right.len()) {
+        difference |=
+            left.get(index).copied().unwrap_or(0) ^ right.get(index).copied().unwrap_or(0);
+    }
+    difference == 0
+}
+
 fn reason_phrase(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        202 => "Accepted",
+        400 => "Bad Request",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        422 => "Unprocessable Entity",
         _ => "Response",
     }
 }
 
 pub fn serve(routes: Vec<Route>, address: &str) -> io::Result<()> {
+    serve_app(WebApp::new(routes, Vec::new()), address)
+}
+
+pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
     let listener = TcpListener::bind(address)?;
-    let router = Router::new(routes);
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => handle_connection(&mut stream, &router)?,
+            Ok(mut stream) => handle_connection(&mut stream, &app)?,
             Err(error) => eprintln!("zelyra web: connection failed: {error}"),
         }
     }
     Ok(())
 }
 
-fn handle_connection(stream: &mut TcpStream, router: &Router) -> io::Result<()> {
+fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
     let mut buffer = [0_u8; 16 * 1024];
     let size = stream.read(&mut buffer)?;
     let response = match std::str::from_utf8(&buffer[..size])
@@ -227,7 +587,7 @@ fn handle_connection(stream: &mut TcpStream, router: &Router) -> io::Result<()> 
         })
         .and_then(parse_request)
     {
-        Ok(request) => router.dispatch(&request.method, &request.target),
+        Ok(request) => app.dispatch(&request),
         Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
     };
     stream.write_all(response.to_http().as_bytes())
@@ -242,6 +602,33 @@ mod tests {
             path: "/hello/{name}".into(),
             html: "<h1>Hello, {name}!</h1>".into(),
         }])
+    }
+
+    fn form_route() -> FormRoute {
+        FormRoute {
+            path: "/forms/CustomerCreate".into(),
+            action: "/forms/CustomerCreate".into(),
+            form: FormDef {
+                name: "CustomerCreate".into(),
+                table: None,
+                fields: vec![zelyra_ast::FormField {
+                    name: "name".into(),
+                    ty: Some(Type::String),
+                    label: Some("Name".into()),
+                    placeholder: None,
+                    required: true,
+                    max: Some(20),
+                    widget: None,
+                    readonly: false,
+                    span: zelyra_ast::Span::default(),
+                }],
+                actions: Vec::new(),
+                span: zelyra_ast::Span::default(),
+            },
+            table: None,
+            schema: None,
+            csrf: CsrfProtection::new("csrf-token"),
+        }
     }
 
     #[test]
@@ -280,5 +667,43 @@ mod tests {
         assert!(wire.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(wire.contains("Content-Length: 2\r\n"));
         assert!(wire.ends_with("\r\n\r\nok"));
+    }
+
+    #[test]
+    fn renders_form_with_csrf_and_field_attributes() {
+        let html = render_form(&form_route(), &HashMap::new(), &[], None);
+        assert!(html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
+        assert!(html.contains("name=\"name\" type=\"text\""));
+        assert!(html.contains(" required"));
+        assert!(html.contains("maxlength=\"20\""));
+    }
+
+    #[test]
+    fn form_post_requires_csrf_and_reports_validation_errors() {
+        let app = WebApp::new(Vec::new(), vec![form_route()]);
+        let invalid_csrf = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nContent-Length: 24\r\n\r\n_zelyra_csrf=wrong",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&invalid_csrf).status, 403);
+
+        let missing_name =
+            parse_request("POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token")
+                .unwrap();
+        let response = app.dispatch(&missing_name);
+        assert_eq!(response.status, 422);
+        assert!(response.body.contains("value is required"));
+    }
+
+    #[test]
+    fn form_post_returns_accepted_after_validating_input() {
+        let app = WebApp::new(Vec::new(), vec![form_route()]);
+        let request = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 202);
+        assert!(response.body.contains("Input validated"));
     }
 }

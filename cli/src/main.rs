@@ -9,7 +9,7 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute, execute_with_database};
-use zelyra_web::{serve, Route};
+use zelyra_web::{serve_app, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -331,20 +331,69 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
-    if program.pages.is_empty() {
-        eprintln!("error[E-WEB-001]: {path} does not define a page");
+    if program.pages.is_empty() && program.forms.is_empty() {
+        eprintln!("error[E-WEB-001]: {path} does not define a page or form");
         return ExitCode::from(1);
     }
     let routes = program
         .pages
-        .into_iter()
+        .iter()
         .map(|page| Route {
-            path: page.path,
-            html: page.html,
+            path: page.path.clone(),
+            html: page.html.clone(),
         })
         .collect();
+    let schema = match build_schema(&program) {
+        Ok(schema) => schema,
+        Err(errors) => {
+            for error in errors {
+                diagnostic(
+                    &path,
+                    "E-DB-001",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(errors) = check_form_program(&program, &schema) {
+        for error in errors {
+            diagnostic(
+                &path,
+                "E-FORM-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return ExitCode::from(1);
+    }
+    let mut form_routes = Vec::new();
+    for form in &program.forms {
+        let Some(csrf) = CsrfProtection::generate().ok() else {
+            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
+            return ExitCode::from(1);
+        };
+        let table = form.table.as_deref().and_then(|table_name| {
+            program
+                .tables
+                .iter()
+                .find(|table| table.name == table_name)
+                .cloned()
+        });
+        form_routes.push(FormRoute {
+            path: format!("/forms/{}", form.name),
+            action: format!("/forms/{}", form.name),
+            form: form.clone(),
+            table,
+            schema: Some(schema.clone()),
+            csrf,
+        });
+    }
     eprintln!("Zelyra server listening on http://{address}");
-    match serve(routes, &address) {
+    match serve_app(WebApp::new(routes, form_routes), &address) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");

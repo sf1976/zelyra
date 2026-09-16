@@ -134,9 +134,15 @@ The form inherits the required name field and its length from the schema.
 Unknown fields, missing values, invalid email addresses, invalid numbers,
 invalid booleans, and submitted readonly fields are rejected.
 
-This is validation infrastructure, not yet a complete HTML form submission
-system. HTML rendering, CSRF protection, POST handling, and database actions
-are the next integration steps.
+Start the form server without Apache:
+
+~~~bash
+zelyra serve examples/customer_form.zyl
+~~
+
+The form is available at http://127.0.0.1:3000/forms/CustomerCreate. GET
+renders the fields and a CSRF token; POST checks the token and validates the
+submitted values. Database action execution is not enabled yet.
 
 ## Database-first development
 

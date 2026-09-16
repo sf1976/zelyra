@@ -136,9 +136,15 @@ Schema. Unbekannte Felder, fehlende Werte, ungültige E-Mail-Adressen,
 ungültige Zahlen, ungültige boolesche Werte und übermittelte Readonly-Felder
 werden abgelehnt.
 
-Dies ist die Validierungsgrundlage, noch kein vollständiges HTML-Formular-
-Submit-System. HTML-Rendering, CSRF-Schutz, POST-Verarbeitung und
-Datenbankaktionen sind die nächsten Integrationsschritte.
+Den Formularserver ohne Apache starten:
+
+~~~bash
+zelyra serve examples/customer_form.zyl
+~~~
+
+Das Formular ist unter http://127.0.0.1:3000/forms/CustomerCreate erreichbar.
+GET rendert die Felder und ein CSRF-Token; POST prüft das Token und validiert
+die Eingaben. Die Ausführung von Datenbankaktionen ist noch nicht aktiviert.
 
 ## Datenbankorientierte Entwicklung
 
