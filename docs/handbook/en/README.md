@@ -572,6 +572,13 @@ FAILED
 Only `PROVEN` means proven. `RUNTIME_CHECK` does not wear a fake moustache and
 claim to be mathematics.
 
+The verifier also summarizes bounded function calls. A callee with multiple
+return paths, such as an absolute-value function, contributes its path
+conditions when a caller returns that call. Callee `requires` clauses are
+checked after argument substitution; caller `requires` clauses are assumptions
+when proving caller `ensures`. Complex, recursive, or unresolved cases remain
+`RUNTIME_CHECK`.
+
 ## 16. Configuration and secrets
 
 Project configuration belongs in `zelyra.toml`; secrets do not:
@@ -659,4 +666,3 @@ case arrives:
 > **Generated when possible. Custom where needed. Verified everywhere.**
 
 Now build a table, read the SQL, and check the backup. In that order.
-

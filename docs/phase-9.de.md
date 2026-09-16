@@ -118,9 +118,10 @@ Konstruktor ist. Dadurch kann `Some(4)` mit anschließendem `return number` als
 Binding-Beziehungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden
 als `UNPROVEN` gemeldet.
 
-Einfache Funktionsaufrufe mit direkter Rückgabe werden ebenfalls als
-Zusammenfassung in das Integer-Modell eingesetzt. Verschachtelte Aufrufe wie
-`increment(increment(value))` werden mit begrenzter Tiefe verarbeitet. Vor der
+Einfache Funktionsaufrufe werden ebenfalls zusammengefasst und in das
+Integer-Modell eingesetzt. Direkte Rückgaben und pfadsensitive Aufrufe wie
+`return absolute(value)` werden mit begrenzter Tiefe verarbeitet; die
+Rückgabepfade der Callee liefern dabei eigene Pfadbedingungen. Vor der
 Verwendung einer Callee-Zusammenfassung prüft der Verifier die `requires`-
 Bedingungen der aufgerufenen Funktion nach Argumentsubstitution. Die
 `requires`-Bedingungen des Aufrufers stehen beim Beweis seiner `ensures` als

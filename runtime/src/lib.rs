@@ -584,44 +584,63 @@ fn constraints_for_pattern(
             }
         }
         PatternKind::Int(expected) => {
-            let left = LinearConstraint::from_value(linear_value(
+            let left = linear_value_alternatives(
                 value,
                 context.return_expression,
                 context.bindings,
                 context.substitutions,
                 context.functions,
                 context.depth,
-            )?);
-            let right = LinearConstraint {
-                coefficients: HashMap::new(),
-                constant: i128::from(*expected),
-            };
-            comparison_constraints(left, BinaryOp::Equal, right, matched)
+            )?;
+            comparison_constraint_alternatives(
+                left,
+                vec![(
+                    LinearValue {
+                        constant: *expected,
+                        ..LinearValue::default()
+                    },
+                    Vec::new(),
+                )],
+                BinaryOp::Equal,
+                matched,
+            )
         }
         PatternKind::Bool(expected) => {
-            let left = LinearConstraint::from_value(linear_value(
+            let left = linear_value_alternatives(
                 value,
                 context.return_expression,
                 context.bindings,
                 context.substitutions,
                 context.functions,
                 context.depth,
-            )?);
+            )?;
             let right = LinearConstraint {
                 coefficients: HashMap::new(),
                 constant: i128::from(*expected as u8),
             };
-            let domain = [
-                left.clone(),
-                LinearConstraint {
-                    coefficients: HashMap::new(),
-                    constant: 1,
+            let mut alternatives = Vec::new();
+            for (left_value, left_constraints) in left {
+                let left = LinearConstraint::from_value(left_value);
+                let domain = [
+                    left.clone(),
+                    LinearConstraint {
+                        coefficients: HashMap::new(),
+                        constant: 1,
+                    }
+                    .combine(left.clone(), 1, -1)?,
+                ];
+                for comparison in
+                    comparison_constraints(left.clone(), BinaryOp::Equal, right.clone(), matched)?
+                {
+                    alternatives.push(
+                        left_constraints
+                            .iter()
+                            .cloned()
+                            .chain(comparison)
+                            .chain(domain.iter().cloned().map(PathConstraint::Linear))
+                            .collect(),
+                    );
                 }
-                .combine(left.clone(), 1, -1)?,
-            ];
-            let mut alternatives = comparison_constraints(left, BinaryOp::Equal, right, matched)?;
-            for alternative in &mut alternatives {
-                alternative.extend(domain.iter().cloned().map(PathConstraint::Linear));
             }
             Some(alternatives)
         }
@@ -650,6 +669,35 @@ fn constraints_for_pattern(
             Some(vec![constraints])
         }
     }
+}
+
+fn comparison_constraint_alternatives(
+    left: Vec<(LinearValue, Vec<PathConstraint>)>,
+    right: Vec<(LinearValue, Vec<PathConstraint>)>,
+    operator: BinaryOp,
+    expected: bool,
+) -> Option<Vec<Vec<PathConstraint>>> {
+    let mut alternatives = Vec::new();
+    for (left, left_constraints) in left {
+        for (right, right_constraints) in &right {
+            for comparison in comparison_constraints(
+                LinearConstraint::from_value(left.clone()),
+                operator,
+                LinearConstraint::from_value(right.clone()),
+                expected,
+            )? {
+                alternatives.push(
+                    left_constraints
+                        .iter()
+                        .cloned()
+                        .chain(right_constraints.iter().cloned())
+                        .chain(comparison)
+                        .collect(),
+                );
+            }
+        }
+    }
+    Some(alternatives)
 }
 
 fn constraints_for_bool(
@@ -728,23 +776,23 @@ fn constraints_for_bool(
             | BinaryOp::LessEqual
             | BinaryOp::Greater
             | BinaryOp::GreaterEqual => {
-                let left = LinearConstraint::from_value(linear_value(
+                let left = linear_value_alternatives(
                     left,
                     return_expression,
                     bindings,
                     substitutions,
                     functions,
                     depth,
-                )?);
-                let right = LinearConstraint::from_value(linear_value(
+                )?;
+                let right = linear_value_alternatives(
                     right,
                     return_expression,
                     bindings,
                     substitutions,
                     functions,
                     depth,
-                )?);
-                comparison_constraints(left, *op, right, expected)
+                )?;
+                comparison_constraint_alternatives(left, right, *op, expected)
             }
             _ => None,
         },
@@ -1080,13 +1128,38 @@ fn linear_value(
     functions: Option<&HashMap<String, &Function>>,
     depth: usize,
 ) -> Option<LinearValue> {
+    let mut alternatives = linear_value_alternatives(
+        expression,
+        return_expression,
+        bindings,
+        substitutions,
+        functions,
+        depth,
+    )?;
+    if alternatives.len() != 1 || !alternatives[0].1.is_empty() {
+        return None;
+    }
+    Some(alternatives.remove(0).0)
+}
+
+fn linear_value_alternatives(
+    expression: &Expr,
+    return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
+) -> Option<Vec<(LinearValue, Vec<PathConstraint>)>> {
     match &expression.kind {
-        ExprKind::Int(value) => Some(LinearValue {
-            constant: *value,
-            ..LinearValue::default()
-        }),
+        ExprKind::Int(value) => Some(vec![(
+            (LinearValue {
+                constant: *value,
+                ..LinearValue::default()
+            }),
+            Vec::new(),
+        )]),
         ExprKind::Variable(name) if name == "result" => return_expression.and_then(|expression| {
-            linear_value(
+            linear_value_alternatives(
                 expression,
                 return_expression,
                 bindings,
@@ -1100,11 +1173,11 @@ fn linear_value(
                 .and_then(|substitutions| substitutions.get(name))
                 .is_some() =>
         {
-            substitutions?.get(name).cloned()
+            Some(vec![(substitutions?.get(name).cloned()?, Vec::new())])
         }
         ExprKind::Variable(name) if bindings.and_then(|bindings| bindings.get(name)).is_some() => {
             let bound = bindings?.get(name)?;
-            linear_value(
+            linear_value_alternatives(
                 bound,
                 return_expression,
                 bindings,
@@ -1113,14 +1186,17 @@ fn linear_value(
                 depth,
             )
         }
-        ExprKind::Variable(name) => Some(LinearValue {
-            coefficients: HashMap::from([(name.clone(), 1)]),
-            constant: 0,
-        }),
+        ExprKind::Variable(name) => Some(vec![(
+            LinearValue {
+                coefficients: HashMap::from([(name.clone(), 1)]),
+                constant: 0,
+            },
+            Vec::new(),
+        )]),
         ExprKind::Unary {
             op: UnaryOp::Negate,
             expr,
-        } => linear_value(
+        } => linear_value_alternatives(
             expr,
             return_expression,
             bindings,
@@ -1128,9 +1204,11 @@ fn linear_value(
             functions,
             depth,
         )?
-        .negate(),
+        .into_iter()
+        .map(|(value, constraints)| Some((value.negate()?, constraints)))
+        .collect(),
         ExprKind::Binary { left, op, right } => {
-            let left = linear_value(
+            let left = linear_value_alternatives(
                 left,
                 return_expression,
                 bindings,
@@ -1138,7 +1216,7 @@ fn linear_value(
                 functions,
                 depth,
             )?;
-            let right = linear_value(
+            let right = linear_value_alternatives(
                 right,
                 return_expression,
                 bindings,
@@ -1146,26 +1224,43 @@ fn linear_value(
                 functions,
                 depth,
             )?;
-            match op {
-                BinaryOp::Add => left.add(right),
-                BinaryOp::Subtract => left.subtract(right),
-                BinaryOp::Multiply if right.coefficients.is_empty() => left.scale(right.constant),
-                BinaryOp::Multiply if left.coefficients.is_empty() => right.scale(left.constant),
-                _ => None,
+            let mut alternatives = Vec::new();
+            for (left, left_constraints) in &left {
+                for (right, right_constraints) in &right {
+                    let value = match op {
+                        BinaryOp::Add => left.clone().add(right.clone()),
+                        BinaryOp::Subtract => left.clone().subtract(right.clone()),
+                        BinaryOp::Multiply if right.coefficients.is_empty() => {
+                            left.clone().scale(right.constant)
+                        }
+                        BinaryOp::Multiply if left.coefficients.is_empty() => {
+                            right.clone().scale(left.constant)
+                        }
+                        _ => None,
+                    }?;
+                    alternatives.push((
+                        value,
+                        left_constraints
+                            .iter()
+                            .cloned()
+                            .chain(right_constraints.iter().cloned())
+                            .collect(),
+                    ));
+                }
             }
+            Some(alternatives)
         }
         ExprKind::Call { name, args } => {
             if depth >= 32 {
                 return None;
             }
             let function = functions?.get(name)?;
-            let callee_return_expression = direct_return_expression(function)?;
             if args.len() != function.params.len() {
                 return None;
             }
-            let mut argument_values = HashMap::new();
-            for (parameter, argument) in function.params.iter().zip(args) {
-                let value = linear_value(
+            let mut argument_alternatives = vec![(Vec::new(), Vec::new())];
+            for argument in args {
+                let values = linear_value_alternatives(
                     argument,
                     return_expression,
                     bindings,
@@ -1173,16 +1268,76 @@ fn linear_value(
                     functions,
                     depth + 1,
                 )?;
-                argument_values.insert(parameter.name.clone(), value);
+                argument_alternatives = argument_alternatives
+                    .into_iter()
+                    .flat_map(|(arguments, constraints)| {
+                        values.iter().map(move |(value, value_constraints)| {
+                            let mut next_arguments = arguments.clone();
+                            next_arguments.push(value.clone());
+                            (
+                                next_arguments,
+                                constraints
+                                    .iter()
+                                    .cloned()
+                                    .chain(value_constraints.iter().cloned())
+                                    .collect(),
+                            )
+                        })
+                    })
+                    .collect();
             }
-            linear_value(
-                callee_return_expression,
-                None,
-                None,
-                Some(&argument_values),
-                functions,
-                depth + 1,
-            )
+            let mut alternatives = Vec::new();
+            for (arguments, argument_constraints) in argument_alternatives {
+                let argument_values = function
+                    .params
+                    .iter()
+                    .zip(arguments)
+                    .map(|(parameter, value)| (parameter.name.clone(), value))
+                    .collect::<HashMap<_, _>>();
+                for path in symbolic_return_paths(function)? {
+                    let Some(return_expression) = path.expression else {
+                        continue;
+                    };
+                    let mut path_alternatives = vec![argument_constraints.clone()];
+                    for guard in &path.guards {
+                        let guard_alternatives = constraints_for_guard(
+                            guard,
+                            Some(return_expression),
+                            Some(&path.bindings),
+                            Some(&argument_values),
+                            functions,
+                            depth + 1,
+                        )?;
+                        path_alternatives =
+                            combine_alternatives(path_alternatives, guard_alternatives);
+                    }
+                    let values = linear_value_alternatives(
+                        return_expression,
+                        None,
+                        Some(&path.bindings),
+                        Some(&argument_values),
+                        functions,
+                        depth + 1,
+                    )?;
+                    for (value, value_constraints) in values {
+                        for constraints in &path_alternatives {
+                            alternatives.push((
+                                value.clone(),
+                                constraints
+                                    .iter()
+                                    .cloned()
+                                    .chain(value_constraints.iter().cloned())
+                                    .collect(),
+                            ));
+                        }
+                    }
+                }
+            }
+            if alternatives.is_empty() {
+                None
+            } else {
+                Some(alternatives)
+            }
         }
         _ => None,
     }
@@ -3089,6 +3244,30 @@ mod tests {
         assert_eq!(results[1].status, VerificationStatus::Proven);
         assert_eq!(results[2].status, VerificationStatus::Proven);
         assert_eq!(results[3].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_path_sensitive_function_call_summaries() {
+        let program = parse(
+            &lex("fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn caller(value: Int) -> Int ensures { result >= 0 } { return absolute(value) } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn rejects_impossible_postcondition_for_path_sensitive_call() {
+        let program = parse(
+            &lex("fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn caller(value: Int) -> Int ensures { result < 0 } { return absolute(value) } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Failed);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 
     #[test]

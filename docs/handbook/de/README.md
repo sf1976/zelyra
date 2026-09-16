@@ -626,6 +626,13 @@ FAILED
 Nur `PROVEN` bedeutet bewiesen. `RUNTIME_CHECK` trägt keinen falschen Schnurrbart
 und behauptet nicht, Mathematik zu sein.
 
+Der Verifier fasst außerdem Funktionsaufrufe mit begrenzter Tiefe zusammen.
+Eine Callee mit mehreren Rückgabepfaden, etwa eine Absolutwertfunktion, liefert
+ihre Pfadbedingungen an den aufrufenden Contract. `requires`-Bedingungen der
+Callee werden nach Argumentsubstitution geprüft; `requires` des Aufrufers sind
+Annahmen beim Beweis seiner `ensures`. Komplexe, rekursive oder nicht
+auflösbare Fälle bleiben `RUNTIME_CHECK`.
+
 ## 16. Konfiguration und Geheimnisse
 
 Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
@@ -729,4 +736,3 @@ die Tür abschließen:
 > **Automatisch, wenn möglich. Anpassbar, wenn nötig. Überall geprüft.**
 
 Und jetzt: eine Tabelle bauen, SQL lesen, Backup prüfen. In dieser Reihenfolge.
-

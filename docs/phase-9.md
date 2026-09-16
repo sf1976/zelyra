@@ -112,13 +112,14 @@ a known constructor, so `Some(4)` followed by `return number` can be checked as
 `return 4`. Unknown payloads and unsupported binding relationships remain
 `RUNTIME_CHECK`; functions without contracts are reported as `UNPROVEN`.
 
-Simple direct-return function calls are also summarized and inlined into the
-integer model. Nested calls such as `increment(increment(value))` are handled
-with a bounded depth. Before a callee summary is used, the verifier checks the
-callee's `requires` after substituting the call arguments. A caller's
-`requires` clauses are available as assumptions while proving its `ensures`.
-Calls to complex, recursive, or otherwise unresolved functions remain
-`RUNTIME_CHECK`, as do call preconditions that cannot be proven.
+Simple function calls are summarized and inlined into the integer model.
+Direct-return calls and path-sensitive calls such as `return absolute(value)`
+are handled with bounded depth; callee return paths contribute their own path
+constraints. Before a callee summary is used, the verifier checks the callee's
+`requires` after substituting the call arguments. A caller's `requires` clauses
+are available as assumptions while proving its `ensures`. Calls to complex,
+recursive, or otherwise unresolved functions remain `RUNTIME_CHECK`, as do
+call preconditions that cannot be proven.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.
