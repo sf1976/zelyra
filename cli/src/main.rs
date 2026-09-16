@@ -8,7 +8,9 @@ use zelyra_forms::{check_program as check_form_program, validate as validate_for
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
-use zelyra_runtime::{check, check_capabilities, execute, execute_with_database};
+use zelyra_runtime::{
+    check, check_capabilities_with_grants, execute, execute_with_database, KNOWN_CAPABILITIES,
+};
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
@@ -34,7 +36,7 @@ fn create_project(path: &str, allow_current_directory: bool) -> ExitCode {
     let files = [
         (
             "zelyra.toml",
-            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n",
+            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.0\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
         ),
         (
             "main.zyl",
@@ -127,16 +129,7 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
             return Err(());
         }
     }
-    if let Err(errors) = check_capabilities(&program) {
-        for error in errors {
-            diagnostic(
-                path,
-                "E-CAP-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
-        }
+    if validate_capabilities(path, &program).is_err() {
         return Err(());
     }
     if let Ok(schema) = build_schema(&program) {
@@ -172,6 +165,97 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    let grants = match project_capability_grants(path) {
+        Ok(grants) => grants,
+        Err(error) => {
+            diagnostic(path, "E-CAP-002", &error, 1, 1);
+            return Err(());
+        }
+    };
+    if let Err(errors) = check_capabilities_with_grants(program, grants.as_ref()) {
+        for error in errors {
+            diagnostic(
+                path,
+                "E-CAP-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return Err(());
+    }
+    Ok(())
+}
+
+fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
+    let source_path =
+        fs::canonicalize(path).map_err(|error| format!("cannot locate source: {error}"))?;
+    let mut directory = source_path
+        .parent()
+        .ok_or_else(|| "source has no parent directory".to_owned())?;
+    let Some(config_path) = (loop {
+        let candidate = directory.join("zelyra.toml");
+        if candidate.is_file() {
+            break Some(candidate);
+        }
+        let Some(parent) = directory.parent() else {
+            break None;
+        };
+        if parent == directory {
+            break None;
+        }
+        directory = parent;
+    }) else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut grants = HashSet::new();
+    let mut seen = HashSet::new();
+    let mut in_capabilities = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_capabilities = line == "[capabilities]";
+            continue;
+        }
+        if !in_capabilities {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid capability setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim().to_ascii_lowercase();
+        let capability = KNOWN_CAPABILITIES
+            .iter()
+            .copied()
+            .find(|capability| capability.to_ascii_lowercase() == key)
+            .ok_or_else(|| format!("unknown capability setting `{key}`"))?;
+        if !seen.insert(capability) {
+            return Err(format!("capability `{key}` is configured more than once"));
+        }
+        match raw_value.trim() {
+            "true" => {
+                grants.insert(capability.to_owned());
+            }
+            "false" => {}
+            value => {
+                return Err(format!(
+                    "capability `{key}` must be true or false, found `{value}`"
+                ));
+            }
+        }
+    }
+    Ok(Some(grants))
 }
 
 fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -611,6 +695,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
+    if validate_capabilities(&path, &program).is_err() {
+        return ExitCode::from(1);
+    }
     if program.pages.is_empty() && program.forms.is_empty() && program.cruds.is_empty() {
         eprintln!("error[E-WEB-001]: {path} does not define a page, form, or CRUD resource");
         return ExitCode::from(1);
@@ -1121,5 +1208,14 @@ mod tests {
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn reads_project_capability_grants() {
+        let grants = project_capability_grants("../examples/capabilities.zyl")
+            .unwrap()
+            .unwrap();
+        assert!(grants.contains("Database"));
+        assert!(grants.contains("Network"));
     }
 }

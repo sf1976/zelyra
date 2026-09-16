@@ -40,10 +40,23 @@ fn load_customer() -> Customer[]
 }
 ~~~
 
-The declaration is checked statically and is visible in the AST and HIR. This
-phase does not yet grant operating-system privileges or implement network and
-file APIs. Runtime capability enforcement for those APIs, project-level grants,
-and capability-aware concurrency remain future work.
+The declaration is checked statically and is visible in the AST and HIR. A
+project can grant capabilities explicitly in `zelyra.toml`:
+
+~~~toml
+[capabilities]
+database = true
+network = false
+~~~
+
+When a project file is present, every declared capability must be enabled
+there. A missing entry or `false` value is denied by `zelyra check`, `build`,
+`run`, and `serve`. Standalone source files without a project file retain the
+single-file development behavior and only receive declaration checking.
+
+This phase does not yet grant operating-system privileges or implement network
+and file APIs. Runtime capability enforcement for those APIs and
+capability-aware concurrency remain future work.
 
 ## Diagnostics
 

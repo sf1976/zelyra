@@ -37,6 +37,13 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
 ];
 
 pub fn check_capabilities(program: &Program) -> Result<(), Vec<CapabilityError>> {
+    check_capabilities_with_grants(program, None)
+}
+
+pub fn check_capabilities_with_grants(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+) -> Result<(), Vec<CapabilityError>> {
     let functions = program
         .functions
         .iter()
@@ -59,6 +66,14 @@ pub fn check_capabilities(program: &Program) -> Result<(), Vec<CapabilityError>>
             } else if !declared.insert(capability.as_str()) {
                 errors.push(CapabilityError {
                     message: format!("capability `{capability}` is declared more than once"),
+                    span: function.span,
+                });
+            } else if grants.is_some_and(|grants| !grants.contains(capability)) {
+                errors.push(CapabilityError {
+                    message: format!(
+                        "capability `{capability}` is not enabled by the project; set `{}` to true in zelyra.toml",
+                        capability.to_ascii_lowercase()
+                    ),
                     span: function.span,
                 });
             }
@@ -1554,5 +1569,15 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("unknown capability `Telepathy`")));
+    }
+
+    #[test]
+    fn rejects_capability_not_granted_by_project() {
+        let program = parse(&lex("fn main() uses Network { print(1) }").unwrap()).unwrap();
+        let grants = HashSet::new();
+        let errors = check_capabilities_with_grants(&program, Some(&grants)).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("not enabled by the project")));
     }
 }

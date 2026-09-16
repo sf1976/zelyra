@@ -50,7 +50,8 @@ Das aktuelle Repository enthält:
   HttpOnly-Sessions, Logout, datenbankgestützten Berechtigungen und
   geschützten Routen.
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
-  statische Durchsetzung von `Database` für natives SQL.
+  statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
+  in `zelyra.toml`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
 Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, Capabilities, Contracts,
@@ -184,6 +185,10 @@ Die aktuelle Projektdatei ist bewusst klein:
 name = "meine-app"
 version = "0.1.0"
 zelyra = "0.1"
+
+[capabilities]
+database = true
+network = false
 ~~~
 
 ## 5. Grundlagen der Sprache

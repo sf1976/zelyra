@@ -54,7 +54,8 @@ Heute implementiert:
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 - erste Capability-Deklarationen und statische Weitergabe über
-  Funktionsaufrufe; natives SQL benötigt die Capability `Database`.
+  Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
+  `zelyra.toml`.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs,
 Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die

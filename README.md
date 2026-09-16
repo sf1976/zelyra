@@ -54,7 +54,8 @@ Implemented today:
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
 - initial capability declarations and static propagation through function calls;
-  native SQL requires the `Database` capability.
+  native SQL requires the `Database` capability, with project grants from
+  `zelyra.toml`.
 
 Full CRUD generation, database roles, APIs, contracts,
 verification, and production deployment tooling are still being developed. See the

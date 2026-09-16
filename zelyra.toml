@@ -1,0 +1,11 @@
+[project]
+name = "zelyra"
+version = "0.1.0"
+zelyra = "0.1"
+
+[database.main]
+engine = "mariadb"
+
+[capabilities]
+database = true
+network = true

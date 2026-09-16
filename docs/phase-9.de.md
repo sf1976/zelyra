@@ -41,10 +41,24 @@ fn load_customer() -> Customer[]
 }
 ~~~
 
-Die Deklaration wird statisch geprüft und ist in AST und HIR sichtbar. Diese
-Phase vergibt noch keine Betriebssystemrechte und implementiert noch keine
-Netzwerk- oder Datei-APIs. Runtime-Durchsetzung für diese APIs,
-projektweite Freigaben und capability-bewusste Nebenläufigkeit folgen später.
+Die Deklaration wird statisch geprüft und ist in AST und HIR sichtbar. Ein
+Projekt kann Capabilities ausdrücklich in `zelyra.toml` freigeben:
+
+~~~toml
+[capabilities]
+database = true
+network = false
+~~~
+
+Wenn eine Projektdatei vorhanden ist, muss jede deklarierte Capability dort
+aktiviert sein. Ein fehlender Eintrag oder der Wert `false` wird von
+`zelyra check`, `build`, `run` und `serve` abgelehnt. Einzelne Quelldateien
+ohne Projektdatei behalten das Entwicklungsverhalten und prüfen nur die
+Deklaration.
+
+Diese Phase vergibt noch keine Betriebssystemrechte und implementiert noch
+keine Netzwerk- oder Datei-APIs. Runtime-Durchsetzung für diese APIs und
+capability-bewusste Nebenläufigkeit folgen später.
 
 ## Diagnosen
 

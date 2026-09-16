@@ -47,7 +47,7 @@ The current repository contains:
 - a database-backed login with Argon2 password verification, persistent
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
 - initial capability declarations, call propagation, and static enforcement of
-  `Database` for native SQL.
+  `Database` for native SQL, with project-level grants in `zelyra.toml`.
 
 The following are not complete yet: full CRUD generation, database roles, login
 throttling, password-management commands, APIs, capabilities, contracts,
@@ -179,6 +179,10 @@ The current project file is intentionally small:
 name = "my-app"
 version = "0.1.0"
 zelyra = "0.1"
+
+[capabilities]
+database = true
+network = false
 ~~~
 
 ## 5. Language basics
