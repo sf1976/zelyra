@@ -23,6 +23,8 @@ pub enum TokenKind {
     Mutable,
     Match,
     Sql,
+    Page,
+    Html,
     Transaction,
     True,
     False,
@@ -60,6 +62,7 @@ pub enum TokenKind {
     LBracket,
     RBracket,
     SqlBody(String),
+    HtmlBody(String),
     Newline,
     Eof,
 }
@@ -84,6 +87,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     let mut column = 1;
     let mut sql_pending = false;
     let mut sql_header_ready = false;
+    let mut html_pending = false;
 
     while i < bytes.len() {
         let start = i;
@@ -128,6 +132,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             if sql_pending && !sql_header_ready && word != "sql" {
                 sql_pending = false;
             }
+            if html_pending && word != "html" {
+                html_pending = false;
+            }
             let kind = match word {
                 "fn" => TokenKind::Fn,
                 "type" => TokenKind::Type,
@@ -135,6 +142,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "table" => TokenKind::Table,
                 "engine" => TokenKind::Engine,
                 "postgres" => TokenKind::Postgres,
+                "page" => TokenKind::Page,
+                "html" => TokenKind::Html,
                 "primary" => TokenKind::Primary,
                 "auto" => TokenKind::Auto,
                 "required" => TokenKind::Required,
@@ -161,6 +170,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             });
             if word == "sql" {
                 sql_pending = true;
+            }
+            if word == "html" {
+                html_pending = true;
             }
             continue;
         }
@@ -286,7 +298,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             });
             continue;
         }
-        if c == '{' && (sql_header_ready || sql_pending) {
+        if c == '{' && (sql_header_ready || sql_pending || html_pending) {
             let open_span = span(i + 1);
             tokens.push(Token {
                 kind: TokenKind::LBrace,
@@ -296,9 +308,15 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             column += 1;
             let body_start = i;
             let (body_end, next_line, next_column) =
-                scan_sql_body(source, body_start, line, column)?;
+                scan_raw_body(source, body_start, line, column)?;
+            let body = source[body_start..body_end].to_owned();
+            let body_kind = if html_pending {
+                TokenKind::HtmlBody(body)
+            } else {
+                TokenKind::SqlBody(body)
+            };
             tokens.push(Token {
-                kind: TokenKind::SqlBody(source[body_start..body_end].to_owned()),
+                kind: body_kind,
                 span: Span::new(body_start, body_end, line, column),
             });
             let close_span = Span::new(body_end, body_end + 1, next_line, next_column);
@@ -311,6 +329,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             column = next_column + 1;
             sql_pending = false;
             sql_header_ready = false;
+            html_pending = false;
             continue;
         }
         let (kind, width) = match (c, bytes.get(i + 1).copied().map(char::from)) {
@@ -373,7 +392,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     Ok(tokens)
 }
 
-fn scan_sql_body(
+fn scan_raw_body(
     source: &str,
     start: usize,
     mut line: usize,
@@ -382,6 +401,7 @@ fn scan_sql_body(
     let bytes = source.as_bytes();
     let mut i = start;
     let mut quote = None;
+    let mut brace_depth = 0;
     while i < bytes.len() {
         let c = bytes[i] as char;
         if let Some(active_quote) = quote {
@@ -401,8 +421,13 @@ fn scan_sql_body(
             i += 1;
             column += 1;
             continue;
+        } else if c == '{' {
+            brace_depth += 1;
         } else if c == '}' {
-            return Ok((i, line, column));
+            if brace_depth == 0 {
+                return Ok((i, line, column));
+            }
+            brace_depth -= 1;
         }
         if c == '\n' {
             line += 1;
@@ -413,7 +438,7 @@ fn scan_sql_body(
         i += 1;
     }
     Err(LexError {
-        message: "unterminated SQL block".into(),
+        message: "unterminated raw block".into(),
         span: Span::new(start, source.len(), line, column),
     })
 }
@@ -441,6 +466,15 @@ mod tests {
         assert!(tokens.iter().any(|token| matches!(
             &token.kind,
             TokenKind::SqlBody(body) if body.contains("'Anna'")
+        )));
+    }
+
+    #[test]
+    fn captures_html_body_and_template_braces() {
+        let tokens = lex("page \"/hello/{name}\" { html { <h1>Hello, {name}!</h1> } }").unwrap();
+        assert!(tokens.iter().any(|token| matches!(
+            &token.kind,
+            TokenKind::HtmlBody(body) if body.contains("{name}")
         )));
     }
 }

@@ -96,3 +96,15 @@ Apache will remain an optional integration for existing infrastructure. The
 same application should also be deployable behind nginx, Caddy, a cloud load
 balancer, or directly on the Zelyra server. These commands are intentionally
 documented as roadmap items until the Web Core phase implements them.
+
+Phase 5 now provides the first Web Core step: page definitions, HTML blocks,
+parameterized GET routes, safe HTML escaping, and the built-in HTTP server.
+Start the example without Apache:
+
+~~~bash
+zelyra serve examples/hello_web.zyl
+# open http://127.0.0.1:3000/hello/Zelyra
+~~~
+
+Forms, CRUD, sessions, CSRF, APIs, and database-backed page data remain
+subsequent Web Core work.

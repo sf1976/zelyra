@@ -81,7 +81,15 @@ pub struct Program {
     pub databases: Vec<DatabaseDef>,
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
+    pub pages: Vec<PageDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageDef {
+    pub path: String,
+    pub html: String,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]

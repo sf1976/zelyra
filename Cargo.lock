@@ -16,6 +16,7 @@ dependencies = [
  "zelyra-lexer",
  "zelyra-parser",
  "zelyra-runtime",
+ "zelyra-web",
 ]
 
 [[package]]
@@ -60,3 +61,7 @@ dependencies = [
  "zelyra-lexer",
  "zelyra-parser",
 ]
+
+[[package]]
+name = "zelyra-web"
+version = "0.1.0"

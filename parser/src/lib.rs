@@ -66,6 +66,7 @@ impl<'a> Parser<'a> {
         let mut databases = Vec::new();
         let mut tables = Vec::new();
         let mut types = Vec::new();
+        let mut pages = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
@@ -75,6 +76,8 @@ impl<'a> Parser<'a> {
                 tables.push(self.table_definition()?);
             } else if self.at(&TokenKind::Type) {
                 types.push(self.type_definition()?);
+            } else if self.at(&TokenKind::Page) {
+                pages.push(self.page_definition()?);
             } else {
                 functions.push(self.function()?);
             }
@@ -84,6 +87,7 @@ impl<'a> Parser<'a> {
             databases,
             tables,
             types,
+            pages,
             functions,
         })
     }
@@ -133,6 +137,40 @@ impl<'a> Parser<'a> {
             }
             _ => self.error(format!("expected {label}")),
         }
+    }
+    fn page_definition(&mut self) -> Result<PageDef, ParseError> {
+        let start = self.expect(TokenKind::Page, "`page`")?;
+        let path = self.string_value("page path")?;
+        self.expect(TokenKind::LBrace, "`{` after page path")?;
+        let mut html = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Html) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `html`")?;
+                let body = match self.current().kind.clone() {
+                    TokenKind::HtmlBody(body) => {
+                        self.advance();
+                        body
+                    }
+                    _ => return self.error("expected HTML body"),
+                };
+                self.expect(TokenKind::RBrace, "`}` after HTML body")?;
+                html = Some(body);
+            } else {
+                return self.error("expected `html` in page definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after page definition")?;
+        let Some(html) = html else {
+            return self.error("page definition requires an `html` block");
+        };
+        Ok(PageDef {
+            path,
+            html,
+            span: start.join(end),
+        })
     }
     fn table_definition(&mut self) -> Result<TableDef, ParseError> {
         let start = self.expect(TokenKind::Table, "`table`")?;
@@ -747,5 +785,20 @@ mod tests {
             program.functions[0].body.statements[1],
             Stmt::BindOrAssign { .. }
         ));
+    }
+
+    #[test]
+    fn parses_page_with_html_template() {
+        let source = r#"
+            page "/hello/{name}" {
+                html {
+                    <h1>Hello, {name}!</h1>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages.len(), 1);
+        assert_eq!(program.pages[0].path, "/hello/{name}");
+        assert!(program.pages[0].html.contains("{name}"));
     }
 }

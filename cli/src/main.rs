@@ -8,9 +8,10 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute, execute_with_database};
+use zelyra_web::{serve, Route};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -301,6 +302,42 @@ fn inspect_for_backend(
     }
 }
 
+fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = args.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let address = args.next().unwrap_or_else(|| "127.0.0.1:3000".into());
+    if args.next().is_some() {
+        usage();
+        return ExitCode::from(2);
+    }
+    let program = match load(&path) {
+        Ok(program) => program,
+        Err(()) => return ExitCode::from(1),
+    };
+    if program.pages.is_empty() {
+        eprintln!("error[E-WEB-001]: {path} does not define a page");
+        return ExitCode::from(1);
+    }
+    let routes = program
+        .pages
+        .into_iter()
+        .map(|page| Route {
+            path: page.path,
+            html: page.html,
+        })
+        .collect();
+    eprintln!("Zelyra server listening on http://{address}");
+    match serve(routes, &address) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
@@ -332,6 +369,9 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
         return create_project(&path, true);
+    }
+    if command == "serve" {
+        return serve_command(args);
     }
     let Some(path) = args.next() else {
         usage();
