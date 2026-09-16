@@ -457,9 +457,10 @@ A minimal CRUD resource can be added with:
 crud Machine -> machines
 ~~~
 
-This exposes `GET /machines` with escaped output, search, pagination, linked
-detail pages, and generated Create/Edit forms at `/machines/new` and
-`/machines/<id>/edit`.
+This exposes `GET /machines` with escaped output, search, exact filters,
+allowlisted sorting, pagination, linked detail pages, and generated Create/Edit
+forms at `/machines/new` and `/machines/<id>/edit`. Filters use
+`filter_<column>`; sorting uses `sort=<column>&order=asc|desc`.
 
 ## 11. Useful commands
 

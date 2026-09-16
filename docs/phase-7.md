@@ -11,8 +11,10 @@ crud Machine -> machines
 
 With a MariaDB `DATABASE_URL`, this exposes `GET /machines`. The generated
 list currently includes all schema columns in an escaped HTML table, search
-across text columns with bound parameters, and bounded pagination through the
-`page` and `per_page` query parameters.
+across text columns with bound parameters, exact filters through
+`filter_<column>`, allowlisted sorting through `sort` and `order`, and bounded
+pagination through the `page` and `per_page` query parameters. Unknown sort or
+filter columns are rejected with HTTP 400.
 
 Each row links to a generated detail route, for example `GET /machines/1`.
 The detail view offers generated Create and Edit forms at `/machines/new` and
@@ -24,7 +26,7 @@ Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
 
-The next steps are configured columns, sorting, filters, and delete actions.
+The next steps are configured columns and delete actions.
 The complete relationship-aware example is `examples/machine_form.zyl`.
 
 ~~~bash

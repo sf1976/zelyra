@@ -467,9 +467,11 @@ Eine minimale CRUD-Ressource wird so ergänzt:
 crud Machine -> machines
 ~~~
 
-Damit wird `GET /machines` mit escaped Ausgabe, Suche, Pagination, verlinkten
-Detailseiten und automatisch erzeugten Create-/Edit-Formularen unter
-`/machines/new` und `/machines/<id>/edit` bereitgestellt.
+Damit wird `GET /machines` mit escaped Ausgabe, Suche, exakten Filtern,
+Allowlist-Sortierung, Pagination, verlinkten Detailseiten und automatisch
+erzeugten Create-/Edit-Formularen unter `/machines/new` und
+`/machines/<id>/edit` bereitgestellt. Filter verwenden `filter_<spalte>`;
+Sortierung verwendet `sort=<spalte>&order=asc|desc`.
 
 ## 11. Nützliche Befehle
 

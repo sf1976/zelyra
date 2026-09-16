@@ -13,6 +13,9 @@ Mit einer auf MariaDB zeigenden `DATABASE_URL` wird `GET /machines`
 bereitgestellt. Die generierte Liste umfasst aktuell alle Schema-Spalten in
 einer escaped HTML-Tabelle, Suche über Textspalten mit gebundenen Parametern
 und begrenzte Pagination über die Query-Parameter `page` und `per_page`.
+Zusätzlich gibt es exakte Filter über `filter_<spalte>` sowie eine Allowlist-
+Sortierung über `sort` und `order`. Unbekannte Sortier- oder Filterspalten
+werden mit HTTP 400 abgelehnt.
 
 Jede Zeile verlinkt auf eine generierte Detailroute, beispielsweise
 `GET /machines/1`. Die Detailansicht bietet automatisch erzeugte Create- und
@@ -25,8 +28,7 @@ Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.
 
-Als Nächstes folgen konfigurierbare Spalten, Sortierung, Filter und die
-Löschaktion. Das vollständige Beispiel mit Beziehung ist
+Als Nächstes folgen konfigurierbare Spalten und die Löschaktion. Das vollständige Beispiel mit Beziehung ist
 `examples/machine_form.zyl`.
 
 ~~~bash

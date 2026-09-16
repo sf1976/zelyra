@@ -495,11 +495,45 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     if columns.is_empty() {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     }
-    let order_column = columns
-        .iter()
-        .copied()
-        .find(|column| *column == "id")
-        .unwrap_or(columns[0]);
+    let sort_column = query_values
+        .get("sort")
+        .map(String::as_str)
+        .unwrap_or_else(|| {
+            columns
+                .iter()
+                .copied()
+                .find(|column| *column == "id")
+                .unwrap_or(columns[0])
+        });
+    if !columns.contains(&sort_column) {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown sort column.</p>");
+    }
+    let order = match query_values
+        .get("order")
+        .map(String::as_str)
+        .unwrap_or("asc")
+    {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ => {
+            return Response::html(
+                400,
+                "<h1>400 Bad Request</h1><p>order must be asc or desc.</p>",
+            )
+        }
+    };
+    let mut filters = Vec::new();
+    for (name, value) in &query_values {
+        let Some(column) = name.strip_prefix("filter_") else {
+            continue;
+        };
+        if !columns.contains(&column) {
+            return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown filter column.</p>");
+        }
+        if !value.is_empty() {
+            filters.push((column, value));
+        }
+    }
     let text_columns = table
         .columns
         .iter()
@@ -518,10 +552,11 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
             .join(", "),
         quote_identifier(&crud.table)
     );
+    let mut conditions = Vec::new();
     if !search.is_empty() && !text_columns.is_empty() {
-        query.push_str(" WHERE ");
-        query.push_str(
-            &text_columns
+        conditions.push(format!(
+            "({})",
+            text_columns
                 .iter()
                 .map(|column| {
                     format!(
@@ -530,12 +565,20 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
                     )
                 })
                 .collect::<Vec<_>>()
-                .join(" OR "),
-        );
+                .join(" OR ")
+        ));
+    }
+    for (column, _) in &filters {
+        conditions.push(format!("{} = :filter_{column}", quote_identifier(column)));
+    }
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
     }
     query.push_str(&format!(
-        " ORDER BY {} LIMIT :limit OFFSET :offset",
-        quote_identifier(order_column)
+        " ORDER BY {} {} LIMIT :limit OFFSET :offset",
+        quote_identifier(sort_column),
+        order
     ));
     let mut params = vec![
         (
@@ -553,6 +596,20 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
             zelyra_database::QueryValue::String(search.clone()),
         ));
     }
+    for (column, value) in filters {
+        let schema_column = table
+            .columns
+            .iter()
+            .find(|candidate| candidate.name == column)
+            .expect("filter column was validated against the schema");
+        let value = match filter_query_value(schema_column, value) {
+            Ok(value) => value,
+            Err(message) => {
+                return Response::html(400, format!("<h1>400 Bad Request</h1><p>{message}</p>"))
+            }
+        };
+        params.push((format!("filter_{column}"), value));
+    }
     let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
@@ -562,7 +619,20 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     };
     Response::html(
         200,
-        render_crud_list(crud, &columns, &result.rows, &search, page, per_page),
+        render_crud_list(
+            crud,
+            CrudListView {
+                table,
+                columns: &columns,
+                rows: &result.rows,
+                search: &search,
+                query_values: &query_values,
+                sort: sort_column,
+                order,
+                page,
+                per_page,
+            },
+        ),
     )
 }
 
@@ -635,14 +705,57 @@ fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<
         .filter(|value| *value > 0)
 }
 
-fn render_crud_list(
-    crud: &CrudRoute,
-    columns: &[&str],
-    rows: &[Vec<String>],
-    search: &str,
+fn filter_query_value(
+    column: &zelyra_database::Column,
+    value: &str,
+) -> Result<zelyra_database::QueryValue, String> {
+    let sql_type = column.sql_type.to_ascii_uppercase();
+    if sql_type.contains("BOOL") {
+        return match value {
+            "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
+            "false" | "0" => Ok(zelyra_database::QueryValue::Bool(false)),
+            _ => Err(format!("filter_{} must be true or false", column.name)),
+        };
+    }
+    if sql_type.contains("INT") {
+        return value
+            .parse::<i64>()
+            .map(zelyra_database::QueryValue::Int)
+            .map_err(|_| format!("filter_{} must be an integer", column.name));
+    }
+    if sql_type.contains("DECIMAL") || sql_type.contains("NUMERIC") || sql_type.contains("DOUBLE") {
+        return value
+            .parse::<f64>()
+            .map(zelyra_database::QueryValue::Float)
+            .map_err(|_| format!("filter_{} must be a number", column.name));
+    }
+    Ok(zelyra_database::QueryValue::String(value.into()))
+}
+
+struct CrudListView<'a> {
+    table: &'a zelyra_database::Table,
+    columns: &'a [&'a str],
+    rows: &'a [Vec<String>],
+    search: &'a str,
+    query_values: &'a HashMap<String, String>,
+    sort: &'a str,
+    order: &'a str,
     page: u64,
     per_page: u64,
-) -> String {
+}
+
+fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
+    let CrudListView {
+        table,
+        columns,
+        rows,
+        search,
+        query_values,
+        sort,
+        order,
+        page,
+        per_page,
+    } = view;
     let mut html = String::from("<main><h1>");
     html.push_str(&html_escape(&crud.title));
     html.push_str("</h1><form method=\"get\" action=\"");
@@ -651,7 +764,55 @@ fn render_crud_list(
         "\"><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
     );
     html.push_str(&html_escape(search));
-    html.push_str("\"><button type=\"submit\">Search</button></form>");
+    html.push_str("\"><label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+    for column in columns {
+        html.push_str("<option value=\"");
+        html.push_str(&html_escape(column));
+        html.push('"');
+        if *column == sort {
+            html.push_str(" selected");
+        }
+        html.push('>');
+        html.push_str(&html_escape(&humanize(column)));
+        html.push_str("</option>");
+    }
+    html.push_str(
+        "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
+    );
+    for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+        html.push_str("<option value=\"");
+        html.push_str(value);
+        html.push('"');
+        if value.eq_ignore_ascii_case(order) {
+            html.push_str(" selected");
+        }
+        html.push('>');
+        html.push_str(label);
+        html.push_str("</option>");
+    }
+    html.push_str("</select>");
+    for column in &table.columns {
+        if column.name == "id" {
+            continue;
+        }
+        html.push_str("<label for=\"filter_");
+        html.push_str(&html_escape(&column.name));
+        html.push_str("\">");
+        html.push_str(&html_escape(&format!("Filter {}", humanize(&column.name))));
+        html.push_str("</label><input id=\"filter_");
+        html.push_str(&html_escape(&column.name));
+        html.push_str("\" name=\"filter_");
+        html.push_str(&html_escape(&column.name));
+        html.push_str("\" value=\"");
+        html.push_str(&html_escape(
+            query_values
+                .get(&format!("filter_{}", column.name))
+                .map(String::as_str)
+                .unwrap_or(""),
+        ));
+        html.push_str("\">");
+    }
+    html.push_str("<button type=\"submit\">Apply</button></form>");
     if rows.is_empty() {
         html.push_str("<p>No records found.</p>");
     } else {
@@ -687,6 +848,9 @@ fn render_crud_list(
         html.push_str(&html_escape(&crud_page_url(
             &crud.path,
             search,
+            query_values,
+            sort,
+            order,
             page - 1,
             per_page,
         )));
@@ -700,6 +864,9 @@ fn render_crud_list(
         html.push_str(&html_escape(&crud_page_url(
             &crud.path,
             search,
+            query_values,
+            sort,
+            order,
             page + 1,
             per_page,
         )));
@@ -730,11 +897,37 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
     html
 }
 
-fn crud_page_url(path: &str, search: &str, page: u64, per_page: u64) -> String {
-    let mut url = format!("{path}?page={page}&per_page={per_page}");
+fn crud_page_url(
+    path: &str,
+    search: &str,
+    query_values: &HashMap<String, String>,
+    sort: &str,
+    order: &str,
+    page: u64,
+    per_page: u64,
+) -> String {
+    let mut url = format!(
+        "{path}?page={page}&per_page={per_page}&sort={sort}&order={}",
+        order.to_ascii_lowercase()
+    );
     if !search.is_empty() {
         url.push_str("&search=");
         url.push_str(&url_encode(search));
+    }
+    let mut filter_names = query_values
+        .keys()
+        .filter(|name| name.starts_with("filter_"))
+        .collect::<Vec<_>>();
+    filter_names.sort();
+    for name in filter_names {
+        if let Some(value) = query_values.get(name) {
+            if !value.is_empty() {
+                url.push('&');
+                url.push_str(name);
+                url.push('=');
+                url.push_str(&url_encode(value));
+            }
+        }
     }
     url
 }
@@ -1557,18 +1750,55 @@ mod tests {
                 tables: Vec::new(),
             },
         };
+        let table = zelyra_database::Table {
+            name: "machines".into(),
+            columns: vec![
+                zelyra_database::Column {
+                    name: "id".into(),
+                    sql_type: "BIGINT".into(),
+                    nullable: false,
+                    primary_key: true,
+                    auto: true,
+                    unique: false,
+                    default: None,
+                },
+                zelyra_database::Column {
+                    name: "name".into(),
+                    sql_type: "VARCHAR(100)".into(),
+                    nullable: false,
+                    primary_key: false,
+                    auto: false,
+                    unique: false,
+                    default: None,
+                },
+            ],
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        };
+        let columns = ["id", "name"];
+        let rows = [vec!["1".into(), "<unsafe>".into()]];
+        let query_values = HashMap::new();
         let html = render_crud_list(
             &route,
-            &["id", "name"],
-            &[vec!["1".into(), "<unsafe>".into()]],
-            "CNC machine",
-            2,
-            1,
+            CrudListView {
+                table: &table,
+                columns: &columns,
+                rows: &rows,
+                search: "CNC machine",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 2,
+                per_page: 1,
+            },
         );
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains("value=\"CNC machine\""));
-        assert!(html.contains("page=1&amp;per_page=1&amp;search=CNC%20machine"));
-        assert!(html.contains("page=3&amp;per_page=1&amp;search=CNC%20machine"));
+        assert!(html
+            .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
+        assert!(html
+            .contains("page=3&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
     }
 
     #[test]
