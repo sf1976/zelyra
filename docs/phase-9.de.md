@@ -107,9 +107,11 @@ Außerdem analysiert er `if`-/`else`-Rückgabepfade und verwendet deren einfache
 Integer-Vergleiche als Pfadannahmen.
 
 Beispielsweise kann er `result >= 0` für eine Absolutwertfunktion mit den
-beiden Zweigen `return value` und `return -value` beweisen. Nicht entscheidbare
-Bedingungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als
-`UNPROVEN` gemeldet.
+beiden Zweigen `return value` und `return -value` beweisen. Vollständige
+`match`-Ausdrücke mit Integer- oder Bool-Literal-Mustern und einem Wildcard-
+Zweig werden ebenfalls als getrennte Rückgabepfade gesammelt. Nicht entscheidbare Bedingungen
+bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als `UNPROVEN`
+gemeldet.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

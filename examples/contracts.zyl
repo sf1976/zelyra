@@ -21,7 +21,23 @@ fn absolute(value: Int) -> Int
     }
 }
 
+fn classify(value: Int) -> Int
+    ensures {
+        result >= 0
+    }
+{
+    match value {
+        0 => {
+            return 0
+        }
+        _ => {
+            return 1
+        }
+    }
+}
+
 fn main() {
     print(increment(41))
     print(absolute(-7))
+    print(classify(0))
 }

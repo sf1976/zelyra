@@ -148,26 +148,26 @@ fn verify_postcondition(
                     saw_unknown_path = true;
                     continue;
                 };
-                let Some(guards) = path
-                    .guards
-                    .iter()
-                    .map(|guard| {
-                        constraints_for_bool(guard.expression, guard.expected, Some(expression))
-                    })
-                    .collect::<Option<Vec<_>>>()
-                    .map(|groups| groups.into_iter().flatten().collect::<Vec<_>>())
-                else {
-                    saw_unknown_path = true;
-                    continue;
-                };
-                if constraints_satisfiable(guards.clone()) == Some(false) {
-                    continue;
+                let mut alternatives = vec![Vec::new()];
+                for guard in &path.guards {
+                    let Some(guard_alternatives) = constraints_for_guard(guard, Some(expression))
+                    else {
+                        saw_unknown_path = true;
+                        alternatives.clear();
+                        break;
+                    };
+                    alternatives = combine_alternatives(alternatives, guard_alternatives);
                 }
-                saw_feasible_path = true;
-                match symbolic_bool_with_constraints(contract, expression, &guards) {
-                    Some(true) => {}
-                    Some(false) => return VerificationStatus::Failed,
-                    None => saw_unknown_path = true,
+                for guards in alternatives {
+                    if constraints_satisfiable(guards.clone()) == Some(false) {
+                        continue;
+                    }
+                    saw_feasible_path = true;
+                    match symbolic_bool_with_constraints(contract, expression, &guards) {
+                        Some(true) => {}
+                        Some(false) => return VerificationStatus::Failed,
+                        None => saw_unknown_path = true,
+                    }
                 }
             }
             if saw_feasible_path && !saw_unknown_path {
@@ -180,9 +180,16 @@ fn verify_postcondition(
 }
 
 #[derive(Clone, Copy, Debug)]
-struct SymbolicGuard<'a> {
-    expression: &'a Expr,
-    expected: bool,
+enum SymbolicGuard<'a> {
+    Condition {
+        expression: &'a Expr,
+        expected: bool,
+    },
+    Match {
+        value: &'a Expr,
+        pattern: &'a Pattern,
+        matched: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -234,7 +241,7 @@ fn symbolic_states<'a>(
                         ..
                     } => {
                         let mut then_guards = guards.clone();
-                        then_guards.push(SymbolicGuard {
+                        then_guards.push(SymbolicGuard::Condition {
                             expression: condition,
                             expected: true,
                         });
@@ -242,18 +249,36 @@ fn symbolic_states<'a>(
 
                         if let Some(else_block) = else_block {
                             let mut else_guards = guards;
-                            else_guards.push(SymbolicGuard {
+                            else_guards.push(SymbolicGuard::Condition {
                                 expression: condition,
                                 expected: false,
                             });
                             next.extend(symbolic_states(else_block, else_guards)?);
                         } else {
                             let mut guards = guards;
-                            guards.push(SymbolicGuard {
+                            guards.push(SymbolicGuard::Condition {
                                 expression: condition,
                                 expected: false,
                             });
                             next.push(SymbolicState::Continue(guards));
+                        }
+                    }
+                    Stmt::Match { value, arms, .. } => {
+                        for (index, arm) in arms.iter().enumerate() {
+                            let mut arm_guards = guards.clone();
+                            for previous in arms.iter().take(index) {
+                                arm_guards.push(SymbolicGuard::Match {
+                                    value,
+                                    pattern: &previous.pattern,
+                                    matched: false,
+                                });
+                            }
+                            arm_guards.push(SymbolicGuard::Match {
+                                value,
+                                pattern: &arm.pattern,
+                                matched: true,
+                            });
+                            next.extend(symbolic_states(&arm.body, arm_guards)?);
                         }
                     }
                     _ => return None,
@@ -334,19 +359,97 @@ impl LinearConstraint {
     }
 }
 
+fn combine_alternatives(
+    left: Vec<Vec<LinearConstraint>>,
+    right: Vec<Vec<LinearConstraint>>,
+) -> Vec<Vec<LinearConstraint>> {
+    left.into_iter()
+        .flat_map(|left_constraints| {
+            right.iter().map(move |right_constraints| {
+                left_constraints
+                    .iter()
+                    .cloned()
+                    .chain(right_constraints.iter().cloned())
+                    .collect()
+            })
+        })
+        .collect()
+}
+
+fn constraints_for_guard(
+    guard: &SymbolicGuard<'_>,
+    return_expression: Option<&Expr>,
+) -> Option<Vec<Vec<LinearConstraint>>> {
+    match guard {
+        SymbolicGuard::Condition {
+            expression,
+            expected,
+        } => constraints_for_bool(expression, *expected, return_expression),
+        SymbolicGuard::Match {
+            value,
+            pattern,
+            matched,
+        } => constraints_for_pattern(value, pattern, *matched, return_expression),
+    }
+}
+
+fn constraints_for_pattern(
+    value: &Expr,
+    pattern: &Pattern,
+    matched: bool,
+    return_expression: Option<&Expr>,
+) -> Option<Vec<Vec<LinearConstraint>>> {
+    match &pattern.kind {
+        PatternKind::Wildcard | PatternKind::Variable(_) => {
+            if matched {
+                Some(vec![Vec::new()])
+            } else {
+                Some(Vec::new())
+            }
+        }
+        PatternKind::Int(expected) => {
+            let left = LinearConstraint::from_value(linear_value(value, return_expression)?);
+            let right = LinearConstraint {
+                coefficients: HashMap::new(),
+                constant: i128::from(*expected),
+            };
+            comparison_constraints(left, BinaryOp::Equal, right, matched)
+        }
+        PatternKind::Bool(expected) => {
+            let left = LinearConstraint::from_value(linear_value(value, return_expression)?);
+            let right = LinearConstraint {
+                coefficients: HashMap::new(),
+                constant: i128::from(*expected as u8),
+            };
+            let domain = [
+                left.clone(),
+                LinearConstraint {
+                    coefficients: HashMap::new(),
+                    constant: 1,
+                }
+                .combine(left.clone(), 1, -1)?,
+            ];
+            let mut alternatives = comparison_constraints(left, BinaryOp::Equal, right, matched)?;
+            for alternative in &mut alternatives {
+                alternative.extend(domain.iter().cloned());
+            }
+            Some(alternatives)
+        }
+        PatternKind::String(_) | PatternKind::Char(_) => None,
+        PatternKind::Constructor { .. } => None,
+    }
+}
+
 fn constraints_for_bool(
     expression: &Expr,
     expected: bool,
     return_expression: Option<&Expr>,
-) -> Option<Vec<LinearConstraint>> {
+) -> Option<Vec<Vec<LinearConstraint>>> {
     if let Some(ConstantValue::Bool(value)) = constant_value(expression) {
         return if value == expected {
-            Some(Vec::new())
+            Some(vec![Vec::new()])
         } else {
-            Some(vec![LinearConstraint {
-                coefficients: HashMap::new(),
-                constant: -1,
-            }])
+            Some(Vec::new())
         };
     }
     match &expression.kind {
@@ -355,16 +458,14 @@ fn constraints_for_bool(
             expr,
         } => constraints_for_bool(expr, !expected, return_expression),
         ExprKind::Binary { left, op, right } => match op {
-            BinaryOp::And if expected => {
-                let mut constraints = constraints_for_bool(left, true, return_expression)?;
-                constraints.extend(constraints_for_bool(right, true, return_expression)?);
-                Some(constraints)
-            }
-            BinaryOp::Or if !expected => {
-                let mut constraints = constraints_for_bool(left, false, return_expression)?;
-                constraints.extend(constraints_for_bool(right, false, return_expression)?);
-                Some(constraints)
-            }
+            BinaryOp::And if expected => Some(combine_alternatives(
+                constraints_for_bool(left, true, return_expression)?,
+                constraints_for_bool(right, true, return_expression)?,
+            )),
+            BinaryOp::Or if !expected => Some(combine_alternatives(
+                constraints_for_bool(left, false, return_expression)?,
+                constraints_for_bool(right, false, return_expression)?,
+            )),
             BinaryOp::Equal
             | BinaryOp::NotEqual
             | BinaryOp::Less
@@ -386,7 +487,7 @@ fn comparison_constraints(
     operator: BinaryOp,
     right: LinearConstraint,
     expected: bool,
-) -> Option<Vec<LinearConstraint>> {
+) -> Option<Vec<Vec<LinearConstraint>>> {
     let operator = if expected {
         operator
     } else {
@@ -402,12 +503,15 @@ fn comparison_constraints(
     };
     let difference = left.clone().combine(right.clone(), 1, -1)?;
     match operator {
-        BinaryOp::Equal => Some(vec![difference.clone(), difference.negate()?]),
-        BinaryOp::NotEqual => None,
-        BinaryOp::Less => Some(vec![right.combine(left, 1, -1)?.shift(1)?]),
-        BinaryOp::LessEqual => Some(vec![right.combine(left, 1, -1)?]),
-        BinaryOp::Greater => Some(vec![difference.shift(1)?]),
-        BinaryOp::GreaterEqual => Some(vec![difference]),
+        BinaryOp::Equal => Some(vec![vec![difference.clone(), difference.negate()?]]),
+        BinaryOp::NotEqual => Some(vec![
+            vec![right.clone().combine(left.clone(), 1, -1)?.shift(1)?],
+            vec![difference.shift(1)?],
+        ]),
+        BinaryOp::Less => Some(vec![vec![right.combine(left, 1, -1)?.shift(1)?]]),
+        BinaryOp::LessEqual => Some(vec![vec![right.combine(left, 1, -1)?]]),
+        BinaryOp::Greater => Some(vec![vec![difference.shift(1)?]]),
+        BinaryOp::GreaterEqual => Some(vec![vec![difference]]),
         _ => None,
     }
 }
@@ -465,14 +569,20 @@ fn symbolic_bool_with_constraints(
     let true_constraints = constraints_for_bool(expression, true, Some(return_expression))?;
     let false_constraints = constraints_for_bool(expression, false, Some(return_expression))?;
 
-    let mut true_path = guards.to_owned();
-    true_path.extend(true_constraints);
-    if constraints_satisfiable(true_path) == Some(false) {
+    let true_possible = true_constraints.into_iter().any(|constraints| {
+        let mut true_path = guards.to_owned();
+        true_path.extend(constraints);
+        constraints_satisfiable(true_path) != Some(false)
+    });
+    if !true_possible {
         return Some(false);
     }
-    let mut false_path = guards.to_owned();
-    false_path.extend(false_constraints);
-    if constraints_satisfiable(false_path) == Some(false) {
+    let false_possible = false_constraints.into_iter().any(|constraints| {
+        let mut false_path = guards.to_owned();
+        false_path.extend(constraints);
+        constraints_satisfiable(false_path) != Some(false)
+    });
+    if !false_possible {
         return Some(true);
     }
     None
@@ -2357,13 +2467,15 @@ mod tests {
     #[test]
     fn proves_simple_integer_postconditions_from_direct_returns() {
         let program = parse(
-            &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn main() { }").unwrap(),
+            &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn classify(value: Int) -> Int ensures { result >= 0 } { match value { 0 => { return 0 } _ => { return 1 } } } fn bool_value(value: Bool) -> Int ensures { result >= 0 } { match value { true => { return 1 } false => { return 0 } } } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::Proven);
         assert_eq!(results[1].status, VerificationStatus::Failed);
         assert_eq!(results[2].status, VerificationStatus::Proven);
-        assert_eq!(results[3].status, VerificationStatus::Unproven);
+        assert_eq!(results[3].status, VerificationStatus::Proven);
+        assert_eq!(results[4].status, VerificationStatus::Proven);
+        assert_eq!(results[5].status, VerificationStatus::Unproven);
     }
 }

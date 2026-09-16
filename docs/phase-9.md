@@ -103,9 +103,10 @@ relationships. It also analyzes `if`/`else` return paths and uses their simple
 integer comparisons as path assumptions.
 
 For example, it can prove `result >= 0` for an absolute-value function with
-the two branches `return value` and `return -value`. Conditions that cannot be
-decided remain `RUNTIME_CHECK`; functions without contracts are reported as
-`UNPROVEN`.
+the two branches `return value` and `return -value`. Exhaustive `match`
+expressions with integer or boolean literal patterns and a wildcard arm are
+also collected as separate return paths. Conditions that cannot be decided remain
+`RUNTIME_CHECK`; functions without contracts are reported as `UNPROVEN`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.
