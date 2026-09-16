@@ -109,9 +109,11 @@ Integer-Vergleiche als Pfadannahmen.
 Beispielsweise kann er `result >= 0` für eine Absolutwertfunktion mit den
 beiden Zweigen `return value` und `return -value` beweisen. Vollständige
 `match`-Ausdrücke mit Integer- oder Bool-Literal-Mustern und einem Wildcard-
-Zweig werden ebenfalls als getrennte Rückgabepfade gesammelt. Nicht entscheidbare Bedingungen
-bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als `UNPROVEN`
-gemeldet.
+Zweig werden ebenfalls als getrennte Rückgabepfade gesammelt. Constructor-
+Muster von `Option` und `Result` wie `Some`, `None`, `Ok` und `Err` tragen
+außerdem Konstruktor-Fakten zur Pfadprüfung bei. Nicht entscheidbare
+Bedingungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als
+`UNPROVEN` gemeldet.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

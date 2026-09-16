@@ -60,8 +60,8 @@ Implemented today:
   these checks are not presented as formal proofs.
 - an initial `zelyra verify` command distinguishing `PROVEN`, `RUNTIME_CHECK`,
   `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
-  integer relationships in direct-return postconditions and basic control-flow
-  paths.
+  integer relationships in direct-return postconditions, basic control-flow
+  paths, and `Option`/`Result` constructor paths.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

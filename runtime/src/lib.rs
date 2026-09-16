@@ -302,6 +302,16 @@ struct LinearConstraint {
     constant: i128,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PathConstraint {
+    Linear(LinearConstraint),
+    Constructor {
+        expression: usize,
+        name: String,
+        equal: bool,
+    },
+}
+
 impl LinearConstraint {
     fn from_value(value: LinearValue) -> Self {
         Self {
@@ -360,9 +370,9 @@ impl LinearConstraint {
 }
 
 fn combine_alternatives(
-    left: Vec<Vec<LinearConstraint>>,
-    right: Vec<Vec<LinearConstraint>>,
-) -> Vec<Vec<LinearConstraint>> {
+    left: Vec<Vec<PathConstraint>>,
+    right: Vec<Vec<PathConstraint>>,
+) -> Vec<Vec<PathConstraint>> {
     left.into_iter()
         .flat_map(|left_constraints| {
             right.iter().map(move |right_constraints| {
@@ -379,7 +389,7 @@ fn combine_alternatives(
 fn constraints_for_guard(
     guard: &SymbolicGuard<'_>,
     return_expression: Option<&Expr>,
-) -> Option<Vec<Vec<LinearConstraint>>> {
+) -> Option<Vec<Vec<PathConstraint>>> {
     match guard {
         SymbolicGuard::Condition {
             expression,
@@ -398,7 +408,7 @@ fn constraints_for_pattern(
     pattern: &Pattern,
     matched: bool,
     return_expression: Option<&Expr>,
-) -> Option<Vec<Vec<LinearConstraint>>> {
+) -> Option<Vec<Vec<PathConstraint>>> {
     match &pattern.kind {
         PatternKind::Wildcard | PatternKind::Variable(_) => {
             if matched {
@@ -431,12 +441,16 @@ fn constraints_for_pattern(
             ];
             let mut alternatives = comparison_constraints(left, BinaryOp::Equal, right, matched)?;
             for alternative in &mut alternatives {
-                alternative.extend(domain.iter().cloned());
+                alternative.extend(domain.iter().cloned().map(PathConstraint::Linear));
             }
             Some(alternatives)
         }
         PatternKind::String(_) | PatternKind::Char(_) => None,
-        PatternKind::Constructor { .. } => None,
+        PatternKind::Constructor { name, .. } => Some(vec![vec![PathConstraint::Constructor {
+            expression: value as *const Expr as usize,
+            name: name.clone(),
+            equal: matched,
+        }]]),
     }
 }
 
@@ -444,7 +458,7 @@ fn constraints_for_bool(
     expression: &Expr,
     expected: bool,
     return_expression: Option<&Expr>,
-) -> Option<Vec<Vec<LinearConstraint>>> {
+) -> Option<Vec<Vec<PathConstraint>>> {
     if let Some(ConstantValue::Bool(value)) = constant_value(expression) {
         return if value == expected {
             Some(vec![Vec::new()])
@@ -487,7 +501,7 @@ fn comparison_constraints(
     operator: BinaryOp,
     right: LinearConstraint,
     expected: bool,
-) -> Option<Vec<Vec<LinearConstraint>>> {
+) -> Option<Vec<Vec<PathConstraint>>> {
     let operator = if expected {
         operator
     } else {
@@ -503,21 +517,67 @@ fn comparison_constraints(
     };
     let difference = left.clone().combine(right.clone(), 1, -1)?;
     match operator {
-        BinaryOp::Equal => Some(vec![vec![difference.clone(), difference.negate()?]]),
+        BinaryOp::Equal => Some(vec![vec![
+            PathConstraint::Linear(difference.clone()),
+            PathConstraint::Linear(difference.negate()?),
+        ]]),
         BinaryOp::NotEqual => Some(vec![
-            vec![right.clone().combine(left.clone(), 1, -1)?.shift(1)?],
-            vec![difference.shift(1)?],
+            vec![PathConstraint::Linear(
+                right.clone().combine(left.clone(), 1, -1)?.shift(1)?,
+            )],
+            vec![PathConstraint::Linear(difference.shift(1)?)],
         ]),
-        BinaryOp::Less => Some(vec![vec![right.combine(left, 1, -1)?.shift(1)?]]),
-        BinaryOp::LessEqual => Some(vec![vec![right.combine(left, 1, -1)?]]),
-        BinaryOp::Greater => Some(vec![vec![difference.shift(1)?]]),
-        BinaryOp::GreaterEqual => Some(vec![vec![difference]]),
+        BinaryOp::Less => Some(vec![vec![PathConstraint::Linear(
+            right.combine(left, 1, -1)?.shift(1)?,
+        )]]),
+        BinaryOp::LessEqual => Some(vec![vec![PathConstraint::Linear(
+            right.combine(left, 1, -1)?,
+        )]]),
+        BinaryOp::Greater => Some(vec![vec![PathConstraint::Linear(difference.shift(1)?)]]),
+        BinaryOp::GreaterEqual => Some(vec![vec![PathConstraint::Linear(difference)]]),
         _ => None,
     }
 }
 
-fn constraints_satisfiable(mut constraints: Vec<LinearConstraint>) -> Option<bool> {
-    let mut variables = constraints
+fn constraints_satisfiable(constraints: Vec<PathConstraint>) -> Option<bool> {
+    let mut constructor_equals = HashMap::<usize, String>::new();
+    let mut constructor_not_equals = HashMap::<usize, HashSet<String>>::new();
+    let mut linear_constraints = Vec::new();
+    for constraint in constraints {
+        match constraint {
+            PathConstraint::Linear(constraint) => linear_constraints.push(constraint),
+            PathConstraint::Constructor {
+                expression,
+                name,
+                equal,
+            } => {
+                if equal {
+                    if constructor_equals
+                        .get(&expression)
+                        .is_some_and(|existing| existing != &name)
+                        || constructor_not_equals
+                            .get(&expression)
+                            .is_some_and(|names| names.contains(&name))
+                    {
+                        return Some(false);
+                    }
+                    constructor_equals.insert(expression, name);
+                } else if constructor_equals
+                    .get(&expression)
+                    .is_some_and(|existing| existing == &name)
+                {
+                    return Some(false);
+                } else {
+                    constructor_not_equals
+                        .entry(expression)
+                        .or_default()
+                        .insert(name);
+                }
+            }
+        }
+    }
+
+    let mut variables = linear_constraints
         .iter()
         .flat_map(|constraint| constraint.coefficients.keys().cloned())
         .collect::<Vec<_>>();
@@ -528,7 +588,7 @@ fn constraints_satisfiable(mut constraints: Vec<LinearConstraint>) -> Option<boo
         let mut positive = Vec::new();
         let mut negative = Vec::new();
         let mut zero = Vec::new();
-        for mut constraint in constraints {
+        for mut constraint in linear_constraints {
             match constraint
                 .coefficients
                 .remove(&variable)
@@ -549,10 +609,10 @@ fn constraints_satisfiable(mut constraints: Vec<LinearConstraint>) -> Option<boo
                 )?);
             }
         }
-        constraints = reduced;
+        linear_constraints = reduced;
     }
     Some(
-        constraints
+        linear_constraints
             .iter()
             .all(|constraint| constraint.constant >= 0),
     )
@@ -561,7 +621,7 @@ fn constraints_satisfiable(mut constraints: Vec<LinearConstraint>) -> Option<boo
 fn symbolic_bool_with_constraints(
     expression: &Expr,
     return_expression: &Expr,
-    guards: &[LinearConstraint],
+    guards: &[PathConstraint],
 ) -> Option<bool> {
     if let Some(value) = symbolic_bool(expression, Some(return_expression)) {
         return Some(value);
@@ -2477,5 +2537,17 @@ mod tests {
         assert_eq!(results[3].status, VerificationStatus::Proven);
         assert_eq!(results[4].status, VerificationStatus::Proven);
         assert_eq!(results[5].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn collects_option_and_result_constructor_paths() {
+        let program = parse(
+            &lex("fn option_flag(value: Int?) -> Int ensures { result >= 0 } { match value { Some(number) => { return 1 } None => { return 0 } } } fn result_flag(value: Result<Int, String>) -> Int ensures { result >= 0 } { match value { Ok(number) => { return 1 } Err(message) => { return 0 } } } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 }

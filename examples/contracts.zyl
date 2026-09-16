@@ -36,8 +36,24 @@ fn classify(value: Int) -> Int
     }
 }
 
+fn option_flag(value: Int?) -> Int
+    ensures {
+        result >= 0
+    }
+{
+    match value {
+        Some(number) => {
+            return 1
+        }
+        None => {
+            return 0
+        }
+    }
+}
+
 fn main() {
     print(increment(41))
     print(absolute(-7))
     print(classify(0))
+    print(option_flag(Some(4)))
 }
