@@ -10,6 +10,8 @@ use zelyra_forms::{validate, FieldError};
 pub struct Route {
     pub path: String,
     pub html: String,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,6 +134,8 @@ pub struct CrudRoute {
     pub list_columns: Vec<String>,
     pub search_columns: Vec<String>,
     pub filter_columns: Vec<String>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -142,6 +146,8 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     pub cruds: Vec<CrudRoute>,
     pub database_url: Option<String>,
+    pub auth_token: Option<String>,
+    pub auth_permissions: Vec<String>,
 }
 
 impl WebApp {
@@ -151,6 +157,8 @@ impl WebApp {
             forms,
             cruds: Vec::new(),
             database_url: None,
+            auth_token: None,
+            auth_permissions: Vec::new(),
         }
     }
 
@@ -164,11 +172,19 @@ impl WebApp {
             forms,
             cruds: Vec::new(),
             database_url,
+            auth_token: None,
+            auth_permissions: Vec::new(),
         }
     }
 
     pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
         self.cruds = cruds;
+        self
+    }
+
+    pub fn with_auth(mut self, token: Option<String>, permissions: Vec<String>) -> Self {
+        self.auth_token = token;
+        self.auth_permissions = permissions;
         self
     }
 
@@ -180,10 +196,20 @@ impl WebApp {
         }
         for crud in &self.cruds {
             if match_path(&crud.path, &request.path).is_some() {
+                if let Some(response) =
+                    authorize(crud.requires_auth, &crud.permissions, request, self)
+                {
+                    return response;
+                }
                 return dispatch_crud(crud, request, self.database_url.as_deref());
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
+                if let Some(response) =
+                    authorize(crud.requires_auth, &crud.permissions, request, self)
+                {
+                    return response;
+                }
                 return dispatch_crud_delete(
                     crud,
                     request,
@@ -193,6 +219,11 @@ impl WebApp {
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&detail_path, &request.path) {
+                if let Some(response) =
+                    authorize(crud.requires_auth, &crud.permissions, request, self)
+                {
+                    return response;
+                }
                 return dispatch_crud_detail(
                     crud,
                     request,
@@ -201,8 +232,56 @@ impl WebApp {
                 );
             }
         }
+        for route in &self.routes {
+            if match_path(&route.path, &request.path).is_some() {
+                if let Some(response) =
+                    authorize(route.requires_auth, &route.permissions, request, self)
+                {
+                    return response;
+                }
+                break;
+            }
+        }
         Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
     }
+}
+
+fn authorize(
+    requires_auth: bool,
+    permissions: &[String],
+    request: &Request,
+    app: &WebApp,
+) -> Option<Response> {
+    if !requires_auth && permissions.is_empty() {
+        return None;
+    }
+    let authenticated = app
+        .auth_token
+        .as_deref()
+        .zip(request.headers.get("authorization").map(String::as_str))
+        .is_some_and(|(expected, header)| {
+            let Some(token) = header.strip_prefix("Bearer ") else {
+                return false;
+            };
+            constant_time_equal(expected.as_bytes(), token.as_bytes())
+        });
+    if !authenticated {
+        return Some(Response::html(
+            401,
+            "<h1>401 Unauthorized</h1><p>Authentication is required.</p>",
+        ));
+    }
+    if let Some(permission) = permissions.iter().find(|permission| {
+        !app.auth_permissions
+            .iter()
+            .any(|granted| granted == *permission)
+    }) {
+        return Some(Response::html(
+            403,
+            format!("<h1>403 Forbidden</h1><p>Missing permission: {permission}</p>"),
+        ));
+    }
+    None
 }
 
 impl Router {
@@ -1675,6 +1754,8 @@ mod tests {
         Router::new(vec![Route {
             path: "/hello/{name}".into(),
             html: "<h1>Hello, {name}!</h1>".into(),
+            requires_auth: false,
+            permissions: Vec::new(),
         }])
     }
 
@@ -1869,6 +1950,8 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -1937,6 +2020,8 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -1945,6 +2030,38 @@ mod tests {
         }]);
         let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(app.dispatch(&request).status, 503);
+    }
+
+    #[test]
+    fn protects_routes_with_authentication_and_permissions() {
+        let route = Route {
+            path: "/admin".into(),
+            html: "<h1>Admin</h1>".into(),
+            requires_auth: true,
+            permissions: vec!["admin.view".into()],
+        };
+        let app = WebApp::new(vec![route], Vec::new())
+            .with_auth(Some("test-token".into()), vec!["admin.view".into()]);
+        let request = parse_request("GET /admin HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 401);
+        let request =
+            parse_request("GET /admin HTTP/1.1\r\nAuthorization: Bearer wrong\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 401);
+        let request =
+            parse_request("GET /admin HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n")
+                .unwrap();
+        assert_eq!(app.dispatch(&request).status, 200);
+        let app = WebApp::new(
+            vec![Route {
+                path: "/admin".into(),
+                html: "<h1>Admin</h1>".into(),
+                requires_auth: true,
+                permissions: vec!["admin.delete".into()],
+            }],
+            Vec::new(),
+        )
+        .with_auth(Some("test-token".into()), vec!["admin.view".into()]);
+        assert_eq!(app.dispatch(&request).status, 403);
     }
 
     #[test]
@@ -1961,6 +2078,8 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -1983,6 +2102,8 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,

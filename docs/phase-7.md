@@ -49,8 +49,9 @@ Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
 
-The next step is authorization and permission checks once the Auth and
-Permissions system is available.
+The first authorization boundary is now documented in
+[Phase 8](phase-8.md). The next step there is database-backed login and
+secure sessions.
 The complete relationship-aware example is `examples/machine_form.zyl`.
 
 ~~~bash

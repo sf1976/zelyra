@@ -39,8 +39,8 @@ Implemented today:
   columns, sorting, pagination, generated Create/Edit forms, and
   CSRF-protected delete.
 
-Full CRUD generation, authentication, APIs, CSRF, contracts, verification, and
-production deployment tooling are still being developed. See the
+Full CRUD generation, database-backed authentication, APIs, contracts,
+verification, and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
 
@@ -319,7 +319,8 @@ The long-term specification is organized into these phases:
 7. CRUD — list, detail, create, edit, search, filter, sort, pagination,
    configurable columns, and CSRF-protected delete implemented; authorization
    remains.
-8. Authentication and authorization.
+8. Authentication and authorization — initial route guards and permission
+   declarations implemented; sessions and user login remain.
 9. Capabilities, contracts, verification, and structured concurrency.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
 

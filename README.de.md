@@ -39,8 +39,8 @@ Heute implementiert:
   Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
   Formularen und CSRF-geschütztem Löschen.
 
-Vollständige CRUD-Erzeugung, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
-Produktionswerkzeuge werden noch entwickelt. Siehe die
+Vollständige CRUD-Erzeugung, datenbankgestützte Authentifizierung, APIs,
+Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
 
@@ -323,7 +323,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
    Pagination, konfigurierbare Spalten und CSRF-geschütztes Löschen vorhanden;
    Autorisierung folgt.
-8. Authentifizierung und Autorisierung.
+8. Authentifizierung und Autorisierung — erste Routensperren und
+   Berechtigungsdeklarationen vorhanden; Sessions und Login folgen.
 9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
 

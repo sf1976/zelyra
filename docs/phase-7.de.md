@@ -52,8 +52,9 @@ Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.
 
-Als Nächstes folgen Berechtigungsprüfungen, sobald das
-Auth-/Permissions-System verfügbar ist. Das vollständige Beispiel mit Beziehung ist
+Die erste Autorisierungsgrenze ist jetzt in
+[Phase 8](phase-8.de.md) dokumentiert. Als Nächstes folgen dort
+datenbankgestützter Login und sichere Sessions. Das vollständige Beispiel mit Beziehung ist
 `examples/machine_form.zyl`.
 
 ~~~bash

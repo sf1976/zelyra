@@ -45,10 +45,10 @@ The current repository contains:
 - initial CRUD lists with MariaDB search, filters, sorting, pagination, and
   CSRF-protected delete actions.
 
-The following are not complete yet: full CRUD generation, sessions,
-authentication, APIs, capabilities, contracts, formal verification, and
-production packaging. A successful command in this guide
-does not imply that those later features already exist.
+The following are not complete yet: full CRUD generation, database-backed
+login and sessions, APIs, capabilities, contracts, formal verification, and
+production packaging. The current authentication adapter provides route
+guards, but it is not a user login system.
 
 ## 1. Requirements
 
@@ -554,10 +554,10 @@ Read the phase documents for implementation details:
 - [Phase 5: Web Core](phase-5.md);
 - [Phase 6: Forms](phase-6.md);
 - [Phase 7: CRUD](phase-7.md).
+- [Phase 8: Authentication and authorization](phase-8.md).
 
 The German versions use the same filenames with the .de.md suffix.
 
 The CRUD list now also provides detail, Create/Edit forms, configurable
-columns, and a CSRF-protected Delete action. The next practical development
-step is authorization checks while keeping the same schema, SQL, and form
-foundations.
+columns, and a CSRF-protected Delete action. The next authentication step is
+database-backed login, secure sessions, and role/permission lookup.

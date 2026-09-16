@@ -47,11 +47,11 @@ Das aktuelle Repository enthält:
 - erste CRUD-Listen mit MariaDB-Suche, Filtern, Sortierung, Pagination und
   CSRF-geschützten Löschaktionen.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Sessions,
-Authentifizierung, APIs, Capabilities, Contracts, formale Verifikation und
-Produktionspaketierung. Ein erfolgreicher Befehl in
-diesem Leitfaden bedeutet nicht, dass diese späteren Funktionen bereits
-existieren.
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, datenbankgestützter
+Login und Sessions, APIs, Capabilities, Contracts, formale Verifikation und
+Produktionspaketierung. Der aktuelle Authentifizierungsadapter schützt Routen,
+ist aber noch kein Benutzersystem. Ein erfolgreicher Befehl in diesem
+Leitfaden bedeutet nicht, dass diese späteren Funktionen bereits existieren.
 
 ## 1. Voraussetzungen
 
@@ -565,10 +565,11 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 5: Web Core](phase-5.de.md);
 - [Phase 6: Forms](phase-6.de.md);
 - [Phase 7: CRUD](phase-7.de.md).
+- [Phase 8: Authentifizierung und Autorisierung](phase-8.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
 Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare,
-konfigurierbare Spalten und eine CSRF-geschützte Löschaktion. Die nächste
-praktische Entwicklungsstufe sind Berechtigungsprüfungen auf demselben
-Schema-, SQL- und Formularfundament.
+konfigurierbare Spalten und eine CSRF-geschützte Löschaktion. Die nächsten
+Authentifizierungsschritte sind datenbankgestützter Login, sichere Sessions
+und Rollen-/Berechtigungsabfragen.

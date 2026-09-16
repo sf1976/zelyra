@@ -69,6 +69,7 @@ impl<'a> Parser<'a> {
         let mut pages = Vec::new();
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
+        let mut auth = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
@@ -84,6 +85,8 @@ impl<'a> Parser<'a> {
                 forms.push(self.form_definition()?);
             } else if self.at(&TokenKind::Crud) {
                 cruds.push(self.crud_definition()?);
+            } else if self.at(&TokenKind::Auth) {
+                auth.push(self.auth_definition()?);
             } else {
                 functions.push(self.function()?);
             }
@@ -96,7 +99,28 @@ impl<'a> Parser<'a> {
             pages,
             forms,
             cruds,
+            auth,
             functions,
+        })
+    }
+
+    fn auth_definition(&mut self) -> Result<AuthDef, ParseError> {
+        let start = self.expect(TokenKind::Auth, "auth")?;
+        let (name, _) = self.ident("authentication name")?;
+        self.expect(TokenKind::LBrace, "opening brace after authentication name")?;
+        self.skip_newlines();
+        self.expect(TokenKind::Table, "table in authentication definition")?;
+        self.expect(TokenKind::Colon, "colon after authentication table")?;
+        let (table, _) = self.ident("authentication user table")?;
+        self.skip_newlines();
+        let end = self.expect(
+            TokenKind::RBrace,
+            "closing brace after authentication definition",
+        )?;
+        Ok(AuthDef {
+            name,
+            table,
+            span: start.join(end),
         })
     }
 
@@ -109,6 +133,8 @@ impl<'a> Parser<'a> {
         let mut list = Vec::new();
         let mut search = Vec::new();
         let mut filters = Vec::new();
+        let mut requires_auth = false;
+        let mut permissions = Vec::new();
 
         if self.at(&TokenKind::LBrace) {
             self.advance();
@@ -132,6 +158,15 @@ impl<'a> Parser<'a> {
                         self.advance();
                         filters = self.crud_column_block("filter")?;
                     }
+                    TokenKind::Requires => {
+                        self.advance();
+                        self.expect(TokenKind::Auth, "auth after requires")?;
+                        requires_auth = true;
+                    }
+                    TokenKind::Permits => {
+                        self.advance();
+                        permissions.push(self.string_value("permission")?);
+                    }
                     _ => {
                         return self
                             .error("expected title, list, search, or filter in CRUD definition")
@@ -147,6 +182,8 @@ impl<'a> Parser<'a> {
                 list,
                 search,
                 filters,
+                requires_auth,
+                permissions,
                 span: start.join(end),
             });
         }
@@ -158,6 +195,8 @@ impl<'a> Parser<'a> {
             list,
             search,
             filters,
+            requires_auth,
+            permissions,
             span: start.join(table_span),
         })
     }
@@ -234,6 +273,8 @@ impl<'a> Parser<'a> {
         let path = self.string_value("page path")?;
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
+        let mut requires_auth = false;
+        let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Html) {
@@ -248,6 +289,13 @@ impl<'a> Parser<'a> {
                 };
                 self.expect(TokenKind::RBrace, "`}` after HTML body")?;
                 html = Some(body);
+            } else if self.at(&TokenKind::Requires) {
+                self.advance();
+                self.expect(TokenKind::Auth, "auth after requires")?;
+                requires_auth = true;
+            } else if self.at(&TokenKind::Permits) {
+                self.advance();
+                permissions.push(self.string_value("permission")?);
             } else {
                 return self.error("expected `html` in page definition");
             }
@@ -260,6 +308,8 @@ impl<'a> Parser<'a> {
         Ok(PageDef {
             path,
             html,
+            requires_auth,
+            permissions,
             span: start.join(end),
         })
     }
@@ -1128,5 +1178,25 @@ mod tests {
         assert_eq!(crud.list, ["customer_number", "name"]);
         assert_eq!(crud.search, ["name"]);
         assert_eq!(crud.filters, ["active"]);
+    }
+
+    #[test]
+    fn parses_auth_and_protected_crud_definition() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                }
+
+                crud Customer -> customers {
+                    requires auth
+                    permits "customers.view"
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.auth[0].name, "users");
+        assert_eq!(program.auth[0].table, "users");
+        assert!(program.cruds[0].requires_auth);
+        assert_eq!(program.cruds[0].permissions, ["customers.view"]);
     }
 }

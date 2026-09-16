@@ -128,6 +128,9 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     if let Ok(schema) = build_schema(&program) {
+        if !validate_auth(path, &program, &schema) {
+            return Err(());
+        }
         if !validate_cruds(path, &program, &schema) {
             return Err(());
         }
@@ -157,6 +160,52 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
+    let mut valid = true;
+    let mut names = HashSet::new();
+    for auth in &program.auth {
+        if !names.insert(auth.name.clone()) {
+            diagnostic(
+                path,
+                "E-AUTH-002",
+                &format!("duplicate authentication definition {}", auth.name),
+                auth.span.line,
+                auth.span.column,
+            );
+            valid = false;
+        }
+        if !schema.tables.iter().any(|table| table.name == auth.table) {
+            diagnostic(
+                path,
+                "E-AUTH-001",
+                &format!("authentication refers to unknown user table {}", auth.table),
+                auth.span.line,
+                auth.span.column,
+            );
+            valid = false;
+        }
+    }
+    let protected = program
+        .pages
+        .iter()
+        .any(|page| page.requires_auth || !page.permissions.is_empty())
+        || program
+            .cruds
+            .iter()
+            .any(|crud| crud.requires_auth || !crud.permissions.is_empty());
+    if protected && program.auth.is_empty() {
+        diagnostic(
+            path,
+            "E-AUTH-003",
+            "protected routes require an auth definition",
+            1,
+            1,
+        );
+        valid = false;
+    }
+    valid
 }
 
 fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -459,6 +508,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .map(|page| Route {
             path: page.path.clone(),
             html: page.html.clone(),
+            requires_auth: page.requires_auth,
+            permissions: page.permissions.clone(),
         })
         .collect();
     let schema = match build_schema(&program) {
@@ -566,6 +617,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             list_columns,
             search_columns,
             filter_columns,
+            requires_auth: crud.requires_auth,
+            permissions: crud.permissions.clone(),
             schema: schema.clone(),
             csrf,
         });
@@ -573,6 +626,16 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     eprintln!("Zelyra server listening on http://{address}");
     match serve_app(
         WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+            .with_auth(
+                env::var("ZELYRA_AUTH_TOKEN").ok(),
+                env::var("ZELYRA_AUTH_PERMISSIONS")
+                    .unwrap_or_default()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|permission| !permission.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+            )
             .with_cruds(crud_routes),
         &address,
     ) {
@@ -876,5 +939,20 @@ mod tests {
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(!validate_cruds("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_protected_routes_without_auth_definition() {
+        let source = r#"
+            page "/admin" {
+                requires auth
+                html {
+                    <h1>Admin</h1>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
     }
 }

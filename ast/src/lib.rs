@@ -84,6 +84,7 @@ pub struct Program {
     pub pages: Vec<PageDef>,
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
+    pub auth: Vec<AuthDef>,
     pub functions: Vec<Function>,
 }
 
@@ -91,6 +92,8 @@ pub struct Program {
 pub struct PageDef {
     pub path: String,
     pub html: String,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub span: Span,
 }
 
@@ -133,6 +136,15 @@ pub struct CrudDef {
     pub list: Vec<String>,
     pub search: Vec<String>,
     pub filters: Vec<String>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthDef {
+    pub name: String,
+    pub table: String,
     pub span: Span,
 }
 
