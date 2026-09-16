@@ -17,7 +17,9 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - geprüftes natives SQL;
 - Web-Seiten und HTTP-Routing;
 - Formulare und Validierung;
-- später CRUD, APIs, Authentifizierung, Autorisierung und Verifikation.
+- eine erste CRUD-Listenroute;
+- später vollständiges CRUD, APIs, Authentifizierung, Autorisierung und
+  Verifikation.
 
 Das zentrale Ziel ist, wichtige Informationen nur einmal zu definieren. Ein
 Pflichtfeld mit maximaler String-Länge in einer Tabelle kann beispielsweise
@@ -40,11 +42,12 @@ Das aktuelle Repository enthält:
 - MariaDB-Inspektion, Schema-Anwendung und native SQL-Ausführung;
 - geprüfte SQL-Blöcke mit benannten Parametern;
 - einen ersten eingebauten HTTP-Server und GET-Router;
-- einen ersten schemaabhängigen Formular-Parser und Validator.
+- einen ersten schemaabhängigen Formular-Parser und Validator;
+- eine erste CRUD-Listenroute mit MariaDB-Suche und Pagination.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, die Ausführung von
-Datenbankaktionen, Sessions, Authentifizierung, APIs, Capabilities, Contracts,
-formale Verifikation und Produktionspaketierung. Ein erfolgreicher Befehl in
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Sessions,
+Authentifizierung, APIs, Capabilities, Contracts, formale Verifikation und
+Produktionspaketierung. Ein erfolgreicher Befehl in
 diesem Leitfaden bedeutet nicht, dass diese späteren Funktionen bereits
 existieren.
 
@@ -529,11 +532,11 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 3: Database Core](phase-3.de.md);
 - [Phase 4: Native SQL](phase-4.de.md);
 - [Phase 5: Web Core](phase-5.de.md);
-- [Phase 6: Forms](phase-6.de.md).
+- [Phase 6: Forms](phase-6.de.md);
+- [Phase 7: CRUD](phase-7.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
-Der nächste praktische Entwicklungsschritt ist die Verbindung von
-Formularvalidierung mit Web-Core-Rendering und sicheren POST-Aktionen. CRUD
-baut anschließend auf denselben Grundlagen aus Schema, SQL, Formularen und
-Berechtigungen auf.
+Die nächste praktische Entwicklungsstufe erweitert die CRUD-Liste um Details,
+Erstellen, Bearbeiten, Löschen, Filter und Sortierung und verwendet weiterhin
+das gleiche Schema-, SQL-, Formular- und Berechtigungsfundament.

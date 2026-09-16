@@ -1,0 +1,31 @@
+# Zelyra 0.1 — Phase 7: CRUD
+
+[Deutsch](phase-7.de.md) · English
+
+Phase 7 starts CRUD as a language-level abstraction. The first vertical slice
+supports:
+
+~~~zelyra
+crud Machine -> machines
+~~~
+
+With a MariaDB `DATABASE_URL`, this exposes `GET /machines`. The generated
+list currently includes all schema columns in an escaped HTML table, search
+across text columns with bound parameters, and bounded pagination through the
+`page` and `per_page` query parameters.
+
+Missing database configuration returns HTTP 503. Query failures return a
+generic HTTP 500. CRUD resource and table names are checked before the server
+starts.
+
+The next steps are configured columns, sorting, filters, detail pages, and
+forms for create, update, and delete actions. The complete relationship-aware
+example is `examples/machine_form.zyl`.
+
+~~~bash
+export DATABASE_URL='mariadb://root:<password>@127.0.0.1:3306/zelyra_crud'
+zelyra db bootstrap examples/machine_form.zyl
+zelyra serve examples/machine_form.zyl
+~~~
+
+Open http://127.0.0.1:3000/machines.

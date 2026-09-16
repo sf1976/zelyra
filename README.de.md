@@ -32,11 +32,12 @@ Heute implementiert:
 - native SQL-Blöcke mit Prüfung von Schema, Spalten, Parametern und Ergebnissen;
 - ein erster Web Core mit Seitendefinitionen, GET-Routing, Pfadparametern und
   eingebautem HTTP-Server;
-- ein erster Forms Core mit schemaabhängigen Feldern und Validierung.
+- ein erster Forms Core mit schemaabhängigen Feldern und Validierung;
 - validierte Formularaktionen mit sicherer MariaDB-Parameterbindung,
   Transaktionen und HTTP-Weiterleitungen.
+- eine erste CRUD-Listenroute mit MariaDB-Suche und Pagination.
 
-Formulare, CRUD, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
+Vollständige CRUD-Erzeugung, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
@@ -315,10 +316,10 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 3. Database Core — erste Unterstützung für MariaDB, SQLite und PostgreSQL.
 4. Native SQL — statische Prüfung und MariaDB-Ausführung vorhanden.
 5. Web Core — erste Seiten und HTTP-Server vorhanden.
-6. Forms — erste schemaabhängige Syntax und Validierung vorhanden;
-   Web-Rendering und Submit-Ablauf fehlen noch.
-7. CRUD — Listen, Details, Erstellen, Bearbeiten, Löschen, Suche, Filter,
-   Sortierung und Pagination.
+6. Forms — schemaabhängige Syntax, Validierung, Web-Rendering, Aktionen und
+   Beziehungs-Selects vorhanden.
+7. CRUD — erste Listenroute vorhanden; Details, Erstellen, Bearbeiten, Löschen,
+   Filter und Sortierung folgen.
 8. Authentifizierung und Autorisierung.
 9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.

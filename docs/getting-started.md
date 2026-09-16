@@ -16,7 +16,8 @@ data. The language is intended to bring together:
 - checked native SQL;
 - web pages and HTTP routing;
 - forms and validation;
-- later, CRUD, APIs, authentication, authorization, and verification.
+- an initial CRUD list route;
+- later, full CRUD, APIs, authentication, authorization, and verification.
 
 The central design goal is to define important information once. For example,
 a required String with a maximum length in a table can also provide the basis
@@ -39,11 +40,12 @@ The current repository contains:
 - MariaDB inspection, schema application, and native SQL execution;
 - checked SQL blocks with named parameters;
 - an initial built-in HTTP server and GET router;
-- an initial schema-aware form parser and validator.
+- an initial schema-aware form parser and validator;
+- an initial CRUD list route with MariaDB search and pagination.
 
-The following are not complete yet: full CRUD generation, database action
-execution, sessions, authentication, APIs, capabilities, contracts, formal
-verification, and production packaging. A successful command in this guide
+The following are not complete yet: full CRUD generation, sessions,
+authentication, APIs, capabilities, contracts, formal verification, and
+production packaging. A successful command in this guide
 does not imply that those later features already exist.
 
 ## 1. Requirements
@@ -521,10 +523,11 @@ Read the phase documents for implementation details:
 - [Phase 3: Database Core](phase-3.md);
 - [Phase 4: Native SQL](phase-4.md);
 - [Phase 5: Web Core](phase-5.md);
-- [Phase 6: Forms](phase-6.md).
+- [Phase 6: Forms](phase-6.md);
+- [Phase 7: CRUD](phase-7.md).
 
 The German versions use the same filenames with the .de.md suffix.
 
-The next practical development step is to connect form validation with Web
-Core rendering and safe POST actions. CRUD will then build on the same schema,
+The next practical development step is to extend the CRUD list with detail,
+create, edit, delete, filtering, and sorting while keeping the same schema,
 SQL, form, and permission foundations.

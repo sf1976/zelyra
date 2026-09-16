@@ -33,3 +33,5 @@ form MachineCreate -> machines {
         redirect "/machines"
     }
 }
+
+crud Machine -> machines

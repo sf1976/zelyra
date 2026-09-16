@@ -83,6 +83,7 @@ pub struct Program {
     pub types: Vec<TypeDef>,
     pub pages: Vec<PageDef>,
     pub forms: Vec<FormDef>,
+    pub cruds: Vec<CrudDef>,
     pub functions: Vec<Function>,
 }
 
@@ -121,6 +122,13 @@ pub struct FormAction {
     pub statements: Vec<Stmt>,
     pub success: Option<String>,
     pub redirect: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudDef {
+    pub name: String,
+    pub table: String,
     pub span: Span,
 }
 

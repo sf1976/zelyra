@@ -1,4 +1,4 @@
-use std::{env, fs, process::ExitCode};
+use std::{collections::HashSet, env, fs, process::ExitCode};
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
     inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
@@ -9,7 +9,7 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute, execute_with_database};
-use zelyra_web::{serve_app, CsrfProtection, FormRoute, Route, WebApp};
+use zelyra_web::{serve_app, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -128,6 +128,9 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     if let Ok(schema) = build_schema(&program) {
+        if !validate_cruds(path, &program, &schema) {
+            return Err(());
+        }
         if let Err(errors) = check_sql_program(&program, &schema) {
             for error in errors {
                 diagnostic(
@@ -154,6 +157,45 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
+    let mut valid = true;
+    let mut names = HashSet::new();
+    let mut tables = HashSet::new();
+    for crud in &program.cruds {
+        if !names.insert(crud.name.clone()) {
+            diagnostic(
+                path,
+                "E-CRUD-002",
+                &format!("duplicate CRUD resource `{}`", crud.name),
+                crud.span.line,
+                crud.span.column,
+            );
+            valid = false;
+        }
+        if !tables.insert(crud.table.clone()) {
+            diagnostic(
+                path,
+                "E-CRUD-003",
+                &format!("table `{}` already has a CRUD resource", crud.table),
+                crud.span.line,
+                crud.span.column,
+            );
+            valid = false;
+        }
+        if !schema.tables.iter().any(|table| table.name == crud.table) {
+            diagnostic(
+                path,
+                "E-CRUD-001",
+                &format!("CRUD resource refers to unknown table `{}`", crud.table),
+                crud.span.line,
+                crud.span.column,
+            );
+            valid = false;
+        }
+    }
+    valid
 }
 
 fn load_schema(path: &str) -> Result<Schema, ()> {
@@ -331,8 +373,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
-    if program.pages.is_empty() && program.forms.is_empty() {
-        eprintln!("error[E-WEB-001]: {path} does not define a page or form");
+    if program.pages.is_empty() && program.forms.is_empty() && program.cruds.is_empty() {
+        eprintln!("error[E-WEB-001]: {path} does not define a page, form, or CRUD resource");
         return ExitCode::from(1);
     }
     let routes = program
@@ -358,6 +400,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if !validate_cruds(&path, &program, &schema) {
+        return ExitCode::from(1);
+    }
     if let Err(errors) = check_form_program(&program, &schema) {
         for error in errors {
             diagnostic(
@@ -392,9 +437,20 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
         });
     }
+    let crud_routes = program
+        .cruds
+        .iter()
+        .map(|crud| CrudRoute {
+            path: format!("/{}", crud.table),
+            title: crud.name.clone(),
+            table: crud.table.clone(),
+            schema: schema.clone(),
+        })
+        .collect();
     eprintln!("Zelyra server listening on http://{address}");
     match serve_app(
-        WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok()),
+        WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+            .with_cruds(crud_routes),
         &address,
     ) {
         Ok(()) => ExitCode::SUCCESS,

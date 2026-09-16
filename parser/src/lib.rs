@@ -68,6 +68,7 @@ impl<'a> Parser<'a> {
         let mut types = Vec::new();
         let mut pages = Vec::new();
         let mut forms = Vec::new();
+        let mut cruds = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
@@ -81,6 +82,8 @@ impl<'a> Parser<'a> {
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::Form) {
                 forms.push(self.form_definition()?);
+            } else if self.at(&TokenKind::Crud) {
+                cruds.push(self.crud_definition()?);
             } else {
                 functions.push(self.function()?);
             }
@@ -92,7 +95,20 @@ impl<'a> Parser<'a> {
             types,
             pages,
             forms,
+            cruds,
             functions,
+        })
+    }
+
+    fn crud_definition(&mut self) -> Result<CrudDef, ParseError> {
+        let start = self.expect(TokenKind::Crud, "`crud`")?;
+        let (name, _) = self.ident("CRUD resource name")?;
+        self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
+        let (table, end) = self.ident("table name after `->`")?;
+        Ok(CrudDef {
+            name,
+            table,
+            span: start.join(end),
         })
     }
     fn database_definition(&mut self) -> Result<DatabaseDef, ParseError> {
@@ -1014,5 +1030,13 @@ mod tests {
         ));
         assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
         assert_eq!(program.forms[1].fields.len(), 2);
+    }
+
+    #[test]
+    fn parses_minimal_crud_definition() {
+        let program = parse(&lex("crud Machine -> machines").unwrap()).unwrap();
+        assert_eq!(program.cruds.len(), 1);
+        assert_eq!(program.cruds[0].name, "Machine");
+        assert_eq!(program.cruds[0].table, "machines");
     }
 }

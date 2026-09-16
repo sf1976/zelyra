@@ -32,11 +32,12 @@ Implemented today:
 - native SQL blocks with schema, column, parameter, and result checks;
 - an initial Web Core with page definitions, GET routing, path parameters, and
   a built-in HTTP server;
-- an initial Forms Core with schema-aware field definitions and validation.
+- an initial Forms Core with schema-aware field definitions and validation;
 - validated form actions with safe MariaDB parameter binding, transactions, and
   HTTP redirects.
+- an initial CRUD list route with MariaDB search and pagination.
 
-Forms, CRUD, authentication, APIs, CSRF, contracts, verification, and
+Full CRUD generation, authentication, APIs, CSRF, contracts, verification, and
 production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
@@ -311,10 +312,10 @@ The long-term specification is organized into these phases:
    support.
 4. Native SQL — implemented static checking and MariaDB execution.
 5. Web Core — initial pages and HTTP server implemented.
-6. Forms — initial schema-aware parsing and validation implemented; web
-   rendering and submit flow remain.
-7. CRUD — list, detail, create, edit, delete, search, filtering, sorting, and
-   pagination.
+6. Forms — schema-aware parsing, validation, web rendering, actions, and
+   relationship selects implemented.
+7. CRUD — initial list route implemented; detail, create, edit, delete,
+   filtering, and sorting remain.
 8. Authentication and authorization.
 9. Capabilities, contracts, verification, and structured concurrency.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.

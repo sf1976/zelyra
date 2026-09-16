@@ -125,9 +125,18 @@ pub struct SelectOption {
 }
 
 #[derive(Clone, Debug)]
+pub struct CrudRoute {
+    pub path: String,
+    pub title: String,
+    pub table: String,
+    pub schema: Schema,
+}
+
+#[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
     pub forms: Vec<FormRoute>,
+    pub cruds: Vec<CrudRoute>,
     pub database_url: Option<String>,
 }
 
@@ -136,6 +145,7 @@ impl WebApp {
         Self {
             routes,
             forms,
+            cruds: Vec::new(),
             database_url: None,
         }
     }
@@ -148,14 +158,25 @@ impl WebApp {
         Self {
             routes,
             forms,
+            cruds: Vec::new(),
             database_url,
         }
+    }
+
+    pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
+        self.cruds = cruds;
+        self
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
         for form in &self.forms {
             if match_path(&form.path, &request.path).is_some() {
                 return dispatch_form(form, request, self.database_url.as_deref());
+            }
+        }
+        for crud in &self.cruds {
+            if match_path(&crud.path, &request.path).is_some() {
+                return dispatch_crud(crud, request, self.database_url.as_deref());
             }
         }
         Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
@@ -330,6 +351,213 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
             &relation_options,
         ),
     )
+}
+
+fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>) -> Response {
+    if request.method != "GET" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(database_url) = database_url else {
+        return Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD lists.</p>",
+        );
+    };
+    let query_string = request
+        .target
+        .split_once('?')
+        .map_or("", |(_, query)| query);
+    let query_values = match parse_urlencoded(query_string) {
+        Ok(values) => values,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    let search = query_values.get("search").cloned().unwrap_or_default();
+    let page = positive_query_value(&query_values, "page").unwrap_or(1);
+    let per_page = positive_query_value(&query_values, "per_page")
+        .unwrap_or(50)
+        .clamp(1, 100);
+    let offset = (page.saturating_sub(1)).saturating_mul(per_page);
+    let Some(table) = crud
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+    else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    let columns = table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+    if columns.is_empty() {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    }
+    let order_column = columns
+        .iter()
+        .copied()
+        .find(|column| *column == "id")
+        .unwrap_or(columns[0]);
+    let text_columns = table
+        .columns
+        .iter()
+        .filter(|column| {
+            let sql_type = column.sql_type.to_ascii_uppercase();
+            sql_type.contains("CHAR") || sql_type.contains("TEXT")
+        })
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+    let mut query = format!(
+        "SELECT {} FROM {}",
+        columns
+            .iter()
+            .map(|column| quote_identifier(column))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(&crud.table)
+    );
+    if !search.is_empty() && !text_columns.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(
+            &text_columns
+                .iter()
+                .map(|column| {
+                    format!(
+                        "{} LIKE CONCAT('%', :search, '%')",
+                        quote_identifier(column)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" OR "),
+        );
+    }
+    query.push_str(&format!(
+        " ORDER BY {} LIMIT :limit OFFSET :offset",
+        quote_identifier(order_column)
+    ));
+    let mut params = vec![
+        (
+            "limit".into(),
+            zelyra_database::QueryValue::Int(per_page as i64),
+        ),
+        (
+            "offset".into(),
+            zelyra_database::QueryValue::Int(offset as i64),
+        ),
+    ];
+    if !search.is_empty() && !text_columns.is_empty() {
+        params.push((
+            "search".into(),
+            zelyra_database::QueryValue::String(search.clone()),
+        ));
+    }
+    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("zelyra web: CRUD query failed: {error}");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        }
+    };
+    Response::html(
+        200,
+        render_crud_list(crud, &columns, &result.rows, &search, page, per_page),
+    )
+}
+
+fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<u64> {
+    values
+        .get(name)
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+}
+
+fn render_crud_list(
+    crud: &CrudRoute,
+    columns: &[&str],
+    rows: &[Vec<String>],
+    search: &str,
+    page: u64,
+    per_page: u64,
+) -> String {
+    let mut html = String::from("<main><h1>");
+    html.push_str(&html_escape(&crud.title));
+    html.push_str("</h1><form method=\"get\" action=\"");
+    html.push_str(&html_escape(&crud.path));
+    html.push_str(
+        "\"><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
+    );
+    html.push_str(&html_escape(search));
+    html.push_str("\"><button type=\"submit\">Search</button></form>");
+    if rows.is_empty() {
+        html.push_str("<p>No records found.</p>");
+    } else {
+        html.push_str("<table><thead><tr>");
+        for column in columns {
+            html.push_str("<th>");
+            html.push_str(&html_escape(&humanize(column)));
+            html.push_str("</th>");
+        }
+        html.push_str("</tr></thead><tbody>");
+        for row in rows {
+            html.push_str("<tr>");
+            for value in row {
+                html.push_str("<td>");
+                html.push_str(&html_escape(value));
+                html.push_str("</td>");
+            }
+            html.push_str("</tr>");
+        }
+        html.push_str("</tbody></table>");
+    }
+    html.push_str("<nav class=\"zelyra-pagination\">");
+    if page > 1 {
+        html.push_str("<a href=\"");
+        html.push_str(&html_escape(&crud_page_url(
+            &crud.path,
+            search,
+            page - 1,
+            per_page,
+        )));
+        html.push_str("\">Previous</a> ");
+    }
+    html.push_str("<span>Page ");
+    html.push_str(&page.to_string());
+    html.push_str("</span>");
+    if rows.len() as u64 == per_page {
+        html.push_str(" <a href=\"");
+        html.push_str(&html_escape(&crud_page_url(
+            &crud.path,
+            search,
+            page + 1,
+            per_page,
+        )));
+        html.push_str("\">Next</a>");
+    }
+    html.push_str("</nav></main>");
+    html
+}
+
+fn crud_page_url(path: &str, search: &str, page: u64, per_page: u64) -> String {
+    let mut url = format!("{path}?page={page}&per_page={per_page}");
+    if !search.is_empty() {
+        url.push_str("&search=");
+        url.push_str(&url_encode(search));
+    }
+    url
+}
+
+fn url_encode(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
 }
 
 fn relation_options_error(database_url: Option<&str>, error: String) -> Response {
@@ -1116,6 +1344,46 @@ mod tests {
         validate_relation_values(&route, &options, &values, &mut errors);
         assert_eq!(errors[0].field, "department");
         assert_eq!(errors[0].message, "selected value does not exist");
+    }
+
+    #[test]
+    fn renders_crud_list_with_escaped_rows_and_pagination() {
+        let route = CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            schema: zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        };
+        let html = render_crud_list(
+            &route,
+            &["id", "name"],
+            &[vec!["1".into(), "<unsafe>".into()]],
+            "CNC machine",
+            2,
+            1,
+        );
+        assert!(html.contains("&lt;unsafe&gt;"));
+        assert!(html.contains("value=\"CNC machine\""));
+        assert!(html.contains("page=1&amp;per_page=1&amp;search=CNC%20machine"));
+        assert!(html.contains("page=3&amp;per_page=1&amp;search=CNC%20machine"));
+    }
+
+    #[test]
+    fn crud_requires_database_url() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_cruds(vec![CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            schema: zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        }]);
+        let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 503);
     }
 
     #[test]
