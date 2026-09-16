@@ -93,6 +93,9 @@ pub enum HirStmt {
     Break {
         span: Span,
     },
+    Continue {
+        span: Span,
+    },
     Match {
         value: HirExpr,
         arms: Vec<HirMatchArm>,
@@ -360,6 +363,7 @@ impl<'a> Resolver<'a> {
                 span: *span,
             },
             Stmt::Break { span } => HirStmt::Break { span: *span },
+            Stmt::Continue { span } => HirStmt::Continue { span: *span },
             Stmt::Match { value, arms, span } => HirStmt::Match {
                 value: self.expr(value),
                 arms: arms

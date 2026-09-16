@@ -126,8 +126,10 @@ Local state is tracked through a function body as well. Both
 summarized like the equivalent direct return. Simple linear mutable
 initialization and assignment are also tracked, for example `next = next + 1`.
 Statically bounded loops with a linearly changing counter are also unfolded
-path by path. Nonlinear assignments, unbounded loops, and other unsupported
-state flow remain `RUNTIME_CHECK`.
+path by path. `break` exits the current loop and `continue` starts its next
+iteration; both are represented as separate symbolic control-flow paths.
+Nonlinear assignments, unbounded loops, and other unsupported state flow
+remain `RUNTIME_CHECK`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

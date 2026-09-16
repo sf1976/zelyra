@@ -583,7 +583,9 @@ Local state is included in these summaries. Both `next: Int = value + 1` and
 the concise `next = value + 1`, followed by `return next`, are analyzed like a
 direct return. Simple linear mutable assignments such as `next = next + 1` are
 also tracked. Statically bounded loops with a linear counter are unfolded;
-nonlinear assignments and unbounded loops remain conservative.
+`break` exits the current loop and `continue` starts its next iteration as
+separate symbolic paths. Nonlinear assignments and unbounded loops remain
+conservative.
 
 ## 16. Configuration and secrets
 

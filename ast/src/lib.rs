@@ -263,6 +263,9 @@ pub enum Stmt {
     Break {
         span: Span,
     },
+    Continue {
+        span: Span,
+    },
     Match {
         value: Expr,
         arms: Vec<MatchArm>,

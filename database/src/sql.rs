@@ -119,7 +119,7 @@ fn check_block(
             Stmt::Loop { body, .. } => {
                 check_block(body, schema, environment, errors);
             }
-            Stmt::Break { .. } => {}
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Match { value, arms, .. } => {
                 check_expr(value, schema, environment, errors);
                 for arm in arms {

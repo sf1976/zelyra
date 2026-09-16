@@ -836,6 +836,10 @@ impl<'a> Parser<'a> {
             let span = self.advance().span;
             return Ok(Stmt::Break { span });
         }
+        if self.at(&TokenKind::Continue) {
+            let span = self.advance().span;
+            return Ok(Stmt::Continue { span });
+        }
         if self.at(&TokenKind::Match) {
             let start = self.advance().span;
             let value = self.expression()?;
@@ -1147,6 +1151,17 @@ mod tests {
     fn parses_multiline_return() {
         let source = "fn f(n: Int) -> Int { return n +\n 1 }";
         assert!(parse(&lex(source).unwrap()).is_ok());
+    }
+
+    #[test]
+    fn parses_loop_control_statements() {
+        let program = parse(&lex("fn main() { while true { continue break } }").unwrap()).unwrap();
+        let body = match &program.functions[0].body.statements[0] {
+            Stmt::While { body, .. } => body,
+            statement => panic!("expected while, found {statement:?}"),
+        };
+        assert!(matches!(body.statements[0], Stmt::Continue { .. }));
+        assert!(matches!(body.statements[1], Stmt::Break { .. }));
     }
 
     #[test]

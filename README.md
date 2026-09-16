@@ -63,8 +63,8 @@ Implemented today:
   integer relationships in direct-return postconditions, basic control-flow
   paths, `Option`/`Result` constructor paths, known payload bindings, and
   bounded path-sensitive function-call summaries, local bindings with simple
-  linear assignments and bounded loops, and caller-assumption-aware callee
-  precondition checks.
+  linear assignments, bounded loops, and modeled `break`/`continue` paths;
+  caller-assumption-aware callee precondition checks are included.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

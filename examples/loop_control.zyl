@@ -1,0 +1,38 @@
+// Loop control is available at runtime and in bounded symbolic verification.
+
+fn stop_after_one() -> Int
+    ensures { result == 1 }
+{
+    mutable i = 0
+
+    while i < 5 {
+        i = i + 1
+        break
+    }
+
+    return i
+}
+
+fn count_without_two() -> Int
+    ensures { result == 2 }
+{
+    mutable i = 0
+    mutable total = 0
+
+    while i < 3 {
+        i = i + 1
+
+        if i == 2 {
+            continue
+        }
+
+        total = total + 1
+    }
+
+    return total
+}
+
+fn main() {
+    print(stop_after_one())
+    print(count_without_two())
+}

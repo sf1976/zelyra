@@ -277,6 +277,16 @@ enum SymbolicState<'a> {
         bindings: HashMap<String, &'a Expr>,
         substitutions: HashMap<String, LinearValue>,
     },
+    Break {
+        guards: Vec<SymbolicGuard<'a>>,
+        bindings: HashMap<String, &'a Expr>,
+        substitutions: HashMap<String, LinearValue>,
+    },
+    LoopContinue {
+        guards: Vec<SymbolicGuard<'a>>,
+        bindings: HashMap<String, &'a Expr>,
+        substitutions: HashMap<String, LinearValue>,
+    },
     Return {
         guards: Vec<SymbolicGuard<'a>>,
         expression: Option<&'a Expr>,
@@ -385,7 +395,9 @@ fn symbolic_states<'a>(
         let mut next = Vec::new();
         for state in states {
             match state {
-                SymbolicState::Return { .. } => next.push(state),
+                SymbolicState::Return { .. }
+                | SymbolicState::Break { .. }
+                | SymbolicState::LoopContinue { .. } => next.push(state),
                 SymbolicState::Continue {
                     guards,
                     bindings,
@@ -461,6 +473,16 @@ fn symbolic_states<'a>(
                     Stmt::Return { value, .. } => next.push(SymbolicState::Return {
                         guards,
                         expression: value.as_ref(),
+                        bindings,
+                        substitutions,
+                    }),
+                    Stmt::Break { .. } => next.push(SymbolicState::Break {
+                        guards,
+                        bindings,
+                        substitutions,
+                    }),
+                    Stmt::Continue { .. } => next.push(SymbolicState::LoopContinue {
+                        guards,
                         bindings,
                         substitutions,
                     }),
@@ -629,6 +651,31 @@ fn symbolic_loop_states<'a>(
     )? {
         match state {
             SymbolicState::Return { .. } => states.push(state),
+            SymbolicState::Break {
+                guards,
+                bindings,
+                substitutions,
+            } => states.push(SymbolicState::Continue {
+                guards,
+                bindings,
+                substitutions,
+            }),
+            SymbolicState::LoopContinue {
+                guards,
+                bindings,
+                substitutions,
+            } => states.extend(symbolic_loop_states(
+                condition,
+                body,
+                SymbolicState::Continue {
+                    guards,
+                    bindings,
+                    substitutions,
+                },
+                parameters,
+                functions,
+                iterations + 1,
+            )?),
             SymbolicState::Continue {
                 guards,
                 bindings,
@@ -1937,7 +1984,7 @@ fn check_capability_block(
                     }
                 }
             }
-            Stmt::Return { value: None, .. } | Stmt::Break { .. } => {}
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::If {
                 condition,
                 then_block,
@@ -2314,6 +2361,11 @@ impl<'a> Checker<'a> {
             Stmt::Break { span } => {
                 if self.loop_depth == 0 {
                     self.error(*span, "`break` is only valid inside a loop");
+                }
+            }
+            Stmt::Continue { span } => {
+                if self.loop_depth == 0 {
+                    self.error(*span, "`continue` is only valid inside a loop");
                 }
             }
             Stmt::Match { value, arms, span } => {
@@ -2814,6 +2866,7 @@ impl Environment {
 
 enum Flow {
     Continue,
+    LoopContinue,
     Return(Value),
     Break,
 }
@@ -2892,7 +2945,7 @@ impl Interpreter {
         }
         let result = match self.exec_block(&function.body, &mut env)? {
             Flow::Return(value) => value,
-            Flow::Continue | Flow::Break => Value::Unit,
+            Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
         };
         if !function.ensures.is_empty() {
             env.declare("result".into(), result.clone(), false);
@@ -2999,6 +3052,7 @@ impl Interpreter {
                     }
                     match self.exec_block(body, env)? {
                         Flow::Continue => {}
+                        Flow::LoopContinue => continue,
                         Flow::Break => break,
                         flow @ Flow::Return(_) => return Ok(flow),
                     }
@@ -3009,6 +3063,7 @@ impl Interpreter {
                 loop {
                     match self.exec_block(body, env)? {
                         Flow::Continue => {}
+                        Flow::LoopContinue => continue,
                         Flow::Break => break,
                         flow @ Flow::Return(_) => return Ok(flow),
                     }
@@ -3016,6 +3071,7 @@ impl Interpreter {
                 Ok(Flow::Continue)
             }
             Stmt::Break { .. } => Ok(Flow::Break),
+            Stmt::Continue { .. } => Ok(Flow::LoopContinue),
             Stmt::Match { value, arms, span } => {
                 let scrutinee = self.eval(value, env)?;
                 for arm in arms {
@@ -3377,6 +3433,29 @@ mod tests {
     }
 
     #[test]
+    fn loop_continue_skips_remaining_body() {
+        let output = run(
+            "fn main() { mutable i = 0 mutable sum = 0 while i < 5 { i = i + 1 if i == 3 { continue } sum = sum + i } print(sum) }",
+        );
+        assert_eq!(output, ["12"]);
+    }
+
+    #[test]
+    fn loop_break_exits_the_current_loop() {
+        let output = run("fn main() { mutable i = 0 while i < 5 { i = i + 1 break } print(i) }");
+        assert_eq!(output, ["1"]);
+    }
+
+    #[test]
+    fn rejects_loop_continue_outside_a_loop() {
+        let program = parse(&lex("fn main() { continue }").unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("`continue` is only valid inside a loop")));
+    }
+
+    #[test]
     fn supports_float_comparisons_and_inferred_returns() {
         let output = run(
             "fn twice(value: Float) { return value * 2.0 } fn main() { if twice(1.5) < 4.0 { print(twice(1.5)) } }",
@@ -3585,6 +3664,18 @@ mod tests {
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_break_and_continue_paths_in_bounded_loops() {
+        let program = parse(
+            &lex("fn stop_after_one() -> Int ensures { result == 1 } { mutable i = 0 while i < 5 { i = i + 1 break } return i } fn skip_one() -> Int ensures { result == 2 } { mutable i = 0 mutable total = 0 while i < 3 { i = i + 1 if i == 2 { continue } total = total + 1 } return total } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 
     #[test]

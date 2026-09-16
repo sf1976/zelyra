@@ -638,7 +638,9 @@ Lokaler Zustandsfluss wird in diesen Zusammenfassungen berücksichtigt. Sowohl
 anschließendem `return next` werden wie eine direkte Rückgabe analysiert.
 Einfache lineare Mutable-Zuweisungen wie `next = next + 1` werden ebenfalls
 verfolgt. Statisch begrenzte Schleifen mit linearem Zähler werden entfaltet;
-nichtlineare Zuweisungen und unbeschränkte Schleifen bleiben konservativ.
+`break` beendet die aktuelle Schleife und `continue` startet ihren nächsten
+Durchlauf als eigene symbolische Pfade. Nichtlineare Zuweisungen und
+unbeschränkte Schleifen bleiben konservativ.
 
 ## 16. Konfiguration und Geheimnisse
 

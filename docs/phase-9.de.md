@@ -132,10 +132,12 @@ Lokaler Zustandsfluss wird ebenfalls durch den Funktionskörper verfolgt.
 Sowohl `next: Int = value + 1` als auch die Kurzform `next = value + 1` mit
 anschließendem `return next` können wie die direkte Rückgabe zusammengefasst
 werden. Einfache lineare Initialisierung und Zuweisung bei Mutable-Variablen
-werden ebenfalls verfolgt, etwa `next = next + 1`. Nichtlineare Zuweisungen,
-statisch begrenzte Schleifen mit linear verändertem Zähler werden ebenfalls
-pfadweise entfaltet. Nichtlineare Zuweisungen, unbeschränkte Schleifen und
-andere nicht unterstützte Zustandsflüsse bleiben `RUNTIME_CHECK`.
+werden ebenfalls verfolgt, etwa `next = next + 1`. Statisch begrenzte
+Schleifen mit linear verändertem Zähler werden pfadweise entfaltet. `break`
+beendet dabei die aktuelle Schleife, `continue` startet ihren nächsten
+Durchlauf; beide werden als eigene symbolische Kontrollflusspfade modelliert.
+Nichtlineare Zuweisungen, unbeschränkte Schleifen und andere nicht unterstützte
+Zustandsflüsse bleiben `RUNTIME_CHECK`.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein
