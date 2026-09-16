@@ -63,13 +63,29 @@ impl<'a> Parser<'a> {
         }
     }
     fn program(mut self) -> Result<Program, ParseError> {
+        let mut types = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
-            functions.push(self.function()?);
+            if self.at(&TokenKind::Type) {
+                types.push(self.type_definition()?);
+            } else {
+                functions.push(self.function()?);
+            }
             self.skip_newlines();
         }
-        Ok(Program { functions })
+        Ok(Program { types, functions })
+    }
+    fn type_definition(&mut self) -> Result<TypeDef, ParseError> {
+        let start = self.expect(TokenKind::Type, "`type`")?;
+        let (name, _) = self.ident("type name")?;
+        self.expect(TokenKind::Equal, "`=` in type definition")?;
+        let target = self.type_name()?;
+        Ok(TypeDef {
+            name,
+            target,
+            span: start,
+        })
     }
     fn function(&mut self) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
@@ -113,7 +129,7 @@ impl<'a> Parser<'a> {
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
         let (name, _) = self.ident("type name")?;
-        Ok(match name.as_str() {
+        let mut ty = match name.as_str() {
             "Int" => Type::Int,
             "UInt" => Type::UInt,
             "Float" => Type::Float,
@@ -126,8 +142,27 @@ impl<'a> Parser<'a> {
             "Date" => Type::Date,
             "Time" => Type::Time,
             "Duration" => Type::Duration,
+            "Option" => {
+                self.expect(TokenKind::Less, "`<` after `Option`")?;
+                let inner = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after Option type")?;
+                Type::Option(Box::new(inner))
+            }
+            "Result" => {
+                self.expect(TokenKind::Less, "`<` after `Result`")?;
+                let ok = self.type_name()?;
+                self.expect(TokenKind::Comma, "`,` between Result types")?;
+                let error = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after Result types")?;
+                Type::Result(Box::new(ok), Box::new(error))
+            }
             _ => Type::Named(name),
-        })
+        };
+        if self.at(&TokenKind::Question) {
+            self.advance();
+            ty = Type::Option(Box::new(ty));
+        }
+        Ok(ty)
     }
     fn block(&mut self) -> Result<Block, ParseError> {
         let start = self.expect(TokenKind::LBrace, "`{`")?;
@@ -197,6 +232,31 @@ impl<'a> Parser<'a> {
             let span = self.advance().span;
             return Ok(Stmt::Break { span });
         }
+        if self.at(&TokenKind::Match) {
+            let start = self.advance().span;
+            let value = self.expression()?;
+            self.expect(TokenKind::LBrace, "`{` after match expression")?;
+            let mut arms = Vec::new();
+            self.skip_newlines();
+            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                let pattern = self.pattern()?;
+                self.expect(TokenKind::FatArrow, "`=>` after match pattern")?;
+                let body = self.block()?;
+                let span = pattern.span.join(body.span);
+                arms.push(MatchArm {
+                    pattern,
+                    body,
+                    span,
+                });
+                self.skip_newlines();
+            }
+            let end = self.expect(TokenKind::RBrace, "`}` after match arms")?;
+            return Ok(Stmt::Match {
+                value,
+                arms,
+                span: start.join(end),
+            });
+        }
         if self.at(&TokenKind::Mutable) {
             let start = self.advance().span;
             let (name, _) = self.ident("binding name")?;
@@ -253,6 +313,56 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(Stmt::Expr(self.expression()?))
+    }
+    fn pattern(&mut self) -> Result<Pattern, ParseError> {
+        let token = self.advance().clone();
+        match token.kind {
+            TokenKind::Ident(name) if name == "_" => Ok(Pattern {
+                kind: PatternKind::Wildcard,
+                span: token.span,
+            }),
+            TokenKind::Ident(name) => {
+                if self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let inner = if self.at(&TokenKind::RParen) {
+                        None
+                    } else {
+                        Some(Box::new(self.pattern()?))
+                    };
+                    let end = self.expect(TokenKind::RParen, "`)` after pattern")?;
+                    Ok(Pattern {
+                        kind: PatternKind::Constructor { name, inner },
+                        span: token.span.join(end),
+                    })
+                } else {
+                    Ok(Pattern {
+                        kind: PatternKind::Variable(name),
+                        span: token.span,
+                    })
+                }
+            }
+            TokenKind::Int(value) => Ok(Pattern {
+                kind: PatternKind::Int(value),
+                span: token.span,
+            }),
+            TokenKind::True => Ok(Pattern {
+                kind: PatternKind::Bool(true),
+                span: token.span,
+            }),
+            TokenKind::False => Ok(Pattern {
+                kind: PatternKind::Bool(false),
+                span: token.span,
+            }),
+            TokenKind::String(value) => Ok(Pattern {
+                kind: PatternKind::String(value),
+                span: token.span,
+            }),
+            TokenKind::Char(value) => Ok(Pattern {
+                kind: PatternKind::Char(value),
+                span: token.span,
+            }),
+            found => self.error(format!("expected pattern, found {found:?}")),
+        }
     }
     fn expression(&mut self) -> Result<Expr, ParseError> {
         self.binary(0)

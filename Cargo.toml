@@ -1,5 +1,5 @@
 [workspace]
-members = ["ast", "lexer", "parser", "runtime", "cli"]
+members = ["ast", "lexer", "parser", "hir", "runtime", "cli"]
 resolver = "2"
 
 [workspace.package]
@@ -11,4 +11,5 @@ license = "MIT"
 zelyra-ast = { path = "ast" }
 zelyra-lexer = { path = "lexer" }
 zelyra-parser = { path = "parser" }
+zelyra-hir = { path = "hir" }
 zelyra-runtime = { path = "runtime" }

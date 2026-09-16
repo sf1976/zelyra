@@ -1,16 +1,12 @@
 [package]
-name = "zelyra-cli"
+name = "zelyra-hir"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "zelyra"
-path = "src/main.rs"
-
 [dependencies]
 zelyra-ast.workspace = true
-zelyra-hir.workspace = true
+
+[dev-dependencies]
 zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
-zelyra-runtime.workspace = true

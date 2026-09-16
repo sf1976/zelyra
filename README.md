@@ -3,8 +3,8 @@
 [Deutsch](README.de.md) · English
 
 Zelyra is a statically typed language for business, database, and web applications.
-This repository contains the Phase 1 language core: lexer, parser, AST, static
-type checker, interpreter, and the `zelyra` CLI.
+This repository contains the Phase 1 and Phase 2 language core: lexer, parser,
+AST, HIR/name resolution, static type checker, interpreter, and the `zelyra` CLI.
 
 ## Quick start
 
@@ -60,6 +60,10 @@ fn main() {
 Supported Phase 1 constructs include primitive values, functions, calls,
 arithmetic and boolean expressions, `if`/`else`, `while`, `loop`, `break`,
 `return`, and `print`.
+
+Phase 2 adds nominal types, `Option`/`Result`, and exhaustive pattern matching.
+See [docs/phase-2.md](docs/phase-2.md) or the
+[German Phase 2 guide](docs/phase-2.de.md).
 
 ## Current limitations
 

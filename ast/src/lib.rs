@@ -43,6 +43,8 @@ pub enum Type {
     Time,
     Duration,
     Unit,
+    Option(Box<Type>),
+    Result(Box<Type>, Box<Type>),
     Named(String),
     Unknown,
 }
@@ -63,6 +65,8 @@ impl fmt::Display for Type {
             Type::Time => "Time",
             Type::Duration => "Duration",
             Type::Unit => "Unit",
+            Type::Option(inner) => return write!(f, "Option<{inner}>"),
+            Type::Result(ok, err) => return write!(f, "Result<{ok}, {err}>"),
             Type::Named(name) => name,
             Type::Unknown => "unknown",
         };
@@ -72,7 +76,15 @@ impl fmt::Display for Type {
 
 #[derive(Clone, Debug)]
 pub struct Program {
+    pub types: Vec<TypeDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeDef {
+    pub name: String,
+    pub target: Type,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +146,38 @@ pub enum Stmt {
     Break {
         span: Span,
     },
+    Match {
+        value: Expr,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct Pattern {
+    pub kind: PatternKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum PatternKind {
+    Wildcard,
+    Variable(String),
+    Constructor {
+        name: String,
+        inner: Option<Box<Pattern>>,
+    },
+    Int(i64),
+    Bool(bool),
+    String(String),
+    Char(char),
 }
 
 #[derive(Clone, Debug)]

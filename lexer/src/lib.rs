@@ -3,6 +3,7 @@ use zelyra_ast::Span;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
     Fn,
+    Type,
     Return,
     If,
     Else,
@@ -10,6 +11,7 @@ pub enum TokenKind {
     Loop,
     Break,
     Mutable,
+    Match,
     True,
     False,
     Ident(String),
@@ -18,6 +20,7 @@ pub enum TokenKind {
     String(String),
     Char(char),
     Arrow,
+    FatArrow,
     Plus,
     Minus,
     Star,
@@ -41,6 +44,7 @@ pub enum TokenKind {
     LBrace,
     RBrace,
     Semicolon,
+    Question,
     Newline,
     Eof,
 }
@@ -106,6 +110,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             let word = &source[start..i];
             let kind = match word {
                 "fn" => TokenKind::Fn,
+                "type" => TokenKind::Type,
                 "return" => TokenKind::Return,
                 "if" => TokenKind::If,
                 "else" => TokenKind::Else,
@@ -113,6 +118,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "loop" => TokenKind::Loop,
                 "break" => TokenKind::Break,
                 "mutable" => TokenKind::Mutable,
+                "match" => TokenKind::Match,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
                 _ => TokenKind::Ident(word.to_owned()),
@@ -247,6 +253,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
         }
         let (kind, width) = match (c, bytes.get(i + 1).copied().map(char::from)) {
             ('-', Some('>')) => (TokenKind::Arrow, 2),
+            ('=', Some('>')) => (TokenKind::FatArrow, 2),
             ('=', Some('=')) => (TokenKind::EqualEqual, 2),
             ('!', Some('=')) => (TokenKind::NotEqual, 2),
             ('<', Some('=')) => (TokenKind::LessEqual, 2),
@@ -270,6 +277,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             ('{', _) => (TokenKind::LBrace, 1),
             ('}', _) => (TokenKind::RBrace, 1),
             (';', _) => (TokenKind::Semicolon, 1),
+            ('?', _) => (TokenKind::Question, 1),
             _ => {
                 return Err(LexError {
                     message: format!("unexpected character `{c}`"),

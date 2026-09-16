@@ -11,9 +11,19 @@ name = "zelyra-cli"
 version = "0.1.0"
 dependencies = [
  "zelyra-ast",
+ "zelyra-hir",
  "zelyra-lexer",
  "zelyra-parser",
  "zelyra-runtime",
+]
+
+[[package]]
+name = "zelyra-hir"
+version = "0.1.0"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-lexer",
+ "zelyra-parser",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use std::{env, fs, process::ExitCode};
+use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{check, execute};
@@ -87,6 +88,18 @@ fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     let program = load(path)?;
+    if let Err(errors) = lower(&program) {
+        for error in errors {
+            diagnostic(
+                path,
+                "E-NAME-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return Err(());
+    }
     if let Err(errors) = check(&program) {
         for error in errors {
             diagnostic(

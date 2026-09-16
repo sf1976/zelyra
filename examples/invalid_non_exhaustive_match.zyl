@@ -1,0 +1,9 @@
+fn main() {
+    value: Int? = None
+
+    match value {
+        Some(number) => {
+            print(number)
+        }
+    }
+}

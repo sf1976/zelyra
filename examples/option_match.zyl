@@ -1,0 +1,17 @@
+fn lookup(flag: Bool) -> Int? {
+    if flag {
+        return Some(42)
+    }
+    return None
+}
+
+fn main() {
+    match lookup(true) {
+        Some(value) => {
+            print(value)
+        }
+        None => {
+            print(0)
+        }
+    }
+}

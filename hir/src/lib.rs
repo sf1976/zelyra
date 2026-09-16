@@ -1,0 +1,459 @@
+use std::collections::HashMap;
+use std::fmt;
+use zelyra_ast::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FunctionId(pub usize);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LocalId(pub usize);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolveError {
+    pub message: String,
+    pub span: Span,
+}
+
+impl fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HirProgram {
+    pub types: Vec<TypeDef>,
+    pub functions: Vec<HirFunction>,
+    pub functions_by_name: HashMap<String, FunctionId>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HirFunction {
+    pub id: FunctionId,
+    pub name: String,
+    pub params: Vec<HirParam>,
+    pub return_type: Option<Type>,
+    pub body: HirBlock,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct HirParam {
+    pub name: String,
+    pub ty: Type,
+    pub local: LocalId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct HirBlock {
+    pub statements: Vec<HirStmt>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum HirStmt {
+    Let {
+        name: String,
+        local: LocalId,
+        ty: Option<Type>,
+        value: HirExpr,
+        mutable: bool,
+        span: Span,
+    },
+    Assign {
+        name: String,
+        local: LocalId,
+        value: HirExpr,
+        span: Span,
+    },
+    Expr(HirExpr),
+    Return {
+        value: Option<HirExpr>,
+        span: Span,
+    },
+    If {
+        condition: HirExpr,
+        then_block: HirBlock,
+        else_block: Option<HirBlock>,
+        span: Span,
+    },
+    While {
+        condition: HirExpr,
+        body: HirBlock,
+        span: Span,
+    },
+    Loop {
+        body: HirBlock,
+        span: Span,
+    },
+    Break {
+        span: Span,
+    },
+    Match {
+        value: HirExpr,
+        arms: Vec<HirMatchArm>,
+        span: Span,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct HirMatchArm {
+    pub pattern: HirPattern,
+    pub body: HirBlock,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct HirPattern {
+    pub kind: HirPatternKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum HirPatternKind {
+    Wildcard,
+    Binding {
+        name: String,
+        local: LocalId,
+    },
+    Constructor {
+        name: String,
+        inner: Option<Box<HirPattern>>,
+    },
+    Int(i64),
+    Bool(bool),
+    String(String),
+    Char(char),
+}
+
+#[derive(Clone, Debug)]
+pub struct HirExpr {
+    pub kind: HirExprKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum HirExprKind {
+    Int(i64),
+    UInt(u64),
+    Float(f64),
+    Bool(bool),
+    String(String),
+    Char(char),
+    Local(LocalId),
+    Call {
+        name: String,
+        function: Option<FunctionId>,
+        args: Vec<HirExpr>,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<HirExpr>,
+    },
+    Binary {
+        left: Box<HirExpr>,
+        op: BinaryOp,
+        right: Box<HirExpr>,
+    },
+}
+
+pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
+    let mut functions_by_name = HashMap::new();
+    let mut errors = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if functions_by_name
+            .insert(function.name.clone(), FunctionId(index))
+            .is_some()
+        {
+            errors.push(ResolveError {
+                message: format!("duplicate function `{}`", function.name),
+                span: function.span,
+            });
+        }
+    }
+
+    let mut functions = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let mut resolver = Resolver {
+            functions: &functions_by_name,
+            errors: Vec::new(),
+            scopes: vec![HashMap::new()],
+            next_local: 0,
+        };
+        let mut params = Vec::new();
+        for parameter in &function.params {
+            let local = resolver.bind(parameter.name.clone(), parameter.span);
+            params.push(HirParam {
+                name: parameter.name.clone(),
+                ty: parameter.ty.clone(),
+                local,
+                span: parameter.span,
+            });
+        }
+        let body = resolver.block(&function.body);
+        errors.extend(resolver.errors);
+        functions.push(HirFunction {
+            id: FunctionId(index),
+            name: function.name.clone(),
+            params,
+            return_type: function.return_type.clone(),
+            body,
+            span: function.span,
+        });
+    }
+
+    if errors.is_empty() {
+        Ok(HirProgram {
+            types: program.types.clone(),
+            functions,
+            functions_by_name,
+        })
+    } else {
+        Err(errors)
+    }
+}
+
+struct Resolver<'a> {
+    functions: &'a HashMap<String, FunctionId>,
+    errors: Vec<ResolveError>,
+    scopes: Vec<HashMap<String, LocalId>>,
+    next_local: usize,
+}
+
+impl<'a> Resolver<'a> {
+    fn error(&mut self, span: Span, message: impl Into<String>) {
+        self.errors.push(ResolveError {
+            message: message.into(),
+            span,
+        });
+    }
+    fn bind(&mut self, name: String, span: Span) -> LocalId {
+        let local = LocalId(self.next_local);
+        self.next_local += 1;
+        if self
+            .scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.clone(), local)
+            .is_some()
+        {
+            self.error(
+                span,
+                format!("name `{name}` is already declared in this scope"),
+            );
+        }
+        local
+    }
+    fn lookup(&self, name: &str) -> Option<LocalId> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).copied())
+    }
+    fn block(&mut self, block: &Block) -> HirBlock {
+        self.scopes.push(HashMap::new());
+        let statements = block
+            .statements
+            .iter()
+            .map(|statement| self.statement(statement))
+            .collect();
+        self.scopes.pop();
+        HirBlock {
+            statements,
+            span: block.span,
+        }
+    }
+    fn statement(&mut self, statement: &Stmt) -> HirStmt {
+        match statement {
+            Stmt::Let {
+                name,
+                ty,
+                value,
+                mutable,
+                span,
+            } => {
+                let value = self.expr(value);
+                let local = self.bind(name.clone(), *span);
+                HirStmt::Let {
+                    name: name.clone(),
+                    local,
+                    ty: ty.clone(),
+                    value,
+                    mutable: *mutable,
+                    span: *span,
+                }
+            }
+            Stmt::BindOrAssign { name, value, span } => {
+                let value = self.expr(value);
+                if let Some(local) = self.lookup(name) {
+                    HirStmt::Assign {
+                        name: name.clone(),
+                        local,
+                        value,
+                        span: *span,
+                    }
+                } else {
+                    let local = self.bind(name.clone(), *span);
+                    HirStmt::Let {
+                        name: name.clone(),
+                        local,
+                        ty: None,
+                        value,
+                        mutable: false,
+                        span: *span,
+                    }
+                }
+            }
+            Stmt::Expr(expr) => HirStmt::Expr(self.expr(expr)),
+            Stmt::Return { value, span } => HirStmt::Return {
+                value: value.as_ref().map(|value| self.expr(value)),
+                span: *span,
+            },
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                span,
+            } => HirStmt::If {
+                condition: self.expr(condition),
+                then_block: self.block(then_block),
+                else_block: else_block.as_ref().map(|block| self.block(block)),
+                span: *span,
+            },
+            Stmt::While {
+                condition,
+                body,
+                span,
+            } => HirStmt::While {
+                condition: self.expr(condition),
+                body: self.block(body),
+                span: *span,
+            },
+            Stmt::Loop { body, span } => HirStmt::Loop {
+                body: self.block(body),
+                span: *span,
+            },
+            Stmt::Break { span } => HirStmt::Break { span: *span },
+            Stmt::Match { value, arms, span } => HirStmt::Match {
+                value: self.expr(value),
+                arms: arms
+                    .iter()
+                    .map(|arm| {
+                        self.scopes.push(HashMap::new());
+                        let pattern = self.pattern(&arm.pattern);
+                        let body = self.block(&arm.body);
+                        self.scopes.pop();
+                        HirMatchArm {
+                            pattern,
+                            body,
+                            span: arm.span,
+                        }
+                    })
+                    .collect(),
+                span: *span,
+            },
+        }
+    }
+    fn pattern(&mut self, pattern: &Pattern) -> HirPattern {
+        let kind = match &pattern.kind {
+            PatternKind::Wildcard => HirPatternKind::Wildcard,
+            PatternKind::Variable(name) => {
+                let local = self.bind(name.clone(), pattern.span);
+                HirPatternKind::Binding {
+                    name: name.clone(),
+                    local,
+                }
+            }
+            PatternKind::Constructor { name, inner } => HirPatternKind::Constructor {
+                name: name.clone(),
+                inner: inner.as_ref().map(|inner| Box::new(self.pattern(inner))),
+            },
+            PatternKind::Int(value) => HirPatternKind::Int(*value),
+            PatternKind::Bool(value) => HirPatternKind::Bool(*value),
+            PatternKind::String(value) => HirPatternKind::String(value.clone()),
+            PatternKind::Char(value) => HirPatternKind::Char(*value),
+        };
+        HirPattern {
+            kind,
+            span: pattern.span,
+        }
+    }
+    fn expr(&mut self, expr: &Expr) -> HirExpr {
+        let kind = match &expr.kind {
+            ExprKind::Int(value) => HirExprKind::Int(*value),
+            ExprKind::UInt(value) => HirExprKind::UInt(*value),
+            ExprKind::Float(value) => HirExprKind::Float(*value),
+            ExprKind::Bool(value) => HirExprKind::Bool(*value),
+            ExprKind::String(value) => HirExprKind::String(value.clone()),
+            ExprKind::Char(value) => HirExprKind::Char(*value),
+            ExprKind::Variable(name) => match self.lookup(name) {
+                Some(local) => HirExprKind::Local(local),
+                None if name == "None" => HirExprKind::Call {
+                    name: name.clone(),
+                    function: None,
+                    args: Vec::new(),
+                },
+                None => {
+                    self.error(expr.span, format!("unknown variable `{name}`"));
+                    HirExprKind::Local(LocalId(usize::MAX))
+                }
+            },
+            ExprKind::Call { name, args } => {
+                let function = self.functions.get(name).copied();
+                if function.is_none() && !matches!(name.as_str(), "print" | "Some" | "Ok" | "Err") {
+                    self.error(expr.span, format!("unknown function `{name}`"));
+                }
+                HirExprKind::Call {
+                    name: name.clone(),
+                    function,
+                    args: args.iter().map(|arg| self.expr(arg)).collect(),
+                }
+            }
+            ExprKind::Unary { op, expr: inner } => HirExprKind::Unary {
+                op: *op,
+                expr: Box::new(self.expr(inner)),
+            },
+            ExprKind::Binary { left, op, right } => HirExprKind::Binary {
+                left: Box::new(self.expr(left)),
+                op: *op,
+                right: Box::new(self.expr(right)),
+            },
+        };
+        HirExpr {
+            kind,
+            span: expr.span,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zelyra_lexer::lex;
+    use zelyra_parser::parse;
+
+    #[test]
+    fn resolves_locals_and_function_calls() {
+        let program = parse(
+            &lex("fn add(value: Int) -> Int { return value + 1 } fn main() { number = add(2) print(number) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.functions_by_name["add"], FunctionId(0));
+        assert!(matches!(
+            hir.functions[1].body.statements[0],
+            HirStmt::Let { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_unresolved_names() {
+        let program = parse(&lex("fn main() { print(missing) }").unwrap()).unwrap();
+        let errors = lower(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("unknown variable")));
+    }
+}

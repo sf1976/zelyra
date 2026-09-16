@@ -28,14 +28,50 @@ struct FunctionSignature {
 
 struct Checker<'a> {
     functions: HashMap<String, FunctionSignature>,
+    known_types: std::collections::HashSet<String>,
     errors: Vec<TypeError>,
     loop_depth: usize,
     _program: &'a Program,
 }
 
 pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
-    let mut functions = HashMap::new();
+    let mut known_types = [
+        "Id",
+        "Int",
+        "UInt",
+        "Float",
+        "Decimal",
+        "Bool",
+        "String",
+        "Char",
+        "Bytes",
+        "Timestamp",
+        "Date",
+        "Time",
+        "Duration",
+        "Unit",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect::<std::collections::HashSet<_>>();
     let mut errors = Vec::new();
+    for definition in &program.types {
+        if !known_types.insert(definition.name.clone()) {
+            errors.push(TypeError {
+                message: format!("duplicate type `{}`", definition.name),
+                span: definition.span,
+            });
+        }
+    }
+    for definition in &program.types {
+        validate_type(
+            &definition.target,
+            &known_types,
+            &mut errors,
+            definition.span,
+        );
+    }
+    let mut functions = HashMap::new();
     for function in &program.functions {
         if functions.contains_key(&function.name) {
             errors.push(TypeError {
@@ -64,10 +100,19 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
     }
     let mut checker = Checker {
         functions,
+        known_types,
         errors,
         loop_depth: 0,
         _program: program,
     };
+    for function in &program.functions {
+        for parameter in &function.params {
+            checker.check_type(&parameter.ty, parameter.span);
+        }
+        if let Some(return_type) = &function.return_type {
+            checker.check_type(return_type, function.span);
+        }
+    }
     for function in &program.functions {
         checker.check_function(function);
     }
@@ -111,7 +156,7 @@ impl<'a> Checker<'a> {
                 );
             }
         }
-        let expected = function.return_type.clone().unwrap_or(Type::Unit);
+        let expected = function.return_type.clone().unwrap_or(Type::Unknown);
         self.check_block(&function.body, &mut scopes, &expected);
     }
     fn check_block(
@@ -227,6 +272,166 @@ impl<'a> Checker<'a> {
                     self.error(*span, "`break` is only valid inside a loop");
                 }
             }
+            Stmt::Match { value, arms, span } => {
+                let value_type = self.check_expr(value, scopes);
+                let mut covered = std::collections::HashSet::new();
+                for arm in arms {
+                    let mut pattern_scope = HashMap::new();
+                    self.check_pattern(
+                        &arm.pattern,
+                        &value_type,
+                        &mut pattern_scope,
+                        &mut covered,
+                        true,
+                    );
+                    scopes.push(pattern_scope);
+                    self.check_block(&arm.body, scopes, expected);
+                    scopes.pop();
+                }
+                self.check_exhaustiveness(&value_type, &covered, *span);
+            }
+        }
+    }
+    fn check_type(&mut self, ty: &Type, span: Span) {
+        match ty {
+            Type::Named(name) if !self.known_types.contains(name) => {
+                self.error(span, format!("unknown type `{name}`"));
+            }
+            Type::Option(inner) => self.check_type(inner, span),
+            Type::Result(ok, error) => {
+                self.check_type(ok, span);
+                self.check_type(error, span);
+            }
+            _ => {}
+        }
+    }
+    fn check_pattern(
+        &mut self,
+        pattern: &Pattern,
+        expected: &Type,
+        scope: &mut HashMap<String, Variable>,
+        covered: &mut std::collections::HashSet<String>,
+        top_level: bool,
+    ) {
+        match &pattern.kind {
+            PatternKind::Wildcard => {
+                if top_level {
+                    covered.insert("_".into());
+                }
+            }
+            PatternKind::Variable(name) => {
+                if top_level {
+                    covered.insert("_".into());
+                }
+                if scope
+                    .insert(
+                        name.clone(),
+                        Variable {
+                            ty: expected.clone(),
+                            mutable: false,
+                        },
+                    )
+                    .is_some()
+                {
+                    self.error(
+                        pattern.span,
+                        format!("pattern variable `{name}` is bound twice"),
+                    );
+                }
+            }
+            PatternKind::Constructor { name, inner } => {
+                if top_level {
+                    covered.insert(name.clone());
+                }
+                match (name.as_str(), expected) {
+                    ("Some", Type::Option(inner_type)) => {
+                        if let Some(inner) = inner {
+                            self.check_pattern(inner, inner_type, scope, covered, false);
+                        } else {
+                            self.error(pattern.span, "`Some` requires an inner pattern");
+                        }
+                    }
+                    ("None", Type::Option(_)) => {
+                        if inner.is_some() {
+                            self.error(pattern.span, "`None` does not accept an inner pattern");
+                        }
+                    }
+                    ("Ok", Type::Result(ok_type, _)) => {
+                        if let Some(inner) = inner {
+                            self.check_pattern(inner, ok_type, scope, covered, false);
+                        } else {
+                            self.error(pattern.span, "`Ok` requires an inner pattern");
+                        }
+                    }
+                    ("Err", Type::Result(_, error_type)) => {
+                        if let Some(inner) = inner {
+                            self.check_pattern(inner, error_type, scope, covered, false);
+                        } else {
+                            self.error(pattern.span, "`Err` requires an inner pattern");
+                        }
+                    }
+                    ("Some" | "None" | "Ok" | "Err", Type::Unknown) => {}
+                    _ => self.error(
+                        pattern.span,
+                        format!("constructor `{name}` does not match `{expected}`"),
+                    ),
+                }
+            }
+            PatternKind::Int(_) => self.expect_type(&Type::Int, expected, pattern.span),
+            PatternKind::Bool(value) => {
+                if top_level {
+                    covered.insert(value.to_string());
+                }
+                self.expect_type(&Type::Bool, expected, pattern.span);
+            }
+            PatternKind::String(_) => self.expect_type(&Type::String, expected, pattern.span),
+            PatternKind::Char(_) => self.expect_type(&Type::Char, expected, pattern.span),
+        }
+    }
+    fn check_exhaustiveness(
+        &mut self,
+        ty: &Type,
+        covered: &std::collections::HashSet<String>,
+        span: Span,
+    ) {
+        if covered.contains("_") {
+            return;
+        }
+        let missing = match ty {
+            Type::Option(_) => {
+                let mut missing = Vec::new();
+                if !covered.contains("Some") {
+                    missing.push("Some(value)");
+                }
+                if !covered.contains("None") {
+                    missing.push("None");
+                }
+                missing.join(", ")
+            }
+            Type::Result(_, _) => {
+                let mut missing = Vec::new();
+                if !covered.contains("Ok") {
+                    missing.push("Ok(value)");
+                }
+                if !covered.contains("Err") {
+                    missing.push("Err(error)");
+                }
+                missing.join(", ")
+            }
+            Type::Bool => {
+                let mut missing = Vec::new();
+                if !covered.contains("true") {
+                    missing.push("true");
+                }
+                if !covered.contains("false") {
+                    missing.push("false");
+                }
+                missing.join(", ")
+            }
+            _ => String::new(),
+        };
+        if !missing.is_empty() {
+            self.error(span, format!("non-exhaustive match; missing: {missing}"));
         }
     }
     fn expect_type(&mut self, expected: &Type, actual: &Type, span: Span) {
@@ -248,6 +453,13 @@ impl<'a> Checker<'a> {
             ExprKind::Variable(name) => self
                 .lookup(scopes, name)
                 .map(|v| v.ty.clone())
+                .or_else(|| {
+                    if name == "None" {
+                        Some(Type::Option(Box::new(Type::Unknown)))
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| {
                     self.error(expr.span, format!("unknown variable `{name}`"));
                     Type::Unknown
@@ -261,6 +473,19 @@ impl<'a> Checker<'a> {
                         self.check_expr(arg, scopes);
                     }
                     Type::Unit
+                } else if name == "Some" || name == "Ok" || name == "Err" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("`{name}` expects exactly one argument"));
+                        return Type::Unknown;
+                    }
+                    let inner = self.check_expr(&args[0], scopes);
+                    if name == "Some" {
+                        Type::Option(Box::new(inner))
+                    } else if name == "Ok" {
+                        Type::Result(Box::new(inner), Box::new(Type::Unknown))
+                    } else {
+                        Type::Result(Box::new(Type::Unknown), Box::new(inner))
+                    }
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -351,10 +576,39 @@ impl<'a> Checker<'a> {
 }
 
 fn compatible(expected: &Type, actual: &Type) -> bool {
-    expected == actual || *expected == Type::Unknown || *actual == Type::Unknown
+    if expected == &Type::Unknown || actual == &Type::Unknown {
+        return true;
+    }
+    match (expected, actual) {
+        (Type::Option(expected), Type::Option(actual)) => compatible(expected, actual),
+        (Type::Result(expected_ok, expected_error), Type::Result(actual_ok, actual_error)) => {
+            compatible(expected_ok, actual_ok) && compatible(expected_error, actual_error)
+        }
+        _ => expected == actual,
+    }
 }
 fn is_numeric(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::UInt | Type::Float | Type::Decimal)
+}
+
+fn validate_type(
+    ty: &Type,
+    known_types: &std::collections::HashSet<String>,
+    errors: &mut Vec<TypeError>,
+    span: Span,
+) {
+    match ty {
+        Type::Named(name) if !known_types.contains(name) => errors.push(TypeError {
+            message: format!("unknown type `{name}`"),
+            span,
+        }),
+        Type::Option(inner) => validate_type(inner, known_types, errors, span),
+        Type::Result(ok, error) => {
+            validate_type(ok, known_types, errors, span);
+            validate_type(error, known_types, errors, span);
+        }
+        _ => {}
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -365,6 +619,8 @@ pub enum Value {
     Bool(bool),
     String(String),
     Char(char),
+    Option(Option<Box<Value>>),
+    Result(Result<Box<Value>, Box<Value>>),
     Unit,
 }
 
@@ -377,6 +633,12 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
+            Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
+            Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
+            Value::Result(Ok(value)) => Type::Result(Box::new(value.ty()), Box::new(Type::Unknown)),
+            Value::Result(Err(value)) => {
+                Type::Result(Box::new(Type::Unknown), Box::new(value.ty()))
+            }
             Value::Unit => Type::Unit,
         }
     }
@@ -388,6 +650,10 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
+            Value::Option(Some(v)) => format!("Some({})", v.output()),
+            Value::Option(None) => "None".into(),
+            Value::Result(Ok(v)) => format!("Ok({})", v.output()),
+            Value::Result(Err(v)) => format!("Err({})", v.output()),
             Value::Unit => "()".into(),
         }
     }
@@ -623,6 +889,21 @@ impl Interpreter {
                 Ok(Flow::Continue)
             }
             Stmt::Break { .. } => Ok(Flow::Break),
+            Stmt::Match { value, arms, span } => {
+                let scrutinee = self.eval(value, env)?;
+                for arm in arms {
+                    if let Some(bindings) = match_pattern(&scrutinee, &arm.pattern) {
+                        env.push();
+                        for (name, value) in bindings {
+                            env.declare(name, value, false);
+                        }
+                        let flow = self.exec_block(&arm.body, env)?;
+                        env.pop();
+                        return Ok(flow);
+                    }
+                }
+                Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
+            }
         }
     }
     fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {
@@ -641,6 +922,13 @@ impl Interpreter {
             ExprKind::Char(v) => Ok(Value::Char(*v)),
             ExprKind::Variable(name) => env
                 .get(name)
+                .or_else(|| {
+                    if name == "None" {
+                        Some(Value::Option(None))
+                    } else {
+                        None
+                    }
+                })
                 .ok_or_else(|| self.runtime_error(expr.span, format!("unknown variable `{name}`"))),
             ExprKind::Call { name, args } => {
                 if name == "print" {
@@ -652,6 +940,22 @@ impl Interpreter {
                     )?;
                     self.output.push(value.output());
                     Ok(Value::Unit)
+                } else if name == "Some" || name == "Ok" || name == "Err" {
+                    let argument = args.first().ok_or_else(|| {
+                        self.runtime_error(expr.span, format!("`{name}` expects one argument"))
+                    })?;
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("`{name}` expects exactly one argument"),
+                        ));
+                    }
+                    let value = Box::new(self.eval(argument, env)?);
+                    match name.as_str() {
+                        "Some" => Ok(Value::Option(Some(value))),
+                        "Ok" => Ok(Value::Result(Ok(value))),
+                        _ => Ok(Value::Result(Err(value))),
+                    }
                 } else {
                     let values = args
                         .iter()
@@ -709,6 +1013,7 @@ impl Interpreter {
             (Value::Float(a), Subtract, Value::Float(b)) => Ok(Value::Float(a - b)),
             (Value::Float(a), Multiply, Value::Float(b)) => Ok(Value::Float(a * b)),
             (Value::Float(a), Divide, Value::Float(b)) => Ok(Value::Float(a / b)),
+            (Value::Float(a), Remainder, Value::Float(b)) => Ok(Value::Float(a % b)),
             (Value::String(a), Add, Value::String(b)) => Ok(Value::String(a + &b)),
             (a, Equal, b) => Ok(Value::Bool(a == b)),
             (a, NotEqual, b) => Ok(Value::Bool(a != b)),
@@ -716,6 +1021,10 @@ impl Interpreter {
             (Value::Int(a), LessEqual, Value::Int(b)) => Ok(Value::Bool(a <= b)),
             (Value::Int(a), Greater, Value::Int(b)) => Ok(Value::Bool(a > b)),
             (Value::Int(a), GreaterEqual, Value::Int(b)) => Ok(Value::Bool(a >= b)),
+            (Value::Float(a), Less, Value::Float(b)) => Ok(Value::Bool(a < b)),
+            (Value::Float(a), LessEqual, Value::Float(b)) => Ok(Value::Bool(a <= b)),
+            (Value::Float(a), Greater, Value::Float(b)) => Ok(Value::Bool(a > b)),
+            (Value::Float(a), GreaterEqual, Value::Float(b)) => Ok(Value::Bool(a >= b)),
             (Value::Bool(a), And, Value::Bool(b)) => Ok(Value::Bool(a && b)),
             (Value::Bool(a), Or, Value::Bool(b)) => Ok(Value::Bool(a || b)),
             (left, op, right) => Err(self.runtime_error(
@@ -727,6 +1036,46 @@ impl Interpreter {
                 ),
             )),
         }
+    }
+}
+
+fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)>> {
+    match &pattern.kind {
+        PatternKind::Wildcard => Some(Vec::new()),
+        PatternKind::Variable(name) => Some(vec![(name.clone(), value.clone())]),
+        PatternKind::Int(expected) => match value {
+            Value::Int(actual) if actual == expected => Some(Vec::new()),
+            _ => None,
+        },
+        PatternKind::Bool(expected) => match value {
+            Value::Bool(actual) if actual == expected => Some(Vec::new()),
+            _ => None,
+        },
+        PatternKind::String(expected) => match value {
+            Value::String(actual) if actual == expected => Some(Vec::new()),
+            _ => None,
+        },
+        PatternKind::Char(expected) => match value {
+            Value::Char(actual) if actual == expected => Some(Vec::new()),
+            _ => None,
+        },
+        PatternKind::Constructor { name, inner } => match (name.as_str(), value) {
+            ("Some", Value::Option(Some(value))) | ("Ok", Value::Result(Ok(value))) => inner
+                .as_ref()
+                .and_then(|pattern| match_pattern(value, pattern)),
+            ("None", Value::Option(None)) => {
+                if inner.is_none() {
+                    Some(Vec::new())
+                } else {
+                    None
+                }
+            }
+            ("Err", Value::Result(Err(_))) if inner.is_none() => Some(Vec::new()),
+            ("Err", Value::Result(Err(value))) => inner
+                .as_ref()
+                .and_then(|pattern| match_pattern(value, pattern)),
+            _ => None,
+        },
     }
 }
 
@@ -752,6 +1101,14 @@ mod tests {
     fn mutable_while_loop_works() {
         let output = run("fn main() { mutable i = 0 while i < 3 { print(i) i = i + 1 } }");
         assert_eq!(output, ["0", "1", "2"]);
+    }
+
+    #[test]
+    fn supports_float_comparisons_and_inferred_returns() {
+        let output = run(
+            "fn twice(value: Float) { return value * 2.0 } fn main() { if twice(1.5) < 4.0 { print(twice(1.5)) } }",
+        );
+        assert_eq!(output, ["3"]);
     }
 
     #[test]
