@@ -101,7 +101,12 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                status: verify_postcondition(contract, return_paths.as_deref(), &functions),
+                status: verify_postcondition(
+                    contract,
+                    &function.requires,
+                    return_paths.as_deref(),
+                    &functions,
+                ),
             });
         }
         if function.requires.is_empty() && function.ensures.is_empty() {
@@ -140,6 +145,7 @@ fn verify_contract(
 
 fn verify_postcondition(
     contract: &Expr,
+    preconditions: &[Expr],
     return_paths: Option<&[ReturnPath<'_>]>,
     functions: &HashMap<String, &Function>,
 ) -> VerificationStatus {
@@ -159,6 +165,28 @@ fn verify_postcondition(
                     continue;
                 };
                 let mut alternatives = vec![Vec::new()];
+                for precondition in preconditions {
+                    let guard = SymbolicGuard::Condition {
+                        expression: precondition,
+                        expected: true,
+                    };
+                    let Some(precondition_alternatives) = constraints_for_guard(
+                        &guard,
+                        Some(expression),
+                        Some(&path.bindings),
+                        None,
+                        Some(functions),
+                        0,
+                    ) else {
+                        saw_unknown_path = true;
+                        alternatives.clear();
+                        break;
+                    };
+                    alternatives = combine_alternatives(alternatives, precondition_alternatives);
+                }
+                if alternatives.is_empty() {
+                    continue;
+                }
                 for guard in &path.guards {
                     let Some(guard_alternatives) = constraints_for_guard(
                         guard,
@@ -179,6 +207,19 @@ fn verify_postcondition(
                         continue;
                     }
                     saw_feasible_path = true;
+                    let context = SymbolicContext {
+                        return_expression: Some(expression),
+                        bindings: Some(&path.bindings),
+                        substitutions: None,
+                        functions: Some(functions),
+                        depth: 0,
+                    };
+                    if call_preconditions_hold(expression, &guards, context) != Some(true)
+                        || call_preconditions_hold(contract, &guards, context) != Some(true)
+                    {
+                        saw_unknown_path = true;
+                        continue;
+                    }
                     match symbolic_bool_with_constraints(
                         contract,
                         expression,
@@ -887,6 +928,108 @@ fn symbolic_bool_with_constraints(
         return Some(true);
     }
     None
+}
+
+fn call_preconditions_hold(
+    expression: &Expr,
+    guards: &[PathConstraint],
+    context: SymbolicContext<'_>,
+) -> Option<bool> {
+    if context.depth >= 32 {
+        return None;
+    }
+    match &expression.kind {
+        ExprKind::Unary { expr, .. } => call_preconditions_hold(expr, guards, context),
+        ExprKind::Binary { left, right, .. } => {
+            if call_preconditions_hold(left, guards, context)?
+                && call_preconditions_hold(right, guards, context)?
+            {
+                Some(true)
+            } else {
+                Some(false)
+            }
+        }
+        ExprKind::Call { name, args } => {
+            for argument in args {
+                match call_preconditions_hold(argument, guards, context) {
+                    Some(true) => {}
+                    result => return result,
+                }
+            }
+            let Some(functions) = context.functions else {
+                return Some(true);
+            };
+            let Some(function) = functions.get(name) else {
+                return Some(true);
+            };
+            if args.len() != function.params.len() {
+                return None;
+            }
+            let mut argument_values = HashMap::new();
+            for (parameter, argument) in function.params.iter().zip(args) {
+                let value = linear_value(
+                    argument,
+                    context.return_expression,
+                    context.bindings,
+                    context.substitutions,
+                    context.functions,
+                    context.depth,
+                )?;
+                argument_values.insert(parameter.name.clone(), value);
+            }
+            for requirement in &function.requires {
+                let true_constraints = constraints_for_bool(
+                    requirement,
+                    true,
+                    None,
+                    None,
+                    Some(&argument_values),
+                    context.functions,
+                    context.depth + 1,
+                )?;
+                let false_constraints = constraints_for_bool(
+                    requirement,
+                    false,
+                    None,
+                    None,
+                    Some(&argument_values),
+                    context.functions,
+                    context.depth + 1,
+                )?;
+                let true_possible = true_constraints.into_iter().any(|constraints| {
+                    let mut path = guards.to_owned();
+                    path.extend(constraints);
+                    constraints_satisfiable(path) != Some(false)
+                });
+                if !true_possible {
+                    return Some(false);
+                }
+                let false_possible = false_constraints.into_iter().any(|constraints| {
+                    let mut path = guards.to_owned();
+                    path.extend(constraints);
+                    constraints_satisfiable(path) != Some(false)
+                });
+                if false_possible {
+                    return None;
+                }
+            }
+            let Some(return_expression) = direct_return_expression(function) else {
+                return Some(true);
+            };
+            call_preconditions_hold(
+                return_expression,
+                guards,
+                SymbolicContext {
+                    return_expression: None,
+                    bindings: None,
+                    substitutions: Some(&argument_values),
+                    functions: context.functions,
+                    depth: context.depth + 1,
+                },
+            )
+        }
+        _ => Some(true),
+    }
 }
 
 impl LinearValue {
@@ -2946,5 +3089,31 @@ mod tests {
         assert_eq!(results[1].status, VerificationStatus::Proven);
         assert_eq!(results[2].status, VerificationStatus::Proven);
         assert_eq!(results[3].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn uses_function_preconditions_as_postcondition_assumptions() {
+        let program = parse(
+            &lex("fn non_negative(value: Int) -> Int requires { value >= 0 } ensures { result >= 0 } { return value } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn checks_called_function_preconditions_under_caller_assumptions() {
+        let program = parse(
+            &lex("fn non_negative(value: Int) -> Int requires { value >= 0 } { return value } fn safe_call(value: Int) -> Int requires { value >= 0 } ensures { result >= 0 } { return non_negative(value) } fn unchecked_call(value: Int) -> Int ensures { result >= 0 } { return non_negative(value) } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[4].status, VerificationStatus::Unproven);
     }
 }

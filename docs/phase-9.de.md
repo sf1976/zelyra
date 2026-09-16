@@ -120,10 +120,12 @@ als `UNPROVEN` gemeldet.
 
 Einfache Funktionsaufrufe mit direkter Rückgabe werden ebenfalls als
 Zusammenfassung in das Integer-Modell eingesetzt. Verschachtelte Aufrufe wie
-`increment(increment(value))` werden mit begrenzter Tiefe verarbeitet. Aufrufe
-komplexer, rekursiver oder nicht auflösbarer Funktionen bleiben
-`RUNTIME_CHECK`; Vorbedingungen der aufgerufenen Funktion werden noch nicht
-als Annahmen des Aufrufers verwendet.
+`increment(increment(value))` werden mit begrenzter Tiefe verarbeitet. Vor der
+Verwendung einer Callee-Zusammenfassung prüft der Verifier die `requires`-
+Bedingungen der aufgerufenen Funktion nach Argumentsubstitution. Die
+`requires`-Bedingungen des Aufrufers stehen beim Beweis seiner `ensures` als
+Annahmen zur Verfügung. Aufrufe komplexer, rekursiver oder nicht auflösbarer
+Funktionen sowie nicht beweisbare Aufrufbedingungen bleiben `RUNTIME_CHECK`.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

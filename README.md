@@ -62,7 +62,8 @@ Implemented today:
   `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
   integer relationships in direct-return postconditions, basic control-flow
   paths, `Option`/`Result` constructor paths, known payload bindings, and
-  bounded direct-return function-call summaries.
+  bounded direct-return function-call summaries with caller-assumption-aware
+  callee precondition checks.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

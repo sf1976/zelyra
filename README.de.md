@@ -63,7 +63,7 @@ Heute implementiert:
   einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben,
   grundlegenden Kontrollflusspfaden, `Option`-/`Result`-Konstruktorpfaden,
   bekannten Payload-Bindings und begrenzten Zusammenfassungen direkter
-  Funktionsrückgaben.
+  Funktionsrückgaben mit aufruferabhängiger Prüfung von Callee-Vorbedingungen.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

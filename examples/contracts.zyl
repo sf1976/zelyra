@@ -10,6 +10,9 @@ fn increment(value: Int) -> Int
 }
 
 fn twice(value: Int) -> Int
+    requires {
+        value >= 0
+    }
     ensures {
         result > value
     }
@@ -23,6 +26,33 @@ fn known_call() -> Int
     }
 {
     return increment(42)
+}
+
+fn non_negative(value: Int) -> Int
+    requires {
+        value >= 0
+    }
+{
+    return value
+}
+
+fn safe_call(value: Int) -> Int
+    requires {
+        value >= 0
+    }
+    ensures {
+        result >= 0
+    }
+{
+    return non_negative(value)
+}
+
+fn unchecked_call(value: Int) -> Int
+    ensures {
+        result >= 0
+    }
+{
+    return non_negative(value)
 }
 
 fn absolute(value: Int) -> Int

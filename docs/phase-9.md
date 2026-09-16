@@ -114,9 +114,11 @@ a known constructor, so `Some(4)` followed by `return number` can be checked as
 
 Simple direct-return function calls are also summarized and inlined into the
 integer model. Nested calls such as `increment(increment(value))` are handled
-with a bounded depth. Calls to complex, recursive, or otherwise unresolved
-functions remain `RUNTIME_CHECK`; callee preconditions are not yet used as
-caller assumptions.
+with a bounded depth. Before a callee summary is used, the verifier checks the
+callee's `requires` after substituting the call arguments. A caller's
+`requires` clauses are available as assumptions while proving its `ensures`.
+Calls to complex, recursive, or otherwise unresolved functions remain
+`RUNTIME_CHECK`, as do call preconditions that cannot be proven.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.
