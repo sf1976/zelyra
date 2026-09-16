@@ -87,15 +87,16 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 function: function.name.clone(),
                 kind: ContractKind::Requires,
                 index,
-                status: verify_contract(contract),
+                status: verify_contract(contract, None),
             });
         }
+        let return_expression = direct_return_expression(function);
         for (index, contract) in function.ensures.iter().enumerate() {
             results.push(VerificationResult {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                status: verify_contract(contract),
+                status: verify_contract(contract, return_expression),
             });
         }
         if function.requires.is_empty() && function.ensures.is_empty() {
@@ -110,12 +111,161 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     results
 }
 
-fn verify_contract(contract: &Expr) -> VerificationStatus {
+fn verify_contract(contract: &Expr, return_expression: Option<&Expr>) -> VerificationStatus {
     match constant_value(contract) {
         Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
         Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
         Some(_) => VerificationStatus::Unproven,
-        None => VerificationStatus::RuntimeCheck,
+        None => symbolic_bool(contract, return_expression).map_or(
+            VerificationStatus::RuntimeCheck,
+            |value| {
+                if value {
+                    VerificationStatus::Proven
+                } else {
+                    VerificationStatus::Failed
+                }
+            },
+        ),
+    }
+}
+
+fn direct_return_expression(function: &Function) -> Option<&Expr> {
+    let [Stmt::Return {
+        value: Some(expression),
+        ..
+    }] = function.body.statements.as_slice()
+    else {
+        return None;
+    };
+    Some(expression)
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct LinearValue {
+    coefficients: HashMap<String, i64>,
+    constant: i64,
+}
+
+impl LinearValue {
+    fn add(mut self, other: Self) -> Option<Self> {
+        self.constant = self.constant.checked_add(other.constant)?;
+        for (name, coefficient) in other.coefficients {
+            let value = self
+                .coefficients
+                .get(&name)
+                .copied()
+                .unwrap_or_default()
+                .checked_add(coefficient)?;
+            if value == 0 {
+                self.coefficients.remove(&name);
+            } else {
+                self.coefficients.insert(name, value);
+            }
+        }
+        Some(self)
+    }
+
+    fn negate(mut self) -> Option<Self> {
+        self.constant = self.constant.checked_neg()?;
+        for coefficient in self.coefficients.values_mut() {
+            *coefficient = coefficient.checked_neg()?;
+        }
+        Some(self)
+    }
+
+    fn scale(mut self, factor: i64) -> Option<Self> {
+        self.constant = self.constant.checked_mul(factor)?;
+        for coefficient in self.coefficients.values_mut() {
+            *coefficient = coefficient.checked_mul(factor)?;
+        }
+        Some(self)
+    }
+
+    fn subtract(self, other: Self) -> Option<Self> {
+        self.add(other.negate()?)
+    }
+}
+
+fn linear_value(expression: &Expr, return_expression: Option<&Expr>) -> Option<LinearValue> {
+    match &expression.kind {
+        ExprKind::Int(value) => Some(LinearValue {
+            constant: *value,
+            ..LinearValue::default()
+        }),
+        ExprKind::Variable(name) if name == "result" => {
+            return_expression.and_then(|expression| linear_value(expression, return_expression))
+        }
+        ExprKind::Variable(name) => Some(LinearValue {
+            coefficients: HashMap::from([(name.clone(), 1)]),
+            constant: 0,
+        }),
+        ExprKind::Unary {
+            op: UnaryOp::Negate,
+            expr,
+        } => linear_value(expr, return_expression)?.negate(),
+        ExprKind::Binary { left, op, right } => {
+            let left = linear_value(left, return_expression)?;
+            let right = linear_value(right, return_expression)?;
+            match op {
+                BinaryOp::Add => left.add(right),
+                BinaryOp::Subtract => left.subtract(right),
+                BinaryOp::Multiply if right.coefficients.is_empty() => left.scale(right.constant),
+                BinaryOp::Multiply if left.coefficients.is_empty() => right.scale(left.constant),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn symbolic_bool(expression: &Expr, return_expression: Option<&Expr>) -> Option<bool> {
+    match &expression.kind {
+        ExprKind::Unary {
+            op: UnaryOp::Not,
+            expr,
+        } => symbolic_bool(expr, return_expression).map(|value| !value),
+        ExprKind::Binary { left, op, right } => match op {
+            BinaryOp::And => match (
+                symbolic_bool(left, return_expression),
+                symbolic_bool(right, return_expression),
+            ) {
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            },
+            BinaryOp::Or => match (
+                symbolic_bool(left, return_expression),
+                symbolic_bool(right, return_expression),
+            ) {
+                (Some(true), _) | (_, Some(true)) => Some(true),
+                (Some(false), Some(false)) => Some(false),
+                _ => None,
+            },
+            BinaryOp::Equal
+            | BinaryOp::NotEqual
+            | BinaryOp::Less
+            | BinaryOp::LessEqual
+            | BinaryOp::Greater
+            | BinaryOp::GreaterEqual => {
+                let left = linear_value(left, return_expression)?;
+                let right = linear_value(right, return_expression)?;
+                let difference = left.subtract(right)?;
+                if !difference.coefficients.is_empty() {
+                    return None;
+                }
+                Some(match op {
+                    BinaryOp::Equal => difference.constant == 0,
+                    BinaryOp::NotEqual => difference.constant != 0,
+                    BinaryOp::Less => difference.constant < 0,
+                    BinaryOp::LessEqual => difference.constant <= 0,
+                    BinaryOp::Greater => difference.constant > 0,
+                    BinaryOp::GreaterEqual => difference.constant >= 0,
+                    _ => unreachable!(),
+                })
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -567,6 +717,7 @@ impl<'a> Checker<'a> {
             let actual = self.check_expr(contract, &scopes);
             self.expect_type(&Type::Bool, &actual, contract.span);
         }
+        self.check_block(&function.body, &mut scopes, &expected);
         if !function.ensures.is_empty() {
             scopes[0].insert(
                 "result".into(),
@@ -580,7 +731,6 @@ impl<'a> Checker<'a> {
                 self.expect_type(&Type::Bool, &actual, contract.span);
             }
         }
-        self.check_block(&function.body, &mut scopes, &expected);
     }
     fn check_block(
         &mut self,
@@ -1870,5 +2020,17 @@ mod tests {
         assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[2].status, VerificationStatus::Failed);
         assert_eq!(results[3].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_simple_integer_postconditions_from_direct_returns() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Failed);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 }

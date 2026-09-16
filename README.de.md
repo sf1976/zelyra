@@ -59,7 +59,8 @@ Heute implementiert:
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - ein erster `zelyra verify`-Befehl, der Contract-Ausdrücke zwischen `PROVEN`,
-  `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet.
+  `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet, einschließlich
+  einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

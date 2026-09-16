@@ -59,7 +59,8 @@ Implemented today:
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial `zelyra verify` command distinguishing `PROVEN`, `RUNTIME_CHECK`,
-  `UNPROVEN`, and `FAILED` for contract expressions.
+  `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
+  integer relationships in direct-return postconditions.
 
 Full CRUD generation, database roles, APIs, formal verification,
 and production deployment tooling are still being developed. See the

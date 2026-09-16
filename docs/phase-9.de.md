@@ -100,10 +100,12 @@ Der erste Verifikationsbefehl ist verfügbar über:
 zelyra verify examples/contracts.zyl
 ~~~
 
-Konstante Bool-Ausdrücke können derzeit als `PROVEN` oder `FAILED`
-klassifiziert werden. Von Parametern oder Rückgabewerten abhängige Bedingungen
-bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als `UNPROVEN`
-gemeldet.
+Konstante Bool-Ausdrücke können als `PROVEN` oder `FAILED` klassifiziert
+werden. Der erste symbolische Verifier setzt außerdem einen direkten
+ganzzahligen Rückgabeausdruck in `ensures` ein und beweist einfache affine
+Beziehungen wie `result > value` bei `return value + 1`. Nicht entscheidbare
+Bedingungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als
+`UNPROVEN` gemeldet.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein
