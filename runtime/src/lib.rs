@@ -116,7 +116,7 @@ fn verify_contract(contract: &Expr, return_expression: Option<&Expr>) -> Verific
         Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
         Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
         Some(_) => VerificationStatus::Unproven,
-        None => symbolic_bool(contract, return_expression).map_or(
+        None => symbolic_bool(contract, return_expression, None).map_or(
             VerificationStatus::RuntimeCheck,
             |value| {
                 if value {
@@ -150,7 +150,8 @@ fn verify_postcondition(
                 };
                 let mut alternatives = vec![Vec::new()];
                 for guard in &path.guards {
-                    let Some(guard_alternatives) = constraints_for_guard(guard, Some(expression))
+                    let Some(guard_alternatives) =
+                        constraints_for_guard(guard, Some(expression), Some(&path.bindings))
                     else {
                         saw_unknown_path = true;
                         alternatives.clear();
@@ -163,7 +164,12 @@ fn verify_postcondition(
                         continue;
                     }
                     saw_feasible_path = true;
-                    match symbolic_bool_with_constraints(contract, expression, &guards) {
+                    match symbolic_bool_with_constraints(
+                        contract,
+                        expression,
+                        &guards,
+                        Some(&path.bindings),
+                    ) {
                         Some(true) => {}
                         Some(false) => return VerificationStatus::Failed,
                         None => saw_unknown_path = true,
@@ -196,43 +202,96 @@ enum SymbolicGuard<'a> {
 struct ReturnPath<'a> {
     guards: Vec<SymbolicGuard<'a>>,
     expression: Option<&'a Expr>,
+    bindings: HashMap<String, &'a Expr>,
 }
 
 #[derive(Clone, Debug)]
 enum SymbolicState<'a> {
-    Continue(Vec<SymbolicGuard<'a>>),
+    Continue {
+        guards: Vec<SymbolicGuard<'a>>,
+        bindings: HashMap<String, &'a Expr>,
+    },
     Return {
         guards: Vec<SymbolicGuard<'a>>,
         expression: Option<&'a Expr>,
+        bindings: HashMap<String, &'a Expr>,
     },
 }
 
 fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
-    let states = symbolic_states(&function.body, Vec::new())?;
+    let states = symbolic_states(&function.body, Vec::new(), HashMap::new())?;
     let mut paths = Vec::new();
     for state in states {
-        let SymbolicState::Return { guards, expression } = state else {
+        let SymbolicState::Return {
+            guards,
+            expression,
+            bindings,
+        } = state
+        else {
             return None;
         };
-        paths.push(ReturnPath { guards, expression });
+        paths.push(ReturnPath {
+            guards,
+            expression,
+            bindings,
+        });
     }
     Some(paths)
+}
+
+fn add_pattern_bindings<'a>(
+    value: &'a Expr,
+    pattern: &'a Pattern,
+    bindings: &mut HashMap<String, &'a Expr>,
+) {
+    match &pattern.kind {
+        PatternKind::Variable(name) => {
+            if !matches!(&value.kind, ExprKind::Variable(existing) if existing == name) {
+                bindings.insert(name.clone(), value);
+            }
+        }
+        PatternKind::Constructor { name, inner } => {
+            let Some(inner) = inner else {
+                return;
+            };
+            let ExprKind::Call {
+                name: value_name,
+                args,
+            } = &value.kind
+            else {
+                return;
+            };
+            if value_name == name && args.len() == 1 {
+                add_pattern_bindings(&args[0], inner, bindings);
+            }
+        }
+        PatternKind::Wildcard
+        | PatternKind::Int(_)
+        | PatternKind::Bool(_)
+        | PatternKind::String(_)
+        | PatternKind::Char(_) => {}
+    }
 }
 
 fn symbolic_states<'a>(
     block: &'a Block,
     incoming: Vec<SymbolicGuard<'a>>,
+    bindings: HashMap<String, &'a Expr>,
 ) -> Option<Vec<SymbolicState<'a>>> {
-    let mut states = vec![SymbolicState::Continue(incoming)];
+    let mut states = vec![SymbolicState::Continue {
+        guards: incoming,
+        bindings,
+    }];
     for statement in &block.statements {
         let mut next = Vec::new();
         for state in states {
             match state {
                 SymbolicState::Return { .. } => next.push(state),
-                SymbolicState::Continue(guards) => match statement {
+                SymbolicState::Continue { guards, bindings } => match statement {
                     Stmt::Return { value, .. } => next.push(SymbolicState::Return {
                         guards,
                         expression: value.as_ref(),
+                        bindings,
                     }),
                     Stmt::If {
                         condition,
@@ -245,7 +304,7 @@ fn symbolic_states<'a>(
                             expression: condition,
                             expected: true,
                         });
-                        next.extend(symbolic_states(then_block, then_guards)?);
+                        next.extend(symbolic_states(then_block, then_guards, bindings.clone())?);
 
                         if let Some(else_block) = else_block {
                             let mut else_guards = guards;
@@ -253,14 +312,18 @@ fn symbolic_states<'a>(
                                 expression: condition,
                                 expected: false,
                             });
-                            next.extend(symbolic_states(else_block, else_guards)?);
+                            next.extend(symbolic_states(
+                                else_block,
+                                else_guards,
+                                bindings.clone(),
+                            )?);
                         } else {
                             let mut guards = guards;
                             guards.push(SymbolicGuard::Condition {
                                 expression: condition,
                                 expected: false,
                             });
-                            next.push(SymbolicState::Continue(guards));
+                            next.push(SymbolicState::Continue { guards, bindings });
                         }
                     }
                     Stmt::Match { value, arms, .. } => {
@@ -278,7 +341,9 @@ fn symbolic_states<'a>(
                                 pattern: &arm.pattern,
                                 matched: true,
                             });
-                            next.extend(symbolic_states(&arm.body, arm_guards)?);
+                            let mut arm_bindings = bindings.clone();
+                            add_pattern_bindings(value, &arm.pattern, &mut arm_bindings);
+                            next.extend(symbolic_states(&arm.body, arm_guards, arm_bindings)?);
                         }
                     }
                     _ => return None,
@@ -389,17 +454,18 @@ fn combine_alternatives(
 fn constraints_for_guard(
     guard: &SymbolicGuard<'_>,
     return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     match guard {
         SymbolicGuard::Condition {
             expression,
             expected,
-        } => constraints_for_bool(expression, *expected, return_expression),
+        } => constraints_for_bool(expression, *expected, return_expression, bindings),
         SymbolicGuard::Match {
             value,
             pattern,
             matched,
-        } => constraints_for_pattern(value, pattern, *matched, return_expression),
+        } => constraints_for_pattern(value, pattern, *matched, return_expression, bindings),
     }
 }
 
@@ -408,6 +474,7 @@ fn constraints_for_pattern(
     pattern: &Pattern,
     matched: bool,
     return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     match &pattern.kind {
         PatternKind::Wildcard | PatternKind::Variable(_) => {
@@ -418,7 +485,8 @@ fn constraints_for_pattern(
             }
         }
         PatternKind::Int(expected) => {
-            let left = LinearConstraint::from_value(linear_value(value, return_expression)?);
+            let left =
+                LinearConstraint::from_value(linear_value(value, return_expression, bindings)?);
             let right = LinearConstraint {
                 coefficients: HashMap::new(),
                 constant: i128::from(*expected),
@@ -426,7 +494,8 @@ fn constraints_for_pattern(
             comparison_constraints(left, BinaryOp::Equal, right, matched)
         }
         PatternKind::Bool(expected) => {
-            let left = LinearConstraint::from_value(linear_value(value, return_expression)?);
+            let left =
+                LinearConstraint::from_value(linear_value(value, return_expression, bindings)?);
             let right = LinearConstraint {
                 coefficients: HashMap::new(),
                 constant: i128::from(*expected as u8),
@@ -446,11 +515,29 @@ fn constraints_for_pattern(
             Some(alternatives)
         }
         PatternKind::String(_) | PatternKind::Char(_) => None,
-        PatternKind::Constructor { name, .. } => Some(vec![vec![PathConstraint::Constructor {
-            expression: value as *const Expr as usize,
-            name: name.clone(),
-            equal: matched,
-        }]]),
+        PatternKind::Constructor { name, .. } => {
+            let expression = value as *const Expr as usize;
+            let mut constraints = vec![PathConstraint::Constructor {
+                expression,
+                name: name.clone(),
+                equal: matched,
+            }];
+            if let ExprKind::Call {
+                name: known_name,
+                args,
+            } = &value.kind
+            {
+                if args.len() == 1 && matches!(known_name.as_str(), "Some" | "None" | "Ok" | "Err")
+                {
+                    constraints.push(PathConstraint::Constructor {
+                        expression,
+                        name: known_name.clone(),
+                        equal: true,
+                    });
+                }
+            }
+            Some(vec![constraints])
+        }
     }
 }
 
@@ -458,6 +545,7 @@ fn constraints_for_bool(
     expression: &Expr,
     expected: bool,
     return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     if let Some(ConstantValue::Bool(value)) = constant_value(expression) {
         return if value == expected {
@@ -470,15 +558,15 @@ fn constraints_for_bool(
         ExprKind::Unary {
             op: UnaryOp::Not,
             expr,
-        } => constraints_for_bool(expr, !expected, return_expression),
+        } => constraints_for_bool(expr, !expected, return_expression, bindings),
         ExprKind::Binary { left, op, right } => match op {
             BinaryOp::And if expected => Some(combine_alternatives(
-                constraints_for_bool(left, true, return_expression)?,
-                constraints_for_bool(right, true, return_expression)?,
+                constraints_for_bool(left, true, return_expression, bindings)?,
+                constraints_for_bool(right, true, return_expression, bindings)?,
             )),
             BinaryOp::Or if !expected => Some(combine_alternatives(
-                constraints_for_bool(left, false, return_expression)?,
-                constraints_for_bool(right, false, return_expression)?,
+                constraints_for_bool(left, false, return_expression, bindings)?,
+                constraints_for_bool(right, false, return_expression, bindings)?,
             )),
             BinaryOp::Equal
             | BinaryOp::NotEqual
@@ -486,8 +574,10 @@ fn constraints_for_bool(
             | BinaryOp::LessEqual
             | BinaryOp::Greater
             | BinaryOp::GreaterEqual => {
-                let left = LinearConstraint::from_value(linear_value(left, return_expression)?);
-                let right = LinearConstraint::from_value(linear_value(right, return_expression)?);
+                let left =
+                    LinearConstraint::from_value(linear_value(left, return_expression, bindings)?);
+                let right =
+                    LinearConstraint::from_value(linear_value(right, return_expression, bindings)?);
                 comparison_constraints(left, *op, right, expected)
             }
             _ => None,
@@ -622,12 +712,15 @@ fn symbolic_bool_with_constraints(
     expression: &Expr,
     return_expression: &Expr,
     guards: &[PathConstraint],
+    bindings: Option<&HashMap<String, &Expr>>,
 ) -> Option<bool> {
-    if let Some(value) = symbolic_bool(expression, Some(return_expression)) {
+    if let Some(value) = symbolic_bool(expression, Some(return_expression), bindings) {
         return Some(value);
     }
-    let true_constraints = constraints_for_bool(expression, true, Some(return_expression))?;
-    let false_constraints = constraints_for_bool(expression, false, Some(return_expression))?;
+    let true_constraints =
+        constraints_for_bool(expression, true, Some(return_expression), bindings)?;
+    let false_constraints =
+        constraints_for_bool(expression, false, Some(return_expression), bindings)?;
 
     let true_possible = true_constraints.into_iter().any(|constraints| {
         let mut true_path = guards.to_owned();
@@ -688,14 +781,21 @@ impl LinearValue {
     }
 }
 
-fn linear_value(expression: &Expr, return_expression: Option<&Expr>) -> Option<LinearValue> {
+fn linear_value(
+    expression: &Expr,
+    return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
+) -> Option<LinearValue> {
     match &expression.kind {
         ExprKind::Int(value) => Some(LinearValue {
             constant: *value,
             ..LinearValue::default()
         }),
-        ExprKind::Variable(name) if name == "result" => {
-            return_expression.and_then(|expression| linear_value(expression, return_expression))
+        ExprKind::Variable(name) if name == "result" => return_expression
+            .and_then(|expression| linear_value(expression, return_expression, bindings)),
+        ExprKind::Variable(name) if bindings.and_then(|bindings| bindings.get(name)).is_some() => {
+            let bound = bindings?.get(name)?;
+            linear_value(bound, return_expression, bindings)
         }
         ExprKind::Variable(name) => Some(LinearValue {
             coefficients: HashMap::from([(name.clone(), 1)]),
@@ -704,10 +804,10 @@ fn linear_value(expression: &Expr, return_expression: Option<&Expr>) -> Option<L
         ExprKind::Unary {
             op: UnaryOp::Negate,
             expr,
-        } => linear_value(expr, return_expression)?.negate(),
+        } => linear_value(expr, return_expression, bindings)?.negate(),
         ExprKind::Binary { left, op, right } => {
-            let left = linear_value(left, return_expression)?;
-            let right = linear_value(right, return_expression)?;
+            let left = linear_value(left, return_expression, bindings)?;
+            let right = linear_value(right, return_expression, bindings)?;
             match op {
                 BinaryOp::Add => left.add(right),
                 BinaryOp::Subtract => left.subtract(right),
@@ -720,24 +820,28 @@ fn linear_value(expression: &Expr, return_expression: Option<&Expr>) -> Option<L
     }
 }
 
-fn symbolic_bool(expression: &Expr, return_expression: Option<&Expr>) -> Option<bool> {
+fn symbolic_bool(
+    expression: &Expr,
+    return_expression: Option<&Expr>,
+    bindings: Option<&HashMap<String, &Expr>>,
+) -> Option<bool> {
     match &expression.kind {
         ExprKind::Unary {
             op: UnaryOp::Not,
             expr,
-        } => symbolic_bool(expr, return_expression).map(|value| !value),
+        } => symbolic_bool(expr, return_expression, bindings).map(|value| !value),
         ExprKind::Binary { left, op, right } => match op {
             BinaryOp::And => match (
-                symbolic_bool(left, return_expression),
-                symbolic_bool(right, return_expression),
+                symbolic_bool(left, return_expression, bindings),
+                symbolic_bool(right, return_expression, bindings),
             ) {
                 (Some(false), _) | (_, Some(false)) => Some(false),
                 (Some(true), Some(true)) => Some(true),
                 _ => None,
             },
             BinaryOp::Or => match (
-                symbolic_bool(left, return_expression),
-                symbolic_bool(right, return_expression),
+                symbolic_bool(left, return_expression, bindings),
+                symbolic_bool(right, return_expression, bindings),
             ) {
                 (Some(true), _) | (_, Some(true)) => Some(true),
                 (Some(false), Some(false)) => Some(false),
@@ -749,8 +853,8 @@ fn symbolic_bool(expression: &Expr, return_expression: Option<&Expr>) -> Option<
             | BinaryOp::LessEqual
             | BinaryOp::Greater
             | BinaryOp::GreaterEqual => {
-                let left = linear_value(left, return_expression)?;
-                let right = linear_value(right, return_expression)?;
+                let left = linear_value(left, return_expression, bindings)?;
+                let right = linear_value(right, return_expression, bindings)?;
                 let difference = left.subtract(right)?;
                 if !difference.coefficients.is_empty() {
                     return None;
@@ -2542,12 +2646,14 @@ mod tests {
     #[test]
     fn collects_option_and_result_constructor_paths() {
         let program = parse(
-            &lex("fn option_flag(value: Int?) -> Int ensures { result >= 0 } { match value { Some(number) => { return 1 } None => { return 0 } } } fn result_flag(value: Result<Int, String>) -> Int ensures { result >= 0 } { match value { Ok(number) => { return 1 } Err(message) => { return 0 } } } fn main() { }").unwrap(),
+            &lex("fn option_flag(value: Int?) -> Int ensures { result >= 0 } { match value { Some(number) => { return 1 } None => { return 0 } } } fn result_flag(value: Result<Int, String>) -> Int ensures { result >= 0 } { match value { Ok(number) => { return 1 } Err(message) => { return 0 } } } fn known_option() -> Int ensures { result == 4 } { match Some(4) { Some(number) => { return number } None => { return 0 } } } fn known_result() -> Int ensures { result == 7 } { match Ok(7) { Ok(number) => { return number } Err(message) => { return 0 } } } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::Proven);
         assert_eq!(results[1].status, VerificationStatus::Proven);
-        assert_eq!(results[2].status, VerificationStatus::Unproven);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].status, VerificationStatus::Proven);
+        assert_eq!(results[4].status, VerificationStatus::Unproven);
     }
 }

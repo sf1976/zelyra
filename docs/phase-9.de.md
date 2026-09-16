@@ -112,8 +112,11 @@ beiden Zweigen `return value` und `return -value` beweisen. Vollständige
 Zweig werden ebenfalls als getrennte Rückgabepfade gesammelt. Constructor-
 Muster von `Option` und `Result` wie `Some`, `None`, `Ok` und `Err` tragen
 außerdem Konstruktor-Fakten zur Pfadprüfung bei. Nicht entscheidbare
-Bedingungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als
-`UNPROVEN` gemeldet.
+Payload-Bindings werden eingesetzt, wenn der gematchte Wert ein bekannter
+Konstruktor ist. Dadurch kann `Some(4)` mit anschließendem `return number` als
+`return 4` geprüft werden. Unbekannte Payloads und nicht unterstützte
+Binding-Beziehungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden
+als `UNPROVEN` gemeldet.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

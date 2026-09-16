@@ -61,7 +61,8 @@ Heute implementiert:
 - ein erster `zelyra verify`-Befehl, der Contract-Ausdrücke zwischen `PROVEN`,
   `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet, einschließlich
   einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben,
-  grundlegenden Kontrollflusspfaden und `Option`-/`Result`-Konstruktorpfaden.
+  grundlegenden Kontrollflusspfaden, `Option`-/`Result`-Konstruktorpfaden und
+  bekannten Payload-Bindings.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

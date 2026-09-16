@@ -107,8 +107,10 @@ the two branches `return value` and `return -value`. Exhaustive `match`
 expressions with integer or boolean literal patterns and a wildcard arm are
 also collected as separate return paths. `Option` and `Result` constructor
 patterns such as `Some`, `None`, `Ok`, and `Err` contribute constructor facts
-to path feasibility. Conditions that cannot be decided remain `RUNTIME_CHECK`;
-functions without contracts are reported as `UNPROVEN`.
+to path feasibility. A payload binding is substituted when the matched value is
+a known constructor, so `Some(4)` followed by `return number` can be checked as
+`return 4`. Unknown payloads and unsupported binding relationships remain
+`RUNTIME_CHECK`; functions without contracts are reported as `UNPROVEN`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

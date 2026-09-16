@@ -51,9 +51,41 @@ fn option_flag(value: Int?) -> Int
     }
 }
 
+fn known_option() -> Int
+    ensures {
+        result == 4
+    }
+{
+    match Some(4) {
+        Some(number) => {
+            return number
+        }
+        None => {
+            return 0
+        }
+    }
+}
+
+fn known_result() -> Int
+    ensures {
+        result == 7
+    }
+{
+    match Ok(7) {
+        Ok(number) => {
+            return number
+        }
+        Err(message) => {
+            return 0
+        }
+    }
+}
+
 fn main() {
     print(increment(41))
     print(absolute(-7))
     print(classify(0))
     print(option_flag(Some(4)))
+    print(known_option())
+    print(known_result())
 }
