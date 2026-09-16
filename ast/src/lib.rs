@@ -207,6 +207,8 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,
+    pub requires: Vec<Expr>,
+    pub ensures: Vec<Expr>,
     pub body: Block,
     pub span: Span,
 }

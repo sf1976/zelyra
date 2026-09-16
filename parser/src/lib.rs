@@ -685,15 +685,46 @@ impl<'a> Parser<'a> {
                 self.skip_newlines();
             }
         }
+        self.skip_newlines();
+        let mut requires = Vec::new();
+        let mut ensures = Vec::new();
+        loop {
+            if self.at(&TokenKind::Requires) {
+                self.advance();
+                requires.extend(self.contract_block("requires")?);
+            } else if self.at(&TokenKind::Ensures) {
+                self.advance();
+                ensures.extend(self.contract_block("ensures")?);
+            } else {
+                break;
+            }
+            self.skip_newlines();
+        }
         let body = self.block()?;
         Ok(Function {
             name,
             params,
             return_type,
             capabilities,
+            requires,
+            ensures,
             span: start.join(body.span),
             body,
         })
+    }
+
+    fn contract_block(&mut self, kind: &str) -> Result<Vec<Expr>, ParseError> {
+        let opening_label = format!("`{{` after `{kind}`");
+        self.expect(TokenKind::LBrace, &opening_label)?;
+        let mut expressions = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            expressions.push(self.expression()?);
+            self.skip_newlines();
+        }
+        let closing_label = format!("`}}` after `{kind}`");
+        self.expect(TokenKind::RBrace, &closing_label)?;
+        Ok(expressions)
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
         let (name, _) = self.ident("type name")?;
@@ -1257,5 +1288,18 @@ mod tests {
         )
         .unwrap();
         assert_eq!(program.functions[0].capabilities, ["Network", "FileSystem"]);
+    }
+
+    #[test]
+    fn parses_function_contracts() {
+        let program = parse(
+            &lex(
+                "fn increment(value: Int) -> Int\n requires { value >= 0 }\n ensures { result > value }\n { return value + 1 } fn main() { print(increment(1)) }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].requires.len(), 1);
+        assert_eq!(program.functions[0].ensures.len(), 1);
     }
 }

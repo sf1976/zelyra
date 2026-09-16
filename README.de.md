@@ -56,9 +56,11 @@ Heute implementiert:
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
+- erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
+  diese Prüfungen werden nicht als formale Beweise ausgegeben.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, APIs,
-Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die
+Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, formale Verifikation und
+Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
 
@@ -346,7 +348,7 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
 9. Capabilities — erste Deklarationen und statische Prüfungen vorhanden;
-   Runtime-Rechte, Contracts, Verifikation und strukturierte Nebenläufigkeit
+   Runtime-Rechte, formale Verifikation und strukturierte Nebenläufigkeit
    folgen.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
 

@@ -56,9 +56,11 @@ Implemented today:
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
+- initial runtime-checked function contracts with `requires` and `ensures`;
+  these checks are not presented as formal proofs.
 
-Full CRUD generation, database roles, APIs, contracts,
-verification, and production deployment tooling are still being developed. See the
+Full CRUD generation, database roles, APIs, formal verification,
+and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
 
@@ -341,7 +343,7 @@ The long-term specification is organized into these phases:
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities — initial declarations and static checks implemented; runtime
-   privilege enforcement, contracts, verification, and structured concurrency
+   privilege enforcement, formal verification, and structured concurrency
    remain.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
 

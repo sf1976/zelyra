@@ -79,6 +79,9 @@ pub fn check_capabilities_with_grants(
             }
         }
         check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+        for contract in function.requires.iter().chain(&function.ensures) {
+            check_capability_expr(contract, function, &functions, &declared, &mut errors);
+        }
     }
 
     if errors.is_empty() {
@@ -358,6 +361,23 @@ impl<'a> Checker<'a> {
             }
         }
         let expected = function.return_type.clone().unwrap_or(Type::Unknown);
+        for contract in &function.requires {
+            let actual = self.check_expr(contract, &scopes);
+            self.expect_type(&Type::Bool, &actual, contract.span);
+        }
+        if !function.ensures.is_empty() {
+            scopes[0].insert(
+                "result".into(),
+                Variable {
+                    ty: function.return_type.clone().unwrap_or(Type::Unit),
+                    mutable: false,
+                },
+            );
+            for contract in &function.ensures {
+                let actual = self.check_expr(contract, &scopes);
+                self.expect_type(&Type::Bool, &actual, contract.span);
+            }
+        }
         self.check_block(&function.body, &mut scopes, &expected);
     }
     fn check_block(
@@ -1037,10 +1057,34 @@ impl Interpreter {
         for (param, value) in function.params.iter().zip(args) {
             env.declare(param.name.clone(), value, false);
         }
-        match self.exec_block(&function.body, &mut env)? {
-            Flow::Return(value) => Ok(value),
-            Flow::Continue | Flow::Break => Ok(Value::Unit),
+        for contract in &function.requires {
+            let value = self.eval(contract, &mut env)?;
+            let condition = self.expect_bool(value, contract.span)?;
+            if !condition {
+                return Err(self.runtime_error(
+                    contract.span,
+                    format!("precondition failed for function `{name}`"),
+                ));
+            }
         }
+        let result = match self.exec_block(&function.body, &mut env)? {
+            Flow::Return(value) => value,
+            Flow::Continue | Flow::Break => Value::Unit,
+        };
+        if !function.ensures.is_empty() {
+            env.declare("result".into(), result.clone(), false);
+            for contract in &function.ensures {
+                let value = self.eval(contract, &mut env)?;
+                let condition = self.expect_bool(value, contract.span)?;
+                if !condition {
+                    return Err(self.runtime_error(
+                        contract.span,
+                        format!("postcondition failed for function `{name}`"),
+                    ));
+                }
+            }
+        }
+        Ok(result)
     }
     fn exec_block(&mut self, block: &Block, env: &mut Environment) -> Result<Flow, RuntimeError> {
         env.push();
@@ -1579,5 +1623,37 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("not enabled by the project")));
+    }
+
+    #[test]
+    fn enforces_preconditions_and_postconditions() {
+        let source = "fn increment(value: Int) -> Int requires { value >= 0 } ensures { result > value } { return value + 1 } fn main() { print(increment(1)) }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        assert_eq!(execute(&program).unwrap(), ["2"]);
+
+        let failing_precondition =
+            parse(&lex("fn increment(value: Int) -> Int requires { value >= 0 } { return value + 1 } fn main() { increment(-1) }").unwrap()).unwrap();
+        check(&failing_precondition).unwrap();
+        let error = execute(&failing_precondition).unwrap_err();
+        assert!(error.message.contains("precondition failed"));
+
+        let failing_postcondition =
+            parse(&lex("fn broken(value: Int) -> Int ensures { result > value } { return value } fn main() { broken(1) }").unwrap()).unwrap();
+        check(&failing_postcondition).unwrap();
+        let error = execute(&failing_postcondition).unwrap_err();
+        assert!(error.message.contains("postcondition failed"));
+    }
+
+    #[test]
+    fn requires_and_ensures_must_be_bool() {
+        let program =
+            parse(&lex("fn main() requires { 1 } ensures { \"done\" } { print(1) }").unwrap())
+                .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert_eq!(errors.len(), 2);
+        assert!(errors
+            .iter()
+            .all(|error| error.message.contains("expected `Bool`")));
     }
 }

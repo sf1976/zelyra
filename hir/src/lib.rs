@@ -34,6 +34,8 @@ pub struct HirFunction {
     pub params: Vec<HirParam>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,
+    pub requires: Vec<HirExpr>,
+    pub ensures: Vec<HirExpr>,
     pub body: HirBlock,
     pub span: Span,
 }
@@ -201,6 +203,17 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
             });
         }
         let body = resolver.block(&function.body);
+        let requires = function
+            .requires
+            .iter()
+            .map(|contract| resolver.expr(contract))
+            .collect();
+        resolver.bind("result".into(), function.span);
+        let ensures = function
+            .ensures
+            .iter()
+            .map(|contract| resolver.expr(contract))
+            .collect();
         errors.extend(resolver.errors);
         functions.push(HirFunction {
             id: FunctionId(index),
@@ -208,6 +221,8 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
             params,
             return_type: function.return_type.clone(),
             capabilities: function.capabilities.clone(),
+            requires,
+            ensures,
             body,
             span: function.span,
         });

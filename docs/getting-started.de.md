@@ -52,11 +52,12 @@ Das aktuelle Repository enthält:
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
+- zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, Capabilities, Contracts,
-formale Verifikation, Runtime-Capability-Durchsetzung und
-Produktionspaketierung.
+Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, formale Verifikation,
+Runtime-Capability-Durchsetzung, strukturierte
+Nebenläufigkeit und Produktionspaketierung.
 
 ## 1. Voraussetzungen
 

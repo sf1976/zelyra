@@ -48,10 +48,12 @@ The current repository contains:
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
+- runtime-checked function contracts using `requires` and `ensures`.
 
 The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, APIs, capabilities, contracts,
-formal verification, runtime capability enforcement, and production packaging.
+throttling, password-management commands, APIs, formal verification,
+runtime capability enforcement, structured concurrency,
+and production packaging.
 
 ## 1. Requirements
 

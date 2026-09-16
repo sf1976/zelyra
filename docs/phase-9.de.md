@@ -70,3 +70,24 @@ error[E-CAP-001]: function `load_customer` uses SQL but does not declare capabil
 
 Die CLI prüft Capabilities als Teil von `zelyra check`, `zelyra build`,
 `zelyra run` und `zelyra serve`.
+
+## Contracts
+
+Funktionen können außerdem zur Laufzeit geprüfte Vor- und Nachbedingungen
+deklarieren:
+
+~~~zelyra
+fn increment(value: Int) -> Int
+    requires { value >= 0 }
+    ensures { result > value }
+{
+    return value + 1
+}
+~~~
+
+`requires`-Ausdrücke werden vor dem Funktionskörper ausgeführt. `ensures`-
+Ausdrücke werden danach ausgewertet; der Rückgabewert steht dort als `result`
+zur Verfügung. Beide Ausdrücke müssen den Typ `Bool` besitzen. Eine falsche
+Bedingung beendet die Ausführung mit einem Runtime-Fehler. Diese Prüfungen
+sind Runtime-Checks und keine mathematischen Beweise. Formale Verifikation und
+Beweisausgabe folgen später.
