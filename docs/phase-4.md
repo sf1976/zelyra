@@ -75,12 +75,22 @@ transaction {
 }
 ```
 
-The block is already parsed and statically checked. Execution through the
-MariaDB runtime adapter follows in the next implementation step.
+The block is parsed, statically checked, and executed atomically through
+MariaDB:
+
+```bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/my_app'
+zelyra run examples/native_sql_runtime.zyl
+```
+
+All statements in the block run on the same MariaDB connection inside one
+transaction. An error prevents the commit.
 
 ## Current limitations
 
-SQL query checking is integrated in Phase 4. Interpreter execution of SQL and
-full result deserialization into Zelyra values are not complete yet. Complex
-SQL expressions will be expanded incrementally; the original SQL remains
+SQL query checking and MariaDB interpreter execution are integrated. SELECT
+results are currently returned as a typed row collection whose values are
+strings; full deserialization into domain-specific Zelyra records follows.
+SQLite and PostgreSQL runtime adapters are not wired yet. Complex SQL
+expressions will be expanded incrementally; the original SQL remains
 available and is not rewritten into an ORM chain.

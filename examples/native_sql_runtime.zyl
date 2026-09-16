@@ -1,0 +1,30 @@
+database main {
+    engine: mariadb
+    database: "zelyra_native_sql"
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email
+}
+
+fn main() {
+    name = "Runtime MariaDB"
+    email = "runtime@example.test"
+
+    transaction {
+        sql {
+            INSERT INTO customers (name, email)
+            VALUES (:name, :email)
+        }
+    }
+
+    customers = sql<Customer[]> {
+        SELECT id, name, email
+        FROM customers
+        WHERE email = :email
+    }
+
+    print(customers)
+}

@@ -76,13 +76,22 @@ transaction {
 }
 ```
 
-Der Block wird bereits geparst und statisch geprüft. Die Ausführung über den
-MariaDB-Runtime-Adapter folgt im nächsten Implementierungsschritt.
+Der Block wird geparst, statisch geprüft und mit MariaDB atomar ausgeführt:
+
+```bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/meine_app'
+zelyra run examples/native_sql_runtime.zyl
+```
+
+Alle Statements des Blocks laufen auf derselben MariaDB-Verbindung innerhalb
+einer Transaktion. Ein Fehler verhindert den Commit.
 
 ## Aktuelle Grenzen
 
-Die SQL-Abfrageprüfung ist in Phase 4 integriert. Die Interpreter-Ausführung
-von SQL und die vollständige Ergebnis-Deserialisierung in Zelyra-Werte sind
-noch nicht abgeschlossen. Komplexe SQL-Ausdrücke werden schrittweise erweitert;
+Die SQL-Abfrageprüfung und die MariaDB-Interpreter-Ausführung sind integriert.
+SELECT-Ergebnisse werden derzeit als typisierte Zeilensammlung mit
+Stringwerten zurückgegeben; die vollständige Deserialisierung in
+fachliche Zelyra-Records folgt. SQLite- und PostgreSQL-Runtime-Adapter sind
+noch nicht angeschlossen. Komplexe SQL-Ausdrücke werden schrittweise erweitert;
 das originale SQL bleibt dabei erhalten und wird nicht in eine ORM-Kette
 umgeschrieben.

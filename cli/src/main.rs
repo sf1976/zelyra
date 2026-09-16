@@ -7,7 +7,7 @@ use zelyra_database::{
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
-use zelyra_runtime::{check, execute};
+use zelyra_runtime::{check, execute, execute_with_database};
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -351,7 +351,11 @@ fn main() -> ExitCode {
             }
         }
         "run" => match validate(&path).and_then(|program| {
-            execute(&program).map_err(|error| {
+            let result = match env::var("DATABASE_URL") {
+                Ok(database_url) => execute_with_database(&program, &database_url),
+                Err(_) => execute(&program),
+            };
+            result.map_err(|error| {
                 diagnostic(
                     &path,
                     "E-RUNTIME-001",

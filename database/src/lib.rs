@@ -909,6 +909,216 @@ pub fn apply_mariadb(database_url: &str, sql: &str) -> Result<(), DatabaseError>
     run_mariadb_sql(database_url, sql, None)
 }
 
+#[derive(Clone, Debug)]
+pub enum QueryValue {
+    Null,
+    Int(i64),
+    UInt(u64),
+    Float(f64),
+    Bool(bool),
+    String(String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct QueryResult {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Query {
+    pub sql: String,
+    pub params: Vec<(String, QueryValue)>,
+}
+
+pub fn execute_mariadb_query(
+    database_url: &str,
+    sql: &str,
+    params: Vec<(String, QueryValue)>,
+) -> Result<QueryResult, DatabaseError> {
+    let mut results = execute_mariadb_queries(
+        database_url,
+        &[Query {
+            sql: sql.into(),
+            params,
+        }],
+        false,
+    )?;
+    Ok(results.pop().unwrap_or_default())
+}
+
+pub fn execute_mariadb_queries(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let _ = parse_mariadb_url(database_url)?;
+    let mut script = String::new();
+    if transaction {
+        script.push_str("START TRANSACTION;\n");
+    }
+    for (query_index, query) in queries.iter().enumerate() {
+        let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
+        for (parameter_index, parameter_name) in parameter_order.iter().enumerate() {
+            let value = query
+                .params
+                .iter()
+                .find(|(name, _)| name == parameter_name)
+                .map(|(_, value)| value)
+                .ok_or_else(|| DatabaseError {
+                    message: format!("missing SQL parameter `:{parameter_name}`"),
+                })?;
+            script.push_str(&format!(
+                "SET @zelyra_p{query_index}_{parameter_index} = {};\n",
+                query_value_sql(value)
+            ));
+        }
+        let statement_name = format!("zelyra_stmt_{query_index}");
+        let prepared_sql = quote_string(&sql.replace('\\', "\\\\"));
+        script.push_str(&format!("PREPARE {statement_name} FROM {prepared_sql};\n"));
+        if parameter_order.is_empty() {
+            script.push_str(&format!("EXECUTE {statement_name};\n"));
+        } else {
+            let variables = parameter_order
+                .iter()
+                .enumerate()
+                .map(|(parameter_index, _)| format!("@zelyra_p{query_index}_{parameter_index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            script.push_str(&format!("EXECUTE {statement_name} USING {variables};\n"));
+        }
+        script.push_str(&format!("DEALLOCATE PREPARE {statement_name};\n"));
+    }
+    if transaction {
+        script.push_str("COMMIT;\n");
+    }
+    let output = run_mariadb_query(database_url, &script)?;
+    if transaction {
+        return Ok(Vec::new());
+    }
+    Ok(vec![parse_query_result(&output)])
+}
+
+fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
+    let bytes = sql.as_bytes();
+    let mut bound = String::with_capacity(sql.len());
+    let mut parameters = Vec::new();
+    let mut index = 0;
+    let mut quote = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(active_quote) = quote {
+            bound.push(byte as char);
+            if byte == active_quote {
+                if bytes.get(index + 1) == Some(&active_quote) {
+                    bound.push(active_quote as char);
+                    index += 2;
+                    continue;
+                }
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'\'' || byte == b'"' {
+            quote = Some(byte);
+            bound.push(byte as char);
+            index += 1;
+            continue;
+        }
+        if byte == b':' {
+            let start = index + 1;
+            let mut end = start;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if end == start {
+                return Err(DatabaseError {
+                    message: "SQL contains a colon without a parameter name".into(),
+                });
+            }
+            let name = sql[start..end].to_owned();
+            parameters.push(name);
+            bound.push('?');
+            index = end;
+            continue;
+        }
+        bound.push(byte as char);
+        index += 1;
+    }
+    Ok((bound, parameters))
+}
+
+fn query_value_sql(value: &QueryValue) -> String {
+    match value {
+        QueryValue::Null => "NULL".into(),
+        QueryValue::Int(value) => value.to_string(),
+        QueryValue::UInt(value) => value.to_string(),
+        QueryValue::Float(value) if value.is_finite() => value.to_string(),
+        QueryValue::Float(_) => "NULL".into(),
+        QueryValue::Bool(value) => if *value { "1" } else { "0" }.into(),
+        QueryValue::String(value) => {
+            format!("'{}'", value.replace('\\', "\\\\").replace('\'', "''"))
+        }
+    }
+}
+
+fn run_mariadb_query(database_url: &str, script: &str) -> Result<String, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    let mut command = Command::new("mariadb");
+    command
+        .args([
+            "--batch",
+            "--raw",
+            "--host",
+            &connection.host,
+            "--port",
+            &connection.port,
+            "--user",
+            &connection.user,
+            "--database",
+            &connection.database,
+        ])
+        .env("MYSQL_PWD", &connection.password)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| DatabaseError {
+        message: format!("could not start mariadb: {error}"),
+    })?;
+    child
+        .stdin
+        .take()
+        .expect("mariadb stdin was piped")
+        .write_all(script.as_bytes())
+        .map_err(|error| DatabaseError {
+            message: format!("could not send SQL to mariadb: {error}"),
+        })?;
+    let output = child.wait_with_output().map_err(|error| DatabaseError {
+        message: format!("could not wait for mariadb: {error}"),
+    })?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(DatabaseError {
+            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        })
+    }
+}
+
+fn parse_query_result(output: &str) -> QueryResult {
+    let mut lines = output.lines();
+    let Some(header) = lines.next() else {
+        return QueryResult::default();
+    };
+    QueryResult {
+        columns: header.split('\t').map(str::to_owned).collect(),
+        rows: lines
+            .map(|line| line.split('\t').map(str::to_owned).collect())
+            .collect(),
+    }
+}
+
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let database = &connection.database;
@@ -1521,5 +1731,18 @@ mod tests {
         parse_mariadb_foreign_keys(&mut schema, "machines\tdepartment_id\tdepartments\tid\n")
             .unwrap();
         assert_eq!(schema.tables[0].foreign_keys[0].column, "department_id");
+    }
+
+    #[test]
+    fn binds_named_parameters_outside_sql_literals() {
+        let (sql, parameters) = bind_named_parameters(
+            "SELECT ':literal', name FROM customers WHERE id = :id OR id = :id",
+        )
+        .unwrap();
+        assert_eq!(
+            sql,
+            "SELECT ':literal', name FROM customers WHERE id = ? OR id = ?"
+        );
+        assert_eq!(parameters, ["id", "id"]);
     }
 }

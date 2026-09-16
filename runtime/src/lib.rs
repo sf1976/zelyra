@@ -648,6 +648,10 @@ pub enum Value {
     Char(char),
     Option(Option<Box<Value>>),
     Result(Result<Box<Value>, Box<Value>>),
+    Rows {
+        columns: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
     Unit,
 }
 
@@ -666,6 +670,7 @@ impl Value {
             Value::Result(Err(value)) => {
                 Type::Result(Box::new(Type::Unknown), Box::new(value.ty()))
             }
+            Value::Rows { .. } => Type::Array(Box::new(Type::Unknown)),
             Value::Unit => Type::Unit,
         }
     }
@@ -681,6 +686,23 @@ impl Value {
             Value::Option(None) => "None".into(),
             Value::Result(Ok(v)) => format!("Ok({})", v.output()),
             Value::Result(Err(v)) => format!("Err({})", v.output()),
+            Value::Rows { columns, rows } => {
+                let rendered_rows = rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .enumerate()
+                            .map(|(index, value)| {
+                                let column = columns.get(index).map(String::as_str).unwrap_or("?");
+                                format!("{column}={value}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                format!("[{rendered_rows}]")
+            }
             Value::Unit => "()".into(),
         }
     }
@@ -759,6 +781,20 @@ enum Flow {
 }
 
 pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, None)
+}
+
+pub fn execute_with_database(
+    program: &Program,
+    database_url: &str,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, Some(database_url.to_owned()))
+}
+
+fn execute_internal(
+    program: &Program,
+    database_url: Option<String>,
+) -> Result<Vec<String>, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
             .functions
@@ -767,6 +803,7 @@ pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
             .collect(),
         output: Vec::new(),
         steps: 0,
+        database_url,
     };
     interpreter.call("main", Vec::new(), Span::default())?;
     Ok(interpreter.output)
@@ -776,6 +813,7 @@ struct Interpreter {
     functions: HashMap<String, Function>,
     output: Vec<String>,
     steps: usize,
+    database_url: Option<String>,
 }
 
 impl Interpreter {
@@ -932,7 +970,22 @@ impl Interpreter {
                 Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
             }
             Stmt::Transaction { span, .. } => {
-                Err(self.runtime_error(*span, "transaction execution requires a database runtime"))
+                let Some(database_url) = self.database_url.clone() else {
+                    return Err(self.runtime_error(
+                        *span,
+                        "transaction execution requires a database runtime",
+                    ));
+                };
+                let Stmt::Transaction { body, .. } = statement else {
+                    unreachable!();
+                };
+                let queries = transaction_queries(body, env, *span)?;
+                zelyra_database::execute_mariadb_queries(&database_url, &queries, true).map_err(
+                    |error| {
+                        self.runtime_error(*span, format!("MariaDB transaction failed: {error}"))
+                    },
+                )?;
+                Ok(Flow::Continue)
             }
         }
     }
@@ -1021,7 +1074,23 @@ impl Interpreter {
                 self.binary(l, *op, r, expr.span)
             }
             ExprKind::Sql { .. } => {
-                Err(self.runtime_error(expr.span, "SQL execution requires a database runtime"))
+                let ExprKind::Sql { query, .. } = &expr.kind else {
+                    unreachable!();
+                };
+                let Some(database_url) = self.database_url.clone() else {
+                    return Err(
+                        self.runtime_error(expr.span, "SQL execution requires a database runtime")
+                    );
+                };
+                let params = query_parameters(query, env, expr.span)?;
+                let result = zelyra_database::execute_mariadb_query(&database_url, query, params)
+                    .map_err(|error| {
+                    self.runtime_error(expr.span, format!("MariaDB query failed: {error}"))
+                })?;
+                Ok(Value::Rows {
+                    columns: result.columns,
+                    rows: result.rows,
+                })
             }
         }
     }
@@ -1070,6 +1139,115 @@ impl Interpreter {
             )),
         }
     }
+}
+
+fn query_parameters(
+    query: &str,
+    env: &Environment,
+    span: Span,
+) -> Result<Vec<(String, zelyra_database::QueryValue)>, RuntimeError> {
+    let bytes = query.as_bytes();
+    let mut parameters = Vec::new();
+    let mut index = 0;
+    let mut quote = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(active_quote) = quote {
+            if byte == active_quote {
+                if bytes.get(index + 1) == Some(&active_quote) {
+                    index += 2;
+                    continue;
+                }
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'\'' || byte == b'"' {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b':' {
+            let start = index + 1;
+            let mut end = start;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if end > start {
+                let name = query[start..end].to_owned();
+                if !parameters.iter().any(|(existing, _)| existing == &name) {
+                    let value = env.get(&name).ok_or_else(|| RuntimeError {
+                        message: format!("SQL parameter `:{name}` is not available"),
+                        span,
+                    })?;
+                    parameters.push((name, value_to_query_value(&value, span)?));
+                }
+                index = end;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    Ok(parameters)
+}
+
+fn value_to_query_value(
+    value: &Value,
+    span: Span,
+) -> Result<zelyra_database::QueryValue, RuntimeError> {
+    use zelyra_database::QueryValue;
+    match value {
+        Value::Int(value) => Ok(QueryValue::Int(*value)),
+        Value::UInt(value) => Ok(QueryValue::UInt(*value)),
+        Value::Float(value) => Ok(QueryValue::Float(*value)),
+        Value::Bool(value) => Ok(QueryValue::Bool(*value)),
+        Value::String(value) => Ok(QueryValue::String(value.clone())),
+        Value::Char(value) => Ok(QueryValue::String(value.to_string())),
+        Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
+        Value::Option(Some(value)) => value_to_query_value(value, span),
+        Value::Rows { .. } | Value::Result(_) => Err(RuntimeError {
+            message: "SQL parameters must be scalar values".into(),
+            span,
+        }),
+    }
+}
+
+fn transaction_queries(
+    block: &Block,
+    env: &Environment,
+    span: Span,
+) -> Result<Vec<zelyra_database::Query>, RuntimeError> {
+    let mut queries = Vec::new();
+    for statement in &block.statements {
+        let expression = match statement {
+            Stmt::Expr(expression) => expression,
+            Stmt::Let { value, .. } => value,
+            _ => {
+                return Err(RuntimeError {
+                    message: "transactions may contain only SQL statements".into(),
+                    span,
+                })
+            }
+        };
+        let ExprKind::Sql { query, .. } = &expression.kind else {
+            return Err(RuntimeError {
+                message: "transactions may contain only SQL statements".into(),
+                span: expression.span,
+            });
+        };
+        queries.push(zelyra_database::Query {
+            sql: query.clone(),
+            params: query_parameters(query, env, expression.span)?,
+        });
+    }
+    if queries.is_empty() {
+        return Err(RuntimeError {
+            message: "transaction must contain at least one SQL statement".into(),
+            span,
+        });
+    }
+    Ok(queries)
 }
 
 fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)>> {
