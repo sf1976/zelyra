@@ -45,6 +45,7 @@ pub enum Type {
     Unit,
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
+    Array(Box<Type>),
     Named(String),
     Unknown,
 }
@@ -67,6 +68,7 @@ impl fmt::Display for Type {
             Type::Unit => "Unit",
             Type::Option(inner) => return write!(f, "Option<{inner}>"),
             Type::Result(ok, err) => return write!(f, "Result<{ok}, {err}>"),
+            Type::Array(inner) => return write!(f, "{inner}[]"),
             Type::Named(name) => name,
             Type::Unknown => "unknown",
         };
@@ -197,6 +199,10 @@ pub enum Stmt {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    Transaction {
+        body: Block,
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -253,6 +259,10 @@ pub enum ExprKind {
         left: Box<Expr>,
         op: BinaryOp,
         right: Box<Expr>,
+    },
+    Sql {
+        result_type: Type,
+        query: String,
     },
 }
 

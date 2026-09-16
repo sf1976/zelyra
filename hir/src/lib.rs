@@ -95,6 +95,10 @@ pub enum HirStmt {
         arms: Vec<HirMatchArm>,
         span: Span,
     },
+    Transaction {
+        body: HirBlock,
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -155,6 +159,10 @@ pub enum HirExprKind {
         left: Box<HirExpr>,
         op: BinaryOp,
         right: Box<HirExpr>,
+    },
+    Sql {
+        result_type: Type,
+        query: String,
     },
 }
 
@@ -353,6 +361,10 @@ impl<'a> Resolver<'a> {
                     .collect(),
                 span: *span,
             },
+            Stmt::Transaction { body, span } => HirStmt::Transaction {
+                body: self.block(body),
+                span: *span,
+            },
         }
     }
     fn pattern(&mut self, pattern: &Pattern) -> HirPattern {
@@ -418,6 +430,10 @@ impl<'a> Resolver<'a> {
                 left: Box::new(self.expr(left)),
                 op: *op,
                 right: Box::new(self.expr(right)),
+            },
+            ExprKind::Sql { result_type, query } => HirExprKind::Sql {
+                result_type: result_type.clone(),
+                query: query.clone(),
             },
         };
         HirExpr {

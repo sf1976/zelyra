@@ -63,6 +63,12 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             });
         }
     }
+    for table in &program.tables {
+        known_types.insert(table.name.clone());
+        if let Some(singular) = singular_table_type(&table.name) {
+            known_types.insert(singular);
+        }
+    }
     for definition in &program.types {
         validate_type(
             &definition.target,
@@ -290,6 +296,7 @@ impl<'a> Checker<'a> {
                 }
                 self.check_exhaustiveness(&value_type, &covered, *span);
             }
+            Stmt::Transaction { body, .. } => self.check_block(body, scopes, expected),
         }
     }
     fn check_type(&mut self, ty: &Type, span: Span) {
@@ -302,6 +309,7 @@ impl<'a> Checker<'a> {
                 self.check_type(ok, span);
                 self.check_type(error, span);
             }
+            Type::Array(inner) => self.check_type(inner, span),
             _ => {}
         }
     }
@@ -557,6 +565,10 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            ExprKind::Sql { result_type, .. } => {
+                self.check_type(result_type, expr.span);
+                result_type.clone()
+            }
         }
     }
     fn numeric_result(&mut self, left: &Type, right: &Type, span: Span) -> Type {
@@ -584,6 +596,7 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
         (Type::Result(expected_ok, expected_error), Type::Result(actual_ok, actual_error)) => {
             compatible(expected_ok, actual_ok) && compatible(expected_error, actual_error)
         }
+        (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
         _ => expected == actual,
     }
 }
@@ -607,8 +620,22 @@ fn validate_type(
             validate_type(ok, known_types, errors, span);
             validate_type(error, known_types, errors, span);
         }
+        Type::Array(inner) => validate_type(inner, known_types, errors, span),
         _ => {}
     }
+}
+
+fn singular_table_type(name: &str) -> Option<String> {
+    let singular = if let Some(stem) = name.strip_suffix("ies") {
+        format!("{stem}y")
+    } else if let Some(stem) = name.strip_suffix('s') {
+        stem.to_owned()
+    } else {
+        name.to_owned()
+    };
+    let mut chars = singular.chars();
+    let first = chars.next()?.to_ascii_uppercase();
+    Some(std::iter::once(first).chain(chars).collect())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -904,6 +931,9 @@ impl Interpreter {
                 }
                 Err(self.runtime_error(*span, "non-exhaustive match at runtime"))
             }
+            Stmt::Transaction { span, .. } => {
+                Err(self.runtime_error(*span, "transaction execution requires a database runtime"))
+            }
         }
     }
     fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {
@@ -989,6 +1019,9 @@ impl Interpreter {
                 }
                 let r = self.eval(right, env)?;
                 self.binary(l, *op, r, expr.span)
+            }
+            ExprKind::Sql { .. } => {
+                Err(self.runtime_error(expr.span, "SQL execution requires a database runtime"))
             }
         }
     }

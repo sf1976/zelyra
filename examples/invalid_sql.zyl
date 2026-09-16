@@ -1,0 +1,19 @@
+database main {
+    engine: mariadb
+    database: "zelyra_test"
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+fn load_customer() {
+    customer = sql<Customer[]> {
+        SELECT username
+        FROM customers
+        WHERE id = :missing_id
+    }
+}
+
+fn main() {}

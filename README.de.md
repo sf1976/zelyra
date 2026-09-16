@@ -71,6 +71,10 @@ ist das Standard-Backend für neue Projekte. Siehe
 [den deutschen Phase-3-Leitfaden](docs/phase-3.de.md) oder die [englische
 Fassung](docs/phase-3.md).
 
+Phase 4 ergänzt native SQL-Blöcke mit Schema-, Spalten- und
+Parameterprüfung. Siehe [den deutschen Phase-4-Leitfaden](docs/phase-4.de.md)
+oder die [englische Fassung](docs/phase-4.md).
+
 ## Aktuelle Grenzen
 
 SQL, Web, Formulare, CRUD, Capabilities, Contracts und Codegenerierung gehören

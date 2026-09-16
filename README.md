@@ -70,6 +70,10 @@ Phase 3 adds the Database Core for MariaDB, PostgreSQL, and SQLite. MariaDB is
 the default backend for new projects. See
 [docs/phase-3.md](docs/phase-3.md) or the [German Phase 3 guide](docs/phase-3.de.md).
 
+Phase 4 adds native SQL blocks with schema, column, and parameter checking.
+See [docs/phase-4.md](docs/phase-4.md) or the
+[German Phase 4 guide](docs/phase-4.de.md).
+
 ## Current limitations
 
 SQL, web, forms, CRUD, capabilities, contracts, and code generation belong to

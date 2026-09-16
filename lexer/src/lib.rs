@@ -22,6 +22,8 @@ pub enum TokenKind {
     Break,
     Mutable,
     Match,
+    Sql,
+    Transaction,
     True,
     False,
     Ident(String),
@@ -55,6 +57,9 @@ pub enum TokenKind {
     RBrace,
     Semicolon,
     Question,
+    LBracket,
+    RBracket,
+    SqlBody(String),
     Newline,
     Eof,
 }
@@ -77,6 +82,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     let mut i = 0;
     let mut line = 1;
     let mut column = 1;
+    let mut sql_pending = false;
+    let mut sql_header_ready = false;
 
     while i < bytes.len() {
         let start = i;
@@ -118,6 +125,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 column += 1;
             }
             let word = &source[start..i];
+            if sql_pending && !sql_header_ready && word != "sql" {
+                sql_pending = false;
+            }
             let kind = match word {
                 "fn" => TokenKind::Fn,
                 "type" => TokenKind::Type,
@@ -139,6 +149,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "break" => TokenKind::Break,
                 "mutable" => TokenKind::Mutable,
                 "match" => TokenKind::Match,
+                "sql" => TokenKind::Sql,
+                "transaction" => TokenKind::Transaction,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
                 _ => TokenKind::Ident(word.to_owned()),
@@ -147,6 +159,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 kind,
                 span: span(i),
             });
+            if word == "sql" {
+                sql_pending = true;
+            }
             continue;
         }
         if c.is_ascii_digit() {
@@ -271,6 +286,33 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             });
             continue;
         }
+        if c == '{' && (sql_header_ready || sql_pending) {
+            let open_span = span(i + 1);
+            tokens.push(Token {
+                kind: TokenKind::LBrace,
+                span: open_span,
+            });
+            i += 1;
+            column += 1;
+            let body_start = i;
+            let (body_end, next_line, next_column) =
+                scan_sql_body(source, body_start, line, column)?;
+            tokens.push(Token {
+                kind: TokenKind::SqlBody(source[body_start..body_end].to_owned()),
+                span: Span::new(body_start, body_end, line, column),
+            });
+            let close_span = Span::new(body_end, body_end + 1, next_line, next_column);
+            tokens.push(Token {
+                kind: TokenKind::RBrace,
+                span: close_span,
+            });
+            i = body_end + 1;
+            line = next_line;
+            column = next_column + 1;
+            sql_pending = false;
+            sql_header_ready = false;
+            continue;
+        }
         let (kind, width) = match (c, bytes.get(i + 1).copied().map(char::from)) {
             ('-', Some('>')) => (TokenKind::Arrow, 2),
             ('=', Some('>')) => (TokenKind::FatArrow, 2),
@@ -298,6 +340,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             ('}', _) => (TokenKind::RBrace, 1),
             (';', _) => (TokenKind::Semicolon, 1),
             ('?', _) => (TokenKind::Question, 1),
+            ('[', _) => (TokenKind::LBracket, 1),
+            (']', _) => (TokenKind::RBracket, 1),
             _ => {
                 return Err(LexError {
                     message: format!("unexpected character `{c}`"),
@@ -308,15 +352,70 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
         i += width;
         column += width;
         tokens.push(Token {
-            kind,
+            kind: kind.clone(),
             span: span(i),
         });
+        if sql_pending {
+            match kind {
+                TokenKind::Less => sql_header_ready = true,
+                TokenKind::LParen | TokenKind::Equal => {
+                    sql_pending = false;
+                    sql_header_ready = false;
+                }
+                _ => {}
+            }
+        }
     }
     tokens.push(Token {
         kind: TokenKind::Eof,
         span: Span::new(source.len(), source.len(), line, column),
     });
     Ok(tokens)
+}
+
+fn scan_sql_body(
+    source: &str,
+    start: usize,
+    mut line: usize,
+    mut column: usize,
+) -> Result<(usize, usize, usize), LexError> {
+    let bytes = source.as_bytes();
+    let mut i = start;
+    let mut quote = None;
+    while i < bytes.len() {
+        let c = bytes[i] as char;
+        if let Some(active_quote) = quote {
+            if c == active_quote {
+                if bytes.get(i + 1).copied() == Some(active_quote as u8) {
+                    i += 2;
+                    column += 2;
+                    continue;
+                }
+                quote = None;
+                i += 1;
+                column += 1;
+                continue;
+            }
+        } else if c == '\'' || c == '"' {
+            quote = Some(c);
+            i += 1;
+            column += 1;
+            continue;
+        } else if c == '}' {
+            return Ok((i, line, column));
+        }
+        if c == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+        i += 1;
+    }
+    Err(LexError {
+        message: "unterminated SQL block".into(),
+        span: Span::new(start, source.len(), line, column),
+    })
 }
 
 #[cfg(test)]
@@ -334,5 +433,14 @@ mod tests {
             lex(r#""hello\n""#).unwrap()[0].kind,
             TokenKind::String("hello\n".into())
         );
+    }
+
+    #[test]
+    fn captures_native_sql_without_lexing_sql_literals() {
+        let tokens = lex("fn main() { rows = sql<Customer[]> { SELECT name FROM customers WHERE name = 'Anna' } }").unwrap();
+        assert!(tokens.iter().any(|token| matches!(
+            &token.kind,
+            TokenKind::SqlBody(body) if body.contains("'Anna'")
+        )));
     }
 }

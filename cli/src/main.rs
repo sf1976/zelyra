@@ -1,7 +1,8 @@
 use std::{env, fs, process::ExitCode};
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
-    inspect_mariadb, inspect_postgres, inspect_sqlite, Backend, Risk, Schema,
+    inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
+    Backend, Risk, Schema,
 };
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
@@ -121,6 +122,20 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
             );
         }
         return Err(());
+    }
+    if let Ok(schema) = build_schema(&program) {
+        if let Err(errors) = check_sql_program(&program, &schema) {
+            for error in errors {
+                diagnostic(
+                    path,
+                    "E-SQL-004",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return Err(());
+        }
     }
     Ok(program)
 }

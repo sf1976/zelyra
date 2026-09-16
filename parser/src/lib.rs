@@ -347,6 +347,11 @@ impl<'a> Parser<'a> {
             self.advance();
             ty = Type::Option(Box::new(ty));
         }
+        if self.at(&TokenKind::LBracket) {
+            self.advance();
+            self.expect(TokenKind::RBracket, "`]` after array type")?;
+            ty = Type::Array(Box::new(ty));
+        }
         Ok(ty)
     }
     fn block(&mut self) -> Result<Block, ParseError> {
@@ -440,6 +445,14 @@ impl<'a> Parser<'a> {
                 value,
                 arms,
                 span: start.join(end),
+            });
+        }
+        if self.at(&TokenKind::Transaction) {
+            let start = self.advance().span;
+            let body = self.block()?;
+            return Ok(Stmt::Transaction {
+                span: start.join(body.span),
+                body,
             });
         }
         if self.at(&TokenKind::Mutable) {
@@ -643,6 +656,7 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Bool(false),
                 span: token.span,
             }),
+            TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
                 if self.at(&TokenKind::LParen) {
                     self.advance();
@@ -679,6 +693,30 @@ impl<'a> Parser<'a> {
             found => self.error(format!("expected expression, found {found:?}")),
         }
     }
+
+    fn sql_expression(&mut self, start: Span) -> Result<Expr, ParseError> {
+        let result_type = if self.at(&TokenKind::Less) {
+            self.advance();
+            let result_type = self.type_name()?;
+            self.expect(TokenKind::Greater, "`>` after SQL result type")?;
+            result_type
+        } else {
+            Type::Unit
+        };
+        self.expect(TokenKind::LBrace, "`{` after SQL block header")?;
+        let query = match self.current().kind.clone() {
+            TokenKind::SqlBody(query) => {
+                self.advance();
+                query
+            }
+            _ => return self.error("expected SQL query body"),
+        };
+        let end = self.expect(TokenKind::RBrace, "`}` after SQL query")?;
+        Ok(Expr {
+            kind: ExprKind::Sql { result_type, query },
+            span: start.join(end),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -695,5 +733,19 @@ mod tests {
     fn parses_multiline_return() {
         let source = "fn f(n: Int) -> Int { return n +\n 1 }";
         assert!(parse(&lex(source).unwrap()).is_ok());
+    }
+
+    #[test]
+    fn parses_native_sql_and_transactions() {
+        let source = "fn main() { transaction { sql { UPDATE customers SET name = :name WHERE id = :id } } rows = sql<Customer[]> { SELECT id, name FROM customers } }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(matches!(
+            program.functions[0].body.statements[0],
+            Stmt::Transaction { .. }
+        ));
+        assert!(matches!(
+            program.functions[0].body.statements[1],
+            Stmt::BindOrAssign { .. }
+        ));
     }
 }

@@ -1,0 +1,27 @@
+database main {
+    engine: mariadb
+    database: "zelyra_test"
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email
+}
+
+fn load_customer(id: Int) {
+    customer = sql<Customer[]> {
+        SELECT
+            id,
+            name,
+            email
+        FROM customers
+        WHERE id = :id
+    }
+
+    print("typed SQL checked")
+}
+
+fn main() {
+    load_customer(1)
+}

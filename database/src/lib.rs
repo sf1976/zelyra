@@ -4,6 +4,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use zelyra_ast::*;
 
+pub mod sql;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatabaseConfig {
     pub name: String,
@@ -329,9 +331,12 @@ fn column_mapping(
             Backend::MariaDb => "DECIMAL(19,4)",
             Backend::Postgres | Backend::Sqlite => "NUMERIC(19,4)",
         },
-        Type::Named(_) | Type::Option(_) | Type::Result(_, _) | Type::Unit | Type::Unknown => {
-            "TEXT"
-        }
+        Type::Named(_)
+        | Type::Option(_)
+        | Type::Result(_, _)
+        | Type::Array(_)
+        | Type::Unit
+        | Type::Unknown => "TEXT",
     };
     (definition.name.clone(), sql_type.into(), None)
 }
