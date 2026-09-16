@@ -455,7 +455,10 @@ fn sql_types_compatible(expected: &Type, actual: &Type) -> bool {
         return true;
     }
     match actual {
-        Type::Named(name) if expected == &Type::Int => name.to_ascii_lowercase().ends_with("id"),
+        Type::Named(name) if expected == &Type::Int => {
+            name.to_ascii_lowercase().ends_with("id")
+                || !matches!(name.as_str(), "Email" | "Url" | "Uuid" | "Money")
+        }
         Type::Named(name) if expected == &Type::String => {
             matches!(name.as_str(), "Email" | "Url" | "Uuid")
         }

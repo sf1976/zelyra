@@ -118,6 +118,12 @@ pub struct FormRoute {
     pub csrf: CsrfProtection,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelectOption {
+    pub value: String,
+    pub label: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
@@ -251,7 +257,14 @@ pub fn html_escape(value: &str) -> String {
 
 fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>) -> Response {
     if request.method == "GET" {
-        return Response::html(200, render_form(form, &HashMap::new(), &[], None));
+        let options = match load_relation_options(form, database_url) {
+            Ok(options) => options,
+            Err(error) => return relation_options_error(database_url, error),
+        };
+        return Response::html(
+            200,
+            render_form_with_options(form, &HashMap::new(), &[], None, &options),
+        );
     }
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -270,20 +283,27 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
+    let relation_options = match load_relation_options(form, database_url) {
+        Ok(options) => options,
+        Err(error) => return relation_options_error(database_url, error),
+    };
     let validation = validate(
         &form.form,
         form.table.as_ref(),
         form.schema.as_ref(),
         &values,
     );
-    if !validation.is_valid() {
+    let mut errors = validation.errors;
+    validate_relation_values(form, &relation_options, &values, &mut errors);
+    if !errors.is_empty() {
         return Response::html(
             422,
-            render_form(
+            render_form_with_options(
                 form,
                 &values,
-                &validation.errors,
+                &errors,
                 Some("Please correct the errors."),
+                &relation_options,
             ),
         );
     }
@@ -302,13 +322,152 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
     }
     Response::html(
         202,
-        render_form(
+        render_form_with_options(
             form,
             &values,
             &[],
             Some("Input validated. Database action execution is not enabled yet."),
+            &relation_options,
         ),
     )
+}
+
+fn relation_options_error(database_url: Option<&str>, error: String) -> Response {
+    eprintln!("zelyra web: could not load relation options: {error}");
+    if database_url.is_none() {
+        Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for relationship fields.</p>",
+        )
+    } else {
+        Response::html(500, "<h1>500 Internal Server Error</h1>")
+    }
+}
+
+fn load_relation_options(
+    form: &FormRoute,
+    database_url: Option<&str>,
+) -> Result<HashMap<String, Vec<SelectOption>>, String> {
+    let mut options = HashMap::new();
+    for field in &form.form.fields {
+        let Some(target_table) = relation_target_for_field(form, field) else {
+            continue;
+        };
+        let Some(database_url) = database_url else {
+            return Err(format!(
+                "relationship field `{}` requires DATABASE_URL",
+                field.name
+            ));
+        };
+        let schema_table = form
+            .schema
+            .as_ref()
+            .and_then(|schema| {
+                schema
+                    .tables
+                    .iter()
+                    .find(|table| table.name == target_table)
+            })
+            .ok_or_else(|| format!("relationship table `{target_table}` is missing from schema"))?;
+        let display_column = relation_display_column(schema_table);
+        let query = format!(
+            "SELECT {}, {} FROM {} ORDER BY {}",
+            quote_identifier("id"),
+            quote_identifier(display_column),
+            quote_identifier(&target_table),
+            quote_identifier(display_column)
+        );
+        let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())
+            .map_err(|error| error.to_string())?;
+        let field_options = result
+            .rows
+            .into_iter()
+            .filter_map(|row| match row.as_slice() {
+                [value, label, ..] => Some(SelectOption {
+                    value: value.clone(),
+                    label: label.clone(),
+                }),
+                _ => None,
+            })
+            .collect();
+        options.insert(field.name.clone(), field_options);
+    }
+    Ok(options)
+}
+
+fn validate_relation_values(
+    form: &FormRoute,
+    options: &HashMap<String, Vec<SelectOption>>,
+    values: &HashMap<String, String>,
+    errors: &mut Vec<FieldError>,
+) {
+    for field in &form.form.fields {
+        let Some(field_options) = options.get(&field.name) else {
+            continue;
+        };
+        let Some(value) = values.get(&field.name) else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+        if !field_options.iter().any(|option| option.value == *value) {
+            errors.push(FieldError {
+                field: field.name.clone(),
+                message: "selected value does not exist".into(),
+            });
+        }
+    }
+}
+
+fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) -> Option<String> {
+    let ty = field.ty.as_ref().or_else(|| {
+        form.table.as_ref().and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name == field.name)
+                .map(|column| &column.ty)
+        })
+    });
+    let Type::Named(name) = ty? else {
+        return None;
+    };
+    if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+        return None;
+    }
+    let schema = form.schema.as_ref()?;
+    let lower = name.to_ascii_lowercase();
+    if schema.tables.iter().any(|table| table.name == lower) {
+        return Some(lower);
+    }
+    let plural = if lower.ends_with('y') {
+        format!("{}ies", &lower[..lower.len() - 1])
+    } else {
+        format!("{lower}s")
+    };
+    schema
+        .tables
+        .iter()
+        .any(|table| table.name == plural)
+        .then_some(plural)
+}
+
+fn relation_display_column(table: &zelyra_database::Table) -> &str {
+    ["name", "number", "title", "email"]
+        .iter()
+        .find(|candidate| {
+            table
+                .columns
+                .iter()
+                .any(|column| column.name == **candidate)
+        })
+        .copied()
+        .unwrap_or("id")
+}
+
+fn quote_identifier(identifier: &str) -> String {
+    format!("`{}`", identifier.replace('`', "``"))
 }
 
 fn execute_form_action(
@@ -366,6 +525,10 @@ fn form_query_parameters(
                 .parse::<i64>()
                 .map(zelyra_database::QueryValue::Int)
                 .map_err(|_| format!("form field `{}` is not an integer", field.name))?,
+            Some(Type::Named(_)) if relation_target_for_field(form, field).is_some() => value
+                .parse::<i64>()
+                .map(zelyra_database::QueryValue::Int)
+                .map_err(|_| format!("form field `{}` is not an integer", field.name))?,
             Some(Type::UInt) => value
                 .parse::<u64>()
                 .map(zelyra_database::QueryValue::UInt)
@@ -394,6 +557,16 @@ pub fn render_form(
     errors: &[FieldError],
     notice: Option<&str>,
 ) -> String {
+    render_form_with_options(route, values, errors, notice, &HashMap::new())
+}
+
+fn render_form_with_options(
+    route: &FormRoute,
+    values: &HashMap<String, String>,
+    errors: &[FieldError],
+    notice: Option<&str>,
+    relation_options: &HashMap<String, Vec<SelectOption>>,
+) -> String {
     let mut html = String::new();
     html.push_str("<form method=\"post\" action=\"");
     html.push_str(&html_escape(&route.action));
@@ -413,7 +586,6 @@ pub fn render_form(
             .iter()
             .filter(|error| error.field == field.name)
             .collect::<Vec<_>>();
-        let input_type = input_type(route, field);
         let required = is_required(route, field);
         let max = field_max(route, field);
         html.push_str("<div class=\"zelyra-field\">");
@@ -422,40 +594,68 @@ pub fn render_form(
         html.push_str("\">");
         html.push_str(&html_escape(&label));
         html.push_str("</label>");
-        html.push_str("<input id=\"");
-        html.push_str(&html_escape(&field.name));
-        html.push_str("\" name=\"");
-        html.push_str(&html_escape(&field.name));
-        html.push_str("\" type=\"");
-        html.push_str(input_type);
-        html.push('"');
-        if input_type == "checkbox" {
-            html.push_str(" value=\"true\"");
-            if matches!(value, "true" | "1") {
-                html.push_str(" checked");
+        if let Some(options) = relation_options.get(&field.name) {
+            html.push_str("<select id=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" name=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push('"');
+            if required {
+                html.push_str(" required");
             }
+            html.push('>');
+            if !required {
+                html.push_str("<option value=\"\">-- Select --</option>");
+            }
+            for option in options {
+                html.push_str("<option value=\"");
+                html.push_str(&html_escape(&option.value));
+                html.push('"');
+                if option.value == value {
+                    html.push_str(" selected");
+                }
+                html.push('>');
+                html.push_str(&html_escape(&option.label));
+                html.push_str("</option>");
+            }
+            html.push_str("</select>");
         } else {
-            html.push_str(" value=\"");
-            html.push_str(&html_escape(value));
+            let input_type = input_type(route, field);
+            html.push_str("<input id=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" name=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" type=\"");
+            html.push_str(input_type);
             html.push('"');
+            if input_type == "checkbox" {
+                html.push_str(" value=\"true\"");
+                if matches!(value, "true" | "1") {
+                    html.push_str(" checked");
+                }
+            } else {
+                html.push_str(" value=\"");
+                html.push_str(&html_escape(value));
+                html.push('"');
+            }
+            if required {
+                html.push_str(" required");
+            }
+            if let Some(max) = max {
+                html.push_str(" maxlength=\"");
+                html.push_str(&max.to_string());
+                html.push('"');
+            }
+            if let Some(placeholder) = &field.placeholder {
+                html.push_str(" placeholder=\"");
+                html.push_str(&html_escape(placeholder));
+                html.push('"');
+            }
+            if field.readonly {
+                html.push_str(" readonly");
+            }
+            html.push('>');
         }
-        if required {
-            html.push_str(" required");
-        }
-        if let Some(max) = max {
-            html.push_str(" maxlength=\"");
-            html.push_str(&max.to_string());
-            html.push('"');
-        }
-        if let Some(placeholder) = &field.placeholder {
-            html.push_str(" placeholder=\"");
-            html.push_str(&html_escape(placeholder));
-            html.push('"');
-        }
-        if field.readonly {
-            html.push_str(" readonly");
-        }
-        html.push('>');
         for error in field_errors {
             html.push_str("<p class=\"zelyra-error\">");
             html.push_str(&html_escape(&error.message));
@@ -763,6 +963,68 @@ mod tests {
         }
     }
 
+    fn relation_form_route() -> FormRoute {
+        let mut route = form_route();
+        route.form.fields.push(zelyra_ast::FormField {
+            name: "department".into(),
+            ty: None,
+            label: Some("Department".into()),
+            placeholder: None,
+            required: true,
+            max: None,
+            widget: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        });
+        route.table = Some(zelyra_ast::TableDef {
+            name: "customers".into(),
+            columns: vec![zelyra_ast::ColumnDef {
+                name: "department".into(),
+                ty: Type::Named("Department".into()),
+                length: None,
+                required: true,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+                span: zelyra_ast::Span::default(),
+            }],
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+            span: zelyra_ast::Span::default(),
+        });
+        route.schema = Some(zelyra_database::Schema {
+            database: None,
+            tables: vec![zelyra_database::Table {
+                name: "departments".into(),
+                columns: vec![
+                    zelyra_database::Column {
+                        name: "id".into(),
+                        sql_type: "BIGINT".into(),
+                        nullable: false,
+                        primary_key: true,
+                        auto: true,
+                        unique: false,
+                        default: None,
+                    },
+                    zelyra_database::Column {
+                        name: "name".into(),
+                        sql_type: "VARCHAR(100)".into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    },
+                ],
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            }],
+        });
+        route
+    }
+
     #[test]
     fn dispatches_literal_and_parameter_routes() {
         let response = router().dispatch("GET", "/hello/Zelyra");
@@ -815,6 +1077,45 @@ mod tests {
         assert!(html.contains("name=\"name\" type=\"text\""));
         assert!(html.contains(" required"));
         assert!(html.contains("maxlength=\"20\""));
+    }
+
+    #[test]
+    fn renders_relationship_as_escaped_select_options() {
+        let route = relation_form_route();
+        let options = HashMap::from([(
+            "department".into(),
+            vec![SelectOption {
+                value: "7".into(),
+                label: "R&D <East>".into(),
+            }],
+        )]);
+        let html = render_form_with_options(
+            &route,
+            &HashMap::from([(String::from("department"), String::from("7"))]),
+            &[],
+            None,
+            &options,
+        );
+        assert!(html.contains("<select id=\"department\" name=\"department\" required>"));
+        assert!(html.contains("value=\"7\" selected>R&amp;D &lt;East&gt;</option>"));
+        assert!(!html.contains("<input id=\"department\""));
+    }
+
+    #[test]
+    fn rejects_unknown_relationship_value() {
+        let route = relation_form_route();
+        let options = HashMap::from([(
+            "department".into(),
+            vec![SelectOption {
+                value: "7".into(),
+                label: "R&D".into(),
+            }],
+        )]);
+        let values = HashMap::from([(String::from("department"), String::from("99"))]);
+        let mut errors = Vec::new();
+        validate_relation_values(&route, &options, &values, &mut errors);
+        assert_eq!(errors[0].field, "department");
+        assert_eq!(errors[0].message, "selected value does not exist");
     }
 
     #[test]

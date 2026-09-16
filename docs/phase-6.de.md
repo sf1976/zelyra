@@ -73,5 +73,12 @@ fehlende Konfiguration liefert HTTP 503, ein Ausführungsfehler einen
 allgemeinen HTTP-500-Fehler. Das Aktions-SQL wird vor dem Serverstart gegen das
 Quellschema geprüft.
 
-Select-Felder für Beziehungen, Sessions und die dauerhafte Verwaltung von
-CSRF-Geheimnissen bleiben weitere Integrationsschritte.
+Sessions und die dauerhafte Verwaltung von CSRF-Geheimnissen bleiben weitere
+Integrationsschritte.
+
+Beziehungsfelder werden jetzt als datenbankgestützte Select-Felder gerendert.
+Beispielsweise wird `department: Department required` automatisch auf die
+Tabelle `departments` abgebildet, verwendet standardmäßig `name` als
+Anzeigespalte und prüft die übermittelte ID vor der Aktionsausführung gegen die
+aktuellen MariaDB-Datensätze. Das vollständige Beispiel ist
+`examples/machine_form.zyl`.

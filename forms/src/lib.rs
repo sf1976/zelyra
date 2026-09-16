@@ -186,7 +186,10 @@ fn find_column<'a>(
     table: &'a zelyra_database::Table,
     name: &str,
 ) -> Option<&'a zelyra_database::Column> {
-    table.columns.iter().find(|column| column.name == name)
+    table
+        .columns
+        .iter()
+        .find(|column| column.name == name || column.name == format!("{name}_id"))
 }
 
 fn varchar_length(column: &zelyra_database::Column) -> Option<u32> {

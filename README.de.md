@@ -167,6 +167,11 @@ Transaktion aus und liefert HTTP 303 zur angegebenen Weiterleitung. Ohne
 als HTTP 500 ausgegeben, ohne Zugangsdaten oder SQL-Details offenzulegen.
 Apache ist nicht erforderlich.
 
+Beziehungsfelder werden automatisch zu Select-Feldern. Das Beispiel
+`examples/machine_form.zyl` definiert `department: Department required`.
+Zelyra lädt IDs und Anzeigenamen der Abteilungen aus MariaDB, rendert ein
+`<select>` und lehnt IDs ab, die in der Datenbank nicht vorhanden sind.
+
 ## Datenbankorientierte Entwicklung
 
 Der vorgesehene Zelyra-Ablauf:

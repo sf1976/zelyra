@@ -164,6 +164,11 @@ the declared redirect. Missing `DATABASE_URL` returns HTTP 503; database
 failures are returned as a controlled HTTP 500 without exposing credentials or
 SQL details. Apache is not required.
 
+Relationship fields become select controls automatically. The example
+`examples/machine_form.zyl` defines `department: Department required`; Zelyra
+loads the department IDs and display names from MariaDB, renders a `<select>`,
+and rejects IDs that are not present in the database.
+
 ## Database-first development
 
 The intended Zelyra flow is:

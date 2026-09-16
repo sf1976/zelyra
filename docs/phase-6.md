@@ -71,5 +71,10 @@ returns HTTP 303. Missing configuration returns HTTP 503 and an execution
 failure returns a generic HTTP 500. Action SQL is checked against the source
 schema before the server starts.
 
-Relationship select controls, sessions, and persistent CSRF secret management
-remain future integration steps.
+Sessions and persistent CSRF secret management remain future integration steps.
+
+Relationship fields are now rendered as database-backed select controls. For
+example, `department: Department required` maps to the `departments` table,
+uses `name` as the display column by convention, and validates the submitted
+ID against the current MariaDB rows before an action is executed. The complete
+example is `examples/machine_form.zyl`.

@@ -444,6 +444,11 @@ redirect. Without `DATABASE_URL` the action returns HTTP 503; database failures
 return a generic HTTP 500. The action SQL is statically checked against the
 source schema before serving.
 
+Relationship fields are loaded from MariaDB automatically. In
+`examples/machine_form.zyl`, `department: Department required` becomes a
+`<select>` using the department ID and name. Zelyra rejects a submitted ID
+that is not present in the current database, before executing the form action.
+
 ## 11. Useful commands
 
 ~~~text

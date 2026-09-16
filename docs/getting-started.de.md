@@ -452,6 +452,12 @@ Aktion HTTP 503; Datenbankfehler werden als allgemeiner HTTP-500-Fehler
 ausgegeben. Das Aktions-SQL wird vor dem Serverstart statisch gegen das
 Quellschema geprüft.
 
+Beziehungsfelder werden automatisch aus MariaDB geladen. In
+`examples/machine_form.zyl` wird `department: Department required` zu einem
+`<select>` mit Abteilungs-ID und -Name. Zelyra lehnt eine übermittelte ID ab,
+die in der aktuellen Datenbank nicht vorhanden ist, bevor die Formularaktion
+ausgeführt wird.
+
 ## 11. Nützliche Befehle
 
 ~~~text
