@@ -9,12 +9,13 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
-    check, check_capabilities_with_grants, execute, execute_with_database, KNOWN_CAPABILITIES,
+    check, check_capabilities_with_grants, execute, execute_with_database,
+    verify as verify_program, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl>\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -165,6 +166,28 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn verify_command(path: &str) -> ExitCode {
+    let program = match validate(path) {
+        Ok(program) => program,
+        Err(()) => return ExitCode::from(1),
+    };
+    let results = verify_program(&program);
+    let failed = results
+        .iter()
+        .any(|result| result.status == VerificationStatus::Failed);
+    for result in results {
+        println!(
+            "{}: {}.{}[{}]",
+            result.status, result.function, result.kind, result.index
+        );
+    }
+    if failed {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
@@ -1093,6 +1116,17 @@ fn main() -> ExitCode {
     }
     if command == "serve" {
         return serve_command(args);
+    }
+    if command == "verify" {
+        let Some(path) = args.next() else {
+            usage();
+            return ExitCode::from(2);
+        };
+        if args.next().is_some() {
+            usage();
+            return ExitCode::from(2);
+        }
+        return verify_command(&path);
     }
     let Some(path) = args.next() else {
         usage();

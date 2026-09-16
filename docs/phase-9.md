@@ -87,3 +87,19 @@ after it, with the returned value available as `result`. Both expressions must
 have type `Bool`. A false condition stops execution with a diagnostic runtime
 error. These checks are runtime checks, not mathematical proofs. Formal
 verification and proof output remain future work.
+
+## Verification command
+
+The first verifier is available through:
+
+~~~bash
+zelyra verify examples/contracts.zyl
+~~~
+
+It reports one status for every contract. Constant boolean expressions can
+currently be classified as `PROVEN` or `FAILED`. Conditions depending on
+parameters or function results remain `RUNTIME_CHECK`; functions without
+contracts are reported as `UNPROVEN`.
+
+The command exits unsuccessfully for a failed constant contract or a compiler
+diagnostic. No status other than `PROVEN` is a mathematical proof.

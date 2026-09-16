@@ -91,3 +91,20 @@ zur Verfügung. Beide Ausdrücke müssen den Typ `Bool` besitzen. Eine falsche
 Bedingung beendet die Ausführung mit einem Runtime-Fehler. Diese Prüfungen
 sind Runtime-Checks und keine mathematischen Beweise. Formale Verifikation und
 Beweisausgabe folgen später.
+
+## Verifikationsbefehl
+
+Der erste Verifikationsbefehl ist verfügbar über:
+
+~~~bash
+zelyra verify examples/contracts.zyl
+~~~
+
+Konstante Bool-Ausdrücke können derzeit als `PROVEN` oder `FAILED`
+klassifiziert werden. Von Parametern oder Rückgabewerten abhängige Bedingungen
+bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als `UNPROVEN`
+gemeldet.
+
+Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
+Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein
+mathematischer Beweis.

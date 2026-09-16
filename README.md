@@ -58,6 +58,8 @@ Implemented today:
   `zelyra.toml`.
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
+- an initial `zelyra verify` command distinguishing `PROVEN`, `RUNTIME_CHECK`,
+  `UNPROVEN`, and `FAILED` for contract expressions.
 
 Full CRUD generation, database roles, APIs, formal verification,
 and production deployment tooling are still being developed. See the
@@ -294,6 +296,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
+zelyra verify <file.zyl>
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

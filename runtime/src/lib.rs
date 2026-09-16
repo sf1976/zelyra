@@ -36,6 +36,208 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
     "Random",
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContractKind {
+    Requires,
+    Ensures,
+}
+
+impl fmt::Display for ContractKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Requires => write!(f, "requires"),
+            Self::Ensures => write!(f, "ensures"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VerificationStatus {
+    Proven,
+    RuntimeCheck,
+    Unproven,
+    Failed,
+}
+
+impl fmt::Display for VerificationStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let status = match self {
+            Self::Proven => "PROVEN",
+            Self::RuntimeCheck => "RUNTIME_CHECK",
+            Self::Unproven => "UNPROVEN",
+            Self::Failed => "FAILED",
+        };
+        write!(f, "{status}")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerificationResult {
+    pub function: String,
+    pub kind: ContractKind,
+    pub index: usize,
+    pub status: VerificationStatus,
+}
+
+pub fn verify(program: &Program) -> Vec<VerificationResult> {
+    let mut results = Vec::new();
+    for function in &program.functions {
+        for (index, contract) in function.requires.iter().enumerate() {
+            results.push(VerificationResult {
+                function: function.name.clone(),
+                kind: ContractKind::Requires,
+                index,
+                status: verify_contract(contract),
+            });
+        }
+        for (index, contract) in function.ensures.iter().enumerate() {
+            results.push(VerificationResult {
+                function: function.name.clone(),
+                kind: ContractKind::Ensures,
+                index,
+                status: verify_contract(contract),
+            });
+        }
+        if function.requires.is_empty() && function.ensures.is_empty() {
+            results.push(VerificationResult {
+                function: function.name.clone(),
+                kind: ContractKind::Requires,
+                index: 0,
+                status: VerificationStatus::Unproven,
+            });
+        }
+    }
+    results
+}
+
+fn verify_contract(contract: &Expr) -> VerificationStatus {
+    match constant_value(contract) {
+        Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
+        Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
+        Some(_) => VerificationStatus::Unproven,
+        None => VerificationStatus::RuntimeCheck,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ConstantValue {
+    Int(i64),
+    UInt(u64),
+    Float(f64),
+    Bool(bool),
+    String(String),
+    Char(char),
+}
+
+fn constant_value(expression: &Expr) -> Option<ConstantValue> {
+    match &expression.kind {
+        ExprKind::Int(value) => Some(ConstantValue::Int(*value)),
+        ExprKind::UInt(value) => Some(ConstantValue::UInt(*value)),
+        ExprKind::Float(value) => Some(ConstantValue::Float(*value)),
+        ExprKind::Bool(value) => Some(ConstantValue::Bool(*value)),
+        ExprKind::String(value) => Some(ConstantValue::String(value.clone())),
+        ExprKind::Char(value) => Some(ConstantValue::Char(*value)),
+        ExprKind::Unary { op, expr } => {
+            let value = constant_value(expr)?;
+            match (op, value) {
+                (UnaryOp::Negate, ConstantValue::Int(value)) => {
+                    value.checked_neg().map(ConstantValue::Int)
+                }
+                (UnaryOp::Negate, ConstantValue::Float(value)) => {
+                    Some(ConstantValue::Float(-value))
+                }
+                (UnaryOp::Not, ConstantValue::Bool(value)) => Some(ConstantValue::Bool(!value)),
+                _ => None,
+            }
+        }
+        ExprKind::Binary { left, op, right } => {
+            let left = constant_value(left)?;
+            if *op == BinaryOp::And && matches!(left, ConstantValue::Bool(false)) {
+                return Some(ConstantValue::Bool(false));
+            }
+            if *op == BinaryOp::Or && matches!(left, ConstantValue::Bool(true)) {
+                return Some(ConstantValue::Bool(true));
+            }
+            let right = constant_value(right)?;
+            constant_binary(left, *op, right)
+        }
+        ExprKind::Variable(_) | ExprKind::Call { .. } | ExprKind::Sql { .. } => None,
+    }
+}
+
+fn constant_binary(
+    left: ConstantValue,
+    op: BinaryOp,
+    right: ConstantValue,
+) -> Option<ConstantValue> {
+    use BinaryOp::*;
+    match (left, op, right) {
+        (ConstantValue::Int(left), Add, ConstantValue::Int(right)) => {
+            left.checked_add(right).map(ConstantValue::Int)
+        }
+        (ConstantValue::Int(left), Subtract, ConstantValue::Int(right)) => {
+            left.checked_sub(right).map(ConstantValue::Int)
+        }
+        (ConstantValue::Int(left), Multiply, ConstantValue::Int(right)) => {
+            left.checked_mul(right).map(ConstantValue::Int)
+        }
+        (ConstantValue::Int(left), Divide, ConstantValue::Int(right)) if right != 0 => {
+            left.checked_div(right).map(ConstantValue::Int)
+        }
+        (ConstantValue::Int(left), Remainder, ConstantValue::Int(right)) if right != 0 => {
+            left.checked_rem(right).map(ConstantValue::Int)
+        }
+        (ConstantValue::Float(left), Add, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Float(left + right))
+        }
+        (ConstantValue::Float(left), Subtract, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Float(left - right))
+        }
+        (ConstantValue::Float(left), Multiply, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Float(left * right))
+        }
+        (ConstantValue::Float(left), Divide, ConstantValue::Float(right)) if right != 0.0 => {
+            Some(ConstantValue::Float(left / right))
+        }
+        (ConstantValue::String(left), Add, ConstantValue::String(right)) => {
+            Some(ConstantValue::String(left + &right))
+        }
+        (left, Equal, right) => Some(ConstantValue::Bool(left == right)),
+        (left, NotEqual, right) => Some(ConstantValue::Bool(left != right)),
+        (ConstantValue::Int(left), Less, ConstantValue::Int(right)) => {
+            Some(ConstantValue::Bool(left < right))
+        }
+        (ConstantValue::Int(left), LessEqual, ConstantValue::Int(right)) => {
+            Some(ConstantValue::Bool(left <= right))
+        }
+        (ConstantValue::Int(left), Greater, ConstantValue::Int(right)) => {
+            Some(ConstantValue::Bool(left > right))
+        }
+        (ConstantValue::Int(left), GreaterEqual, ConstantValue::Int(right)) => {
+            Some(ConstantValue::Bool(left >= right))
+        }
+        (ConstantValue::Float(left), Less, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Bool(left < right))
+        }
+        (ConstantValue::Float(left), LessEqual, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Bool(left <= right))
+        }
+        (ConstantValue::Float(left), Greater, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Bool(left > right))
+        }
+        (ConstantValue::Float(left), GreaterEqual, ConstantValue::Float(right)) => {
+            Some(ConstantValue::Bool(left >= right))
+        }
+        (ConstantValue::Bool(left), And, ConstantValue::Bool(right)) => {
+            Some(ConstantValue::Bool(left && right))
+        }
+        (ConstantValue::Bool(left), Or, ConstantValue::Bool(right)) => {
+            Some(ConstantValue::Bool(left || right))
+        }
+        _ => None,
+    }
+}
+
 pub fn check_capabilities(program: &Program) -> Result<(), Vec<CapabilityError>> {
     check_capabilities_with_grants(program, None)
 }
@@ -1655,5 +1857,18 @@ mod tests {
         assert!(errors
             .iter()
             .all(|error| error.message.contains("expected `Bool`")));
+    }
+
+    #[test]
+    fn classifies_verification_results_without_overclaiming() {
+        let program = parse(
+            &lex("fn proven() requires { 1 < 2 } { } fn dynamic(value: Int) requires { value >= 0 } { } fn failed() ensures { 1 > 2 } { } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[2].status, VerificationStatus::Failed);
+        assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 }

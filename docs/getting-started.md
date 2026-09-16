@@ -498,6 +498,7 @@ zelyra check <file.zyl>                 check source
 zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
+zelyra verify <file.zyl>                classify contract checks
 zelyra form validate <file> <Form> ...  validate form input
 zelyra db create <file.zyl>             print schema DDL
 zelyra db bootstrap <file.zyl>          create/apply initial schema

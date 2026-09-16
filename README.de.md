@@ -58,6 +58,8 @@ Heute implementiert:
   `zelyra.toml`.
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
+- ein erster `zelyra verify`-Befehl, der Contract-Ausdrücke zwischen `PROVEN`,
+  `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
@@ -299,6 +301,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
+zelyra verify <file.zyl>
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

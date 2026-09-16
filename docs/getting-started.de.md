@@ -511,6 +511,7 @@ zelyra check <file.zyl>                 Quellcode prüfen
 zelyra build <file.zyl>                 Quellcode prüfen/bauen
 zelyra run <file.zyl>                   Programm ausführen
 zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
+zelyra verify <file.zyl>                Contract-Prüfungen klassifizieren
 zelyra form validate <file> <Form> ...  Formularwerte validieren
 zelyra db create <file.zyl>             Schema-DDL ausgeben
 zelyra db bootstrap <file.zyl>          Anfangsschema erzeugen/anwenden
