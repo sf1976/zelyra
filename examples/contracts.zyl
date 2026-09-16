@@ -9,6 +9,19 @@ fn increment(value: Int) -> Int
     return value + 1
 }
 
+fn absolute(value: Int) -> Int
+    ensures {
+        result >= 0
+    }
+{
+    if value >= 0 {
+        return value
+    } else {
+        return -value
+    }
+}
+
 fn main() {
     print(increment(41))
+    print(absolute(-7))
 }

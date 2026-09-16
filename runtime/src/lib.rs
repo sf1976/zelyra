@@ -90,13 +90,13 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 status: verify_contract(contract, None),
             });
         }
-        let return_expression = direct_return_expression(function);
+        let return_paths = symbolic_return_paths(function);
         for (index, contract) in function.ensures.iter().enumerate() {
             results.push(VerificationResult {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                status: verify_contract(contract, return_expression),
+                status: verify_postcondition(contract, return_paths.as_deref()),
             });
         }
         if function.requires.is_empty() && function.ensures.is_empty() {
@@ -129,21 +129,353 @@ fn verify_contract(contract: &Expr, return_expression: Option<&Expr>) -> Verific
     }
 }
 
-fn direct_return_expression(function: &Function) -> Option<&Expr> {
-    let [Stmt::Return {
-        value: Some(expression),
-        ..
-    }] = function.body.statements.as_slice()
-    else {
-        return None;
-    };
-    Some(expression)
+fn verify_postcondition(
+    contract: &Expr,
+    return_paths: Option<&[ReturnPath<'_>]>,
+) -> VerificationStatus {
+    match constant_value(contract) {
+        Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
+        Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
+        Some(_) => VerificationStatus::Unproven,
+        None => {
+            let Some(return_paths) = return_paths else {
+                return VerificationStatus::RuntimeCheck;
+            };
+            let mut saw_feasible_path = false;
+            let mut saw_unknown_path = false;
+            for path in return_paths {
+                let Some(expression) = path.expression else {
+                    saw_unknown_path = true;
+                    continue;
+                };
+                let Some(guards) = path
+                    .guards
+                    .iter()
+                    .map(|guard| {
+                        constraints_for_bool(guard.expression, guard.expected, Some(expression))
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .map(|groups| groups.into_iter().flatten().collect::<Vec<_>>())
+                else {
+                    saw_unknown_path = true;
+                    continue;
+                };
+                if constraints_satisfiable(guards.clone()) == Some(false) {
+                    continue;
+                }
+                saw_feasible_path = true;
+                match symbolic_bool_with_constraints(contract, expression, &guards) {
+                    Some(true) => {}
+                    Some(false) => return VerificationStatus::Failed,
+                    None => saw_unknown_path = true,
+                }
+            }
+            if saw_feasible_path && !saw_unknown_path {
+                VerificationStatus::Proven
+            } else {
+                VerificationStatus::RuntimeCheck
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SymbolicGuard<'a> {
+    expression: &'a Expr,
+    expected: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ReturnPath<'a> {
+    guards: Vec<SymbolicGuard<'a>>,
+    expression: Option<&'a Expr>,
+}
+
+#[derive(Clone, Debug)]
+enum SymbolicState<'a> {
+    Continue(Vec<SymbolicGuard<'a>>),
+    Return {
+        guards: Vec<SymbolicGuard<'a>>,
+        expression: Option<&'a Expr>,
+    },
+}
+
+fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
+    let states = symbolic_states(&function.body, Vec::new())?;
+    let mut paths = Vec::new();
+    for state in states {
+        let SymbolicState::Return { guards, expression } = state else {
+            return None;
+        };
+        paths.push(ReturnPath { guards, expression });
+    }
+    Some(paths)
+}
+
+fn symbolic_states<'a>(
+    block: &'a Block,
+    incoming: Vec<SymbolicGuard<'a>>,
+) -> Option<Vec<SymbolicState<'a>>> {
+    let mut states = vec![SymbolicState::Continue(incoming)];
+    for statement in &block.statements {
+        let mut next = Vec::new();
+        for state in states {
+            match state {
+                SymbolicState::Return { .. } => next.push(state),
+                SymbolicState::Continue(guards) => match statement {
+                    Stmt::Return { value, .. } => next.push(SymbolicState::Return {
+                        guards,
+                        expression: value.as_ref(),
+                    }),
+                    Stmt::If {
+                        condition,
+                        then_block,
+                        else_block,
+                        ..
+                    } => {
+                        let mut then_guards = guards.clone();
+                        then_guards.push(SymbolicGuard {
+                            expression: condition,
+                            expected: true,
+                        });
+                        next.extend(symbolic_states(then_block, then_guards)?);
+
+                        if let Some(else_block) = else_block {
+                            let mut else_guards = guards;
+                            else_guards.push(SymbolicGuard {
+                                expression: condition,
+                                expected: false,
+                            });
+                            next.extend(symbolic_states(else_block, else_guards)?);
+                        } else {
+                            let mut guards = guards;
+                            guards.push(SymbolicGuard {
+                                expression: condition,
+                                expected: false,
+                            });
+                            next.push(SymbolicState::Continue(guards));
+                        }
+                    }
+                    _ => return None,
+                },
+            }
+        }
+        states = next;
+    }
+    Some(states)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct LinearValue {
     coefficients: HashMap<String, i64>,
     constant: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct LinearConstraint {
+    coefficients: HashMap<String, i128>,
+    constant: i128,
+}
+
+impl LinearConstraint {
+    fn from_value(value: LinearValue) -> Self {
+        Self {
+            coefficients: value
+                .coefficients
+                .into_iter()
+                .map(|(name, coefficient)| (name, i128::from(coefficient)))
+                .collect(),
+            constant: i128::from(value.constant),
+        }
+    }
+
+    fn negate(mut self) -> Option<Self> {
+        self.constant = self.constant.checked_neg()?;
+        for coefficient in self.coefficients.values_mut() {
+            *coefficient = coefficient.checked_neg()?;
+        }
+        Some(self)
+    }
+
+    fn shift(mut self, amount: i128) -> Option<Self> {
+        self.constant = self.constant.checked_sub(amount)?;
+        Some(self)
+    }
+
+    fn combine(self, other: Self, self_factor: i128, other_factor: i128) -> Option<Self> {
+        let mut combined = Self {
+            coefficients: HashMap::new(),
+            constant: self
+                .constant
+                .checked_mul(self_factor)?
+                .checked_add(other.constant.checked_mul(other_factor)?)?,
+        };
+        for (name, coefficient) in self.coefficients {
+            let value = coefficient.checked_mul(self_factor)?;
+            if value != 0 {
+                combined.coefficients.insert(name, value);
+            }
+        }
+        for (name, coefficient) in other.coefficients {
+            let value = coefficient.checked_mul(other_factor)?;
+            let sum = combined
+                .coefficients
+                .get(&name)
+                .copied()
+                .unwrap_or_default()
+                .checked_add(value)?;
+            if sum == 0 {
+                combined.coefficients.remove(&name);
+            } else {
+                combined.coefficients.insert(name, sum);
+            }
+        }
+        Some(combined)
+    }
+}
+
+fn constraints_for_bool(
+    expression: &Expr,
+    expected: bool,
+    return_expression: Option<&Expr>,
+) -> Option<Vec<LinearConstraint>> {
+    if let Some(ConstantValue::Bool(value)) = constant_value(expression) {
+        return if value == expected {
+            Some(Vec::new())
+        } else {
+            Some(vec![LinearConstraint {
+                coefficients: HashMap::new(),
+                constant: -1,
+            }])
+        };
+    }
+    match &expression.kind {
+        ExprKind::Unary {
+            op: UnaryOp::Not,
+            expr,
+        } => constraints_for_bool(expr, !expected, return_expression),
+        ExprKind::Binary { left, op, right } => match op {
+            BinaryOp::And if expected => {
+                let mut constraints = constraints_for_bool(left, true, return_expression)?;
+                constraints.extend(constraints_for_bool(right, true, return_expression)?);
+                Some(constraints)
+            }
+            BinaryOp::Or if !expected => {
+                let mut constraints = constraints_for_bool(left, false, return_expression)?;
+                constraints.extend(constraints_for_bool(right, false, return_expression)?);
+                Some(constraints)
+            }
+            BinaryOp::Equal
+            | BinaryOp::NotEqual
+            | BinaryOp::Less
+            | BinaryOp::LessEqual
+            | BinaryOp::Greater
+            | BinaryOp::GreaterEqual => {
+                let left = LinearConstraint::from_value(linear_value(left, return_expression)?);
+                let right = LinearConstraint::from_value(linear_value(right, return_expression)?);
+                comparison_constraints(left, *op, right, expected)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn comparison_constraints(
+    left: LinearConstraint,
+    operator: BinaryOp,
+    right: LinearConstraint,
+    expected: bool,
+) -> Option<Vec<LinearConstraint>> {
+    let operator = if expected {
+        operator
+    } else {
+        match operator {
+            BinaryOp::Equal => BinaryOp::NotEqual,
+            BinaryOp::NotEqual => BinaryOp::Equal,
+            BinaryOp::Less => BinaryOp::GreaterEqual,
+            BinaryOp::LessEqual => BinaryOp::Greater,
+            BinaryOp::Greater => BinaryOp::LessEqual,
+            BinaryOp::GreaterEqual => BinaryOp::Less,
+            _ => return None,
+        }
+    };
+    let difference = left.clone().combine(right.clone(), 1, -1)?;
+    match operator {
+        BinaryOp::Equal => Some(vec![difference.clone(), difference.negate()?]),
+        BinaryOp::NotEqual => None,
+        BinaryOp::Less => Some(vec![right.combine(left, 1, -1)?.shift(1)?]),
+        BinaryOp::LessEqual => Some(vec![right.combine(left, 1, -1)?]),
+        BinaryOp::Greater => Some(vec![difference.shift(1)?]),
+        BinaryOp::GreaterEqual => Some(vec![difference]),
+        _ => None,
+    }
+}
+
+fn constraints_satisfiable(mut constraints: Vec<LinearConstraint>) -> Option<bool> {
+    let mut variables = constraints
+        .iter()
+        .flat_map(|constraint| constraint.coefficients.keys().cloned())
+        .collect::<Vec<_>>();
+    variables.sort();
+    variables.dedup();
+
+    for variable in variables {
+        let mut positive = Vec::new();
+        let mut negative = Vec::new();
+        let mut zero = Vec::new();
+        for mut constraint in constraints {
+            match constraint
+                .coefficients
+                .remove(&variable)
+                .unwrap_or_default()
+            {
+                coefficient if coefficient > 0 => positive.push((coefficient, constraint)),
+                coefficient if coefficient < 0 => negative.push((coefficient, constraint)),
+                _ => zero.push(constraint),
+            }
+        }
+        let mut reduced = zero;
+        for (positive_coefficient, lower) in &positive {
+            for (negative_coefficient, upper) in &negative {
+                reduced.push(lower.clone().combine(
+                    upper.clone(),
+                    negative_coefficient.checked_neg()?,
+                    *positive_coefficient,
+                )?);
+            }
+        }
+        constraints = reduced;
+    }
+    Some(
+        constraints
+            .iter()
+            .all(|constraint| constraint.constant >= 0),
+    )
+}
+
+fn symbolic_bool_with_constraints(
+    expression: &Expr,
+    return_expression: &Expr,
+    guards: &[LinearConstraint],
+) -> Option<bool> {
+    if let Some(value) = symbolic_bool(expression, Some(return_expression)) {
+        return Some(value);
+    }
+    let true_constraints = constraints_for_bool(expression, true, Some(return_expression))?;
+    let false_constraints = constraints_for_bool(expression, false, Some(return_expression))?;
+
+    let mut true_path = guards.to_owned();
+    true_path.extend(true_constraints);
+    if constraints_satisfiable(true_path) == Some(false) {
+        return Some(false);
+    }
+    let mut false_path = guards.to_owned();
+    false_path.extend(false_constraints);
+    if constraints_satisfiable(false_path) == Some(false) {
+        return Some(true);
+    }
+    None
 }
 
 impl LinearValue {
@@ -2025,12 +2357,13 @@ mod tests {
     #[test]
     fn proves_simple_integer_postconditions_from_direct_returns() {
         let program = parse(
-            &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn main() { }").unwrap(),
+            &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::Proven);
         assert_eq!(results[1].status, VerificationStatus::Failed);
-        assert_eq!(results[2].status, VerificationStatus::Unproven);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 }

@@ -62,7 +62,7 @@ Heute implementiert:
   `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet, einschließlich
   einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, formale Verifikation und
+Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
@@ -289,7 +289,8 @@ ORM-Methodenkette.
   ausdrückliche Freigabe.
 - Capabilities sind teilweise implementiert: Deklarationen, Prüfung bekannter
   Namen, Weitergabe über Aufrufe und die `Database`-Pflicht für natives SQL
-  sind aktiv. Contracts und formale Verifikation bleiben Roadmap-Ziele.
+  sind aktiv. Erweiterte Contracts und allgemeine formale Verifikation bleiben
+  Roadmap-Ziele.
 
 ## CLI
 
@@ -351,9 +352,10 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
-9. Capabilities — erste Deklarationen und statische Prüfungen vorhanden;
-   Runtime-Rechte, formale Verifikation und strukturierte Nebenläufigkeit
-   folgen.
+9. Capabilities und Contracts — erste Deklarationen, statische Prüfungen,
+   Runtime-Contracts und begrenzte symbolische Verifikation sind vorhanden;
+   Runtime-Rechte, allgemeine formale Verifikation und strukturierte
+   Nebenläufigkeit folgen.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und

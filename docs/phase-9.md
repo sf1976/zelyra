@@ -97,11 +97,15 @@ zelyra verify examples/contracts.zyl
 ~~~
 
 It reports one status for every contract. Constant boolean expressions can be
-classified as `PROVEN` or `FAILED`. The initial symbolic verifier also
-substitutes a direct integer return expression into `ensures` and proves simple
-affine relationships such as `result > value` for `return value + 1`.
-Conditions that cannot be decided remain `RUNTIME_CHECK`; functions without
-contracts are reported as `UNPROVEN`.
+classified as `PROVEN` or `FAILED`. The initial symbolic verifier substitutes
+direct integer return expressions into `ensures` and proves simple affine
+relationships. It also analyzes `if`/`else` return paths and uses their simple
+integer comparisons as path assumptions.
+
+For example, it can prove `result >= 0` for an absolute-value function with
+the two branches `return value` and `return -value`. Conditions that cannot be
+decided remain `RUNTIME_CHECK`; functions without contracts are reported as
+`UNPROVEN`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

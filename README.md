@@ -62,7 +62,7 @@ Implemented today:
   `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
   integer relationships in direct-return postconditions.
 
-Full CRUD generation, database roles, APIs, formal verification,
+Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
@@ -284,7 +284,7 @@ method chain.
   approval.
 - Capabilities are partially implemented: declarations, known-name checking,
   call propagation, and the `Database` requirement for native SQL are active.
-  Contracts and formal verification remain roadmap goals.
+  Advanced contracts and general formal verification remain roadmap goals.
 
 ## CLI
 
@@ -346,9 +346,10 @@ The long-term specification is organized into these phases:
    remains.
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
-9. Capabilities — initial declarations and static checks implemented; runtime
-   privilege enforcement, formal verification, and structured concurrency
-   remain.
+9. Capabilities and contracts — initial declarations, static checks, runtime
+   contracts, and limited symbolic verification are implemented; runtime
+   privilege enforcement, general formal verification, and structured
+   concurrency remain.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,

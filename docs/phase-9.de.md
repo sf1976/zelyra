@@ -101,9 +101,13 @@ zelyra verify examples/contracts.zyl
 ~~~
 
 Konstante Bool-Ausdrücke können als `PROVEN` oder `FAILED` klassifiziert
-werden. Der erste symbolische Verifier setzt außerdem einen direkten
-ganzzahligen Rückgabeausdruck in `ensures` ein und beweist einfache affine
-Beziehungen wie `result > value` bei `return value + 1`. Nicht entscheidbare
+werden. Der erste symbolische Verifier setzt direkte ganzzahlige
+Rückgabeausdrücke in `ensures` ein und beweist einfache affine Beziehungen.
+Außerdem analysiert er `if`-/`else`-Rückgabepfade und verwendet deren einfache
+Integer-Vergleiche als Pfadannahmen.
+
+Beispielsweise kann er `result >= 0` für eine Absolutwertfunktion mit den
+beiden Zweigen `return value` und `return -value` beweisen. Nicht entscheidbare
 Bedingungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden als
 `UNPROVEN` gemeldet.
 
