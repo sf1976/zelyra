@@ -9,6 +9,22 @@ fn increment(value: Int) -> Int
     return value + 1
 }
 
+fn twice(value: Int) -> Int
+    ensures {
+        result > value
+    }
+{
+    return increment(increment(value))
+}
+
+fn known_call() -> Int
+    ensures {
+        result == 43
+    }
+{
+    return increment(42)
+}
+
 fn absolute(value: Int) -> Int
     ensures {
         result >= 0
@@ -83,6 +99,8 @@ fn known_result() -> Int
 
 fn main() {
     print(increment(41))
+    print(twice(41))
+    print(known_call())
     print(absolute(-7))
     print(classify(0))
     print(option_flag(Some(4)))

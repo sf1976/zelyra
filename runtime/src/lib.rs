@@ -80,6 +80,11 @@ pub struct VerificationResult {
 }
 
 pub fn verify(program: &Program) -> Vec<VerificationResult> {
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.clone(), function))
+        .collect::<HashMap<_, _>>();
     let mut results = Vec::new();
     for function in &program.functions {
         for (index, contract) in function.requires.iter().enumerate() {
@@ -87,7 +92,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 function: function.name.clone(),
                 kind: ContractKind::Requires,
                 index,
-                status: verify_contract(contract, None),
+                status: verify_contract(contract, None, &functions),
             });
         }
         let return_paths = symbolic_return_paths(function);
@@ -96,7 +101,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                status: verify_postcondition(contract, return_paths.as_deref()),
+                status: verify_postcondition(contract, return_paths.as_deref(), &functions),
             });
         }
         if function.requires.is_empty() && function.ensures.is_empty() {
@@ -111,12 +116,16 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     results
 }
 
-fn verify_contract(contract: &Expr, return_expression: Option<&Expr>) -> VerificationStatus {
+fn verify_contract(
+    contract: &Expr,
+    return_expression: Option<&Expr>,
+    functions: &HashMap<String, &Function>,
+) -> VerificationStatus {
     match constant_value(contract) {
         Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
         Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
         Some(_) => VerificationStatus::Unproven,
-        None => symbolic_bool(contract, return_expression, None).map_or(
+        None => symbolic_bool(contract, return_expression, None, None, Some(functions), 0).map_or(
             VerificationStatus::RuntimeCheck,
             |value| {
                 if value {
@@ -132,6 +141,7 @@ fn verify_contract(contract: &Expr, return_expression: Option<&Expr>) -> Verific
 fn verify_postcondition(
     contract: &Expr,
     return_paths: Option<&[ReturnPath<'_>]>,
+    functions: &HashMap<String, &Function>,
 ) -> VerificationStatus {
     match constant_value(contract) {
         Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
@@ -150,9 +160,14 @@ fn verify_postcondition(
                 };
                 let mut alternatives = vec![Vec::new()];
                 for guard in &path.guards {
-                    let Some(guard_alternatives) =
-                        constraints_for_guard(guard, Some(expression), Some(&path.bindings))
-                    else {
+                    let Some(guard_alternatives) = constraints_for_guard(
+                        guard,
+                        Some(expression),
+                        Some(&path.bindings),
+                        None,
+                        Some(functions),
+                        0,
+                    ) else {
                         saw_unknown_path = true;
                         alternatives.clear();
                         break;
@@ -169,6 +184,8 @@ fn verify_postcondition(
                         expression,
                         &guards,
                         Some(&path.bindings),
+                        Some(functions),
+                        0,
                     ) {
                         Some(true) => {}
                         Some(false) => return VerificationStatus::Failed,
@@ -237,6 +254,17 @@ fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
         });
     }
     Some(paths)
+}
+
+fn direct_return_expression(function: &Function) -> Option<&Expr> {
+    let [Stmt::Return {
+        value: Some(expression),
+        ..
+    }] = function.body.statements.as_slice()
+    else {
+        return None;
+    };
+    Some(expression)
 }
 
 fn add_pattern_bindings<'a>(
@@ -451,21 +479,52 @@ fn combine_alternatives(
         .collect()
 }
 
+#[derive(Clone, Copy)]
+struct SymbolicContext<'a> {
+    return_expression: Option<&'a Expr>,
+    bindings: Option<&'a HashMap<String, &'a Expr>>,
+    substitutions: Option<&'a HashMap<String, LinearValue>>,
+    functions: Option<&'a HashMap<String, &'a Function>>,
+    depth: usize,
+}
+
 fn constraints_for_guard(
     guard: &SymbolicGuard<'_>,
     return_expression: Option<&Expr>,
     bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     match guard {
         SymbolicGuard::Condition {
             expression,
             expected,
-        } => constraints_for_bool(expression, *expected, return_expression, bindings),
+        } => constraints_for_bool(
+            expression,
+            *expected,
+            return_expression,
+            bindings,
+            substitutions,
+            functions,
+            depth,
+        ),
         SymbolicGuard::Match {
             value,
             pattern,
             matched,
-        } => constraints_for_pattern(value, pattern, *matched, return_expression, bindings),
+        } => constraints_for_pattern(
+            value,
+            pattern,
+            *matched,
+            SymbolicContext {
+                return_expression,
+                bindings,
+                substitutions,
+                functions,
+                depth,
+            },
+        ),
     }
 }
 
@@ -473,8 +532,7 @@ fn constraints_for_pattern(
     value: &Expr,
     pattern: &Pattern,
     matched: bool,
-    return_expression: Option<&Expr>,
-    bindings: Option<&HashMap<String, &Expr>>,
+    context: SymbolicContext<'_>,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     match &pattern.kind {
         PatternKind::Wildcard | PatternKind::Variable(_) => {
@@ -485,8 +543,14 @@ fn constraints_for_pattern(
             }
         }
         PatternKind::Int(expected) => {
-            let left =
-                LinearConstraint::from_value(linear_value(value, return_expression, bindings)?);
+            let left = LinearConstraint::from_value(linear_value(
+                value,
+                context.return_expression,
+                context.bindings,
+                context.substitutions,
+                context.functions,
+                context.depth,
+            )?);
             let right = LinearConstraint {
                 coefficients: HashMap::new(),
                 constant: i128::from(*expected),
@@ -494,8 +558,14 @@ fn constraints_for_pattern(
             comparison_constraints(left, BinaryOp::Equal, right, matched)
         }
         PatternKind::Bool(expected) => {
-            let left =
-                LinearConstraint::from_value(linear_value(value, return_expression, bindings)?);
+            let left = LinearConstraint::from_value(linear_value(
+                value,
+                context.return_expression,
+                context.bindings,
+                context.substitutions,
+                context.functions,
+                context.depth,
+            )?);
             let right = LinearConstraint {
                 coefficients: HashMap::new(),
                 constant: i128::from(*expected as u8),
@@ -546,6 +616,9 @@ fn constraints_for_bool(
     expected: bool,
     return_expression: Option<&Expr>,
     bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
 ) -> Option<Vec<Vec<PathConstraint>>> {
     if let Some(ConstantValue::Bool(value)) = constant_value(expression) {
         return if value == expected {
@@ -558,15 +631,55 @@ fn constraints_for_bool(
         ExprKind::Unary {
             op: UnaryOp::Not,
             expr,
-        } => constraints_for_bool(expr, !expected, return_expression, bindings),
+        } => constraints_for_bool(
+            expr,
+            !expected,
+            return_expression,
+            bindings,
+            substitutions,
+            functions,
+            depth,
+        ),
         ExprKind::Binary { left, op, right } => match op {
             BinaryOp::And if expected => Some(combine_alternatives(
-                constraints_for_bool(left, true, return_expression, bindings)?,
-                constraints_for_bool(right, true, return_expression, bindings)?,
+                constraints_for_bool(
+                    left,
+                    true,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?,
+                constraints_for_bool(
+                    right,
+                    true,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?,
             )),
             BinaryOp::Or if !expected => Some(combine_alternatives(
-                constraints_for_bool(left, false, return_expression, bindings)?,
-                constraints_for_bool(right, false, return_expression, bindings)?,
+                constraints_for_bool(
+                    left,
+                    false,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?,
+                constraints_for_bool(
+                    right,
+                    false,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?,
             )),
             BinaryOp::Equal
             | BinaryOp::NotEqual
@@ -574,10 +687,22 @@ fn constraints_for_bool(
             | BinaryOp::LessEqual
             | BinaryOp::Greater
             | BinaryOp::GreaterEqual => {
-                let left =
-                    LinearConstraint::from_value(linear_value(left, return_expression, bindings)?);
-                let right =
-                    LinearConstraint::from_value(linear_value(right, return_expression, bindings)?);
+                let left = LinearConstraint::from_value(linear_value(
+                    left,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?);
+                let right = LinearConstraint::from_value(linear_value(
+                    right,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?);
                 comparison_constraints(left, *op, right, expected)
             }
             _ => None,
@@ -713,14 +838,37 @@ fn symbolic_bool_with_constraints(
     return_expression: &Expr,
     guards: &[PathConstraint],
     bindings: Option<&HashMap<String, &Expr>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
 ) -> Option<bool> {
-    if let Some(value) = symbolic_bool(expression, Some(return_expression), bindings) {
+    if let Some(value) = symbolic_bool(
+        expression,
+        Some(return_expression),
+        bindings,
+        None,
+        functions,
+        depth,
+    ) {
         return Some(value);
     }
-    let true_constraints =
-        constraints_for_bool(expression, true, Some(return_expression), bindings)?;
-    let false_constraints =
-        constraints_for_bool(expression, false, Some(return_expression), bindings)?;
+    let true_constraints = constraints_for_bool(
+        expression,
+        true,
+        Some(return_expression),
+        bindings,
+        None,
+        functions,
+        depth,
+    )?;
+    let false_constraints = constraints_for_bool(
+        expression,
+        false,
+        Some(return_expression),
+        bindings,
+        None,
+        functions,
+        depth,
+    )?;
 
     let true_possible = true_constraints.into_iter().any(|constraints| {
         let mut true_path = guards.to_owned();
@@ -785,17 +933,42 @@ fn linear_value(
     expression: &Expr,
     return_expression: Option<&Expr>,
     bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
 ) -> Option<LinearValue> {
     match &expression.kind {
         ExprKind::Int(value) => Some(LinearValue {
             constant: *value,
             ..LinearValue::default()
         }),
-        ExprKind::Variable(name) if name == "result" => return_expression
-            .and_then(|expression| linear_value(expression, return_expression, bindings)),
+        ExprKind::Variable(name) if name == "result" => return_expression.and_then(|expression| {
+            linear_value(
+                expression,
+                return_expression,
+                bindings,
+                substitutions,
+                functions,
+                depth,
+            )
+        }),
+        ExprKind::Variable(name)
+            if substitutions
+                .and_then(|substitutions| substitutions.get(name))
+                .is_some() =>
+        {
+            substitutions?.get(name).cloned()
+        }
         ExprKind::Variable(name) if bindings.and_then(|bindings| bindings.get(name)).is_some() => {
             let bound = bindings?.get(name)?;
-            linear_value(bound, return_expression, bindings)
+            linear_value(
+                bound,
+                return_expression,
+                bindings,
+                substitutions,
+                functions,
+                depth,
+            )
         }
         ExprKind::Variable(name) => Some(LinearValue {
             coefficients: HashMap::from([(name.clone(), 1)]),
@@ -804,10 +977,32 @@ fn linear_value(
         ExprKind::Unary {
             op: UnaryOp::Negate,
             expr,
-        } => linear_value(expr, return_expression, bindings)?.negate(),
+        } => linear_value(
+            expr,
+            return_expression,
+            bindings,
+            substitutions,
+            functions,
+            depth,
+        )?
+        .negate(),
         ExprKind::Binary { left, op, right } => {
-            let left = linear_value(left, return_expression, bindings)?;
-            let right = linear_value(right, return_expression, bindings)?;
+            let left = linear_value(
+                left,
+                return_expression,
+                bindings,
+                substitutions,
+                functions,
+                depth,
+            )?;
+            let right = linear_value(
+                right,
+                return_expression,
+                bindings,
+                substitutions,
+                functions,
+                depth,
+            )?;
             match op {
                 BinaryOp::Add => left.add(right),
                 BinaryOp::Subtract => left.subtract(right),
@@ -815,6 +1010,36 @@ fn linear_value(
                 BinaryOp::Multiply if left.coefficients.is_empty() => right.scale(left.constant),
                 _ => None,
             }
+        }
+        ExprKind::Call { name, args } => {
+            if depth >= 32 {
+                return None;
+            }
+            let function = functions?.get(name)?;
+            let callee_return_expression = direct_return_expression(function)?;
+            if args.len() != function.params.len() {
+                return None;
+            }
+            let mut argument_values = HashMap::new();
+            for (parameter, argument) in function.params.iter().zip(args) {
+                let value = linear_value(
+                    argument,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth + 1,
+                )?;
+                argument_values.insert(parameter.name.clone(), value);
+            }
+            linear_value(
+                callee_return_expression,
+                None,
+                None,
+                Some(&argument_values),
+                functions,
+                depth + 1,
+            )
         }
         _ => None,
     }
@@ -824,24 +1049,63 @@ fn symbolic_bool(
     expression: &Expr,
     return_expression: Option<&Expr>,
     bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
+    functions: Option<&HashMap<String, &Function>>,
+    depth: usize,
 ) -> Option<bool> {
     match &expression.kind {
         ExprKind::Unary {
             op: UnaryOp::Not,
             expr,
-        } => symbolic_bool(expr, return_expression, bindings).map(|value| !value),
+        } => symbolic_bool(
+            expr,
+            return_expression,
+            bindings,
+            substitutions,
+            functions,
+            depth,
+        )
+        .map(|value| !value),
         ExprKind::Binary { left, op, right } => match op {
             BinaryOp::And => match (
-                symbolic_bool(left, return_expression, bindings),
-                symbolic_bool(right, return_expression, bindings),
+                symbolic_bool(
+                    left,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                ),
+                symbolic_bool(
+                    right,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                ),
             ) {
                 (Some(false), _) | (_, Some(false)) => Some(false),
                 (Some(true), Some(true)) => Some(true),
                 _ => None,
             },
             BinaryOp::Or => match (
-                symbolic_bool(left, return_expression, bindings),
-                symbolic_bool(right, return_expression, bindings),
+                symbolic_bool(
+                    left,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                ),
+                symbolic_bool(
+                    right,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                ),
             ) {
                 (Some(true), _) | (_, Some(true)) => Some(true),
                 (Some(false), Some(false)) => Some(false),
@@ -853,8 +1117,22 @@ fn symbolic_bool(
             | BinaryOp::LessEqual
             | BinaryOp::Greater
             | BinaryOp::GreaterEqual => {
-                let left = linear_value(left, return_expression, bindings)?;
-                let right = linear_value(right, return_expression, bindings)?;
+                let left = linear_value(
+                    left,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?;
+                let right = linear_value(
+                    right,
+                    return_expression,
+                    bindings,
+                    substitutions,
+                    functions,
+                    depth,
+                )?;
                 let difference = left.subtract(right)?;
                 if !difference.coefficients.is_empty() {
                     return None;
@@ -2655,5 +2933,18 @@ mod tests {
         assert_eq!(results[2].status, VerificationStatus::Proven);
         assert_eq!(results[3].status, VerificationStatus::Proven);
         assert_eq!(results[4].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_direct_function_call_summaries() {
+        let program = parse(
+            &lex("fn increment(value: Int) -> Int { return value + 1 } fn twice(value: Int) -> Int ensures { result > value } { return increment(increment(value)) } fn known() -> Int ensures { result == 5 } { return increment(4) } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Unproven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 }

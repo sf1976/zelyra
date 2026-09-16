@@ -112,5 +112,11 @@ a known constructor, so `Some(4)` followed by `return number` can be checked as
 `return 4`. Unknown payloads and unsupported binding relationships remain
 `RUNTIME_CHECK`; functions without contracts are reported as `UNPROVEN`.
 
+Simple direct-return function calls are also summarized and inlined into the
+integer model. Nested calls such as `increment(increment(value))` are handled
+with a bounded depth. Calls to complex, recursive, or otherwise unresolved
+functions remain `RUNTIME_CHECK`; callee preconditions are not yet used as
+caller assumptions.
+
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

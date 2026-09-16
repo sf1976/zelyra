@@ -61,7 +61,8 @@ Implemented today:
 - an initial `zelyra verify` command distinguishing `PROVEN`, `RUNTIME_CHECK`,
   `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
   integer relationships in direct-return postconditions, basic control-flow
-  paths, `Option`/`Result` constructor paths, and known payload bindings.
+  paths, `Option`/`Result` constructor paths, known payload bindings, and
+  bounded direct-return function-call summaries.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

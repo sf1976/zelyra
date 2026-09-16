@@ -118,6 +118,13 @@ Konstruktor ist. Dadurch kann `Some(4)` mit anschließendem `return number` als
 Binding-Beziehungen bleiben `RUNTIME_CHECK`; Funktionen ohne Contracts werden
 als `UNPROVEN` gemeldet.
 
+Einfache Funktionsaufrufe mit direkter Rückgabe werden ebenfalls als
+Zusammenfassung in das Integer-Modell eingesetzt. Verschachtelte Aufrufe wie
+`increment(increment(value))` werden mit begrenzter Tiefe verarbeitet. Aufrufe
+komplexer, rekursiver oder nicht auflösbarer Funktionen bleiben
+`RUNTIME_CHECK`; Vorbedingungen der aufgerufenen Funktion werden noch nicht
+als Annahmen des Aufrufers verwendet.
+
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein
 mathematischer Beweis.
