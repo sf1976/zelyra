@@ -2,108 +2,515 @@
 
 Deutsch · [English](getting-started.md)
 
-Zelyra ist so konzipiert, dass auch Einsteiger mit möglichst wenig
-Systemkonfiguration vom Download zu einem laufenden Programm gelangen.
+Dieser Leitfaden führt vom Repository-Checkout zum ersten Zelyra-Programm,
+zur ersten Web-Seite, zum ersten Schema, zu nativem SQL und zur ersten
+Formularvalidierung. Er beschreibt die aktuelle Implementierung von Zelyra
+0.1 und nicht nur die langfristige Sprachvision.
 
-## 1. Installieren
+## Was ist Zelyra?
 
-Repository herunterladen oder klonen, in das Verzeichnis wechseln und
-ausführen:
+Zelyra ist eine statisch typisierte Sprache für Anwendungen, die mit
+Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 
-```bash
+- allgemeine Programmierung;
+- Definitionen von Datenbankschemata;
+- geprüftes natives SQL;
+- Web-Seiten und HTTP-Routing;
+- Formulare und Validierung;
+- später CRUD, APIs, Authentifizierung, Autorisierung und Verifikation.
+
+Das zentrale Ziel ist, wichtige Informationen nur einmal zu definieren. Ein
+Pflichtfeld mit maximaler String-Länge in einer Tabelle kann beispielsweise
+auch die Grundlage für die Formularvalidierung bilden. Compiler und Werkzeuge
+sollen diese Verbindung ausdrücklich und prüfbar machen.
+
+Zelyra ist weder ein Low-Code-Editor noch eine reine ORM-Sprache. Es bleibt
+eine vollständige Programmiersprache. Entwickler können Funktionen, natives
+SQL, eigene Seiten, Aktionen und Geschäftsregeln schreiben.
+
+## Was funktioniert in 0.1?
+
+Das aktuelle Repository enthält:
+
+- Rust-Lexer, Parser, AST, HIR, Type Checker, Interpreter und CLI;
+- standardmäßig unveränderliche Variablen, Funktionen, Ausdrücke,
+  Bedingungen, Schleifen, Option, Result, nominale Typen und Pattern Matching;
+- MariaDB als Standard-Backend;
+- Schema-Planung und DDL-Unterstützung für MariaDB, SQLite und PostgreSQL;
+- MariaDB-Inspektion, Schema-Anwendung und native SQL-Ausführung;
+- geprüfte SQL-Blöcke mit benannten Parametern;
+- einen ersten eingebauten HTTP-Server und GET-Router;
+- einen ersten schemaabhängigen Formular-Parser und Validator.
+
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, HTML-
+Formular-Rendering, POST-Verarbeitung, Sessions, CSRF, Authentifizierung,
+APIs, Capabilities, Contracts, formale Verifikation und
+Produktionspaketierung. Ein erfolgreicher Befehl in diesem Leitfaden bedeutet
+nicht, dass diese späteren Funktionen bereits existieren.
+
+## 1. Voraussetzungen
+
+Für die einfachste Installation aus dem Quellcode werden benötigt:
+
+- eine Unix-ähnliche Shell mit Bash;
+- Git;
+- curl, falls Rust noch nicht installiert ist;
+- eine Netzwerkverbindung für die erste Installation der Rust-Toolchain.
+
+Der Installer ist für Linux- und macOS-ähnliche Umgebungen ausgelegt. Er
+installiert nur für den aktuellen Benutzer und verwendet kein sudo. Ein
+plattformnativer Installer für eigenständige Releases ohne Rust ist geplant.
+
+Apache ist nicht erforderlich. Für Sprachkern-, Web- und lokale
+Formularbeispiele wird kein Datenbankserver benötigt. MariaDB wird nur
+benötigt, wenn Datenbankoperationen gegen MariaDB ausgeführt werden sollen.
+
+## 2. Herunterladen und installieren
+
+Repository klonen:
+
+~~~bash
+git clone https://github.com/sf1976/zelyra.git
+cd zelyra
+~~~
+
+Befehl installieren:
+
+~~~bash
 ./install.sh
-```
+~~~
 
-Der Installer arbeitet lokal für den aktuellen Benutzer. Er benötigt kein
-`sudo`, kein Apache, keine Datenbank und keine vorhandene Rust-Installation.
-Wenn Rust fehlt, wird die offizielle stabile Toolchain über `rustup` lokal für
-den aktuellen Benutzer installiert.
+Das Script baut die CLI im Release-Modus und installiert sie unter:
 
-Das Programm wird standardmäßig unter `~/.local/bin/zelyra` installiert. Falls
-dieses Verzeichnis noch nicht im `PATH` enthalten ist, einmalig ergänzen:
+~~~text
+~/.local/bin/zelyra
+~~~
 
-```bash
+Falls die Shell zelyra nicht findet, das Verzeichnis für die aktuelle Shell
+zum PATH hinzufügen:
+
+~~~bash
 export PATH="$HOME/.local/bin:$PATH"
-```
+~~~
 
-Für Entwickler und Mitwirkende lautet der entsprechende Entwicklungsbefehl:
+Für eine dauerhafte Einstellung gehört der Export in die Startdatei der
+verwendeten Shell, beispielsweise ~/.bashrc oder ~/.zshrc.
 
-```bash
-cargo run -p zelyra-cli -- run examples/fibonacci.zyl
-```
+Installation prüfen:
 
-## 2. Erstes Programm ausführen
+~~~bash
+zelyra --help
+~~~
 
-```bash
+Die Installation benötigt kein Kontopasswort. Den Installer nicht als root
+ausführen, außer es gibt einen gesonderten Grund für eine systemweite
+Paketierung.
+
+## 3. Erstes Programm ausführen
+
+Fibonacci-Beispiel ausführen:
+
+~~~bash
 zelyra run examples/fibonacci.zyl
-```
+~~~
 
-Das Ergebnis ist:
+Erwartete Ausgabe:
 
-```text
+~~~text
 55
-```
+~~~
 
-Mit `zelyra check program.zyl` kann ein Programm geprüft werden, ohne es
-auszuführen.
+Der Quellcode ist normales Zelyra:
 
-## 3. Datenbank ohne Framework-Konfiguration
+~~~zelyra
+fn fibonacci(n: Int) -> Int {
+    if n <= 1 {
+        return n
+    }
 
-Für lokale Projekte kann Zelyra SQLite ohne separaten Server verwenden:
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
 
-```bash
+fn main() {
+    print(fibonacci(10))
+}
+~~~
+
+Prüfen, ohne auszuführen:
+
+~~~bash
+zelyra check examples/fibonacci.zyl
+~~~
+
+Der Check-Befehl lexed, parst, löst Namen auf und prüft die Typen. Er sollte
+folgendes melden:
+
+~~~text
+ok: examples/fibonacci.zyl
+~~~
+
+## 4. Neues Projekt erstellen
+
+Projektverzeichnis erstellen:
+
+~~~bash
+zelyra new meine-app
+cd meine-app
+zelyra run main.zyl
+~~~
+
+Das erzeugte Projekt enthält eine minimale zelyra.toml und main.zyl. Das
+aktuelle Verzeichnis kann stattdessen initialisiert werden:
+
+~~~bash
+mkdir andere-app
+cd andere-app
+zelyra init
+~~~
+
+Die aktuelle Projektdatei ist bewusst klein:
+
+~~~toml
+[project]
+name = "meine-app"
+version = "0.1.0"
+zelyra = "0.1"
+~~~
+
+## 5. Grundlagen der Sprache
+
+Variablen sind standardmäßig unveränderlich:
+
+~~~zelyra
+name = "Anna"
+age: Int = 25
+~~~
+
+Veränderlichkeit wird ausdrücklich markiert:
+
+~~~zelyra
+mutable counter = 0
+counter = counter + 1
+~~~
+
+Funktionen besitzen typisierte Parameter und können einen typisierten
+Rückgabewert haben:
+
+~~~zelyra
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+~~~
+
+Normale Werte sind nicht null. Optionale Werte verwenden die Fragezeichen-
+Schreibweise und müssen ausdrücklich behandelt werden:
+
+~~~zelyra
+name: String?
+
+match name {
+    Some(value) => print(value)
+    None => print("Unknown")
+}
+~~~
+
+Die Sprache unterscheidet außerdem nominale Fachtypen:
+
+~~~zelyra
+type UserId = Id
+type OrderId = Id
+~~~
+
+UserId und OrderId sind unterschiedliche Typen, obwohl beide auf Id basieren.
+Damit wird eine wichtige Klasse von Fehlern in der Geschäftslogik verhindert.
+
+## 6. Web-Seite ohne Apache starten
+
+Zelyra 0.1 enthält einen ersten eingebauten HTTP-Server. Das Beispiel:
+
+~~~zelyra
+page "/hello/{name}" {
+    html {
+        <html>
+            <body>
+                <h1>Hello, {name}!</h1>
+            </body>
+        </html>
+    }
+}
+~~~
+
+Starten:
+
+~~~bash
+zelyra serve examples/hello_web.zyl
+~~~
+
+Diese Adresse im Browser öffnen:
+
+~~~text
+http://127.0.0.1:3000/hello/Zelyra
+~~~
+
+Bei Bedarf einen anderen lokalen Port verwenden:
+
+~~~bash
+zelyra serve examples/hello_web.zyl 127.0.0.1:8080
+~~~
+
+Der aktuelle Server unterstützt GET-Routen, feste Pfadsegmente,
+Pfadparameter, das Entfernen von Query-Strings für das Routing,
+grundlegendes HTTP-Parsing und HTML-Responses. Werte aus Pfadparametern
+werden standardmäßig HTML-escaped.
+
+Apache, nginx, Caddy, TLS-Terminierung, Prozessüberwachung und
+Firewall-Konfiguration sind Aufgaben für die Bereitstellung. Für diesen
+lokalen ersten Schritt werden sie nicht benötigt.
+
+## 7. MariaDB-Schema definieren
+
+MariaDB ist das Standard-Backend und die primäre Runtime-Referenz von Zelyra.
+Ein Schema wird direkt beschrieben:
+
+~~~zelyra
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    customer_number: String(20) required unique
+    name: String(100) required
+    email: Email?
+    active: Bool default true
+}
+~~~
+
+Das vorhandene Maschinenverwaltungsbeispiel enthält verbundene Tabellen:
+
+~~~text
+examples/machine_management_mariadb.zyl
+~~~
+
+Eine MariaDB-Verbindungszeichenfolge über die Umgebung setzen:
+
+~~~bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/meine_app'
+~~~
+
+Aktuelle Datenbank inspizieren:
+
+~~~bash
+zelyra db inspect examples/machine_management_mariadb.zyl
+~~~
+
+Schemaunterschiede planen:
+
+~~~bash
+zelyra db plan examples/machine_management_mariadb.zyl
+~~~
+
+Neue MariaDB-Datenbank und Anfangsschema erzeugen:
+
+~~~bash
+zelyra db bootstrap examples/machine_management_mariadb.zyl
+~~~
+
+Geprüften Plan anwenden:
+
+~~~bash
+zelyra db apply examples/machine_management_mariadb.zyl
+~~~
+
+Destruktive Änderungen werden ohne ausdrückliche Freigabe abgelehnt:
+
+~~~bash
+zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+~~~
+
+Destruktive Pläne sorgfältig prüfen. Niemals echte Passwörter in eine
+committete Zelyra-Datei, Dokumentation oder ein Shell-Script schreiben.
+Umgebungsvariablen, Secret-Manager und geschützte Deployment-Konfiguration
+sind vorzuziehen.
+
+## 8. SQLite lokal verwenden
+
+SQLite ist nützlich, wenn eine lokale Datei-Datenbank ohne laufenden
+Datenbankdienst benötigt wird:
+
+~~~bash
 export DATABASE_URL='sqlite:///tmp/meine-app.sqlite3'
 zelyra db bootstrap examples/machine_management_sqlite.zyl
 zelyra db inspect examples/machine_management_sqlite.zyl
-```
+~~~
 
-MariaDB wird ebenfalls direkt unterstützt. Die Zugangsdaten werden nur über
-`DATABASE_URL` oder einen Secret-Manager gesetzt:
+SQLite und MariaDB gehören beide zur unterstützten Datenbankrichtung. Der
+aktuelle Runtime-Pfad für natives SQL wird hauptsächlich mit MariaDB erprobt;
+Schema-DDL und Inspektion sind in dieser Phase breiter unterstützt als die
+Runtime-Abfrageausführung.
 
-```bash
+## 9. Natives SQL schreiben
+
+SQL wird in einem nativen Block geschrieben:
+
+~~~zelyra
+customer = sql<Customer?> {
+    SELECT id, name, email
+    FROM customers
+    WHERE id = :id
+}
+~~~
+
+Benannte Parameter werden als Parameter gebunden und nicht in SQL
+zusammenkonkateniert. Wenn das Schema verfügbar ist, kann Zelyra Tabellen,
+Spalten, Aliase, Parameter, NULL-Fähigkeit und Ergebnismappings prüfen.
+
+Auch INSERT-, UPDATE- und Transaktionsblöcke gehören zur aktuellen Syntax:
+
+~~~zelyra
+transaction {
+    sql {
+        UPDATE inventory
+        SET quantity = quantity - :amount
+        WHERE product_id = :product
+    }
+}
+~~~
+
+Zelyra respektiert komplexes SQL. Entwickler müssen nicht jede Abfrage durch
+eine ORM-Abstraktion ersetzen.
+
+## 10. Schemaabhängiges Formular validieren
+
+Ein Formular kann auf eine Tabelle zeigen und ihre Felder übernehmen:
+
+~~~zelyra
+form CustomerCreate -> customers {
+    fields {
+        name
+        email
+    }
+}
+~~~
+
+Ein ausdrücklich definiertes Feld kann Darstellung und Validierungsregeln
+ergänzen:
+
+~~~zelyra
+form CustomerForm {
+    field email: Email {
+        label: "E-Mail"
+        required
+        max: 255
+        widget: email
+    }
+}
+~~~
+
+Lokale Validierung ausführen:
+
+~~~bash
+zelyra form validate examples/customer_form.zyl CustomerCreate \
+  name=Anna email=anna@example.test
+~~~
+
+Erfolgreiche Ausgabe:
+
+~~~text
+valid: CustomerCreate
+~~~
+
+Ungültige Eingaben testen:
+
+~~~bash
+zelyra form validate examples/customer_form.zyl CustomerCreate \
+  email=keine-email
+~~~
+
+Der Validator meldet das fehlende Pflichtfeld name und die ungültige
+E-Mail-Adresse. Zusätzlich werden unbekannte Felder, zu lange Werte, ungültige
+Zahlen, ungültige boolesche Werte und übermittelte Readonly-Felder abgelehnt.
+
+Der aktuelle Form-Befehl validiert Eingaben lokal. Er rendert noch kein
+HTML-Formular, verarbeitet keinen Browser-POST, erzeugt keine CSRF-Tokens und
+führt noch keine Datenbankaktion aus.
+
+## 11. Nützliche Befehle
+
+~~~text
+zelyra new <directory>                  Projekt erstellen
+zelyra init [directory]                 Projekt initialisieren
+zelyra check <file.zyl>                 Quellcode prüfen
+zelyra build <file.zyl>                 Quellcode prüfen/bauen
+zelyra run <file.zyl>                   Programm ausführen
+zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
+zelyra form validate <file> <Form> ...  Formularwerte validieren
+zelyra db create <file.zyl>             Schema-DDL ausgeben
+zelyra db bootstrap <file.zyl>          Anfangsschema erzeugen/anwenden
+zelyra db inspect <file.zyl>            aktuelle Datenbank inspizieren
+zelyra db plan <file.zyl>               Schemaänderungen anzeigen
+zelyra db apply <file.zyl>              geprüfte Änderungen anwenden
+~~~
+
+Für Rust-Mitwirkende:
+
+~~~bash
+cargo fmt --all
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+~~~
+
+## 12. Häufige Probleme
+
+### zelyra: command not found
+
+Das benutzerlokale bin-Verzeichnis ist nicht im PATH:
+
+~~~bash
+export PATH="$HOME/.local/bin:$PATH"
+~~~
+
+### Rust oder curl fehlt
+
+Der Quellcode-Installer benötigt curl nur, wenn Rust fehlt. curl mit dem
+Paketmanager des Betriebssystems installieren und install.sh erneut ausführen.
+Alternativ Rust zuerst über den offiziellen rustup-Weg installieren.
+
+### DATABASE_URL wird benötigt
+
+Datenbank-Inspektion, Bootstrap, Planung gegen eine laufende Datenbank und
+Apply benötigen eine Verbindungszeichenfolge:
+
+~~~bash
 export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/meine_app'
-zelyra db bootstrap examples/machine_management_mariadb.zyl
-```
+~~~
 
-Damit sind für den Einstieg weder Apache noch ein separates ORM erforderlich.
+Formularvalidierung und Sprachbeispiele benötigen keine Datenbankverbindung.
 
-## 4. Webserver-Konzept
+### Destruktive Schemaänderung wird abgelehnt
 
-Die Webplattform wird einen eingebauten Entwicklungsserver bereitstellen.
-Neue Benutzer können damit Anwendungen starten, ohne Apache, PHP, einen
-separaten Frontend-Server oder einen Reverse Proxy installieren zu müssen.
+Das ist beabsichtigt. db plan ausführen, betroffene Zeilen und SQL prüfen und
+db apply erst danach mit dem ausdrücklichen Flag allow-destructive wiederholen.
 
-Für den Produktivbetrieb wird Zelyra zwei gleichwertige Wege unterstützen:
+### Eine Seite startet, aber der Browser zeigt 404
 
-1. den eigenständigen Zelyra-Server direkt ausführen;
-2. Zelyra hinter einem vorhandenen Apache, nginx, Caddy oder Cloud-
-   Load-Balancer betreiben.
+Die exakte Route einschließlich aller Pfadparameter prüfen. Die Beispielroute
+besteht aus hello und genau einem Namenssegment. Query-Strings werden beim
+Matching ignoriert, der Pfad selbst muss aber übereinstimmen.
 
-Wenn gewünscht, erzeugt Zelyra die Apache-Konfiguration automatisch. Apache
-ist dabei ein Adapter und keine verpflichtende Abhängigkeit der
-Sprachlaufzeit. TLS, Prozessüberwachung, Firewall-Regeln und
-Datenbankzugangsdaten bleiben ausdrücklich sichtbare Betriebsaufgaben.
+## 13. Wie geht es weiter?
 
-Die Befehle `zelyra dev`, `zelyra serve` und `zelyra web apache` sind für die
-Web-Core-Phasen vorgesehen. Phase 1 enthält bewusst noch keinen Webserver.
+Weitere technische Details stehen in den Phasendokumenten:
 
-## 5. Anforderungen an zukünftige Installer
+- [Phase 2: Type System](phase-2.de.md);
+- [Phase 3: Database Core](phase-3.de.md);
+- [Phase 4: Native SQL](phase-4.de.md);
+- [Phase 5: Web Core](phase-5.de.md);
+- [Phase 6: Forms](phase-6.de.md).
 
-Release-Versionen sollen plattformspezifische eigenständige Programme
-bereitstellen, damit Endbenutzer Rust nicht selbst installieren müssen.
-Paketmanager und Container-Images können später hinzukommen. Der erste
-Einstieg soll jedoch kurz bleiben:
+Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
-```text
-download → zelyra new meine-app → zelyra dev
-```
-
-Für eine benutzerlokale Installation soll kein Kontopasswort erforderlich
-sein.
-
-## 6. Dokumentationssprache
-
-Die zentrale Dokumentation wird immer auf Deutsch und Englisch gepflegt. Neue
-Dokumente erhalten eine gleichnamige deutsche Variante mit dem Suffix `.de.md`
-oder verlinken auf eine zweisprachige Fassung. Änderungen an Installation,
-CLI und Benutzerführung müssen in beiden Sprachversionen nachgezogen werden.
+Der nächste praktische Entwicklungsschritt ist die Verbindung von
+Formularvalidierung mit Web-Core-Rendering und sicheren POST-Aktionen. CRUD
+baut anschließend auf denselben Grundlagen aus Schema, SQL, Formularen und
+Berechtigungen auf.

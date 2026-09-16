@@ -1,126 +1,314 @@
 # Zelyra 0.1
 
+**Von der Datenbank zur Anwendung.**
+**Absicht beschreiben. Korrektheit beweisen.**
+
 Deutsch · [English](README.md)
 
 Zelyra ist eine statisch typisierte Programmiersprache für Business-,
-Datenbank- und Webanwendungen. Dieses Repository enthält den Sprachkern der
-Phasen 1 und 2 sowie den Database Core der Phase 3: Lexer, Parser, AST, HIR,
-statische Typprüfung, Interpreter, Schema-Compiler und die `zelyra`-CLI.
+Datenbank- und Webanwendungen. Die Sprache folgt einer einfachen Idee:
+Informationen, die ein Fachobjekt beschreiben, sollen in der gesamten
+Anwendung wiederverwendbar sein.
+
+Eine Tabellendefinition soll die Grundlage für Typen, SQL-Prüfung,
+Validierung, Formulare, APIs und CRUD bilden können. Gleichzeitig bleiben
+normale Programmierung, natives SQL und eigene Geschäftslogik jederzeit
+möglich.
+
+## Aktueller Stand
+
+Zelyra 0.1 ist eine aktive frühe Implementierung. Das Repository enthält echten,
+kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
+Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
+
+Heute implementiert:
+
+- Sprachkern mit Variablen, Funktionen, Ausdrücken, Kontrollfluss und
+  unveränderlichen Variablen als Standard;
+- statische Typprüfung, nominale Typen, Option, Result und Pattern Matching;
+- Schemadefinitionen und Schema-DDL-Planung für MariaDB, SQLite und
+  PostgreSQL;
+- MariaDB-Inspektion, Schema-Anwendung und Runtime-Ausführung von nativem SQL;
+- native SQL-Blöcke mit Prüfung von Schema, Spalten, Parametern und Ergebnissen;
+- ein erster Web Core mit Seitendefinitionen, GET-Routing, Pfadparametern und
+  eingebautem HTTP-Server;
+- ein erster Forms Core mit schemaabhängigen Feldern und Validierung.
+
+Formulare, CRUD, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
+Produktionswerkzeuge werden noch entwickelt. Siehe die
+[Roadmap](#roadmap) und den ausführlichen
+[Getting-Started-Leitfaden](docs/getting-started.de.md).
 
 ## Schnelleinstieg
 
-Für einen ausgecheckten Quellcode ist die einfachste Installation:
+Der einfachste Weg aus einem Quellcode-Checkout:
 
-```bash
+~~~bash
+git clone https://github.com/sf1976/zelyra.git
+cd zelyra
 ./install.sh
 zelyra run examples/fibonacci.zyl
-```
-
-Der Installer verwendet das aktuelle Benutzerkonto, installiert Rust nur bei
-Bedarf lokal und legt das Programm standardmäßig unter `~/.local/bin` ab. Für
-den Sprachkern der Phase 1 sind weder Root-Rechte noch Apache, ein
-Datenbankserver oder eine globale Systemkonfiguration erforderlich.
-
-Eine ausführliche Anleitung gibt es im [deutschen Getting-Started-Leitfaden](docs/getting-started.de.md)
-oder im [englischen Getting-Started-Leitfaden](docs/getting-started.md).
-
-```bash
-cargo run --bin zelyra -- run examples/fibonacci.zyl
-```
+~~~
 
 Erwartete Ausgabe:
 
-```text
+~~~text
 55
-```
+~~~
+
+Der Installer baut Zelyra für den aktuellen Benutzer und installiert das
+Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt weder sudo,
+eine globale Rust-Installation, Apache noch einen Datenbankserver für die
+Sprachkern-Beispiele.
+
+Eine Quelldatei direkt aus dem Repository ausführen:
+
+~~~bash
+cargo run -p zelyra-cli -- run examples/fibonacci.zyl
+~~~
 
 Ein Programm prüfen, ohne es auszuführen:
 
-```bash
-cargo run --bin zelyra -- check examples/fibonacci.zyl
-```
+~~~bash
+zelyra check examples/fibonacci.zyl
+~~~
 
-## Syntax der Phase 1
+Der vollständige Einsteigerweg mit Fehlerbehebung und Datenbankeinrichtung
+steht in [Erste Schritte](docs/getting-started.de.md) oder auf
+[Englisch](docs/getting-started.md).
 
-Variablen sind standardmäßig unveränderlich. Eine Variable wird mit
-`name = wert` oder einer expliziten Typangabe eingeführt. Veränderliche
-Variablen werden mit `mutable` markiert:
+## Eine erste Web-Seite
 
-```zelyra
-fn main() {
-    name: String = "Zelyra"
-    mutable counter = 0
+Zelyra enthält einen kleinen eingebauten HTTP-Server. Apache ist optional und
+für den Einstieg nicht erforderlich.
 
-    while counter < 3 {
-        print(name)
-        counter = counter + 1
+~~~zelyra
+page "/hello/{name}" {
+    html {
+        <html>
+            <body>
+                <h1>Hello, {name}!</h1>
+            </body>
+        </html>
     }
 }
-```
+~~~
 
-Unterstützt werden primitive Werte, Funktionen, Aufrufe, arithmetische und
-boolesche Ausdrücke, `if`/`else`, `while`, `loop`, `break`, `return` und
-`print`.
-
-Phase 2 ergänzt nominale Typen, `Option`/`Result` und vollständiges Pattern
-Matching. Siehe [den deutschen Phase-2-Leitfaden](docs/phase-2.de.md) oder die
-[englische Fassung](docs/phase-2.md).
-
-Phase 3 ergänzt den Database Core für MariaDB, PostgreSQL und SQLite. MariaDB
-ist das Standard-Backend für neue Projekte. Siehe
-[den deutschen Phase-3-Leitfaden](docs/phase-3.de.md) oder die [englische
-Fassung](docs/phase-3.md).
-
-Phase 4 ergänzt native SQL-Blöcke mit Schema-, Spalten- und
-Parameterprüfung sowie MariaDB-Runtime-Ausführung. Siehe [den deutschen
-Phase-4-Leitfaden](docs/phase-4.de.md)
-oder die [englische Fassung](docs/phase-4.md).
-
-## Aktuelle Grenzen
-
-CRUD, Sessions, CSRF, Capabilities, Contracts und Codegenerierung gehören zu
-den folgenden Phasen. Der Database Core unterstützt bereits Schema-DDL,
-Inspektion, Diff, Plan und Apply für PostgreSQL, MariaDB und SQLite. Der Web
-Core enthält bereits Seiten; der Forms Core unterstützt schemaabhängige
-Validierung.
-
-## Prinzip für eine einfache Bereitstellung
-
-Webanwendungen sollen während der Entwicklung mit einem einzigen Zelyra-Befehl
-starten können. Ein Zelyra-Projekt darf Apache nicht voraussetzen. Geplant
-sind:
-
-```text
-zelyra dev                 Eingebauter Entwicklungsserver
-zelyra serve               Eigenständiger Produktionsserver
-zelyra web apache          Apache-Reverse-Proxy-Konfiguration erzeugen
-```
-
-Apache bleibt eine optionale Integration für bestehende Infrastruktur. Die
-gleiche Anwendung soll auch hinter nginx, Caddy, einem Cloud-Load-Balancer
-oder direkt über den Zelyra-Server betrieben werden können. Diese Befehle sind
-bewusst als Roadmap dokumentiert, bis die Web-Core-Phase sie implementiert.
-
-Phase 5 stellt jetzt den ersten Web-Core-Schritt bereit: Seitendefinitionen,
-HTML-Blöcke, GET-Routen mit Parametern, sicheres HTML-Escaping und den
-eingebauten HTTP-Server. Das Beispiel startet ohne Apache:
+Starten:
 
 ~~~bash
 zelyra serve examples/hello_web.zyl
-# http://127.0.0.1:3000/hello/Zelyra öffnen
 ~~~
 
-Formulare, CRUD, Sessions, CSRF, APIs und datenbankgestützte Seiten folgen in
-weiteren Web-Core-Schritten.
+http://127.0.0.1:3000/hello/Zelyra öffnen. Routenparameter werden standardmäßig
+HTML-escaped. Der aktuelle Web Core unterstützt den ersten sicheren vertikalen
+Schritt: GET-Routen, Pfadparameter, Query-String-Verarbeitung, Request-Parsing
+und HTML-Responses.
 
-Phase 6 ergänzt native Formdefinitionen und schemaabhängige Validierung. Das
-Beispiel kann ohne Verbindung zu MariaDB getestet werden:
+## Ein erstes schemaabhängiges Formular
+
+Formulare können Einschränkungen einer Tabelle wiederverwenden:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email?
+}
+
+form CustomerCreate -> customers {
+    fields {
+        name
+        email
+    }
+}
+~~~
+
+Eingaben lokal validieren:
 
 ~~~bash
 zelyra form validate examples/customer_form.zyl CustomerCreate \
   name=Anna email=anna@example.test
 ~~~
 
-Das Formular übernimmt das Pflichtfeld name und dessen maximale Länge aus der
-Tabelle customers. Der Validator weist fehlende, zu lange, falsch typisierte
-und unbekannte Felder zurück.
+Das Formular übernimmt das Pflichtfeld name und dessen maximale Länge aus dem
+Schema. Unbekannte Felder, fehlende Werte, ungültige E-Mail-Adressen,
+ungültige Zahlen, ungültige boolesche Werte und übermittelte Readonly-Felder
+werden abgelehnt.
+
+Dies ist die Validierungsgrundlage, noch kein vollständiges HTML-Formular-
+Submit-System. HTML-Rendering, CSRF-Schutz, POST-Verarbeitung und
+Datenbankaktionen sind die nächsten Integrationsschritte.
+
+## Datenbankorientierte Entwicklung
+
+Der vorgesehene Zelyra-Ablauf:
+
+~~~text
+Datenbankdefinition
+        ↓
+Schema-Modell
+        ↓
+Typen und Beziehungen
+        ↓
+Geprüftes SQL
+        ↓
+Formulare und Validierung
+        ↓
+Seiten, APIs und CRUD
+~~~
+
+MariaDB ist das Standard-Backend für neue Zelyra-Definitionen und die primäre
+Runtime-Referenz. SQLite steht für kleine lokale Anwendungen und Tests zur
+Verfügung. PostgreSQL gehört ebenfalls zum Database Core.
+
+Beispiel:
+
+~~~zelyra
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    customer_number: String(20) required unique
+    name: String(100) required
+    email: Email?
+    active: Bool default true
+}
+~~~
+
+Gewünschtes Schema inspizieren oder anwenden:
+
+~~~bash
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/meine_app'
+zelyra db inspect examples/machine_management_mariadb.zyl
+zelyra db plan examples/machine_management_mariadb.zyl
+zelyra db apply examples/machine_management_mariadb.zyl
+~~~
+
+Für SQLite:
+
+~~~bash
+export DATABASE_URL='sqlite:///tmp/meine-app.sqlite3'
+zelyra db bootstrap examples/machine_management_sqlite.zyl
+~~~
+
+Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
+Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies
+das Standard-Backend des Projekts ist.
+
+## Natives SQL
+
+SQL ist ein Sprachelement und kein untypisierter String:
+
+~~~zelyra
+customer = sql<Customer?> {
+    SELECT id, name, email
+    FROM customers
+    WHERE id = :id
+}
+~~~
+
+Wenn das Schema verfügbar ist, prüft Zelyra Tabellen, Spalten, Aliase,
+Parameter, NULL-Fähigkeit und Ergebnismappings. Benannte Parameter werden
+sicher gebunden. Komplexes SQL bleibt möglich; Zelyra erzwingt keine
+ORM-Methodenkette.
+
+## Sprachprinzipien
+
+- Werte sind standardmäßig unveränderlich. Veränderlichkeit wird ausdrücklich
+  mit mutable markiert.
+- Normale Typen können niemals null sein. Optionale Werte verwenden die
+  explizite Option-Schreibweise.
+- Fachliche IDs können nominal unterschieden werden. Eine UserId kann daher
+  nicht versehentlich als OrderId verwendet werden.
+- Funktionen beschreiben Fehler ausdrücklich, statt versteckte Exceptions als
+  normale Kontrollsteuerung zu verwenden.
+- SQL-Parameter werden sicher gebunden.
+- HTML-Ausgaben werden standardmäßig escaped.
+- Schemaänderungen werden geprüft; destruktive Änderungen benötigen eine
+  ausdrückliche Freigabe.
+- Capabilities, Contracts und formale Verifikation sind Ziele der Sprache,
+  aber in Version 0.1 nicht stillschweigend als fertig zu betrachten.
+
+## CLI
+
+Aktuell verfügbar:
+
+~~~text
+zelyra new <directory>
+zelyra init [directory]
+zelyra check <file.zyl>
+zelyra build <file.zyl>
+zelyra run <file.zyl>
+zelyra serve <file.zyl> [address]
+zelyra form validate <file.zyl> <FormName> [field=value ...]
+zelyra db create <file.zyl>
+zelyra db bootstrap <file.zyl>
+zelyra db inspect <file.zyl>
+zelyra db plan <file.zyl>
+zelyra db apply <file.zyl> [--allow-destructive]
+~~~
+
+Die Befehle sind bewusst klein und ausdrücklich. Apache, PHP, ein ORM und ein
+Frontend-Framework sind für die obigen Beispiele keine Voraussetzungen.
+
+## Repository-Struktur
+
+~~~text
+zelyra/
+├── ast/          Abstract Syntax Tree und Sprachdatenmodell
+├── lexer/        Tokenisierung von Quelle, SQL und HTML
+├── parser/       Parser für die Zelyra-Syntax
+├── hir/          Namensauflösung und High-Level-IR
+├── database/     Schema-Modell, SQL-Prüfung und Datenbank-Backends
+├── forms/        Schemaabhängige Formularprüfung und Validierung
+├── web/          Router, HTTP-Modell, Escaping und Server
+├── runtime/      Typprüfung und Interpreter
+├── cli/          Kommandozeilenprogramm zelyra
+├── examples/     Kleine ausführbare Beispiele
+├── docs/         Deutsche und englische Dokumentation
+└── tests/        Crate-übergreifende Akzeptanztests
+~~~
+
+Der Bootstrap-Compiler wird in Rust entwickelt und als Cargo-Workspace gebaut.
+
+## Roadmap
+
+Die langfristige Spezifikation ist in folgende Phasen gegliedert:
+
+1. Language Core — implementierte Grundlage.
+2. Type System — erste Implementierung vorhanden.
+3. Database Core — erste Unterstützung für MariaDB, SQLite und PostgreSQL.
+4. Native SQL — statische Prüfung und MariaDB-Ausführung vorhanden.
+5. Web Core — erste Seiten und HTTP-Server vorhanden.
+6. Forms — erste schemaabhängige Syntax und Validierung vorhanden;
+   Web-Rendering und Submit-Ablauf fehlen noch.
+7. CRUD — Listen, Details, Erstellen, Bearbeiten, Löschen, Suche, Filter,
+   Sortierung und Pagination.
+8. Authentifizierung und Autorisierung.
+9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
+10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
+
+Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
+negative Tests, Dokumentation und Beispiele enthalten.
+
+## Mitwirken
+
+Das Repository wird bewusst in kleinen, testbaren Phasen entwickelt. Vor
+Änderungen:
+
+~~~bash
+cargo fmt --all
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+~~~
+
+Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
+Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit
+erhalten.
+
+## Lizenz
+
+Zelyra wird unter der MIT-Lizenz veröffentlicht. Siehe [LICENSE](LICENSE).
