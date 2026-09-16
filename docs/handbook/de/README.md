@@ -633,6 +633,11 @@ Callee werden nach Argumentsubstitution geprüft; `requires` des Aufrufers sind
 Annahmen beim Beweis seiner `ensures`. Komplexe, rekursive oder nicht
 auflösbare Fälle bleiben `RUNTIME_CHECK`.
 
+Unveränderliche typisierte lokale Werte werden in diesen Zusammenfassungen
+berücksichtigt. Beispielsweise wird `next: Int = value + 1` mit anschließendem
+`return next` wie eine direkte Rückgabe analysiert. Mutable Lokale und
+Zuweisungen bleiben konservativ, bis ihr Zustandsfluss sicher modelliert wird.
+
 ## 16. Konfiguration und Geheimnisse
 
 Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:

@@ -9,6 +9,15 @@ fn increment(value: Int) -> Int
     return value + 1
 }
 
+fn increment_local(value: Int) -> Int
+    ensures {
+        result > value
+    }
+{
+    next: Int = value + 1
+    return next
+}
+
 fn twice(value: Int) -> Int
     requires {
         value >= 0

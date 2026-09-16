@@ -357,6 +357,16 @@ fn symbolic_states<'a>(
             match state {
                 SymbolicState::Return { .. } => next.push(state),
                 SymbolicState::Continue { guards, bindings } => match statement {
+                    Stmt::Let {
+                        name,
+                        value,
+                        mutable: false,
+                        ..
+                    } if !expression_contains_variable(value, name) => {
+                        let mut bindings = bindings;
+                        bindings.insert(name.clone(), value);
+                        next.push(SymbolicState::Continue { guards, bindings });
+                    }
                     Stmt::Return { value, .. } => next.push(SymbolicState::Return {
                         guards,
                         expression: value.as_ref(),
@@ -422,6 +432,26 @@ fn symbolic_states<'a>(
         states = next;
     }
     Some(states)
+}
+
+fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
+    match &expression.kind {
+        ExprKind::Variable(variable) => variable == name,
+        ExprKind::Call { args, .. } => args
+            .iter()
+            .any(|argument| expression_contains_variable(argument, name)),
+        ExprKind::Unary { expr, .. } => expression_contains_variable(expr, name),
+        ExprKind::Binary { left, right, .. } => {
+            expression_contains_variable(left, name) || expression_contains_variable(right, name)
+        }
+        ExprKind::Int(..)
+        | ExprKind::UInt(..)
+        | ExprKind::Float(..)
+        | ExprKind::Bool(..)
+        | ExprKind::String(..)
+        | ExprKind::Char(..)
+        | ExprKind::Sql { .. } => false,
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -3217,6 +3247,29 @@ mod tests {
         assert_eq!(results[3].status, VerificationStatus::Proven);
         assert_eq!(results[4].status, VerificationStatus::Proven);
         assert_eq!(results[5].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_immutable_local_bindings_in_contracts() {
+        let program = parse(
+            &lex("fn increment_local(value: Int) -> Int ensures { result > value } { next: Int = value + 1 return next } fn caller(value: Int) -> Int ensures { result > value } { next: Int = value + 1 return next } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn keeps_mutable_local_bindings_unproven() {
+        let program = parse(
+            &lex("fn increment_local(value: Int) -> Int ensures { result > value } { mutable next = value + 1 return next } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
     }
 
     #[test]

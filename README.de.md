@@ -62,9 +62,9 @@ Heute implementiert:
   `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet, einschließlich
   einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben,
   grundlegenden Kontrollflusspfaden, `Option`-/`Result`-Konstruktorpfaden,
-  bekannten Payload-Bindings und begrenzten pfadsensitiven Zusammenfassungen
-  von Funktionsaufrufen mit aufruferabhängiger Prüfung von Callee-
-  Vorbedingungen.
+  bekannten Payload-Bindings, begrenzten pfadsensitiven Zusammenfassungen von
+  Funktionsaufrufen, unveränderlichen lokalen Bindings und aufruferabhängiger
+  Prüfung von Callee-Vorbedingungen.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
