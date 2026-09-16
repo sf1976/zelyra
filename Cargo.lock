@@ -12,6 +12,7 @@ version = "0.1.0"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
+ "zelyra-forms",
  "zelyra-hir",
  "zelyra-lexer",
  "zelyra-parser",
@@ -26,6 +27,14 @@ dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
  "zelyra-parser",
+]
+
+[[package]]
+name = "zelyra-forms"
+version = "0.1.0"
+dependencies = [
+ "zelyra-ast",
+ "zelyra-database",
 ]
 
 [[package]]

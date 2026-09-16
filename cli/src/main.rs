@@ -4,6 +4,7 @@ use zelyra_database::{
     inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
     Backend, Risk, Schema,
 };
+use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
@@ -11,7 +12,7 @@ use zelyra_runtime::{check, execute, execute_with_database};
 use zelyra_web::{serve, Route};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -112,17 +113,19 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
         return Err(());
     }
-    if let Err(errors) = check(&program) {
-        for error in errors {
-            diagnostic(
-                path,
-                "E-TYPE-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+    if !program.functions.is_empty() {
+        if let Err(errors) = check(&program) {
+            for error in errors {
+                diagnostic(
+                    path,
+                    "E-TYPE-001",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return Err(());
         }
-        return Err(());
     }
     if let Ok(schema) = build_schema(&program) {
         if let Err(errors) = check_sql_program(&program, &schema) {
@@ -130,6 +133,18 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
                 diagnostic(
                     path,
                     "E-SQL-004",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return Err(());
+        }
+        if let Err(errors) = check_form_program(&program, &schema) {
+            for error in errors {
+                diagnostic(
+                    path,
+                    "E-FORM-001",
                     &error.message,
                     error.span.line,
                     error.span.column,
@@ -338,6 +353,86 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 }
 
+fn form_usage() {
+    eprintln!("Usage: zelyra form validate <file.zyl> <FormName> [field=value ...]");
+}
+
+fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    if args.next().as_deref() != Some("validate") {
+        form_usage();
+        return ExitCode::from(2);
+    }
+    let Some(path) = args.next() else {
+        form_usage();
+        return ExitCode::from(2);
+    };
+    let Some(form_name) = args.next() else {
+        form_usage();
+        return ExitCode::from(2);
+    };
+    let mut input = std::collections::HashMap::new();
+    for argument in args {
+        let Some((field, value)) = argument.split_once('=') else {
+            eprintln!("error[E-FORM-002]: expected field=value, found `{argument}`");
+            return ExitCode::from(2);
+        };
+        if field.is_empty() {
+            eprintln!("error[E-FORM-002]: field name must not be empty");
+            return ExitCode::from(2);
+        }
+        input.insert(field.to_owned(), value.to_owned());
+    }
+    let program = match load(&path) {
+        Ok(program) => program,
+        Err(()) => return ExitCode::from(1),
+    };
+    let schema = match build_schema(&program) {
+        Ok(schema) => schema,
+        Err(errors) => {
+            for error in errors {
+                diagnostic(
+                    &path,
+                    "E-DB-001",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(errors) = check_form_program(&program, &schema) {
+        for error in errors {
+            diagnostic(
+                &path,
+                "E-FORM-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return ExitCode::from(1);
+    }
+    let Some(form) = program.forms.iter().find(|form| form.name == form_name) else {
+        eprintln!("error[E-FORM-003]: form `{form_name}` was not found in `{path}`");
+        return ExitCode::from(1);
+    };
+    let table_definition = form
+        .table
+        .as_deref()
+        .and_then(|table_name| program.tables.iter().find(|table| table.name == table_name));
+    let result = validate_form(form, table_definition, Some(&schema), &input);
+    if result.is_valid() {
+        println!("valid: {form_name}");
+        ExitCode::SUCCESS
+    } else {
+        for error in result.errors {
+            eprintln!("error[E-FORM-004]: {}: {}", error.field, error.message);
+        }
+        ExitCode::from(1)
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
@@ -350,6 +445,9 @@ fn main() -> ExitCode {
     }
     if command == "db" {
         return database_command(args);
+    }
+    if command == "form" {
+        return form_command(args);
     }
     if command == "new" {
         let Some(path) = args.next() else {

@@ -76,9 +76,10 @@ MariaDB runtime execution. See [docs/phase-4.md](docs/phase-4.md) or the
 
 ## Current limitations
 
-SQL, web, forms, CRUD, capabilities, contracts, and code generation belong to
+CRUD, sessions, CSRF, capabilities, contracts, and code generation belong to
 the following phases. The Database Core already supports schema DDL, inspection,
-diff, planning, and applying for PostgreSQL, MariaDB, and SQLite.
+diff, planning, and applying for PostgreSQL, MariaDB, and SQLite. The Web Core
+already includes pages and the Forms Core includes schema-aware validation.
 
 ## Easy deployment principle
 
@@ -108,3 +109,15 @@ zelyra serve examples/hello_web.zyl
 
 Forms, CRUD, sessions, CSRF, APIs, and database-backed page data remain
 subsequent Web Core work.
+
+Phase 6 adds native form definitions and schema-aware validation. Try the
+example without connecting to MariaDB:
+
+~~~bash
+zelyra form validate examples/customer_form.zyl CustomerCreate \
+  name=Anna email=anna@example.test
+~~~
+
+The form inherits the required name field and its maximum length from the
+customers table. The validator rejects missing, overlong, incorrectly typed,
+and unknown fields.

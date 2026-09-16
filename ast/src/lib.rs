@@ -82,6 +82,7 @@ pub struct Program {
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
     pub pages: Vec<PageDef>,
+    pub forms: Vec<FormDef>,
     pub functions: Vec<Function>,
 }
 
@@ -89,6 +90,37 @@ pub struct Program {
 pub struct PageDef {
     pub path: String,
     pub html: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct FormDef {
+    pub name: String,
+    pub table: Option<String>,
+    pub fields: Vec<FormField>,
+    pub actions: Vec<FormAction>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormField {
+    pub name: String,
+    pub ty: Option<Type>,
+    pub label: Option<String>,
+    pub placeholder: Option<String>,
+    pub required: bool,
+    pub max: Option<u32>,
+    pub widget: Option<String>,
+    pub readonly: bool,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct FormAction {
+    pub name: String,
+    pub statements: Vec<Stmt>,
+    pub success: Option<String>,
+    pub redirect: Option<String>,
     pub span: Span,
 }
 

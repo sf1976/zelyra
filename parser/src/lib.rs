@@ -67,6 +67,7 @@ impl<'a> Parser<'a> {
         let mut tables = Vec::new();
         let mut types = Vec::new();
         let mut pages = Vec::new();
+        let mut forms = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
@@ -78,6 +79,8 @@ impl<'a> Parser<'a> {
                 types.push(self.type_definition()?);
             } else if self.at(&TokenKind::Page) {
                 pages.push(self.page_definition()?);
+            } else if self.at(&TokenKind::Form) {
+                forms.push(self.form_definition()?);
             } else {
                 functions.push(self.function()?);
             }
@@ -88,6 +91,7 @@ impl<'a> Parser<'a> {
             tables,
             types,
             pages,
+            forms,
             functions,
         })
     }
@@ -171,6 +175,173 @@ impl<'a> Parser<'a> {
             html,
             span: start.join(end),
         })
+    }
+    fn form_definition(&mut self) -> Result<FormDef, ParseError> {
+        let start = self.expect(TokenKind::Form, "`form`")?;
+        let (name, _) = self.ident("form name")?;
+        let table = if self.at(&TokenKind::Arrow) {
+            self.advance();
+            Some(self.ident("table name after `->`")?.0)
+        } else {
+            None
+        };
+        self.expect(TokenKind::LBrace, "`{` after form name")?;
+        let mut fields = Vec::new();
+        let mut actions = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Field) {
+                fields.push(self.form_field()?);
+            } else if self.at(&TokenKind::Fields) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `fields`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (field_name, field_span) = self.ident("form field name")?;
+                    fields.push(FormField {
+                        name: field_name,
+                        ty: None,
+                        label: None,
+                        placeholder: None,
+                        required: false,
+                        max: None,
+                        widget: None,
+                        readonly: false,
+                        span: field_span,
+                    });
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after form fields")?;
+            } else if self.at(&TokenKind::Action) {
+                actions.push(self.form_action()?);
+            } else {
+                return self.error("expected `field`, `fields`, or `action` in form definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after form definition")?;
+        Ok(FormDef {
+            name,
+            table,
+            fields,
+            actions,
+            span: start.join(end),
+        })
+    }
+    fn form_field(&mut self) -> Result<FormField, ParseError> {
+        let start = self.expect(TokenKind::Field, "`field`")?;
+        let (name, _) = self.ident("form field name")?;
+        let ty = if self.at(&TokenKind::Colon) {
+            self.advance();
+            Some(self.type_name()?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::LBrace, "`{` after form field")?;
+        let mut field = FormField {
+            name,
+            ty,
+            label: None,
+            placeholder: None,
+            required: false,
+            max: None,
+            widget: None,
+            readonly: false,
+            span: start,
+        };
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            match self.current().kind.clone() {
+                TokenKind::Label => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after label")?;
+                    field.label = Some(self.string_value("label")?);
+                }
+                TokenKind::Placeholder => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after placeholder")?;
+                    field.placeholder = Some(self.string_value("placeholder")?);
+                }
+                TokenKind::Required => {
+                    field.required = true;
+                    self.advance();
+                }
+                TokenKind::Max => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after max")?;
+                    field.max = Some(self.positive_integer("maximum length")?);
+                }
+                TokenKind::Widget => {
+                    self.advance();
+                    self.expect(TokenKind::Colon, "`:` after widget")?;
+                    field.widget = Some(self.form_value("widget")?);
+                }
+                TokenKind::Readonly => {
+                    field.readonly = true;
+                    self.advance();
+                }
+                found => return self.error(format!("unexpected form field option {found:?}")),
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after form field")?;
+        field.span = start.join(end);
+        Ok(field)
+    }
+    fn form_action(&mut self) -> Result<FormAction, ParseError> {
+        let start = self.expect(TokenKind::Action, "`action`")?;
+        let (name, _) = self.ident("form action name")?;
+        self.expect(TokenKind::LBrace, "`{` after form action")?;
+        let mut statements = Vec::new();
+        let mut success = None;
+        let mut redirect = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Success) {
+                self.advance();
+                success = Some(self.string_value("success message")?);
+            } else if self.at(&TokenKind::Redirect) {
+                self.advance();
+                redirect = Some(self.string_value("redirect path")?);
+            } else {
+                statements.push(self.statement()?);
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after form action")?;
+        Ok(FormAction {
+            name,
+            statements,
+            success,
+            redirect,
+            span: start.join(end),
+        })
+    }
+    fn positive_integer(&mut self, label: &str) -> Result<u32, ParseError> {
+        match self.current().kind.clone() {
+            TokenKind::Int(value) if value > 0 => {
+                self.advance();
+                Ok(value as u32)
+            }
+            _ => self.error(format!("expected positive {label}")),
+        }
+    }
+    fn form_value(&mut self, label: &str) -> Result<String, ParseError> {
+        match self.current().kind.clone() {
+            TokenKind::String(value) => {
+                self.advance();
+                Ok(value)
+            }
+            TokenKind::Ident(value) => {
+                self.advance();
+                Ok(value)
+            }
+            _ => self.error(format!("expected {label}")),
+        }
     }
     fn table_definition(&mut self) -> Result<TableDef, ParseError> {
         let start = self.expect(TokenKind::Table, "`table`")?;
@@ -800,5 +971,48 @@ mod tests {
         assert_eq!(program.pages.len(), 1);
         assert_eq!(program.pages[0].path, "/hello/{name}");
         assert!(program.pages[0].html.contains("{name}"));
+    }
+
+    #[test]
+    fn parses_explicit_and_schema_mapped_form() {
+        let source = r#"
+            form CustomerForm {
+                field email: Email {
+                    label: "E-Mail"
+                    required
+                    max: 255
+                    widget: email
+                }
+                action save {
+                    sql {
+                        INSERT INTO customers (email) VALUES (:email)
+                    }
+                    success "Saved"
+                    redirect "/customers"
+                }
+            }
+            form CustomerCreate -> customers {
+                fields {
+                    name
+                    active
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.forms.len(), 2);
+        assert_eq!(program.forms[0].fields[0].widget.as_deref(), Some("email"));
+        assert_eq!(
+            program.forms[0].actions[0].redirect.as_deref(),
+            Some("/customers")
+        );
+        assert!(matches!(
+            program.forms[0].actions[0].statements[0],
+            Stmt::Expr(Expr {
+                kind: ExprKind::Sql { .. },
+                ..
+            })
+        ));
+        assert_eq!(program.forms[1].table.as_deref(), Some("customers"));
+        assert_eq!(program.forms[1].fields.len(), 2);
     }
 }

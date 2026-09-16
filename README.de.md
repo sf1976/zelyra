@@ -78,9 +78,11 @@ oder die [englische Fassung](docs/phase-4.md).
 
 ## Aktuelle Grenzen
 
-SQL, Web, Formulare, CRUD, Capabilities, Contracts und Codegenerierung gehören
-zu den folgenden Phasen. Der Database Core unterstützt bereits Schema-DDL,
-Inspektion, Diff, Plan und Apply für PostgreSQL, MariaDB und SQLite.
+CRUD, Sessions, CSRF, Capabilities, Contracts und Codegenerierung gehören zu
+den folgenden Phasen. Der Database Core unterstützt bereits Schema-DDL,
+Inspektion, Diff, Plan und Apply für PostgreSQL, MariaDB und SQLite. Der Web
+Core enthält bereits Seiten; der Forms Core unterstützt schemaabhängige
+Validierung.
 
 ## Prinzip für eine einfache Bereitstellung
 
@@ -110,3 +112,15 @@ zelyra serve examples/hello_web.zyl
 
 Formulare, CRUD, Sessions, CSRF, APIs und datenbankgestützte Seiten folgen in
 weiteren Web-Core-Schritten.
+
+Phase 6 ergänzt native Formdefinitionen und schemaabhängige Validierung. Das
+Beispiel kann ohne Verbindung zu MariaDB getestet werden:
+
+~~~bash
+zelyra form validate examples/customer_form.zyl CustomerCreate \
+  name=Anna email=anna@example.test
+~~~
+
+Das Formular übernimmt das Pflichtfeld name und dessen maximale Länge aus der
+Tabelle customers. Der Validator weist fehlende, zu lange, falsch typisierte
+und unbekannte Felder zurück.

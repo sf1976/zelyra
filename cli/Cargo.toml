@@ -16,3 +16,4 @@ zelyra-lexer.workspace = true
 zelyra-parser.workspace = true
 zelyra-runtime.workspace = true
 zelyra-web.workspace = true
+zelyra-forms.workspace = true
