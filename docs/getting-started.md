@@ -44,11 +44,11 @@ The current repository contains:
 - an initial schema-aware form parser and validator;
 - initial CRUD lists with MariaDB search, filters, sorting, pagination, and
   CSRF-protected delete actions.
-- an initial database-backed login with Argon2 password verification,
-  HttpOnly sessions, logout, and protected routes.
+- a database-backed login with Argon2 password verification, persistent
+  HttpOnly sessions, logout, database-backed permissions, and protected routes.
 
-The following are not complete yet: full CRUD generation, persistent sessions,
-roles and database-backed permission lookup, APIs, capabilities, contracts,
+The following are not complete yet: full CRUD generation, database roles, login
+throttling, password-management commands, APIs, capabilities, contracts,
 formal verification, and production packaging.
 
 ## 1. Requirements
@@ -560,5 +560,6 @@ Read the phase documents for implementation details:
 The German versions use the same filenames with the .de.md suffix.
 
 The CRUD list now also provides detail, Create/Edit forms, configurable
-columns, and a CSRF-protected Delete action. The next authentication step is
-persistent sessions and role/permission lookup.
+columns, and a CSRF-protected Delete action. Authentication now supports
+persistent sessions and permission lookup through MariaDB tables; database
+roles and password-management workflows remain future work.

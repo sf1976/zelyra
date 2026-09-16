@@ -1,4 +1,5 @@
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use blake2::{Blake2s256, Digest};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -157,6 +158,8 @@ pub struct CrudRoute {
 #[derive(Clone, Debug)]
 pub struct AuthRoute {
     pub table: String,
+    pub session_table: Option<String>,
+    pub permissions_table: Option<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -231,7 +234,7 @@ impl WebApp {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
             }
             if request.path == "/logout" {
-                return dispatch_logout(self, request);
+                return dispatch_logout(self, request, self.database_url.as_deref());
             }
         }
         for form in &self.forms {
@@ -241,18 +244,26 @@ impl WebApp {
         }
         for crud in &self.cruds {
             if match_path(&crud.path, &request.path).is_some() {
-                if let Some(response) =
-                    authorize(crud.requires_auth, &crud.permissions, request, self)
-                {
+                if let Some(response) = authorize(
+                    crud.requires_auth,
+                    &crud.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
                     return response;
                 }
                 return dispatch_crud(crud, request, self.database_url.as_deref());
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
-                if let Some(response) =
-                    authorize(crud.requires_auth, &crud.permissions, request, self)
-                {
+                if let Some(response) = authorize(
+                    crud.requires_auth,
+                    &crud.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
                     return response;
                 }
                 return dispatch_crud_delete(
@@ -264,9 +275,13 @@ impl WebApp {
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&detail_path, &request.path) {
-                if let Some(response) =
-                    authorize(crud.requires_auth, &crud.permissions, request, self)
-                {
+                if let Some(response) = authorize(
+                    crud.requires_auth,
+                    &crud.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
                     return response;
                 }
                 return dispatch_crud_detail(
@@ -279,9 +294,13 @@ impl WebApp {
         }
         for route in &self.routes {
             if match_path(&route.path, &request.path).is_some() {
-                if let Some(response) =
-                    authorize(route.requires_auth, &route.permissions, request, self)
-                {
+                if let Some(response) = authorize(
+                    route.requires_auth,
+                    &route.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
                     return response;
                 }
                 break;
@@ -296,11 +315,12 @@ fn authorize(
     permissions: &[String],
     request: &Request,
     app: &WebApp,
+    database_url: Option<&str>,
 ) -> Option<Response> {
     if !requires_auth && permissions.is_empty() {
         return None;
     }
-    let session = session_from_request(app, request);
+    let session = session_from_request(app, request, database_url);
     let bearer_authenticated = app
         .auth_token
         .as_deref()
@@ -414,15 +434,44 @@ fn dispatch_login(
             else {
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             };
-            let Ok(mut sessions) = app.sessions.lock() else {
-                return Response::html(500, "<h1>500 Internal Server Error</h1>");
-            };
-            sessions.insert(
-                session_id.clone(),
-                Session {
-                    permissions: app.auth_permissions.clone(),
-                },
-            );
+            if let Some(session_table) = &auth.session_table {
+                let Some(user_id) = result
+                    .rows
+                    .first()
+                    .and_then(|row| row.first())
+                    .and_then(|value| value.parse::<i64>().ok())
+                else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                let query = format!(
+                    "INSERT INTO {} (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY))",
+                    quote_identifier(session_table)
+                );
+                if let Err(error) = zelyra_database::execute_mariadb_query(
+                    database_url,
+                    &query,
+                    vec![
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                        (
+                            "token_hash".into(),
+                            zelyra_database::QueryValue::String(session_token_hash(&session_id)),
+                        ),
+                    ],
+                ) {
+                    eprintln!("zelyra web: session creation failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            } else {
+                let Ok(mut sessions) = app.sessions.lock() else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                sessions.insert(
+                    session_id.clone(),
+                    Session {
+                        permissions: app.auth_permissions.clone(),
+                    },
+                );
+            }
             Response::redirect("/").with_header(
                 "Set-Cookie",
                 format!("zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax"),
@@ -432,13 +481,31 @@ fn dispatch_login(
     }
 }
 
-fn dispatch_logout(app: &WebApp, request: &Request) -> Response {
+fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) -> Response {
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
     if let Some(session_id) = cookie_value(request, "zelyra_session") {
-        if let Ok(mut sessions) = app.sessions.lock() {
-            sessions.remove(&session_id);
+        if let Some(auth) = &app.auth_route {
+            if let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) {
+                let query = format!(
+                    "DELETE FROM {} WHERE token_hash = :token_hash",
+                    quote_identifier(session_table)
+                );
+                if let Err(error) = zelyra_database::execute_mariadb_query(
+                    database_url,
+                    &query,
+                    vec![(
+                        "token_hash".into(),
+                        zelyra_database::QueryValue::String(session_token_hash(&session_id)),
+                    )],
+                ) {
+                    eprintln!("zelyra web: session deletion failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            } else if let Ok(mut sessions) = app.sessions.lock() {
+                sessions.remove(&session_id);
+            }
         }
     }
     Response::redirect("/login").with_header(
@@ -470,9 +537,65 @@ fn cookie_value(request: &Request, name: &str) -> Option<String> {
         })
 }
 
-fn session_from_request(app: &WebApp, request: &Request) -> Option<Session> {
+fn session_from_request(
+    app: &WebApp,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Option<Session> {
     let session_id = cookie_value(request, "zelyra_session")?;
-    app.sessions.lock().ok()?.get(&session_id).cloned()
+    let Some(auth) = &app.auth_route else {
+        return app.sessions.lock().ok()?.get(&session_id).cloned();
+    };
+    let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) else {
+        return app.sessions.lock().ok()?.get(&session_id).cloned();
+    };
+    let query = format!(
+        "SELECT user_id FROM {} WHERE token_hash = :token_hash AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
+        quote_identifier(session_table)
+    );
+    let result = match zelyra_database::execute_mariadb_query(
+        database_url,
+        &query,
+        vec![(
+            "token_hash".into(),
+            zelyra_database::QueryValue::String(session_token_hash(&session_id)),
+        )],
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("zelyra web: session lookup failed: {error}");
+            return None;
+        }
+    };
+    let user_id = result
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .and_then(|value| value.parse::<i64>().ok())?;
+    let permissions = if let Some(permissions_table) = &auth.permissions_table {
+        let query = format!(
+            "SELECT permission FROM {} WHERE user_id = :user_id",
+            quote_identifier(permissions_table)
+        );
+        match zelyra_database::execute_mariadb_query(
+            database_url,
+            &query,
+            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+        ) {
+            Ok(result) => result
+                .rows
+                .into_iter()
+                .filter_map(|row| row.into_iter().next())
+                .collect(),
+            Err(error) => {
+                eprintln!("zelyra web: permission lookup failed: {error}");
+                return None;
+            }
+        }
+    } else {
+        app.auth_permissions.clone()
+    };
+    Some(Session { permissions })
 }
 
 impl Router {
@@ -1870,6 +1993,11 @@ fn hex_encode(bytes: &[u8]) -> String {
         result.push(HEX[(byte & 0x0f) as usize] as char);
     }
     result
+}
+
+fn session_token_hash(token: &str) -> String {
+    let digest = Blake2s256::digest(token.as_bytes());
+    hex_encode(&digest)
 }
 
 fn hex_value(byte: u8) -> Option<u8> {

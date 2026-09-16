@@ -109,17 +109,39 @@ impl<'a> Parser<'a> {
         let (name, _) = self.ident("authentication name")?;
         self.expect(TokenKind::LBrace, "opening brace after authentication name")?;
         self.skip_newlines();
-        self.expect(TokenKind::Table, "table in authentication definition")?;
-        self.expect(TokenKind::Colon, "colon after authentication table")?;
-        let (table, _) = self.ident("authentication user table")?;
-        self.skip_newlines();
+        let mut table = None;
+        let mut session_table = None;
+        let mut permissions_table = None;
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let field = match self.current().kind.clone() {
+                TokenKind::Table => "table",
+                TokenKind::Sessions => "sessions",
+                TokenKind::Permissions => "permissions",
+                _ => return self.error("expected table, sessions, or permissions option"),
+            };
+            self.advance();
+            self.expect(TokenKind::Colon, "colon after authentication option")?;
+            let value = self.ident("authentication option value")?.0;
+            match field {
+                "table" => table = Some(value),
+                "sessions" => session_table = Some(value),
+                "permissions" => permissions_table = Some(value),
+                _ => return self.error("unknown authentication option"),
+            }
+            self.skip_newlines();
+        }
         let end = self.expect(
             TokenKind::RBrace,
             "closing brace after authentication definition",
         )?;
+        let Some(table) = table else {
+            return self.error("authentication definition requires a table option");
+        };
         Ok(AuthDef {
             name,
             table,
+            session_table,
+            permissions_table,
             span: start.join(end),
         })
     }
@@ -1185,6 +1207,8 @@ mod tests {
         let program = parse(
             &lex(r#"auth users {
                     table: users
+                    sessions: auth_sessions
+                    permissions: user_permissions
                 }
 
                 crud Customer -> customers {
@@ -1196,6 +1220,14 @@ mod tests {
         .unwrap();
         assert_eq!(program.auth[0].name, "users");
         assert_eq!(program.auth[0].table, "users");
+        assert_eq!(
+            program.auth[0].session_table.as_deref(),
+            Some("auth_sessions")
+        );
+        assert_eq!(
+            program.auth[0].permissions_table.as_deref(),
+            Some("user_permissions")
+        );
         assert!(program.cruds[0].requires_auth);
         assert_eq!(program.cruds[0].permissions, ["customers.view"]);
     }

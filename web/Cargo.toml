@@ -9,3 +9,4 @@ zelyra-ast.workspace = true
 zelyra-database.workspace = true
 zelyra-forms.workspace = true
 argon2 = "0.5"
+blake2 = "0.10"

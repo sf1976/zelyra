@@ -145,6 +145,8 @@ pub struct CrudDef {
 pub struct AuthDef {
     pub name: String,
     pub table: String,
+    pub session_table: Option<String>,
+    pub permissions_table: Option<String>,
     pub span: Span,
 }
 

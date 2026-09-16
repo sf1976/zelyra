@@ -8,6 +8,8 @@ against a user table:
 ~~~zelyra
 auth users {
     table: users
+    sessions: auth_sessions
+    permissions: user_permissions
 }
 ~~~
 
@@ -31,9 +33,19 @@ configured user table must contain id, email, and password_hash columns;
 password_hash values use Argon2. An optional active column disables inactive
 users.
 
-Successful login creates an HttpOnly, SameSite session cookie. Logout is
-available as POST /logout. Sessions are kept in process memory for this
-initial implementation and are invalidated when the server stops.
+Successful login creates an HttpOnly, SameSite session cookie. When the
+optional sessions table is configured, only a Blake2s-256 hash of the session
+token is stored in MariaDB; the cookie itself is never stored in the database.
+Sessions expire after 24 hours and logout removes the database record. Without
+the sessions option, the explicit development fallback keeps sessions in
+process memory.
+
+When the optional permissions table is configured, it must contain user_id and
+permission columns. Permissions are loaded from that table for every
+protected request. An authenticated user with no matching permission receives
+HTTP 403. Without the permissions option, the explicit
+ZELYRA_AUTH_PERMISSIONS allowlist remains available for local development and
+reverse-proxy deployments.
 
 For deployments that authenticate users in a reverse proxy, the server also
 accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The
@@ -57,6 +69,7 @@ Without the token the response is HTTP 401. With a valid token but without a
 declared permission the response is HTTP 403. Tokens and permissions are never
 stored in source code by the compiler.
 
-This is the first working authentication slice. Database-backed roles and
-permission lookup, session persistence, login throttling, and a dedicated
-password-management command remain the next authentication steps.
+This is the first working authentication slice with persistent sessions and
+database-backed permission lookup. Database roles, login throttling, session
+rotation, and a dedicated password-management command remain future
+authentication steps.

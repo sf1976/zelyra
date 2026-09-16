@@ -1,5 +1,7 @@
 # Zelyra 0.1
 
+![Zelyra logo](assets/zelyra-logo.png)
+
 **From database to application.**
 **Describe intent. Prove correctness.**
 
@@ -52,7 +54,7 @@ Implemented today:
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
 
-Full CRUD generation, database-backed authentication, APIs, contracts,
+Full CRUD generation, database roles, APIs, contracts,
 verification, and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
@@ -332,8 +334,8 @@ The long-term specification is organized into these phases:
 7. CRUD — list, detail, create, edit, search, filter, sort, pagination,
    configurable columns, and CSRF-protected delete implemented; authorization
    remains.
-8. Authentication and authorization — initial route guards and permission
-   declarations implemented; sessions and user login remain.
+8. Authentication and authorization — Argon2 login, persistent MariaDB
+   sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities, contracts, verification, and structured concurrency.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
 

@@ -1,5 +1,7 @@
 # Zelyra 0.1
 
+![Zelyra-Logo](assets/zelyra-logo.png)
+
 **Von der Datenbank zur Anwendung.**
 **Absicht beschreiben. Korrektheit beweisen.**
 
@@ -52,7 +54,7 @@ Heute implementiert:
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 
-Vollständige CRUD-Erzeugung, datenbankgestützte Authentifizierung, APIs,
+Vollständige CRUD-Erzeugung, Datenbankrollen, APIs,
 Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
@@ -336,8 +338,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
    Pagination, konfigurierbare Spalten und CSRF-geschütztes Löschen vorhanden;
    Autorisierung folgt.
-8. Authentifizierung und Autorisierung — erste Routensperren und
-   Berechtigungsdeklarationen vorhanden; Sessions und Login folgen.
+8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
+   Sessions, Logout, Routensperren und datenbankgestützte
+   Berechtigungsabfragen vorhanden.
 9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
 

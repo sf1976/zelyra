@@ -209,6 +209,84 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 valid = false;
             }
         }
+        if let Some(session_table_name) = &auth.session_table {
+            let Some(session_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *session_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-005",
+                    &format!(
+                        "authentication refers to unknown session table {}",
+                        session_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["user_id", "token_hash", "expires_at"] {
+                if !session_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-006",
+                        &format!(
+                            "authentication session table {} requires column {}",
+                            session_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+        }
+        if let Some(permissions_table_name) = &auth.permissions_table {
+            let Some(permissions_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *permissions_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-007",
+                    &format!(
+                        "authentication refers to unknown permissions table {}",
+                        permissions_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["user_id", "permission"] {
+                if !permissions_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-008",
+                        &format!(
+                            "authentication permissions table {} requires column {}",
+                            permissions_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+        }
     }
     let protected = program
         .pages
@@ -576,6 +654,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         };
         Some(AuthRoute {
             table: auth.table.clone(),
+            session_table: auth.session_table.clone(),
+            permissions_table: auth.permissions_table.clone(),
             schema: schema.clone(),
             csrf,
         })
@@ -996,5 +1076,38 @@ mod tests {
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(!validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn accepts_persistent_auth_tables() {
+        let source = r#"
+            auth users {
+                table: users
+                sessions: auth_sessions
+                permissions: user_permissions
+            }
+
+            table users {
+                id: Id primary auto
+                email: Email required
+                password_hash: String(255) required
+            }
+
+            table auth_sessions {
+                id: Id primary auto
+                user: User required
+                token_hash: String(64) required
+                expires_at: Timestamp required
+            }
+
+            table user_permissions {
+                id: Id primary auto
+                user: User required
+                permission: String(100) required
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(validate_auth("test.zyl", &program, &schema));
     }
 }
