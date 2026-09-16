@@ -633,11 +633,11 @@ Callee werden nach Argumentsubstitution geprüft; `requires` des Aufrufers sind
 Annahmen beim Beweis seiner `ensures`. Komplexe, rekursive oder nicht
 auflösbare Fälle bleiben `RUNTIME_CHECK`.
 
-Unveränderliche lokale Werte werden in diesen Zusammenfassungen berücksichtigt.
-Sowohl `next: Int = value + 1` als auch die Kurzform `next = value + 1` mit
+Lokaler Zustandsfluss wird in diesen Zusammenfassungen berücksichtigt. Sowohl
+`next: Int = value + 1` als auch die Kurzform `next = value + 1` mit
 anschließendem `return next` werden wie eine direkte Rückgabe analysiert.
-Mutable Lokale und Zuweisungen bleiben konservativ, bis ihr Zustandsfluss
-sicher modelliert wird.
+Einfache lineare Mutable-Zuweisungen wie `next = next + 1` werden ebenfalls
+verfolgt; nichtlineare Zuweisungen und Schleifen bleiben konservativ.
 
 ## 16. Konfiguration und Geheimnisse
 

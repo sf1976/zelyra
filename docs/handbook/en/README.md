@@ -579,10 +579,10 @@ checked after argument substitution; caller `requires` clauses are assumptions
 when proving caller `ensures`. Complex, recursive, or unresolved cases remain
 `RUNTIME_CHECK`.
 
-Immutable locals are included in these summaries. Both `next: Int = value + 1`
-and the concise `next = value + 1`, followed by `return next`, are analyzed
-like a direct return. Mutable locals and assignments remain conservative until
-their state flow can be modeled safely.
+Local state is included in these summaries. Both `next: Int = value + 1` and
+the concise `next = value + 1`, followed by `return next`, are analyzed like a
+direct return. Simple linear mutable assignments such as `next = next + 1` are
+also tracked; nonlinear assignments and loops remain conservative.
 
 ## 16. Configuration and secrets
 

@@ -95,7 +95,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 status: verify_contract(contract, None, &functions),
             });
         }
-        let return_paths = symbolic_return_paths(function);
+        let return_paths = symbolic_return_paths(function, Some(&functions));
         for (index, contract) in function.ensures.iter().enumerate() {
             results.push(VerificationResult {
                 function: function.name.clone(),
@@ -174,7 +174,7 @@ fn verify_postcondition(
                         &guard,
                         Some(expression),
                         Some(&path.bindings),
-                        None,
+                        Some(&path.substitutions),
                         Some(functions),
                         0,
                     ) else {
@@ -192,7 +192,7 @@ fn verify_postcondition(
                         guard,
                         Some(expression),
                         Some(&path.bindings),
-                        None,
+                        Some(&path.substitutions),
                         Some(functions),
                         0,
                     ) else {
@@ -210,7 +210,7 @@ fn verify_postcondition(
                     let context = SymbolicContext {
                         return_expression: Some(expression),
                         bindings: Some(&path.bindings),
-                        substitutions: None,
+                        substitutions: Some(&path.substitutions),
                         functions: Some(functions),
                         depth: 0,
                     };
@@ -225,6 +225,7 @@ fn verify_postcondition(
                         expression,
                         &guards,
                         Some(&path.bindings),
+                        Some(&path.substitutions),
                         Some(functions),
                         0,
                     ) {
@@ -261,6 +262,7 @@ struct ReturnPath<'a> {
     guards: Vec<SymbolicGuard<'a>>,
     expression: Option<&'a Expr>,
     bindings: HashMap<String, &'a Expr>,
+    substitutions: HashMap<String, LinearValue>,
 }
 
 #[derive(Clone, Debug)]
@@ -268,27 +270,40 @@ enum SymbolicState<'a> {
     Continue {
         guards: Vec<SymbolicGuard<'a>>,
         bindings: HashMap<String, &'a Expr>,
+        substitutions: HashMap<String, LinearValue>,
     },
     Return {
         guards: Vec<SymbolicGuard<'a>>,
         expression: Option<&'a Expr>,
         bindings: HashMap<String, &'a Expr>,
+        substitutions: HashMap<String, LinearValue>,
     },
 }
 
-fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
+fn symbolic_return_paths<'a>(
+    function: &'a Function,
+    functions: Option<&HashMap<String, &Function>>,
+) -> Option<Vec<ReturnPath<'a>>> {
     let parameters = function
         .params
         .iter()
         .map(|parameter| parameter.name.clone())
         .collect::<HashSet<_>>();
-    let states = symbolic_states(&function.body, Vec::new(), HashMap::new(), &parameters)?;
+    let states = symbolic_states(
+        &function.body,
+        Vec::new(),
+        HashMap::new(),
+        HashMap::new(),
+        &parameters,
+        functions,
+    )?;
     let mut paths = Vec::new();
     for state in states {
         let SymbolicState::Return {
             guards,
             expression,
             bindings,
+            substitutions,
         } = state
         else {
             return None;
@@ -297,6 +312,7 @@ fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
             guards,
             expression,
             bindings,
+            substitutions,
         });
     }
     Some(paths)
@@ -351,18 +367,25 @@ fn symbolic_states<'a>(
     block: &'a Block,
     incoming: Vec<SymbolicGuard<'a>>,
     bindings: HashMap<String, &'a Expr>,
+    substitutions: HashMap<String, LinearValue>,
     parameters: &HashSet<String>,
+    functions: Option<&HashMap<String, &Function>>,
 ) -> Option<Vec<SymbolicState<'a>>> {
     let mut states = vec![SymbolicState::Continue {
         guards: incoming,
         bindings,
+        substitutions,
     }];
     for statement in &block.statements {
         let mut next = Vec::new();
         for state in states {
             match state {
                 SymbolicState::Return { .. } => next.push(state),
-                SymbolicState::Continue { guards, bindings } => match statement {
+                SymbolicState::Continue {
+                    guards,
+                    bindings,
+                    substitutions,
+                } => match statement {
                     Stmt::Let {
                         name,
                         value,
@@ -371,21 +394,70 @@ fn symbolic_states<'a>(
                     } if !expression_contains_variable(value, name) => {
                         let mut bindings = bindings;
                         bindings.insert(name.clone(), value);
-                        next.push(SymbolicState::Continue { guards, bindings });
+                        next.push(SymbolicState::Continue {
+                            guards,
+                            bindings,
+                            substitutions,
+                        });
+                    }
+                    Stmt::Let {
+                        name,
+                        value,
+                        mutable: true,
+                        ..
+                    } => {
+                        let value = linear_value(
+                            value,
+                            None,
+                            Some(&bindings),
+                            Some(&substitutions),
+                            functions,
+                            0,
+                        )?;
+                        let mut substitutions = substitutions;
+                        substitutions.insert(name.clone(), value);
+                        next.push(SymbolicState::Continue {
+                            guards,
+                            bindings,
+                            substitutions,
+                        });
+                    }
+                    Stmt::BindOrAssign { name, value, .. } if substitutions.contains_key(name) => {
+                        let value = linear_value(
+                            value,
+                            None,
+                            Some(&bindings),
+                            Some(&substitutions),
+                            functions,
+                            0,
+                        )?;
+                        let mut substitutions = substitutions;
+                        substitutions.insert(name.clone(), value);
+                        next.push(SymbolicState::Continue {
+                            guards,
+                            bindings,
+                            substitutions,
+                        });
                     }
                     Stmt::BindOrAssign { name, value, .. }
                         if !parameters.contains(name)
                             && !bindings.contains_key(name)
+                            && !substitutions.contains_key(name)
                             && !expression_contains_variable(value, name) =>
                     {
                         let mut bindings = bindings;
                         bindings.insert(name.clone(), value);
-                        next.push(SymbolicState::Continue { guards, bindings });
+                        next.push(SymbolicState::Continue {
+                            guards,
+                            bindings,
+                            substitutions,
+                        });
                     }
                     Stmt::Return { value, .. } => next.push(SymbolicState::Return {
                         guards,
                         expression: value.as_ref(),
                         bindings,
+                        substitutions,
                     }),
                     Stmt::If {
                         condition,
@@ -402,7 +474,9 @@ fn symbolic_states<'a>(
                             then_block,
                             then_guards,
                             bindings.clone(),
+                            substitutions.clone(),
                             parameters,
+                            functions,
                         )?);
 
                         if let Some(else_block) = else_block {
@@ -415,7 +489,9 @@ fn symbolic_states<'a>(
                                 else_block,
                                 else_guards,
                                 bindings.clone(),
+                                substitutions.clone(),
                                 parameters,
+                                functions,
                             )?);
                         } else {
                             let mut guards = guards;
@@ -423,7 +499,11 @@ fn symbolic_states<'a>(
                                 expression: condition,
                                 expected: false,
                             });
-                            next.push(SymbolicState::Continue { guards, bindings });
+                            next.push(SymbolicState::Continue {
+                                guards,
+                                bindings,
+                                substitutions,
+                            });
                         }
                     }
                     Stmt::Match { value, arms, .. } => {
@@ -447,7 +527,9 @@ fn symbolic_states<'a>(
                                 &arm.body,
                                 arm_guards,
                                 arm_bindings,
+                                substitutions.clone(),
                                 parameters,
+                                functions,
                             )?);
                         }
                     }
@@ -983,6 +1065,7 @@ fn symbolic_bool_with_constraints(
     return_expression: &Expr,
     guards: &[PathConstraint],
     bindings: Option<&HashMap<String, &Expr>>,
+    substitutions: Option<&HashMap<String, LinearValue>>,
     functions: Option<&HashMap<String, &Function>>,
     depth: usize,
 ) -> Option<bool> {
@@ -990,7 +1073,7 @@ fn symbolic_bool_with_constraints(
         expression,
         Some(return_expression),
         bindings,
-        None,
+        substitutions,
         functions,
         depth,
     ) {
@@ -1001,7 +1084,7 @@ fn symbolic_bool_with_constraints(
         true,
         Some(return_expression),
         bindings,
-        None,
+        substitutions,
         functions,
         depth,
     )?;
@@ -1010,7 +1093,7 @@ fn symbolic_bool_with_constraints(
         false,
         Some(return_expression),
         bindings,
-        None,
+        substitutions,
         functions,
         depth,
     )?;
@@ -1174,6 +1257,28 @@ impl LinearValue {
     fn subtract(self, other: Self) -> Option<Self> {
         self.add(other.negate()?)
     }
+}
+
+fn substitute_linear_value(
+    value: &LinearValue,
+    substitutions: &HashMap<String, LinearValue>,
+) -> Option<LinearValue> {
+    let mut result = LinearValue {
+        constant: value.constant,
+        ..LinearValue::default()
+    };
+    for (name, coefficient) in &value.coefficients {
+        let term = substitutions
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| LinearValue {
+                coefficients: HashMap::from([(name.clone(), 1)]),
+                constant: 0,
+            })
+            .scale(*coefficient)?;
+        result = result.add(term)?;
+    }
+    Some(result)
 }
 
 fn linear_value(
@@ -1350,17 +1455,24 @@ fn linear_value_alternatives(
                     .zip(arguments)
                     .map(|(parameter, value)| (parameter.name.clone(), value))
                     .collect::<HashMap<_, _>>();
-                for path in symbolic_return_paths(function)? {
+                for path in symbolic_return_paths(function, functions)? {
                     let Some(return_expression) = path.expression else {
                         continue;
                     };
+                    let mut callee_substitutions = argument_values.clone();
+                    for (name, value) in &path.substitutions {
+                        callee_substitutions.insert(
+                            name.clone(),
+                            substitute_linear_value(value, &argument_values)?,
+                        );
+                    }
                     let mut path_alternatives = vec![argument_constraints.clone()];
                     for guard in &path.guards {
                         let guard_alternatives = constraints_for_guard(
                             guard,
                             Some(return_expression),
                             Some(&path.bindings),
-                            Some(&argument_values),
+                            Some(&callee_substitutions),
                             functions,
                             depth + 1,
                         )?;
@@ -1371,7 +1483,7 @@ fn linear_value_alternatives(
                         return_expression,
                         None,
                         Some(&path.bindings),
-                        Some(&argument_values),
+                        Some(&callee_substitutions),
                         functions,
                         depth + 1,
                     )?;
@@ -3288,9 +3400,32 @@ mod tests {
     }
 
     #[test]
-    fn keeps_mutable_local_bindings_unproven() {
+    fn proves_mutable_local_initialization() {
         let program = parse(
             &lex("fn increment_local(value: Int) -> Int ensures { result > value } { mutable next = value + 1 return next } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_linear_mutable_assignments() {
+        let program = parse(
+            &lex("fn increment_mutable(value: Int) -> Int ensures { result > value } { mutable next = value next = next + 1 return next } fn caller(value: Int) -> Int ensures { result > value } { mutable next = value next = next + 1 return next } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn keeps_non_linear_mutable_assignments_unproven() {
+        let program = parse(
+            &lex("fn multiply_mutable(value: Int) -> Int ensures { result > value } { mutable next = value next = next * value return next } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);

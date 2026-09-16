@@ -18,6 +18,16 @@ fn increment_local(value: Int) -> Int
     return next
 }
 
+fn increment_mutable(value: Int) -> Int
+    ensures {
+        result > value
+    }
+{
+    mutable next = value
+    next = next + 1
+    return next
+}
+
 fn twice(value: Int) -> Int
     requires {
         value >= 0
