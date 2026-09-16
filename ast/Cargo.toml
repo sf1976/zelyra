@@ -1,0 +1,9 @@
+[package]
+name = "zelyra-ast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "zelyra_ast"
+path = "src/lib.rs"

@@ -1,0 +1,15 @@
+[package]
+name = "zelyra-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "zelyra"
+path = "src/main.rs"
+
+[dependencies]
+zelyra-ast.workspace = true
+zelyra-lexer.workspace = true
+zelyra-parser.workspace = true
+zelyra-runtime.workspace = true

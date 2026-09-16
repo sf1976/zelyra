@@ -1,0 +1,9 @@
+[package]
+name = "zelyra-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zelyra-ast.workspace = true
+zelyra-lexer.workspace = true

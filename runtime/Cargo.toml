@@ -1,0 +1,12 @@
+[package]
+name = "zelyra-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zelyra-ast.workspace = true
+
+[dev-dependencies]
+zelyra-lexer.workspace = true
+zelyra-parser.workspace = true

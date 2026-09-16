@@ -1,0 +1,14 @@
+[workspace]
+members = ["ast", "lexer", "parser", "runtime", "cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+zelyra-ast = { path = "ast" }
+zelyra-lexer = { path = "lexer" }
+zelyra-parser = { path = "parser" }
+zelyra-runtime = { path = "runtime" }
