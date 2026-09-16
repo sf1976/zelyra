@@ -121,10 +121,11 @@ are available as assumptions while proving its `ensures`. Calls to complex,
 recursive, or otherwise unresolved functions remain `RUNTIME_CHECK`, as do
 call preconditions that cannot be proven.
 
-Immutable typed local bindings are tracked through a function body as well:
-`next: Int = value + 1` followed by `return next` can be summarized like the
-equivalent direct return. Mutable locals and assignments are not summarized in
-this step and remain `RUNTIME_CHECK`.
+Immutable local bindings are tracked through a function body as well. Both
+`next: Int = value + 1` and the concise `next = value + 1`, followed by
+`return next`, can be summarized like the equivalent direct return. Mutable
+locals and assignments are not summarized in this step and remain
+`RUNTIME_CHECK`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

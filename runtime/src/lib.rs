@@ -277,7 +277,12 @@ enum SymbolicState<'a> {
 }
 
 fn symbolic_return_paths(function: &Function) -> Option<Vec<ReturnPath<'_>>> {
-    let states = symbolic_states(&function.body, Vec::new(), HashMap::new())?;
+    let parameters = function
+        .params
+        .iter()
+        .map(|parameter| parameter.name.clone())
+        .collect::<HashSet<_>>();
+    let states = symbolic_states(&function.body, Vec::new(), HashMap::new(), &parameters)?;
     let mut paths = Vec::new();
     for state in states {
         let SymbolicState::Return {
@@ -346,6 +351,7 @@ fn symbolic_states<'a>(
     block: &'a Block,
     incoming: Vec<SymbolicGuard<'a>>,
     bindings: HashMap<String, &'a Expr>,
+    parameters: &HashSet<String>,
 ) -> Option<Vec<SymbolicState<'a>>> {
     let mut states = vec![SymbolicState::Continue {
         guards: incoming,
@@ -367,6 +373,15 @@ fn symbolic_states<'a>(
                         bindings.insert(name.clone(), value);
                         next.push(SymbolicState::Continue { guards, bindings });
                     }
+                    Stmt::BindOrAssign { name, value, .. }
+                        if !parameters.contains(name)
+                            && !bindings.contains_key(name)
+                            && !expression_contains_variable(value, name) =>
+                    {
+                        let mut bindings = bindings;
+                        bindings.insert(name.clone(), value);
+                        next.push(SymbolicState::Continue { guards, bindings });
+                    }
                     Stmt::Return { value, .. } => next.push(SymbolicState::Return {
                         guards,
                         expression: value.as_ref(),
@@ -383,7 +398,12 @@ fn symbolic_states<'a>(
                             expression: condition,
                             expected: true,
                         });
-                        next.extend(symbolic_states(then_block, then_guards, bindings.clone())?);
+                        next.extend(symbolic_states(
+                            then_block,
+                            then_guards,
+                            bindings.clone(),
+                            parameters,
+                        )?);
 
                         if let Some(else_block) = else_block {
                             let mut else_guards = guards;
@@ -395,6 +415,7 @@ fn symbolic_states<'a>(
                                 else_block,
                                 else_guards,
                                 bindings.clone(),
+                                parameters,
                             )?);
                         } else {
                             let mut guards = guards;
@@ -422,7 +443,12 @@ fn symbolic_states<'a>(
                             });
                             let mut arm_bindings = bindings.clone();
                             add_pattern_bindings(value, &arm.pattern, &mut arm_bindings);
-                            next.extend(symbolic_states(&arm.body, arm_guards, arm_bindings)?);
+                            next.extend(symbolic_states(
+                                &arm.body,
+                                arm_guards,
+                                arm_bindings,
+                                parameters,
+                            )?);
                         }
                     }
                     _ => return None,
@@ -3252,7 +3278,7 @@ mod tests {
     #[test]
     fn proves_immutable_local_bindings_in_contracts() {
         let program = parse(
-            &lex("fn increment_local(value: Int) -> Int ensures { result > value } { next: Int = value + 1 return next } fn caller(value: Int) -> Int ensures { result > value } { next: Int = value + 1 return next } fn main() { }").unwrap(),
+            &lex("fn increment_local(value: Int) -> Int ensures { result > value } { next: Int = value + 1 return next } fn caller(value: Int) -> Int ensures { result > value } { next = value + 1 return next } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);

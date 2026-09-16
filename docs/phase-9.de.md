@@ -128,11 +128,11 @@ Bedingungen der aufgerufenen Funktion nach Argumentsubstitution. Die
 Annahmen zur Verfügung. Aufrufe komplexer, rekursiver oder nicht auflösbarer
 Funktionen sowie nicht beweisbare Aufrufbedingungen bleiben `RUNTIME_CHECK`.
 
-Unveränderliche typisierte lokale Bindings werden ebenfalls durch den
-Funktionskörper verfolgt: `next: Int = value + 1` mit anschließendem
-`return next` kann wie die direkte Rückgabe zusammengefasst werden. Mutable
-Lokale und Zuweisungen werden in diesem Schritt nicht zusammengefasst und
-bleiben `RUNTIME_CHECK`.
+Unveränderliche lokale Bindings werden ebenfalls durch den Funktionskörper
+verfolgt. Sowohl `next: Int = value + 1` als auch die Kurzform
+`next = value + 1` mit anschließendem `return next` können wie die direkte
+Rückgabe zusammengefasst werden. Mutable Lokale und Zuweisungen werden in
+diesem Schritt nicht zusammengefasst und bleiben `RUNTIME_CHECK`.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

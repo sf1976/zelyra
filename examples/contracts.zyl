@@ -14,7 +14,7 @@ fn increment_local(value: Int) -> Int
         result > value
     }
 {
-    next: Int = value + 1
+    next = value + 1
     return next
 }
 
