@@ -35,8 +35,9 @@ Implemented today:
 - an initial Forms Core with schema-aware field definitions and validation;
 - validated form actions with safe MariaDB parameter binding, transactions, and
   HTTP redirects.
-- an initial CRUD list route with MariaDB search, filtering, sorting, and
-  pagination.
+- an initial CRUD resource with MariaDB search, configurable list/search/filter
+  columns, sorting, pagination, generated Create/Edit forms, and
+  CSRF-protected delete.
 
 Full CRUD generation, authentication, APIs, CSRF, contracts, verification, and
 production deployment tooling are still being developed. See the
@@ -315,9 +316,9 @@ The long-term specification is organized into these phases:
 5. Web Core — initial pages and HTTP server implemented.
 6. Forms — schema-aware parsing, validation, web rendering, actions, and
    relationship selects implemented.
-7. CRUD — list, detail, create, edit, search, filter, sort, pagination, and
-   CSRF-protected delete implemented; configured columns and authorization
-   remain.
+7. CRUD — list, detail, create, edit, search, filter, sort, pagination,
+   configurable columns, and CSRF-protected delete implemented; authorization
+   remains.
 8. Authentication and authorization.
 9. Capabilities, contracts, verification, and structured concurrency.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.

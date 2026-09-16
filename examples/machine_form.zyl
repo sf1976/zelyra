@@ -34,4 +34,23 @@ form MachineCreate -> machines {
     }
 }
 
-crud Machine -> machines
+crud Machine -> machines {
+    title: "Machines"
+
+    list {
+        number
+        name
+        department
+        active
+    }
+
+    search {
+        number
+        name
+    }
+
+    filter {
+        department
+        active
+    }
+}

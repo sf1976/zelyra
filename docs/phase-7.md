@@ -2,12 +2,30 @@
 
 [Deutsch](phase-7.de.md) · English
 
-Phase 7 starts CRUD as a language-level abstraction. The first vertical slice
-supports:
+Phase 7 starts CRUD as a language-level abstraction. The current vertical
+slice supports:
 
 ~~~zelyra
 crud Machine -> machines
 ~~~
+
+CRUD resources can now configure their title, visible list columns, searchable
+columns, and filter columns:
+
+~~~zelyra
+crud Machine -> machines {
+    title: "Machines"
+    list { number name department active }
+    search { number name }
+    filter { department active }
+}
+~~~
+
+The blocks are optional. Without them, Zelyra keeps the safe defaults:
+all schema columns in the list, text columns for search, and all non-ID
+columns for filters. Configured names are checked against the schema before
+the server starts; relationship fields such as department resolve to their
+stored foreign-key column automatically.
 
 With a MariaDB `DATABASE_URL`, this exposes `GET /machines`. The generated
 list currently includes all schema columns in an escaped HTML table, search
@@ -31,8 +49,8 @@ Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
 
-The next steps are configured columns and authorization checks once the Auth
-and Permissions system is available.
+The next step is authorization and permission checks once the Auth and
+Permissions system is available.
 The complete relationship-aware example is `examples/machine_form.zyl`.
 
 ~~~bash

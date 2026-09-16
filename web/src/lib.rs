@@ -129,6 +129,9 @@ pub struct CrudRoute {
     pub path: String,
     pub title: String,
     pub table: String,
+    pub list_columns: Vec<String>,
+    pub search_columns: Vec<String>,
+    pub filter_columns: Vec<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -497,25 +500,77 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     else {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     };
-    let columns = table
+    let all_columns = table
         .columns
         .iter()
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
-    if columns.is_empty() {
+    if all_columns.is_empty() {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     }
+    let display_columns = crud
+        .list_columns
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let display_columns = if display_columns.is_empty() {
+        all_columns.clone()
+    } else {
+        display_columns
+    };
+    let mut query_columns = Vec::new();
+    if all_columns.contains(&"id") {
+        query_columns.push("id");
+    }
+    for column in &display_columns {
+        if !query_columns.contains(column) {
+            query_columns.push(column);
+        }
+    }
+    let sort_columns = all_columns.clone();
+    let search_columns = crud
+        .search_columns
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let search_columns = if crud.search_columns.is_empty() {
+        table
+            .columns
+            .iter()
+            .filter(|column| {
+                let sql_type = column.sql_type.to_ascii_uppercase();
+                sql_type.contains("CHAR") || sql_type.contains("TEXT")
+            })
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>()
+    } else {
+        search_columns
+    };
+    let filter_columns = crud
+        .filter_columns
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let filter_columns = if crud.filter_columns.is_empty() {
+        all_columns
+            .iter()
+            .copied()
+            .filter(|column| *column != "id")
+            .collect::<Vec<_>>()
+    } else {
+        filter_columns
+    };
     let sort_column = query_values
         .get("sort")
         .map(String::as_str)
         .unwrap_or_else(|| {
-            columns
+            sort_columns
                 .iter()
                 .copied()
                 .find(|column| *column == "id")
-                .unwrap_or(columns[0])
+                .unwrap_or(sort_columns[0])
         });
-    if !columns.contains(&sort_column) {
+    if !sort_columns.contains(&sort_column) {
         return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown sort column.</p>");
     }
     let order = match query_values
@@ -537,25 +592,16 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         let Some(column) = name.strip_prefix("filter_") else {
             continue;
         };
-        if !columns.contains(&column) {
+        if !filter_columns.contains(&column) {
             return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown filter column.</p>");
         }
         if !value.is_empty() {
             filters.push((column, value));
         }
     }
-    let text_columns = table
-        .columns
-        .iter()
-        .filter(|column| {
-            let sql_type = column.sql_type.to_ascii_uppercase();
-            sql_type.contains("CHAR") || sql_type.contains("TEXT")
-        })
-        .map(|column| column.name.as_str())
-        .collect::<Vec<_>>();
     let mut query = format!(
         "SELECT {} FROM {}",
-        columns
+        query_columns
             .iter()
             .map(|column| quote_identifier(column))
             .collect::<Vec<_>>()
@@ -563,10 +609,10 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         quote_identifier(&crud.table)
     );
     let mut conditions = Vec::new();
-    if !search.is_empty() && !text_columns.is_empty() {
+    if !search.is_empty() && !search_columns.is_empty() {
         conditions.push(format!(
             "({})",
-            text_columns
+            search_columns
                 .iter()
                 .map(|column| {
                     format!(
@@ -600,7 +646,7 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
             zelyra_database::QueryValue::Int(offset as i64),
         ),
     ];
-    if !search.is_empty() && !text_columns.is_empty() {
+    if !search.is_empty() && !search_columns.is_empty() {
         params.push((
             "search".into(),
             zelyra_database::QueryValue::String(search.clone()),
@@ -632,8 +678,10 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         render_crud_list(
             crud,
             CrudListView {
-                table,
-                columns: &columns,
+                query_columns: &query_columns,
+                display_columns: &display_columns,
+                filter_columns: &filter_columns,
+                sort_columns: &sort_columns,
                 rows: &result.rows,
                 search: &search,
                 query_values: &query_values,
@@ -795,8 +843,10 @@ fn filter_query_value(
 }
 
 struct CrudListView<'a> {
-    table: &'a zelyra_database::Table,
-    columns: &'a [&'a str],
+    query_columns: &'a [&'a str],
+    display_columns: &'a [&'a str],
+    filter_columns: &'a [&'a str],
+    sort_columns: &'a [&'a str],
     rows: &'a [Vec<String>],
     search: &'a str,
     query_values: &'a HashMap<String, String>,
@@ -808,8 +858,10 @@ struct CrudListView<'a> {
 
 fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
     let CrudListView {
-        table,
-        columns,
+        query_columns,
+        display_columns,
+        filter_columns,
+        sort_columns,
         rows,
         search,
         query_values,
@@ -827,7 +879,7 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
     );
     html.push_str(&html_escape(search));
     html.push_str("\"><label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
-    for column in columns {
+    for column in sort_columns {
         html.push_str("<option value=\"");
         html.push_str(&html_escape(column));
         html.push('"');
@@ -853,22 +905,19 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
         html.push_str("</option>");
     }
     html.push_str("</select>");
-    for column in &table.columns {
-        if column.name == "id" {
-            continue;
-        }
+    for column in filter_columns {
         html.push_str("<label for=\"filter_");
-        html.push_str(&html_escape(&column.name));
+        html.push_str(&html_escape(column));
         html.push_str("\">");
-        html.push_str(&html_escape(&format!("Filter {}", humanize(&column.name))));
+        html.push_str(&html_escape(&format!("Filter {}", humanize(column))));
         html.push_str("</label><input id=\"filter_");
-        html.push_str(&html_escape(&column.name));
+        html.push_str(&html_escape(column));
         html.push_str("\" name=\"filter_");
-        html.push_str(&html_escape(&column.name));
+        html.push_str(&html_escape(column));
         html.push_str("\" value=\"");
         html.push_str(&html_escape(
             query_values
-                .get(&format!("filter_{}", column.name))
+                .get(&format!("filter_{column}"))
                 .map(String::as_str)
                 .unwrap_or(""),
         ));
@@ -879,7 +928,7 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
         html.push_str("<p>No records found.</p>");
     } else {
         html.push_str("<table><thead><tr>");
-        for column in columns {
+        for column in display_columns {
             html.push_str("<th>");
             html.push_str(&html_escape(&humanize(column)));
             html.push_str("</th>");
@@ -887,9 +936,15 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
         html.push_str("</tr></thead><tbody>");
         for row in rows {
             html.push_str("<tr>");
-            for (index, value) in row.iter().enumerate() {
+            for column in display_columns {
                 html.push_str("<td>");
-                if columns.get(index) == Some(&"id") {
+                let value = query_columns
+                    .iter()
+                    .position(|query_column| query_column == column)
+                    .and_then(|index| row.get(index))
+                    .map(String::as_str)
+                    .unwrap_or("");
+                if *column == "id" {
                     html.push_str("<a href=\"");
                     html.push_str(&html_escape(&format!("{}/{}", crud.path, value)));
                     html.push_str("\">");
@@ -1811,13 +1866,16 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
                 tables: Vec::new(),
             },
         };
-        let table = zelyra_database::Table {
+        let _table = zelyra_database::Table {
             name: "machines".into(),
             columns: vec![
                 zelyra_database::Column {
@@ -1849,8 +1907,10 @@ mod tests {
         let html = render_crud_list(
             &route,
             CrudListView {
-                table: &table,
-                columns: &columns,
+                query_columns: &columns,
+                display_columns: &columns,
+                filter_columns: &["name"],
+                sort_columns: &columns,
                 rows: &rows,
                 search: "CNC machine",
                 query_values: &query_values,
@@ -1874,6 +1934,9 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -1895,6 +1958,9 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -1914,6 +1980,9 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,

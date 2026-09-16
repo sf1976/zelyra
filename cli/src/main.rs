@@ -193,9 +193,85 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 crud.span.column,
             );
             valid = false;
+            continue;
+        }
+        let configured_columns = crud.list.iter().chain(&crud.search).chain(&crud.filters);
+        for column in configured_columns {
+            if !crud_column_exists(program, schema, crud, column) {
+                diagnostic(
+                    path,
+                    "E-CRUD-004",
+                    &format!(
+                        "CRUD column {column} does not exist in table {}",
+                        crud.table
+                    ),
+                    crud.span.line,
+                    crud.span.column,
+                );
+                valid = false;
+            }
         }
     }
     valid
+}
+
+fn crud_column_exists(
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+    crud: &zelyra_ast::CrudDef,
+    column: &str,
+) -> bool {
+    let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
+        return false;
+    };
+    let logical_exists = table
+        .columns
+        .iter()
+        .any(|candidate| candidate.name == column);
+    if !logical_exists
+        && !schema.tables.iter().any(|table| {
+            table.name == crud.table
+                && table
+                    .columns
+                    .iter()
+                    .any(|candidate| candidate.name == column)
+        })
+    {
+        return false;
+    }
+    let storage = storage_column_name(schema, &crud.table, column);
+    schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+        .is_some_and(|table| {
+            table
+                .columns
+                .iter()
+                .any(|candidate| candidate.name == storage)
+        })
+}
+
+fn configured_crud_columns(
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+    crud: &zelyra_ast::CrudDef,
+    configured: &[String],
+    default: impl FnOnce(&zelyra_database::Table) -> Vec<String>,
+) -> Vec<String> {
+    let table = schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+        .expect("CRUD table was validated before route generation");
+    if configured.is_empty() {
+        return default(table);
+    }
+    configured
+        .iter()
+        .map(|column| storage_column_name(schema, &crud.table, column))
+        .filter(|column| crud_column_exists(program, schema, crud, column))
+        .collect()
 }
 
 fn load_schema(path: &str) -> Result<Schema, ()> {
@@ -455,10 +531,41 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
             return ExitCode::from(1);
         };
+        let list_columns = configured_crud_columns(&program, &schema, crud, &crud.list, |table| {
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect()
+        });
+        let search_columns =
+            configured_crud_columns(&program, &schema, crud, &crud.search, |table| {
+                table
+                    .columns
+                    .iter()
+                    .filter(|column| {
+                        let sql_type = column.sql_type.to_ascii_uppercase();
+                        sql_type.contains("CHAR") || sql_type.contains("TEXT")
+                    })
+                    .map(|column| column.name.clone())
+                    .collect()
+            });
+        let filter_columns =
+            configured_crud_columns(&program, &schema, crud, &crud.filters, |table| {
+                table
+                    .columns
+                    .iter()
+                    .filter(|column| column.name != "id")
+                    .map(|column| column.name.clone())
+                    .collect()
+            });
         crud_routes.push(CrudRoute {
             path: format!("/{}", crud.table),
-            title: crud.name.clone(),
+            title: crud.title.clone().unwrap_or_else(|| crud.name.clone()),
             table: crud.table.clone(),
+            list_columns,
+            search_columns,
+            filter_columns,
             schema: schema.clone(),
             csrf,
         });
@@ -747,5 +854,27 @@ fn main() -> ExitCode {
             usage();
             ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unknown_configured_crud_columns() {
+        let source = r#"
+            table machines {
+                id: Id primary auto
+                name: String(100) required
+            }
+
+            crud Machine -> machines {
+                list { missing }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_cruds("test.zyl", &program, &schema));
     }
 }

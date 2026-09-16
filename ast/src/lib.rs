@@ -129,6 +129,10 @@ pub struct FormAction {
 pub struct CrudDef {
     pub name: String,
     pub table: String,
+    pub title: Option<String>,
+    pub list: Vec<String>,
+    pub search: Vec<String>,
+    pub filters: Vec<String>,
     pub span: Span,
 }
 

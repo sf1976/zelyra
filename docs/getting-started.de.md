@@ -17,7 +17,8 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - geprüftes natives SQL;
 - Web-Seiten und HTTP-Routing;
 - Formulare und Validierung;
-- erste CRUD-Listen, Details, Create-/Edit-Formulare und Löschaktionen;
+- erste CRUD-Listen, Details, Create-/Edit-Formulare, konfigurierbare Spalten
+  und Löschaktionen;
 - später vollständiges CRUD, APIs, Authentifizierung, Autorisierung und
   Verifikation.
 
@@ -468,6 +469,23 @@ Eine minimale CRUD-Ressource wird so ergänzt:
 crud Machine -> machines
 ~~~
 
+Für eine angepasste Ressource können Titel, sichtbare Spalten, Suchspalten und
+Filter konfiguriert werden:
+
+~~~zelyra
+crud Machine -> machines {
+    title: "Machines"
+    list { number name department active }
+    search { number name }
+    filter { department active }
+}
+~~~
+
+Alle Blöcke sind optional. Konfigurierte Spalten werden gegen das Schema
+geprüft; Beziehungsfelder werden auf ihre gespeicherten Foreign-Key-Spalten
+abgebildet. Die Kurzform behält die Defaults für Liste, Textsuche und Filter
+außer der ID.
+
 Damit wird `GET /machines` mit escaped Ausgabe, Suche, exakten Filtern,
 Allowlist-Sortierung, Pagination, verlinkten Detailseiten und automatisch
 erzeugten Create-/Edit-Formularen unter `/machines/new` und
@@ -550,7 +568,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
-Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare und eine
-CSRF-geschützte Löschaktion. Die nächste praktische Entwicklungsstufe sind
-konfigurierbare Spalten und Berechtigungsprüfungen auf demselben Schema-, SQL-,
-Formular- und Berechtigungsfundament.
+Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare,
+konfigurierbare Spalten und eine CSRF-geschützte Löschaktion. Die nächste
+praktische Entwicklungsstufe sind Berechtigungsprüfungen auf demselben
+Schema-, SQL- und Formularfundament.

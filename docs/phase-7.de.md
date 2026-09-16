@@ -2,12 +2,30 @@
 
 Deutsch · [English](phase-7.md)
 
-Phase 7 beginnt CRUD als Sprachabstraktion. Der erste vertikale Schnitt
+Phase 7 beginnt CRUD als Sprachabstraktion. Der aktuelle vertikale Schnitt
 unterstützt:
 
 ~~~zelyra
 crud Machine -> machines
 ~~~
+
+CRUD-Ressourcen können jetzt Titel, sichtbare Listenspalten,
+durchsuchbare Spalten und Filterspalten konfigurieren:
+
+~~~zelyra
+crud Machine -> machines {
+    title: "Machines"
+    list { number name department active }
+    search { number name }
+    filter { department active }
+}
+~~~
+
+Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
+erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
+Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem
+Serverstart gegen das Schema geprüft; Beziehungsfelder wie department
+werden automatisch auf ihre gespeicherte Foreign-Key-Spalte abgebildet.
 
 Mit einer auf MariaDB zeigenden `DATABASE_URL` wird `GET /machines`
 bereitgestellt. Die generierte Liste umfasst aktuell alle Schema-Spalten in
@@ -34,8 +52,8 @@ Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.
 
-Als Nächstes folgen konfigurierbare Spalten und Berechtigungsprüfungen, sobald
-das Auth-/Permissions-System verfügbar ist. Das vollständige Beispiel mit Beziehung ist
+Als Nächstes folgen Berechtigungsprüfungen, sobald das
+Auth-/Permissions-System verfügbar ist. Das vollständige Beispiel mit Beziehung ist
 `examples/machine_form.zyl`.
 
 ~~~bash

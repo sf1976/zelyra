@@ -35,8 +35,9 @@ Heute implementiert:
 - ein erster Forms Core mit schemaabhängigen Feldern und Validierung;
 - validierte Formularaktionen mit sicherer MariaDB-Parameterbindung,
   Transaktionen und HTTP-Weiterleitungen.
-- eine erste CRUD-Listenroute mit MariaDB-Suche, Filtern, Sortierung und
-  Pagination.
+- eine erste CRUD-Ressource mit MariaDB-Suche, konfigurierbaren Listen-,
+  Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
+  Formularen und CSRF-geschütztem Löschen.
 
 Vollständige CRUD-Erzeugung, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
@@ -320,8 +321,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 6. Forms — schemaabhängige Syntax, Validierung, Web-Rendering, Aktionen und
    Beziehungs-Selects vorhanden.
 7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
-   Pagination und CSRF-geschütztes Löschen vorhanden; konfigurierbare Spalten
-   und Autorisierung folgen.
+   Pagination, konfigurierbare Spalten und CSRF-geschütztes Löschen vorhanden;
+   Autorisierung folgt.
 8. Authentifizierung und Autorisierung.
 9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.

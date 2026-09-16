@@ -16,7 +16,8 @@ data. The language is intended to bring together:
 - checked native SQL;
 - web pages and HTTP routing;
 - forms and validation;
-- initial CRUD lists, details, Create/Edit forms, and delete actions;
+- initial CRUD lists, details, Create/Edit forms, configurable columns, and
+  delete actions;
 - later, full CRUD, APIs, authentication, authorization, and verification.
 
 The central design goal is to define important information once. For example,
@@ -458,6 +459,22 @@ A minimal CRUD resource can be added with:
 crud Machine -> machines
 ~~~
 
+For a tailored resource, configure the title, visible columns, searchable
+columns, and filters:
+
+~~~zelyra
+crud Machine -> machines {
+    title: "Machines"
+    list { number name department active }
+    search { number name }
+    filter { department active }
+}
+~~~
+
+All blocks are optional. Configured columns are checked against the schema;
+relationship fields are mapped to their stored foreign-key columns. The
+minimal form keeps the default list, text search, and non-ID filters.
+
 This exposes `GET /machines` with escaped output, search, exact filters,
 allowlisted sorting, pagination, linked detail pages, and generated Create/Edit
 forms at `/machines/new` and `/machines/<id>/edit`. Filters use
@@ -540,7 +557,7 @@ Read the phase documents for implementation details:
 
 The German versions use the same filenames with the .de.md suffix.
 
-The CRUD list now also provides detail, Create/Edit forms, and a
-CSRF-protected Delete action. The next practical development step is configured
-columns and authorization checks while keeping the same schema, SQL, form, and
-permission foundations.
+The CRUD list now also provides detail, Create/Edit forms, configurable
+columns, and a CSRF-protected Delete action. The next practical development
+step is authorization checks while keeping the same schema, SQL, and form
+foundations.

@@ -104,12 +104,83 @@ impl<'a> Parser<'a> {
         let start = self.expect(TokenKind::Crud, "`crud`")?;
         let (name, _) = self.ident("CRUD resource name")?;
         self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
-        let (table, end) = self.ident("table name after `->`")?;
+        let (table, table_span) = self.ident("table name after `->`")?;
+        let mut title = None;
+        let mut list = Vec::new();
+        let mut search = Vec::new();
+        let mut filters = Vec::new();
+
+        if self.at(&TokenKind::LBrace) {
+            self.advance();
+            self.skip_newlines();
+            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                match self.current().kind.clone() {
+                    TokenKind::Title => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD title")?;
+                        title = Some(self.string_value("CRUD title")?);
+                    }
+                    TokenKind::List => {
+                        self.advance();
+                        list = self.crud_column_block("list")?;
+                    }
+                    TokenKind::Search => {
+                        self.advance();
+                        search = self.crud_column_block("search")?;
+                    }
+                    TokenKind::Filter => {
+                        self.advance();
+                        filters = self.crud_column_block("filter")?;
+                    }
+                    _ => {
+                        return self
+                            .error("expected title, list, search, or filter in CRUD definition")
+                    }
+                }
+                self.skip_newlines();
+            }
+            let end = self.expect(TokenKind::RBrace, "`}` after CRUD definition")?;
+            return Ok(CrudDef {
+                name,
+                table,
+                title,
+                list,
+                search,
+                filters,
+                span: start.join(end),
+            });
+        }
+
         Ok(CrudDef {
             name,
             table,
-            span: start.join(end),
+            title,
+            list,
+            search,
+            filters,
+            span: start.join(table_span),
         })
+    }
+
+    fn crud_column_block(&mut self, label: &str) -> Result<Vec<String>, ParseError> {
+        let (open_label, close_label) = match label {
+            "list" => ("`{` after CRUD list", "`}` after CRUD list"),
+            "search" => ("`{` after CRUD search", "`}` after CRUD search"),
+            _ => ("`{` after CRUD filter", "`}` after CRUD filter"),
+        };
+        self.expect(TokenKind::LBrace, open_label)?;
+        let mut columns = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            columns.push(self.ident("CRUD column name")?.0);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        self.expect(TokenKind::RBrace, close_label)?;
+        Ok(columns)
     }
     fn database_definition(&mut self) -> Result<DatabaseDef, ParseError> {
         let start = self.expect(TokenKind::Database, "`database`")?;
@@ -1038,5 +1109,24 @@ mod tests {
         assert_eq!(program.cruds.len(), 1);
         assert_eq!(program.cruds[0].name, "Machine");
         assert_eq!(program.cruds[0].table, "machines");
+    }
+
+    #[test]
+    fn parses_configured_crud_definition() {
+        let program = parse(
+            &lex(r#"crud Customer -> customers {
+                    title: "Customers"
+                    list { customer_number name }
+                    search { name }
+                    filter { active }
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let crud = &program.cruds[0];
+        assert_eq!(crud.title.as_deref(), Some("Customers"));
+        assert_eq!(crud.list, ["customer_number", "name"]);
+        assert_eq!(crud.search, ["name"]);
+        assert_eq!(crud.filters, ["active"]);
     }
 }
