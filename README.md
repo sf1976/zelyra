@@ -65,6 +65,9 @@ Phase 2 adds nominal types, `Option`/`Result`, and exhaustive pattern matching.
 See [docs/phase-2.md](docs/phase-2.md) or the
 [German Phase 2 guide](docs/phase-2.de.md).
 
+Phase 3 adds the PostgreSQL Database Core. See [docs/phase-3.md](docs/phase-3.md)
+or the [German Phase 3 guide](docs/phase-3.de.md).
+
 ## Current limitations
 
 The Phase 1 implementation is an interpreter-backed compiler prototype. It

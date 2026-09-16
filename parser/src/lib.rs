@@ -63,18 +63,203 @@ impl<'a> Parser<'a> {
         }
     }
     fn program(mut self) -> Result<Program, ParseError> {
+        let mut databases = Vec::new();
+        let mut tables = Vec::new();
         let mut types = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Type) {
+            if self.at(&TokenKind::Database) {
+                databases.push(self.database_definition()?);
+            } else if self.at(&TokenKind::Table) {
+                tables.push(self.table_definition()?);
+            } else if self.at(&TokenKind::Type) {
                 types.push(self.type_definition()?);
             } else {
                 functions.push(self.function()?);
             }
             self.skip_newlines();
         }
-        Ok(Program { types, functions })
+        Ok(Program {
+            databases,
+            tables,
+            types,
+            functions,
+        })
+    }
+    fn database_definition(&mut self) -> Result<DatabaseDef, ParseError> {
+        let start = self.expect(TokenKind::Database, "`database`")?;
+        let (name, _) = self.ident("database name")?;
+        self.expect(TokenKind::LBrace, "`{` after database name")?;
+        let mut engine = None;
+        let mut database = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Engine) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after engine")?;
+                engine = Some(self.database_value("database engine")?);
+            } else if self.at(&TokenKind::Database) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after database")?;
+                database = Some(self.string_value("database name")?);
+            } else {
+                return self.error("expected `engine` or `database` in database definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after database definition")?;
+        Ok(DatabaseDef {
+            name,
+            engine: engine.unwrap_or_else(|| "postgres".into()),
+            database,
+            span: start.join(end),
+        })
+    }
+    fn database_value(&mut self, label: &str) -> Result<String, ParseError> {
+        if self.at(&TokenKind::Postgres) {
+            self.advance();
+            Ok("postgres".into())
+        } else {
+            self.ident(label).map(|(name, _)| name)
+        }
+    }
+    fn string_value(&mut self, label: &str) -> Result<String, ParseError> {
+        match &self.current().kind {
+            TokenKind::String(value) => {
+                let value = value.clone();
+                self.advance();
+                Ok(value)
+            }
+            _ => self.error(format!("expected {label}")),
+        }
+    }
+    fn table_definition(&mut self) -> Result<TableDef, ParseError> {
+        let start = self.expect(TokenKind::Table, "`table`")?;
+        let (name, _) = self.ident("table name")?;
+        self.expect(TokenKind::LBrace, "`{` after table name")?;
+        let mut columns = Vec::new();
+        let mut indexes = Vec::new();
+        let mut uniques = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Index) {
+                indexes.push(self.index_definition(TokenKind::Index)?);
+            } else if self.at(&TokenKind::Unique) {
+                uniques.push(self.index_definition(TokenKind::Unique)?);
+            } else {
+                columns.push(self.column_definition()?);
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after table definition")?;
+        Ok(TableDef {
+            name,
+            columns,
+            indexes,
+            uniques,
+            span: start.join(end),
+        })
+    }
+    fn column_definition(&mut self) -> Result<ColumnDef, ParseError> {
+        let (name, span) = self.ident("column name")?;
+        self.expect(TokenKind::Colon, "`:` after column name")?;
+        let (ty, length) = self.column_type()?;
+        let mut required = false;
+        let mut primary_key = false;
+        let mut auto = false;
+        let mut unique = false;
+        let mut default = None;
+        loop {
+            match self.current().kind.clone() {
+                TokenKind::Required => {
+                    required = true;
+                    self.advance();
+                }
+                TokenKind::Primary => {
+                    primary_key = true;
+                    self.advance();
+                }
+                TokenKind::Auto => {
+                    auto = true;
+                    self.advance();
+                }
+                TokenKind::Unique => {
+                    unique = true;
+                    self.advance();
+                }
+                TokenKind::Default => {
+                    self.advance();
+                    default = Some(self.default_value()?);
+                }
+                _ => break,
+            }
+        }
+        Ok(ColumnDef {
+            name,
+            ty,
+            length,
+            required,
+            primary_key,
+            auto,
+            unique,
+            default,
+            span,
+        })
+    }
+    fn column_type(&mut self) -> Result<(Type, Option<u32>), ParseError> {
+        let ty = self.type_name()?;
+        if self.at(&TokenKind::LParen) {
+            if ty != Type::String {
+                return self.error("length is only supported for String columns");
+            }
+            self.advance();
+            let length = match self.current().kind.clone() {
+                TokenKind::Int(value) if value > 0 => {
+                    self.advance();
+                    value as u32
+                }
+                _ => return self.error("expected positive String length"),
+            };
+            self.expect(TokenKind::RParen, "`)` after String length")?;
+            Ok((ty, Some(length)))
+        } else {
+            Ok((ty, None))
+        }
+    }
+    fn default_value(&mut self) -> Result<DefaultValue, ParseError> {
+        let token = self.advance().clone();
+        match token.kind {
+            TokenKind::Int(value) => Ok(DefaultValue::Int(value)),
+            TokenKind::True => Ok(DefaultValue::Bool(true)),
+            TokenKind::False => Ok(DefaultValue::Bool(false)),
+            TokenKind::String(value) => Ok(DefaultValue::String(value)),
+            TokenKind::Ident(value) => Ok(DefaultValue::Ident(value)),
+            found => self.error(format!("expected default value, found {found:?}")),
+        }
+    }
+    fn index_definition(&mut self, kind: TokenKind) -> Result<IndexDef, ParseError> {
+        let start = self.expect(kind, "index declaration")?;
+        self.expect(TokenKind::LBrace, "`{` after index declaration")?;
+        let mut columns = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (column, _) = self.ident("indexed column name")?;
+            columns.push(column);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after index columns")?;
+        if columns.is_empty() {
+            return self.error("index must contain at least one column");
+        }
+        Ok(IndexDef {
+            columns,
+            span: start.join(end),
+        })
     }
     fn type_definition(&mut self) -> Result<TypeDef, ParseError> {
         let start = self.expect(TokenKind::Type, "`type`")?;

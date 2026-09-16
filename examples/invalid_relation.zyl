@@ -1,0 +1,4 @@
+table machines {
+    id: Id primary auto
+    department: MissingDepartment required
+}

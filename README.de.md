@@ -66,6 +66,9 @@ Phase 2 ergänzt nominale Typen, `Option`/`Result` und vollständiges Pattern
 Matching. Siehe [den deutschen Phase-2-Leitfaden](docs/phase-2.de.md) oder die
 [englische Fassung](docs/phase-2.md).
 
+Phase 3 ergänzt den PostgreSQL Database Core. Siehe [den deutschen
+Phase-3-Leitfaden](docs/phase-3.de.md) oder die [englische Fassung](docs/phase-3.md).
+
 ## Aktuelle Grenzen
 
 Die Implementierung der Phase 1 ist ein compilerartiger Prototyp mit

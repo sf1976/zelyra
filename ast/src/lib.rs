@@ -76,8 +76,54 @@ impl fmt::Display for Type {
 
 #[derive(Clone, Debug)]
 pub struct Program {
+    pub databases: Vec<DatabaseDef>,
+    pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DatabaseDef {
+    pub name: String,
+    pub engine: String,
+    pub database: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct TableDef {
+    pub name: String,
+    pub columns: Vec<ColumnDef>,
+    pub indexes: Vec<IndexDef>,
+    pub uniques: Vec<IndexDef>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ColumnDef {
+    pub name: String,
+    pub ty: Type,
+    pub length: Option<u32>,
+    pub required: bool,
+    pub primary_key: bool,
+    pub auto: bool,
+    pub unique: bool,
+    pub default: Option<DefaultValue>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum DefaultValue {
+    Int(i64),
+    Bool(bool),
+    String(String),
+    Ident(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct IndexDef {
+    pub columns: Vec<String>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]

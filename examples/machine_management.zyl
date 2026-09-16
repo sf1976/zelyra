@@ -1,0 +1,21 @@
+database main {
+    engine: postgres
+    database: "machine_management"
+}
+
+table departments {
+    id: Id primary auto
+    name: String(100) required unique
+}
+
+table machines {
+    id: Id primary auto
+    number: String(30) required unique
+    name: String(100) required
+    department: Department required
+    active: Bool default true
+
+    index {
+        department
+    }
+}
