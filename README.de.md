@@ -33,6 +33,8 @@ Heute implementiert:
 - ein erster Web Core mit Seitendefinitionen, GET-Routing, Pfadparametern und
   eingebautem HTTP-Server;
 - ein erster Forms Core mit schemaabhängigen Feldern und Validierung.
+- validierte Formularaktionen mit sicherer MariaDB-Parameterbindung,
+  Transaktionen und HTTP-Weiterleitungen.
 
 Formulare, CRUD, Authentifizierung, APIs, CSRF, Contracts, Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
@@ -144,7 +146,26 @@ zelyra serve examples/customer_form.zyl
 
 Das Formular ist unter http://127.0.0.1:3000/forms/CustomerCreate erreichbar.
 GET rendert die Felder und ein CSRF-Token; POST prüft das Token und validiert
-die Eingaben. Die Ausführung von Datenbankaktionen ist noch nicht aktiviert.
+die Eingaben. Ein Formular ohne Aktion dient nur der Validierung.
+
+## Eine erste MariaDB-Formularaktion
+
+`examples/customer_form_action.zyl` zeigt ein vollständiges
+datenbankgestütztes Formular:
+
+~~~bash
+export DATABASE_URL='mariadb://root:<passwort>@127.0.0.1:3306/zelyra_forms'
+zelyra db bootstrap examples/customer_form_action.zyl
+zelyra serve examples/customer_form_action.zyl
+~~~
+
+Öffne http://127.0.0.1:3000/forms/CustomerCreate. Die POST-Anfrage wird auf
+CSRF und Schema-Validierung geprüft, bindet ausschließlich deklarierte
+Formularfelder als Datenbankparameter, führt das SQL in einer MariaDB-
+Transaktion aus und liefert HTTP 303 zur angegebenen Weiterleitung. Ohne
+`DATABASE_URL` wird HTTP 503 geliefert; Datenbankfehler werden kontrolliert
+als HTTP 500 ausgegeben, ohne Zugangsdaten oder SQL-Details offenzulegen.
+Apache ist nicht erforderlich.
 
 ## Datenbankorientierte Entwicklung
 

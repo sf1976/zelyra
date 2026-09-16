@@ -46,10 +46,30 @@ database connection.
 Forms are exposed automatically by the built-in server at
 /forms/FormName. GET renders a schema-aware HTML form with a per-server CSRF
 token. POST parses URL-encoded input, verifies the token, validates the fields,
-and renders field-specific errors with HTTP 422 when needed. A valid request
-returns HTTP 202 and confirms validation; it does not execute a database action
-yet.
+and renders field-specific errors with HTTP 422 when needed. A form without an
+action returns HTTP 202 after validation.
 
-Form actions are parsed together with native SQL, success messages, and
-redirect targets. Executing a validated action, relationship select controls,
-sessions, and persistent CSRF secret management are the next integration steps.
+Form actions can execute native SQL after successful validation:
+
+~~~zelyra
+form CustomerCreate -> customers {
+    fields { name email }
+
+    action save {
+        sql {
+            INSERT INTO customers (name, email)
+            VALUES (:name, :email)
+        }
+        redirect "/customers"
+    }
+}
+~~~
+
+The built-in server reads `DATABASE_URL`, binds declared fields as prepared
+parameters, and executes all action SQL in one MariaDB transaction. Success
+returns HTTP 303. Missing configuration returns HTTP 503 and an execution
+failure returns a generic HTTP 500. Action SQL is checked against the source
+schema before the server starts.
+
+Relationship select controls, sessions, and persistent CSRF secret management
+remain future integration steps.

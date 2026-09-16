@@ -1,0 +1,26 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email?
+}
+
+form CustomerCreate -> customers {
+    fields {
+        name
+        email
+    }
+
+    action save {
+        sql {
+            INSERT INTO customers (name, email)
+            VALUES (:name, :email)
+        }
+
+        success "Customer saved."
+        redirect "/customers"
+    }
+}

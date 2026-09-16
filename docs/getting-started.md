@@ -426,9 +426,23 @@ and submitted readonly fields.
 
 The built-in server also exposes each form at /forms/FormName. GET renders an
 HTML form with escaped values and a per-server CSRF token. POST checks the
-token, parses URL-encoded data, validates the fields, and returns field errors
-with HTTP 422. A valid submission returns HTTP 202 as a validation
-confirmation. It does not execute a database action yet.
+token, parses URL-encoded data, and validates the fields. Invalid input returns
+field errors with HTTP 422. A form without an action returns HTTP 202 as a
+validation confirmation.
+
+For a database-backed action, use the MariaDB example:
+
+~~~bash
+export DATABASE_URL='mariadb://root:<password>@127.0.0.1:3306/zelyra_forms'
+zelyra db bootstrap examples/customer_form_action.zyl
+zelyra serve examples/customer_form_action.zyl
+~~~
+
+After a valid POST, Zelyra binds the declared fields as prepared parameters,
+executes the action in a MariaDB transaction, and returns HTTP 303 to its
+redirect. Without `DATABASE_URL` the action returns HTTP 503; database failures
+return a generic HTTP 500. The action SQL is statically checked against the
+source schema before serving.
 
 ## 11. Useful commands
 

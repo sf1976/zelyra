@@ -27,6 +27,7 @@ pub struct Response {
     pub reason: String,
     pub content_type: String,
     pub body: String,
+    pub location: Option<String>,
 }
 
 impl Response {
@@ -36,18 +37,38 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "text/html; charset=utf-8".into(),
             body: body.into(),
+            location: None,
         }
     }
 
     pub fn to_http(&self) -> String {
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
+            self.location
+                .as_deref()
+                .map_or(String::new(), |location| format!("Location: {location}\r\n")),
             self.body.len(),
             self.body
         )
+    }
+
+    pub fn redirect(location: impl Into<String>) -> Self {
+        let location = location.into();
+        let location = if location.contains(['\r', '\n']) {
+            "/".into()
+        } else {
+            location
+        };
+        Self {
+            status: 303,
+            reason: reason_phrase(303).into(),
+            content_type: "text/plain; charset=utf-8".into(),
+            body: String::new(),
+            location: Some(location),
+        }
     }
 }
 
@@ -101,17 +122,34 @@ pub struct FormRoute {
 pub struct WebApp {
     pub routes: Vec<Route>,
     pub forms: Vec<FormRoute>,
+    pub database_url: Option<String>,
 }
 
 impl WebApp {
     pub fn new(routes: Vec<Route>, forms: Vec<FormRoute>) -> Self {
-        Self { routes, forms }
+        Self {
+            routes,
+            forms,
+            database_url: None,
+        }
+    }
+
+    pub fn with_database_url(
+        routes: Vec<Route>,
+        forms: Vec<FormRoute>,
+        database_url: Option<String>,
+    ) -> Self {
+        Self {
+            routes,
+            forms,
+            database_url,
+        }
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
         for form in &self.forms {
             if match_path(&form.path, &request.path).is_some() {
-                return dispatch_form(form, request);
+                return dispatch_form(form, request, self.database_url.as_deref());
             }
         }
         Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
@@ -211,7 +249,7 @@ pub fn html_escape(value: &str) -> String {
     escaped
 }
 
-fn dispatch_form(form: &FormRoute, request: &Request) -> Response {
+fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>) -> Response {
     if request.method == "GET" {
         return Response::html(200, render_form(form, &HashMap::new(), &[], None));
     }
@@ -249,6 +287,19 @@ fn dispatch_form(form: &FormRoute, request: &Request) -> Response {
             ),
         );
     }
+    if let Some(action) = form.form.actions.first() {
+        let Some(database_url) = database_url else {
+            return Response::html(
+                503,
+                "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for this form action.</p>",
+            );
+        };
+        if let Err(error) = execute_form_action(form, action, &values, database_url) {
+            eprintln!("zelyra web: form action failed: {error}");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        }
+        return Response::redirect(action.redirect.as_deref().unwrap_or("/"));
+    }
     Response::html(
         202,
         render_form(
@@ -258,6 +309,83 @@ fn dispatch_form(form: &FormRoute, request: &Request) -> Response {
             Some("Input validated. Database action execution is not enabled yet."),
         ),
     )
+}
+
+fn execute_form_action(
+    form: &FormRoute,
+    action: &zelyra_ast::FormAction,
+    values: &HashMap<String, String>,
+    database_url: &str,
+) -> Result<(), String> {
+    let mut queries = Vec::new();
+    for statement in &action.statements {
+        let expression = match statement {
+            zelyra_ast::Stmt::Expr(expression) => expression,
+            _ => return Err("form actions may contain only SQL statements".into()),
+        };
+        let zelyra_ast::ExprKind::Sql { query, .. } = &expression.kind else {
+            return Err("form actions may contain only SQL statements".into());
+        };
+        queries.push(zelyra_database::Query {
+            sql: query.clone(),
+            params: form_query_parameters(form, values)?,
+        });
+    }
+    if queries.is_empty() {
+        return Err("form action must contain at least one SQL statement".into());
+    }
+    zelyra_database::execute_mariadb_queries(database_url, &queries, true)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn form_query_parameters(
+    form: &FormRoute,
+    values: &HashMap<String, String>,
+) -> Result<Vec<(String, zelyra_database::QueryValue)>, String> {
+    let mut parameters = Vec::new();
+    for field in &form.form.fields {
+        let Some(value) = values.get(&field.name) else {
+            continue;
+        };
+        let ty = field.ty.as_ref().or_else(|| {
+            form.table.as_ref().and_then(|table| {
+                table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == field.name)
+                    .map(|column| &column.ty)
+            })
+        });
+        let query_value = match ty {
+            Some(Type::Int) => value
+                .parse::<i64>()
+                .map(zelyra_database::QueryValue::Int)
+                .map_err(|_| format!("form field `{}` is not an integer", field.name))?,
+            Some(Type::Named(name)) if name == "Id" => value
+                .parse::<i64>()
+                .map(zelyra_database::QueryValue::Int)
+                .map_err(|_| format!("form field `{}` is not an integer", field.name))?,
+            Some(Type::UInt) => value
+                .parse::<u64>()
+                .map(zelyra_database::QueryValue::UInt)
+                .map_err(|_| format!("form field `{}` is not an unsigned integer", field.name))?,
+            Some(Type::Float) | Some(Type::Decimal) => value
+                .parse::<f64>()
+                .map(zelyra_database::QueryValue::Float)
+                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
+            Some(Type::Named(name)) if name == "Money" => value
+                .parse::<f64>()
+                .map(zelyra_database::QueryValue::Float)
+                .map_err(|_| format!("form field `{}` is not a number", field.name))?,
+            Some(Type::Bool) => {
+                zelyra_database::QueryValue::Bool(matches!(value.as_str(), "true" | "1"))
+            }
+            _ => zelyra_database::QueryValue::String(value.clone()),
+        };
+        parameters.push((field.name.clone(), query_value));
+    }
+    Ok(parameters)
 }
 
 pub fn render_form(
@@ -558,7 +686,11 @@ fn reason_phrase(status: u16) -> &'static str {
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
         422 => "Unprocessable Entity",
+        303 => "See Other",
         _ => "Response",
     }
 }
@@ -670,6 +802,13 @@ mod tests {
     }
 
     #[test]
+    fn serializes_redirect_response() {
+        let wire = Response::redirect("/customers").to_http();
+        assert!(wire.starts_with("HTTP/1.1 303 See Other\r\n"));
+        assert!(wire.contains("Location: /customers\r\n"));
+    }
+
+    #[test]
     fn renders_form_with_csrf_and_field_attributes() {
         let html = render_form(&form_route(), &HashMap::new(), &[], None);
         assert!(html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
@@ -705,5 +844,29 @@ mod tests {
         let response = app.dispatch(&request);
         assert_eq!(response.status, 202);
         assert!(response.body.contains("Input validated"));
+    }
+
+    #[test]
+    fn form_action_requires_database_url() {
+        let mut route = form_route();
+        route.form.actions.push(zelyra_ast::FormAction {
+            name: "save".into(),
+            statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                kind: zelyra_ast::ExprKind::Sql {
+                    result_type: Type::Unit,
+                    query: "INSERT INTO customers (name) VALUES (:name)".into(),
+                },
+                span: zelyra_ast::Span::default(),
+            })],
+            success: Some("Saved".into()),
+            redirect: Some("/customers".into()),
+            span: zelyra_ast::Span::default(),
+        });
+        let app = WebApp::new(Vec::new(), vec![route]);
+        let request = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&request).status, 503);
     }
 }

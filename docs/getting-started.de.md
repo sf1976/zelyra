@@ -433,10 +433,24 @@ Zahlen, ungültige boolesche Werte und übermittelte Readonly-Felder abgelehnt.
 
 Der eingebaute Server stellt jedes Formular zusätzlich unter /forms/FormName
 bereit. GET rendert ein HTML-Formular mit escaped Werten und einem CSRF-Token
-pro Serverstart. POST prüft das Token, parst URL-encoded Daten, validiert die
-Felder und liefert bei Fehlern feldbezogene Meldungen mit HTTP 422. Eine gültige
-Übermittlung liefert HTTP 202 als Validierungsbestätigung. Eine
-Datenbankaktion wird noch nicht ausgeführt.
+pro Serverstart. POST prüft das Token, parst URL-encoded Daten und validiert die
+Felder. Ungültige Eingaben liefern Feldfehler mit HTTP 422. Ein Formular ohne
+Aktion liefert HTTP 202 als Validierungsbestätigung.
+
+Für eine datenbankgestützte Aktion verwende das MariaDB-Beispiel:
+
+~~~bash
+export DATABASE_URL='mariadb://root:<passwort>@127.0.0.1:3306/zelyra_forms'
+zelyra db bootstrap examples/customer_form_action.zyl
+zelyra serve examples/customer_form_action.zyl
+~~~
+
+Nach einer gültigen POST-Anfrage bindet Zelyra die deklarierten Felder als
+Prepared-Statement-Parameter, führt die Aktion in einer MariaDB-Transaktion
+aus und liefert HTTP 303 zur Weiterleitung. Ohne `DATABASE_URL` liefert die
+Aktion HTTP 503; Datenbankfehler werden als allgemeiner HTTP-500-Fehler
+ausgegeben. Das Aktions-SQL wird vor dem Serverstart statisch gegen das
+Quellschema geprüft.
 
 ## 11. Nützliche Befehle
 

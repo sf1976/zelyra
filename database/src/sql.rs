@@ -39,6 +39,34 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             .collect::<HashMap<_, _>>();
         check_block(&function.body, schema, &mut environment, &mut errors);
     }
+    for form in &program.forms {
+        let source_table = form.table.as_ref().and_then(|table_name| {
+            program
+                .tables
+                .iter()
+                .find(|table| table.name == *table_name)
+        });
+        for action in &form.actions {
+            let mut environment = HashMap::new();
+            for field in &form.fields {
+                let field_type = field.ty.clone().or_else(|| {
+                    source_table.and_then(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == field.name)
+                            .map(|column| column.ty.clone())
+                    })
+                });
+                environment.insert(field.name.clone(), field_type.unwrap_or(Type::Unknown));
+            }
+            let block = Block {
+                statements: action.statements.clone(),
+                span: action.span,
+            };
+            check_block(&block, schema, &mut environment, &mut errors);
+        }
+    }
     if errors.is_empty() {
         Ok(())
     } else {
@@ -615,5 +643,21 @@ mod tests {
             .iter()
             .any(|error| error.message.contains("username")));
         assert!(errors.iter().any(|error| error.message.contains(":id")));
+    }
+
+    #[test]
+    fn checks_form_action_sql_against_form_fields() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } form CustomerCreate -> customers { fields { name } action save { sql { INSERT INTO customers (username) VALUES (:username) } } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&program, &source_schema()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("username")));
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("not available in this scope")));
     }
 }

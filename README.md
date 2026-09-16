@@ -33,6 +33,8 @@ Implemented today:
 - an initial Web Core with page definitions, GET routing, path parameters, and
   a built-in HTTP server;
 - an initial Forms Core with schema-aware field definitions and validation.
+- validated form actions with safe MariaDB parameter binding, transactions, and
+  HTTP redirects.
 
 Forms, CRUD, authentication, APIs, CSRF, contracts, verification, and
 production deployment tooling are still being developed. See the
@@ -142,7 +144,25 @@ zelyra serve examples/customer_form.zyl
 
 The form is available at http://127.0.0.1:3000/forms/CustomerCreate. GET
 renders the fields and a CSRF token; POST checks the token and validates the
-submitted values. Database action execution is not enabled yet.
+submitted values. The form without an action is validation-only.
+
+## A first MariaDB form action
+
+`examples/customer_form_action.zyl` demonstrates a complete database-backed
+form:
+
+~~~bash
+export DATABASE_URL='mariadb://root:<password>@127.0.0.1:3306/zelyra_forms'
+zelyra db bootstrap examples/customer_form_action.zyl
+zelyra serve examples/customer_form_action.zyl
+~~~
+
+Open http://127.0.0.1:3000/forms/CustomerCreate. The POST request is checked
+for CSRF and schema validation, binds only declared form fields as database
+parameters, executes the SQL in a MariaDB transaction, and returns HTTP 303 to
+the declared redirect. Missing `DATABASE_URL` returns HTTP 503; database
+failures are returned as a controlled HTTP 500 without exposing credentials or
+SQL details. Apache is not required.
 
 ## Database-first development
 

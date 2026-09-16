@@ -393,7 +393,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         });
     }
     eprintln!("Zelyra server listening on http://{address}");
-    match serve_app(WebApp::new(routes, form_routes), &address) {
+    match serve_app(
+        WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok()),
+        &address,
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");

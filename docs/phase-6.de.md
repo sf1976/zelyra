@@ -47,10 +47,31 @@ Formulare werden vom eingebauten Server automatisch unter
 /forms/FormName bereitgestellt. GET rendert ein schemaabhängiges HTML-Formular
 mit einem CSRF-Token pro Serverstart. POST parst URL-encoded Eingaben, prüft
 das Token, validiert die Felder und rendert bei Fehlern feldbezogene Meldungen
-mit HTTP 422. Eine gültige Anfrage liefert HTTP 202 und bestätigt die
-Validierung; eine Datenbankaktion wird noch nicht ausgeführt.
+mit HTTP 422. Ein Formular ohne Aktion liefert nach erfolgreicher Validierung
+HTTP 202.
 
-Form-Aktionen werden zusammen mit nativem SQL, Erfolgsmeldungen und
-Weiterleitungszielen geparst. Das Ausführen validierter Aktionen,
+Formularaktionen können nach erfolgreicher Validierung natives SQL ausführen:
+
+~~~zelyra
+form CustomerCreate -> customers {
+    fields { name email }
+
+    action save {
+        sql {
+            INSERT INTO customers (name, email)
+            VALUES (:name, :email)
+        }
+        redirect "/customers"
+    }
+}
+~~~
+
+Der eingebaute Server liest `DATABASE_URL`, bindet deklarierte Felder als
+Prepared-Statement-Parameter und führt alle SQL-Anweisungen der Aktion in
+einer MariaDB-Transaktion aus. Bei Erfolg wird HTTP 303 geliefert. Eine
+fehlende Konfiguration liefert HTTP 503, ein Ausführungsfehler einen
+allgemeinen HTTP-500-Fehler. Das Aktions-SQL wird vor dem Serverstart gegen das
+Quellschema geprüft.
+
 Select-Felder für Beziehungen, Sessions und die dauerhafte Verwaltung von
-CSRF-Geheimnissen sind die nächsten Integrationsschritte.
+CSRF-Geheimnissen bleiben weitere Integrationsschritte.
