@@ -206,6 +206,7 @@ pub struct Function {
     pub name: String,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
+    pub capabilities: Vec<String>,
     pub body: Block,
     pub span: Span,
 }

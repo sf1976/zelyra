@@ -1,0 +1,11 @@
+fn send_invoice(invoice: String)
+    uses Network
+{
+    print(invoice)
+}
+
+fn main()
+    uses Network
+{
+    send_invoice("Invoice queued")
+}

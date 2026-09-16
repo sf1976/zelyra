@@ -33,6 +33,7 @@ pub struct HirFunction {
     pub name: String,
     pub params: Vec<HirParam>,
     pub return_type: Option<Type>,
+    pub capabilities: Vec<String>,
     pub body: HirBlock,
     pub span: Span,
 }
@@ -206,6 +207,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
             name: function.name.clone(),
             params,
             return_type: function.return_type.clone(),
+            capabilities: function.capabilities.clone(),
             body,
             span: function.span,
         });

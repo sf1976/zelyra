@@ -9,7 +9,9 @@ table customers {
     email: Email
 }
 
-fn load_customer(id: Int) {
+fn load_customer(id: Int)
+    uses Database
+{
     customer = sql<Customer[]> {
         SELECT
             id,
@@ -22,6 +24,8 @@ fn load_customer(id: Int) {
     print("typed SQL checked")
 }
 
-fn main() {
+fn main()
+    uses Database
+{
     load_customer(1)
 }

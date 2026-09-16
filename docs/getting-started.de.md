@@ -49,10 +49,13 @@ Das aktuelle Repository enthält:
 - ein datenbankgestützter Login mit Argon2-Passwortprüfung, persistenten
   HttpOnly-Sessions, Logout, datenbankgestützten Berechtigungen und
   geschützten Routen.
+- erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
+  statische Durchsetzung von `Database` für natives SQL.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
 Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, Capabilities, Contracts,
-formale Verifikation und Produktionspaketierung.
+formale Verifikation, Runtime-Capability-Durchsetzung und
+Produktionspaketierung.
 
 ## 1. Voraussetzungen
 
@@ -567,6 +570,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 6: Forms](phase-6.de.md);
 - [Phase 7: CRUD](phase-7.de.md).
 - [Phase 8: Authentifizierung und Autorisierung](phase-8.de.md).
+- [Phase 9: Capabilities](phase-9.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 

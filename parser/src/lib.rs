@@ -671,11 +671,26 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        self.skip_newlines();
+        let mut capabilities = Vec::new();
+        if self.at(&TokenKind::Uses) {
+            self.advance();
+            loop {
+                capabilities.push(self.ident("capability name")?.0);
+                self.skip_newlines();
+                if !self.at(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+                self.skip_newlines();
+            }
+        }
         let body = self.block()?;
         Ok(Function {
             name,
             params,
             return_type,
+            capabilities,
             span: start.join(body.span),
             body,
         })
@@ -1230,5 +1245,17 @@ mod tests {
         );
         assert!(program.cruds[0].requires_auth);
         assert_eq!(program.cruds[0].permissions, ["customers.view"]);
+    }
+
+    #[test]
+    fn parses_function_capabilities() {
+        let program = parse(
+            &lex(
+                "fn send_invoice(order: Order) -> Unit\n uses Network, FileSystem\n { return } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].capabilities, ["Network", "FileSystem"]);
     }
 }

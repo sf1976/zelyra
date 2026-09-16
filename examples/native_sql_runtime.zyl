@@ -9,7 +9,9 @@ table customers {
     email: Email
 }
 
-fn main() {
+fn main()
+    uses Database
+{
     name = "Runtime MariaDB"
     email = "runtime@example.test"
 

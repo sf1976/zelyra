@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use zelyra_ast::*;
 
@@ -11,6 +11,186 @@ pub struct TypeError {
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CapabilityError {
+    pub message: String,
+    pub span: Span,
+}
+
+impl fmt::Display for CapabilityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+pub const KNOWN_CAPABILITIES: &[&str] = &[
+    "Database",
+    "Network",
+    "FileSystem",
+    "Environment",
+    "Process",
+    "Clock",
+    "Random",
+];
+
+pub fn check_capabilities(program: &Program) -> Result<(), Vec<CapabilityError>> {
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), function))
+        .collect::<HashMap<_, _>>();
+    let known = KNOWN_CAPABILITIES.iter().copied().collect::<HashSet<_>>();
+    let mut errors = Vec::new();
+
+    for function in &program.functions {
+        let mut declared = HashSet::new();
+        for capability in &function.capabilities {
+            if !known.contains(capability.as_str()) {
+                errors.push(CapabilityError {
+                    message: format!(
+                        "unknown capability `{capability}`; expected one of {}",
+                        KNOWN_CAPABILITIES.join(", ")
+                    ),
+                    span: function.span,
+                });
+            } else if !declared.insert(capability.as_str()) {
+                errors.push(CapabilityError {
+                    message: format!("capability `{capability}` is declared more than once"),
+                    span: function.span,
+                });
+            }
+        }
+        check_capability_block(&function.body, function, &functions, &declared, &mut errors);
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn check_capability_block(
+    block: &Block,
+    function: &Function,
+    functions: &HashMap<&str, &Function>,
+    declared: &HashSet<&str>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::Expr(value)
+            | Stmt::Return {
+                value: Some(value), ..
+            }
+            | Stmt::Match { value, .. } => {
+                check_capability_expr(value, function, functions, declared, errors);
+                if let Stmt::Match { arms, .. } = statement {
+                    for arm in arms {
+                        check_capability_block(&arm.body, function, functions, declared, errors);
+                    }
+                }
+            }
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } => {}
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                check_capability_expr(condition, function, functions, declared, errors);
+                check_capability_block(then_block, function, functions, declared, errors);
+                if let Some(else_block) = else_block {
+                    check_capability_block(else_block, function, functions, declared, errors);
+                }
+            }
+            Stmt::While {
+                condition, body, ..
+            } => {
+                check_capability_expr(condition, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors);
+            }
+            Stmt::Loop { body, .. } | Stmt::Transaction { body, .. } => {
+                check_capability_block(body, function, functions, declared, errors);
+            }
+        }
+    }
+}
+
+fn check_capability_expr(
+    expression: &Expr,
+    function: &Function,
+    functions: &HashMap<&str, &Function>,
+    declared: &HashSet<&str>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    match &expression.kind {
+        ExprKind::Sql { .. } => require_capability(
+            "Database",
+            "SQL access",
+            expression.span,
+            function,
+            declared,
+            errors,
+        ),
+        ExprKind::Call { name, args } => {
+            if let Some(callee) = functions.get(name.as_str()) {
+                for capability in &callee.capabilities {
+                    if KNOWN_CAPABILITIES.contains(&capability.as_str())
+                        && !declared.contains(capability.as_str())
+                    {
+                        errors.push(CapabilityError {
+                            message: format!(
+                                "function `{}` calls `{name}`, which requires capability `{capability}`; declare `uses {capability}`",
+                                function.name
+                            ),
+                            span: expression.span,
+                        });
+                    }
+                }
+            }
+            for argument in args {
+                check_capability_expr(argument, function, functions, declared, errors);
+            }
+        }
+        ExprKind::Unary { expr, .. } => {
+            check_capability_expr(expr, function, functions, declared, errors);
+        }
+        ExprKind::Binary { left, right, .. } => {
+            check_capability_expr(left, function, functions, declared, errors);
+            check_capability_expr(right, function, functions, declared, errors);
+        }
+        ExprKind::Int(..)
+        | ExprKind::UInt(..)
+        | ExprKind::Float(..)
+        | ExprKind::Bool(..)
+        | ExprKind::String(..)
+        | ExprKind::Char(..)
+        | ExprKind::Variable(..) => {}
+    }
+}
+
+fn require_capability(
+    capability: &str,
+    operation: &str,
+    span: Span,
+    function: &Function,
+    declared: &HashSet<&str>,
+    errors: &mut Vec<CapabilityError>,
+) {
+    if !declared.contains(capability) {
+        errors.push(CapabilityError {
+            message: format!(
+                "function `{}` uses {operation} but does not declare capability `{capability}`; add `uses {capability}`",
+                function.name
+            ),
+            span,
+        });
     }
 }
 
@@ -1327,5 +1507,52 @@ mod tests {
         let program = parse(&lex("fn main() { value = 1 value = 2 }").unwrap()).unwrap();
         let errors = check(&program).unwrap_err();
         assert!(errors.iter().any(|e| e.message.contains("immutable")));
+    }
+
+    #[test]
+    fn accepts_declared_database_capability_for_sql() {
+        let program = parse(
+            &lex("fn load() uses Database { rows = sql<Int> { SELECT 1 } } fn main() uses Database { load() }").unwrap(),
+        )
+        .unwrap();
+        check_capabilities(&program).unwrap();
+    }
+
+    #[test]
+    fn rejects_sql_without_database_capability() {
+        let program = parse(&lex("fn main() { rows = sql<Int> { SELECT 1 } }").unwrap()).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("does not declare capability `Database`")
+        }));
+    }
+
+    #[test]
+    fn propagates_called_function_capabilities() {
+        let program =
+            parse(&lex("fn send() uses Network { print(1) } fn main() { send() }").unwrap())
+                .unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("calls `send`, which requires capability `Network`")
+        }));
+    }
+
+    #[test]
+    fn rejects_unknown_and_duplicate_capabilities() {
+        let program =
+            parse(&lex("fn main() uses Network, Network, Telepathy { print(1) }").unwrap())
+                .unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("declared more than once")));
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("unknown capability `Telepathy`")));
     }
 }

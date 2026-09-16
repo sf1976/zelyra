@@ -8,7 +8,9 @@ table customers {
     name: String(100) required
 }
 
-fn load_customer() {
+fn load_customer()
+    uses Database
+{
     customer = sql<Customer[]> {
         SELECT username
         FROM customers

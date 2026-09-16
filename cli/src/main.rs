@@ -8,7 +8,7 @@ use zelyra_forms::{check_program as check_form_program, validate as validate_for
 use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
-use zelyra_runtime::{check, execute, execute_with_database};
+use zelyra_runtime::{check, check_capabilities, execute, execute_with_database};
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
@@ -126,6 +126,18 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
             }
             return Err(());
         }
+    }
+    if let Err(errors) = check_capabilities(&program) {
+        for error in errors {
+            diagnostic(
+                path,
+                "E-CAP-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return Err(());
     }
     if let Ok(schema) = build_schema(&program) {
         if !validate_auth(path, &program, &schema) {

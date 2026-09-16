@@ -53,6 +53,8 @@ Heute implementiert:
   Formularen und CSRF-geschütztem Löschen.
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
+- erste Capability-Deklarationen und statische Weitergabe über
+  Funktionsaufrufe; natives SQL benötigt die Capability `Database`.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs,
 Contracts, Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die
@@ -279,8 +281,9 @@ ORM-Methodenkette.
 - HTML-Ausgaben werden standardmäßig escaped.
 - Schemaänderungen werden geprüft; destruktive Änderungen benötigen eine
   ausdrückliche Freigabe.
-- Capabilities, Contracts und formale Verifikation sind Ziele der Sprache,
-  aber in Version 0.1 nicht stillschweigend als fertig zu betrachten.
+- Capabilities sind teilweise implementiert: Deklarationen, Prüfung bekannter
+  Namen, Weitergabe über Aufrufe und die `Database`-Pflicht für natives SQL
+  sind aktiv. Contracts und formale Verifikation bleiben Roadmap-Ziele.
 
 ## CLI
 
@@ -341,7 +344,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
-9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
+9. Capabilities — erste Deklarationen und statische Prüfungen vorhanden;
+   Runtime-Rechte, Contracts, Verifikation und strukturierte Nebenläufigkeit
+   folgen.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und

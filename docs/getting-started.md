@@ -46,10 +46,12 @@ The current repository contains:
   CSRF-protected delete actions.
 - a database-backed login with Argon2 password verification, persistent
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
+- initial capability declarations, call propagation, and static enforcement of
+  `Database` for native SQL.
 
 The following are not complete yet: full CRUD generation, database roles, login
 throttling, password-management commands, APIs, capabilities, contracts,
-formal verification, and production packaging.
+formal verification, runtime capability enforcement, and production packaging.
 
 ## 1. Requirements
 
@@ -556,6 +558,7 @@ Read the phase documents for implementation details:
 - [Phase 6: Forms](phase-6.md);
 - [Phase 7: CRUD](phase-7.md).
 - [Phase 8: Authentication and authorization](phase-8.md).
+- [Phase 9: Capabilities](phase-9.md).
 
 The German versions use the same filenames with the .de.md suffix.
 

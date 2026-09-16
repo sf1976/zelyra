@@ -53,6 +53,8 @@ Implemented today:
   CSRF-protected delete.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
+- initial capability declarations and static propagation through function calls;
+  native SQL requires the `Database` capability.
 
 Full CRUD generation, database roles, APIs, contracts,
 verification, and production deployment tooling are still being developed. See the
@@ -274,8 +276,9 @@ method chain.
 - HTML output is escaped by default.
 - Schema changes are inspected and destructive changes require explicit
   approval.
-- Capabilities, contracts, and formal verification are language goals on the
-  roadmap; they are not silently claimed to be complete in 0.1.
+- Capabilities are partially implemented: declarations, known-name checking,
+  call propagation, and the `Database` requirement for native SQL are active.
+  Contracts and formal verification remain roadmap goals.
 
 ## CLI
 
@@ -336,7 +339,9 @@ The long-term specification is organized into these phases:
    remains.
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
-9. Capabilities, contracts, verification, and structured concurrency.
+9. Capabilities — initial declarations and static checks implemented; runtime
+   privilege enforcement, contracts, verification, and structured concurrency
+   remain.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
