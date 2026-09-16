@@ -1,5 +1,7 @@
 # Getting started with Zelyra
 
+[Deutsch](getting-started.de.md) · English
+
 Zelyra is designed so a beginner can get from download to a running program
 with as little system setup as possible.
 
@@ -72,3 +74,10 @@ download → zelyra new my-app → zelyra dev
 ```
 
 No account password should be required for a user-local installation.
+
+## 5. Documentation languages
+
+Core documentation is maintained in both German and English. New documents
+should either be bilingual or have a matching German variant with the `.de.md`
+suffix. Changes to installation, the CLI, and the user experience must be
+updated in both language versions.

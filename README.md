@@ -1,5 +1,7 @@
 # Zelyra 0.1
 
+[Deutsch](README.de.md) · English
+
 Zelyra is a statically typed language for business, database, and web applications.
 This repository contains the Phase 1 language core: lexer, parser, AST, static
 type checker, interpreter, and the `zelyra` CLI.
@@ -18,7 +20,8 @@ needed, and places the binary in `~/.local/bin` by default. No root access,
 Apache installation, database server, or global system configuration is
 required for the Phase 1 language core.
 
-See [docs/getting-started.md](docs/getting-started.md) for the complete
+See the [English getting-started guide](docs/getting-started.md) or the
+[German getting-started guide](docs/getting-started.de.md) for the complete
 beginner path and the planned web deployment modes.
 
 ```bash
