@@ -451,6 +451,16 @@ Relationship fields are loaded from MariaDB automatically. In
 `<select>` using the department ID and name. Zelyra rejects a submitted ID
 that is not present in the current database, before executing the form action.
 
+A minimal CRUD resource can be added with:
+
+~~~zelyra
+crud Machine -> machines
+~~~
+
+This exposes `GET /machines` with escaped output, search, pagination, linked
+detail pages, and generated Create/Edit forms at `/machines/new` and
+`/machines/<id>/edit`.
+
 ## 11. Useful commands
 
 ~~~text

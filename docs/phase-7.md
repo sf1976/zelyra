@@ -14,13 +14,18 @@ list currently includes all schema columns in an escaped HTML table, search
 across text columns with bound parameters, and bounded pagination through the
 `page` and `per_page` query parameters.
 
+Each row links to a generated detail route, for example `GET /machines/1`.
+The detail view offers generated Create and Edit forms at `/machines/new` and
+`GET/POST /machines/1/edit`. These forms inherit schema validation,
+relationship selects, CSRF protection, prepared parameters, and MariaDB
+transactions. Edit forms are prefilled from the selected row.
+
 Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
 
-The next steps are configured columns, sorting, filters, detail pages, and
-forms for create, update, and delete actions. The complete relationship-aware
-example is `examples/machine_form.zyl`.
+The next steps are configured columns, sorting, filters, and delete actions.
+The complete relationship-aware example is `examples/machine_form.zyl`.
 
 ~~~bash
 export DATABASE_URL='mariadb://root:<password>@127.0.0.1:3306/zelyra_crud'

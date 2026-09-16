@@ -437,6 +437,18 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
         });
     }
+    for crud in &program.cruds {
+        let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
+            continue;
+        };
+        for edit in [false, true] {
+            let Some(csrf) = CsrfProtection::generate().ok() else {
+                eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
+                return ExitCode::from(1);
+            };
+            form_routes.push(generated_crud_form(crud, table, &schema, edit, csrf));
+        }
+    }
     let crud_routes = program
         .cruds
         .iter()
@@ -459,6 +471,114 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+fn generated_crud_form(
+    crud: &zelyra_ast::CrudDef,
+    table: &zelyra_ast::TableDef,
+    schema: &Schema,
+    edit: bool,
+    csrf: CsrfProtection,
+) -> FormRoute {
+    let fields = table
+        .columns
+        .iter()
+        .filter(|column| !column.primary_key && !column.auto)
+        .map(|column| zelyra_ast::FormField {
+            name: column.name.clone(),
+            ty: None,
+            label: None,
+            placeholder: None,
+            required: false,
+            max: None,
+            widget: None,
+            readonly: false,
+            span: column.span,
+        })
+        .collect::<Vec<_>>();
+    let storage_columns = fields
+        .iter()
+        .map(|field| storage_column_name(schema, &crud.table, &field.name))
+        .collect::<Vec<_>>();
+    let query = if edit {
+        let assignments = storage_columns
+            .iter()
+            .zip(&fields)
+            .map(|(column, field)| format!("{} = :{}", quote_identifier(column), field.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "UPDATE {} SET {} WHERE {} = :id",
+            quote_identifier(&crud.table),
+            assignments,
+            quote_identifier("id")
+        )
+    } else {
+        format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            quote_identifier(&crud.table),
+            storage_columns
+                .iter()
+                .map(|column| quote_identifier(column))
+                .collect::<Vec<_>>()
+                .join(", "),
+            fields
+                .iter()
+                .map(|field| format!(":{}", field.name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let path = if edit {
+        format!("/{}/{{id}}/edit", crud.table)
+    } else {
+        format!("/{}/new", crud.table)
+    };
+    FormRoute {
+        path: path.clone(),
+        action: path,
+        form: zelyra_ast::FormDef {
+            name: format!("{}{}", crud.name, if edit { "Edit" } else { "Create" }),
+            table: Some(table.name.clone()),
+            fields,
+            actions: vec![zelyra_ast::FormAction {
+                name: "save".into(),
+                statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
+                    kind: zelyra_ast::ExprKind::Sql {
+                        result_type: zelyra_ast::Type::Unit,
+                        query,
+                    },
+                    span: table.span,
+                })],
+                success: Some("Saved.".into()),
+                redirect: Some(format!("/{}", crud.table)),
+                span: table.span,
+            }],
+            span: table.span,
+        },
+        table: Some(table.clone()),
+        schema: Some(schema.clone()),
+        csrf,
+    }
+}
+
+fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
+    schema
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table)
+        .and_then(|candidate| {
+            candidate
+                .columns
+                .iter()
+                .find(|column| column.name == field || column.name == format!("{field}_id"))
+        })
+        .map(|column| column.name.clone())
+        .unwrap_or_else(|| field.into())
+}
+
+fn quote_identifier(identifier: &str) -> String {
+    format!("`{}`", identifier.replace('`', "``"))
 }
 
 fn form_usage() {

@@ -461,6 +461,16 @@ Beziehungsfelder werden automatisch aus MariaDB geladen. In
 die in der aktuellen Datenbank nicht vorhanden ist, bevor die Formularaktion
 ausgeführt wird.
 
+Eine minimale CRUD-Ressource wird so ergänzt:
+
+~~~zelyra
+crud Machine -> machines
+~~~
+
+Damit wird `GET /machines` mit escaped Ausgabe, Suche, Pagination, verlinkten
+Detailseiten und automatisch erzeugten Create-/Edit-Formularen unter
+`/machines/new` und `/machines/<id>/edit` bereitgestellt.
+
 ## 11. Nützliche Befehle
 
 ~~~text

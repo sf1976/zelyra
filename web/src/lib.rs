@@ -170,13 +170,22 @@ impl WebApp {
 
     pub fn dispatch(&self, request: &Request) -> Response {
         for form in &self.forms {
-            if match_path(&form.path, &request.path).is_some() {
-                return dispatch_form(form, request, self.database_url.as_deref());
+            if let Some(path_params) = match_path(&form.path, &request.path) {
+                return dispatch_form(form, request, &path_params, self.database_url.as_deref());
             }
         }
         for crud in &self.cruds {
             if match_path(&crud.path, &request.path).is_some() {
                 return dispatch_crud(crud, request, self.database_url.as_deref());
+            }
+            let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
+            if let Some(path_params) = match_path(&detail_path, &request.path) {
+                return dispatch_crud_detail(
+                    crud,
+                    request,
+                    &path_params,
+                    self.database_url.as_deref(),
+                );
             }
         }
         Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
@@ -276,15 +285,30 @@ pub fn html_escape(value: &str) -> String {
     escaped
 }
 
-fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>) -> Response {
+fn dispatch_form(
+    form: &FormRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Response {
+    let rendered_form = form_with_path_params(form, path_params);
     if request.method == "GET" {
-        let options = match load_relation_options(form, database_url) {
+        let options = match load_relation_options(&rendered_form, database_url) {
             Ok(options) => options,
             Err(error) => return relation_options_error(database_url, error),
         };
+        let values = if rendered_form.form.name.ends_with("Edit") {
+            match load_existing_form_values(&rendered_form, path_params, database_url) {
+                Ok(Some(values)) => values,
+                Ok(None) => return Response::html(404, "<h1>404 Not Found</h1>"),
+                Err(error) => return relation_options_error(database_url, error),
+            }
+        } else {
+            HashMap::new()
+        };
         return Response::html(
             200,
-            render_form_with_options(form, &HashMap::new(), &[], None, &options),
+            render_form_with_options(&rendered_form, &values, &[], None, &options),
         );
     }
     if request.method != "POST" {
@@ -304,7 +328,7 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
-    let relation_options = match load_relation_options(form, database_url) {
+    let relation_options = match load_relation_options(&rendered_form, database_url) {
         Ok(options) => options,
         Err(error) => return relation_options_error(database_url, error),
     };
@@ -320,7 +344,7 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
         return Response::html(
             422,
             render_form_with_options(
-                form,
+                &rendered_form,
                 &values,
                 &errors,
                 Some("Please correct the errors."),
@@ -335,7 +359,7 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
                 "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for this form action.</p>",
             );
         };
-        if let Err(error) = execute_form_action(form, action, &values, database_url) {
+        if let Err(error) = execute_form_action(form, action, &values, path_params, database_url) {
             eprintln!("zelyra web: form action failed: {error}");
             return Response::html(500, "<h1>500 Internal Server Error</h1>");
         }
@@ -344,13 +368,89 @@ fn dispatch_form(form: &FormRoute, request: &Request, database_url: Option<&str>
     Response::html(
         202,
         render_form_with_options(
-            form,
+            &rendered_form,
             &values,
             &[],
             Some("Input validated. Database action execution is not enabled yet."),
             &relation_options,
         ),
     )
+}
+
+fn form_with_path_params(form: &FormRoute, path_params: &HashMap<String, String>) -> FormRoute {
+    let mut rendered_form = form.clone();
+    for (name, value) in path_params {
+        rendered_form.action = rendered_form.action.replace(&format!("{{{name}}}"), value);
+    }
+    rendered_form
+}
+
+fn load_existing_form_values(
+    form: &FormRoute,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Result<Option<HashMap<String, String>>, String> {
+    let Some(database_url) = database_url else {
+        return Err("DATABASE_URL is required for edit forms".into());
+    };
+    let Some(id) = path_params.get("id") else {
+        return Err("edit form path parameter `id` is missing".into());
+    };
+    let id = id
+        .parse::<i64>()
+        .map_err(|_| "edit form path parameter `id` is not an integer".to_owned())?;
+    let table_name = form
+        .form
+        .table
+        .as_deref()
+        .ok_or_else(|| "edit form has no source table".to_owned())?;
+    let schema_table = form
+        .schema
+        .as_ref()
+        .and_then(|schema| schema.tables.iter().find(|table| table.name == table_name))
+        .ok_or_else(|| format!("edit form table `{table_name}` is missing from schema"))?;
+    let columns = form
+        .form
+        .fields
+        .iter()
+        .map(|field| {
+            schema_table
+                .columns
+                .iter()
+                .find(|column| {
+                    column.name == field.name || column.name == format!("{}_id", field.name)
+                })
+                .map(|column| column.name.clone())
+                .unwrap_or_else(|| field.name.clone())
+        })
+        .collect::<Vec<_>>();
+    let query = format!(
+        "SELECT {} FROM {} WHERE {} = :id",
+        columns
+            .iter()
+            .map(|column| quote_identifier(column))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(table_name),
+        quote_identifier("id")
+    );
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &query,
+        vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+    )
+    .map_err(|error| error.to_string())?;
+    let Some(row) = result.rows.first() else {
+        return Ok(None);
+    };
+    let values = form
+        .form
+        .fields
+        .iter()
+        .zip(row)
+        .map(|(field, value)| (field.name.clone(), value.clone()))
+        .collect();
+    Ok(Some(values))
 }
 
 fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>) -> Response {
@@ -466,6 +566,68 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     )
 }
 
+fn dispatch_crud_detail(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Response {
+    if request.method != "GET" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(database_url) = database_url else {
+        return Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD details.</p>",
+        );
+    };
+    let Some(id) = path_params.get("id") else {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    };
+    let id_text = id.clone();
+    let Ok(id) = id.parse::<i64>() else {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>id must be an integer.</p>");
+    };
+    let Some(table) = crud
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+    else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    let columns = table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+    let query = format!(
+        "SELECT {} FROM {} WHERE {} = :id",
+        columns
+            .iter()
+            .map(|column| quote_identifier(column))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(&crud.table),
+        quote_identifier("id")
+    );
+    let result = match zelyra_database::execute_mariadb_query(
+        database_url,
+        &query,
+        vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("zelyra web: CRUD detail query failed: {error}");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        }
+    };
+    let Some(row) = result.rows.first() else {
+        return Response::html(404, "<h1>404 Not Found</h1>");
+    };
+    Response::html(200, render_crud_detail(crud, &columns, row, &id_text))
+}
+
 fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<u64> {
     values
         .get(name)
@@ -502,9 +664,17 @@ fn render_crud_list(
         html.push_str("</tr></thead><tbody>");
         for row in rows {
             html.push_str("<tr>");
-            for value in row {
+            for (index, value) in row.iter().enumerate() {
                 html.push_str("<td>");
-                html.push_str(&html_escape(value));
+                if columns.get(index) == Some(&"id") {
+                    html.push_str("<a href=\"");
+                    html.push_str(&html_escape(&format!("{}/{}", crud.path, value)));
+                    html.push_str("\">");
+                    html.push_str(&html_escape(value));
+                    html.push_str("</a>");
+                } else {
+                    html.push_str(&html_escape(value));
+                }
                 html.push_str("</td>");
             }
             html.push_str("</tr>");
@@ -536,6 +706,27 @@ fn render_crud_list(
         html.push_str("\">Next</a>");
     }
     html.push_str("</nav></main>");
+    html
+}
+
+fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &str) -> String {
+    let mut html = String::from("<main><p><a href=\"");
+    html.push_str(&html_escape(&crud.path));
+    html.push_str("\">Back to list</a></p><h1>");
+    html.push_str(&html_escape(&crud.title));
+    html.push_str(" detail</h1><dl>");
+    for (column, value) in columns.iter().zip(row) {
+        html.push_str("<dt>");
+        html.push_str(&html_escape(&humanize(column)));
+        html.push_str("</dt><dd>");
+        html.push_str(&html_escape(value));
+        html.push_str("</dd>");
+    }
+    html.push_str("</dl><p><a href=\"");
+    html.push_str(&html_escape(&format!("{}/{}/edit", crud.path, id)));
+    html.push_str("\">Edit</a> <a href=\"");
+    html.push_str(&html_escape(&format!("{}/new", crud.path)));
+    html.push_str("\">Create new</a></p></main>");
     html
 }
 
@@ -702,8 +893,17 @@ fn execute_form_action(
     form: &FormRoute,
     action: &zelyra_ast::FormAction,
     values: &HashMap<String, String>,
+    path_params: &HashMap<String, String>,
     database_url: &str,
 ) -> Result<(), String> {
+    let mut parameters = form_query_parameters(form, values)?;
+    for (name, value) in path_params {
+        let parsed = value
+            .parse::<i64>()
+            .map(zelyra_database::QueryValue::Int)
+            .map_err(|_| format!("path parameter `{name}` is not an integer"))?;
+        parameters.push((name.clone(), parsed));
+    }
     let mut queries = Vec::new();
     for statement in &action.statements {
         let expression = match statement {
@@ -715,7 +915,7 @@ fn execute_form_action(
         };
         queries.push(zelyra_database::Query {
             sql: query.clone(),
-            params: form_query_parameters(form, values)?,
+            params: parameters.clone(),
         });
     }
     if queries.is_empty() {
