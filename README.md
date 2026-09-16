@@ -315,8 +315,9 @@ The long-term specification is organized into these phases:
 5. Web Core — initial pages and HTTP server implemented.
 6. Forms — schema-aware parsing, validation, web rendering, actions, and
    relationship selects implemented.
-7. CRUD — list, detail, create, edit, search, filter, sort, and pagination
-   implemented; delete remains.
+7. CRUD — list, detail, create, edit, search, filter, sort, pagination, and
+   CSRF-protected delete implemented; configured columns and authorization
+   remain.
 8. Authentication and authorization.
 9. Capabilities, contracts, verification, and structured concurrency.
 10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.

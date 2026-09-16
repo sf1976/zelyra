@@ -24,11 +24,18 @@ Formulare übernehmen Schema-Validierung, Beziehungs-Selects, CSRF-Schutz,
 gebundene Parameter und MariaDB-Transaktionen. Edit-Formulare werden mit dem
 ausgewählten Datensatz vorausgefüllt.
 
+Die Detailansicht enthält außerdem eine durch CSRF geschützte
+Löschbestätigung. Ein gültiges `POST /machines/1/delete` führt ein
+parametrisiertes MariaDB-DELETE in einer Transaktion aus und leitet zu
+`/machines` weiter. Ein ungültiges Token wird mit HTTP 403 abgelehnt; der
+Datensatz bleibt unverändert.
+
 Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.
 
-Als Nächstes folgen konfigurierbare Spalten und die Löschaktion. Das vollständige Beispiel mit Beziehung ist
+Als Nächstes folgen konfigurierbare Spalten und Berechtigungsprüfungen, sobald
+das Auth-/Permissions-System verfügbar ist. Das vollständige Beispiel mit Beziehung ist
 `examples/machine_form.zyl`.
 
 ~~~bash

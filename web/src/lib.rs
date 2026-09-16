@@ -130,6 +130,7 @@ pub struct CrudRoute {
     pub title: String,
     pub table: String,
     pub schema: Schema,
+    pub csrf: CsrfProtection,
 }
 
 #[derive(Clone, Debug)]
@@ -177,6 +178,15 @@ impl WebApp {
         for crud in &self.cruds {
             if match_path(&crud.path, &request.path).is_some() {
                 return dispatch_crud(crud, request, self.database_url.as_deref());
+            }
+            let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
+            if let Some(path_params) = match_path(&delete_path, &request.path) {
+                return dispatch_crud_delete(
+                    crud,
+                    request,
+                    &path_params,
+                    self.database_url.as_deref(),
+                );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&detail_path, &request.path) {
@@ -698,6 +708,58 @@ fn dispatch_crud_detail(
     Response::html(200, render_crud_detail(crud, &columns, row, &id_text))
 }
 
+fn dispatch_crud_delete(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Response {
+    if request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(database_url) = database_url else {
+        return Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD actions.</p>",
+        );
+    };
+    let Some(id) = path_params.get("id") else {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    };
+    let Ok(id) = id.parse::<i64>() else {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>id must be an integer.</p>");
+    };
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !crud
+        .csrf
+        .verify(input.get("_zelyra_csrf").map(String::as_str))
+    {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    let query = format!(
+        "DELETE FROM {} WHERE {} = :id",
+        quote_identifier(&crud.table),
+        quote_identifier("id")
+    );
+    if let Err(error) = zelyra_database::execute_mariadb_queries(
+        database_url,
+        &[zelyra_database::Query {
+            sql: query,
+            params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+        }],
+        true,
+    ) {
+        eprintln!("zelyra web: CRUD delete failed: {error}");
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    }
+    Response::redirect(&crud.path)
+}
+
 fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<u64> {
     values
         .get(name)
@@ -893,7 +955,11 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
     html.push_str(&html_escape(&format!("{}/{}/edit", crud.path, id)));
     html.push_str("\">Edit</a> <a href=\"");
     html.push_str(&html_escape(&format!("{}/new", crud.path)));
-    html.push_str("\">Create new</a></p></main>");
+    html.push_str("\">Create new</a></p><form method=\"post\" action=\"");
+    html.push_str(&html_escape(&format!("{}/{}/delete", crud.path, id)));
+    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+    html.push_str(&html_escape(crud.csrf.token()));
+    html.push_str("\"><button type=\"submit\">Delete</button></form></main>");
     html
 }
 
@@ -1745,6 +1811,7 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
                 tables: Vec::new(),
@@ -1807,6 +1874,7 @@ mod tests {
             path: "/machines".into(),
             title: "Machines".into(),
             table: "machines".into(),
+            csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
                 tables: Vec::new(),
@@ -1814,6 +1882,48 @@ mod tests {
         }]);
         let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(app.dispatch(&request).status, 503);
+    }
+
+    #[test]
+    fn crud_delete_requires_csrf() {
+        let app = WebApp::with_database_url(
+            Vec::new(),
+            Vec::new(),
+            Some("mariadb://root:invalid@127.0.0.1:3306/test".into()),
+        )
+        .with_cruds(vec![CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema: zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        }]);
+        let request = parse_request(
+            "POST /machines/1/delete HTTP/1.1\r\nContent-Length: 20\r\n\r\n_zelyra_csrf=wrong",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&request).status, 403);
+    }
+
+    #[test]
+    fn renders_crud_delete_confirmation_form() {
+        let route = CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema: zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        };
+        let html = render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1");
+        assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
+        assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
+        assert!(html.contains(">Delete</button>"));
     }
 
     #[test]

@@ -449,16 +449,20 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             form_routes.push(generated_crud_form(crud, table, &schema, edit, csrf));
         }
     }
-    let crud_routes = program
-        .cruds
-        .iter()
-        .map(|crud| CrudRoute {
+    let mut crud_routes = Vec::new();
+    for crud in &program.cruds {
+        let Some(csrf) = CsrfProtection::generate().ok() else {
+            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
+            return ExitCode::from(1);
+        };
+        crud_routes.push(CrudRoute {
             path: format!("/{}", crud.table),
             title: crud.name.clone(),
             table: crud.table.clone(),
             schema: schema.clone(),
-        })
-        .collect();
+            csrf,
+        });
+    }
     eprintln!("Zelyra server listening on http://{address}");
     match serve_app(
         WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())

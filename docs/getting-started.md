@@ -16,7 +16,7 @@ data. The language is intended to bring together:
 - checked native SQL;
 - web pages and HTTP routing;
 - forms and validation;
-- an initial CRUD list route;
+- initial CRUD lists, details, Create/Edit forms, and delete actions;
 - later, full CRUD, APIs, authentication, authorization, and verification.
 
 The central design goal is to define important information once. For example,
@@ -41,7 +41,8 @@ The current repository contains:
 - checked SQL blocks with named parameters;
 - an initial built-in HTTP server and GET router;
 - an initial schema-aware form parser and validator;
-- an initial CRUD list route with MariaDB search and pagination.
+- initial CRUD lists with MariaDB search, filters, sorting, pagination, and
+  CSRF-protected delete actions.
 
 The following are not complete yet: full CRUD generation, sessions,
 authentication, APIs, capabilities, contracts, formal verification, and
@@ -539,6 +540,7 @@ Read the phase documents for implementation details:
 
 The German versions use the same filenames with the .de.md suffix.
 
-The next practical development step is to extend the CRUD list with detail,
-create, edit, delete, filtering, and sorting while keeping the same schema,
-SQL, form, and permission foundations.
+The CRUD list now also provides detail, Create/Edit forms, and a
+CSRF-protected Delete action. The next practical development step is configured
+columns and authorization checks while keeping the same schema, SQL, form, and
+permission foundations.

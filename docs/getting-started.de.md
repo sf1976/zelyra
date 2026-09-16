@@ -17,7 +17,7 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - geprüftes natives SQL;
 - Web-Seiten und HTTP-Routing;
 - Formulare und Validierung;
-- eine erste CRUD-Listenroute;
+- erste CRUD-Listen, Details, Create-/Edit-Formulare und Löschaktionen;
 - später vollständiges CRUD, APIs, Authentifizierung, Autorisierung und
   Verifikation.
 
@@ -43,7 +43,8 @@ Das aktuelle Repository enthält:
 - geprüfte SQL-Blöcke mit benannten Parametern;
 - einen ersten eingebauten HTTP-Server und GET-Router;
 - einen ersten schemaabhängigen Formular-Parser und Validator;
-- eine erste CRUD-Listenroute mit MariaDB-Suche und Pagination.
+- erste CRUD-Listen mit MariaDB-Suche, Filtern, Sortierung, Pagination und
+  CSRF-geschützten Löschaktionen.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Sessions,
 Authentifizierung, APIs, Capabilities, Contracts, formale Verifikation und
@@ -549,6 +550,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
-Die nächste praktische Entwicklungsstufe erweitert die CRUD-Liste um Details,
-Erstellen, Bearbeiten, Löschen, Filter und Sortierung und verwendet weiterhin
-das gleiche Schema-, SQL-, Formular- und Berechtigungsfundament.
+Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare und eine
+CSRF-geschützte Löschaktion. Die nächste praktische Entwicklungsstufe sind
+konfigurierbare Spalten und Berechtigungsprüfungen auf demselben Schema-, SQL-,
+Formular- und Berechtigungsfundament.

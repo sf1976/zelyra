@@ -22,11 +22,17 @@ The detail view offers generated Create and Edit forms at `/machines/new` and
 relationship selects, CSRF protection, prepared parameters, and MariaDB
 transactions. Edit forms are prefilled from the selected row.
 
+The detail view also contains a CSRF-protected delete confirmation. A valid
+`POST /machines/1/delete` executes a parameterized MariaDB delete in a
+transaction and redirects to `/machines`; an invalid token is rejected with
+HTTP 403 and the record is left unchanged.
+
 Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
 
-The next steps are configured columns and delete actions.
+The next steps are configured columns and authorization checks once the Auth
+and Permissions system is available.
 The complete relationship-aware example is `examples/machine_form.zyl`.
 
 ~~~bash

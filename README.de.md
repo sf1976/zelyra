@@ -319,8 +319,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 5. Web Core — erste Seiten und HTTP-Server vorhanden.
 6. Forms — schemaabhängige Syntax, Validierung, Web-Rendering, Aktionen und
    Beziehungs-Selects vorhanden.
-7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung und
-   Pagination vorhanden; Löschen folgt.
+7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
+   Pagination und CSRF-geschütztes Löschen vorhanden; konfigurierbare Spalten
+   und Autorisierung folgen.
 8. Authentifizierung und Autorisierung.
 9. Capabilities, Contracts, Verifikation und strukturierte Nebenläufigkeit.
 10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
