@@ -244,11 +244,16 @@ fn verify_postcondition(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum SymbolicGuard<'a> {
     Condition {
         expression: &'a Expr,
         expected: bool,
+    },
+    ConditionSnapshot {
+        expression: &'a Expr,
+        expected: bool,
+        substitutions: HashMap<String, LinearValue>,
     },
     Match {
         value: &'a Expr,
@@ -466,9 +471,10 @@ fn symbolic_states<'a>(
                         ..
                     } => {
                         let mut then_guards = guards.clone();
-                        then_guards.push(SymbolicGuard::Condition {
+                        then_guards.push(SymbolicGuard::ConditionSnapshot {
                             expression: condition,
                             expected: true,
+                            substitutions: substitutions.clone(),
                         });
                         next.extend(symbolic_states(
                             then_block,
@@ -481,9 +487,10 @@ fn symbolic_states<'a>(
 
                         if let Some(else_block) = else_block {
                             let mut else_guards = guards;
-                            else_guards.push(SymbolicGuard::Condition {
+                            else_guards.push(SymbolicGuard::ConditionSnapshot {
                                 expression: condition,
                                 expected: false,
+                                substitutions: substitutions.clone(),
                             });
                             next.extend(symbolic_states(
                                 else_block,
@@ -495,9 +502,10 @@ fn symbolic_states<'a>(
                             )?);
                         } else {
                             let mut guards = guards;
-                            guards.push(SymbolicGuard::Condition {
+                            guards.push(SymbolicGuard::ConditionSnapshot {
                                 expression: condition,
                                 expected: false,
+                                substitutions: substitutions.clone(),
                             });
                             next.push(SymbolicState::Continue {
                                 guards,
@@ -533,11 +541,111 @@ fn symbolic_states<'a>(
                             )?);
                         }
                     }
+                    Stmt::While {
+                        condition, body, ..
+                    } => {
+                        next.extend(symbolic_loop_states(
+                            condition,
+                            body,
+                            SymbolicState::Continue {
+                                guards,
+                                bindings,
+                                substitutions,
+                            },
+                            parameters,
+                            functions,
+                            0,
+                        )?);
+                    }
                     _ => return None,
                 },
             }
         }
         states = next;
+    }
+    Some(states)
+}
+
+fn symbolic_loop_states<'a>(
+    condition: &'a Expr,
+    body: &'a Block,
+    state: SymbolicState<'a>,
+    parameters: &HashSet<String>,
+    functions: Option<&HashMap<String, &Function>>,
+    iterations: usize,
+) -> Option<Vec<SymbolicState<'a>>> {
+    let SymbolicState::Continue {
+        guards,
+        bindings,
+        substitutions,
+    } = state
+    else {
+        return None;
+    };
+    let true_constraints = constraints_for_bool(
+        condition,
+        true,
+        None,
+        Some(&bindings),
+        Some(&substitutions),
+        functions,
+        0,
+    )?;
+    let mut exit_guards = guards.clone();
+    exit_guards.push(SymbolicGuard::ConditionSnapshot {
+        expression: condition,
+        expected: false,
+        substitutions: substitutions.clone(),
+    });
+    let mut states = Vec::new();
+    let true_possible = true_constraints
+        .iter()
+        .any(|constraints| constraints_satisfiable(constraints.clone()) != Some(false));
+    if !true_possible {
+        states.push(SymbolicState::Continue {
+            guards: exit_guards,
+            bindings,
+            substitutions,
+        });
+        return Some(states);
+    }
+    if iterations >= 32 {
+        return None;
+    }
+
+    let mut body_guards = guards;
+    body_guards.push(SymbolicGuard::ConditionSnapshot {
+        expression: condition,
+        expected: true,
+        substitutions: substitutions.clone(),
+    });
+    for state in symbolic_states(
+        body,
+        body_guards,
+        bindings,
+        substitutions,
+        parameters,
+        functions,
+    )? {
+        match state {
+            SymbolicState::Return { .. } => states.push(state),
+            SymbolicState::Continue {
+                guards,
+                bindings,
+                substitutions,
+            } => states.extend(symbolic_loop_states(
+                condition,
+                body,
+                SymbolicState::Continue {
+                    guards,
+                    bindings,
+                    substitutions,
+                },
+                parameters,
+                functions,
+                iterations + 1,
+            )?),
+        }
     }
     Some(states)
 }
@@ -685,6 +793,19 @@ fn constraints_for_guard(
             return_expression,
             bindings,
             substitutions,
+            functions,
+            depth,
+        ),
+        SymbolicGuard::ConditionSnapshot {
+            expression,
+            expected,
+            substitutions,
+        } => constraints_for_bool(
+            expression,
+            *expected,
+            return_expression,
+            bindings,
+            Some(substitutions),
             functions,
             depth,
         ),
@@ -3426,6 +3547,39 @@ mod tests {
     fn keeps_non_linear_mutable_assignments_unproven() {
         let program = parse(
             &lex("fn multiply_mutable(value: Int) -> Int ensures { result > value } { mutable next = value next = next * value return next } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_bounded_linear_while_loops() {
+        let program = parse(
+            &lex("fn add_three(value: Int) -> Int ensures { result >= value + 3 } { mutable total = value mutable count = 0 while count < 3 { total = total + 1 count = count + 1 } return total } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn preserves_mutable_condition_snapshots() {
+        let program = parse(
+            &lex("fn avoid_zero(value: Int) -> Int ensures { result != 0 } { mutable current = value if current >= 0 { current = current + 1 } else { current = current - 1 } return current } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn keeps_unbounded_while_loops_unproven() {
+        let program = parse(
+            &lex("fn reduce(value: Int) -> Int ensures { result == 0 } { mutable current = value while current > 0 { current = current - 1 } return current } fn main() { }").unwrap(),
         )
         .unwrap();
         let results = verify(&program);

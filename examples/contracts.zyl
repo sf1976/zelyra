@@ -28,6 +28,22 @@ fn increment_mutable(value: Int) -> Int
     return next
 }
 
+fn add_three(value: Int) -> Int
+    ensures {
+        result >= value + 3
+    }
+{
+    mutable total = value
+    mutable count = 0
+
+    while count < 3 {
+        total = total + 1
+        count = count + 1
+    }
+
+    return total
+}
+
 fn twice(value: Int) -> Int
     requires {
         value >= 0

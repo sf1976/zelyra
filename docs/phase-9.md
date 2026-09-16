@@ -125,8 +125,9 @@ Local state is tracked through a function body as well. Both
 `next: Int = value + 1` and the concise `next = value + 1`, followed by `return next`, can be
 summarized like the equivalent direct return. Simple linear mutable
 initialization and assignment are also tracked, for example `next = next + 1`.
-Nonlinear assignments, loops, and other unsupported state flow remain
-`RUNTIME_CHECK`.
+Statically bounded loops with a linearly changing counter are also unfolded
+path by path. Nonlinear assignments, unbounded loops, and other unsupported
+state flow remain `RUNTIME_CHECK`.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

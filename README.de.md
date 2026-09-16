@@ -64,7 +64,8 @@ Heute implementiert:
   grundlegenden Kontrollflusspfaden, `Option`-/`Result`-Konstruktorpfaden,
   bekannten Payload-Bindings, begrenzten pfadsensitiven Zusammenfassungen von
   Funktionsaufrufen, lokalen Bindings mit einfachen linearen Zuweisungen und
-  aufruferabhängiger Prüfung von Callee-Vorbedingungen.
+  begrenzten Schleifen sowie aufruferabhängiger Prüfung von Callee-
+  Vorbedingungen.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

@@ -582,7 +582,8 @@ when proving caller `ensures`. Complex, recursive, or unresolved cases remain
 Local state is included in these summaries. Both `next: Int = value + 1` and
 the concise `next = value + 1`, followed by `return next`, are analyzed like a
 direct return. Simple linear mutable assignments such as `next = next + 1` are
-also tracked; nonlinear assignments and loops remain conservative.
+also tracked. Statically bounded loops with a linear counter are unfolded;
+nonlinear assignments and unbounded loops remain conservative.
 
 ## 16. Configuration and secrets
 

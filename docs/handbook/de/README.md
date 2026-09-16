@@ -637,7 +637,8 @@ Lokaler Zustandsfluss wird in diesen Zusammenfassungen berücksichtigt. Sowohl
 `next: Int = value + 1` als auch die Kurzform `next = value + 1` mit
 anschließendem `return next` werden wie eine direkte Rückgabe analysiert.
 Einfache lineare Mutable-Zuweisungen wie `next = next + 1` werden ebenfalls
-verfolgt; nichtlineare Zuweisungen und Schleifen bleiben konservativ.
+verfolgt. Statisch begrenzte Schleifen mit linearem Zähler werden entfaltet;
+nichtlineare Zuweisungen und unbeschränkte Schleifen bleiben konservativ.
 
 ## 16. Konfiguration und Geheimnisse
 
