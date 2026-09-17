@@ -96,7 +96,8 @@ noch in Prüfung.
   `<slot />`-Inhaltsslot.
 - [ ] Typisierte View-Ausdrücke mit Prüfung von Variablen, Feldern, Option-Werten
   und sicherem Escaping.
-- [ ] Benannte Komponenten mit typisierten Properties und Events.
+- [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
+  Events bleiben geplant.
 - [ ] Mehrere benannte Slots, Default-Slots, Fallback-Inhalte und verschachtelte
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.

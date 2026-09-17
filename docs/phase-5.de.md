@@ -64,5 +64,19 @@ page "/customers" {
 Jeder benannte View muss genau einen `<slot />` enthalten. Das HTML der Seite
 wird vor dem Erzeugen der Route in diesen Slot eingesetzt. So bleibt die
 Layout-Anpassung von Authentifizierung, Routing und Output-Escaping getrennt.
-Mehrere Slots, typisierte Komponenten, Styling und CRUD-spezifische
+Typisierte selbstschließende Komponenten mit deklarierten Properties sind
+ebenfalls verfügbar:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Mehrere Slots, verschachtelte Komponenten, Styling und CRUD-spezifische
 Überschreibungen sind als nächste Ausbaustufen geplant.

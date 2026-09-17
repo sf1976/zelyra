@@ -480,8 +480,22 @@ page "/customers" {
 
 Der Compiler verlangt in einem benannten View genau einen `<slot />`. Der
 Seiteninhalt wird vor dem Routing eingesetzt; Authentifizierung,
-Autorisierung und Escaping bleiben aktiv. Typisierte Komponenten, benannte
-Slots, Themes und CRUD-View-Überschreibungen sind geplante Erweiterungen.
+Autorisierung und Escaping bleiben aktiv. Typisierte selbstschließende
+Komponenten mit deklarierten Properties sind ebenfalls verfügbar:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Benannte Slots, verschachtelte Komposition, Themes und CRUD-View-
+Überschreibungen sind geplante Erweiterungen.
 
 ## 11. Formulare
 

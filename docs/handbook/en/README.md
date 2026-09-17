@@ -425,8 +425,22 @@ page "/customers" {
 
 The compiler requires exactly one `<slot />` in a named view. The page content
 is inserted before routing, while existing authentication, authorization, and
-escaping remain active. Typed components, named slots, themes, and CRUD view
-overrides are planned extensions.
+escaping remain active. Typed self-closing components with declared properties
+are available as well:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Named slots, nested composition, themes, and CRUD view overrides are planned
+extensions.
 
 ## 11. Forms
 

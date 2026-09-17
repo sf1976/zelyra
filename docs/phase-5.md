@@ -57,7 +57,21 @@ page "/customers" {
 
 Each named view must contain exactly one `<slot />`. The page's HTML is inserted
 into that slot before the route is created. This keeps layout customization
-separate from authentication, routing, and output escaping. Multiple slots,
-typed components, styling, and CRUD view overrides are planned next.
+separate from authentication, routing, and output escaping. Typed self-closing
+components with declared properties are also available:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Multiple slots, nested component composition, styling, and CRUD view overrides
+are planned next.
 
 Apache is not required for local development or this standalone server.

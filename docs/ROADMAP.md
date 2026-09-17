@@ -99,7 +99,8 @@ under evaluation.
   validated `<slot />` content insertion point.
 - [ ] Typed view expressions with compile-time checking of variables, fields,
   optional values, and output escaping.
-- [ ] Named components with typed properties and events.
+- [~] Named components with typed properties are available; typed events remain
+  planned.
 - [ ] Multiple named slots, default slots, fallback content, and nested views.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.
