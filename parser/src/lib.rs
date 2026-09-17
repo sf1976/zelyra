@@ -75,6 +75,10 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok(("view".into(), span))
             }
+            TokenKind::Label => {
+                let span = self.advance().span;
+                Ok(("label".into(), span))
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -84,6 +88,7 @@ impl<'a> Parser<'a> {
         let mut types = Vec::new();
         let mut records = Vec::new();
         let mut views = Vec::new();
+        let mut components = Vec::new();
         let mut pages = Vec::new();
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
@@ -102,6 +107,8 @@ impl<'a> Parser<'a> {
                 records.push(self.record_definition()?);
             } else if self.at(&TokenKind::View) {
                 views.push(self.view_definition()?);
+            } else if self.at(&TokenKind::Component) {
+                components.push(self.component_definition()?);
             } else if self.at(&TokenKind::Page) {
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::Form) {
@@ -123,6 +130,7 @@ impl<'a> Parser<'a> {
             types,
             records,
             views,
+            components,
             pages,
             forms,
             cruds,
@@ -558,6 +566,59 @@ impl<'a> Parser<'a> {
         };
         Ok(ViewDef {
             name,
+            html,
+            span: start.join(end),
+        })
+    }
+
+    fn component_definition(&mut self) -> Result<ComponentDef, ParseError> {
+        let start = self.expect(TokenKind::Component, "`component`")?;
+        let (name, _) = self.ident("component name")?;
+        self.expect(TokenKind::LBrace, "`{` after component name")?;
+        let mut props = Vec::new();
+        let mut html = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Props) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `props`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (prop_name, prop_span) = self.ident("component property name")?;
+                    self.expect(TokenKind::Colon, "`:` after component property name")?;
+                    let ty = self.type_name()?;
+                    props.push(ComponentProp {
+                        name: prop_name,
+                        ty,
+                        span: prop_span,
+                    });
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after component properties")?;
+            } else if self.at(&TokenKind::Html) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `html`")?;
+                let body = match self.current().kind.clone() {
+                    TokenKind::HtmlBody(body) => {
+                        self.advance();
+                        body
+                    }
+                    _ => return self.error("expected HTML body"),
+                };
+                self.expect(TokenKind::RBrace, "`}` after HTML body")?;
+                html = Some(body);
+            } else {
+                return self.error("expected `props` or `html` in component definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after component definition")?;
+        let Some(html) = html else {
+            return self.error("component definition requires an `html` block");
+        };
+        Ok(ComponentDef {
+            name,
+            props,
             html,
             span: start.join(end),
         })
@@ -1689,6 +1750,29 @@ mod tests {
         assert_eq!(program.views[0].name, "AppShell");
         assert!(program.views[0].html.contains("<slot />"));
         assert_eq!(program.pages[0].view.as_deref(), Some("AppShell"));
+    }
+
+    #[test]
+    fn parses_typed_view_component_properties() {
+        let source = r#"
+            component Badge {
+                props {
+                    text: String
+                    count: Int?
+                }
+                html { <span>{text}</span> }
+            }
+            page "/status" {
+                html { <Badge text="Ready" /> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.components.len(), 1);
+        assert_eq!(program.components[0].props.len(), 2);
+        assert_eq!(
+            program.components[0].props[1].ty,
+            Type::Option(Box::new(Type::Int))
+        );
     }
 
     #[test]

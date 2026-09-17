@@ -23,7 +23,7 @@ Zelyra 0.1 ist eine aktive frühe Implementierung. Das Repository enthält echte
 kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
 Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
 
-Die gepflegte [Roadmap](ROADMAP.de.md) enthält alle geplanten Pflicht- und
+Die gepflegte [Roadmap](docs/ROADMAP.de.md) enthält alle geplanten Pflicht- und
 optionalen Arbeiten, einschließlich Views-System und kryptografischer
 Audit-Verkettung.
 
@@ -238,6 +238,24 @@ Der Compiler verlangt in jedem benannten View genau einen `<slot />`-Slot. Der
 Seiteninhalt wird vor dem Routing in diesen Slot eingesetzt; Authentifizierung
 und Escaping bleiben dadurch in der bestehenden sicheren Web-Pipeline. Ein
 vollständiges Beispiel steht in `examples/views.zyl`.
+
+Views können außerdem typisierte, wiederverwendbare Komponenten deklarieren:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
+verfügbar. Eine einheitliche, zusammensetzbare View-Datenpipeline dafür ist
+geplant, damit dieselbe typisierte Definition sowohl die Abfrage als auch die
+zugänglichen Bedienelemente erzeugt.
 
 ## Ein erstes schemaabhängiges Formular
 

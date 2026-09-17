@@ -30,6 +30,8 @@ pub enum TokenKind {
     Sql,
     Page,
     View,
+    Component,
+    Props,
     Html,
     Form,
     Crud,
@@ -188,6 +190,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "postgres" => TokenKind::Postgres,
                 "page" => TokenKind::Page,
                 "view" => TokenKind::View,
+                "component" => TokenKind::Component,
+                "props" => TokenKind::Props,
                 "html" => TokenKind::Html,
                 "form" => TokenKind::Form,
                 "crud" => TokenKind::Crud,
@@ -606,5 +610,14 @@ mod tests {
             lex("view AppShell { html { <slot /> } }").unwrap()[0].kind,
             TokenKind::View
         ));
+    }
+
+    #[test]
+    fn lexes_component_keywords() {
+        let tokens = lex("component Badge { props { text: String } }").unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::Component));
+        assert!(tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Props)));
     }
 }

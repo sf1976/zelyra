@@ -22,7 +22,7 @@ Zelyra 0.1 is an active early implementation. The repository is real,
 buildable, tested Rust code, but the complete long-term language specification
 is not implemented yet.
 
-See the maintained [roadmap](ROADMAP.md) for required and optional future
+See the maintained [roadmap](docs/ROADMAP.md) for required and optional future
 work, including the Views System and cryptographic audit chaining.
 
 ## License and implementation
@@ -232,6 +232,24 @@ The compiler requires exactly one `<slot />` in every named view. The page
 content is composed into that slot before routing, so authentication and
 escaping continue to use the existing web pipeline. See
 `examples/views.zyl` for a complete example.
+
+Views can also declare typed, reusable components:
+
+~~~zelyra
+component Badge {
+    props { text: String }
+    html { <span class="badge">{text}</span> }
+}
+
+page "/status" {
+    html { <Badge text="Ready" /> }
+}
+~~~
+
+Search, filtering, sorting, and pagination are already available on generated
+CRUD lists. A unified, composable view data pipeline for these operations is
+planned so the same typed declaration can drive both the query and its
+accessible controls.
 
 ## A first schema-aware form
 

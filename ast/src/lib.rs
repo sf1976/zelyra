@@ -85,6 +85,7 @@ pub struct Program {
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
     pub views: Vec<ViewDef>,
+    pub components: Vec<ComponentDef>,
     pub pages: Vec<PageDef>,
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
@@ -107,6 +108,21 @@ pub struct PageDef {
 pub struct ViewDef {
     pub name: String,
     pub html: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComponentDef {
+    pub name: String,
+    pub props: Vec<ComponentProp>,
+    pub html: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComponentProp {
+    pub name: String,
+    pub ty: Type,
     pub span: Span,
 }
 

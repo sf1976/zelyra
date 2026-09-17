@@ -10,6 +10,8 @@ compiler and repository release.
 
 - Added named web views with page-level `view: Name` composition and a
   compiler-validated `<slot />` content boundary.
+- Added typed self-closing view components with declared properties and safe
+  literal-property escaping.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

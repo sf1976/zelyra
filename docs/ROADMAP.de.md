@@ -22,9 +22,10 @@ noch in Prüfung.
   Ergebnis-, Transaktions- und sicherer Parameterprüfung.
 - [x] HTTP-Server, Seiten, Formulare, CRUD, Suche, Filter, Sortierung,
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
-- [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition und ein
-  validierter Content-Slot sind verfügbar. Typisierte Komponenten, Properties,
-  Themes und CRUD-View-Überschreibungen folgen.
+- [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
+  validierter Content-Slot und typisierte selbstschließende Komponenten mit
+  Properties sind verfügbar. Mehrere Slots, Themes und CRUD-View-
+  Überschreibungen folgen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -100,6 +101,13 @@ noch in Prüfung.
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
 - [ ] View-lokales Laden von Daten mit expliziten Query- und Berechtigungsgrenzen.
+- [ ] Einheitliche typisierte View-Datenpipelines wie `.search(...)`,
+  `.filter(...)`, `.sort(...)` und `.page(...)`, die in sichere serverseitige
+  SQL-Abfragen kompiliert werden.
+- [ ] Direkt aus derselben Pipeline erzeugte zugängliche Filter- und
+  Sortiersteuerung mit stabiler Sortierung und URL-Zustand.
+- [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für Strings,
+  Zahlen, Datum, Boolesche Werte, Relationen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,
   Pagination und Validierungsfehler-Komponenten.
 - [ ] CRUD-View-Überschreibungen für Liste, Detail, Create, Edit, Delete, leer,

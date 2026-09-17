@@ -26,8 +26,8 @@ use zelyra_runtime::{
     VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
-    parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute, CsrfProtection,
-    FormRoute, Response, Route, WebApp,
+    html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute,
+    CsrfProtection, FormRoute, Response, Route, WebApp,
 };
 
 fn usage() {
@@ -211,6 +211,9 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     if !validate_views(path, &program) {
         return Err(());
     }
+    if !validate_components(path, &program) {
+        return Err(());
+    }
     if let Ok(schema) = build_schema(&program) {
         if !validate_auth(path, &program, &schema) {
             return Err(());
@@ -288,6 +291,279 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 valid = false;
             }
         }
+    }
+    valid
+}
+
+fn component_invocations(html: &str) -> Result<Vec<(String, String)>, String> {
+    let mut invocations = Vec::new();
+    let mut search_from = 0;
+    while let Some(relative_start) = html[search_from..].find('<') {
+        let start = search_from + relative_start;
+        let after_open = &html[start + 1..];
+        let Some(first) = after_open.chars().next() else {
+            break;
+        };
+        if !first.is_ascii_uppercase() {
+            search_from = start + 1;
+            continue;
+        }
+        let name_length = after_open
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .map(char::len_utf8)
+            .sum::<usize>();
+        let name = after_open[..name_length].to_owned();
+        let after_name = start + 1 + name_length;
+        let Some(relative_end) = html[after_name..].find("/>") else {
+            return Err(format!(
+                "component `<{name}>` must be self-closing with `/>`"
+            ));
+        };
+        let end = after_name + relative_end;
+        invocations.push((name, html[after_name..end].to_owned()));
+        search_from = end + 2;
+    }
+    Ok(invocations)
+}
+
+fn component_attributes(attributes: &str) -> Result<HashMap<String, String>, String> {
+    let mut values = HashMap::new();
+    let bytes = attributes.as_bytes();
+    let mut position = 0;
+    while position < bytes.len() {
+        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
+            position += 1;
+        }
+        if position == bytes.len() {
+            break;
+        }
+        let name_start = position;
+        while bytes
+            .get(position)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+        {
+            position += 1;
+        }
+        if name_start == position {
+            return Err("component properties require a name".into());
+        }
+        let name = attributes[name_start..position].to_owned();
+        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
+            position += 1;
+        }
+        if bytes.get(position) != Some(&b'=') {
+            return Err(format!("component property `{name}` requires `=`"));
+        }
+        position += 1;
+        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
+            position += 1;
+        }
+        if bytes.get(position) != Some(&b'"') {
+            return Err(format!(
+                "component property `{name}` must use a quoted value"
+            ));
+        }
+        position += 1;
+        let value_start = position;
+        while bytes.get(position).is_some_and(|byte| *byte != b'"') {
+            position += 1;
+        }
+        if position == bytes.len() {
+            return Err(format!(
+                "component property `{name}` has an unterminated value"
+            ));
+        }
+        let value = attributes[value_start..position].to_owned();
+        position += 1;
+        if values.insert(name.clone(), value).is_some() {
+            return Err(format!(
+                "component property `{name}` is specified more than once"
+            ));
+        }
+    }
+    Ok(values)
+}
+
+fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
+    if value.starts_with('{') && value.ends_with('}') {
+        return value.len() > 2;
+    }
+    match &prop.ty {
+        Type::Option(inner) => component_prop_accepts(
+            &zelyra_ast::ComponentProp {
+                name: prop.name.clone(),
+                ty: (**inner).clone(),
+                span: prop.span,
+            },
+            value,
+        ),
+        Type::Int | Type::UInt => value.parse::<i64>().is_ok(),
+        Type::Float | Type::Decimal => value.parse::<f64>().is_ok(),
+        Type::Bool => matches!(value, "true" | "false"),
+        _ => true,
+    }
+}
+
+fn validate_component_template(
+    path: &str,
+    program: &zelyra_ast::Program,
+    html: &str,
+    line: usize,
+    column: usize,
+) -> bool {
+    let mut valid = true;
+    let invocations = match component_invocations(html) {
+        Ok(invocations) => invocations,
+        Err(message) => {
+            diagnostic(path, "E-VIEW-006", &message, line, column);
+            return false;
+        }
+    };
+    for (name, attributes) in invocations {
+        let Some(component) = program
+            .components
+            .iter()
+            .find(|component| component.name == name)
+        else {
+            diagnostic(
+                path,
+                "E-VIEW-007",
+                &format!("unknown view component `{name}`"),
+                line,
+                column,
+            );
+            valid = false;
+            continue;
+        };
+        let attributes = match component_attributes(&attributes) {
+            Ok(attributes) => attributes,
+            Err(message) => {
+                diagnostic(path, "E-VIEW-006", &message, line, column);
+                valid = false;
+                continue;
+            }
+        };
+        for attribute in attributes.keys() {
+            if !component.props.iter().any(|prop| prop.name == *attribute) {
+                diagnostic(
+                    path,
+                    "E-VIEW-008",
+                    &format!("component `{name}` has no property `{attribute}`"),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+        }
+        for prop in &component.props {
+            let Some(value) = attributes.get(&prop.name) else {
+                if !matches!(prop.ty, Type::Option(_)) {
+                    diagnostic(
+                        path,
+                        "E-VIEW-009",
+                        &format!(
+                            "component `{name}` is missing required property `{}`",
+                            prop.name
+                        ),
+                        line,
+                        column,
+                    );
+                    valid = false;
+                }
+                continue;
+            };
+            if !component_prop_accepts(prop, value) {
+                diagnostic(
+                    path,
+                    "E-VIEW-010",
+                    &format!(
+                        "value `{value}` is incompatible with component property `{}` of type {}",
+                        prop.name, prop.ty
+                    ),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+        }
+    }
+    valid
+}
+
+fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    let mut names = HashSet::new();
+    for component in &program.components {
+        if !component
+            .name
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+        {
+            diagnostic(
+                path,
+                "E-VIEW-004",
+                &format!(
+                    "view component `{}` must start with an uppercase letter",
+                    component.name
+                ),
+                component.span.line,
+                component.span.column,
+            );
+            valid = false;
+        }
+        if !names.insert(component.name.as_str()) {
+            diagnostic(
+                path,
+                "E-VIEW-005",
+                &format!("duplicate view component `{}`", component.name),
+                component.span.line,
+                component.span.column,
+            );
+            valid = false;
+        }
+        let mut props = HashSet::new();
+        for prop in &component.props {
+            if !props.insert(prop.name.as_str()) {
+                diagnostic(
+                    path,
+                    "E-VIEW-005",
+                    &format!(
+                        "duplicate property `{}` in component `{}`",
+                        prop.name, component.name
+                    ),
+                    prop.span.line,
+                    prop.span.column,
+                );
+                valid = false;
+            }
+        }
+        valid &= validate_component_template(
+            path,
+            program,
+            &component.html,
+            component.span.line,
+            component.span.column,
+        );
+    }
+    for view in &program.views {
+        valid &= validate_component_template(
+            path,
+            program,
+            &view.html,
+            view.span.line,
+            view.span.column,
+        );
+    }
+    for page in &program.pages {
+        valid &= validate_component_template(
+            path,
+            program,
+            &page.html,
+            page.span.line,
+            page.span.column,
+        );
     }
     valid
 }
@@ -3056,15 +3332,65 @@ fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
 }
 
 fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
-    let Some(view_name) = page.view.as_deref() else {
-        return page.html.clone();
+    let html = if let Some(view_name) = page.view.as_deref() {
+        let view = program
+            .views
+            .iter()
+            .find(|view| view.name == view_name)
+            .expect("page views are validated before route generation");
+        view.html.replace("<slot />", &page.html)
+    } else {
+        page.html.clone()
     };
-    let view = program
-        .views
+    expand_view_components(program, html)
+}
+
+fn render_view_component(component: &zelyra_ast::ComponentDef, attributes: &str) -> String {
+    let attributes = component_attributes(attributes).expect("view components are validated");
+    component
+        .props
         .iter()
-        .find(|view| view.name == view_name)
-        .expect("page views are validated before route generation");
-    view.html.replace("<slot />", &page.html)
+        .fold(component.html.clone(), |html, prop| {
+            let value = attributes.get(&prop.name).map_or("", String::as_str);
+            let replacement = if value.starts_with('{') && value.ends_with('}') {
+                value.to_owned()
+            } else {
+                html_escape(value)
+            };
+            html.replace(&format!("{{{}}}", prop.name), &replacement)
+        })
+}
+
+fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
+    for _ in 0..16 {
+        let mut changed = false;
+        for component in &program.components {
+            let marker = format!("<{}", component.name);
+            while let Some(start) = html.find(&marker) {
+                let after_name = start + marker.len();
+                if html
+                    .as_bytes()
+                    .get(after_name)
+                    .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+                {
+                    break;
+                } else {
+                    let Some(relative_end) = html[after_name..].find("/>") else {
+                        break;
+                    };
+                    let end = after_name + relative_end;
+                    let attributes = html[after_name..end].to_owned();
+                    let rendered = render_view_component(component, &attributes);
+                    html.replace_range(start..end + 2, &rendered);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    html
 }
 
 fn quote_identifier(identifier: &str) -> String {
