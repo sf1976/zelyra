@@ -602,6 +602,17 @@ aktiviert: Die erste Tabelle enthält `user_id` und `role`, die zweite `role`
 und `permission`. Effektive Berechtigungen sind die Vereinigung direkter
 Vergaben und aller Berechtigungen aus den Rollen des Benutzers.
 
+Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
+Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind
+sicher:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role grant app.zyl 42 manager
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role-permission revoke app.zyl manager customers.edit
+~~~
+
 Dieselben Schutzregeln sichern typisierte API-Handler:
 
 ~~~zelyra

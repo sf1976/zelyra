@@ -62,6 +62,23 @@ direkter Berechtigungen und der Berechtigungen aller zugewiesenen Rollen.
 Rollennamen sind Anwendungsdaten; eine eigene Rollenkatalogtabelle ist nicht
 erforderlich.
 
+Rollenzuweisungen und Rollenberechtigungen können ohne eigene SQL-Befehle
+gepflegt werden:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role grant app.zyl 42 manager
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role-permission grant app.zyl manager customers.edit
+~~~
+
+Die Grant-Befehle sind idempotent. Revoke-Befehle entfernen die passende
+Zuweisung oder Rollenberechtigung. Die Befehle verwenden die erste
+`auth`-Definition, verlangen MariaDB, prüfen zuerst das Projektschema und
+binden Benutzer-IDs und Werte als SQL-Parameter. Eine browserbasierte
+Rollenverwaltung und der Schutz des letzten Administrators sind noch nicht
+vorhanden.
+
 Für Deployments, die Benutzer in einem Reverse Proxy authentifizieren,
 akzeptiert der Server zusätzlich ein Bearer-Token, wenn ZELYRA_AUTH_TOKEN
 ausdrücklich gesetzt ist. Die serverseitige Berechtigungsliste wird über

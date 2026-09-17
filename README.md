@@ -55,6 +55,8 @@ Implemented today:
   actions while direct requests remain protected.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, direct and role-based permission checks.
+- CLI role and role-permission grant/revoke commands with schema validation and
+  idempotent MariaDB writes.
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
   permission guards, structured JSON errors, and declared `Result` error
@@ -114,12 +116,15 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, role administration, richer language-level domain-error values,
+Full CRUD generation, browser-based role administration, richer language-level domain-error values,
 general formal verification, operating-system capability integration, and
 production deployment tooling are still being developed. See
 the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
+
+Zelyra's concrete product differentiation is documented in the
+[positioning and unique strengths guide](docs/positioning.md).
 
 ## Quick start
 
@@ -431,6 +436,9 @@ The long-term specification is organized into these phases:
 13. MariaDB CRUD end-to-end coverage and GitHub Actions CI are implemented.
 14. Tag-based Linux and Windows release archives with SHA-256 checksums are
     generated automatically.
+15. Bootstrap independence and a self-hosting compiler are strategic goals;
+    the current compiler bootstrap remains Rust while released users do not
+    need Rust installed.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
 positive and negative tests, documentation, and examples.

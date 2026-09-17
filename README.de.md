@@ -58,6 +58,9 @@ Heute implementiert:
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout sowie direkte und rollenbasierte
   Berechtigungsprüfungen.
+- CLI-Befehle zum Gewähren und Entziehen von Rollen und
+  Rollenberechtigungen mit Schemavalidierung und idempotenten MariaDB-
+  Schreibvorgängen.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
@@ -119,11 +122,14 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Rollenverwaltung, umfangreichere fachliche
+Vollständige CRUD-Erzeugung, browserbasierte Rollenverwaltung, umfangreichere fachliche
 Fehlerwerte, allgemeine formale Verifikation, Betriebssystem-Integration der
 Capabilities und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
+
+Die konkreten Alleinstellungsmerkmale sind im
+[Leitfaden zur Positionierung](docs/positioning.de.md) dokumentiert.
 
 ## Schnelleinstieg
 
@@ -441,6 +447,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 13. MariaDB-CRUD-End-to-End-Abdeckung und GitHub-Actions-CI sind vorhanden.
 14. Linux- und Windows-Release-Archive mit SHA-256-Prüfsummen werden
     automatisch aus Tags erzeugt.
+15. Bootstrap-Unabhängigkeit und ein selbsthostender Compiler sind strategische
+    Ziele; der aktuelle Compiler-Bootstrap bleibt Rust, während Nutzer
+    veröffentlichter Zelyra-Versionen Rust nicht installieren müssen.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.

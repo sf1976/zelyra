@@ -12,7 +12,7 @@ use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
     inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
-    Backend, Risk, Schema,
+    Backend, QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -31,7 +31,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -2990,8 +2990,189 @@ fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 
 fn auth_usage() {
     eprintln!(
-        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n\nThe interactive form does not echo passwords. Use --stdin for automation."
+        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n  zelyra auth role grant <file.zyl> <user-id> <role>\n  zelyra auth role revoke <file.zyl> <user-id> <role>\n  zelyra auth role-permission grant <file.zyl> <role> <permission>\n  zelyra auth role-permission revoke <file.zyl> <role> <permission>\n\nRole commands use DATABASE_URL and the role tables declared in the first auth definition.\nThe interactive password form does not echo passwords. Use --stdin for automation."
     );
+}
+
+#[derive(Clone, Debug)]
+struct AuthRoleTables {
+    assignments: String,
+    permissions: String,
+}
+
+fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
+    let program = match validate(path) {
+        Ok(program) => program,
+        Err(()) => return Err(ExitCode::from(1)),
+    };
+    let Some(auth) = program.auth.first() else {
+        eprintln!("error[E-AUTH-014]: role commands require an auth definition");
+        return Err(ExitCode::from(1));
+    };
+    let (Some(assignments), Some(permissions)) = (
+        auth.roles_table.clone(),
+        auth.role_permissions_table.clone(),
+    ) else {
+        eprintln!(
+            "error[E-AUTH-015]: role commands require roles and role_permissions in the auth definition"
+        );
+        return Err(ExitCode::from(1));
+    };
+    Ok(AuthRoleTables {
+        assignments,
+        permissions,
+    })
+}
+
+fn auth_role_database_url() -> Result<String, ExitCode> {
+    match env::var("DATABASE_URL") {
+        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
+        Ok(_) => {
+            eprintln!("error[E-AUTH-016]: role commands require a MariaDB DATABASE_URL");
+            Err(ExitCode::from(1))
+        }
+        Err(_) => {
+            eprintln!("error[E-AUTH-017]: DATABASE_URL is required for role commands");
+            Err(ExitCode::from(1))
+        }
+    }
+}
+
+fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let Some(operation) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    let Some(path) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    let Some(user_id) = args.next().and_then(|value| value.parse::<i64>().ok()) else {
+        eprintln!("error[E-AUTH-018]: user-id must be an integer");
+        return ExitCode::from(2);
+    };
+    let Some(role) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    if args.next().is_some() || role.is_empty() || !matches!(operation.as_str(), "grant" | "revoke")
+    {
+        auth_usage();
+        return ExitCode::from(2);
+    }
+    let tables = match auth_role_tables(&path) {
+        Ok(tables) => tables,
+        Err(code) => return code,
+    };
+    let database_url = match auth_role_database_url() {
+        Ok(url) => url,
+        Err(code) => return code,
+    };
+    let (sql, message) = if operation == "grant" {
+        (
+            format!(
+                "INSERT INTO {} (user_id, role) SELECT :user_id, :role FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE user_id = :user_id AND role = :role)",
+                quote_identifier(&tables.assignments),
+                quote_identifier(&tables.assignments),
+            ),
+            "role granted",
+        )
+    } else {
+        (
+            format!(
+                "DELETE FROM {} WHERE user_id = :user_id AND role = :role",
+                quote_identifier(&tables.assignments),
+            ),
+            "role revoked",
+        )
+    };
+    match zelyra_database::execute_mariadb_query(
+        &database_url,
+        &sql,
+        vec![
+            ("user_id".into(), QueryValue::Int(user_id)),
+            ("role".into(), QueryValue::String(role.clone())),
+        ],
+    ) {
+        Ok(_) => {
+            println!("{message}: user {user_id} -> {role}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-AUTH-019]: cannot change role assignment: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let Some(operation) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    let Some(path) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    let Some(role) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    let Some(permission) = args.next() else {
+        auth_usage();
+        return ExitCode::from(2);
+    };
+    if args.next().is_some()
+        || role.is_empty()
+        || permission.is_empty()
+        || !matches!(operation.as_str(), "grant" | "revoke")
+    {
+        auth_usage();
+        return ExitCode::from(2);
+    }
+    let tables = match auth_role_tables(&path) {
+        Ok(tables) => tables,
+        Err(code) => return code,
+    };
+    let database_url = match auth_role_database_url() {
+        Ok(url) => url,
+        Err(code) => return code,
+    };
+    let (sql, message) = if operation == "grant" {
+        (
+            format!(
+                "INSERT INTO {} (role, permission) SELECT :role, :permission FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE role = :role AND permission = :permission)",
+                quote_identifier(&tables.permissions),
+                quote_identifier(&tables.permissions),
+            ),
+            "permission granted",
+        )
+    } else {
+        (
+            format!(
+                "DELETE FROM {} WHERE role = :role AND permission = :permission",
+                quote_identifier(&tables.permissions),
+            ),
+            "permission revoked",
+        )
+    };
+    match zelyra_database::execute_mariadb_query(
+        &database_url,
+        &sql,
+        vec![
+            ("role".into(), QueryValue::String(role.clone())),
+            ("permission".into(), QueryValue::String(permission.clone())),
+        ],
+    ) {
+        Ok(_) => {
+            println!("{message}: {role} -> {permission}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-AUTH-020]: cannot change role permission: {error}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 fn password_from_stdin() -> Result<String, String> {
@@ -3002,11 +3183,7 @@ fn password_from_stdin() -> Result<String, String> {
     Ok(password.trim_end_matches(['\r', '\n']).to_owned())
 }
 
-fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    if args.next().as_deref() != Some("hash-password") {
-        auth_usage();
-        return ExitCode::from(2);
-    }
+fn auth_hash_password_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let use_stdin = match args.next().as_deref() {
         None => false,
         Some("--stdin") => true,
@@ -3056,6 +3233,18 @@ fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Err(error) => {
             eprintln!("error[E-AUTH-003]: {error}");
             ExitCode::from(1)
+        }
+    }
+}
+
+fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    match args.next().as_deref() {
+        Some("hash-password") => auth_hash_password_command(args),
+        Some("role") => auth_role_command(args),
+        Some("role-permission") => auth_role_permission_command(args),
+        _ => {
+            auth_usage();
+            ExitCode::from(2)
         }
     }
 }

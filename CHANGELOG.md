@@ -11,6 +11,8 @@ compiler and repository release.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.
+- Added MariaDB CLI administration for idempotent role assignments and role
+  permissions with `zelyra auth role` and `zelyra auth role-permission`.
 
 ## 0.1.37 — 2026-09-17
 

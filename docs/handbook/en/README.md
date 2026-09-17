@@ -546,6 +546,16 @@ the first table contains `user_id` and `role`, and the second contains `role`
 and `permission`. Effective permissions are the union of direct grants and
 all permissions inherited from the user's roles.
 
+Use the CLI to maintain assignments without writing SQL. The project is
+validated before the MariaDB write, and repeated grants are safe:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role grant app.zyl 42 manager
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role-permission revoke app.zyl manager customers.edit
+~~~
+
 The same guards protect typed API handlers:
 
 ~~~zelyra

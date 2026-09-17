@@ -59,6 +59,22 @@ permissions are the union of direct permissions and permissions inherited from
 all assigned roles. Role names are application data, so no separate role
 catalog is required.
 
+Role assignments and role permissions can be maintained without handwritten
+SQL:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role grant app.zyl 42 manager
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra auth role-permission grant app.zyl manager customers.edit
+~~~
+
+The grant operations are idempotent. Revoke operations remove the matching
+assignment or role permission. The commands use the first `auth` definition,
+require MariaDB, validate the project schema first, and bind user IDs and
+values as SQL parameters. They do not yet provide a browser-based role
+administration screen or last-administrator protection.
+
 For deployments that authenticate users in a reverse proxy, the server also
 accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The
 server-side permission allowlist is configured with

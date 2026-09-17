@@ -14,6 +14,7 @@ secondary_email="zelyra-protected-secondary-${suffix}@example.test"
 viewer_email="zelyra-protected-viewer-${suffix}@example.test"
 primary_role="zelyra-protected-manager-${suffix}"
 viewer_role="zelyra-protected-viewer-${suffix}"
+temporary_role="zelyra-protected-temporary-${suffix}"
 test_password="ZelyraProtected-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
@@ -61,7 +62,7 @@ WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${se
 DELETE FROM user_roles
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM role_permissions
-WHERE role IN ('${primary_role}', '${viewer_role}');
+WHERE role IN ('${primary_role}', '${viewer_role}', '${temporary_role}');
 DELETE FROM auth_sessions
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
@@ -103,17 +104,34 @@ SET @secondary_user_id = (SELECT id FROM users WHERE email = '${secondary_email}
 SET @viewer_user_id = (SELECT id FROM users WHERE email = '${viewer_email}');
 INSERT INTO user_permissions (user_id, permission)
 VALUES (@secondary_user_id, 'other.permission');
-INSERT INTO user_roles (user_id, role)
-VALUES (@primary_user_id, '${primary_role}'),
-       (@viewer_user_id, '${viewer_role}');
-INSERT INTO role_permissions (role, permission)
-VALUES ('${primary_role}', 'customers.view'),
-       ('${primary_role}', 'customers.create'),
-       ('${primary_role}', 'customers.edit'),
-       ('${primary_role}', 'customers.delete'),
-       ('${viewer_role}', 'customers.view');
 INSERT INTO customers (name) VALUES ('${customer_name}');
 SQL
+primary_user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${primary_email}'")"
+viewer_user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${viewer_email}'")"
+[[ -n "${primary_user_id}" ]]
+[[ -n "${viewer_user_id}" ]]
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant "${project_file}" "${primary_user_id}" "${primary_role}"
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant "${project_file}" "${viewer_user_id}" "${viewer_role}"
+for permission in customers.view customers.create customers.edit customers.delete; do
+    DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
+        "${project_file}" "${primary_role}" "${permission}"
+done
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
+    "${project_file}" "${viewer_role}" customers.view
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant \
+    "${project_file}" "${primary_user_id}" "${primary_role}"
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
+    "${project_file}" "${primary_role}" customers.view
+primary_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${primary_user_id}' AND role = '${primary_role}'")"
+primary_permission_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM role_permissions WHERE role = '${primary_role}' AND permission = 'customers.view'")"
+[[ "${primary_role_count}" == "1" ]]
+[[ "${primary_permission_count}" == "1" ]]
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant \
+    "${project_file}" "${primary_user_id}" "${temporary_role}"
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role revoke \
+    "${project_file}" "${primary_user_id}" "${temporary_role}"
+temporary_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${primary_user_id}' AND role = '${temporary_role}'")"
+[[ "${temporary_role_count}" == "0" ]]
 customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${customer_name}'")"
 [[ -n "${customer_id}" ]]
 
