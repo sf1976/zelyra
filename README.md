@@ -60,6 +60,7 @@ Implemented today:
   records;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
+- structured `for ... in` array iteration with `break` and `continue`;
 - record literals and checked field access for nested business values;
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from

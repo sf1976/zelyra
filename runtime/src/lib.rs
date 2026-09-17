@@ -1348,9 +1348,10 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
                     collect_loop_modified_names(else_block, names);
                 }
             }
-            Stmt::While { body, .. } | Stmt::Loop { body, .. } | Stmt::Transaction { body, .. } => {
-                collect_loop_modified_names(body, names)
-            }
+            Stmt::While { body, .. }
+            | Stmt::For { body, .. }
+            | Stmt::Loop { body, .. }
+            | Stmt::Transaction { body, .. } => collect_loop_modified_names(body, names),
             Stmt::Match { arms, .. } => {
                 for arm in arms {
                     collect_loop_modified_names(&arm.body, names);
@@ -1397,6 +1398,7 @@ fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Ex
                     collect_loop_invariants(&arm.body, loops);
                 }
             }
+            Stmt::For { body, .. } => collect_loop_invariants(body, loops),
             Stmt::Transaction { body, .. } => collect_loop_invariants(body, loops),
             Stmt::Let { .. }
             | Stmt::BindOrAssign { .. }
@@ -2976,6 +2978,10 @@ fn check_capability_block(
                 }
                 check_capability_block(body, function, functions, declared, errors);
             }
+            Stmt::For { iterable, body, .. } => {
+                check_capability_expr(iterable, function, functions, declared, errors);
+                check_capability_block(body, function, functions, declared, errors);
+            }
             Stmt::Loop {
                 invariants, body, ..
             } => {
@@ -3380,6 +3386,37 @@ impl<'a> Checker<'a> {
                 self.loop_depth += 1;
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
+            }
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                ..
+            } => {
+                let iterable_type = self.check_expr(iterable, scopes);
+                let element_type = match iterable_type {
+                    Type::Array(inner) => *inner,
+                    Type::Unknown => Type::Unknown,
+                    other => {
+                        self.error(
+                            iterable.span,
+                            format!("`for ... in` expects an array, found `{other}`"),
+                        );
+                        Type::Unknown
+                    }
+                };
+                scopes.push(HashMap::new());
+                scopes.last_mut().unwrap().insert(
+                    name.clone(),
+                    Variable {
+                        ty: element_type,
+                        mutable: false,
+                    },
+                );
+                self.loop_depth += 1;
+                self.check_block(body, scopes, expected);
+                self.loop_depth -= 1;
+                scopes.pop();
             }
             Stmt::Loop {
                 invariants, body, ..
@@ -4359,6 +4396,35 @@ impl Interpreter {
                 }
                 Ok(Flow::Continue)
             }
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                span,
+            } => {
+                let iterable = self.eval(iterable, env)?;
+                let values = match iterable {
+                    Value::Array(values) => values,
+                    value => {
+                        return Err(self.runtime_error(
+                            *span,
+                            format!("`for ... in` expects an array, found {}", value.ty()),
+                        ));
+                    }
+                };
+                for value in values {
+                    env.push();
+                    env.declare(name.clone(), value, false);
+                    let flow = self.exec_block(body, env)?;
+                    env.pop();
+                    match flow {
+                        Flow::Continue | Flow::LoopContinue => {}
+                        Flow::Break => break,
+                        flow @ Flow::Return(_) => return Ok(flow),
+                    }
+                }
+                Ok(Flow::Continue)
+            }
             Stmt::Loop {
                 invariants,
                 body,
@@ -4873,6 +4939,24 @@ mod tests {
             "fn main() { values = [1, 2] extended = append(values, 3) combined = extended + [4] print(combined[2]) print(len(combined)) }",
         );
         assert_eq!(output, ["3", "4"]);
+    }
+
+    #[test]
+    fn supports_array_for_iteration_and_loop_control() {
+        let output = run(
+            "fn main() { mutable total = 0 for value in [1, 2, 3, 4] { if value == 2 { continue } if value == 4 { break } total = total + value } print(total) }",
+        );
+        assert_eq!(output, ["4"]);
+    }
+
+    #[test]
+    fn rejects_non_array_for_iteration() {
+        let program =
+            parse(&lex("fn main() { for value in 1 { print(value) } }").unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("expects an array")));
     }
 
     #[test]

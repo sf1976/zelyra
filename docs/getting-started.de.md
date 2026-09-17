@@ -57,6 +57,7 @@ Das aktuelle Repository enthält:
   `struct`-Records;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`;
+- strukturierte `for ... in`-Iteration über Arrays mit `break` und `continue`;
 - Record-Literale und geprüfter Feldzugriff für verschachtelte Werte;
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
@@ -198,7 +199,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]

@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]
@@ -544,6 +544,9 @@ customer = CustomerInput {
 print(customer.address.city)
 ~~~
 
+Array iteration uses `for ... in`; the loop variable is immutable and scoped to
+the loop body. `break` and `continue` are supported.
+
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
@@ -683,7 +686,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]

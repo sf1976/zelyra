@@ -137,6 +137,17 @@ last = last(numbers)
 `first` and `last` return `Option<T>`, so empty arrays are handled without a
 runtime null value.
 
+Arrays can be iterated with structured `for ... in` loops. The loop variable is
+immutable and scoped to the loop body:
+
+~~~zelyra
+for customer in customers {
+    print(customer.name)
+}
+~~~
+
+`break` and `continue` work inside array loops as they do in other loops.
+
 Records provide the declared model for nested JSON objects. Missing optional
 fields become `None`; unknown fields and missing required fields are rejected
 at the API boundary:

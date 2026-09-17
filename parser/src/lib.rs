@@ -961,6 +961,19 @@ impl<'a> Parser<'a> {
                 span: start.join(body.span),
             });
         }
+        if self.at(&TokenKind::For) {
+            let start = self.advance().span;
+            let (name, _) = self.ident("loop variable name")?;
+            self.expect(TokenKind::In, "`in` after loop variable")?;
+            let iterable = self.expression()?;
+            let body = self.block()?;
+            return Ok(Stmt::For {
+                name,
+                iterable,
+                body: body.clone(),
+                span: start.join(body.span),
+            });
+        }
         if self.at(&TokenKind::Loop) {
             let start = self.advance().span;
             self.skip_newlines();
@@ -1666,6 +1679,16 @@ mod tests {
             panic!("expected print call");
         };
         assert!(matches!(args[0].kind, ExprKind::Field { .. }));
+    }
+
+    #[test]
+    fn parses_array_for_loops() {
+        let program =
+            parse(&lex("fn main() { for value in [1, 2] { print(value) } }").unwrap()).unwrap();
+        assert!(matches!(
+            program.functions[0].body.statements[0],
+            Stmt::For { ref name, .. } if name == "value"
+        ));
     }
 
     #[test]

@@ -89,6 +89,13 @@ pub enum HirStmt {
         body: HirBlock,
         span: Span,
     },
+    For {
+        name: String,
+        local: LocalId,
+        iterable: HirExpr,
+        body: HirBlock,
+        span: Span,
+    },
     Loop {
         invariants: Vec<HirExpr>,
         body: HirBlock,
@@ -382,6 +389,25 @@ impl<'a> Resolver<'a> {
                 body: self.block(body),
                 span: *span,
             },
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                span,
+            } => {
+                let iterable = self.expr(iterable);
+                self.scopes.push(HashMap::new());
+                let local = self.bind(name.clone(), *span);
+                let body = self.block(body);
+                self.scopes.pop();
+                HirStmt::For {
+                    name: name.clone(),
+                    local,
+                    iterable,
+                    body,
+                    span: *span,
+                }
+            }
             Stmt::Loop {
                 invariants,
                 body,
@@ -560,7 +586,7 @@ mod tests {
     #[test]
     fn lowers_records_arrays_and_array_builtins() {
         let program = parse(
-            &lex("struct Address { city: String } fn main() { address = Address { city: \"Berlin\" } print(address.city) items = [1, 2] first = items[0] count = len(items) extended = append(items, 3) print(first) print(count) print(extended) }").unwrap(),
+            &lex("struct Address { city: String } fn main() { address = Address { city: \"Berlin\" } print(address.city) items = [1, 2] first = items[0] count = len(items) extended = append(items, 3) for item in extended { print(item) } print(first) print(count) print(extended) }").unwrap(),
         )
         .unwrap();
         let hir = lower(&program).unwrap();
@@ -591,6 +617,10 @@ mod tests {
                 },
                 ..
             } if name == "len"
+        ));
+        assert!(matches!(
+            hir.functions[0].body.statements[6],
+            HirStmt::For { ref name, .. } if name == "item"
         ));
     }
 }

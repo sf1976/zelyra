@@ -178,7 +178,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]
@@ -597,6 +597,10 @@ customer = CustomerInput {
 print(customer.address.city)
 ~~~
 
+Die Array-Iteration verwendet `for ... in`; die Schleifenvariable ist
+unveränderlich und nur im Schleifenkörper sichtbar. `break` und `continue`
+werden unterstützt.
+
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
@@ -743,7 +747,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]

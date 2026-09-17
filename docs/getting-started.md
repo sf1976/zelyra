@@ -54,6 +54,7 @@ The current repository contains:
   declared with `struct` records;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`;
+- structured `for ... in` array iteration with `break` and `continue`;
 - record literals and checked field access for nested values;
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
@@ -191,7 +192,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.1"
+version = "0.1.2"
 zelyra = "0.1"
 
 [capabilities]

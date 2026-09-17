@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.2 — 2026-09-17
+
+### Added
+
+- Structured `for ... in` iteration over arrays.
+- Immutable loop variables scoped to the loop body.
+- `break` and `continue` support in array loops.
+- Parser, HIR, type-checking, runtime, and integration tests for array loops.
+
+### Dokumentation
+
+- README, Getting Started, Handbook, and Phase 10 documentation updated in
+  English and German.
+- The runnable `examples/array_for.zyl` example demonstrates iteration and
+  loop control.
+
 ## 0.1.1 — 2026-09-17
 
 ### Added

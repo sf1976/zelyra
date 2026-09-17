@@ -122,6 +122,10 @@ fn check_block(
                 }
                 check_block(body, schema, environment, errors);
             }
+            Stmt::For { iterable, body, .. } => {
+                check_expr(iterable, schema, environment, errors);
+                check_block(body, schema, environment, errors);
+            }
             Stmt::Loop {
                 invariants, body, ..
             } => {

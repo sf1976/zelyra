@@ -139,6 +139,18 @@ last = last(numbers)
 `first` und `last` liefern `Option<T`; leere Arrays werden dadurch ohne einen
 Laufzeit-Nullwert sicher behandelt.
 
+Arrays können mit strukturierten `for ... in`-Schleifen durchlaufen werden. Die
+Schleifenvariable ist unveränderlich und nur im Schleifenkörper sichtbar:
+
+~~~zelyra
+for customer in customers {
+    print(customer.name)
+}
+~~~
+
+`break` und `continue` funktionieren innerhalb von Array-Schleifen wie in den
+anderen Schleifen.
+
 Records bilden das deklarierte Modell für verschachtelte JSON-Objekte.
 Fehlende optionale Felder werden zu `None`; unbekannte Felder und fehlende
 Pflichtfelder werden an der API-Grenze abgelehnt:

@@ -1,0 +1,15 @@
+fn main() {
+    mutable total = 0
+
+    for value in [1, 2, 3, 4] {
+        if value == 2 {
+            continue
+        }
+        if value == 4 {
+            break
+        }
+        total = total + value
+    }
+
+    print(total)
+}

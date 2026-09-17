@@ -61,6 +61,7 @@ Heute implementiert:
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
+- strukturierte `for ... in`-Iteration über Arrays mit `break` und `continue`;
 - Record-Literale und geprüfter Feldzugriff für verschachtelte Fachobjekte;
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus

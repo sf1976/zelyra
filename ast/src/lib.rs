@@ -300,6 +300,12 @@ pub enum Stmt {
         body: Block,
         span: Span,
     },
+    For {
+        name: String,
+        iterable: Expr,
+        body: Block,
+        span: Span,
+    },
     Loop {
         invariants: Vec<Expr>,
         body: Block,
