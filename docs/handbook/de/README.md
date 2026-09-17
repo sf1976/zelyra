@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.26"
+version = "0.1.27"
 zelyra = "0.1"
 
 [capabilities]
@@ -736,6 +736,24 @@ erfolgreiche UTF-8-GET-Response-Bodies innerhalb der konfigurierten Grenzen
 geliefert. Request-Header, Request-Bodies und umfangreichere HTTP-Funktionen
 folgen später.
 
+Typisierte Anfragen verwenden `http_request`:
+
+~~~zelyra
+fn create_customer(url: String) -> HttpResponse uses Network {
+    return http_request(
+        "POST",
+        url,
+        ["Content-Type: application/json"],
+        Some("{\"name\":\"Anna\"}")
+    )
+}
+~~~
+
+Die Methode akzeptiert `GET`, `POST`, `PUT`, `PATCH`, `DELETE` und `HEAD`.
+Header sind Strings im Format `Name: value`, der Body ist `String?`. Das
+typisierte Ergebnis enthält `status: Int`, `headers: String[]` und
+`body: String`. GET- und HEAD-Anfragen dürfen keinen Body enthalten.
+
 Die Process-Capability stellt eine Befehls-API ohne Shell bereit:
 
 ~~~zelyra
@@ -903,7 +921,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.26"
+version = "0.1.27"
 zelyra = "0.1"
 
 [capabilities]

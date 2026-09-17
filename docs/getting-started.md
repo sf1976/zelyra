@@ -71,6 +71,7 @@ The current repository contains:
   list_dir(path) through FileSystem with project path roots;
 - http_get(url) through Network with an explicit host allowlist and bounded
   timeout and response size;
+- http_request(method, url, headers, body) with typed HttpResponse results;
 - run_process(command, args) through Process without a shell, using an exact
   command allowlist and bounded execution;
 - runtime-checked function contracts using `requires` and `ensures`.
@@ -267,7 +268,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.26"
+version = "0.1.27"
 zelyra = "0.1"
 
 [capabilities]

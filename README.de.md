@@ -80,6 +80,7 @@ Heute implementiert:
   list_dir(path) über die FileSystem-Capability mit Projektpfadgrenzen;
 - http_get(url) über die Network-Capability mit Projekt-Host-Allowlists,
   Zeitlimits und Antwortgrößenbegrenzung;
+- http_request(method, url, headers, body) mit typisierten HttpResponse-Werten;
 - run_process(command, args) über Process mit exakter Befehls-Allowlist,
   ohne Shell, Timeout und begrenzter Ausgabe;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;

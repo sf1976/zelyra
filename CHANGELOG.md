@@ -4,6 +4,23 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.27 — 2026-09-17
+
+### Added
+
+- Added `http_request(method, url, headers, body)` with typed
+  `HttpResponse` values containing status, headers, and body.
+- Added support for POST, PUT, PATCH, DELETE, and HEAD alongside GET, with
+  safe separate header and body values.
+- Added local request/response integration coverage and synchronized German
+  and English documentation.
+
+### Known limitations
+
+- Request headers are represented as `Name: value` strings, and response
+  bodies are UTF-8 strings. Multipart, streaming, and typed JSON decoding
+  remain future work.
+
 ## 0.1.26 — 2026-09-17
 
 ### Added

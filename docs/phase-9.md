@@ -121,6 +121,25 @@ not follow redirects and limits response size and total request time. The API
 remains intentionally limited to GET and UTF-8 response bodies; request
 headers, request bodies, and richer HTTP client features remain future work.
 
+For typed requests, use `http_request`:
+
+~~~zelyra
+fn create_customer(url: String) -> HttpResponse uses Network {
+    return http_request(
+        "POST",
+        url,
+        ["Content-Type: application/json"],
+        Some("{\"name\":\"Anna\"}")
+    )
+}
+~~~
+
+The request API accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
+Headers use `Name: value` strings, and the body is `String?`. The returned
+`HttpResponse` has typed fields `status: Int`, `headers: String[]`, and
+`body: String`. Redirects remain disabled, and GET/HEAD requests cannot carry
+a body.
+
 The Process capability exposes a deliberately narrow command API:
 
 ~~~zelyra

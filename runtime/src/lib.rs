@@ -74,6 +74,7 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
         "Time",
         "Duration",
         "Unit",
+        "HttpResponse",
     ]
     .into_iter()
     .map(String::from)
@@ -3054,7 +3055,7 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "http_get" {
+            } else if name == "http_get" || name == "http_request" {
                 require_capability(
                     "Network",
                     "network access",
@@ -3221,6 +3222,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         "Time",
         "Duration",
         "Unit",
+        "HttpResponse",
     ]
     .into_iter()
     .map(String::from)
@@ -3956,6 +3958,23 @@ impl<'a> Checker<'a> {
                     let url = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &url, args[0].span);
                     Type::String
+                } else if name == "http_request" {
+                    if args.len() != 4 {
+                        self.error(
+                            expr.span,
+                            "http_request expects String method, String URL, String[] headers, and String? body",
+                        );
+                        return Type::Unknown;
+                    }
+                    let method = self.check_expr(&args[0], scopes);
+                    let url = self.check_expr(&args[1], scopes);
+                    let headers = self.check_expr(&args[2], scopes);
+                    let body = self.check_expr(&args[3], scopes);
+                    self.expect_type(&Type::String, &method, args[0].span);
+                    self.expect_type(&Type::String, &url, args[1].span);
+                    self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[2].span);
+                    self.expect_type(&Type::Option(Box::new(Type::String)), &body, args[3].span);
+                    Type::Named("HttpResponse".into())
                 } else if name == "run_process" {
                     if args.len() != 2 {
                         self.error(
@@ -4153,6 +4172,14 @@ impl<'a> Checker<'a> {
             return None;
         };
         let mut name = initial_name.as_str();
+        if name == "HttpResponse" {
+            return match field {
+                "status" => Some(Type::Int),
+                "headers" => Some(Type::Array(Box::new(Type::String))),
+                "body" => Some(Type::String),
+                _ => None,
+            };
+        }
         let mut visited = HashSet::new();
         loop {
             if !visited.insert(name) {
@@ -4731,15 +4758,34 @@ impl Interpreter {
         }
     }
 
-    fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
+    fn http_request(
+        &self,
+        method: &str,
+        url: &str,
+        request_headers: &[String],
+        request_body: Option<&str>,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if !matches!(method, "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD") {
+            return Err(self.runtime_error(
+                span,
+                format!("http_request does not support method `{method}`"),
+            ));
+        }
+        if matches!(method, "GET" | "HEAD") && request_body.is_some() {
+            return Err(self.runtime_error(
+                span,
+                format!("http_request does not allow a body with {method}"),
+            ));
+        }
         let Some((scheme, authority_and_path)) = url.split_once("://") else {
             return Err(
-                self.runtime_error(span, "http_get supports only http:// and https:// URLs")
+                self.runtime_error(span, "http_request supports only http:// and https:// URLs")
             );
         };
         if !matches!(scheme, "http" | "https") {
             return Err(
-                self.runtime_error(span, "http_get supports only http:// and https:// URLs")
+                self.runtime_error(span, "http_request supports only http:// and https:// URLs")
             );
         }
         let authority_end = authority_and_path
@@ -4747,18 +4793,18 @@ impl Interpreter {
             .unwrap_or(authority_and_path.len());
         let authority = &authority_and_path[..authority_end];
         if authority.is_empty() || authority.contains('@') || authority.contains(['\r', '\n']) {
-            return Err(self.runtime_error(span, "http_get received an invalid URL"));
+            return Err(self.runtime_error(span, "http_request received an invalid URL"));
         }
         let host = if let Some((host, port)) = authority.rsplit_once(':') {
             if port.parse::<u16>().is_err() {
-                return Err(self.runtime_error(span, "http_get received an invalid port"));
+                return Err(self.runtime_error(span, "http_request received an invalid port"));
             }
             host
         } else {
             authority
         };
         if host.is_empty() || host.contains(['/', '?', '#', '[', ']', '\\']) {
-            return Err(self.runtime_error(span, "http_get received an invalid host"));
+            return Err(self.runtime_error(span, "http_request received an invalid host"));
         }
         if let Some(policy) = &self.network_policy {
             let authority_allowed = policy
@@ -4776,9 +4822,10 @@ impl Interpreter {
         let timeout = Duration::from_millis(policy.map_or(5_000, |policy| policy.timeout_ms));
         let maximum = policy.map_or(1_048_576, |policy| policy.max_response_bytes);
         if maximum == 0 {
-            return Err(
-                self.runtime_error(span, "http_get requires a positive maximum response size")
-            );
+            return Err(self.runtime_error(
+                span,
+                "http_request requires a positive maximum response size",
+            ));
         }
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_global(Some(timeout))
@@ -4786,13 +4833,40 @@ impl Interpreter {
             .http_status_as_error(false)
             .build()
             .into();
-        let mut response = agent.get(url).call().map_err(|error| {
-            self.runtime_error(span, format!("network request failed: {error}"))
-        })?;
-        let status = response.status().as_u16();
-        if !(200..300).contains(&status) {
-            return Err(self.runtime_error(span, format!("http_get received HTTP status {status}")));
+        let mut builder = ureq::http::Request::builder().method(method).uri(url);
+        for header in request_headers {
+            let Some((name, value)) = header.split_once(':') else {
+                return Err(self.runtime_error(
+                    span,
+                    "http_request headers must use the `Name: value` format",
+                ));
+            };
+            let name = name.trim();
+            let value = value.trim();
+            if name.is_empty() || value.contains(['\r', '\n']) {
+                return Err(self.runtime_error(span, "http_request received an invalid header"));
+            }
+            builder = builder.header(name, value);
         }
+        let mut response = if let Some(body) = request_body {
+            let request = builder.body(body.to_owned()).map_err(|error| {
+                self.runtime_error(
+                    span,
+                    format!("http_request could not build request: {error}"),
+                )
+            })?;
+            agent.run(request)
+        } else {
+            let request = builder.body(()).map_err(|error| {
+                self.runtime_error(
+                    span,
+                    format!("http_request could not build request: {error}"),
+                )
+            })?;
+            agent.run(request)
+        }
+        .map_err(|error| self.runtime_error(span, format!("network request failed: {error}")))?;
+        let status = response.status().as_u16();
         let content_length = response
             .headers()
             .get("content-length")
@@ -4818,8 +4892,46 @@ impl Interpreter {
                 format!("network response exceeds the {maximum} byte limit"),
             ));
         }
-        String::from_utf8(body)
-            .map_err(|_| self.runtime_error(span, "network response is not valid UTF-8"))
+        let body = String::from_utf8(body)
+            .map_err(|_| self.runtime_error(span, "network response is not valid UTF-8"))?;
+        let headers = response
+            .headers()
+            .iter()
+            .map(|(name, value)| {
+                format!(
+                    "{}: {}",
+                    name,
+                    value.to_str().unwrap_or("<non-utf8-header>")
+                )
+            })
+            .map(Value::String)
+            .collect();
+        Ok(Value::Object {
+            type_name: "HttpResponse".into(),
+            fields: HashMap::from([
+                ("status".into(), Value::Int(i64::from(status))),
+                ("headers".into(), Value::Array(headers)),
+                ("body".into(), Value::String(body)),
+            ]),
+        })
+    }
+
+    fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
+        let response = self.http_request("GET", url, &[], None, span)?;
+        let Value::Object { fields, .. } = response else {
+            return Err(self.runtime_error(span, "http_get received an invalid response"));
+        };
+        let status = match fields.get("status") {
+            Some(Value::Int(status)) => *status,
+            _ => return Err(self.runtime_error(span, "http_get received an invalid status")),
+        };
+        if !(200..300).contains(&status) {
+            return Err(self.runtime_error(span, format!("http_get received HTTP status {status}")));
+        }
+        match fields.get("body") {
+            Some(Value::String(body)) => Ok(body.clone()),
+            _ => Err(self.runtime_error(span, "http_get received an invalid body")),
+        }
     }
 
     fn run_process(
@@ -5547,6 +5659,60 @@ impl Interpreter {
                         );
                     };
                     self.http_get(&url, expr.span).map(Value::String)
+                } else if name == "http_request" {
+                    if args.len() != 4 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "http_request expects String method, String URL, String[] headers, and String? body",
+                        ));
+                    }
+                    self.require_runtime_capability("Network", "network access", expr.span)?;
+                    let method = self.eval(&args[0], env)?;
+                    let url = self.eval(&args[1], env)?;
+                    let headers = self.eval(&args[2], env)?;
+                    let body = self.eval(&args[3], env)?;
+                    let Value::String(method) = method else {
+                        return Err(self
+                            .runtime_error(args[0].span, "http_request expects a String method"));
+                    };
+                    let Value::String(url) = url else {
+                        return Err(
+                            self.runtime_error(args[1].span, "http_request expects a String URL")
+                        );
+                    };
+                    let Value::Array(headers) = headers else {
+                        return Err(self
+                            .runtime_error(args[2].span, "http_request expects String[] headers"));
+                    };
+                    let mut header_strings = Vec::with_capacity(headers.len());
+                    for header in headers {
+                        let Value::String(header) = header else {
+                            return Err(self.runtime_error(
+                                args[2].span,
+                                "http_request expects String[] headers",
+                            ));
+                        };
+                        header_strings.push(header);
+                    }
+                    let body = match body {
+                        Value::Option(Some(body)) => match *body {
+                            Value::String(body) => Some(body),
+                            _ => {
+                                return Err(self.runtime_error(
+                                    args[3].span,
+                                    "http_request expects a String? body",
+                                ));
+                            }
+                        },
+                        Value::Option(None) => None,
+                        _ => {
+                            return Err(self.runtime_error(
+                                args[3].span,
+                                "http_request expects a String? body",
+                            ));
+                        }
+                    };
+                    self.http_request(&method, &url, &header_strings, body.as_deref(), expr.span)
                 } else if name == "run_process" {
                     if args.len() != 2 {
                         return Err(self.runtime_error(
@@ -6389,6 +6555,98 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.message.contains("network access denied"));
+    }
+
+    #[test]
+    fn sends_typed_http_request_and_returns_structured_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 512];
+            while !request
+                .windows(b"{\"name\":\"Anna\"}".len())
+                .any(|window| window == b"{\"name\":\"Anna\"}")
+            {
+                let size = stream.read(&mut chunk).unwrap();
+                if size == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..size]);
+            }
+            let request = String::from_utf8_lossy(&request);
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request.starts_with("POST /customers HTTP/1.1"));
+            assert!(request_lower.contains("x-request-id: test-1"));
+            assert!(request.contains("{\"name\":\"Anna\"}"));
+            std::io::Write::write_all(
+                &mut stream,
+                b"HTTP/1.1 201 Created\r\nX-Request-ID: test-1\r\nContent-Length: 7\r\nConnection: close\r\n\r\ncreated",
+            )
+            .unwrap();
+        });
+        let source =
+            "fn request(url: String) -> HttpResponse uses Network { return http_request(\"POST\", url, [\"X-Request-ID: test-1\", \"Content-Type: application/json\"], Some(\"{\\\"name\\\":\\\"Anna\\\"}\")) } fn status(url: String) -> Int uses Network { response = request(url) return response.status } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec![format!("127.0.0.1:{port}")],
+                timeout_ms: 1_000,
+                max_response_bytes: 100,
+            }),
+            process: None,
+        };
+        let response = execute_function_with_capabilities_and_policies(
+            &program,
+            "request",
+            vec![Value::String(format!("http://127.0.0.1:{port}/customers"))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        let Value::Object { fields, .. } = response else {
+            panic!("expected HttpResponse object");
+        };
+        assert_eq!(fields.get("status"), Some(&Value::Int(201)));
+        assert_eq!(fields.get("body"), Some(&Value::String("created".into())));
+        assert!(
+            matches!(fields.get("headers"), Some(Value::Array(headers)) if headers.iter().any(|header| header == &Value::String("x-request-id: test-1".into())))
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn rejects_http_request_body_for_get() {
+        let source = "fn request() -> HttpResponse uses Network { return http_request(\"GET\", \"http://example.test\", [], Some(\"body\")) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec![String::from("example.test")],
+                timeout_ms: 100,
+                max_response_bytes: 100,
+            }),
+            process: None,
+        };
+        let error = execute_function_with_capabilities_and_policies(
+            &program,
+            "request",
+            Vec::new(),
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("does not allow a body with GET"));
     }
 
     #[test]

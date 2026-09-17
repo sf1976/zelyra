@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.26"
+version = "0.1.27"
 zelyra = "0.1"
 
 [capabilities]
@@ -676,6 +676,24 @@ default. It does not follow redirects and returns only successful UTF-8 GET
 response bodies within the configured limits. Request headers, request bodies,
 and richer HTTP features are future work.
 
+Typed requests use `http_request`:
+
+~~~zelyra
+fn create_customer(url: String) -> HttpResponse uses Network {
+    return http_request(
+        "POST",
+        url,
+        ["Content-Type: application/json"],
+        Some("{\"name\":\"Anna\"}")
+    )
+}
+~~~
+
+The method accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
+Headers are `Name: value` strings, the body is `String?`, and the typed result
+contains `status: Int`, `headers: String[]`, and `body: String`. GET/HEAD
+requests cannot carry a body.
+
 The Process capability exposes a shell-free command API:
 
 ~~~zelyra
@@ -837,7 +855,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.26"
+version = "0.1.27"
 zelyra = "0.1"
 
 [capabilities]
