@@ -67,6 +67,10 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok(("role_permissions".into(), span))
             }
+            TokenKind::Audit => {
+                let span = self.advance().span;
+                Ok(("audit".into(), span))
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -229,6 +233,7 @@ impl<'a> Parser<'a> {
         let mut permissions_table = None;
         let mut roles_table = None;
         let mut role_permissions_table = None;
+        let mut audit_table = None;
         let mut admin_path = None;
         let mut admin_permission = None;
         let mut admin_role = None;
@@ -239,6 +244,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Permissions => "permissions",
                 TokenKind::Roles => "roles",
                 TokenKind::RolePermissions => "role_permissions",
+                TokenKind::Audit => "audit",
                 TokenKind::AdminPath => "admin_path",
                 TokenKind::AdminPermission => "admin_permission",
                 TokenKind::AdminRole => "admin_role",
@@ -257,6 +263,7 @@ impl<'a> Parser<'a> {
                 "permissions" => permissions_table = Some(value),
                 "roles" => roles_table = Some(value),
                 "role_permissions" => role_permissions_table = Some(value),
+                "audit" => audit_table = Some(value),
                 "admin_path" => admin_path = Some(value),
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
@@ -278,6 +285,7 @@ impl<'a> Parser<'a> {
             permissions_table,
             roles_table,
             role_permissions_table,
+            audit_table,
             admin_path,
             admin_permission,
             admin_role,
@@ -1691,6 +1699,7 @@ mod tests {
                     permissions: user_permissions
                     roles: user_roles
                     role_permissions: role_permissions
+                    audit: auth_audit_log
                     admin_path: "/admin/access"
                     admin_permission: "auth.manage"
                     admin_role: admin
@@ -1720,6 +1729,10 @@ mod tests {
         assert_eq!(
             program.auth[0].role_permissions_table.as_deref(),
             Some("role_permissions")
+        );
+        assert_eq!(
+            program.auth[0].audit_table.as_deref(),
+            Some("auth_audit_log")
         );
         assert_eq!(program.auth[0].admin_path.as_deref(), Some("/admin/access"));
         assert_eq!(

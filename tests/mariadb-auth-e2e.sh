@@ -162,6 +162,7 @@ logout_status="$(request_status "${temp_dir}/logout.html" \
     --cookie "${primary_cookie}" \
     --cookie-jar "${primary_cookie}" \
     --request POST \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
     "${base_url}/logout")"
 [[ "${logout_status}" == "303" ]]
 logged_out_admin_status="$(request_status "${temp_dir}/logged-out-admin.html" \

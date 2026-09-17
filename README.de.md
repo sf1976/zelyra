@@ -64,6 +64,8 @@ Heute implementiert:
 - optionale browserbasierte Rollenverwaltung mit CSRF-Schutz,
   Berechtigungssperren, Benutzeranlage, Passwort-Zurücksetzung, Aktivierung
   und Deaktivierung sowie Schutz der letzten Administrationszuordnung.
+- optionales MariaDB-Audit-Logging für Login-, Logout-, Passwort-, Benutzer-,
+  Rollen- und Berechtigungsereignisse mit Anzeige der letzten 100 Einträge.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter

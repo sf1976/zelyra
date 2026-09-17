@@ -1807,6 +1807,51 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        if let Some(audit_table_name) = &auth.audit_table {
+            let Some(audit_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *audit_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-025",
+                    &format!(
+                        "authentication refers to unknown audit table {}",
+                        audit_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in [
+                "actor_user_id",
+                "event",
+                "target_user_id",
+                "details",
+                "created_at",
+            ] {
+                if !audit_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-026",
+                        &format!(
+                            "authentication audit table {} requires column {}",
+                            audit_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+        }
         let admin_options = [
             auth.admin_path.is_some(),
             auth.admin_permission.is_some(),
@@ -2306,6 +2351,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions_table: auth.permissions_table.clone(),
             roles_table: auth.roles_table.clone(),
             role_permissions_table: auth.role_permissions_table.clone(),
+            audit_table: auth.audit_table.clone(),
             admin_path: auth.admin_path.clone(),
             admin_permission: auth.admin_permission.clone(),
             admin_role: auth.admin_role.clone(),

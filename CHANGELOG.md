@@ -20,6 +20,10 @@ compiler and repository release.
   revocation and last-active-administrator protection.
 - Administrative password resets now revoke all persistent sessions for the
   affected user atomically with the password change.
+- Added optional append-only MariaDB audit logging for browser user and role
+  administration, including the latest 100 events in the admin screen.
+- Login, failed-login, and logout events are recorded when audit logging is
+  enabled; logout now requires a valid CSRF token.
 
 ## 0.1.37 — 2026-09-17
 

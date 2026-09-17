@@ -183,6 +183,8 @@ primary_login_status="$(request_status "${temp_dir}/primary-login.html" \
     --data-urlencode "password=${test_password}" \
     "${base_url}/login")"
 [[ "${primary_login_status}" == "303" ]]
+primary_login_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'auth.login' AND target_user_id = '${primary_user_id}'")"
+[[ "${primary_login_audit_count}" == "1" ]]
 primary_crud_status="$(request_status "${temp_dir}/primary-crud.html" \
     --cookie "${primary_cookie}" \
     "${base_url}/customers")"
@@ -235,6 +237,8 @@ managed_login_status="$(request_status "${temp_dir}/managed-login-disabled.html"
     --data-urlencode "password=${managed_password}" \
     "${base_url}/login")"
 [[ "${managed_login_status}" == "401" ]]
+managed_failed_login_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'auth.login_failed' AND target_user_id IS NULL")"
+[[ "${managed_failed_login_audit_count}" == "1" ]]
 admin_activate_status="$(request_status "${temp_dir}/primary-admin-activate.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${admin_csrf}" \
@@ -261,6 +265,15 @@ managed_old_session_status="$(request_status "${temp_dir}/managed-old-session.ht
     --cookie "${temp_dir}/managed-before-reset.cookies" \
     "${base_url}/admin/access")"
 [[ "${managed_old_session_status}" == "401" ]]
+audit_create_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'user.create' AND target_user_id IS NULL AND details = 'email=${managed_email}'")"
+audit_reset_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'user.password_reset' AND target_user_id = '${managed_user_id}'")"
+[[ "${audit_create_count}" == "1" ]]
+[[ "${audit_reset_count}" == "1" ]]
+curl --silent --show-error --fail --cookie "${primary_cookie}" \
+    "${base_url}/admin/access" -o "${temp_dir}/primary-admin-audit.html"
+grep -Fq "Audit log" "${temp_dir}/primary-admin-audit.html"
+grep -Fq "user.create" "${temp_dir}/primary-admin-audit.html"
+grep -Fq "user.password_reset" "${temp_dir}/primary-admin-audit.html"
 managed_login_enabled_status="$(request_status "${temp_dir}/managed-login-enabled.html" \
     --cookie-jar "${temp_dir}/managed-enabled.cookies" \
     --data-urlencode "_zelyra_csrf=${csrf}" \
@@ -268,6 +281,14 @@ managed_login_enabled_status="$(request_status "${temp_dir}/managed-login-enable
     --data-urlencode "password=${managed_new_password}" \
     "${base_url}/login")"
 [[ "${managed_login_enabled_status}" == "303" ]]
+managed_logout_status="$(request_status "${temp_dir}/managed-logout.html" \
+    --cookie "${temp_dir}/managed-enabled.cookies" \
+    --request POST \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    "${base_url}/logout")"
+[[ "${managed_logout_status}" == "303" ]]
+managed_logout_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${managed_user_id}' AND event = 'auth.logout' AND target_user_id = '${managed_user_id}'")"
+[[ "${managed_logout_count}" == "1" ]]
 admin_last_role_status="$(request_status "${temp_dir}/primary-admin-last-role.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${admin_csrf}" \

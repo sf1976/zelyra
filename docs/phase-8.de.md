@@ -12,6 +12,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    audit: auth_audit_log
     admin_path: "/admin/access"
     admin_permission: "auth.manage"
     admin_role: admin
@@ -47,7 +48,8 @@ ein vorhandenes Session-Token dieses Browsers. Wenn die
 optionale Session-Tabelle konfiguriert ist, wird nur ein Blake2s-256-Hash des
 Session-Tokens in MariaDB gespeichert; das Cookie selbst wird nie in der
 Datenbank gespeichert. Sessions laufen nach 24 Stunden ab und Logout entfernt
-den Datenbankeintrag. Ohne sessions-Option verwendet der ausdrückliche
+den Datenbankeintrag; Logout ist ein CSRF-geschützter POST. Ohne
+sessions-Option verwendet der ausdrückliche
 Entwicklungs-Fallback den Prozessspeicher.
 
 Wenn die optionale Berechtigungstabelle konfiguriert ist, muss sie die Spalten
@@ -88,6 +90,15 @@ Rollenberechtigungen vergeben und entziehen. Alle Formulare sind
 CSRF-geschützt und durch die deklarierte Berechtigung gesichert.
 Ein administrativer Passwort-Reset ändert das Passwort und entfernt in einer
 Transaktion alle persistenten Sessions des betroffenen Benutzers.
+
+Mit `audit: auth_audit_log` werden Login-, Logout-, Passwort-, Benutzer-,
+Rollen- und Berechtigungsereignisse in eine append-only Tabelle geschrieben.
+Sie benötigt die Spalten
+`actor_user_id`, `event`, `target_user_id`, `details` und `created_at`.
+`actor_user_id` ist bei einer nicht sitzungsgebundenen Authentifizierung
+nullable; bei einer Benutzeranlage kann auch `target_user_id` leer sein, weil
+die neue Auto-Increment-ID erst während des Inserts entsteht. Die
+Administrationsseite zeigt die letzten 100 Einträge.
 
 Wenn die Benutzertabelle eine `active`-Spalte besitzt, können deaktivierte
 Benutzer sich nicht anmelden; beim Deaktivieren werden ihre persistenten

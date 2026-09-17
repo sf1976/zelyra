@@ -6,6 +6,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    audit: auth_audit_log
     admin_path: "/admin/access"
     admin_permission: "auth.manage"
     admin_role: admin
@@ -41,6 +42,15 @@ table role_permissions {
     id: Id primary auto
     role: String(100) required
     permission: String(100) required
+}
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
 }
 
 table customers {

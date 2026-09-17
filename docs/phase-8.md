@@ -12,6 +12,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    audit: auth_audit_log
     admin_path: "/admin/access"
     admin_permission: "auth.manage"
     admin_role: admin
@@ -44,9 +45,9 @@ Successful login creates an HttpOnly, SameSite session cookie and rotates any
 previous session token from that browser. When the
 optional sessions table is configured, only a Blake2s-256 hash of the session
 token is stored in MariaDB; the cookie itself is never stored in the database.
-Sessions expire after 24 hours and logout removes the database record. Without
-the sessions option, the explicit development fallback keeps sessions in
-process memory.
+Sessions expire after 24 hours and logout removes the database record; logout
+is a CSRF-protected POST. Without the sessions option, the explicit
+development fallback keeps sessions in process memory.
 
 When the optional permissions table is configured, it must contain user_id and
 permission columns. Permissions are loaded from that table for every
@@ -84,6 +85,13 @@ users, and grant or revoke roles and role permissions. All forms use CSRF
 protection and the declared permission guard.
 An administrative password reset changes the password and atomically removes
 all persistent sessions belonging to that user.
+
+With `audit: auth_audit_log`, login, logout, password, user, role, and
+permission events are written to an append-only table. It requires the columns `actor_user_id`, `event`,
+`target_user_id`, `details`, and `created_at`. `actor_user_id` is nullable for
+authentication without a database session; `target_user_id` can also be empty
+for user creation because the new auto-increment ID is created by the insert.
+The administration screen shows the latest 100 entries.
 
 When the user table has an `active` column, deactivated users cannot log in;
 deactivation also removes their persistent sessions. The configured

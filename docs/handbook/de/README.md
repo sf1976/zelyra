@@ -584,6 +584,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    audit: auth_audit_log
     admin_path: "/admin/access"
     admin_permission: "auth.manage"
     admin_role: admin
@@ -616,6 +617,11 @@ Deaktivieren entfernt. Passwort-Resets entfernen ebenfalls alle persistenten
 Sessions des betroffenen Benutzers. Die letzte Zuweisung der konfigurierten
 Administrationsrolle und der letzte aktive Administrator sind geschützt.
 Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
+
+Die optionale Tabelle `auth_audit_log` protokolliert Login-, Logout-,
+Passwort-, Benutzer-, Rollen- und Berechtigungsereignisse mit Akteur, Ereignis,
+Ziel, Details und Zeitstempel. Die letzten 100 Einträge werden auf der
+Administrationsseite angezeigt.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

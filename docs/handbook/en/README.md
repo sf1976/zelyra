@@ -528,6 +528,7 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    audit: auth_audit_log
     admin_path: "/admin/access"
     admin_permission: "auth.manage"
     admin_role: admin
@@ -554,11 +555,15 @@ browser administration screen at the configured path. It is protected by the
 declared permission and CSRF tokens. Administrators can create users, reset
 passwords, activate or deactivate users, and manage roles and role
 permissions. With an `active` column, deactivated users cannot log in and
-their persistent sessions are removed on deactivation. The last assignment
-Password resets also remove all persistent sessions belonging to that user.
+their persistent sessions are removed on deactivation. Password resets also
+remove all persistent sessions belonging to that user. The last assignment
 The last assignment of the configured administrator role and the last active
 administrator are protected. User deletion and self-service account
 management remain future work.
+
+The optional `auth_audit_log` table records login, logout, password, user,
+role, and permission events with actor, event, target, details, and timestamp.
+The administration screen displays the latest 100 entries.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

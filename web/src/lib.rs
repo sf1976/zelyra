@@ -286,6 +286,7 @@ pub struct AuthRoute {
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,
     pub role_permissions_table: Option<String>,
+    pub audit_table: Option<String>,
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
@@ -295,6 +296,7 @@ pub struct AuthRoute {
 
 #[derive(Clone, Debug)]
 struct Session {
+    user_id: Option<i64>,
     permissions: Vec<String>,
 }
 
@@ -801,7 +803,25 @@ fn dispatch_login(
                             .is_ok()
                     })
             });
+            let login_user_id = result
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .and_then(|value| value.parse::<i64>().ok());
             if !valid_password {
+                if auth.audit_table.is_some() {
+                    if let Err(error) = execute_auth_admin_mutation(
+                        auth,
+                        database_url,
+                        Vec::new(),
+                        None,
+                        "auth.login_failed",
+                        login_user_id,
+                        "",
+                    ) {
+                        eprintln!("zelyra web: failed-login audit write failed: {error}");
+                    }
+                }
                 record_login_failure(app, throttle_key);
                 return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
             }
@@ -815,39 +835,36 @@ fn dispatch_login(
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             };
             if let Some(session_table) = &auth.session_table {
-                let Some(user_id) = result
-                    .rows
-                    .first()
-                    .and_then(|row| row.first())
-                    .and_then(|value| value.parse::<i64>().ok())
-                else {
+                let Some(user_id) = login_user_id else {
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 };
-                let query = format!(
-                    "INSERT INTO {} (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY))",
-                    quote_identifier(session_table)
-                );
-                if let Err(error) = zelyra_database::execute_mariadb_query(
-                    database_url,
-                    &query,
-                    vec![
+                let query = zelyra_database::Query {
+                    sql: format!(
+                        "INSERT INTO {} (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY))",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![
                         ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
                         (
                             "token_hash".into(),
                             zelyra_database::QueryValue::String(session_token_hash(&session_id)),
                         ),
                     ],
+                };
+                if let Err(error) = execute_auth_admin_mutation(
+                    auth,
+                    database_url,
+                    vec![query],
+                    Some(user_id),
+                    "auth.login",
+                    Some(user_id),
+                    "",
                 ) {
                     eprintln!("zelyra web: session creation failed: {error}");
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             } else {
-                let Some(user_id) = result
-                    .rows
-                    .first()
-                    .and_then(|row| row.first())
-                    .and_then(|value| value.parse::<i64>().ok())
-                else {
+                let Some(user_id) = login_user_id else {
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 };
                 let permissions =
@@ -862,7 +879,26 @@ fn dispatch_login(
                 let Ok(mut sessions) = app.sessions.lock() else {
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 };
-                sessions.insert(session_id.clone(), Session { permissions });
+                sessions.insert(
+                    session_id.clone(),
+                    Session {
+                        user_id: Some(user_id),
+                        permissions,
+                    },
+                );
+                if auth.audit_table.is_some() {
+                    if let Err(error) = execute_auth_admin_mutation(
+                        auth,
+                        database_url,
+                        Vec::new(),
+                        Some(user_id),
+                        "auth.login",
+                        Some(user_id),
+                        "",
+                    ) {
+                        eprintln!("zelyra web: login audit write failed: {error}");
+                    }
+                }
             }
             Response::redirect("/").with_header(
                 "Set-Cookie",
@@ -961,28 +997,47 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
-    if app.database_capability_granted == Some(false)
-        && app
-            .auth_route
-            .as_ref()
-            .is_some_and(|auth| auth.session_table.is_some())
+    let Some(auth) = app.auth_route.as_ref() else {
+        return Response::html(404, "<h1>404 Not Found</h1>");
+    };
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !auth
+        .csrf
+        .verify(input.get("_zelyra_csrf").map(String::as_str))
     {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    if app.database_capability_granted == Some(false) && auth.session_table.is_some() {
         return database_capability_denied();
     }
     if let Some(session_id) = cookie_value(request, "zelyra_session") {
         if let Some(auth) = &app.auth_route {
             if let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) {
-                let query = format!(
-                    "DELETE FROM {} WHERE token_hash = :token_hash",
-                    quote_identifier(session_table)
-                );
-                if let Err(error) = zelyra_database::execute_mariadb_query(
-                    database_url,
-                    &query,
-                    vec![(
+                let actor_user_id = session_from_request(app, request, Some(database_url))
+                    .and_then(|session| session.user_id);
+                let query = zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE token_hash = :token_hash",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![(
                         "token_hash".into(),
                         zelyra_database::QueryValue::String(session_token_hash(&session_id)),
                     )],
+                };
+                if let Err(error) = execute_auth_admin_mutation(
+                    auth,
+                    database_url,
+                    vec![query],
+                    actor_user_id,
+                    "auth.logout",
+                    actor_user_id,
+                    "",
                 ) {
                     eprintln!("zelyra web: session deletion failed: {error}");
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
@@ -1040,14 +1095,26 @@ fn dispatch_auth_admin(
         "GET" => match load_auth_admin_data(auth, database_url) {
             Ok(data) => Response::html(
                 200,
-                render_auth_admin(auth, &data.users, &data.assignments, &data.permissions),
+                render_auth_admin(
+                    auth,
+                    &data.users,
+                    &data.assignments,
+                    &data.permissions,
+                    &data.audit,
+                ),
             ),
             Err(error) => {
                 eprintln!("zelyra web: auth administration query failed: {error}");
                 Response::html(500, "<h1>500 Internal Server Error</h1>")
             }
         },
-        "POST" => dispatch_auth_admin_post(auth, request, database_url),
+        "POST" => dispatch_auth_admin_post(
+            auth,
+            request,
+            database_url,
+            session_from_request(app, request, Some(database_url))
+                .and_then(|session| session.user_id),
+        ),
         _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
     }
 }
@@ -1056,6 +1123,46 @@ struct AuthAdminData {
     users: Vec<Vec<String>>,
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
+    audit: Vec<Vec<String>>,
+}
+
+fn execute_auth_admin_mutation(
+    auth: &AuthRoute,
+    database_url: &str,
+    mut queries: Vec<zelyra_database::Query>,
+    actor_user_id: Option<i64>,
+    action: &str,
+    target_user_id: Option<i64>,
+    details: &str,
+) -> Result<zelyra_database::QueryResult, zelyra_database::DatabaseError> {
+    if let Some(audit_table) = auth.audit_table.as_deref() {
+        let details = details.chars().take(1000).collect::<String>();
+        queries.push(zelyra_database::Query {
+            sql: format!(
+                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
+                quote_identifier(audit_table)
+            ),
+            params: vec![
+                (
+                    "actor_user_id".into(),
+                    actor_user_id
+                        .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
+                ),
+                (
+                    "event".into(),
+                    zelyra_database::QueryValue::String(action.into()),
+                ),
+                (
+                    "target_user_id".into(),
+                    target_user_id
+                        .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
+                ),
+                ("details".into(), zelyra_database::QueryValue::String(details)),
+            ],
+        });
+    }
+    zelyra_database::execute_mariadb_queries(database_url, &queries, true)
+        .map(|_| zelyra_database::QueryResult::default())
 }
 
 fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdminData, String> {
@@ -1114,14 +1221,34 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     )
     .map_err(|error| error.to_string())?
     .rows;
+    let audit = if let Some(audit_table) = auth.audit_table.as_deref() {
+        zelyra_database::execute_mariadb_query(
+            database_url,
+            &format!(
+                "SELECT actor_user_id, event, target_user_id, details, created_at FROM {} ORDER BY created_at DESC, id DESC LIMIT 100",
+                quote_identifier(audit_table)
+            ),
+            Vec::new(),
+        )
+        .map_err(|error| error.to_string())?
+        .rows
+    } else {
+        Vec::new()
+    };
     Ok(AuthAdminData {
         users,
         assignments,
         permissions,
+        audit,
     })
 }
 
-fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &str) -> Response {
+fn dispatch_auth_admin_post(
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: &str,
+    actor_user_id: Option<i64>,
+) -> Response {
     let input = match parse_urlencoded(&request.body) {
         Ok(input) => input,
         Err(error) => {
@@ -1216,7 +1343,15 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                     ],
                 )
             };
-            zelyra_database::execute_mariadb_query(database_url, &sql, params)
+            execute_auth_admin_mutation(
+                auth,
+                database_url,
+                vec![zelyra_database::Query { sql, params }],
+                actor_user_id,
+                "user.create",
+                None,
+                &format!("email={email}"),
+            )
         }
         "reset_password" => {
             let Some(user_id) = user_id else {
@@ -1255,29 +1390,25 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                     ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
                 ],
             };
+            let mut queries = vec![update];
             if let Some(session_table) = auth.session_table.as_deref() {
-                zelyra_database::execute_mariadb_queries(
-                    database_url,
-                    &[
-                        update,
-                        zelyra_database::Query {
-                            sql: format!(
-                                "DELETE FROM {} WHERE user_id = :user_id",
-                                quote_identifier(session_table)
-                            ),
-                            params: vec![(
-                                "user_id".into(),
-                                zelyra_database::QueryValue::Int(user_id),
-                            )],
-                        },
-                    ],
-                    true,
-                )
-                .map(|_| zelyra_database::QueryResult::default())
-            } else {
-                zelyra_database::execute_mariadb_queries(database_url, &[update], true)
-                    .map(|_| zelyra_database::QueryResult::default())
+                queries.push(zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE user_id = :user_id",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+                });
             }
+            execute_auth_admin_mutation(
+                auth,
+                database_url,
+                queries,
+                actor_user_id,
+                "user.password_reset",
+                Some(user_id),
+                "",
+            )
         }
         "activate_user" | "deactivate_user" => {
             let Some(user_id) = user_id else {
@@ -1366,34 +1497,31 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                 ),
                 params: vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
             };
+            let mut queries = vec![update];
             if !activating {
                 if let Some(session_table) = auth.session_table.as_deref() {
-                    zelyra_database::execute_mariadb_queries(
-                        database_url,
-                        &[
-                            update,
-                            zelyra_database::Query {
-                                sql: format!(
-                                    "DELETE FROM {} WHERE user_id = :user_id",
-                                    quote_identifier(session_table)
-                                ),
-                                params: vec![(
-                                    "user_id".into(),
-                                    zelyra_database::QueryValue::Int(user_id),
-                                )],
-                            },
-                        ],
-                        true,
-                    )
-                    .map(|_| zelyra_database::QueryResult::default())
-                } else {
-                    zelyra_database::execute_mariadb_queries(database_url, &[update], true)
-                        .map(|_| zelyra_database::QueryResult::default())
+                    queries.push(zelyra_database::Query {
+                        sql: format!(
+                            "DELETE FROM {} WHERE user_id = :user_id",
+                            quote_identifier(session_table)
+                        ),
+                        params: vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+                    });
                 }
-            } else {
-                zelyra_database::execute_mariadb_queries(database_url, &[update], true)
-                    .map(|_| zelyra_database::QueryResult::default())
             }
+            execute_auth_admin_mutation(
+                auth,
+                database_url,
+                queries,
+                actor_user_id,
+                if activating {
+                    "user.activate"
+                } else {
+                    "user.deactivate"
+                },
+                Some(user_id),
+                "",
+            )
         }
         "grant_role" => {
             let Some(user_id) = user_id else {
@@ -1413,13 +1541,23 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                 quote_identifier(roles_table),
                 quote_identifier(roles_table),
             );
-            zelyra_database::execute_mariadb_query(
+            execute_auth_admin_mutation(
+                auth,
                 database_url,
-                &sql,
-                vec![
-                    ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
-                    ("role".into(), zelyra_database::QueryValue::String(role)),
-                ],
+                vec![zelyra_database::Query {
+                    sql,
+                    params: vec![
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                        (
+                            "role".into(),
+                            zelyra_database::QueryValue::String(role.clone()),
+                        ),
+                    ],
+                }],
+                actor_user_id,
+                "role.grant",
+                Some(user_id),
+                &format!("role={role}"),
             )
         }
         "revoke_role" => {
@@ -1470,13 +1608,23 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                 "DELETE FROM {} WHERE user_id = :user_id AND role = :role",
                 quote_identifier(roles_table)
             );
-            zelyra_database::execute_mariadb_query(
+            execute_auth_admin_mutation(
+                auth,
                 database_url,
-                &sql,
-                vec![
-                    ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
-                    ("role".into(), zelyra_database::QueryValue::String(role)),
-                ],
+                vec![zelyra_database::Query {
+                    sql,
+                    params: vec![
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                        (
+                            "role".into(),
+                            zelyra_database::QueryValue::String(role.clone()),
+                        ),
+                    ],
+                }],
+                actor_user_id,
+                "role.revoke",
+                Some(user_id),
+                &format!("role={role}"),
             )
         }
         "grant_permission" | "revoke_permission" => {
@@ -1492,32 +1640,52 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                     quote_identifier(role_permissions_table),
                     quote_identifier(role_permissions_table),
                 );
-                zelyra_database::execute_mariadb_query(
+                execute_auth_admin_mutation(
+                    auth,
                     database_url,
-                    &sql,
-                    vec![
-                        ("role".into(), zelyra_database::QueryValue::String(role)),
-                        (
-                            "permission".into(),
-                            zelyra_database::QueryValue::String(permission),
-                        ),
-                    ],
+                    vec![zelyra_database::Query {
+                        sql,
+                        params: vec![
+                            (
+                                "role".into(),
+                                zelyra_database::QueryValue::String(role.clone()),
+                            ),
+                            (
+                                "permission".into(),
+                                zelyra_database::QueryValue::String(permission.clone()),
+                            ),
+                        ],
+                    }],
+                    actor_user_id,
+                    "role_permission.grant",
+                    None,
+                    &format!("role={role};permission={permission}"),
                 )
             } else {
                 let sql = format!(
                     "DELETE FROM {} WHERE role = :role AND permission = :permission",
                     quote_identifier(role_permissions_table)
                 );
-                zelyra_database::execute_mariadb_query(
+                execute_auth_admin_mutation(
+                    auth,
                     database_url,
-                    &sql,
-                    vec![
-                        ("role".into(), zelyra_database::QueryValue::String(role)),
-                        (
-                            "permission".into(),
-                            zelyra_database::QueryValue::String(permission),
-                        ),
-                    ],
+                    vec![zelyra_database::Query {
+                        sql,
+                        params: vec![
+                            (
+                                "role".into(),
+                                zelyra_database::QueryValue::String(role.clone()),
+                            ),
+                            (
+                                "permission".into(),
+                                zelyra_database::QueryValue::String(permission.clone()),
+                            ),
+                        ],
+                    }],
+                    actor_user_id,
+                    "role_permission.revoke",
+                    None,
+                    &format!("role={role};permission={permission}"),
                 )
             }
         }
@@ -1540,6 +1708,7 @@ fn render_auth_admin(
     users: &[Vec<String>],
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
+    audit: &[Vec<String>],
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
@@ -1616,7 +1785,22 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table></main>");
+    if auth.audit_table.is_some() {
+        html.push_str(
+            "</table><h2>Audit log</h2><p>Latest 100 administrative changes.</p><table><tr><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>Created</th></tr>",
+        );
+        for row in audit {
+            let cells = row
+                .iter()
+                .map(|value| format!("<td>{}</td>", html_escape(value)))
+                .collect::<String>();
+            html.push_str(&format!("<tr>{cells}</tr>"));
+        }
+        html.push_str("</table>");
+    } else {
+        html.push_str("</table>");
+    }
+    html.push_str("</main>");
     html
 }
 
@@ -1745,7 +1929,10 @@ fn session_from_request(
                 return None;
             }
         };
-    Some(Session { permissions })
+    Some(Session {
+        user_id: Some(user_id),
+        permissions,
+    })
 }
 
 fn database_capability_denied() -> Response {
@@ -3934,6 +4121,29 @@ mod tests {
     }
 
     #[test]
+    fn logout_requires_csrf() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(auth);
+        let request = parse_request("POST /logout HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 403);
+    }
+
+    #[test]
     fn throttles_after_five_failed_login_attempts() {
         let app = WebApp::new(Vec::new(), Vec::new());
         let key = login_throttle_key(" User@Example.test ");
@@ -3958,6 +4168,7 @@ mod tests {
         app.sessions.lock().unwrap().insert(
             old_token.into(),
             Session {
+                user_id: None,
                 permissions: Vec::new(),
             },
         );
@@ -3967,6 +4178,7 @@ mod tests {
             permissions_table: None,
             roles_table: None,
             role_permissions_table: None,
+            audit_table: None,
             admin_path: None,
             admin_permission: None,
             admin_role: None,
@@ -4291,6 +4503,7 @@ mod tests {
             permissions_table: None,
             roles_table: None,
             role_permissions_table: None,
+            audit_table: None,
             admin_path: None,
             admin_permission: None,
             admin_role: None,
