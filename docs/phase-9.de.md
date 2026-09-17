@@ -176,7 +176,7 @@ Die Textausgabe zeigt anschließend eine kurze Erklärung und die betroffene
 Quellzeile mit einem Caret-Marker:
 
 ~~~text
-  = The condition is false on a feasible analyzed path.
+  = The loop invariant is false on a feasible path or is not preserved by the loop body.
     |
   8 |     invariant { current == value }
     |                ^^^^^^^^^^^^^^^^^^^

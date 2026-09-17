@@ -165,7 +165,7 @@ The text formatter then prints a short explanation and the affected source
 line with a caret marker:
 
 ~~~text
-  = The condition is false on a feasible analyzed path.
+  = The loop invariant is false on a feasible path or is not preserved by the loop body.
     |
   8 |     invariant { current == value }
     |                ^^^^^^^^^^^^^^^^^^^

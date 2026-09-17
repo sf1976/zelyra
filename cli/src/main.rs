@@ -212,7 +212,7 @@ fn format_verification_result(path: &str, source: &str, result: &VerificationRes
         result.span.column,
         end_line,
         end_column,
-        result.status.explanation()
+        result.message
     );
     match format_source_excerpt(source, result.span) {
         Some(excerpt) => format!("{header}\n{excerpt}"),
@@ -229,7 +229,7 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
                 "{{\"status\":\"{}\",\"code\":\"{}\",\"message\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
                 result.status,
                 result.status.code(),
-                json_escape(result.status.explanation()),
+                json_escape(&result.message),
                 json_escape(&result.function),
                 result.kind,
                 result.index,
@@ -1304,6 +1304,7 @@ mod tests {
             index: 0,
             status: VerificationStatus::Proven,
             span: zelyra_ast::Span::new(6, 12, 2, 1),
+            message: "The verifier proved this condition for all analyzed paths.".into(),
         };
         assert_eq!(
             format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
@@ -1319,10 +1320,11 @@ mod tests {
             index: 1,
             status: VerificationStatus::RuntimeCheck,
             span: zelyra_ast::Span::new(6, 12, 2, 1),
+            message: "This postcondition needs a runtime check because not all return paths are symbolically modeled.".into(),
         };
         assert_eq!(
             format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"The verifier could not complete a symbolic proof; runtime checking is required.","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
+            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
         );
     }
 

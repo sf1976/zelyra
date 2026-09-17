@@ -102,6 +102,7 @@ pub struct VerificationResult {
     pub index: usize,
     pub status: VerificationStatus,
     pub span: Span,
+    pub message: String,
 }
 
 pub fn verify(program: &Program) -> Vec<VerificationResult> {
@@ -113,11 +114,13 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     let mut results = Vec::new();
     for function in &program.functions {
         for (index, contract) in function.requires.iter().enumerate() {
+            let status = verify_contract(contract, None, &functions);
             results.push(VerificationResult {
                 function: function.name.clone(),
                 kind: ContractKind::Requires,
                 index,
-                status: verify_contract(contract, None, &functions),
+                message: verification_message(ContractKind::Requires, status, Some(contract)),
+                status,
                 span: contract.span,
             });
         }
@@ -125,16 +128,18 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
         let return_paths =
             symbolic_return_paths(function, Some(&functions), &mut invariant_diagnostics);
         for (index, contract) in function.ensures.iter().enumerate() {
+            let status = verify_postcondition(
+                contract,
+                &function.requires,
+                return_paths.as_deref(),
+                &functions,
+            );
             results.push(VerificationResult {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                status: verify_postcondition(
-                    contract,
-                    &function.requires,
-                    return_paths.as_deref(),
-                    &functions,
-                ),
+                message: verification_message(ContractKind::Ensures, status, Some(contract)),
+                status,
                 span: contract.span,
             });
         }
@@ -142,14 +147,20 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
         collect_loop_invariants(&function.body, &mut loop_invariants);
         for (loop_id, invariants) in loop_invariants {
             for (index, invariant) in invariants.iter().enumerate() {
+                let status = invariant_diagnostics
+                    .get(&(loop_id, index))
+                    .copied()
+                    .unwrap_or_else(|| verify_contract(invariant, None, &functions));
                 results.push(VerificationResult {
                     function: function.name.clone(),
                     kind: ContractKind::LoopInvariant,
                     index,
-                    status: invariant_diagnostics
-                        .get(&(loop_id, index))
-                        .copied()
-                        .unwrap_or_else(|| verify_contract(invariant, None, &functions)),
+                    message: verification_message(
+                        ContractKind::LoopInvariant,
+                        status,
+                        Some(invariant),
+                    ),
+                    status,
                     span: invariant.span,
                 });
             }
@@ -161,10 +172,60 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 index: 0,
                 status: VerificationStatus::Unproven,
                 span: function.span,
+                message: verification_message(
+                    ContractKind::Requires,
+                    VerificationStatus::Unproven,
+                    None,
+                ),
             });
         }
     }
     results
+}
+
+fn verification_message(
+    kind: ContractKind,
+    status: VerificationStatus,
+    expression: Option<&Expr>,
+) -> String {
+    if status == VerificationStatus::Failed
+        && expression.is_some_and(|expression| {
+            matches!(constant_value(expression), Some(ConstantValue::Bool(false)))
+        })
+    {
+        return "Constant contradiction: this condition evaluates to false for every input.".into();
+    }
+    match (kind, status, expression.is_some()) {
+        (_, VerificationStatus::Proven, _) => status.explanation().into(),
+        (ContractKind::Requires, VerificationStatus::RuntimeCheck, _) => {
+            "This precondition needs a runtime check because the symbolic proof is incomplete."
+                .into()
+        }
+        (ContractKind::Ensures, VerificationStatus::RuntimeCheck, _) => {
+            "This postcondition needs a runtime check because not all return paths are symbolically modeled."
+                .into()
+        }
+        (ContractKind::LoopInvariant, VerificationStatus::RuntimeCheck, _) => {
+            "This loop invariant needs a runtime check because entry or preservation could not be proved symbolically."
+                .into()
+        }
+        (ContractKind::Requires, VerificationStatus::Failed, _) => {
+            "The precondition is false for a feasible checked model.".into()
+        }
+        (ContractKind::Ensures, VerificationStatus::Failed, _) => {
+            "The postcondition is false on a feasible return path.".into()
+        }
+        (ContractKind::LoopInvariant, VerificationStatus::Failed, _) => {
+            "The loop invariant is false on a feasible path or is not preserved by the loop body."
+                .into()
+        }
+        (_, VerificationStatus::Unproven, false) => {
+            "No proof target was declared for this function.".into()
+        }
+        (_, VerificationStatus::Unproven, true) => {
+            "No proof is available for this condition.".into()
+        }
+    }
 }
 
 fn verify_contract(
@@ -4111,6 +4172,10 @@ mod tests {
         assert_eq!(results[0].status, VerificationStatus::Proven);
         assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[2].status, VerificationStatus::Failed);
+        assert_eq!(
+            results[2].message,
+            "Constant contradiction: this condition evaluates to false for every input."
+        );
         assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 
@@ -4246,6 +4311,7 @@ mod tests {
         assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[2].kind, ContractKind::LoopInvariant);
         assert_eq!(results[2].status, VerificationStatus::Failed);
+        assert!(results[2].message.contains("not preserved"));
         assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 
