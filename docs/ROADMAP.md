@@ -132,8 +132,8 @@ under evaluation.
 - [ ] Progressive enhancement: server-rendered HTML first, optional client
   state and hydration second.
 - [ ] WebSocket/SSE support and typed client-server events where needed.
-- [ ] View snapshots, browser integration tests, and deterministic rendering
-  tests.
+- [~] Browser integration coverage now includes MariaDB-backed struct tableviews;
+  view snapshots and deterministic rendering tests remain planned.
 - [?] Optional alternate renderers (email, PDF, text, native desktop).
 
 ## 5. Forms, CRUD, and business applications

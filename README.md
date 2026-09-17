@@ -522,7 +522,10 @@ The long-term specification is organized into these phases:
 13. MariaDB CRUD end-to-end coverage and GitHub Actions CI are implemented.
 14. Tag-based Linux and Windows release archives with SHA-256 checksums are
     generated automatically.
-15. Bootstrap independence and a self-hosting compiler are strategic goals;
+15. MariaDB tableview end-to-end coverage now verifies struct-backed joins,
+    aggregates, escaping, search, sorting, and pagination through the web
+    server.
+16. Bootstrap independence and a self-hosting compiler are strategic goals;
     the current compiler bootstrap remains Rust while released users do not
     need Rust installed.
 
@@ -542,6 +545,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 GitHub Actions additionally runs the credential-free MariaDB CRUD integration
 test from `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
+The tableview integration test from `tests/mariadb-tableview-e2e.sh` additionally
+executes a struct-backed join and aggregate view through the running web server,
+including search, sorting, pagination, and HTML escaping.
 The MariaDB authentication integration test from
 `tests/mariadb-auth-e2e.sh` additionally covers login, persistent sessions,
 permission denial, and logout.

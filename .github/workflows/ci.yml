@@ -46,6 +46,16 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
+      - name: Create isolated tableview test database
+        env:
+          MYSQL_PWD: root
+        run: mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e "CREATE DATABASE IF NOT EXISTS zelyra_tableview_ci"
+      - name: Run MariaDB tableview integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_tableview_ci
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_TABLEVIEW_E2E_ADDRESS: 127.0.0.1:38515
+        run: ./tests/mariadb-tableview-e2e.sh
       - name: Run MariaDB authentication integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

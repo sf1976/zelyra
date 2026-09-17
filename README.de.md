@@ -533,7 +533,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 13. MariaDB-CRUD-End-to-End-Abdeckung und GitHub-Actions-CI sind vorhanden.
 14. Linux- und Windows-Release-Archive mit SHA-256-Prüfsummen werden
     automatisch aus Tags erzeugt.
-15. Bootstrap-Unabhängigkeit und ein selbsthostender Compiler sind strategische
+15. Die MariaDB-Tableview-Abdeckung prüft struct-basierte Joins, Aggregate,
+    Escaping, Suche, Sortierung und Pagination über den laufenden Webserver.
+16. Bootstrap-Unabhängigkeit und ein selbsthostender Compiler sind strategische
     Ziele; der aktuelle Compiler-Bootstrap bleibt Rust, während Nutzer
     veröffentlichter Zelyra-Versionen Rust nicht installieren müssen.
 
@@ -554,6 +556,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 GitHub Actions führt zusätzlich den zugangsdatenfreien MariaDB-CRUD-
 Integrationstest aus `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-
 11-Service aus.
+Der Tableview-Integrationstest aus `tests/mariadb-tableview-e2e.sh` führt
+zusätzlich eine struct-basierte Join- und Aggregatansicht über den laufenden
+Webserver aus und prüft Suche, Sortierung, Pagination und HTML-Escaping.
 Der MariaDB-Authentifizierungs-Integrationstest aus
 `tests/mariadb-auth-e2e.sh` prüft außerdem Login, persistente Sessions,
 Berechtigungsablehnung und Logout.

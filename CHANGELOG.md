@@ -40,6 +40,14 @@ compiler and repository release.
   `zelyra audit export` with bounded limits.
 - Added structural audit verification and explicitly confirmed, transactional
   audit pruning through `zelyra audit verify` and `zelyra audit prune`.
+- Added a MariaDB tableview end-to-end test covering struct-backed joins,
+  aggregates, escaping, search, sorting, pagination, and rejected sort fields.
+
+## 0.1.37-alpha.8 — 2026-09-17
+
+This release contains the changes listed under `Unreleased` above.
+
+Diese Version enthält die oben unter `Unreleased` aufgeführten Änderungen.
 
 ## 0.1.37 — 2026-09-17
 

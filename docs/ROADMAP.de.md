@@ -129,8 +129,8 @@ noch in Prüfung.
 - [ ] Progressive Enhancement: zuerst servergerendertes HTML, danach optional
   Client-State und Hydration.
 - [ ] WebSocket-/SSE-Unterstützung und typisierte Client-Server-Events.
-- [ ] View-Snapshots, Browser-Integrationstests und deterministische Rendering-
-  Tests.
+- [~] Browser-Integrationstests decken jetzt MariaDB-basierte struct-Tableviews
+  ab; View-Snapshots und deterministische Rendering-Tests bleiben geplant.
 - [?] Optionale weitere Renderer (E-Mail, PDF, Text, Desktop).
 
 ## 5. Formulare, CRUD und Businessanwendungen
