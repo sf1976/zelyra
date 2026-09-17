@@ -242,6 +242,13 @@ admin_activate_status="$(request_status "${temp_dir}/primary-admin-activate.html
     --data-urlencode "user_id=${managed_user_id}" \
     "${base_url}/admin/access")"
 [[ "${admin_activate_status}" == "303" ]]
+managed_login_before_reset_status="$(request_status "${temp_dir}/managed-login-before-reset.html" \
+    --cookie-jar "${temp_dir}/managed-before-reset.cookies" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${managed_email}" \
+    --data-urlencode "password=${managed_password}" \
+    "${base_url}/login")"
+[[ "${managed_login_before_reset_status}" == "303" ]]
 admin_reset_password_status="$(request_status "${temp_dir}/primary-admin-reset-password.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${admin_csrf}" \
@@ -250,6 +257,10 @@ admin_reset_password_status="$(request_status "${temp_dir}/primary-admin-reset-p
     --data-urlencode "password=${managed_new_password}" \
     "${base_url}/admin/access")"
 [[ "${admin_reset_password_status}" == "303" ]]
+managed_old_session_status="$(request_status "${temp_dir}/managed-old-session.html" \
+    --cookie "${temp_dir}/managed-before-reset.cookies" \
+    "${base_url}/admin/access")"
+[[ "${managed_old_session_status}" == "401" ]]
 managed_login_enabled_status="$(request_status "${temp_dir}/managed-login-enabled.html" \
     --cookie-jar "${temp_dir}/managed-enabled.cookies" \
     --data-urlencode "_zelyra_csrf=${csrf}" \

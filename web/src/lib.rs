@@ -1242,21 +1242,42 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             };
-            let sql = format!(
-                "UPDATE {} SET password_hash = :password_hash WHERE id = :user_id",
-                quote_identifier(&auth.table)
-            );
-            zelyra_database::execute_mariadb_query(
-                database_url,
-                &sql,
-                vec![
+            let update = zelyra_database::Query {
+                sql: format!(
+                    "UPDATE {} SET password_hash = :password_hash WHERE id = :user_id",
+                    quote_identifier(&auth.table)
+                ),
+                params: vec![
                     (
                         "password_hash".into(),
                         zelyra_database::QueryValue::String(password_hash),
                     ),
                     ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
                 ],
-            )
+            };
+            if let Some(session_table) = auth.session_table.as_deref() {
+                zelyra_database::execute_mariadb_queries(
+                    database_url,
+                    &[
+                        update,
+                        zelyra_database::Query {
+                            sql: format!(
+                                "DELETE FROM {} WHERE user_id = :user_id",
+                                quote_identifier(session_table)
+                            ),
+                            params: vec![(
+                                "user_id".into(),
+                                zelyra_database::QueryValue::Int(user_id),
+                            )],
+                        },
+                    ],
+                    true,
+                )
+                .map(|_| zelyra_database::QueryResult::default())
+            } else {
+                zelyra_database::execute_mariadb_queries(database_url, &[update], true)
+                    .map(|_| zelyra_database::QueryResult::default())
+            }
         }
         "activate_user" | "deactivate_user" => {
             let Some(user_id) = user_id else {

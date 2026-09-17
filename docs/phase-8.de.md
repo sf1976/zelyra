@@ -86,6 +86,8 @@ Rollen: Administratoren können Benutzer anlegen, Passwörter zurücksetzen,
 Benutzer aktivieren oder deaktivieren sowie Rollen und
 Rollenberechtigungen vergeben und entziehen. Alle Formulare sind
 CSRF-geschützt und durch die deklarierte Berechtigung gesichert.
+Ein administrativer Passwort-Reset ändert das Passwort und entfernt in einer
+Transaktion alle persistenten Sessions des betroffenen Benutzers.
 
 Wenn die Benutzertabelle eine `active`-Spalte besitzt, können deaktivierte
 Benutzer sich nicht anmelden; beim Deaktivieren werden ihre persistenten

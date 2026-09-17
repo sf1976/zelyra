@@ -82,6 +82,8 @@ An optional browser administration screen is enabled by `admin_path`,
 administrators can create users, reset passwords, activate or deactivate
 users, and grant or revoke roles and role permissions. All forms use CSRF
 protection and the declared permission guard.
+An administrative password reset changes the password and atomically removes
+all persistent sessions belonging to that user.
 
 When the user table has an `active` column, deactivated users cannot log in;
 deactivation also removes their persistent sessions. The configured

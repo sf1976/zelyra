@@ -18,6 +18,8 @@ compiler and repository release.
 - Added opt-in browser user administration for creating users, resetting
   passwords, and activating/deactivating accounts with persistent-session
   revocation and last-active-administrator protection.
+- Administrative password resets now revoke all persistent sessions for the
+  affected user atomically with the password change.
 
 ## 0.1.37 — 2026-09-17
 

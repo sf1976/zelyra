@@ -612,7 +612,8 @@ Administratoren können dort Benutzer anlegen, Passwörter zurücksetzen,
 Benutzer aktivieren oder deaktivieren sowie Rollen und
 Rollenberechtigungen verwalten. Mit einer `active`-Spalte können deaktivierte
 Benutzer sich nicht anmelden; ihre persistenten Sessions werden beim
-Deaktivieren entfernt. Die letzte Zuweisung der konfigurierten
+Deaktivieren entfernt. Passwort-Resets entfernen ebenfalls alle persistenten
+Sessions des betroffenen Benutzers. Die letzte Zuweisung der konfigurierten
 Administrationsrolle und der letzte aktive Administrator sind geschützt.
 Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
 
