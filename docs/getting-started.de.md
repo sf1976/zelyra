@@ -290,7 +290,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.35"
+version = "0.1.36"
 zelyra = "0.1"
 
 [capabilities]
@@ -719,6 +719,20 @@ cargo fmt --all
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
+
+Für einen echten MariaDB-CRUD-Test wird die CLI gebaut und anschließend das
+zugangsdatenfreie Integrationsskript mit einer eigenen Testdatenbank gestartet:
+
+~~~bash
+cargo build -p zelyra-cli
+export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/zelyra_e2e'
+./tests/mariadb-e2e.sh
+~~~
+
+Das Skript prüft Schema-Setup und -Inspektion, startet den Zelyra-Server und
+testet verbundene CRUD-Abläufe zum Erstellen, Lesen, Bearbeiten und Löschen.
+Eigene Testdatensätze werden wieder entfernt; das Datenbankpasswort wird weder
+ausgegeben noch gespeichert.
 
 ## 12. Häufige Probleme
 

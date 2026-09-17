@@ -433,6 +433,7 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 12. API-Validierung von Medientypen und Body-Größe, vollständiges Einlesen
     über mehrere Netzwerk-Reads sowie sichere Standard-Response-Header sind
     vorhanden.
+13. MariaDB-CRUD-End-to-End-Abdeckung und GitHub-Actions-CI sind vorhanden.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.
@@ -447,6 +448,10 @@ cargo fmt --all
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
+
+GitHub Actions führt zusätzlich den zugangsdatenfreien MariaDB-CRUD-
+Integrationstest aus `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-
+11-Service aus.
 
 Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
 Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit

@@ -4,6 +4,24 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.36 — 2026-09-17
+
+### Added
+
+- Added a reproducible MariaDB CRUD end-to-end test at
+  `tests/mariadb-e2e.sh`.
+- Added GitHub Actions CI with a MariaDB 11 service, workspace tests,
+  formatting, Clippy, and the real CRUD integration test.
+- Extended `examples/machine_form.zyl` with a Department CRUD resource and
+  linked machine IDs for complete browser-level CRUD coverage.
+
+### Compatibility
+
+- The integration test requires only `DATABASE_URL`, `curl`, and a built
+  `zelyra` binary; it contains no credentials.
+- The GitHub workflow uses an isolated CI database and does not access
+  production systems.
+
 ## 0.1.35 — 2026-09-17
 
 ### Added
