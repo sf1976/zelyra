@@ -109,6 +109,12 @@ Expected output:
 55
 ~~~
 
+Check project readiness before starting a web application:
+
+~~~bash
+zelyra doctor examples/machine_management.zyl
+~~~
+
 The installer builds Zelyra for the current user and installs the executable
 in the user-local bin directory. It does not require sudo, a global Rust
 installation, Apache, or a database server for the language-core examples.
@@ -325,6 +331,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
+zelyra doctor [file.zyl] [--port <port>]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra form validate <file.zyl> <FormName> [field=value ...]

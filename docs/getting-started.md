@@ -143,6 +143,17 @@ Verify the installation:
 zelyra --help
 ~~~
 
+Check whether a project is ready to run:
+
+~~~bash
+zelyra doctor examples/machine_management.zyl
+~~~
+
+`doctor` checks the source and schema, reports the configured database
+connection without changing it, and tests whether the default web port is
+available. A missing `DATABASE_URL` is reported as a warning; an unreachable
+configured database or invalid project is reported as a failure.
+
 The installation does not require an account password. Do not run the installer
 as root unless there is a separate system-wide packaging reason.
 
@@ -213,7 +224,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.6"
+version = "0.1.7"
 zelyra = "0.1"
 
 [capabilities]
@@ -563,6 +574,7 @@ zelyra check <file.zyl>                 check source
 zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
+zelyra doctor [file.zyl] [--port <port>] check project, database, and web readiness
 zelyra verify <file.zyl>                classify contract checks
 zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
 zelyra doc <file.zyl> --typescript     generate a TypeScript client

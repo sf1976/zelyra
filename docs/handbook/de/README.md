@@ -178,7 +178,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.6"
+version = "0.1.7"
 zelyra = "0.1"
 
 [capabilities]
@@ -194,6 +194,7 @@ Die wichtigsten Befehle:
 | `zelyra build app.zyl` | Anwendung prüfen und bauen |
 | `zelyra run app.zyl` | Programm ausführen |
 | `zelyra serve app.zyl` | HTTP-Server starten |
+| `zelyra doctor app.zyl` | Projekt-, DB- und Web-Bereitschaft prüfen |
 | `zelyra verify app.zyl` | Contracts klassifizieren |
 | `zelyra doc app.zyl --openapi` | OpenAPI-Dokument erzeugen |
 | `zelyra db inspect app.zyl` | Ist-Schema lesen |
@@ -761,7 +762,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.6"
+version = "0.1.7"
 zelyra = "0.1"
 
 [capabilities]

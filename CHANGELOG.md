@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.7 — 2026-09-17
+
+### Added
+
+- `zelyra doctor [file.zyl] [--port <port>]` checks project validation, schema,
+  database connectivity, the Rust toolchain, and web-port availability without
+  changing database state.
+- Missing `DATABASE_URL` is presented as a warning; invalid projects,
+  unreachable configured databases, and occupied ports produce a failing exit
+  status.
+
+### Documentation
+
+- Beginner installation and readiness checks documented in English and German.
+
 ## 0.1.6 — 2026-09-17
 
 ### Added

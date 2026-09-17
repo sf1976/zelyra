@@ -3,6 +3,8 @@ use std::{
     env,
     fmt::Write as _,
     fs,
+    net::TcpListener,
+    process::Command,
     process::ExitCode,
 };
 use zelyra_ast::Type;
@@ -26,7 +28,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -48,7 +50,7 @@ fn create_project(path: &str, allow_current_directory: bool) -> ExitCode {
     let files = [
         (
             "zelyra.toml",
-            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.6\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
+            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.7\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
         ),
         (
             "main.zyl",
@@ -214,6 +216,112 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
             println!("{}", format_verification_result(path, &source, result));
         }
     }
+    if failed {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let mut path = "main.zyl".to_owned();
+    let mut path_given = false;
+    let mut port = 3000u16;
+    while let Some(argument) = args.next() {
+        if argument == "--port" {
+            let Some(value) = args.next() else {
+                usage();
+                return ExitCode::from(2);
+            };
+            port = match value.parse() {
+                Ok(port) => port,
+                Err(_) => {
+                    eprintln!("error[E-DOCTOR-001]: invalid TCP port `{value}`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else if argument.starts_with('-') || path_given {
+            usage();
+            return ExitCode::from(2);
+        } else {
+            path = argument;
+            path_given = true;
+        }
+    }
+
+    let mut failed = false;
+    let mut warnings = 0;
+    println!("Zelyra doctor {}", env!("CARGO_PKG_VERSION"));
+
+    let program = if fs::metadata(&path).is_ok() {
+        println!("  [PASS] Project file: {path}");
+        match validate(&path) {
+            Ok(program) => {
+                println!("  [PASS] Static checks: source, types, APIs, SQL, and forms");
+                Some(program)
+            }
+            Err(()) => {
+                println!("  [FAIL] Static checks: see diagnostics above");
+                failed = true;
+                None
+            }
+        }
+    } else {
+        println!("  [FAIL] Project file: `{path}` does not exist");
+        failed = true;
+        None
+    };
+
+    match Command::new("cargo").arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            println!("  [PASS] Rust toolchain: {version}");
+        }
+        _ => {
+            warnings += 1;
+            println!("  [WARN] Rust toolchain: cargo is unavailable");
+        }
+    }
+
+    if let Some(program) = &program {
+        if let Ok(schema) = build_schema(program) {
+            let backend = schema.backend();
+            match env::var("DATABASE_URL") {
+                Ok(url) => match inspect_for_backend(backend, &url) {
+                    Ok(current) => println!(
+                        "  [PASS] Database ({}): {}",
+                        backend.name(),
+                        current.summary().replace('\n', ", ")
+                    ),
+                    Err(error) => {
+                        println!("  [FAIL] Database ({}): {error}", backend.name());
+                        failed = true;
+                    }
+                },
+                Err(_) => {
+                    warnings += 1;
+                    println!(
+                        "  [WARN] Database ({}): DATABASE_URL is not set",
+                        backend.name()
+                    );
+                }
+            }
+        }
+    }
+
+    match TcpListener::bind(("127.0.0.1", port)) {
+        Ok(listener) => {
+            let actual_port = listener.local_addr().map_or(port, |address| address.port());
+            println!("  [PASS] Web port: 127.0.0.1:{actual_port} is available");
+        }
+        Err(error) => {
+            println!("  [FAIL] Web port: 127.0.0.1:{port} is unavailable ({error})");
+            failed = true;
+        }
+    }
+
+    let status = if failed { "failed" } else { "ready" };
+    println!("Doctor result: {status} ({warnings} warning(s))");
     if failed {
         ExitCode::from(1)
     } else {
@@ -2124,6 +2232,9 @@ fn main() -> ExitCode {
     if command == "serve" {
         return serve_command(args);
     }
+    if command == "doctor" {
+        return doctor_command(args);
+    }
     if command == "doc" {
         return doc_command(args);
     }
@@ -2212,6 +2323,12 @@ mod tests {
             format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
             "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)\n  = The verifier proved this condition for all analyzed paths.\n    |\n  2 | second value\n    | ^^^^^^"
         );
+    }
+
+    #[test]
+    fn doctor_rejects_invalid_port() {
+        let arguments = ["--port".to_owned(), "not-a-port".to_owned()];
+        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
     }
 
     #[test]
