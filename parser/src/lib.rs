@@ -883,6 +883,12 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Greater, "`>` after Result types")?;
                 Type::Result(Box::new(ok), Box::new(error))
             }
+            "HttpResult" => {
+                self.expect(TokenKind::Less, "`<` after `HttpResult`")?;
+                let response = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after HttpResult type")?;
+                Type::HttpResult(Box::new(response))
+            }
             _ => Type::Named(name),
         };
         if self.at(&TokenKind::Question) {
@@ -1304,23 +1310,24 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
-                let type_args = if matches!(name.as_str(), "json_decode" | "http_json")
-                    && self.at(&TokenKind::Less)
-                {
-                    self.advance();
-                    let mut type_args = Vec::new();
-                    loop {
-                        type_args.push(self.type_name()?);
-                        if !self.at(&TokenKind::Comma) {
-                            break;
-                        }
+                let type_args =
+                    if matches!(name.as_str(), "json_decode" | "http_json" | "http_result")
+                        && self.at(&TokenKind::Less)
+                    {
                         self.advance();
-                    }
-                    self.expect(TokenKind::Greater, "`>` after call type arguments")?;
-                    type_args
-                } else {
-                    Vec::new()
-                };
+                        let mut type_args = Vec::new();
+                        loop {
+                            type_args.push(self.type_name()?);
+                            if !self.at(&TokenKind::Comma) {
+                                break;
+                            }
+                            self.advance();
+                        }
+                        self.expect(TokenKind::Greater, "`>` after call type arguments")?;
+                        type_args
+                    } else {
+                        Vec::new()
+                    };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();

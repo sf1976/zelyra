@@ -184,6 +184,20 @@ decoded into the response record. If no `Content-Type` header is supplied,
 `application/json` is added. Non-2xx responses remain explicit runtime errors;
 the helper returns the decoded value rather than response headers.
 
+When the response metadata must remain available, use `http_result`:
+
+~~~zelyra
+fn submit(url: String, payload: CustomerCreate) -> HttpResult<Customer> uses Network {
+    return http_result<CustomerCreate, Customer>("POST", url, [], Some(payload))
+}
+~~~
+
+`HttpResult<Response>` contains `status: Int`, `headers: String[]`,
+`body: String`, `data: Response?`, and `error: HttpError?`. Successful 2xx
+responses populate `data` and leave `error` as `None`; non-2xx responses
+populate `error` with `status`, `headers`, `body`, and `message`. Transport
+failures and invalid success JSON remain runtime errors.
+
 The Process capability exposes a deliberately narrow command API:
 
 ~~~zelyra

@@ -81,6 +81,8 @@ Das aktuelle Repository enthält:
   von Records, Arrays, Optionen und Skalarwerten;
 - http_json<Request, Response>(...) für automatische typisierte JSON-HTTP-
   Anfragen und -Antworten;
+- http_result<Request, Response>(...) mit typisierten `HttpResult<Response>`-
+  Werten für Status, Header, Body, Daten und strukturierte HTTP-Fehler;
 - run_process(command, args) über Process ohne Shell, mit exakter
   Befehls-Allowlist und begrenzter Ausführung;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
@@ -282,7 +284,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.29"
+version = "0.1.30"
 zelyra = "0.1"
 
 [capabilities]

@@ -188,6 +188,21 @@ Response-Record dekodiert. Wenn kein `Content-Type` angegeben ist, wird
 Laufzeitfehler; der Helper liefert den dekodierten Wert und nicht die
 Response-Header zurück.
 
+Wenn die Response-Metadaten erhalten bleiben müssen, wird `http_result`
+verwendet:
+
+~~~zelyra
+fn submit(url: String, payload: CustomerCreate) -> HttpResult<Customer> uses Network {
+    return http_result<CustomerCreate, Customer>("POST", url, [], Some(payload))
+}
+~~~
+
+`HttpResult<Response>` enthält `status: Int`, `headers: String[]`,
+`body: String`, `data: Response?` und `error: HttpError?`. Erfolgreiche
+2xx-Antworten setzen `data` und lassen `error` auf `None`; Nicht-2xx-
+Antworten setzen `error` mit `status`, `headers`, `body` und `message`.
+Transportfehler und ungültiges Erfolgs-JSON bleiben Laufzeitfehler.
+
 Die Process-Capability stellt eine bewusst enge Befehls-API bereit:
 
 ~~~zelyra

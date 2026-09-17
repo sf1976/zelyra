@@ -84,6 +84,8 @@ Implemented today:
   of records, arrays, options, and scalar values;
 - http_json<Request, Response>(...) for automatic typed JSON HTTP requests and
   responses;
+- http_result<Request, Response>(...) returning a typed `HttpResult<Response>`
+  with status, headers, body, data, and structured HTTP errors;
 - run_process(command, args) through Process with an exact command allowlist,
   no shell, timeout, and bounded output;
 - initial runtime-checked function contracts with `requires` and `ensures`;

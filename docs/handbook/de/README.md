@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.29"
+version = "0.1.30"
 zelyra = "0.1"
 
 [capabilities]
@@ -794,6 +794,21 @@ Response-Record dekodiert. Wenn kein `Content-Type` angegeben ist, wird
 Laufzeitfehler; der Helper liefert den dekodierten Wert und nicht die
 Response-Header zurück.
 
+Wenn die Response-Metadaten erhalten bleiben müssen, wird `http_result`
+verwendet:
+
+~~~zelyra
+fn submit(url: String, payload: CustomerCreate) -> HttpResult<Customer> uses Network {
+    return http_result<CustomerCreate, Customer>("POST", url, [], Some(payload))
+}
+~~~
+
+`HttpResult<Response>` enthält `status: Int`, `headers: String[]`,
+`body: String`, `data: Response?` und `error: HttpError?`. Erfolgreiche
+2xx-Antworten setzen `data`; Nicht-2xx-Antworten setzen `error` mit Status,
+Headern, Body und Meldung. Transportfehler und ungültiges Erfolgs-JSON bleiben
+Laufzeitfehler.
+
 Die Process-Capability stellt eine Befehls-API ohne Shell bereit:
 
 ~~~zelyra
@@ -961,7 +976,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.29"
+version = "0.1.30"
 zelyra = "0.1"
 
 [capabilities]

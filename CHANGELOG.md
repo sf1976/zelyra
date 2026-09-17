@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.30 — 2026-09-17
+
+### Added
+
+- Added `HttpResult<Response>` and `http_result<Request, Response>(...)` with
+  status, headers, raw body, optional typed data, and structured `HttpError`.
+- Non-2xx HTTP responses are now available as data through `error` instead of
+  being forced into an unstructured runtime failure by this helper.
+- Added typed `HttpResult` field checking, local integration coverage, and
+  synchronized German and English documentation.
+
+### Known limitations
+
+- Transport failures and invalid JSON in a successful response remain runtime
+  errors; response status and headers are available through `HttpResult`.
+
 ## 0.1.29 — 2026-09-17
 
 ### Added

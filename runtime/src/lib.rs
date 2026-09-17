@@ -75,6 +75,8 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
         "Duration",
         "Unit",
         "HttpResponse",
+        "HttpError",
+        "HttpResult",
     ]
     .into_iter()
     .map(String::from)
@@ -209,7 +211,9 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
 fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
     match ty {
         Type::Named(name) => known_types.contains(name),
-        Type::Option(inner) | Type::Array(inner) => api_type_known(inner, known_types),
+        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            api_type_known(inner, known_types)
+        }
         Type::Result(ok, error) => {
             api_type_known(ok, known_types) && api_type_known(error, known_types)
         }
@@ -3057,7 +3061,10 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if matches!(name.as_str(), "http_get" | "http_request" | "http_json") {
+            } else if matches!(
+                name.as_str(),
+                "http_get" | "http_request" | "http_json" | "http_result"
+            ) {
                 require_capability(
                     "Network",
                     "network access",
@@ -3225,6 +3232,8 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         "Duration",
         "Unit",
         "HttpResponse",
+        "HttpError",
+        "HttpResult",
     ]
     .into_iter()
     .map(String::from)
@@ -3617,6 +3626,7 @@ impl<'a> Checker<'a> {
                 self.check_type(error, span);
             }
             Type::Array(inner) => self.check_type(inner, span),
+            Type::HttpResult(inner) => self.check_type(inner, span),
             _ => {}
         }
     }
@@ -4019,6 +4029,38 @@ impl<'a> Checker<'a> {
                         );
                     }
                     type_args.get(1).cloned().unwrap_or(Type::Unknown)
+                } else if name == "http_result" {
+                    if type_args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "http_result expects request and response type arguments",
+                        );
+                    } else {
+                        self.check_type(&type_args[0], expr.span);
+                        self.check_type(&type_args[1], expr.span);
+                    }
+                    if args.len() != 4 {
+                        self.error(
+                            expr.span,
+                            "http_result expects String method, String URL, String[] headers, and Request? body",
+                        );
+                        return Type::Unknown;
+                    }
+                    let method = self.check_expr(&args[0], scopes);
+                    let url = self.check_expr(&args[1], scopes);
+                    let headers = self.check_expr(&args[2], scopes);
+                    let body = self.check_expr(&args[3], scopes);
+                    self.expect_type(&Type::String, &method, args[0].span);
+                    self.expect_type(&Type::String, &url, args[1].span);
+                    self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[2].span);
+                    if let Some(request_type) = type_args.first() {
+                        self.expect_type(
+                            &Type::Option(Box::new(request_type.clone())),
+                            &body,
+                            args[3].span,
+                        );
+                    }
+                    Type::HttpResult(Box::new(type_args.get(1).cloned().unwrap_or(Type::Unknown)))
                 } else if name == "http_request" {
                     if args.len() != 4 {
                         self.error(
@@ -4229,9 +4271,27 @@ impl<'a> Checker<'a> {
     }
 
     fn record_field_type(&self, ty: &Type, field: &str) -> Option<Type> {
+        if let Type::HttpResult(response) = ty {
+            return match field {
+                "status" => Some(Type::Int),
+                "headers" => Some(Type::Array(Box::new(Type::String))),
+                "body" => Some(Type::String),
+                "data" => Some(Type::Option(response.clone())),
+                "error" => Some(Type::Option(Box::new(Type::Named("HttpError".into())))),
+                _ => None,
+            };
+        }
         let Type::Named(initial_name) = ty else {
             return None;
         };
+        if initial_name == "HttpError" {
+            return match field {
+                "status" => Some(Type::Int),
+                "headers" => Some(Type::Array(Box::new(Type::String))),
+                "body" | "message" => Some(Type::String),
+                _ => None,
+            };
+        }
         let mut name = initial_name.as_str();
         if name == "HttpResponse" {
             return match field {
@@ -4281,6 +4341,7 @@ fn compatible(expected: &Type, actual: &Type) -> bool {
             compatible(expected_ok, actual_ok) && compatible(expected_error, actual_error)
         }
         (Type::Array(expected), Type::Array(actual)) => compatible(expected, actual),
+        (Type::HttpResult(expected), Type::HttpResult(actual)) => compatible(expected, actual),
         _ => expected == actual,
     }
 }
@@ -4305,6 +4366,7 @@ fn validate_type(
             validate_type(error, known_types, errors, span);
         }
         Type::Array(inner) => validate_type(inner, known_types, errors, span),
+        Type::HttpResult(inner) => validate_type(inner, known_types, errors, span),
         _ => {}
     }
 }
@@ -5031,6 +5093,74 @@ impl Interpreter {
         self.json_decode(body, response_type, span)
     }
 
+    fn http_result(
+        &self,
+        method: &str,
+        url: &str,
+        request_headers: &[String],
+        request_body: Option<&Value>,
+        response_type: &Type,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        let encoded_body = request_body
+            .map(|value| self.json_encode(value, span))
+            .transpose()?;
+        let response =
+            self.http_request(method, url, request_headers, encoded_body.as_deref(), span)?;
+        let Value::Object { fields, .. } = response else {
+            return Err(self.runtime_error(span, "http_result received an invalid response"));
+        };
+        let status = match fields.get("status") {
+            Some(Value::Int(status)) => *status,
+            _ => return Err(self.runtime_error(span, "http_result received an invalid status")),
+        };
+        let headers = match fields.get("headers") {
+            Some(Value::Array(headers)) => headers.clone(),
+            _ => return Err(self.runtime_error(span, "http_result received invalid headers")),
+        };
+        let body = match fields.get("body") {
+            Some(Value::String(body)) => body.clone(),
+            _ => return Err(self.runtime_error(span, "http_result received an invalid body")),
+        };
+        let successful = (200..300).contains(&status);
+        let data = if successful {
+            let decoded = if matches!(response_type, Type::Unit) && body.trim().is_empty() {
+                Value::Unit
+            } else {
+                self.json_decode(&body, response_type, span)?
+            };
+            Value::Option(Some(Box::new(decoded)))
+        } else {
+            Value::Option(None)
+        };
+        let error = if successful {
+            Value::Option(None)
+        } else {
+            Value::Option(Some(Box::new(Value::Object {
+                type_name: "HttpError".into(),
+                fields: HashMap::from([
+                    ("status".into(), Value::Int(status)),
+                    ("headers".into(), Value::Array(headers.clone())),
+                    ("body".into(), Value::String(body.clone())),
+                    (
+                        "message".into(),
+                        Value::String(format!("HTTP status {status}")),
+                    ),
+                ]),
+            })))
+        };
+        Ok(Value::Object {
+            type_name: "HttpResult".into(),
+            fields: HashMap::from([
+                ("status".into(), Value::Int(status)),
+                ("headers".into(), Value::Array(headers)),
+                ("body".into(), Value::String(body)),
+                ("data".into(), data),
+                ("error".into(), error),
+            ]),
+        })
+    }
+
     fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
         let response = self.http_request("GET", url, &[], None, span)?;
         let Value::Object { fields, .. } = response else {
@@ -5192,10 +5322,11 @@ impl Interpreter {
                 span,
                 format!("json_decode does not support target type `{name}`"),
             )),
-            Type::Result(_, _) | Type::Unknown | Type::Option(_) => Err(self.runtime_error(
-                span,
-                format!("json_decode does not support target type `{target}`"),
-            )),
+            Type::Result(_, _) | Type::Unknown | Type::Option(_) | Type::HttpResult(_) => Err(self
+                .runtime_error(
+                    span,
+                    format!("json_decode does not support target type `{target}`"),
+                )),
             Type::Bytes | Type::Date | Type::Time | Type::Duration => Err(self.runtime_error(
                 span,
                 format!("json_decode does not support target type `{target}`"),
@@ -6085,6 +6216,69 @@ impl Interpreter {
                         }
                     };
                     self.http_json(
+                        &method,
+                        &url,
+                        &header_strings,
+                        body.as_deref(),
+                        &type_args[1],
+                        expr.span,
+                    )
+                } else if name == "http_result" {
+                    if type_args.len() != 2 || args.len() != 4 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "http_result expects request and response type arguments plus four values",
+                        ));
+                    }
+                    self.require_runtime_capability("Network", "network access", expr.span)?;
+                    let method = self.eval(&args[0], env)?;
+                    let url = self.eval(&args[1], env)?;
+                    let headers = self.eval(&args[2], env)?;
+                    let body = self.eval(&args[3], env)?;
+                    let Value::String(method) = method else {
+                        return Err(
+                            self.runtime_error(args[0].span, "http_result expects a String method")
+                        );
+                    };
+                    let Value::String(url) = url else {
+                        return Err(
+                            self.runtime_error(args[1].span, "http_result expects a String URL")
+                        );
+                    };
+                    let Value::Array(headers) = headers else {
+                        return Err(self
+                            .runtime_error(args[2].span, "http_result expects String[] headers"));
+                    };
+                    let mut header_strings = Vec::with_capacity(headers.len() + 1);
+                    let mut has_content_type = false;
+                    for header in headers {
+                        let Value::String(header) = header else {
+                            return Err(self.runtime_error(
+                                args[2].span,
+                                "http_result expects String[] headers",
+                            ));
+                        };
+                        if header.split_once(':').is_some_and(|(name, _)| {
+                            name.trim().eq_ignore_ascii_case("content-type")
+                        }) {
+                            has_content_type = true;
+                        }
+                        header_strings.push(header);
+                    }
+                    if !has_content_type {
+                        header_strings.push("Content-Type: application/json".into());
+                    }
+                    let body = match body {
+                        Value::Option(Some(body)) => Some(body),
+                        Value::Option(None) => None,
+                        _ => {
+                            return Err(self.runtime_error(
+                                args[3].span,
+                                "http_result expects a Request? body",
+                            ));
+                        }
+                    };
+                    self.http_result(
                         &method,
                         &url,
                         &header_strings,
@@ -7137,6 +7331,68 @@ mod tests {
         };
         assert_eq!(fields.get("id"), Some(&Value::Int(42)));
         assert_eq!(fields.get("name"), Some(&Value::String("Anna".into())));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn returns_structured_http_result_for_http_errors() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 512];
+            let _ = stream.read(&mut request).unwrap();
+            std::io::Write::write_all(
+                &mut stream,
+                b"HTTP/1.1 422 Unprocessable Entity\r\nX-Reason: invalid\r\nContent-Length: 21\r\nConnection: close\r\n\r\n{\"message\":\"invalid\"}",
+            )
+            .unwrap();
+        });
+        let source = r#"
+            struct Customer { id: Int name: String }
+            fn submit(url: String) -> HttpResult<Customer> uses Network {
+                return http_result<Customer, Customer>("POST", url, [], None)
+            }
+            fn main() { }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec![format!("127.0.0.1:{port}")],
+                timeout_ms: 1_000,
+                max_response_bytes: 100,
+            }),
+            process: None,
+        };
+        let result = execute_function_with_capabilities_and_policies(
+            &program,
+            "submit",
+            vec![Value::String(format!("http://127.0.0.1:{port}/customers"))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        let Value::Object { fields, .. } = result else {
+            panic!("expected HttpResult object");
+        };
+        assert_eq!(fields.get("status"), Some(&Value::Int(422)));
+        assert_eq!(fields.get("data"), Some(&Value::Option(None)));
+        let Value::Option(Some(error)) = fields.get("error").unwrap() else {
+            panic!("expected structured HttpError");
+        };
+        let Value::Object { fields, .. } = &**error else {
+            panic!("expected HttpError object");
+        };
+        assert_eq!(fields.get("status"), Some(&Value::Int(422)));
+        assert_eq!(
+            fields.get("body"),
+            Some(&Value::String(r#"{"message":"invalid"}"#.into()))
+        );
         server.join().unwrap();
     }
 

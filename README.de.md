@@ -85,6 +85,8 @@ Heute implementiert:
   von Records, Arrays, Optionen und Skalarwerten;
 - http_json<Request, Response>(...) für automatische typisierte JSON-HTTP-
   Anfragen und -Antworten;
+- http_result<Request, Response>(...) mit typisiertem `HttpResult<Response>`
+  für Status, Header, Body, Daten und strukturierte HTTP-Fehler;
 - run_process(command, args) über Process mit exakter Befehls-Allowlist,
   ohne Shell, Timeout und begrenzter Ausgabe;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;

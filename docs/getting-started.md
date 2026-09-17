@@ -76,6 +76,8 @@ The current repository contains:
   of records, arrays, options, and scalar values;
 - http_json<Request, Response>(...) for automatic typed JSON HTTP requests and
   responses;
+- http_result<Request, Response>(...) returning typed `HttpResult<Response>`
+  values with status, headers, body, data, and structured HTTP errors;
 - run_process(command, args) through Process without a shell, using an exact
   command allowlist and bounded execution;
 - runtime-checked function contracts using `requires` and `ensures`.
@@ -272,7 +274,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.29"
+version = "0.1.30"
 zelyra = "0.1"
 
 [capabilities]
