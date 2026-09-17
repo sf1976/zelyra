@@ -252,7 +252,11 @@ while current > 0
 
 `break` exits the current loop and `continue` starts its next iteration. The
 runtime checks declared invariants before and after iterations. The verifier
-can use a proven invariant to summarize supported linear loops:
+can use a proven invariant to summarize supported linear loops. `zelyra verify`
+also reports every declared invariant separately, using zero-based names such
+as `reduce.invariant[0]`. `FAILED` means that an invariant is false or not
+preserved on an analyzed path; `RUNTIME_CHECK` means that runtime checking is
+needed because the symbolic proof is incomplete. Only `PROVEN` is a proof:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl

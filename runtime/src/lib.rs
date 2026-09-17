@@ -40,6 +40,7 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
 pub enum ContractKind {
     Requires,
     Ensures,
+    LoopInvariant,
 }
 
 impl fmt::Display for ContractKind {
@@ -47,6 +48,7 @@ impl fmt::Display for ContractKind {
         match self {
             Self::Requires => write!(f, "requires"),
             Self::Ensures => write!(f, "ensures"),
+            Self::LoopInvariant => write!(f, "invariant"),
         }
     }
 }
@@ -95,7 +97,9 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 status: verify_contract(contract, None, &functions),
             });
         }
-        let return_paths = symbolic_return_paths(function, Some(&functions));
+        let mut invariant_diagnostics = HashMap::new();
+        let return_paths =
+            symbolic_return_paths(function, Some(&functions), &mut invariant_diagnostics);
         for (index, contract) in function.ensures.iter().enumerate() {
             results.push(VerificationResult {
                 function: function.name.clone(),
@@ -108,6 +112,21 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                     &functions,
                 ),
             });
+        }
+        let mut loop_invariants = Vec::new();
+        collect_loop_invariants(&function.body, &mut loop_invariants);
+        for (loop_id, invariants) in loop_invariants {
+            for (index, invariant) in invariants.iter().enumerate() {
+                results.push(VerificationResult {
+                    function: function.name.clone(),
+                    kind: ContractKind::LoopInvariant,
+                    index,
+                    status: invariant_diagnostics
+                        .get(&(loop_id, index))
+                        .copied()
+                        .unwrap_or_else(|| verify_contract(invariant, None, &functions)),
+                });
+            }
         }
         if function.requires.is_empty() && function.ensures.is_empty() {
             results.push(VerificationResult {
@@ -270,6 +289,14 @@ struct ReturnPath<'a> {
     substitutions: HashMap<String, LinearValue>,
 }
 
+type InvariantDiagnostics = HashMap<(usize, usize), VerificationStatus>;
+
+struct LoopSymbolicContext<'a> {
+    parameters: &'a HashSet<String>,
+    functions: Option<&'a HashMap<String, &'a Function>>,
+    diagnostics: &'a mut InvariantDiagnostics,
+}
+
 #[derive(Clone, Debug)]
 enum SymbolicState<'a> {
     Continue {
@@ -298,6 +325,7 @@ enum SymbolicState<'a> {
 fn symbolic_return_paths<'a>(
     function: &'a Function,
     functions: Option<&HashMap<String, &Function>>,
+    diagnostics: &mut InvariantDiagnostics,
 ) -> Option<Vec<ReturnPath<'a>>> {
     let parameters = function
         .params
@@ -319,6 +347,7 @@ fn symbolic_return_paths<'a>(
         HashMap::new(),
         &parameters,
         functions,
+        diagnostics,
     )?;
     let mut paths = Vec::new();
     for state in states {
@@ -393,6 +422,7 @@ fn symbolic_states<'a>(
     substitutions: HashMap<String, LinearValue>,
     parameters: &HashSet<String>,
     functions: Option<&HashMap<String, &Function>>,
+    diagnostics: &mut InvariantDiagnostics,
 ) -> Option<Vec<SymbolicState<'a>>> {
     let mut states = vec![SymbolicState::Continue {
         guards: incoming,
@@ -513,6 +543,7 @@ fn symbolic_states<'a>(
                             substitutions.clone(),
                             parameters,
                             functions,
+                            diagnostics,
                         )?);
 
                         if let Some(else_block) = else_block {
@@ -529,6 +560,7 @@ fn symbolic_states<'a>(
                                 substitutions.clone(),
                                 parameters,
                                 functions,
+                                diagnostics,
                             )?);
                         } else {
                             let mut guards = guards;
@@ -568,6 +600,7 @@ fn symbolic_states<'a>(
                                 substitutions.clone(),
                                 parameters,
                                 functions,
+                                diagnostics,
                             )?);
                         }
                     }
@@ -575,35 +608,47 @@ fn symbolic_states<'a>(
                         condition,
                         invariants,
                         body,
-                        ..
+                        span,
                     } => {
+                        let mut context = LoopSymbolicContext {
+                            parameters,
+                            functions,
+                            diagnostics,
+                        };
                         next.extend(symbolic_loop_states(
                             condition,
                             invariants,
+                            span.start,
                             body,
                             SymbolicState::Continue {
                                 guards,
                                 bindings,
                                 substitutions,
                             },
-                            parameters,
-                            functions,
+                            &mut context,
                             0,
                         )?);
                     }
                     Stmt::Loop {
-                        invariants, body, ..
+                        invariants,
+                        body,
+                        span,
                     } => {
+                        let mut context = LoopSymbolicContext {
+                            parameters,
+                            functions,
+                            diagnostics,
+                        };
                         next.extend(symbolic_unconditional_loop_states(
                             invariants,
+                            span.start,
                             body,
                             SymbolicState::Continue {
                                 guards,
                                 bindings,
                                 substitutions,
                             },
-                            parameters,
-                            functions,
+                            &mut context,
                             0,
                         )?);
                     }
@@ -619,10 +664,10 @@ fn symbolic_states<'a>(
 fn symbolic_loop_states<'a>(
     condition: &'a Expr,
     invariants: &'a [Expr],
+    loop_id: usize,
     body: &'a Block,
     state: SymbolicState<'a>,
-    parameters: &HashSet<String>,
-    functions: Option<&HashMap<String, &Function>>,
+    context: &mut LoopSymbolicContext<'_>,
     iterations: usize,
 ) -> Option<Vec<SymbolicState<'a>>> {
     let SymbolicState::Continue {
@@ -633,8 +678,16 @@ fn symbolic_loop_states<'a>(
     else {
         return None;
     };
-    for invariant in invariants {
-        if !prove_symbolic_predicate(invariant, &guards, &bindings, &substitutions, functions)? {
+    for (index, invariant) in invariants.iter().enumerate() {
+        let status = invariant_status(
+            invariant,
+            &guards,
+            &bindings,
+            &substitutions,
+            context.functions,
+        );
+        record_invariant_status(context.diagnostics, loop_id, index, status);
+        if status != VerificationStatus::Proven {
             return None;
         }
     }
@@ -644,14 +697,15 @@ fn symbolic_loop_states<'a>(
         None,
         Some(&bindings),
         Some(&substitutions),
-        functions,
+        context.functions,
         0,
     )?;
     let mut exit_guards = guards.clone();
     for invariant in invariants {
-        exit_guards.push(SymbolicGuard::Condition {
+        exit_guards.push(SymbolicGuard::ConditionSnapshot {
             expression: invariant,
             expected: true,
+            substitutions: substitutions.clone(),
         });
     }
     exit_guards.push(SymbolicGuard::ConditionSnapshot {
@@ -681,9 +735,10 @@ fn symbolic_loop_states<'a>(
             }
             let mut abstract_exit_guards = guards;
             for invariant in invariants {
-                abstract_exit_guards.push(SymbolicGuard::Condition {
+                abstract_exit_guards.push(SymbolicGuard::ConditionSnapshot {
                     expression: invariant,
                     expected: true,
+                    substitutions: abstract_substitutions.clone(),
                 });
             }
             abstract_exit_guards.push(SymbolicGuard::ConditionSnapshot {
@@ -703,9 +758,10 @@ fn symbolic_loop_states<'a>(
 
     let mut body_guards = guards;
     for invariant in invariants {
-        body_guards.push(SymbolicGuard::Condition {
+        body_guards.push(SymbolicGuard::ConditionSnapshot {
             expression: invariant,
             expected: true,
+            substitutions: substitutions.clone(),
         });
     }
     body_guards.push(SymbolicGuard::ConditionSnapshot {
@@ -718,8 +774,9 @@ fn symbolic_loop_states<'a>(
         body_guards,
         bindings,
         substitutions,
-        parameters,
-        functions,
+        context.parameters,
+        context.functions,
+        context.diagnostics,
     )? {
         match state {
             SymbolicState::Return { .. } => states.push(state),
@@ -728,14 +785,16 @@ fn symbolic_loop_states<'a>(
                 bindings,
                 substitutions,
             } => {
-                for invariant in invariants {
-                    if !prove_symbolic_predicate(
+                for (index, invariant) in invariants.iter().enumerate() {
+                    let status = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
-                        functions,
-                    )? {
+                        context.functions,
+                    );
+                    record_invariant_status(context.diagnostics, loop_id, index, status);
+                    if status != VerificationStatus::Proven {
                         return None;
                     }
                 }
@@ -752,14 +811,14 @@ fn symbolic_loop_states<'a>(
             } => states.extend(symbolic_loop_states(
                 condition,
                 invariants,
+                loop_id,
                 body,
                 SymbolicState::Continue {
                     guards,
                     bindings,
                     substitutions,
                 },
-                parameters,
-                functions,
+                context,
                 iterations + 1,
             )?),
             SymbolicState::Continue {
@@ -767,28 +826,30 @@ fn symbolic_loop_states<'a>(
                 bindings,
                 substitutions,
             } => {
-                for invariant in invariants {
-                    if !prove_symbolic_predicate(
+                for (index, invariant) in invariants.iter().enumerate() {
+                    let status = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
-                        functions,
-                    )? {
+                        context.functions,
+                    );
+                    record_invariant_status(context.diagnostics, loop_id, index, status);
+                    if status != VerificationStatus::Proven {
                         return None;
                     }
                 }
                 states.extend(symbolic_loop_states(
                     condition,
                     invariants,
+                    loop_id,
                     body,
                     SymbolicState::Continue {
                         guards,
                         bindings,
                         substitutions,
                     },
-                    parameters,
-                    functions,
+                    context,
                     iterations + 1,
                 )?)
             }
@@ -799,10 +860,10 @@ fn symbolic_loop_states<'a>(
 
 fn symbolic_unconditional_loop_states<'a>(
     invariants: &'a [Expr],
+    loop_id: usize,
     body: &'a Block,
     state: SymbolicState<'a>,
-    parameters: &HashSet<String>,
-    functions: Option<&HashMap<String, &Function>>,
+    context: &mut LoopSymbolicContext<'_>,
     iterations: usize,
 ) -> Option<Vec<SymbolicState<'a>>> {
     let SymbolicState::Continue {
@@ -813,17 +874,26 @@ fn symbolic_unconditional_loop_states<'a>(
     else {
         return None;
     };
-    for invariant in invariants {
-        if !prove_symbolic_predicate(invariant, &guards, &bindings, &substitutions, functions)? {
+    for (index, invariant) in invariants.iter().enumerate() {
+        let status = invariant_status(
+            invariant,
+            &guards,
+            &bindings,
+            &substitutions,
+            context.functions,
+        );
+        record_invariant_status(context.diagnostics, loop_id, index, status);
+        if status != VerificationStatus::Proven {
             return None;
         }
     }
 
     let mut body_guards = guards;
     for invariant in invariants {
-        body_guards.push(SymbolicGuard::Condition {
+        body_guards.push(SymbolicGuard::ConditionSnapshot {
             expression: invariant,
             expected: true,
+            substitutions: substitutions.clone(),
         });
     }
     let mut states = Vec::new();
@@ -832,8 +902,9 @@ fn symbolic_unconditional_loop_states<'a>(
         body_guards,
         bindings,
         substitutions,
-        parameters,
-        functions,
+        context.parameters,
+        context.functions,
+        context.diagnostics,
     )? {
         match state {
             SymbolicState::Return { .. } => states.push(state),
@@ -842,14 +913,16 @@ fn symbolic_unconditional_loop_states<'a>(
                 bindings,
                 substitutions,
             } => {
-                for invariant in invariants {
-                    if !prove_symbolic_predicate(
+                for (index, invariant) in invariants.iter().enumerate() {
+                    let status = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
-                        functions,
-                    )? {
+                        context.functions,
+                    );
+                    record_invariant_status(context.diagnostics, loop_id, index, status);
+                    if status != VerificationStatus::Proven {
                         return None;
                     }
                 }
@@ -874,14 +947,14 @@ fn symbolic_unconditional_loop_states<'a>(
                 }
                 states.extend(symbolic_unconditional_loop_states(
                     invariants,
+                    loop_id,
                     body,
                     SymbolicState::Continue {
                         guards,
                         bindings,
                         substitutions,
                     },
-                    parameters,
-                    functions,
+                    context,
                     iterations + 1,
                 )?);
             }
@@ -920,6 +993,49 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
                 }
             }
             Stmt::Let { .. }
+            | Stmt::Expr(_)
+            | Stmt::Return { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Expr])>) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::While {
+                invariants,
+                body,
+                span,
+                ..
+            }
+            | Stmt::Loop {
+                invariants,
+                body,
+                span,
+            } => {
+                loops.push((span.start, invariants));
+                collect_loop_invariants(body, loops);
+            }
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_loop_invariants(then_block, loops);
+                if let Some(else_block) = else_block {
+                    collect_loop_invariants(else_block, loops);
+                }
+            }
+            Stmt::Match { arms, .. } => {
+                for arm in arms {
+                    collect_loop_invariants(&arm.body, loops);
+                }
+            }
+            Stmt::Transaction { body, .. } => collect_loop_invariants(body, loops),
+            Stmt::Let { .. }
+            | Stmt::BindOrAssign { .. }
             | Stmt::Expr(_)
             | Stmt::Return { .. }
             | Stmt::Break { .. }
@@ -1498,6 +1614,42 @@ fn prove_symbolic_predicate(
     Some(true)
 }
 
+fn invariant_status(
+    predicate: &Expr,
+    guards: &[SymbolicGuard<'_>],
+    bindings: &HashMap<String, &Expr>,
+    substitutions: &HashMap<String, LinearValue>,
+    functions: Option<&HashMap<String, &Function>>,
+) -> VerificationStatus {
+    match prove_symbolic_predicate(predicate, guards, bindings, substitutions, functions) {
+        Some(true) => VerificationStatus::Proven,
+        Some(false) => VerificationStatus::Failed,
+        None => VerificationStatus::RuntimeCheck,
+    }
+}
+
+fn record_invariant_status(
+    diagnostics: &mut InvariantDiagnostics,
+    loop_id: usize,
+    index: usize,
+    status: VerificationStatus,
+) {
+    diagnostics
+        .entry((loop_id, index))
+        .and_modify(|existing| {
+            *existing = match (*existing, status) {
+                (VerificationStatus::Failed, _) | (_, VerificationStatus::Failed) => {
+                    VerificationStatus::Failed
+                }
+                (VerificationStatus::RuntimeCheck, _) | (_, VerificationStatus::RuntimeCheck) => {
+                    VerificationStatus::RuntimeCheck
+                }
+                _ => VerificationStatus::Proven,
+            };
+        })
+        .or_insert(status);
+}
+
 fn symbolic_bool_with_constraints(
     expression: &Expr,
     return_expression: &Expr,
@@ -1893,7 +2045,9 @@ fn linear_value_alternatives(
                     .zip(arguments)
                     .map(|(parameter, value)| (parameter.name.clone(), value))
                     .collect::<HashMap<_, _>>();
-                for path in symbolic_return_paths(function, functions)? {
+                let mut invariant_diagnostics = HashMap::new();
+                for path in symbolic_return_paths(function, functions, &mut invariant_diagnostics)?
+                {
                     let Some(return_expression) = path.expression else {
                         continue;
                     };
@@ -4036,7 +4190,9 @@ mod tests {
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[1].status, VerificationStatus::Proven);
-        assert_eq!(results[2].status, VerificationStatus::Unproven);
+        assert_eq!(results[2].kind, ContractKind::LoopInvariant);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 
     #[test]
@@ -4047,7 +4203,9 @@ mod tests {
         .unwrap();
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::Proven);
-        assert_eq!(results[1].status, VerificationStatus::Unproven);
+        assert_eq!(results[1].kind, ContractKind::LoopInvariant);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 
     #[test]
@@ -4059,7 +4217,24 @@ mod tests {
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
-        assert_eq!(results[2].status, VerificationStatus::Unproven);
+        assert_eq!(results[2].kind, ContractKind::LoopInvariant);
+        assert_eq!(results[2].status, VerificationStatus::Failed);
+        assert_eq!(results[3].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn reports_each_loop_invariant_status() {
+        let program = parse(
+            &lex("fn reduce(value: Int) -> Int requires { value >= 0 } ensures { result == 0 } { mutable current = value while current > 0 invariant { current >= 0 } invariant { current == value } { current = current - 1 } return current } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[2].kind, ContractKind::LoopInvariant);
+        assert_eq!(results[2].index, 0);
+        assert_eq!(results[2].status, VerificationStatus::Proven);
+        assert_eq!(results[3].kind, ContractKind::LoopInvariant);
+        assert_eq!(results[3].index, 1);
+        assert_eq!(results[3].status, VerificationStatus::Failed);
     }
 
     #[test]

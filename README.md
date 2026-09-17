@@ -64,8 +64,8 @@ Implemented today:
   paths, `Option`/`Result` constructor paths, known payload bindings, and
   bounded path-sensitive function-call summaries, local bindings with simple
   linear assignments, bounded loops, and modeled `break`/`continue` paths;
-  explicit loop invariants and caller-assumption-aware callee precondition
-  checks are included.
+  explicit loop invariants with individual verification statuses and
+  caller-assumption-aware callee precondition checks are included.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

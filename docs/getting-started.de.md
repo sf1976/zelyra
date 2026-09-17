@@ -261,7 +261,12 @@ while current > 0
 Durchlauf. Die Runtime prüft deklarierte Invarianten vor und nach den
 Durchläufen. Der Verifier kann eine bewiesene Invariante verwenden, um
 unterstützte lineare Schleifen zusammenzufassen; bei `loop` wird dafür ein
-modellierter `break`-Austritt benötigt:
+modellierter `break`-Austritt benötigt. `zelyra verify` meldet außerdem jede
+deklarierte Invariante einzeln, mit nullbasierten Namen wie
+`reduce.invariant[0]`. `FAILED` bedeutet, dass eine Invariante auf einem
+analysierten Pfad falsch ist oder nicht erhalten bleibt; `RUNTIME_CHECK`
+bedeutet, dass wegen eines unvollständigen symbolischen Beweises eine
+Laufzeitprüfung nötig ist. Nur `PROVEN` ist ein Beweis:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl

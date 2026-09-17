@@ -605,6 +605,20 @@ unconditional `loop` can use it with a modeled `break` exit. Runtime execution
 checks it before and after each iteration. Unsupported or unproven invariants
 remain conservative and do not produce `PROVEN` results.
 
+`zelyra verify` reports each declared invariant separately, after a function's
+`ensures` results. Invariant indexes are zero-based:
+
+~~~text
+PROVEN: reduce.ensures[0]
+PROVEN: reduce.invariant[0]
+FAILED: reduce.invariant[1]
+~~~
+
+`FAILED` means that the invariant is false on a feasible analyzed path or is
+not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking
+is required because the symbolic verifier cannot complete the proof. Only
+`PROVEN` is a mathematical proof.
+
 ## 16. Configuration and secrets
 
 Project configuration belongs in `zelyra.toml`; secrets do not:

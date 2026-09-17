@@ -662,6 +662,22 @@ sie mit einem modellierten `break`-Austritt verwenden. Die Runtime prüft sie
 vor und nach jedem Durchlauf. Nicht unterstützte oder nicht beweisbare
 Invarianten bleiben konservativ und erzeugen kein `PROVEN`-Ergebnis.
 
+`zelyra verify` meldet jede deklarierte Invariante separat, nach den
+`ensures`-Ergebnissen einer Funktion. Die Indizes der Invarianten beginnen bei
+null:
+
+~~~text
+PROVEN: reduce.ensures[0]
+PROVEN: reduce.invariant[0]
+FAILED: reduce.invariant[1]
+~~~
+
+`FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
+falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`
+bedeutet, dass eine Laufzeitprüfung erforderlich ist, weil der symbolische
+Verifier den Beweis nicht vollständig führen kann. Nur `PROVEN` ist ein
+mathematischer Beweis.
+
 ## 16. Konfiguration und Geheimnisse
 
 Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:

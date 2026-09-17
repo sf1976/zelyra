@@ -146,5 +146,20 @@ invalid or unsupported invariants, and other unsupported state flow remain
 `RUNTIME_CHECK`. Runtime execution checks the invariant before and after every
 iteration as well.
 
+`zelyra verify` reports every declared invariant separately, after the
+function's `ensures` results. The result name uses the zero-based invariant
+index, for example:
+
+~~~text
+PROVEN: reduce.ensures[0]
+PROVEN: reduce.invariant[0]
+FAILED: reduce.invariant[1]
+~~~
+
+`FAILED` means that the invariant is false on a feasible analyzed path or is
+not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking
+is required because the current symbolic verifier cannot complete the proof.
+Neither status is a mathematical proof.
+
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.

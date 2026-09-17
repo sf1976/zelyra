@@ -156,6 +156,22 @@ unterstützte Invarianten und andere nicht unterstützte Zustandsflüsse bleiben
 `RUNTIME_CHECK`. Die Runtime prüft die Invariante ebenfalls vor und nach jedem
 Durchlauf.
 
+`zelyra verify` meldet jede deklarierte Invariante separat, nach den
+`ensures`-Ergebnissen der Funktion. Der Name verwendet den nullbasierten Index
+der Invariante, zum Beispiel:
+
+~~~text
+PROVEN: reduce.ensures[0]
+PROVEN: reduce.invariant[0]
+FAILED: reduce.invariant[1]
+~~~
+
+`FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
+falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`
+bedeutet, dass eine Laufzeitprüfung erforderlich ist, weil der aktuelle
+symbolische Verifier den Beweis nicht vollständig führen kann. Keiner dieser
+Statuswerte außer `PROVEN` ist ein mathematischer Beweis.
+
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein
 mathematischer Beweis.
