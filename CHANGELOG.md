@@ -4,6 +4,23 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.28 — 2026-09-17
+
+### Added
+
+- Added `json_encode(value)` and `json_decode<Type>(text)` for checked JSON
+  conversion of scalar values, arrays, options, and declared records.
+- Added nested record decoding with required/optional field validation and
+  rejection of unknown fields.
+- Added typed-call syntax for the JSON decoder, synchronized examples, and
+  German and English documentation.
+
+### Known limitations
+
+- JSON decoding currently supports records, arrays, options, and scalar values;
+  `Result`, `Bytes`, date/time domain values, streaming JSON, and custom codec
+  hooks remain future work.
+
 ## 0.1.27 — 2026-09-17
 
 ### Added

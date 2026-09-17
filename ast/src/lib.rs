@@ -389,6 +389,7 @@ pub enum ExprKind {
     },
     Call {
         name: String,
+        type_args: Vec<Type>,
         args: Vec<Expr>,
     },
     Unary {

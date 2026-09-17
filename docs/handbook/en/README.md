@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.27"
+version = "0.1.28"
 zelyra = "0.1"
 
 [capabilities]
@@ -673,8 +673,9 @@ max_response_bytes = 1048576
 Without `[network]`, a project allows no hosts. The transport supports
 `http://` and `https://` with Rustls certificate verification enabled by
 default. It does not follow redirects and returns only successful UTF-8 GET
-response bodies within the configured limits. Request headers, request bodies,
-and richer HTTP features are future work.
+response bodies within the configured limits. The `http_get` helper remains
+the simple GET-only convenience API; use `http_request` when request headers,
+request bodies, or response status are needed.
 
 Typed requests use `http_request`:
 
@@ -693,6 +694,26 @@ The method accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
 Headers are `Name: value` strings, the body is `String?`, and the typed result
 contains `status: Int`, `headers: String[]`, and `body: String`. GET/HEAD
 requests cannot carry a body.
+
+JSON values can be converted to and from checked Zelyra values. Records and
+their nested fields are validated against the declared schema:
+
+~~~zelyra
+struct Customer { name: String tags: String[] nickname: String? }
+
+fn decode_customer(body: String) -> Customer {
+    return json_decode<Customer>(body)
+}
+
+fn encode_customer(customer: Customer) -> String {
+    return json_encode(customer)
+}
+~~~
+
+`json_decode<Type>(text)` requires one target type argument and supports
+records, nested records, arrays, options, and scalar values. `json_encode`
+serializes the same value families. Malformed JSON, type mismatches, unknown
+record fields, and missing required fields are explicit runtime errors.
 
 The Process capability exposes a shell-free command API:
 
@@ -855,7 +876,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.27"
+version = "0.1.28"
 zelyra = "0.1"
 
 [capabilities]

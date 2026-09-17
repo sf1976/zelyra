@@ -1304,6 +1304,21 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
+                let type_args = if name == "json_decode" && self.at(&TokenKind::Less) {
+                    self.advance();
+                    let mut type_args = Vec::new();
+                    loop {
+                        type_args.push(self.type_name()?);
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                    self.expect(TokenKind::Greater, "`>` after call type arguments")?;
+                    type_args
+                } else {
+                    Vec::new()
+                };
                 if self.at(&TokenKind::LParen) {
                     self.advance();
                     let mut args = Vec::new();
@@ -1321,9 +1336,15 @@ impl<'a> Parser<'a> {
                     }
                     let end = self.expect(TokenKind::RParen, "`)`")?;
                     Ok(Expr {
-                        kind: ExprKind::Call { name, args },
+                        kind: ExprKind::Call {
+                            name,
+                            type_args,
+                            args,
+                        },
                         span: token.span.join(end),
                     })
+                } else if !type_args.is_empty() {
+                    self.error("type arguments require a function call")
                 } else if self.at(&TokenKind::LBrace) && self.looks_like_record_literal() {
                     self.record_literal(name, token.span)
                 } else {
@@ -1695,6 +1716,23 @@ mod tests {
             panic!("expected print call");
         };
         assert!(matches!(args[0].kind, ExprKind::Field { .. }));
+    }
+
+    #[test]
+    fn parses_typed_function_calls() {
+        let program =
+            parse(&lex("fn main() { value = json_decode<Customer>(body) }").unwrap()).unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected binding");
+        };
+        let ExprKind::Call {
+            name, type_args, ..
+        } = &value.kind
+        else {
+            panic!("expected typed call");
+        };
+        assert_eq!(name, "json_decode");
+        assert_eq!(type_args, &[Type::Named("Customer".into())]);
     }
 
     #[test]

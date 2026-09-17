@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.27"
+version = "0.1.28"
 zelyra = "0.1"
 
 [capabilities]
@@ -733,8 +733,9 @@ Ohne `[network]` sind in einem Projekt keine Hosts erlaubt. Der Transport
 unterstützt `http://` und `https://`; die Zertifikatsprüfung über Rustls ist
 standardmäßig aktiviert. Es werden keine Redirects verfolgt und nur
 erfolgreiche UTF-8-GET-Response-Bodies innerhalb der konfigurierten Grenzen
-geliefert. Request-Header, Request-Bodies und umfangreichere HTTP-Funktionen
-folgen später.
+geliefert. Der Helper `http_get` bleibt die einfache GET-Komfort-API; für
+Request-Header, Request-Bodies oder den Response-Status wird `http_request`
+verwendet.
 
 Typisierte Anfragen verwenden `http_request`:
 
@@ -753,6 +754,27 @@ Die Methode akzeptiert `GET`, `POST`, `PUT`, `PATCH`, `DELETE` und `HEAD`.
 Header sind Strings im Format `Name: value`, der Body ist `String?`. Das
 typisierte Ergebnis enthält `status: Int`, `headers: String[]` und
 `body: String`. GET- und HEAD-Anfragen dürfen keinen Body enthalten.
+
+JSON-Werte können in geprüfte Zelyra-Werte umgewandelt werden und umgekehrt.
+Records und verschachtelte Felder werden gegen das deklarierte Schema geprüft:
+
+~~~zelyra
+struct Customer { name: String tags: String[] nickname: String? }
+
+fn decode_customer(body: String) -> Customer {
+    return json_decode<Customer>(body)
+}
+
+fn encode_customer(customer: Customer) -> String {
+    return json_encode(customer)
+}
+~~~
+
+`json_decode<Typ>(text)` benötigt genau ein Zieltypargument und unterstützt
+Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
+`json_encode` serialisiert dieselben Werte. Ungültiges JSON, Typfehler,
+unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdrückliche
+Laufzeitfehler gemeldet.
 
 Die Process-Capability stellt eine Befehls-API ohne Shell bereit:
 
@@ -921,7 +943,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.27"
+version = "0.1.28"
 zelyra = "0.1"
 
 [capabilities]

@@ -117,9 +117,10 @@ max_response_bytes = 1048576
 The allowlist matches a host or host-and-port exactly. A project with no
 `[network]` section has no allowed hosts. The transport supports `http://` and
 `https://` with Rustls certificate verification enabled by default. It does
-not follow redirects and limits response size and total request time. The API
-remains intentionally limited to GET and UTF-8 response bodies; request
-headers, request bodies, and richer HTTP client features remain future work.
+not follow redirects and limits response size and total request time. The
+`http_get` helper remains the simple GET-only convenience API; use
+`http_request` when request headers, request bodies, or response status are
+needed.
 
 For typed requests, use `http_request`:
 
@@ -139,6 +140,32 @@ Headers use `Name: value` strings, and the body is `String?`. The returned
 `HttpResponse` has typed fields `status: Int`, `headers: String[]`, and
 `body: String`. Redirects remain disabled, and GET/HEAD requests cannot carry
 a body.
+
+JSON values can be converted to and from checked Zelyra values. Records and
+their nested fields are validated against the declared schema; unknown or
+missing required fields are runtime errors:
+
+~~~zelyra
+struct Customer {
+    name: String
+    tags: String[]
+    nickname: String?
+}
+
+fn decode_customer(body: String) -> Customer {
+    return json_decode<Customer>(body)
+}
+
+fn encode_customer(customer: Customer) -> String {
+    return json_encode(customer)
+}
+~~~
+
+`json_decode<Type>(text)` requires exactly one target type argument. It supports
+records, nested records, arrays, options, and scalar values. `json_encode`
+serializes the same value families; an absent option becomes JSON `null`.
+Malformed JSON, type mismatches, unknown record fields, and missing required
+fields are reported as explicit runtime errors.
 
 The Process capability exposes a deliberately narrow command API:
 

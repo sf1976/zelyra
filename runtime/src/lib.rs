@@ -769,6 +769,7 @@ fn add_pattern_bindings<'a>(
             let ExprKind::Call {
                 name: value_name,
                 args,
+                ..
             } = &value.kind
             else {
                 return;
@@ -1694,6 +1695,7 @@ fn constraints_for_pattern(
             if let ExprKind::Call {
                 name: known_name,
                 args,
+                ..
             } = &value.kind
             {
                 if args.len() == 1 && matches!(known_name.as_str(), "Some" | "None" | "Ok" | "Err")
@@ -2275,7 +2277,7 @@ fn call_preconditions_hold(
                 Some(false)
             }
         }
-        ExprKind::Call { name, args } => {
+        ExprKind::Call { name, args, .. } => {
             for argument in args {
                 match call_preconditions_hold(argument, guards, context) {
                     Some(true) => {}
@@ -2550,7 +2552,7 @@ fn linear_value_alternatives(
             }
             Some(alternatives)
         }
-        ExprKind::Call { name, args } => {
+        ExprKind::Call { name, args, .. } => {
             if depth >= 32 {
                 return None;
             }
@@ -3027,7 +3029,7 @@ fn check_capability_expr(
             declared,
             errors,
         ),
-        ExprKind::Call { name, args } => {
+        ExprKind::Call { name, args, .. } => {
             if name == "now" {
                 require_capability(
                     "Clock",
@@ -3833,7 +3835,11 @@ impl<'a> Checker<'a> {
                     self.error(expr.span, format!("unknown variable `{name}`"));
                     Type::Unknown
                 }),
-            ExprKind::Call { name, args } => {
+            ExprKind::Call {
+                name,
+                type_args,
+                args,
+            } => {
                 if name == "print" {
                     if args.len() != 1 {
                         self.error(expr.span, "`print` expects exactly one argument");
@@ -3958,6 +3964,29 @@ impl<'a> Checker<'a> {
                     let url = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &url, args[0].span);
                     Type::String
+                } else if name == "json_encode" {
+                    if !type_args.is_empty() {
+                        self.error(expr.span, "json_encode does not accept type arguments");
+                    }
+                    if args.len() != 1 {
+                        self.error(expr.span, "json_encode expects exactly one value");
+                        return Type::Unknown;
+                    }
+                    self.check_expr(&args[0], scopes);
+                    Type::String
+                } else if name == "json_decode" {
+                    if type_args.len() != 1 {
+                        self.error(expr.span, "json_decode expects exactly one type argument");
+                    } else {
+                        self.check_type(&type_args[0], expr.span);
+                    }
+                    if args.len() != 1 {
+                        self.error(expr.span, "json_decode expects exactly one String value");
+                        return Type::Unknown;
+                    }
+                    let source = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &source, args[0].span);
+                    type_args.first().cloned().unwrap_or(Type::Unknown)
                 } else if name == "http_request" {
                     if args.len() != 4 {
                         self.error(
@@ -4587,6 +4616,16 @@ pub fn execute_function_with_capabilities_and_policies(
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.and_then(|policy| policy.network.clone()),
         process_policy: policy.and_then(|policy| policy.process.clone()),
+        record_definitions: program
+            .records
+            .iter()
+            .map(|record| (record.name.clone(), record.clone()))
+            .collect(),
+        type_aliases: program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect(),
         active_capabilities: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
@@ -4650,6 +4689,16 @@ fn execute_internal(
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
         process_policy: policy.and_then(|policy| policy.process),
+        record_definitions: program
+            .records
+            .iter()
+            .map(|record| (record.name.clone(), record.clone()))
+            .collect(),
+        type_aliases: program
+            .types
+            .iter()
+            .map(|definition| (definition.name.clone(), definition.target.clone()))
+            .collect(),
         active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
@@ -4665,6 +4714,8 @@ struct Interpreter {
     filesystem_policy: Option<FileSystemPolicy>,
     network_policy: Option<NetworkPolicy>,
     process_policy: Option<ProcessPolicy>,
+    record_definitions: HashMap<String, RecordDef>,
+    type_aliases: HashMap<String, Type>,
     active_capabilities: Vec<HashSet<String>>,
 }
 
@@ -4932,6 +4983,234 @@ impl Interpreter {
             Some(Value::String(body)) => Ok(body.clone()),
             _ => Err(self.runtime_error(span, "http_get received an invalid body")),
         }
+    }
+
+    fn json_encode(&self, value: &Value, span: Span) -> Result<String, RuntimeError> {
+        serde_json::to_string(&self.json_value(value, span)?).map_err(|error| {
+            self.runtime_error(
+                span,
+                format!("json_encode failed to serialize value: {error}"),
+            )
+        })
+    }
+
+    fn json_value(&self, value: &Value, span: Span) -> Result<serde_json::Value, RuntimeError> {
+        match value {
+            Value::Int(value) => Ok(serde_json::Value::from(*value)),
+            Value::UInt(value) => Ok(serde_json::Value::from(*value)),
+            Value::Float(value) => serde_json::Number::from_f64(*value)
+                .map(serde_json::Value::Number)
+                .ok_or_else(|| {
+                    self.runtime_error(span, "json_encode cannot serialize non-finite Float")
+                }),
+            Value::Bool(value) => Ok(serde_json::Value::from(*value)),
+            Value::String(value) => Ok(serde_json::Value::String(value.clone())),
+            Value::Char(value) => Ok(serde_json::Value::String(value.to_string())),
+            Value::Timestamp(value) => Ok(serde_json::Value::from(*value)),
+            Value::Array(values) => values
+                .iter()
+                .map(|value| self.json_value(value, span))
+                .collect::<Result<Vec<_>, _>>()
+                .map(serde_json::Value::Array),
+            Value::Object { fields, .. } => fields
+                .iter()
+                .map(|(name, value)| {
+                    self.json_value(value, span)
+                        .map(|value| (name.clone(), value))
+                })
+                .collect::<Result<serde_json::Map<_, _>, _>>()
+                .map(serde_json::Value::Object),
+            Value::Option(Some(value)) => self.json_value(value, span),
+            Value::Option(None) | Value::Unit => Ok(serde_json::Value::Null),
+            Value::Result(Ok(value)) => self.json_value(value, span),
+            Value::Result(Err(value)) => {
+                let mut object = serde_json::Map::new();
+                object.insert("error".into(), self.json_value(value, span)?);
+                Ok(serde_json::Value::Object(object))
+            }
+            Value::Rows { columns, rows } => rows
+                .iter()
+                .map(|row| {
+                    columns
+                        .iter()
+                        .zip(row)
+                        .map(|(column, value)| {
+                            Ok((column.clone(), serde_json::Value::String(value.clone())))
+                        })
+                        .collect::<Result<serde_json::Map<_, _>, RuntimeError>>()
+                        .map(serde_json::Value::Object)
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(serde_json::Value::Array),
+        }
+    }
+
+    fn json_decode(&self, source: &str, target: &Type, span: Span) -> Result<Value, RuntimeError> {
+        let value: serde_json::Value = serde_json::from_str(source).map_err(|error| {
+            self.runtime_error(span, format!("json_decode received invalid JSON: {error}"))
+        })?;
+        self.json_decode_value(&value, target, span)
+    }
+
+    fn json_decode_value(
+        &self,
+        value: &serde_json::Value,
+        target: &Type,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        if let Type::Option(inner) = target {
+            if value.is_null() {
+                return Ok(Value::Option(None));
+            }
+            return Ok(Value::Option(Some(Box::new(
+                self.json_decode_value(value, inner, span)?,
+            ))));
+        }
+        if let Type::Named(name) = target {
+            if let Some(alias) = self.type_aliases.get(name) {
+                return self.json_decode_value(value, alias, span);
+            }
+            if let Some(record) = self.record_definitions.get(name) {
+                return self.json_decode_record(value, record, span);
+            }
+            if matches!(name.as_str(), "Id" | "Email" | "Url" | "Uuid" | "Money") {
+                return self.json_decode_string(value, target, span);
+            }
+        }
+        match target {
+            Type::Int => value
+                .as_i64()
+                .map(Value::Int)
+                .ok_or_else(|| self.json_type_error("Int", value, span)),
+            Type::UInt => value
+                .as_u64()
+                .map(Value::UInt)
+                .ok_or_else(|| self.json_type_error("UInt", value, span)),
+            Type::Float | Type::Decimal => value
+                .as_f64()
+                .map(Value::Float)
+                .ok_or_else(|| self.json_type_error("number", value, span)),
+            Type::Bool => value
+                .as_bool()
+                .map(Value::Bool)
+                .ok_or_else(|| self.json_type_error("Bool", value, span)),
+            Type::String => self.json_decode_string(value, target, span),
+            Type::Char => {
+                let Value::String(string) = self.json_decode_string(value, target, span)? else {
+                    return Err(self.runtime_error(span, "json_decode expected a String value"));
+                };
+                let mut chars = string.chars();
+                let Some(character) = chars.next() else {
+                    return Err(self.runtime_error(span, "json_decode expected one character"));
+                };
+                if chars.next().is_some() {
+                    return Err(self.runtime_error(span, "json_decode expected one character"));
+                }
+                Ok(Value::Char(character))
+            }
+            Type::Timestamp => value
+                .as_i64()
+                .map(Value::Timestamp)
+                .ok_or_else(|| self.json_type_error("Timestamp", value, span)),
+            Type::Array(inner) => {
+                let Some(values) = value.as_array() else {
+                    return Err(self.json_type_error("array", value, span));
+                };
+                values
+                    .iter()
+                    .map(|value| self.json_decode_value(value, inner, span))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Array)
+            }
+            Type::Unit if value.is_null() => Ok(Value::Unit),
+            Type::Unit => Err(self.json_type_error("null", value, span)),
+            Type::Named(name) => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{name}`"),
+            )),
+            Type::Result(_, _) | Type::Unknown | Type::Option(_) => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{target}`"),
+            )),
+            Type::Bytes | Type::Date | Type::Time | Type::Duration => Err(self.runtime_error(
+                span,
+                format!("json_decode does not support target type `{target}`"),
+            )),
+        }
+    }
+
+    fn json_decode_string(
+        &self,
+        value: &serde_json::Value,
+        target: &Type,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        value
+            .as_str()
+            .map(|value| Value::String(value.to_owned()))
+            .ok_or_else(|| self.json_type_error(&target.to_string(), value, span))
+    }
+
+    fn json_decode_record(
+        &self,
+        value: &serde_json::Value,
+        record: &RecordDef,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        let Some(object) = value.as_object() else {
+            return Err(self.json_type_error(&format!("{} object", record.name), value, span));
+        };
+        for field in object.keys() {
+            if !record
+                .fields
+                .iter()
+                .any(|candidate| candidate.name == *field)
+            {
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "json_decode found unknown field `{field}` in `{}`",
+                        record.name
+                    ),
+                ));
+            }
+        }
+        let mut fields = HashMap::new();
+        for field in &record.fields {
+            let Some(value) = object.get(&field.name) else {
+                if matches!(field.ty, Type::Option(_)) {
+                    fields.insert(field.name.clone(), Value::Option(None));
+                    continue;
+                }
+                return Err(self.runtime_error(
+                    span,
+                    format!(
+                        "json_decode is missing field `{}` in `{}`",
+                        field.name, record.name
+                    ),
+                ));
+            };
+            fields.insert(
+                field.name.clone(),
+                self.json_decode_value(value, &field.ty, span)?,
+            );
+        }
+        Ok(Value::Object {
+            type_name: record.name.clone(),
+            fields,
+        })
+    }
+
+    fn json_type_error(
+        &self,
+        expected: &str,
+        value: &serde_json::Value,
+        span: Span,
+    ) -> RuntimeError {
+        self.runtime_error(
+            span,
+            format!("json_decode expected {expected}, found JSON value `{value}`"),
+        )
     }
 
     fn run_process(
@@ -5372,6 +5651,8 @@ impl Interpreter {
                             filesystem_policy: self.filesystem_policy.clone(),
                             network_policy: self.network_policy.clone(),
                             process_policy: self.process_policy.clone(),
+                            record_definitions: self.record_definitions.clone(),
+                            type_aliases: self.type_aliases.clone(),
                             active_capabilities: self.active_capabilities.clone(),
                         };
                         let mut child_env = env.clone();
@@ -5464,7 +5745,11 @@ impl Interpreter {
                     }
                 })
                 .ok_or_else(|| self.runtime_error(expr.span, format!("unknown variable `{name}`"))),
-            ExprKind::Call { name, args } => {
+            ExprKind::Call {
+                name,
+                type_args,
+                args,
+            } => {
                 if name == "print" {
                     let value = self.eval(
                         args.first().ok_or_else(|| {
@@ -5659,6 +5944,28 @@ impl Interpreter {
                         );
                     };
                     self.http_get(&url, expr.span).map(Value::String)
+                } else if name == "json_encode" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "json_encode expects exactly one value")
+                        );
+                    }
+                    let value = self.eval(&args[0], env)?;
+                    self.json_encode(&value, expr.span).map(Value::String)
+                } else if name == "json_decode" {
+                    if type_args.len() != 1 || args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "json_decode expects one type argument and one String value",
+                        ));
+                    }
+                    let value = self.eval(&args[0], env)?;
+                    let Value::String(source) = value else {
+                        return Err(
+                            self.runtime_error(args[0].span, "json_decode expects a String value")
+                        );
+                    };
+                    self.json_decode(&source, &type_args[0], expr.span)
                 } else if name == "http_request" {
                     if args.len() != 4 {
                         return Err(self.runtime_error(
@@ -6647,6 +6954,84 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.message.contains("does not allow a body with GET"));
+    }
+
+    #[test]
+    fn decodes_and_encodes_typed_json_records() {
+        let source = r#"
+            struct Address { city: String }
+            struct Customer {
+                name: String
+                address: Address
+                tags: String[]
+                nickname: String?
+            }
+            fn decode(body: String) -> Customer {
+                return json_decode<Customer>(body)
+            }
+            fn encode(customer: Customer) -> String {
+                return json_encode(customer)
+            }
+            fn main() { }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let decoded = execute_function(
+            &program,
+            "decode",
+            vec![Value::String(
+                r#"{"name":"Anna","address":{"city":"Berlin"},"tags":["vip","de"]}"#.into(),
+            )],
+            None,
+        )
+        .unwrap();
+        let Value::Object { fields, .. } = &decoded else {
+            panic!("expected decoded Customer object");
+        };
+        assert_eq!(fields.get("name"), Some(&Value::String("Anna".into())));
+        assert_eq!(fields.get("nickname"), Some(&Value::Option(None)));
+        let Value::Object {
+            fields: address, ..
+        } = fields.get("address").unwrap()
+        else {
+            panic!("expected decoded Address object");
+        };
+        assert_eq!(address.get("city"), Some(&Value::String("Berlin".into())));
+
+        let encoded = execute_function(&program, "encode", vec![decoded], None).unwrap();
+        let Value::String(encoded) = encoded else {
+            panic!("expected JSON string");
+        };
+        let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(json["name"], "Anna");
+        assert_eq!(json["address"]["city"], "Berlin");
+        assert_eq!(json["tags"][0], "vip");
+        assert!(json["nickname"].is_null());
+    }
+
+    #[test]
+    fn rejects_json_decode_unknown_record_field() {
+        let source = "struct Customer { name: String } fn decode(body: String) -> Customer { return json_decode<Customer>(body) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute_function(
+            &program,
+            "decode",
+            vec![Value::String(r#"{"name":"Anna","admin":true}"#.into())],
+            None,
+        )
+        .unwrap_err();
+        assert!(error.message.contains("unknown field `admin`"));
+    }
+
+    #[test]
+    fn rejects_json_decode_without_target_type() {
+        let source = "fn decode(body: String) -> String { return json_decode(body) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("exactly one type argument")));
     }
 
     #[test]

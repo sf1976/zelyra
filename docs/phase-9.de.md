@@ -121,9 +121,9 @@ Die Allowlist vergleicht Host oder Host-mit-Port exakt. Ohne Abschnitt
 `[network]` sind in einem Projekt keine Hosts erlaubt. Der Transport
 unterstützt `http://` und `https://`; die Zertifikatsprüfung über Rustls ist
 standardmäßig aktiviert. Es werden keine Redirects verfolgt und Antwortgröße
-sowie gesamte Anfragezeit begrenzt. Die API bleibt bewusst auf GET und
-UTF-8-Response-Bodies beschränkt; Request-Header, Request-Bodies und
-umfangreichere HTTP-Funktionen folgen später.
+sowie gesamte Anfragezeit begrenzt. Der Helper `http_get` bleibt die einfache
+GET-Komfort-API; für Request-Header, Request-Bodies oder den Response-Status
+wird `http_request` verwendet.
 
 Für typisierte Anfragen gibt es `http_request`:
 
@@ -143,6 +143,32 @@ Header werden als Strings im Format `Name: value` übergeben, der Body ist
 `String?`. Die zurückgegebene `HttpResponse` besitzt die typisierten Felder
 `status: Int`, `headers: String[]` und `body: String`. Redirects bleiben
 deaktiviert; GET- und HEAD-Anfragen dürfen keinen Body enthalten.
+
+JSON-Werte können in geprüfte Zelyra-Werte umgewandelt werden und umgekehrt.
+Records und verschachtelte Felder werden gegen das deklarierte Schema geprüft;
+unbekannte oder fehlende Pflichtfelder sind Laufzeitfehler:
+
+~~~zelyra
+struct Customer {
+    name: String
+    tags: String[]
+    nickname: String?
+}
+
+fn decode_customer(body: String) -> Customer {
+    return json_decode<Customer>(body)
+}
+
+fn encode_customer(customer: Customer) -> String {
+    return json_encode(customer)
+}
+~~~
+
+`json_decode<Typ>(text)` benötigt genau ein Zieltypargument. Unterstützt werden
+Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
+`json_encode` serialisiert dieselben Werte; eine nicht vorhandene Option wird
+zu JSON `null`. Ungültiges JSON, Typfehler, unbekannte Record-Felder und
+fehlende Pflichtfelder werden als ausdrückliche Laufzeitfehler gemeldet.
 
 Die Process-Capability stellt eine bewusst enge Befehls-API bereit:
 

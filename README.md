@@ -80,6 +80,8 @@ Implemented today:
 - http_get(url) through the Network capability with project host allowlists,
   timeouts, and response-size limits;
 - http_request(method, url, headers, body) with typed HttpResponse values;
+- json_encode(value) and json_decode<Type>(text) for checked JSON conversion
+  of records, arrays, options, and scalar values;
 - run_process(command, args) through Process with an exact command allowlist,
   no shell, timeout, and bounded output;
 - initial runtime-checked function contracts with `requires` and `ensures`;

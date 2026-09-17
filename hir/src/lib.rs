@@ -183,6 +183,7 @@ pub enum HirExprKind {
     Call {
         name: String,
         function: Option<FunctionId>,
+        type_args: Vec<Type>,
         args: Vec<HirExpr>,
     },
     Unary {
@@ -535,6 +536,7 @@ impl<'a> Resolver<'a> {
                 None if name == "None" => HirExprKind::Call {
                     name: name.clone(),
                     function: None,
+                    type_args: Vec::new(),
                     args: Vec::new(),
                 },
                 None => {
@@ -542,7 +544,11 @@ impl<'a> Resolver<'a> {
                     HirExprKind::Local(LocalId(usize::MAX))
                 }
             },
-            ExprKind::Call { name, args } => {
+            ExprKind::Call {
+                name,
+                type_args,
+                args,
+            } => {
                 let function = self.functions.get(name).copied();
                 if function.is_none()
                     && !matches!(
@@ -561,6 +567,8 @@ impl<'a> Resolver<'a> {
                             | "random_int"
                             | "http_get"
                             | "http_request"
+                            | "json_encode"
+                            | "json_decode"
                             | "run_process"
                             | "read_text"
                             | "write_text"
@@ -573,6 +581,7 @@ impl<'a> Resolver<'a> {
                 HirExprKind::Call {
                     name: name.clone(),
                     function,
+                    type_args: type_args.clone(),
                     args: args.iter().map(|arg| self.expr(arg)).collect(),
                 }
             }
@@ -675,6 +684,33 @@ mod tests {
             hir.functions[0].body.statements[6],
             HirStmt::For { ref name, .. } if name == "item"
         ));
+    }
+
+    #[test]
+    fn preserves_typed_json_call_arguments() {
+        let program = parse(
+            &lex("struct Customer { name: String } fn main() { customer = json_decode<Customer>(\"{}\") }").unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        let HirStmt::Let {
+            value:
+                HirExpr {
+                    kind:
+                        HirExprKind::Call {
+                            ref name,
+                            ref type_args,
+                            ..
+                        },
+                    ..
+                },
+            ..
+        } = &hir.functions[0].body.statements[0]
+        else {
+            panic!("expected typed JSON call");
+        };
+        assert_eq!(name, "json_decode");
+        assert_eq!(type_args, &[Type::Named("Customer".into())]);
     }
 
     #[test]

@@ -1,0 +1,24 @@
+struct Address {
+    city: String
+}
+
+struct Customer {
+    name: String
+    address: Address
+    tags: String[]
+    nickname: String?
+}
+
+fn decode_customer(body: String) -> Customer {
+    return json_decode<Customer>(body)
+}
+
+fn encode_customer(customer: Customer) -> String {
+    return json_encode(customer)
+}
+
+fn main() {
+    payload = "{\"name\":\"Anna\",\"address\":{\"city\":\"Berlin\"},\"tags\":[\"vip\"]}"
+    customer = decode_customer(payload)
+    print(encode_customer(customer))
+}
