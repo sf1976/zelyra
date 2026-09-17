@@ -54,9 +54,12 @@ there. A missing entry or `false` value is denied by `zelyra check`, `build`,
 `run`, and `serve`. Standalone source files without a project file retain the
 single-file development behavior and only receive declaration checking.
 
-This phase does not yet grant operating-system privileges or implement network
-and file APIs. Runtime capability enforcement for those APIs remains future
-work.
+This phase does not yet implement network or file APIs, and it does not grant
+operating-system privileges. Runtime capability boundaries are nevertheless
+enforced: a function call with a project grant set is denied unless the
+function's declared capabilities are granted, and native SQL is denied unless
+the current function declares `Database`. The CLI passes the grants from
+`zelyra.toml` to `run`, `serve`, and executable API handlers.
 
 The first structured-concurrency slice is available through `parallel` and
 `await`:

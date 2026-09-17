@@ -56,9 +56,13 @@ aktiviert sein. Ein fehlender Eintrag oder der Wert `false` wird von
 ohne Projektdatei behalten das Entwicklungsverhalten und prüfen nur die
 Deklaration.
 
-Diese Phase vergibt noch keine Betriebssystemrechte und implementiert noch
-keine Netzwerk- oder Datei-APIs. Runtime-Durchsetzung für diese APIs bleibt
-eine zukünftige Aufgabe.
+Diese Phase implementiert noch keine Netzwerk- oder Datei-APIs und vergibt
+keine Betriebssystemrechte. Capability-Grenzen werden zur Laufzeit dennoch
+durchgesetzt: Ein Funktionsaufruf mit Projektfreigaben wird abgewiesen, wenn
+die deklarierten Capabilities der Funktion nicht freigegeben sind; natives SQL
+wird abgewiesen, wenn die aktuelle Funktion nicht `Database` deklariert. Die
+CLI übergibt die Freigaben aus `zelyra.toml` an `run`, `serve` und ausführbare
+API-Handler.
 
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:

@@ -69,6 +69,8 @@ Heute implementiert:
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
+- Runtime-Durchsetzung deklarierter Funktions-Capabilities und nativer
+  SQL-Zugriffe, wenn die CLI Projektfreigaben übergibt;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
@@ -397,9 +399,10 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
 9. Capabilities und Contracts — erste Deklarationen, statische Prüfungen,
-   Runtime-Contracts, begrenzte symbolische Verifikation sowie ein erster
-   `parallel`/`await`-Baustein für strukturierte Nebenläufigkeit sind vorhanden;
-   Runtime-Rechte und allgemeine formale Verifikation folgen.
+   Runtime-Contracts, begrenzte symbolische Verifikation,
+   Runtime-Capability-Grenzen sowie ein erster `parallel`/`await`-Baustein für
+   strukturierte Nebenläufigkeit sind vorhanden; Betriebssystemrechte und
+   allgemeine formale Verifikation folgen.
 10. Typisierte API-Deklarationen, ausführbare Handler, API-Authentifizierung
     und Berechtigungen sowie OpenAPI-3.0.3-Erzeugung sind vorhanden; Client
     State, WebAssembly und Optimierungsschnittstellen folgen.

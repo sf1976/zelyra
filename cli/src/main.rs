@@ -18,9 +18,9 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
-    check, check_apis, check_capabilities_with_grants, execute, execute_function,
-    execute_with_database, verify as verify_program, Value, VerificationResult, VerificationStatus,
-    KNOWN_CAPABILITIES,
+    check, check_apis, check_capabilities_with_grants, execute_function_with_capabilities,
+    execute_with_capabilities, execute_with_database_and_capabilities, verify as verify_program,
+    Value, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
@@ -48,9 +48,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.13\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.15\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.13\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.15\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -70,7 +70,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.13\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.15\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -1646,6 +1646,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if validate_capabilities(&path, &program).is_err() {
         return ExitCode::from(1);
     }
+    let capability_grants = match project_capability_grants(&path) {
+        Ok(grants) => grants,
+        Err(error) => {
+            diagnostic(&path, "E-CAP-002", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if program.pages.is_empty()
         && program.forms.is_empty()
         && program.cruds.is_empty()
@@ -1793,7 +1800,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
         });
     }
-    let api_routes = generated_api_routes(&program);
+    let api_routes = generated_api_routes(&program, capability_grants.as_ref());
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
         .with_apis(api_routes)
@@ -1911,7 +1918,10 @@ fn generated_crud_form(
     }
 }
 
-fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
+fn generated_api_routes(
+    program: &zelyra_ast::Program,
+    capability_grants: Option<&HashSet<String>>,
+) -> Vec<ApiRoute> {
     let database_url = env::var("DATABASE_URL").ok();
     program
         .apis
@@ -1921,6 +1931,7 @@ fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
             let api = api.clone();
             let program = program.clone();
             let database_url = database_url.clone();
+            let capability_grants = capability_grants.cloned();
             let requires_auth = api.requires_auth;
             let permissions = api.permissions.clone();
             Some(
@@ -1928,13 +1939,14 @@ fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
                     api.method.clone(),
                     api.path.clone(),
                     move |request, path_params| {
-                        dispatch_api(
+                        dispatch_api_with_capabilities(
                             &program,
                             &api,
                             &handler,
                             request,
                             path_params,
                             database_url.as_deref(),
+                            capability_grants.as_ref(),
                         )
                     },
                 )
@@ -1944,6 +1956,7 @@ fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
         .collect()
 }
 
+#[cfg(test)]
 fn dispatch_api(
     program: &zelyra_ast::Program,
     api: &zelyra_ast::ApiDef,
@@ -1951,6 +1964,26 @@ fn dispatch_api(
     request: &zelyra_web::Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+) -> Response {
+    dispatch_api_with_capabilities(
+        program,
+        api,
+        handler,
+        request,
+        path_params,
+        database_url,
+        None,
+    )
+}
+
+fn dispatch_api_with_capabilities(
+    program: &zelyra_ast::Program,
+    api: &zelyra_ast::ApiDef,
+    handler: &str,
+    request: &zelyra_web::Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+    capability_grants: Option<&HashSet<String>>,
 ) -> Response {
     let values = if matches!(api.method.as_str(), "GET" | "DELETE") {
         request.target.split_once('?').map_or_else(
@@ -1991,7 +2024,13 @@ fn dispatch_api(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
-    match execute_function(program, handler, arguments, database_url) {
+    match execute_function_with_capabilities(
+        program,
+        handler,
+        arguments,
+        database_url,
+        capability_grants,
+    ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
     }
@@ -2489,9 +2528,18 @@ fn main() -> ExitCode {
             }
         }
         "run" => match validate(&path).and_then(|program| {
+            let grants = match project_capability_grants(&path) {
+                Ok(grants) => grants,
+                Err(error) => {
+                    diagnostic(&path, "E-CAP-002", &error, 1, 1);
+                    return Err(());
+                }
+            };
             let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => execute_with_database(&program, &database_url),
-                Err(_) => execute(&program),
+                Ok(database_url) => {
+                    execute_with_database_and_capabilities(&program, &database_url, grants.as_ref())
+                }
+                Err(_) => execute_with_capabilities(&program, grants.as_ref()),
             };
             result.map_err(|error| {
                 diagnostic(

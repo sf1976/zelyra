@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.13"
+version = "0.1.15"
 zelyra = "0.1"
 
 [capabilities]
@@ -617,8 +617,9 @@ database = true
 network = false
 ~~~
 
-Static checking is implemented. A complete operating-system sandbox for every
-capability is not yet available.
+Static checking and runtime enforcement at function and native-SQL boundaries
+are implemented when project grants are supplied. A complete operating-system
+sandbox for every capability is not yet available.
 
 ## 15. Contracts and verification
 
@@ -724,7 +725,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.13"
+version = "0.1.15"
 zelyra = "0.1"
 
 [capabilities]

@@ -64,6 +64,8 @@ Das aktuelle Repository enthält:
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
+- Runtime-Durchsetzung von Funktions-Capabilities und nativen SQL-Grenzen beim
+  Ausführen mit Projektfreigaben;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -76,7 +78,7 @@ Das aktuelle Repository enthält:
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
 Login-Drosselung, Passwortverwaltungs-Kommandos, umfangreichere fachliche
 Fehlerwerte, weitergehende formale Verifikation,
-Runtime-Capability-Durchsetzung, Abbruch laufender Branches,
+Betriebssystem-Integration für Capabilities, Abbruch laufender Branches,
 Datenbank-Pool-Integration für parallele Arbeit und Produktionspaketierung.
 
 ## 1. Voraussetzungen
@@ -263,7 +265,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.13"
+version = "0.1.15"
 zelyra = "0.1"
 
 [capabilities]

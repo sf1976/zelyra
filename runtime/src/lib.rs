@@ -4230,14 +4230,29 @@ enum Flow {
 }
 
 pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, None)
+    execute_internal(program, None, None)
 }
 
 pub fn execute_with_database(
     program: &Program,
     database_url: &str,
 ) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, Some(database_url.to_owned()))
+    execute_internal(program, Some(database_url.to_owned()), None)
+}
+
+pub fn execute_with_capabilities(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, None, grants.cloned())
+}
+
+pub fn execute_with_database_and_capabilities(
+    program: &Program,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, Some(database_url.to_owned()), grants.cloned())
 }
 
 pub fn execute_function(
@@ -4245,6 +4260,16 @@ pub fn execute_function(
     name: &str,
     args: Vec<Value>,
     database_url: Option<&str>,
+) -> Result<Value, RuntimeError> {
+    execute_function_with_capabilities(program, name, args, database_url, None)
+}
+
+pub fn execute_function_with_capabilities(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
 ) -> Result<Value, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
@@ -4255,6 +4280,8 @@ pub fn execute_function(
         output: Vec::new(),
         steps: 0,
         database_url: database_url.map(str::to_owned),
+        granted_capabilities: grants.cloned(),
+        active_capabilities: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
 }
@@ -4262,6 +4289,7 @@ pub fn execute_function(
 fn execute_internal(
     program: &Program,
     database_url: Option<String>,
+    granted_capabilities: Option<HashSet<String>>,
 ) -> Result<Vec<String>, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
@@ -4272,6 +4300,8 @@ fn execute_internal(
         output: Vec::new(),
         steps: 0,
         database_url,
+        granted_capabilities,
+        active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
     Ok(interpreter.output)
@@ -4282,6 +4312,8 @@ struct Interpreter {
     output: Vec<String>,
     steps: usize,
     database_url: Option<String>,
+    granted_capabilities: Option<HashSet<String>>,
+    active_capabilities: Vec<HashSet<String>>,
 }
 
 impl Interpreter {
@@ -4290,6 +4322,36 @@ impl Interpreter {
             message: message.into(),
             span,
         }
+    }
+    fn require_runtime_capability(
+        &self,
+        capability: &str,
+        operation: &str,
+        span: Span,
+    ) -> Result<(), RuntimeError> {
+        let declared = self
+            .active_capabilities
+            .last()
+            .is_some_and(|capabilities| capabilities.contains(capability));
+        if !declared {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "runtime capability denied: {operation} requires `{capability}` in the current function"
+                ),
+            ));
+        }
+        if self
+            .granted_capabilities
+            .as_ref()
+            .is_some_and(|grants| !grants.contains(capability))
+        {
+            return Err(self.runtime_error(
+                span,
+                format!("runtime capability denied: `{capability}` is not granted"),
+            ));
+        }
+        Ok(())
     }
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
         let function = self
@@ -4306,38 +4368,56 @@ impl Interpreter {
                 ),
             ));
         }
-        let mut env = Environment::new();
-        for (param, value) in function.params.iter().zip(args) {
-            env.declare(param.name.clone(), value, false);
-        }
-        for contract in &function.requires {
-            let value = self.eval(contract, &mut env)?;
-            let condition = self.expect_bool(value, contract.span)?;
-            if !condition {
+        if let Some(grants) = &self.granted_capabilities {
+            if let Some(capability) = function
+                .capabilities
+                .iter()
+                .find(|capability| !grants.contains(*capability))
+            {
                 return Err(self.runtime_error(
-                    contract.span,
-                    format!("precondition failed for function `{name}`"),
+                    function.span,
+                    format!("runtime capability denied: function `{name}` requires `{capability}`"),
                 ));
             }
         }
-        let result = match self.exec_block(&function.body, &mut env)? {
-            Flow::Return(value) => value,
-            Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
-        };
-        if !function.ensures.is_empty() {
-            env.declare("result".into(), result.clone(), false);
-            for contract in &function.ensures {
+        self.active_capabilities
+            .push(function.capabilities.iter().cloned().collect());
+        let result = (|| {
+            let mut env = Environment::new();
+            for (param, value) in function.params.iter().zip(args) {
+                env.declare(param.name.clone(), value, false);
+            }
+            for contract in &function.requires {
                 let value = self.eval(contract, &mut env)?;
                 let condition = self.expect_bool(value, contract.span)?;
                 if !condition {
                     return Err(self.runtime_error(
                         contract.span,
-                        format!("postcondition failed for function `{name}`"),
+                        format!("precondition failed for function `{name}`"),
                     ));
                 }
             }
-        }
-        Ok(result)
+            let result = match self.exec_block(&function.body, &mut env)? {
+                Flow::Return(value) => value,
+                Flow::Continue | Flow::LoopContinue | Flow::Break => Value::Unit,
+            };
+            if !function.ensures.is_empty() {
+                env.declare("result".into(), result.clone(), false);
+                for contract in &function.ensures {
+                    let value = self.eval(contract, &mut env)?;
+                    let condition = self.expect_bool(value, contract.span)?;
+                    if !condition {
+                        return Err(self.runtime_error(
+                            contract.span,
+                            format!("postcondition failed for function `{name}`"),
+                        ));
+                    }
+                }
+            }
+            Ok(result)
+        })();
+        self.active_capabilities.pop();
+        result
     }
     fn check_loop_invariants(
         &mut self,
@@ -4572,6 +4652,8 @@ impl Interpreter {
                             output: Vec::new(),
                             steps: 0,
                             database_url: self.database_url.clone(),
+                            granted_capabilities: self.granted_capabilities.clone(),
+                            active_capabilities: self.active_capabilities.clone(),
                         };
                         let mut child_env = env.clone();
                         std::thread::spawn(move || {
@@ -4834,6 +4916,7 @@ impl Interpreter {
                 let ExprKind::Sql { query, .. } = &expr.kind else {
                     unreachable!();
                 };
+                self.require_runtime_capability("Database", "SQL access", expr.span)?;
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(
                         self.runtime_error(expr.span, "SQL execution requires a database runtime")
@@ -5293,6 +5376,41 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("not enabled by the project")));
+    }
+
+    #[test]
+    fn enforces_runtime_capability_for_called_function() {
+        let program =
+            parse(&lex("fn send() uses Network { print(1) } fn main() { send() }").unwrap())
+                .unwrap();
+        let grants = HashSet::new();
+        let error = execute_with_capabilities(&program, Some(&grants)).unwrap_err();
+        assert!(error.message.contains("function `send` requires `Network`"));
+    }
+
+    #[test]
+    fn enforces_runtime_database_capability_before_connecting() {
+        let program = parse(&lex("fn main() { rows = sql<Int> { SELECT 1 } }").unwrap()).unwrap();
+        let grants = HashSet::new();
+        let error = execute_with_database_and_capabilities(
+            &program,
+            "mariadb://invalid:invalid@127.0.0.1:1/invalid",
+            Some(&grants),
+        )
+        .unwrap_err();
+        assert!(error
+            .message
+            .contains("SQL access requires `Database` in the current function"));
+    }
+
+    #[test]
+    fn accepts_runtime_capability_grant() {
+        let program = parse(&lex("fn main() uses Network { print(1) }").unwrap()).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        assert_eq!(
+            execute_with_capabilities(&program, Some(&grants)).unwrap(),
+            ["1"]
+        );
     }
 
     #[test]

@@ -4,6 +4,41 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.15 — 2026-09-17
+
+### Added
+
+- Runtime capability enforcement for function calls and native SQL access.
+- New runtime APIs for passing project capability grants to program and API
+  execution.
+- CLI `run` and `serve` now pass the grants from `zelyra.toml` into runtime
+  execution, including executable API handlers.
+- Added positive and negative runtime enforcement tests and synchronized the
+  German and English documentation.
+
+### Known limitations
+
+- Network, file-system, process, clock, and random host APIs are not exposed
+  yet; operating-system integration remains future work.
+
+## 0.1.14 — 2026-09-17
+
+### Added
+
+- Runtime capability enforcement for function calls when project grants are
+  supplied.
+- Native SQL now checks the current function's `Database` capability directly
+  before attempting a database connection.
+- CLI `run`, `serve`, and executable API handlers now pass the grants from
+  `zelyra.toml` into the runtime.
+- Added positive and negative runtime capability tests and synchronized German
+  and English documentation.
+
+### Known limitations
+
+- Network, file-system, process, clock, and random host APIs are not exposed by
+  the runtime yet; operating-system integration remains future work.
+
 ## 0.1.13 — 2026-09-17
 
 ### Added

@@ -68,6 +68,8 @@ Implemented today:
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
+- runtime enforcement of declared function capabilities and native SQL access
+  when project grants are supplied by the CLI;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches
@@ -391,9 +393,10 @@ The long-term specification is organized into these phases:
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities and contracts — initial declarations, static checks, runtime
-   contracts, limited symbolic verification, and an initial `parallel`/`await`
-   structured-concurrency slice are implemented; runtime privilege enforcement
-   and general formal verification remain.
+   contracts, limited symbolic verification, runtime capability boundaries,
+   and an initial `parallel`/`await` structured-concurrency slice are
+   implemented; operating-system privilege integration and general formal
+   verification remain.
 10. Typed API declarations, executable handlers, API authentication and
     permissions, and OpenAPI 3.0.3 generation are implemented; client state,
     WebAssembly, and optimization interfaces remain.

@@ -60,6 +60,8 @@ The current repository contains:
 - record literals and checked field access for nested values;
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
+- runtime enforcement of function capabilities and native SQL boundaries when
+  running with project grants;
 - runtime-checked function contracts using `requires` and `ensures`.
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
@@ -70,7 +72,7 @@ The current repository contains:
 
 The following are not complete yet: full CRUD generation, database roles, login
 throttling, password-management commands, richer domain-error values, broader
-formal verification, runtime capability enforcement, cancellation, database
+formal verification, operating-system capability integration, cancellation, database
 pool integration for parallel work, and production packaging.
 
 ## 1. Requirements
@@ -254,7 +256,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.13"
+version = "0.1.15"
 zelyra = "0.1"
 
 [capabilities]
