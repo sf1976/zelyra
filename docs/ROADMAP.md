@@ -104,8 +104,8 @@ under evaluation.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
   declared columns, typed filters, search, sorting, pagination, URL state, and
   escaping are available for table- and struct-backed result types.
-- [~] Components support one default slot and nested component composition;
-  multiple named slots, fallback content, and nested views remain planned.
+- [~] Components support default and named slots plus nested composition;
+  fallback content and nested views remain planned.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.
 - [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,

@@ -40,7 +40,7 @@ compiler and repository release.
   `zelyra audit export` with bounded limits.
 - Added structural audit verification and explicitly confirmed, transactional
   audit pruning through `zelyra audit verify` and `zelyra audit prune`.
-- Added one default `<slot />` for reusable components, including nested
+- Added default and named slots for reusable components, including nested
   component composition and compile-time rejection of unconsumed child content.
 - Added typed `tableview` filters with safe equality, text, numeric, boolean,
   and NULL operators, generated controls, URL state, and validation.

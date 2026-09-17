@@ -264,9 +264,11 @@ page "/dashboard" {
 }
 ~~~
 
-Verschachtelte Komponenten werden von innen nach außen erweitert. Inhalt darf
-nur an Komponenten übergeben werden, die `<slot />` enthalten; ungenutzter
-Inhalt wird abgelehnt.
+Komponenten können mit `<slot name="header" />` auch benannte Slots deklarieren;
+Aufrufer übergeben sie mit Blöcken wie
+`<slot name="header">...</slot>`. Verschachtelte Komponenten werden von innen
+nach außen erweitert, unbekannter oder ungenutzter Inhalt wird abgelehnt. Siehe
+`examples/component_slots.zyl`.
 
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
 verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und

@@ -1,0 +1,21 @@
+component DashboardPanel {
+    html {
+        <section class="panel">
+            <header><slot name="header" /></header>
+            <main><slot /></main>
+        </section>
+    }
+}
+
+page "/dashboard" {
+    html {
+        <DashboardPanel>
+            <slot name="header"><h1>Dashboard</h1></slot>
+            <p>Reusable view content.</p>
+        </DashboardPanel>
+    }
+}
+
+fn main() {
+    print("Run: zelyra serve examples/component_slots.zyl")
+}

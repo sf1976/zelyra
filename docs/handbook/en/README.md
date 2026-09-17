@@ -439,7 +439,7 @@ page "/status" {
 }
 ~~~
 
-Components may also accept child HTML through one default slot:
+Components may accept child HTML through a default slot or named slots:
 
 ~~~zelyra
 component Panel {
@@ -451,12 +451,28 @@ page "/dashboard" {
 }
 ~~~
 
-Nested components are expanded from the inside out. Passing child content to a
-component without `<slot />` is a compile-time error. Multiple named slots are
-planned for a later language revision.
+Named slots are declared and provided explicitly:
 
-Named slots, nested composition, themes, and CRUD view overrides are planned
-extensions.
+~~~zelyra
+component Layout {
+    html { <header><slot name="header" /></header><main><slot /></main> }
+}
+
+page "/dashboard" {
+    html {
+        <Layout>
+            <slot name="header"><h1>Dashboard</h1></slot>
+            <p>Content</p>
+        </Layout>
+    }
+}
+~~~
+
+Nested components are expanded from the inside out. Passing child content to a
+component without a matching default or named `<slot />` is a compile-time
+error. Fallback slot content remains planned.
+
+Themes and CRUD view overrides are planned extensions.
 
 ## 11. Forms
 

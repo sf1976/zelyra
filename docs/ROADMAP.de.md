@@ -102,9 +102,8 @@ noch in Prüfung.
   deklarierten Spalten, typisierten Filtern, Suche, Sortierung, Pagination,
   URL-Zustand und Escaping sind für tabellen- und struct-basierte Ergebnistypen
   verfügbar.
-- [~] Komponenten unterstützen einen Default-Slot und verschachtelte
-  Komposition; mehrere benannte Slots, Fallback-Inhalte und verschachtelte Views
-  bleiben geplant.
+- [~] Komponenten unterstützen Default- und benannte Slots sowie verschachtelte
+  Komposition; Fallback-Inhalte und verschachtelte Views bleiben geplant.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
 - [ ] View-lokales Laden von Daten mit expliziten Query- und Berechtigungsgrenzen.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und

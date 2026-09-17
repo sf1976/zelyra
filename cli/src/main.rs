@@ -424,6 +424,117 @@ fn component_attributes(attributes: &str) -> Result<HashMap<String, String>, Str
     Ok(values)
 }
 
+struct SlotInvocation {
+    name: Option<String>,
+    body: Option<String>,
+    start: usize,
+    end: usize,
+}
+
+fn slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, String> {
+    let mut slots = Vec::new();
+    let mut search_from = 0;
+    while let Some(relative_start) = html[search_from..].find("<slot") {
+        let start = search_from + relative_start;
+        let after_name = start + "<slot".len();
+        if html
+            .as_bytes()
+            .get(after_name)
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+        {
+            search_from = after_name;
+            continue;
+        }
+        let Some(relative_tag_end) = html[after_name..].find('>') else {
+            return Err("slot has an unterminated opening tag".into());
+        };
+        let tag_end = after_name + relative_tag_end;
+        let tag_content = &html[after_name..tag_end];
+        let self_closing = tag_content.trim_end().ends_with('/');
+        let attributes = if self_closing {
+            tag_content.trim_end().trim_end_matches('/').trim_end()
+        } else {
+            tag_content
+        };
+        let attributes = component_attributes(attributes)
+            .map_err(|error| format!("invalid slot declaration: {error}"))?;
+        if attributes.keys().any(|name| name != "name") {
+            return Err("slot supports only the `name` attribute".into());
+        }
+        let name = attributes.get("name").cloned();
+        if self_closing {
+            let end = tag_end + 1;
+            slots.push(SlotInvocation {
+                name,
+                body: None,
+                start,
+                end,
+            });
+            search_from = end;
+        } else {
+            let Some(name) = name else {
+                return Err("content slot blocks require a `name` attribute".into());
+            };
+            let body_start = tag_end + 1;
+            let closing = "</slot>";
+            let Some(relative_closing_start) = html[body_start..].find(closing) else {
+                return Err("slot is missing `</slot>`".into());
+            };
+            let closing_start = body_start + relative_closing_start;
+            let end = closing_start + closing.len();
+            slots.push(SlotInvocation {
+                name: Some(name),
+                body: Some(html[body_start..closing_start].to_owned()),
+                start,
+                end,
+            });
+            search_from = end;
+        }
+    }
+    Ok(slots)
+}
+
+fn declared_component_slots(
+    component: &zelyra_ast::ComponentDef,
+) -> Result<(bool, HashSet<String>), String> {
+    let mut has_default = false;
+    let mut named = HashSet::new();
+    for slot in slot_invocations(&component.html)? {
+        if slot.body.is_some() {
+            return Err("component declarations must use self-closing slots".into());
+        }
+        if let Some(name) = slot.name {
+            if !named.insert(name) {
+                return Err("component declares the same named slot more than once".into());
+            }
+        } else if has_default {
+            return Err("component declares the default slot more than once".into());
+        } else {
+            has_default = true;
+        }
+    }
+    Ok((has_default, named))
+}
+
+fn split_component_body(body: &str) -> Result<(String, HashMap<String, String>), String> {
+    let slots = slot_invocations(body)?;
+    let mut named = HashMap::new();
+    let mut default_body = body.to_owned();
+    for slot in slots.into_iter().rev() {
+        let Some(slot_body) = slot.body else {
+            return Err("component content slots must use opening and closing tags".into());
+        };
+        let Some(name) = slot.name else {
+            return Err("component content slots require a `name` attribute".into());
+        };
+        if named.insert(name, slot_body).is_some() {
+            return Err("the same named slot is provided more than once".into());
+        }
+        default_body.replace_range(slot.start..slot.end, "");
+    }
+    Ok((default_body, named))
+}
+
 fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
     if value.starts_with('{') && value.ends_with('}') {
         return value.len() > 2;
@@ -489,8 +600,24 @@ fn validate_component_template(
                 continue;
             }
         };
+        let (has_default_slot, named_slots) = match declared_component_slots(component) {
+            Ok(slots) => slots,
+            Err(message) => {
+                diagnostic(path, "E-VIEW-011", &message, line, column);
+                valid = false;
+                (false, HashSet::new())
+            }
+        };
         if let Some(body) = body.as_deref() {
-            if !body.trim().is_empty() && !component.html.contains("<slot />") {
+            let (default_body, supplied_named_slots) = match split_component_body(body) {
+                Ok(slots) => slots,
+                Err(message) => {
+                    diagnostic(path, "E-VIEW-012", &message, line, column);
+                    valid = false;
+                    (body.to_owned(), HashMap::new())
+                }
+            };
+            if !default_body.trim().is_empty() && !has_default_slot {
                 diagnostic(
                     path,
                     "E-VIEW-011",
@@ -499,6 +626,18 @@ fn validate_component_template(
                     column,
                 );
                 valid = false;
+            }
+            for slot_name in supplied_named_slots.keys() {
+                if !named_slots.contains(slot_name) {
+                    diagnostic(
+                        path,
+                        "E-VIEW-012",
+                        &format!("component `{name}` has no named slot `{slot_name}`"),
+                        line,
+                        column,
+                    );
+                    valid = false;
+                }
             }
             valid &= validate_component_template(path, program, body, line, column);
         }
@@ -581,15 +720,11 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
-        let slot_count = component.html.matches("<slot />").count();
-        if slot_count > 1 {
+        if let Err(message) = declared_component_slots(component) {
             diagnostic(
                 path,
                 "E-VIEW-011",
-                &format!(
-                    "component `{}` may contain at most one default `<slot />`",
-                    component.name
-                ),
+                &format!("component `{}`: {message}", component.name),
                 component.span.line,
                 component.span.column,
             );
@@ -3674,19 +3809,46 @@ fn render_view_component(
     body: Option<&str>,
 ) -> String {
     let attributes = component_attributes(attributes).expect("view components are validated");
-    component
-        .props
-        .iter()
-        .fold(component.html.clone(), |html, prop| {
-            let value = attributes.get(&prop.name).map_or("", String::as_str);
-            let replacement = if value.starts_with('{') && value.ends_with('}') {
-                value.to_owned()
-            } else {
-                html_escape(value)
-            };
-            html.replace(&format!("{{{}}}", prop.name), &replacement)
-        })
-        .replace("<slot />", body.unwrap_or_default())
+    let (default_body, named_slots) = body
+        .map(split_component_body)
+        .transpose()
+        .expect("view component slots are validated")
+        .unwrap_or_default();
+    let mut template = component.html.clone();
+    let slots = slot_invocations(&template).expect("view component slots are validated");
+    for (index, slot) in slots.into_iter().enumerate().rev() {
+        let replacement = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
+        template.replace_range(slot.start..slot.end, &replacement);
+    }
+    let mut rendered = component.props.iter().fold(template, |html, prop| {
+        let value = attributes.get(&prop.name).map_or("", String::as_str);
+        let replacement = if value.starts_with('{') && value.ends_with('}') {
+            value.to_owned()
+        } else {
+            html_escape(value)
+        };
+        html.replace(&format!("{{{}}}", prop.name), &replacement)
+    });
+    let slots = slot_invocations(&component.html).expect("view component slots are validated");
+    for (index, slot) in slots.into_iter().enumerate() {
+        let marker = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
+        let replacement = slot
+            .name
+            .as_deref()
+            .and_then(|name| named_slots.get(name))
+            .map_or_else(
+                || {
+                    if slot.name.is_none() {
+                        default_body.as_str()
+                    } else {
+                        ""
+                    }
+                },
+                String::as_str,
+            );
+        rendered = rendered.replace(&marker, replacement);
+    }
+    rendered
 }
 
 fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
@@ -4745,6 +4907,49 @@ mod tests {
             }
             page "/status" {
                 html { <Panel><p>Unexpected content</p></Panel> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_components("components.zyl", &program));
+    }
+
+    #[test]
+    fn composes_named_component_slots() {
+        let source = r#"
+            component Layout {
+                html {
+                    <header><slot name="header" /></header>
+                    <main><slot /></main>
+                }
+            }
+            page "/dashboard" {
+                html {
+                    <Layout>
+                        <slot name="header"><h1>Dashboard</h1></slot>
+                        <p>Content</p>
+                    </Layout>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_components("components.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<header><h1>Dashboard</h1></header>"));
+        assert!(html.contains("<main>"));
+        assert!(html.contains("<p>Content</p>"));
+        assert!(!html.contains("<slot"));
+    }
+
+    #[test]
+    fn rejects_unknown_named_component_slots() {
+        let source = r#"
+            component Layout {
+                html { <main><slot name="content" /></main> }
+            }
+            page "/dashboard" {
+                html {
+                    <Layout><slot name="footer"><p>Footer</p></slot></Layout>
+                }
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
