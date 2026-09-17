@@ -56,8 +56,7 @@ there. A missing entry or `false` value is denied by `zelyra check`, `build`,
 `run`, and `serve`. Standalone source files without a project file retain the
 single-file development behavior and only receive declaration checking.
 
-This phase does not yet implement network or file APIs, and it does not grant
-operating-system privileges. Runtime capability boundaries are nevertheless
+This phase does not grant operating-system privileges. Runtime capability boundaries are nevertheless
 enforced: a function call with a project grant set is denied unless the
 function's declared capabilities are granted, and native SQL is denied unless
 the current function declares `Database`. The CLI passes the grants from
@@ -80,8 +79,8 @@ now() requires Clock and returns the current Unix-epoch timestamp in
 milliseconds. env(name) requires Environment and returns None when the
 variable is missing. Neither API logs or exposes values automatically; output
 only occurs when the program explicitly uses print or another application
-operation. Network, file-system, process, and random host APIs remain future
-work.
+operation. File-system and network host APIs require separate resource
+policies.
 
 The Random capability exposes secure integer generation:
 
@@ -93,8 +92,33 @@ fn dice_roll() -> Int uses Random {
 
 Both bounds are inclusive. The runtime uses the operating system's secure
 random source and rejects minimum values greater than maximum values. Random
-values are never logged or printed implicitly. Network, file-system, and
-process APIs still require separate resource and error contracts.
+values are never logged or printed implicitly. Process APIs still require
+separate resource and error contracts.
+
+The first network host API is `http_get`:
+
+~~~zelyra
+fn load_status(url: String) -> String uses Network {
+    return http_get(url)
+}
+~~~
+
+`http_get` requires the `Network` capability and returns the UTF-8 response
+body for a successful HTTP request. Project execution requires an explicit
+allowlist:
+
+~~~toml
+[network]
+allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
+timeout_ms = 5000
+max_response_bytes = 1048576
+~~~
+
+The allowlist matches a host or host-and-port exactly. A project with no
+`[network]` section has no allowed hosts. The initial implementation supports
+only `http://`, does not follow redirects, rejects transfer-encoded responses,
+and limits response size and connection time. HTTPS/TLS and a richer HTTP
+client remain future work.
 
 The FileSystem host APIs are:
 

@@ -58,8 +58,7 @@ aktiviert sein. Ein fehlender Eintrag oder der Wert `false` wird von
 ohne Projektdatei behalten das Entwicklungsverhalten und prüfen nur die
 Deklaration.
 
-Diese Phase implementiert noch keine Netzwerk- oder Datei-APIs und vergibt
-keine Betriebssystemrechte. Capability-Grenzen werden zur Laufzeit dennoch
+Diese Phase vergibt keine Betriebssystemrechte. Capability-Grenzen werden zur Laufzeit dennoch
 durchgesetzt: Ein Funktionsaufruf mit Projektfreigaben wird abgewiesen, wenn
 die deklarierten Capabilities der Funktion nicht freigegeben sind; natives SQL
 wird abgewiesen, wenn die aktuelle Funktion nicht `Database` deklariert. Die
@@ -82,8 +81,8 @@ now() benötigt Clock und liefert den aktuellen Unix-Epoch-Zeitstempel in
 Millisekunden. env(name) benötigt Environment und liefert None, wenn die
 Variable fehlt. Keine der beiden APIs protokolliert oder veröffentlicht Werte
 automatisch; eine Ausgabe erfolgt nur, wenn das Programm ausdrücklich print
-oder eine andere Anwendungsoperation verwendet. Netzwerk-, Datei-, Prozess-
-und Zufalls-APIs folgen in späteren Schritten.
+oder eine andere Anwendungsoperation verwendet. Datei- und Netzwerk-APIs
+benötigen eigene Ressourcenrichtlinien.
 
 Die Random-Capability stellt sichere Ganzzahl-Erzeugung bereit:
 
@@ -96,8 +95,33 @@ fn dice_roll() -> Int uses Random {
 Beide Grenzen sind inklusiv. Die Runtime verwendet die sichere
 Zufallsquelle des Betriebssystems und lehnt Bereiche ab, bei denen das
 Minimum größer als das Maximum ist. Zufallswerte werden niemals automatisch
-protokolliert oder ausgegeben. Netzwerk-, Datei- und Prozess-APIs benötigen
-weiterhin eigene Ressourcen- und Fehlerverträge.
+protokolliert oder ausgegeben. Prozess-APIs benötigen weiterhin eigene
+Ressourcen- und Fehlerverträge.
+
+Die erste Netzwerk-Host-API ist `http_get`:
+
+~~~zelyra
+fn load_status(url: String) -> String uses Network {
+    return http_get(url)
+}
+~~~
+
+`http_get` benötigt die Capability `Network` und liefert den UTF-8-Body einer
+erfolgreichen HTTP-Anfrage. Für Projekte ist zusätzlich eine ausdrückliche
+Host-Allowlist erforderlich:
+
+~~~toml
+[network]
+allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
+timeout_ms = 5000
+max_response_bytes = 1048576
+~~~
+
+Die Allowlist vergleicht Host oder Host-mit-Port exakt. Ohne Abschnitt
+`[network]` sind in einem Projekt keine Hosts erlaubt. Die erste
+Implementierung unterstützt nur `http://`, folgt keinen Redirects, lehnt
+transfer-kodierte Antworten ab und begrenzt Antwortgröße sowie Verbindungszeit.
+HTTPS/TLS und ein umfangreicherer HTTP-Client folgen später.
 
 Die FileSystem-Host-APIs sind:
 

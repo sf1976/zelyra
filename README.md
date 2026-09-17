@@ -77,6 +77,8 @@ Implemented today:
   bounds and runtime rejection of invalid ranges;
 - read_text(path), write_text(path, content), delete_file(path), and
   list_dir(path) through the FileSystem capability with project path roots;
+- http_get(url) through the Network capability with project host allowlists,
+  timeouts, and response-size limits;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches

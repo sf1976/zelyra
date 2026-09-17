@@ -69,6 +69,8 @@ The current repository contains:
   inclusive and an invalid range is a runtime error;
 - read_text(path), write_text(path, content), delete_file(path), and
   list_dir(path) through FileSystem with project path roots;
+- http_get(url) through Network with an explicit host allowlist and bounded
+  timeout and response size;
 - runtime-checked function contracts using `requires` and `ensures`.
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
@@ -263,7 +265,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]

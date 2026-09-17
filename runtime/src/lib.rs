@@ -1,8 +1,10 @@
 use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::io::{Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3052,6 +3054,15 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "http_get" {
+                require_capability(
+                    "Network",
+                    "network access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             } else if name == "read_text" {
                 require_capability(
                     "FileSystem",
@@ -3928,6 +3939,14 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Int, &minimum, args[0].span);
                     self.expect_type(&Type::Int, &maximum, args[1].span);
                     Type::Int
+                } else if name == "http_get" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "http_get expects exactly one String URL");
+                        return Type::Unknown;
+                    }
+                    let url = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &url, args[0].span);
+                    Type::String
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_text expects exactly one String path");
@@ -4301,6 +4320,19 @@ pub struct FileSystemPolicy {
     pub write_roots: Vec<PathBuf>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NetworkPolicy {
+    pub allowed_hosts: Vec<String>,
+    pub timeout_ms: u64,
+    pub max_response_bytes: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct RuntimePolicy {
+    pub filesystem: Option<FileSystemPolicy>,
+    pub network: Option<NetworkPolicy>,
+}
+
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
@@ -4405,7 +4437,23 @@ pub fn execute_with_capabilities_and_filesystem_policy(
     grants: Option<&HashSet<String>>,
     filesystem_policy: Option<&FileSystemPolicy>,
 ) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, None, grants.cloned(), filesystem_policy.cloned())
+    execute_internal(
+        program,
+        None,
+        grants.cloned(),
+        Some(RuntimePolicy {
+            filesystem: filesystem_policy.cloned(),
+            network: None,
+        }),
+    )
+}
+
+pub fn execute_with_capabilities_and_policies(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, None, grants.cloned(), policy.cloned())
 }
 
 pub fn execute_with_database_and_capabilities_and_filesystem_policy(
@@ -4418,7 +4466,24 @@ pub fn execute_with_database_and_capabilities_and_filesystem_policy(
         program,
         Some(database_url.to_owned()),
         grants.cloned(),
-        filesystem_policy.cloned(),
+        Some(RuntimePolicy {
+            filesystem: filesystem_policy.cloned(),
+            network: None,
+        }),
+    )
+}
+
+pub fn execute_with_database_and_capabilities_and_policies(
+    program: &Program,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(
+        program,
+        Some(database_url.to_owned()),
+        grants.cloned(),
+        policy.cloned(),
     )
 }
 
@@ -4436,6 +4501,31 @@ pub fn execute_function(
         None,
         None,
     )
+}
+
+pub fn execute_function_with_capabilities_and_policies(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
+    policy: Option<&RuntimePolicy>,
+) -> Result<Value, RuntimeError> {
+    let mut interpreter = Interpreter {
+        functions: program
+            .functions
+            .iter()
+            .map(|function| (function.name.clone(), function.clone()))
+            .collect(),
+        output: Vec::new(),
+        steps: 0,
+        database_url: database_url.map(str::to_owned),
+        granted_capabilities: grants.cloned(),
+        filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
+        network_policy: policy.and_then(|policy| policy.network.clone()),
+        active_capabilities: Vec::new(),
+    };
+    interpreter.call(name, args, Span::default())
 }
 
 pub fn execute_function_with_capabilities(
@@ -4463,27 +4553,24 @@ pub fn execute_function_with_capabilities_and_filesystem_policy(
     grants: Option<&HashSet<String>>,
     filesystem_policy: Option<&FileSystemPolicy>,
 ) -> Result<Value, RuntimeError> {
-    let mut interpreter = Interpreter {
-        functions: program
-            .functions
-            .iter()
-            .map(|function| (function.name.clone(), function.clone()))
-            .collect(),
-        output: Vec::new(),
-        steps: 0,
-        database_url: database_url.map(str::to_owned),
-        granted_capabilities: grants.cloned(),
-        filesystem_policy: filesystem_policy.cloned(),
-        active_capabilities: Vec::new(),
-    };
-    interpreter.call(name, args, Span::default())
+    execute_function_with_capabilities_and_policies(
+        program,
+        name,
+        args,
+        database_url,
+        grants,
+        Some(&RuntimePolicy {
+            filesystem: filesystem_policy.cloned(),
+            network: None,
+        }),
+    )
 }
 
 fn execute_internal(
     program: &Program,
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
-    filesystem_policy: Option<FileSystemPolicy>,
+    policy: Option<RuntimePolicy>,
 ) -> Result<Vec<String>, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
@@ -4495,7 +4582,8 @@ fn execute_internal(
         steps: 0,
         database_url,
         granted_capabilities,
-        filesystem_policy,
+        filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
+        network_policy: policy.and_then(|policy| policy.network),
         active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
@@ -4509,6 +4597,7 @@ struct Interpreter {
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
     filesystem_policy: Option<FileSystemPolicy>,
+    network_policy: Option<NetworkPolicy>,
     active_capabilities: Vec<HashSet<String>>,
 }
 
@@ -4600,6 +4689,142 @@ impl Interpreter {
                 format!("file-system {operation} denied for {path}: path is outside the configured roots"),
             ))
         }
+    }
+
+    fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
+        let Some(authority_and_path) = url.strip_prefix("http://") else {
+            return Err(self.runtime_error(span, "http_get currently supports only http:// URLs"));
+        };
+        if authority_and_path.is_empty()
+            || authority_and_path.contains('@')
+            || authority_and_path.contains(['\r', '\n'])
+        {
+            return Err(self.runtime_error(span, "http_get received an invalid URL"));
+        }
+        let (authority, target) = authority_and_path
+            .split_once('/')
+            .map_or((authority_and_path, "/".to_owned()), |(authority, path)| {
+                (authority, format!("/{path}"))
+            });
+        let (host, port) = authority
+            .rsplit_once(':')
+            .and_then(|(host, port)| port.parse::<u16>().ok().map(|port| (host, port)))
+            .unwrap_or((authority, 80));
+        if host.is_empty() || host.contains(['/', '?', '#', '[', ']', '\\']) {
+            return Err(self.runtime_error(span, "http_get received an invalid host"));
+        }
+        if let Some(policy) = &self.network_policy {
+            let authority_allowed = policy
+                .allowed_hosts
+                .iter()
+                .any(|allowed| allowed == authority || allowed == host);
+            if !authority_allowed {
+                return Err(self.runtime_error(
+                    span,
+                    format!("network access denied for host `{authority}`"),
+                ));
+            }
+        }
+        let policy = self.network_policy.as_ref();
+        let timeout = Duration::from_millis(policy.map_or(5_000, |policy| policy.timeout_ms));
+        let maximum = policy.map_or(1_048_576, |policy| policy.max_response_bytes);
+        if maximum == 0 {
+            return Err(
+                self.runtime_error(span, "http_get requires a positive maximum response size")
+            );
+        }
+        let addresses = (host, port).to_socket_addrs().map_err(|error| {
+            self.runtime_error(span, format!("network address lookup failed: {error}"))
+        })?;
+        let mut stream = None;
+        let mut last_error = None;
+        for address in addresses {
+            match TcpStream::connect_timeout(&address, timeout) {
+                Ok(candidate) => {
+                    stream = Some(candidate);
+                    break;
+                }
+                Err(error) => last_error = Some(error),
+            }
+        }
+        let mut stream = stream.ok_or_else(|| {
+            self.runtime_error(
+                span,
+                format!(
+                    "network connection to `{authority}` failed: {}",
+                    last_error.map_or_else(
+                        || "no address was available".to_owned(),
+                        |error| error.to_string()
+                    )
+                ),
+            )
+        })?;
+        stream.set_read_timeout(Some(timeout)).map_err(|error| {
+            self.runtime_error(span, format!("network read timeout setup failed: {error}"))
+        })?;
+        stream.set_write_timeout(Some(timeout)).map_err(|error| {
+            self.runtime_error(span, format!("network write timeout setup failed: {error}"))
+        })?;
+        let request =
+            format!("GET {target} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");
+        stream.write_all(request.as_bytes()).map_err(|error| {
+            self.runtime_error(span, format!("network request failed: {error}"))
+        })?;
+        let mut response = Vec::new();
+        stream
+            .take((maximum.saturating_add(65_536)) as u64)
+            .read_to_end(&mut response)
+            .map_err(|error| {
+                self.runtime_error(span, format!("network response failed: {error}"))
+            })?;
+        let Some(header_end) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
+            return Err(self.runtime_error(span, "network response has no valid headers"));
+        };
+        if header_end > 65_536 {
+            return Err(self.runtime_error(span, "network response headers are too large"));
+        }
+        let headers = String::from_utf8_lossy(&response[..header_end]);
+        let status_line = headers.lines().next().unwrap_or_default();
+        let status = status_line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|status| status.parse::<u16>().ok())
+            .ok_or_else(|| self.runtime_error(span, "network response has an invalid status"))?;
+        if !(200..300).contains(&status) {
+            return Err(self.runtime_error(span, format!("http_get received HTTP status {status}")));
+        }
+        if headers.lines().any(|line| {
+            line.split_once(':').is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case("transfer-encoding")
+                    && !value.trim().eq_ignore_ascii_case("identity")
+            })
+        }) {
+            return Err(
+                self.runtime_error(span, "http_get does not support transfer-encoded responses")
+            );
+        }
+        let content_length = headers.lines().find_map(|line| {
+            line.split_once(':').and_then(|(name, value)| {
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+        });
+        if content_length.is_some_and(|content_length| content_length > maximum) {
+            return Err(self.runtime_error(
+                span,
+                format!("network response exceeds the {maximum} byte limit"),
+            ));
+        }
+        let body = &response[header_end + 4..];
+        if body.len() > maximum {
+            return Err(self.runtime_error(
+                span,
+                format!("network response exceeds the {maximum} byte limit"),
+            ));
+        }
+        String::from_utf8(body.to_vec())
+            .map_err(|_| self.runtime_error(span, "network response is not valid UTF-8"))
     }
 
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
@@ -4903,6 +5128,7 @@ impl Interpreter {
                             database_url: self.database_url.clone(),
                             granted_capabilities: self.granted_capabilities.clone(),
                             filesystem_policy: self.filesystem_policy.clone(),
+                            network_policy: self.network_policy.clone(),
                             active_capabilities: self.active_capabilities.clone(),
                         };
                         let mut child_env = env.clone();
@@ -5177,6 +5403,19 @@ impl Interpreter {
                             return Ok(Value::Int(value as i64));
                         }
                     }
+                } else if name == "http_get" {
+                    if args.len() != 1 {
+                        return Err(self
+                            .runtime_error(expr.span, "http_get expects exactly one String URL"));
+                    }
+                    self.require_runtime_capability("Network", "network access", expr.span)?;
+                    let url = self.eval(&args[0], env)?;
+                    let Value::String(url) = url else {
+                        return Err(
+                            self.runtime_error(args[0].span, "http_get expects a String URL")
+                        );
+                    };
+                    self.http_get(&url, expr.span).map(Value::String)
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         return Err(self.runtime_error(
@@ -5634,6 +5873,8 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
+    use std::thread;
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
 
@@ -5905,6 +6146,84 @@ mod tests {
             execute_with_capabilities(&program, Some(&grants)).unwrap(),
             ["1"]
         );
+    }
+
+    #[test]
+    fn requires_network_capability_for_http_get() {
+        let program =
+            parse(&lex("fn main() { print(http_get(\"http://example.test\")) }").unwrap()).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("does not declare capability `Network`")));
+    }
+
+    #[test]
+    fn performs_http_get_with_network_policy() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).unwrap();
+            std::io::Write::write_all(
+                &mut stream,
+                b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+            )
+            .unwrap();
+        });
+        let source =
+            "fn fetch(url: String) -> String uses Network { return http_get(url) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec![format!("127.0.0.1:{port}")],
+                timeout_ms: 1_000,
+                max_response_bytes: 100,
+            }),
+        };
+        let body = execute_function_with_capabilities_and_policies(
+            &program,
+            "fetch",
+            vec![Value::String(format!("http://127.0.0.1:{port}/health"))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        assert_eq!(body, Value::String("hello".into()));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn rejects_http_get_outside_network_allowlist() {
+        let source =
+            "fn fetch() -> String uses Network { return http_get(\"http://example.test\") } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: Vec::new(),
+                timeout_ms: 100,
+                max_response_bytes: 100,
+            }),
+        };
+        let error = execute_function_with_capabilities_and_policies(
+            &program,
+            "fetch",
+            Vec::new(),
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("network access denied"));
     }
 
     #[test]

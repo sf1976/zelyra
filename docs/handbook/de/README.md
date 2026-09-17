@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]
@@ -708,9 +708,30 @@ fn dice_roll() -> Int uses Random {
 ~~~
 
 Der Bereich ist auf beiden Seiten inklusiv. Ungültige Bereiche führen zu
-einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben. Netzwerk-,
-Datei- und Prozess-APIs bleiben geplant, bis ihre Ressourcen- und Fehlerverträge
-definiert sind.
+einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben. Prozess-
+APIs bleiben geplant, bis ihre Ressourcen- und Fehlerverträge definiert sind.
+
+Die erste Network-Host-API ist `http_get`:
+
+~~~zelyra
+fn load_status(url: String) -> String uses Network {
+    return http_get(url)
+}
+~~~
+
+Projekte verwenden eine exakte Host-Allowlist und begrenzte Ressourcen:
+
+~~~toml
+[network]
+allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
+timeout_ms = 5000
+max_response_bytes = 1048576
+~~~
+
+Ohne `[network]` sind in einem Projekt keine Hosts erlaubt. Die erste
+Implementierung ist auf `http://` begrenzt, folgt keinen Redirects, lehnt
+transfer-kodierte Antworten ab und liefert nur erfolgreiche UTF-8-Response-
+Bodies. HTTPS/TLS und ein umfangreicherer HTTP-Client folgen später.
 
 Die FileSystem-Host-APIs sind:
 
@@ -857,7 +878,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]

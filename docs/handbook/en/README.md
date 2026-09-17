@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]
@@ -650,8 +650,30 @@ fn dice_roll() -> Int uses Random {
 ~~~
 
 The range is inclusive on both sides. Invalid ranges fail at runtime, and
-random values are not emitted implicitly. Network, file-system, and process
-APIs remain planned until their resource and error contracts are defined.
+random values are not emitted implicitly. Process APIs remain planned until
+their resource and error contracts are defined.
+
+The first Network host API is `http_get`:
+
+~~~zelyra
+fn load_status(url: String) -> String uses Network {
+    return http_get(url)
+}
+~~~
+
+Project execution uses an exact host allowlist and bounded resources:
+
+~~~toml
+[network]
+allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
+timeout_ms = 5000
+max_response_bytes = 1048576
+~~~
+
+Without `[network]`, a project allows no hosts. The first implementation is
+limited to `http://`, does not follow redirects, rejects transfer-encoded
+responses, and returns only successful UTF-8 response bodies. HTTPS/TLS and a
+richer HTTP client are future work.
 
 The FileSystem host APIs are:
 
@@ -792,7 +814,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]

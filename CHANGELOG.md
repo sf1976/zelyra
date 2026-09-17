@@ -4,6 +4,23 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.24 — 2026-09-17
+
+### Added
+
+- Added the `http_get(url)` Network host API with static and runtime capability
+  enforcement.
+- Added project network policies with exact host allowlists, connection
+  timeouts, and maximum response sizes.
+- Added local HTTP integration tests and synchronized German and English
+  documentation.
+
+### Known limitations
+
+- The first HTTP slice supports only `http://`, successful UTF-8 response
+  bodies, no redirects, and no transfer-encoded responses. HTTPS/TLS and a
+  richer HTTP client remain future work.
+
 ## 0.1.23 — 2026-09-17
 
 ### Added

@@ -73,6 +73,8 @@ Das aktuelle Repository enthält:
   die Grenzen sind inklusiv, ein ungültiger Bereich ist ein Runtime-Fehler;
 - read_text(path), write_text(path, content), delete_file(path) und
   list_dir(path) über FileSystem mit Projektpfadgrenzen;
+- http_get(url) über Network mit ausdrücklicher Host-Allowlist sowie
+  begrenzter Zeit und Antwortgröße;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -272,7 +274,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.23"
+version = "0.1.24"
 zelyra = "0.1"
 
 [capabilities]

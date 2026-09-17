@@ -20,10 +20,10 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
-    execute_function_with_capabilities_and_filesystem_policy,
-    execute_with_capabilities_and_filesystem_policy,
-    execute_with_database_and_capabilities_and_filesystem_policy, verify as verify_program,
-    FileSystemPolicy, Value, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
+    execute_with_database_and_capabilities_and_policies, verify as verify_program,
+    FileSystemPolicy, NetworkPolicy, RuntimePolicy, Value, VerificationResult, VerificationStatus,
+    KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
@@ -51,9 +51,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.23\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.24\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.23\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.24\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -73,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.23\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.24\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -182,6 +182,10 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     }
     if let Err(error) = project_filesystem_policy(path) {
         diagnostic(path, "E-FS-002", &error, 1, 1);
+        return Err(());
+    }
+    if let Err(error) = project_network_policy(path) {
+        diagnostic(path, "E-NET-002", &error, 1, 1);
         return Err(());
     }
     if let Err(errors) = check_apis(&program) {
@@ -1203,7 +1207,7 @@ fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, Stri
 fn parse_string_array(value: &str) -> Result<Vec<String>, String> {
     let value = value.trim();
     if !value.starts_with('[') || !value.ends_with(']') {
-        return Err("filesystem roots must be a TOML string array".into());
+        return Err("value must be a TOML string array".into());
     }
     let inner = value[1..value.len() - 1].trim();
     if inner.is_empty() {
@@ -1217,7 +1221,7 @@ fn parse_string_array(value: &str) -> Result<Vec<String>, String> {
                 .strip_prefix('"')
                 .and_then(|item| item.strip_suffix('"'))
             else {
-                return Err("filesystem roots must contain quoted strings".into());
+                return Err("string arrays must contain quoted strings".into());
             };
             Ok(item.replace("\\\\", "\\").replace("\\\"", "\""))
         })
@@ -1305,6 +1309,82 @@ fn project_filesystem_policy(path: &str) -> Result<Option<FileSystemPolicy>, Str
         read_roots,
         write_roots,
     }))
+}
+
+fn project_network_policy(path: &str) -> Result<Option<NetworkPolicy>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut allowed_hosts = None;
+    let mut timeout_ms = 5_000;
+    let mut max_response_bytes = 1_048_576;
+    let mut seen = HashSet::new();
+    let mut in_network = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_network = line == "[network]";
+            continue;
+        }
+        if !in_network {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid network setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim();
+        if !seen.insert(key) {
+            return Err(format!(
+                "network setting {key} is configured more than once"
+            ));
+        }
+        match key {
+            "allowed_hosts" => allowed_hosts = Some(parse_string_array(raw_value)?),
+            "timeout_ms" => {
+                timeout_ms = raw_value.trim().parse().map_err(|_| {
+                    "network setting timeout_ms must be a positive integer".to_owned()
+                })?;
+                if timeout_ms == 0 {
+                    return Err("network setting timeout_ms must be positive".into());
+                }
+            }
+            "max_response_bytes" => {
+                max_response_bytes = raw_value.trim().parse().map_err(|_| {
+                    "network setting max_response_bytes must be a positive integer".to_owned()
+                })?;
+                if max_response_bytes == 0 {
+                    return Err("network setting max_response_bytes must be positive".into());
+                }
+            }
+            _ => return Err(format!("unknown network setting {key}")),
+        }
+    }
+    Ok(Some(NetworkPolicy {
+        allowed_hosts: allowed_hosts.unwrap_or_default(),
+        timeout_ms,
+        max_response_bytes,
+    }))
+}
+
+fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
+    let filesystem = project_filesystem_policy(path)?;
+    let network = project_network_policy(path)?;
+    if filesystem.is_none() && network.is_none() {
+        Ok(None)
+    } else {
+        Ok(Some(RuntimePolicy {
+            filesystem,
+            network,
+        }))
+    }
 }
 
 fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -1771,10 +1851,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let filesystem_policy = match project_filesystem_policy(&path) {
+    let runtime_policy = match project_runtime_policy(&path) {
         Ok(policy) => policy,
         Err(error) => {
-            diagnostic(&path, "E-FS-002", &error, 1, 1);
+            diagnostic(&path, "E-POLICY-002", &error, 1, 1);
             return ExitCode::from(1);
         }
     };
@@ -1931,7 +2011,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let api_routes = generated_api_routes(
         &program,
         capability_grants.as_ref(),
-        filesystem_policy.as_ref(),
+        runtime_policy.as_ref(),
     );
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
@@ -2054,7 +2134,7 @@ fn generated_crud_form(
 fn generated_api_routes(
     program: &zelyra_ast::Program,
     capability_grants: Option<&HashSet<String>>,
-    filesystem_policy: Option<&FileSystemPolicy>,
+    runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = env::var("DATABASE_URL").ok();
     program
@@ -2066,7 +2146,7 @@ fn generated_api_routes(
             let program = program.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
-            let filesystem_policy = filesystem_policy.cloned();
+            let runtime_policy = runtime_policy.cloned();
             let requires_auth = api.requires_auth;
             let permissions = api.permissions.clone();
             Some(
@@ -2083,7 +2163,7 @@ fn generated_api_routes(
                             ApiRuntimeContext {
                                 database_url: database_url.as_deref(),
                                 capability_grants: capability_grants.as_ref(),
-                                filesystem_policy: filesystem_policy.as_ref(),
+                                runtime_policy: runtime_policy.as_ref(),
                             },
                         )
                     },
@@ -2112,7 +2192,7 @@ fn dispatch_api(
         ApiRuntimeContext {
             database_url,
             capability_grants: None,
-            filesystem_policy: None,
+            runtime_policy: None,
         },
     )
 }
@@ -2121,7 +2201,7 @@ fn dispatch_api(
 struct ApiRuntimeContext<'a> {
     database_url: Option<&'a str>,
     capability_grants: Option<&'a HashSet<String>>,
-    filesystem_policy: Option<&'a FileSystemPolicy>,
+    runtime_policy: Option<&'a RuntimePolicy>,
 }
 
 fn dispatch_api_with_capabilities(
@@ -2171,13 +2251,13 @@ fn dispatch_api_with_capabilities(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
-    match execute_function_with_capabilities_and_filesystem_policy(
+    match execute_function_with_capabilities_and_policies(
         program,
         handler,
         arguments,
         context.database_url,
         context.capability_grants,
-        context.filesystem_policy,
+        context.runtime_policy,
     ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
@@ -2684,24 +2764,24 @@ fn main() -> ExitCode {
                     return Err(());
                 }
             };
-            let filesystem_policy = match project_filesystem_policy(&path) {
+            let runtime_policy = match project_runtime_policy(&path) {
                 Ok(policy) => policy,
                 Err(error) => {
-                    diagnostic(&path, "E-FS-002", &error, 1, 1);
+                    diagnostic(&path, "E-POLICY-002", &error, 1, 1);
                     return Err(());
                 }
             };
             let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => execute_with_database_and_capabilities_and_filesystem_policy(
+                Ok(database_url) => execute_with_database_and_capabilities_and_policies(
                     &program,
                     &database_url,
                     grants.as_ref(),
-                    filesystem_policy.as_ref(),
+                    runtime_policy.as_ref(),
                 ),
-                Err(_) => execute_with_capabilities_and_filesystem_policy(
+                Err(_) => execute_with_capabilities_and_policies(
                     &program,
                     grants.as_ref(),
-                    filesystem_policy.as_ref(),
+                    runtime_policy.as_ref(),
                 ),
             };
             result.map_err(|error| {
@@ -3131,5 +3211,15 @@ mod tests {
             .iter()
             .any(|root| root.ends_with("zelyra")));
         assert!(policy.write_roots.is_empty());
+    }
+
+    #[test]
+    fn defaults_project_network_policy_to_no_allowed_hosts() {
+        let policy = project_network_policy("../examples/filesystem_api.zyl")
+            .unwrap()
+            .unwrap();
+        assert!(policy.allowed_hosts.is_empty());
+        assert_eq!(policy.timeout_ms, 5_000);
+        assert_eq!(policy.max_response_bytes, 1_048_576);
     }
 }

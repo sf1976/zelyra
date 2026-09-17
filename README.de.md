@@ -78,6 +78,8 @@ Heute implementiert:
   inklusive Grenzen und ungültige Bereiche werden zur Laufzeit geprüft;
 - read_text(path), write_text(path, content), delete_file(path) und
   list_dir(path) über die FileSystem-Capability mit Projektpfadgrenzen;
+- http_get(url) über die Network-Capability mit Projekt-Host-Allowlists,
+  Zeitlimits und Antwortgrößenbegrenzung;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
