@@ -87,9 +87,23 @@ Input and runtime failures use the same transport shape, for example:
 ~~~
 
 The declared `errors` block documents possible HTTP responses in OpenAPI. The
-initial runtime does not yet infer application-specific status codes from a
-handler's domain error value; explicit error mapping remains planned.
+When a handler returns `Err("NotFound")`, and `NotFound` is declared with a
+status, the runtime returns that status as a structured JSON error. An
+undeclared error is never guessed and becomes a 500 response.
+
+The handler therefore declares a `Result` when it can return one of these
+application errors:
+
+~~~zelyra
+api GET "/customers/{id}" {
+    handler find_customer
+    input { id: CustomerId }
+    output Result<Customer, String>
+    errors { 404 NotFound }
+}
+~~~
 
 The handler bridge is intentionally small: scalar JSON values are supported;
 typed arrays and nested input objects, generated client bindings, and
-application-specific error mapping remain later Web/API work.
+generated client bindings, and richer domain-error values remain later Web/API
+work.

@@ -52,7 +52,7 @@ Das aktuelle Repository enthält:
   geschützten Routen.
 - typisierte API-Deklarationen mit optionalen ausführbaren Handlern,
   OpenAPI-Erzeugung, Authentifizierungs- und Berechtigungssperren sowie
-  strukturierten JSON-Fehlern.
+  strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung.
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
@@ -63,8 +63,8 @@ Das aktuelle Repository enthält:
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, anwendungsspezifische
-API-Fehlerzuordnung, weitergehende formale Verifikation,
+Login-Drosselung, Passwortverwaltungs-Kommandos, umfangreichere fachliche
+Fehlerwerte, weitergehende formale Verifikation,
 Runtime-Capability-Durchsetzung, strukturierte
 Nebenläufigkeit und Produktionspaketierung.
 

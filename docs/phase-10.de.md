@@ -88,11 +88,23 @@ Eingabe- und Laufzeitfehler verwenden dieselbe Transportstruktur, zum Beispiel:
 {"error":{"code":"BadRequest","message":"missing API input `id`"}}
 ~~~
 
-Der `errors`-Block dokumentiert mögliche HTTP-Antworten in OpenAPI. Die erste
-Laufzeitimplementierung leitet aus einem fachlichen Fehlerwert des Handlers
-noch keinen anwendungsspezifischen Statuscode ab; eine explizite
-Fehlerzuordnung ist geplant.
+Wenn ein Handler `Err("NotFound")` zurückgibt und `NotFound` mit einem Status
+deklariert ist, gibt die Laufzeit diesen Status als strukturierten JSON-Fehler
+zurück. Ein nicht deklarierter Fehler wird niemals erraten und führt zu einer
+500-Antwort.
+
+Der Handler deklariert dafür ein `Result`, wenn er einen dieser fachlichen
+Fehler zurückgeben kann:
+
+~~~zelyra
+api GET "/customers/{id}" {
+    handler find_customer
+    input { id: CustomerId }
+    output Result<Customer, String>
+    errors { 404 NotFound }
+}
+~~~
 
 Die Handler-Brücke bleibt bewusst klein: skalare JSON-Werte werden unterstützt;
 typisierte Arrays und verschachtelte Eingabeobjekte, generierte Client-Bindings
-und anwendungsspezifische Fehlerzuordnung folgen in späteren Web/API-Schritten.
+und umfangreichere fachliche Fehlerwerte folgen in späteren Web/API-Schritten.

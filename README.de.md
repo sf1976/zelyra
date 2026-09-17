@@ -55,7 +55,8 @@ Heute implementiert:
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
-  Berechtigungssperren sowie strukturierten JSON-Fehlern.
+  Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
+  `Result`-Fehlerzuordnung.
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
@@ -77,9 +78,9 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, anwendungsspezifische
-API-Fehlerzuordnung, allgemeine formale Verifikation und Produktionswerkzeuge
-werden noch entwickelt. Siehe die
+Vollständige CRUD-Erzeugung, Datenbankrollen, umfangreichere fachliche
+Fehlerwerte, allgemeine formale Verifikation und Produktionswerkzeuge werden
+noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
 

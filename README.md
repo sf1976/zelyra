@@ -55,7 +55,8 @@ Implemented today:
   HttpOnly sessions, logout, and permission checks.
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
-  permission guards, and structured JSON errors.
+  permission guards, structured JSON errors, and declared `Result` error
+  mapping.
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
@@ -76,9 +77,9 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, database roles, application-specific API error mapping,
-general formal verification, and production deployment tooling are still being
-developed. See the
+Full CRUD generation, database roles, richer domain-error values, general formal
+verification, and production deployment tooling are still being developed. See
+the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
 

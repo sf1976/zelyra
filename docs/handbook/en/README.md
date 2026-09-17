@@ -513,9 +513,10 @@ api GET "/api/machines/{id}" {
 }
 ~~~
 
-Protected API failures use JSON with an error `code` and `message`. The
-declared `errors` block is currently OpenAPI documentation; mapping domain
-errors to those statuses remains future work.
+Protected API failures use JSON with an error `code` and `message`. A handler
+can return `Err("NotFound")` to select a matching status from the declared
+`errors` block; undeclared errors become 500 responses. Richer domain-error
+values remain future work.
 
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
@@ -725,8 +726,7 @@ Major planned areas include:
 - activity, audit, and technical logs;
 - typed connections and secret providers;
 - ODBC and external read-only databases;
-- application-specific API error mapping and richer runtime request/response
-  processing;
+- richer domain-error values and runtime request/response processing;
 - structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.

@@ -566,9 +566,10 @@ api GET "/api/machines/{id}" {
 }
 ~~~
 
-Fehler bei geschützten APIs verwenden JSON mit `code` und `message`. Der
-deklarierte `errors`-Block ist derzeit OpenAPI-Dokumentation; die Zuordnung
-fachlicher Fehler zu diesen Statuscodes folgt später.
+Fehler bei geschützten APIs verwenden JSON mit `code` und `message`. Ein
+Handler kann `Err("NotFound")` zurückgeben, um den passenden Status aus dem
+deklarierten `errors`-Block zu wählen; nicht deklarierte Fehler führen zu 500.
+Umfangreichere fachliche Fehlerwerte folgen später.
 
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
@@ -801,7 +802,7 @@ Die wichtigsten geplanten Bereiche:
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
-- anwendungsspezifische API-Fehlerzuordnung und weitergehende Request-/Response-Verarbeitung zur Laufzeit;
+- umfangreichere fachliche Fehlerwerte und weitergehende Request-/Response-Verarbeitung zur Laufzeit;
 - strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.

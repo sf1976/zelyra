@@ -1463,9 +1463,32 @@ fn dispatch_api(
         }
     }
     match execute_function(program, handler, arguments, database_url) {
-        Ok(value) => Response::json(200, api_json_value(&value)),
+        Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
     }
+}
+
+fn api_result_response(api: &zelyra_ast::ApiDef, value: &Value) -> Response {
+    if let Value::Result(Err(error)) = value {
+        let error_name = error.output();
+        if let Some(declaration) = api
+            .errors
+            .iter()
+            .find(|declaration| declaration.name == error_name)
+        {
+            return api_error_response(
+                declaration.status,
+                &declaration.name,
+                &format!("API handler returned {}", declaration.name),
+            );
+        }
+        return api_error_response(
+            500,
+            "InternalServerError",
+            &format!("unmapped API error `{error_name}`"),
+        );
+    }
+    Response::json(200, api_json_value(value))
 }
 
 fn api_value(value: &str, ty: &Type, program: &zelyra_ast::Program) -> Result<Value, String> {
@@ -1851,6 +1874,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+        assert!(check_apis(&program).is_ok());
         let api = &program.apis[0];
         let request = zelyra_web::parse_request(
             "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n{\"value\":42}",
@@ -1919,6 +1943,39 @@ mod tests {
         let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
         assert_eq!(response.status, 200);
         assert_eq!(response.body, "null");
+    }
+
+    #[test]
+    fn maps_declared_result_errors_to_http_responses() {
+        let program = parse(
+            &lex(
+                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"NotFound\") } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
+        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 404);
+        assert!(response.body.contains("\"code\":\"NotFound\""));
+    }
+
+    #[test]
+    fn returns_internal_error_for_undeclared_result_errors() {
+        let program = parse(
+            &lex(
+                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"Other\") } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
+        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 500);
+        assert!(response.body.contains("InternalServerError"));
+        assert!(response.body.contains("unmapped API error"));
     }
 
     #[test]

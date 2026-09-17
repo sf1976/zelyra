@@ -49,7 +49,8 @@ The current repository contains:
 - a database-backed login with Argon2 password verification, persistent
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
 - typed API declarations with optional executable handlers, OpenAPI generation,
-  authentication and permission guards, and structured JSON errors.
+  authentication and permission guards, structured JSON errors, and declared
+  `Result` error mapping.
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime-checked function contracts using `requires` and `ensures`.
@@ -58,8 +59,8 @@ The current repository contains:
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
 The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, application-specific API error
-mapping, broader formal verification, runtime capability enforcement, structured concurrency,
+throttling, password-management commands, richer domain-error values, broader
+formal verification, runtime capability enforcement, structured concurrency,
 and production packaging.
 
 ## 1. Requirements
