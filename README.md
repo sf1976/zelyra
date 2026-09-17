@@ -50,7 +50,8 @@ Implemented today:
   HTTP redirects.
 - an initial CRUD resource with MariaDB search, configurable list/search/filter
   columns, sorting, pagination, generated Create/Edit forms, and
-  CSRF-protected delete.
+  CSRF-protected delete with separate view/create/edit/delete permissions and
+  backward-compatible permission fallback.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
 - typed API declarations with route/type validation, optional executable
@@ -411,7 +412,7 @@ The long-term specification is organized into these phases:
    relationship selects implemented.
 7. CRUD — list, detail, create, edit, search, filter, sort, pagination,
    configurable columns, relationship labels and selects, and CSRF-protected
-   delete implemented; authorization remains.
+   delete, and separate action permissions implemented.
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities and contracts — initial declarations, static checks, runtime
@@ -450,7 +451,8 @@ The MariaDB authentication integration test from
 `tests/mariadb-auth-e2e.sh` additionally covers login, persistent sessions,
 permission denial, and logout.
 The protected CRUD/API test from `tests/mariadb-protected-e2e.sh` verifies the
-same permission boundary for HTML CRUD and JSON API endpoints.
+permission boundary for HTML CRUD and JSON API endpoints, including separate
+Create, Edit, and Delete permissions.
 
 Please keep German and English user documentation synchronized. Architectural
 decisions should preserve safety, control, and extensibility.

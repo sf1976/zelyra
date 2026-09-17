@@ -141,7 +141,12 @@ pub struct CrudDef {
     pub search: Vec<String>,
     pub filters: Vec<String>,
     pub requires_auth: bool,
+    /// Legacy/default permission(s), used for list/detail and as the fallback
+    /// for actions without an explicit permission scope.
     pub permissions: Vec<String>,
+    pub create_permissions: Vec<String>,
+    pub edit_permissions: Vec<String>,
+    pub delete_permissions: Vec<String>,
     pub span: Span,
 }
 

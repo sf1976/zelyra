@@ -264,6 +264,9 @@ impl<'a> Parser<'a> {
         let mut filters = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
+        let mut create_permissions = Vec::new();
+        let mut edit_permissions = Vec::new();
+        let mut delete_permissions = Vec::new();
 
         if self.at(&TokenKind::LBrace) {
             self.advance();
@@ -294,11 +297,29 @@ impl<'a> Parser<'a> {
                     }
                     TokenKind::Permits => {
                         self.advance();
-                        permissions.push(self.string_value("permission")?);
+                        let scope = match &self.current().kind {
+                            TokenKind::Ident(scope)
+                                if matches!(scope.as_str(), "view" | "create" | "edit" | "delete") =>
+                            {
+                                let scope = scope.clone();
+                                self.advance();
+                                Some(scope)
+                            }
+                            _ => None,
+                        };
+                        let permission = self.string_value("permission")?;
+                        match scope.as_deref() {
+                            Some("create") => create_permissions.push(permission),
+                            Some("edit") => edit_permissions.push(permission),
+                            Some("delete") => delete_permissions.push(permission),
+                            Some("view") | None => permissions.push(permission),
+                            _ => unreachable!("CRUD permission scope was validated above"),
+                        }
                     }
                     _ => {
-                        return self
-                            .error("expected title, list, search, or filter in CRUD definition")
+                        return self.error(
+                            "expected title, list, search, filter, requires auth, or permits in CRUD definition",
+                        )
                     }
                 }
                 self.skip_newlines();
@@ -313,6 +334,9 @@ impl<'a> Parser<'a> {
                 filters,
                 requires_auth,
                 permissions,
+                create_permissions,
+                edit_permissions,
+                delete_permissions,
                 span: start.join(end),
             });
         }
@@ -326,6 +350,9 @@ impl<'a> Parser<'a> {
             filters,
             requires_auth,
             permissions,
+            create_permissions,
+            edit_permissions,
+            delete_permissions,
             span: start.join(table_span),
         })
     }
@@ -1620,6 +1647,9 @@ mod tests {
                 crud Customer -> customers {
                     requires auth
                     permits "customers.view"
+                    permits create "customers.create"
+                    permits edit "customers.edit"
+                    permits delete "customers.delete"
                 }"#)
             .unwrap(),
         )
@@ -1636,6 +1666,24 @@ mod tests {
         );
         assert!(program.cruds[0].requires_auth);
         assert_eq!(program.cruds[0].permissions, ["customers.view"]);
+        assert_eq!(program.cruds[0].create_permissions, ["customers.create"]);
+        assert_eq!(program.cruds[0].edit_permissions, ["customers.edit"]);
+        assert_eq!(program.cruds[0].delete_permissions, ["customers.delete"]);
+    }
+
+    #[test]
+    fn keeps_unscoped_crud_permission_as_legacy_default() {
+        let program = parse(
+            &lex(r#"crud Customer -> customers {
+                    permits view "customers.view"
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.cruds[0].permissions, ["customers.view"]);
+        assert!(program.cruds[0].create_permissions.is_empty());
+        assert!(program.cruds[0].edit_permissions.is_empty());
+        assert!(program.cruds[0].delete_permissions.is_empty());
     }
 
     #[test]

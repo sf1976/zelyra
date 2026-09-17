@@ -55,6 +55,24 @@ The detail view also contains a CSRF-protected delete confirmation. A valid
 transaction and redirects to `/machines`; an invalid token is rejected with
 HTTP 403 and the record is left unchanged.
 
+CRUD authorization can use separate permissions for each operation:
+
+~~~zelyra
+crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+    permits create "customers.create"
+    permits edit "customers.edit"
+    permits delete "customers.delete"
+}
+~~~
+
+The unscoped `permits` form remains the backward-compatible view/default
+permission. It protects list and detail routes and is used as the fallback
+for Create, Edit, and Delete when no scoped permission is declared. Scoped
+permissions protect the generated Create and Edit forms as well as the Delete
+endpoint independently.
+
 Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.

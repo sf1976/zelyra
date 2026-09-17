@@ -20,12 +20,17 @@ compiler and repository release.
   sessions, permission denial, and logout.
 - Added a protected CRUD/API example and MariaDB integration test covering
   session-based authorization at both HTML and JSON endpoints.
+- Added scoped CRUD permissions for `create`, `edit`, and
+  `delete`; generated forms and delete routes now enforce their
+  action-specific permission.
 
 ### Fixed
 
 - Configured relationship filters now preserve their logical query names,
   such as `filter_department`, while still using the stored foreign-key column
   safely.
+- Generated CRUD Create/Edit forms no longer bypass authentication and
+  authorization checks.
 
 ### Compatibility
 

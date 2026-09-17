@@ -33,6 +33,9 @@ table customers {
 crud Customer -> customers {
     requires auth
     permits "customers.view"
+    permits create "customers.create"
+    permits edit "customers.edit"
+    permits delete "customers.delete"
 
     list {
         id

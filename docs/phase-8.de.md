@@ -119,4 +119,7 @@ api GET "/api/customers/{id}" {
 Der Integrationstest `tests/mariadb-protected-e2e.sh` prüft, dass anonyme
 Anfragen HTTP 401 erhalten, eine berechtigte Session beide Endpunkte mit HTTP
 200 erreicht und ein eingeloggter Benutzer ohne `customers.view` sowohl für
-die HTML-CRUD-Route als auch für die JSON-API HTTP 403 erhält.
+die HTML-CRUD-Route als auch für die JSON-API HTTP 403 erhält. Zusätzlich
+werden die getrennten Berechtigungen `customers.create`,
+`customers.edit` und `customers.delete` an den erzeugten
+CRUD-Aktionen geprüft.

@@ -251,6 +251,8 @@ pub struct FormRoute {
     pub form: FormDef,
     pub table: Option<TableDef>,
     pub schema: Option<Schema>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub csrf: CsrfProtection,
 }
 
@@ -270,6 +272,9 @@ pub struct CrudRoute {
     pub filter_columns: Vec<String>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub create_permissions: Vec<String>,
+    pub edit_permissions: Vec<String>,
+    pub delete_permissions: Vec<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -426,6 +431,15 @@ impl WebApp {
                 if self.database_capability_granted == Some(false) {
                     return database_capability_denied();
                 }
+                if let Some(response) = authorize(
+                    form.requires_auth,
+                    &form.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
+                }
                 return dispatch_form(form, request, &path_params, self.database_url.as_deref());
             }
         }
@@ -452,7 +466,7 @@ impl WebApp {
                 }
                 if let Some(response) = authorize(
                     crud.requires_auth,
-                    &crud.permissions,
+                    &crud.delete_permissions,
                     request,
                     self,
                     self.database_url.as_deref(),
@@ -2829,6 +2843,8 @@ mod tests {
             },
             table: None,
             schema: None,
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf: CsrfProtection::new("csrf-token"),
         }
     }
@@ -3212,6 +3228,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -3332,6 +3351,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema,
         };
@@ -3369,6 +3391,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -3396,6 +3421,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -3471,6 +3499,67 @@ mod tests {
     }
 
     #[test]
+    fn protects_generated_crud_forms_with_action_permissions() {
+        let mut form = form_route();
+        form.requires_auth = true;
+        form.permissions = vec!["customers.create".into()];
+        let app = WebApp::new(Vec::new(), vec![form])
+            .with_auth(Some("test-token".into()), vec!["customers.create".into()]);
+
+        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 401);
+        let request = parse_request(
+            "GET /forms/CustomerCreate HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&request).status, 200);
+
+        let mut form = form_route();
+        form.requires_auth = true;
+        form.permissions = vec!["customers.edit".into()];
+        let app = WebApp::new(Vec::new(), vec![form])
+            .with_auth(Some("test-token".into()), vec!["customers.create".into()]);
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("customers.edit"));
+    }
+
+    #[test]
+    fn protects_crud_delete_with_delete_permission() {
+        let app = WebApp::with_database_url(
+            Vec::new(),
+            Vec::new(),
+            Some("mariadb://root:invalid@127.0.0.1:1/test".into()),
+        )
+        .with_auth(Some("test-token".into()), vec!["customers.view".into()])
+        .with_cruds(vec![CrudRoute {
+            path: "/customers".into(),
+            title: "Customers".into(),
+            table: "customers".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
+            requires_auth: true,
+            permissions: vec!["customers.view".into()],
+            create_permissions: vec!["customers.create".into()],
+            edit_permissions: vec!["customers.edit".into()],
+            delete_permissions: vec!["customers.delete".into()],
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        }]);
+        let request = parse_request(
+            "POST /customers/1/delete HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("customers.delete"));
+    }
+
+    #[test]
     fn protects_api_routes_with_json_authentication_errors() {
         let api = ApiRoute::new("GET", "/customers", |_request, _parameters| {
             Response::json(200, "[]")
@@ -3519,6 +3608,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,
@@ -3543,6 +3635,9 @@ mod tests {
             filter_columns: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
             csrf: CsrfProtection::new("crud-csrf"),
             schema: zelyra_database::Schema {
                 database: None,

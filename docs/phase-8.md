@@ -114,4 +114,6 @@ api GET "/api/customers/{id}" {
 The integration test `tests/mariadb-protected-e2e.sh` verifies that anonymous
 requests receive HTTP 401, the permitted session receives HTTP 200 for both
 endpoints, and an authenticated user without `customers.view` receives HTTP
-403 from both the HTML CRUD route and the JSON API.
+403 from both the HTML CRUD route and the JSON API. It also verifies separate
+`customers.create`, `customers.edit`, and `customers.delete`
+permissions on the generated CRUD actions.

@@ -60,6 +60,25 @@ parametrisiertes MariaDB-DELETE in einer Transaktion aus und leitet zu
 `/machines` weiter. Ein ungültiges Token wird mit HTTP 403 abgelehnt; der
 Datensatz bleibt unverändert.
 
+CRUD-Berechtigungen können für jede Operation getrennt angegeben werden:
+
+~~~zelyra
+crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+    permits create "customers.create"
+    permits edit "customers.edit"
+    permits delete "customers.delete"
+}
+~~~
+
+Die ungescopte Schreibweise `permits` bleibt als abwärtskompatible
+View-/Standardberechtigung erhalten. Sie schützt Listen- und Detailrouten und
+wird als Fallback für Create, Edit und Delete verwendet, wenn keine
+gescopte Berechtigung definiert ist. Gescopte Berechtigungen schützen die
+generierten Create- und Edit-Formulare sowie den Delete-Endpunkt unabhängig
+voneinander.
+
 Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.

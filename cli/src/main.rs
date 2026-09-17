@@ -1724,10 +1724,13 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
         .pages
         .iter()
         .any(|page| page.requires_auth || !page.permissions.is_empty())
-        || program
-            .cruds
-            .iter()
-            .any(|crud| crud.requires_auth || !crud.permissions.is_empty())
+        || program.cruds.iter().any(|crud| {
+            crud.requires_auth
+                || !crud.permissions.is_empty()
+                || !crud.create_permissions.is_empty()
+                || !crud.edit_permissions.is_empty()
+                || !crud.delete_permissions.is_empty()
+        })
         || program
             .apis
             .iter()
@@ -2179,6 +2182,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             form: form.clone(),
             table,
             schema: Some(schema.clone()),
+            requires_auth: false,
+            permissions: Vec::new(),
             csrf,
         });
     }
@@ -2237,6 +2242,15 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             filter_columns,
             requires_auth: crud.requires_auth,
             permissions: crud.permissions.clone(),
+            create_permissions: effective_crud_permissions(
+                &crud.permissions,
+                &crud.create_permissions,
+            ),
+            edit_permissions: effective_crud_permissions(&crud.permissions, &crud.edit_permissions),
+            delete_permissions: effective_crud_permissions(
+                &crud.permissions,
+                &crud.delete_permissions,
+            ),
             schema: schema.clone(),
             csrf,
         });
@@ -2290,6 +2304,11 @@ fn generated_crud_form(
     edit: bool,
     csrf: CsrfProtection,
 ) -> FormRoute {
+    let permissions = if edit {
+        effective_crud_permissions(&crud.permissions, &crud.edit_permissions)
+    } else {
+        effective_crud_permissions(&crud.permissions, &crud.create_permissions)
+    };
     let fields = table
         .columns
         .iter()
@@ -2368,7 +2387,17 @@ fn generated_crud_form(
         },
         table: Some(table.clone()),
         schema: Some(schema.clone()),
+        requires_auth: crud.requires_auth,
+        permissions,
         csrf,
+    }
+}
+
+fn effective_crud_permissions(default: &[String], scoped: &[String]) -> Vec<String> {
+    if scoped.is_empty() {
+        default.to_vec()
+    } else {
+        scoped.to_vec()
     }
 }
 
@@ -3485,6 +3514,23 @@ mod tests {
                 html {
                     <h1>Admin</h1>
                 }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_scoped_crud_permissions_without_auth_definition() {
+        let source = r#"
+            table customers {
+                id: Id primary auto
+                name: String(100) required
+            }
+
+            crud Customer -> customers {
+                permits create "customers.create"
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();

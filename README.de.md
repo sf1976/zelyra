@@ -50,7 +50,8 @@ Heute implementiert:
   Transaktionen und HTTP-Weiterleitungen.
 - eine erste CRUD-Ressource mit MariaDB-Suche, konfigurierbaren Listen-,
   Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
-  Formularen und CSRF-geschütztem Löschen.
+  Formularen und CSRF-geschütztem Löschen mit getrennten Berechtigungen für
+  View/Create/Edit/Delete sowie abwärtskompatiblem Berechtigungs-Fallback.
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
@@ -416,7 +417,7 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Beziehungs-Selects vorhanden.
 7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
    Pagination, konfigurierbare Spalten, Beziehungslabels und -Selects sowie
-   CSRF-geschütztes Löschen vorhanden; Autorisierung folgt.
+   CSRF-geschütztes Löschen und getrennte Aktionsberechtigungen vorhanden.
 8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
@@ -457,8 +458,9 @@ Integrationstest aus `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-
 Der MariaDB-Authentifizierungs-Integrationstest aus
 `tests/mariadb-auth-e2e.sh` prüft außerdem Login, persistente Sessions,
 Berechtigungsablehnung und Logout.
-Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft
-dieselbe Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte.
+Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft die
+Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte einschließlich
+getrennter Create-, Edit- und Delete-Berechtigungen.
 
 Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
 Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit
