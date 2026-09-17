@@ -449,6 +449,8 @@ test from `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
 The MariaDB authentication integration test from
 `tests/mariadb-auth-e2e.sh` additionally covers login, persistent sessions,
 permission denial, and logout.
+The protected CRUD/API test from `tests/mariadb-protected-e2e.sh` verifies the
+same permission boundary for HTML CRUD and JSON API endpoints.
 
 Please keep German and English user documentation synchronized. Architectural
 decisions should preserve safety, control, and extensibility.

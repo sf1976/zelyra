@@ -53,3 +53,10 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_AUTH_E2E_ADDRESS: 127.0.0.1:38505
         run: ./tests/mariadb-auth-e2e.sh
+      - name: Run protected CRUD and API integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_PROTECTED_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
+        run: ./tests/mariadb-protected-e2e.sh

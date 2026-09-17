@@ -92,3 +92,26 @@ MariaDB with two temporary users: anonymous access is rejected, invalid
 credentials fail, the permitted user receives a persistent session and can
 access `/admin`, a logged-in user without `admin.view` receives HTTP 403, and
 logout removes the session from MariaDB.
+
+The combined example `examples/auth_crud_api.zyl` applies the same boundary to
+both a CRUD resource and a typed API:
+
+~~~zelyra
+crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+}
+
+api GET "/api/customers/{id}" {
+    handler get_customer
+    requires auth
+    permits "customers.view"
+    input { id: CustomerId }
+    output Customer
+}
+~~~
+
+The integration test `tests/mariadb-protected-e2e.sh` verifies that anonymous
+requests receive HTTP 401, the permitted session receives HTTP 200 for both
+endpoints, and an authenticated user without `customers.view` receives HTTP
+403 from both the HTML CRUD route and the JSON API.

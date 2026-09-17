@@ -457,6 +457,8 @@ Integrationstest aus `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-
 Der MariaDB-Authentifizierungs-Integrationstest aus
 `tests/mariadb-auth-e2e.sh` prüft außerdem Login, persistente Sessions,
 Berechtigungsablehnung und Logout.
+Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft
+dieselbe Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte.
 
 Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
 Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit

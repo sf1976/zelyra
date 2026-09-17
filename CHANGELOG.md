@@ -18,6 +18,8 @@ compiler and repository release.
   complete cleanup.
 - Added a MariaDB authentication end-to-end test covering login, persistent
   sessions, permission denial, and logout.
+- Added a protected CRUD/API example and MariaDB integration test covering
+  session-based authorization at both HTML and JSON endpoints.
 
 ### Fixed
 

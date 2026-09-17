@@ -1,0 +1,67 @@
+type CustomerId = Id
+
+auth users {
+    table: users
+    sessions: auth_sessions
+    permissions: user_permissions
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+
+table user_permissions {
+    id: Id primary auto
+    user: User required
+    permission: String(100) required
+}
+
+table customers {
+    id: CustomerId primary auto
+    name: String(100) required
+}
+
+crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+
+    list {
+        id
+        name
+    }
+}
+
+fn get_customer(id: CustomerId) -> Customer uses Database {
+    return sql<Customer> {
+        SELECT id, name
+        FROM customers
+        WHERE id = :id
+    }
+}
+
+api GET "/api/customers/{id}" {
+    handler get_customer
+    requires auth
+    permits "customers.view"
+
+    input {
+        id: CustomerId
+    }
+
+    output Customer
+    errors {
+        404 NotFound
+    }
+}
+
+fn main() {
+}
