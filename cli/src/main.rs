@@ -73,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.37\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.37-alpha.1\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -3555,5 +3555,24 @@ mod tests {
         assert!(policy.allowed_commands.is_empty());
         assert_eq!(policy.timeout_ms, 5_000);
         assert_eq!(policy.max_output_bytes, 1_048_576);
+    }
+
+    #[test]
+    fn generates_dockerfile_with_published_release_ref() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-template-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let status = create_project(path.to_str().unwrap(), false, true);
+        assert_eq!(status, ExitCode::SUCCESS);
+
+        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.37-alpha.1"));
+
+        fs::remove_dir_all(path).unwrap();
     }
 }
