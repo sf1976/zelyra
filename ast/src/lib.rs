@@ -156,6 +156,8 @@ pub struct ApiDef {
     pub method: String,
     pub path: String,
     pub handler: Option<String>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub input: Vec<ApiField>,
     pub output: Type,
     pub errors: Vec<ApiError>,

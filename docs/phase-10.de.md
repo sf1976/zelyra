@@ -26,6 +26,26 @@ dokumentierte Fehlerstatus. HTTP-Methoden werden in Großbuchstaben
 normalisiert. Die erste Implementierung unterstützt `GET`, `POST`, `PUT`,
 `PATCH` und `DELETE`.
 
+API-Routen können dieselben Authentifizierungs- und Berechtigungsschutzregeln
+wie Seiten und CRUD-Ressourcen verwenden:
+
+~~~zelyra
+api DELETE "/customers/{id}" {
+    handler delete_customer
+    requires auth
+    permits "customers.delete"
+    input { id: CustomerId }
+    output Unit
+}
+~~~
+
+`requires auth` verlangt eine authentifizierte Session oder ein konfiguriertes
+gültiges Bearer-Token. Jede `permits`-Angabe verlangt die genannte
+Berechtigung. Eine geschützte API benötigt eine `auth`-Definition im Projekt;
+andernfalls weist `zelyra check` das Programm zurück. Fehlgeschlagene
+API-Autorisierung wird als JSON mit stabilem `code` und verständlicher
+`message` zurückgegeben.
+
 Eine ausführbare Route kann mit `handler` eine Zelyra-Funktion benennen. Ihre
 Parameter müssen Namen und Typen der API-Eingabefelder in derselben Reihenfolge
 besitzen; der Rückgabetyp muss `output` entsprechen:
@@ -62,7 +82,17 @@ nicht-GET-Methoden werden JSON-Request-Bodies unterstützt und Handler-Ergebniss
 als JSON zurückgegeben. Datenbank-Handler verwenden `DATABASE_URL`, im
 Zelyra-Runtime standardmäßig MariaDB.
 
-Die aktuelle Handler-Brücke bleibt bewusst klein: Fehlerdeklarationen werden
-in OpenAPI dokumentiert, aber anwendungsspezifische Fehlerzuordnung,
-Authentifizierungssperren und umfangreicheres JSON-Decoding folgen in späteren
-Web/API-Schritten.
+Eingabe- und Laufzeitfehler verwenden dieselbe Transportstruktur, zum Beispiel:
+
+~~~json
+{"error":{"code":"BadRequest","message":"missing API input `id`"}}
+~~~
+
+Der `errors`-Block dokumentiert mögliche HTTP-Antworten in OpenAPI. Die erste
+Laufzeitimplementierung leitet aus einem fachlichen Fehlerwert des Handlers
+noch keinen anwendungsspezifischen Statuscode ab; eine explizite
+Fehlerzuordnung ist geplant.
+
+Die Handler-Brücke bleibt bewusst klein: verschachteltes JSON-Decoding,
+generierte Client-Bindings und anwendungsspezifische Fehlerzuordnung folgen in
+späteren Web/API-Schritten.

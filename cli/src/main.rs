@@ -314,6 +314,19 @@ fn format_openapi(program: &zelyra_ast::Program) -> String {
             };
             let mut parameters = path_parameters;
             parameters.extend(query_parameters);
+            let security = if api.requires_auth || !api.permissions.is_empty() {
+                format!(
+                    ",\"x-zelyra-requires-auth\":{},\"x-zelyra-permissions\":[{}]",
+                    api.requires_auth,
+                    api.permissions
+                        .iter()
+                        .map(|permission| format!("\"{}\"", json_escape(permission)))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            } else {
+                String::new()
+            };
             let responses = std::iter::once(format!(
                 "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
                 openapi_schema(&api.output)
@@ -336,13 +349,14 @@ fn format_openapi(program: &zelyra_ast::Program) -> String {
                     .replace('/', "_")
             );
             format!(
-                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}}}}}",
+                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}{}}}}}",
                 json_escape(&api.path),
                 method,
                 json_escape(&operation_id),
                 parameters.join(","),
                 request_body,
-                responses
+                responses,
+                security
             )
         })
         .collect::<Vec<_>>()
@@ -792,7 +806,11 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
         || program
             .cruds
             .iter()
-            .any(|crud| crud.requires_auth || !crud.permissions.is_empty());
+            .any(|crud| crud.requires_auth || !crud.permissions.is_empty())
+        || program
+            .apis
+            .iter()
+            .any(|api| api.requires_auth || !api.permissions.is_empty());
     if protected && program.auth.is_empty() {
         diagnostic(
             path,
@@ -1374,20 +1392,25 @@ fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
             let api = api.clone();
             let program = program.clone();
             let database_url = database_url.clone();
-            Some(ApiRoute::new(
-                api.method.clone(),
-                api.path.clone(),
-                move |request, path_params| {
-                    dispatch_api(
-                        &program,
-                        &api,
-                        &handler,
-                        request,
-                        path_params,
-                        database_url.as_deref(),
-                    )
-                },
-            ))
+            let requires_auth = api.requires_auth;
+            let permissions = api.permissions.clone();
+            Some(
+                ApiRoute::new(
+                    api.method.clone(),
+                    api.path.clone(),
+                    move |request, path_params| {
+                        dispatch_api(
+                            &program,
+                            &api,
+                            &handler,
+                            request,
+                            path_params,
+                            database_url.as_deref(),
+                        )
+                    },
+                )
+                .with_auth(requires_auth, permissions),
+            )
         })
         .collect()
 }
@@ -1416,7 +1439,7 @@ fn dispatch_api(
     };
     let mut values = match values {
         Ok(values) => values,
-        Err(error) => return api_error_response(400, &error.to_string()),
+        Err(error) => return api_error_response(400, "BadRequest", &error.to_string()),
     };
     for (name, value) in path_params {
         values.insert(name.clone(), value.clone());
@@ -1428,16 +1451,20 @@ fn dispatch_api(
                 arguments.push(Value::Option(None));
                 continue;
             }
-            return api_error_response(400, &format!("missing API input `{}`", field.name));
+            return api_error_response(
+                400,
+                "BadRequest",
+                &format!("missing API input `{}`", field.name),
+            );
         };
         match api_value(value, &field.ty, program) {
             Ok(value) => arguments.push(value),
-            Err(error) => return api_error_response(400, &error),
+            Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
     match execute_function(program, handler, arguments, database_url) {
         Ok(value) => Response::json(200, api_json_value(&value)),
-        Err(error) => api_error_response(500, &error.message),
+        Err(error) => api_error_response(500, "InternalServerError", &error.message),
     }
 }
 
@@ -1516,10 +1543,14 @@ fn api_json_value(value: &Value) -> String {
     }
 }
 
-fn api_error_response(status: u16, message: &str) -> Response {
+fn api_error_response(status: u16, code: &str, message: &str) -> Response {
     Response::json(
         status,
-        format!("{{\"error\":\"{}\"}}", json_escape(message)),
+        format!(
+            "{{\"error\":{{\"code\":\"{}\",\"message\":\"{}\"}}}}",
+            json_escape(code),
+            json_escape(message)
+        ),
     )
 }
 
@@ -1833,6 +1864,27 @@ mod tests {
     }
 
     #[test]
+    fn returns_structured_json_for_invalid_api_input() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 400);
+        assert_eq!(response.content_type, "application/json; charset=utf-8");
+        assert!(response.body.contains("\"code\":\"BadRequest\""));
+        assert!(response.body.contains("missing API input"));
+    }
+
+    #[test]
     fn rejects_unknown_configured_crud_columns() {
         let source = r#"
             table machines {
@@ -1857,6 +1909,19 @@ mod tests {
                 html {
                     <h1>Admin</h1>
                 }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_protected_api_without_auth_definition() {
+        let source = r#"
+            api GET "/admin" {
+                requires auth
+                output String
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();

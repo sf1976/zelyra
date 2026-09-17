@@ -120,6 +120,8 @@ impl<'a> Parser<'a> {
         let path = self.string_value("API path")?;
         self.expect(TokenKind::LBrace, "`{` after API path")?;
         let mut handler = None;
+        let mut requires_auth = false;
+        let mut permissions = Vec::new();
         let mut input = Vec::new();
         let mut output = None;
         let mut errors = Vec::new();
@@ -128,6 +130,13 @@ impl<'a> Parser<'a> {
             if self.at(&TokenKind::Handler) {
                 self.advance();
                 handler = Some(self.ident("API handler function name")?.0);
+            } else if self.at(&TokenKind::Requires) {
+                self.advance();
+                self.expect(TokenKind::Auth, "auth after requires")?;
+                requires_auth = true;
+            } else if self.at(&TokenKind::Permits) {
+                self.advance();
+                permissions.push(self.string_value("API permission")?);
             } else if self.at(&TokenKind::Input) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `input`")?;
@@ -166,7 +175,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
                 return self
-                    .error("expected `handler`, `input`, `output`, or `errors` in API definition");
+                    .error("expected `handler`, `requires auth`, `permits`, `input`, `output`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -178,6 +187,8 @@ impl<'a> Parser<'a> {
             method,
             path,
             handler,
+            requires_auth,
+            permissions,
             input,
             output,
             errors,
@@ -1452,8 +1463,25 @@ mod tests {
         assert_eq!(program.apis[0].method, "GET");
         assert_eq!(program.apis[0].path, "/customers/{id}");
         assert_eq!(program.apis[0].handler.as_deref(), Some("get_customer"));
+        assert!(!program.apis[0].requires_auth);
         assert_eq!(program.apis[0].input[0].name, "id");
         assert_eq!(program.apis[0].errors[1].status, 404);
+    }
+
+    #[test]
+    fn parses_api_authentication_and_permissions() {
+        let program = parse(
+            &lex(r#"api GET "/customers" {
+                    requires auth
+                    permits "customers.view"
+                    output String
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(program.apis[0].requires_auth);
+        assert_eq!(program.apis[0].permissions, ["customers.view"]);
     }
 
     #[test]

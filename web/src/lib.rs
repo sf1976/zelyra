@@ -32,6 +32,8 @@ type ApiHandler = dyn Fn(&Request, &HashMap<String, String>) -> Response + Send 
 pub struct ApiRoute {
     pub method: String,
     pub path: String,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     handler: Arc<ApiHandler>,
 }
 
@@ -41,6 +43,8 @@ impl fmt::Debug for ApiRoute {
             .debug_struct("ApiRoute")
             .field("method", &self.method)
             .field("path", &self.path)
+            .field("requires_auth", &self.requires_auth)
+            .field("permissions", &self.permissions)
             .finish_non_exhaustive()
     }
 }
@@ -54,8 +58,16 @@ impl ApiRoute {
         Self {
             method: method.into(),
             path: path.into(),
+            requires_auth: false,
+            permissions: Vec::new(),
             handler: Arc::new(handler),
         }
+    }
+
+    pub fn with_auth(mut self, requires_auth: bool, permissions: Vec<String>) -> Self {
+        self.requires_auth = requires_auth;
+        self.permissions = permissions;
+        self
     }
 }
 
@@ -292,7 +304,19 @@ impl WebApp {
         for api in &self.apis {
             if let Some(path_params) = match_path(&api.path, &request.path) {
                 if api.method != request.method {
-                    return Response::json(405, "{\"error\":\"method not allowed\"}");
+                    return Response::json(
+                        405,
+                        "{\"error\":{\"code\":\"MethodNotAllowed\",\"message\":\"method not allowed\"}}",
+                    );
+                }
+                if let Some(response) = authorize_api(
+                    api.requires_auth,
+                    &api.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
                 }
                 return (api.handler)(request, &path_params);
             }
@@ -412,6 +436,62 @@ fn authorize(
         ));
     }
     None
+}
+
+fn authorize_api(
+    requires_auth: bool,
+    permissions: &[String],
+    request: &Request,
+    app: &WebApp,
+    database_url: Option<&str>,
+) -> Option<Response> {
+    if !requires_auth && permissions.is_empty() {
+        return None;
+    }
+    let session = session_from_request(app, request, database_url);
+    let bearer_authenticated = app
+        .auth_token
+        .as_deref()
+        .zip(request.headers.get("authorization").map(String::as_str))
+        .is_some_and(|(expected, header)| {
+            let Some(token) = header.strip_prefix("Bearer ") else {
+                return false;
+            };
+            constant_time_equal(expected.as_bytes(), token.as_bytes())
+        });
+    let authenticated = session.is_some() || bearer_authenticated;
+    if !authenticated {
+        return Some(Response::json(
+            401,
+            "{\"error\":{\"code\":\"Unauthorized\",\"message\":\"authentication is required\"}}",
+        ));
+    }
+    let granted_permissions = session
+        .map(|session| session.permissions)
+        .unwrap_or_else(|| app.auth_permissions.clone());
+    if let Some(permission) = permissions.iter().find(|permission| {
+        !granted_permissions
+            .iter()
+            .any(|granted| granted == *permission)
+    }) {
+        return Some(Response::json(
+            403,
+            format!(
+                "{{\"error\":{{\"code\":\"Forbidden\",\"message\":\"missing permission: {}\"}}}}",
+                json_escape(permission)
+            ),
+        ));
+    }
+    None
+}
+
+fn json_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }
 
 fn dispatch_login(
@@ -2463,6 +2543,39 @@ mod tests {
         )
         .with_auth(Some("test-token".into()), vec!["admin.view".into()]);
         assert_eq!(app.dispatch(&request).status, 403);
+    }
+
+    #[test]
+    fn protects_api_routes_with_json_authentication_errors() {
+        let api = ApiRoute::new("GET", "/customers", |_request, _parameters| {
+            Response::json(200, "[]")
+        })
+        .with_auth(true, vec!["customers.view".into()]);
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth(Some("test-token".into()), vec!["customers.view".into()])
+            .with_apis(vec![api]);
+
+        let request = parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 401);
+        assert!(response.body.contains("Unauthorized"));
+        assert_eq!(response.content_type, "application/json; charset=utf-8");
+
+        let request =
+            parse_request("GET /customers HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n")
+                .unwrap();
+        assert_eq!(app.dispatch(&request).status, 200);
+
+        let api = ApiRoute::new("GET", "/customers", |_request, _parameters| {
+            Response::json(200, "[]")
+        })
+        .with_auth(true, vec!["customers.delete".into()]);
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth(Some("test-token".into()), vec!["customers.view".into()])
+            .with_apis(vec![api]);
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("customers.delete"));
     }
 
     #[test]

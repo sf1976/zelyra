@@ -553,6 +553,23 @@ page "/admin" {
 }
 ~~~
 
+Dieselben Schutzregeln sichern typisierte API-Handler:
+
+~~~zelyra
+api GET "/api/machines/{id}" {
+    handler get_machine
+    requires auth
+    permits "machines.view"
+    input { id: MachineId }
+    output Machine
+    errors { 404 NotFound }
+}
+~~~
+
+Fehler bei geschützten APIs verwenden JSON mit `code` und `message`. Der
+deklarierte `errors`-Block ist derzeit OpenAPI-Dokumentation; die Zuordnung
+fachlicher Fehler zu diesen Statuscodes folgt später.
+
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
@@ -784,7 +801,7 @@ Die wichtigsten geplanten Bereiche:
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
-- weitergehende API-Fehler-/Authentifizierungsbehandlung und Request-/Response-Verarbeitung zur Laufzeit;
+- anwendungsspezifische API-Fehlerzuordnung und weitergehende Request-/Response-Verarbeitung zur Laufzeit;
 - strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.

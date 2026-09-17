@@ -25,6 +25,25 @@ The declaration records the HTTP method, route, input types, response type, and
 documented error statuses. HTTP methods are normalized to uppercase and the
 initial implementation supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`.
 
+API routes can use the same authentication and permission guards as pages and
+CRUD resources:
+
+~~~zelyra
+api DELETE "/customers/{id}" {
+    handler delete_customer
+    requires auth
+    permits "customers.delete"
+    input { id: CustomerId }
+    output Unit
+}
+~~~
+
+`requires auth` requires an authenticated session or a valid configured bearer
+token. Each `permits` declaration requires the named permission. A protected
+API requires an `auth` definition in the project; otherwise `zelyra check`
+rejects the program. API authorization failures are returned as JSON with a
+stable `code` and human-readable `message`.
+
 An executable route can name a Zelyra function with `handler`. Its parameters
 must have the same names and types as the API input fields, in the same order,
 and its return type must match `output`:
@@ -61,6 +80,16 @@ are supported for non-GET methods, and handler results are returned as JSON.
 Database-backed handlers use the configured `DATABASE_URL`, which is MariaDB
 by default in the Zelyra runtime.
 
-The current handler bridge is intentionally small: error declarations are
-documented in OpenAPI, but application-specific error mapping, authentication
-guards, and richer JSON decoding remain later Web/API work.
+Input and runtime failures use the same transport shape, for example:
+
+~~~json
+{"error":{"code":"BadRequest","message":"missing API input `id`"}}
+~~~
+
+The declared `errors` block documents possible HTTP responses in OpenAPI. The
+initial runtime does not yet infer application-specific status codes from a
+handler's domain error value; explicit error mapping remains planned.
+
+The handler bridge is intentionally small: nested JSON decoding, generated
+client bindings, and application-specific error mapping remain later Web/API
+work.

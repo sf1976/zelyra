@@ -500,6 +500,23 @@ page "/admin" {
 }
 ~~~
 
+The same guards protect typed API handlers:
+
+~~~zelyra
+api GET "/api/machines/{id}" {
+    handler get_machine
+    requires auth
+    permits "machines.view"
+    input { id: MachineId }
+    output Machine
+    errors { 404 NotFound }
+}
+~~~
+
+Protected API failures use JSON with an error `code` and `message`. The
+declared `errors` block is currently OpenAPI documentation; mapping domain
+errors to those statuses remains future work.
+
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
@@ -708,7 +725,8 @@ Major planned areas include:
 - activity, audit, and technical logs;
 - typed connections and secret providers;
 - ODBC and external read-only databases;
-- richer API error/auth handling and runtime request/response processing;
+- application-specific API error mapping and richer runtime request/response
+  processing;
 - structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.

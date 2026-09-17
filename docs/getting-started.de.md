@@ -50,6 +50,9 @@ Das aktuelle Repository enthält:
 - ein datenbankgestützter Login mit Argon2-Passwortprüfung, persistenten
   HttpOnly-Sessions, Logout, datenbankgestützten Berechtigungen und
   geschützten Routen.
+- typisierte API-Deklarationen mit optionalen ausführbaren Handlern,
+  OpenAPI-Erzeugung, Authentifizierungs- und Berechtigungssperren sowie
+  strukturierten JSON-Fehlern.
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
@@ -60,7 +63,8 @@ Das aktuelle Repository enthält:
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, weitergehende API-Fehler- und Authentifizierungsbehandlung, weitergehende formale Verifikation,
+Login-Drosselung, Passwortverwaltungs-Kommandos, anwendungsspezifische
+API-Fehlerzuordnung, weitergehende formale Verifikation,
 Runtime-Capability-Durchsetzung, strukturierte
 Nebenläufigkeit und Produktionspaketierung.
 
