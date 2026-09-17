@@ -74,6 +74,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             schema,
             &HashMap::new(),
             &program.records,
+            &tableview.columns,
             tableview.span,
         ));
     }
@@ -313,6 +314,7 @@ fn check_tableview_query(
     schema: &Schema,
     environment: &HashMap<String, Type>,
     records: &[zelyra_ast::RecordDef],
+    columns: &[String],
     span: Span,
 ) -> Vec<SqlError> {
     let mut errors = check_query(query, result_type, schema, environment, span);
@@ -323,6 +325,11 @@ fn check_tableview_query(
                     "SQL result type `{record_name}` does not map to a table"
                 ))
             });
+            if let Some(record) = records.iter().find(|record| record.name == record_name) {
+                errors.extend(check_record_projection(
+                    query, record, columns, schema, span,
+                ));
+            }
         }
     }
     errors
@@ -336,6 +343,242 @@ fn result_record_name(result_type: &Type) -> Option<&str> {
     match result_type {
         Type::Named(name) => Some(name),
         _ => None,
+    }
+}
+
+fn check_record_projection(
+    query: &str,
+    record: &zelyra_ast::RecordDef,
+    columns: &[String],
+    schema: &Schema,
+    span: Span,
+) -> Vec<SqlError> {
+    let tokens = tokenize(query);
+    let mut errors = Vec::new();
+    let Some(projections) = select_projections(&tokens) else {
+        errors.push(sql_error(
+            span,
+            "tableview struct results require an explicit SELECT projection",
+        ));
+        return errors;
+    };
+    let table_names = schema
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<HashSet<_>>();
+    let mut table_errors = Vec::new();
+    let tables = query_tables(&tokens, schema, &table_names, span, &mut table_errors);
+    let mut names = HashSet::new();
+    for projection in projections {
+        let Some(name) = projection_name(&projection) else {
+            errors.push(sql_error(
+                span,
+                "computed tableview result expressions require an explicit AS alias",
+            ));
+            continue;
+        };
+        let normalized = name.to_ascii_lowercase();
+        if !names.insert(normalized.clone()) {
+            errors.push(sql_error(
+                span,
+                format!("tableview result alias `{name}` is specified more than once"),
+            ));
+            continue;
+        }
+        let Some(field) = record
+            .fields
+            .iter()
+            .find(|field| field.name.eq_ignore_ascii_case(&normalized))
+        else {
+            errors.push(sql_error(
+                span,
+                format!(
+                    "tableview result alias `{name}` is not a field of `{}`",
+                    record.name
+                ),
+            ));
+            continue;
+        };
+        if !columns
+            .iter()
+            .any(|column| column.eq_ignore_ascii_case(&normalized))
+        {
+            errors.push(sql_error(
+                span,
+                format!("tableview result alias `{name}` is not declared as a view column"),
+            ));
+            continue;
+        }
+        let (actual_type, nullable) = projection_type(&projection, &tables, schema);
+        if !matches!(actual_type, Type::Unknown)
+            && !result_types_compatible(&field.ty, &actual_type)
+        {
+            errors.push(sql_error(
+                span,
+                format!(
+                    "tableview result field `{name}` expects `{}`, but SQL produces `{actual_type}`",
+                    field.ty
+                ),
+            ));
+        }
+        if nullable && !matches!(field.ty, Type::Option(_)) {
+            errors.push(sql_error(
+                span,
+                format!("tableview result field `{name}` may be NULL but is not optional"),
+            ));
+        }
+    }
+    for column in columns {
+        if !names.contains(&column.to_ascii_lowercase()) {
+            errors.push(sql_error(
+                span,
+                format!("tableview column `{column}` is missing from the SQL projection"),
+            ));
+        }
+    }
+    errors
+}
+
+fn select_projections(tokens: &[SqlToken]) -> Option<Vec<Vec<SqlToken>>> {
+    if !matches!(tokens.first(), Some(SqlToken::Word(word)) if word.eq_ignore_ascii_case("SELECT"))
+    {
+        return None;
+    }
+    let mut depth = 0_u32;
+    let mut current = Vec::new();
+    let mut projections = Vec::new();
+    for token in tokens.iter().skip(1) {
+        match token {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth = depth.saturating_sub(1),
+            SqlToken::Word(word) if depth == 0 && word.eq_ignore_ascii_case("FROM") => {
+                if !current.is_empty() {
+                    projections.push(current);
+                }
+                return (!projections.is_empty()).then_some(projections);
+            }
+            SqlToken::Comma if depth == 0 => {
+                if current.is_empty() {
+                    return None;
+                }
+                projections.push(current);
+                current = Vec::new();
+                continue;
+            }
+            _ => {}
+        }
+        current.push(token.clone());
+    }
+    None
+}
+
+fn projection_name(projection: &[SqlToken]) -> Option<String> {
+    let mut depth = 0_u32;
+    for index in 0..projection.len() {
+        match &projection[index] {
+            SqlToken::OpenParen => depth += 1,
+            SqlToken::CloseParen => depth = depth.saturating_sub(1),
+            SqlToken::Word(word)
+                if depth == 0
+                    && word.eq_ignore_ascii_case("AS")
+                    && matches!(projection.get(index + 1), Some(SqlToken::Word(_))) =>
+            {
+                if let Some(SqlToken::Word(alias)) = projection.get(index + 1) {
+                    return Some(alias.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    match projection {
+        [SqlToken::Word(name)] => Some(name.clone()),
+        [SqlToken::Word(_), SqlToken::Dot, SqlToken::Word(name)] => Some(name.clone()),
+        _ => None,
+    }
+}
+
+fn projection_type(
+    projection: &[SqlToken],
+    tables: &HashMap<String, String>,
+    schema: &Schema,
+) -> (Type, bool) {
+    let expression_end = projection
+        .iter()
+        .position(|token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("AS")))
+        .unwrap_or(projection.len());
+    let expression = &projection[..expression_end];
+    if let Some(SqlToken::Word(function)) = expression.first() {
+        if matches!(expression.get(1), Some(SqlToken::OpenParen)) {
+            return match function.to_ascii_uppercase().as_str() {
+                "COUNT" => (Type::Int, false),
+                "SUM" | "AVG" | "MIN" | "MAX" => {
+                    let inner = expression.get(2..expression.len().saturating_sub(1));
+                    let (ty, _) = inner
+                        .map(|inner| projection_type(inner, tables, schema))
+                        .unwrap_or((Type::Unknown, true));
+                    (ty, true)
+                }
+                "COALESCE" | "IFNULL" => {
+                    let inner = expression.get(2..expression.len().saturating_sub(1));
+                    inner
+                        .and_then(|inner| {
+                            inner
+                                .split(|token| matches!(token, SqlToken::Comma))
+                                .next()
+                                .map(|part| projection_type(part, tables, schema))
+                        })
+                        .unwrap_or((Type::Unknown, false))
+                }
+                _ => (Type::Unknown, true),
+            };
+        }
+    }
+    if let Some(column) = projection_source_column(expression, tables, schema) {
+        return (sql_type_to_type(&column.sql_type), column.nullable);
+    }
+    match expression.first() {
+        Some(SqlToken::Number) => (Type::Int, false),
+        Some(SqlToken::String) => (Type::String, false),
+        _ => (Type::Unknown, true),
+    }
+}
+
+fn projection_source_column<'a>(
+    expression: &[SqlToken],
+    tables: &HashMap<String, String>,
+    schema: &'a Schema,
+) -> Option<&'a super::Column> {
+    let (table_name, column_name) = match expression {
+        [SqlToken::Word(table), SqlToken::Dot, SqlToken::Word(column)] => {
+            (tables.get(&table.to_ascii_lowercase())?, column)
+        }
+        [SqlToken::Word(column)] => (tables.values().next()?, column),
+        _ => return None,
+    };
+    schema
+        .tables
+        .iter()
+        .find(|table| table.name == *table_name)
+        .and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|column| column.name.eq_ignore_ascii_case(column_name))
+        })
+}
+
+fn result_types_compatible(expected: &Type, actual: &Type) -> bool {
+    if matches!(actual, Type::Unknown) || expected == actual {
+        return true;
+    }
+    match expected {
+        Type::Named(name) if actual == &Type::Int => name.to_ascii_lowercase().ends_with("id"),
+        Type::Named(name) if actual == &Type::String => {
+            matches!(name.as_str(), "Email" | "Url" | "Uuid")
+        }
+        Type::Option(inner) => result_types_compatible(inner, actual),
+        _ => false,
     }
 }
 
@@ -773,10 +1016,37 @@ mod tests {
     #[test]
     fn accepts_record_tableview_results() {
         let program = parse(&lex(
-            "struct CustomerOverview { id: Id name: String orders: Int turnover: Decimal? } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name, COUNT(id) AS orders, SUM(id) AS turnover FROM customers GROUP BY id, name } columns { id name orders turnover } }",
+            "struct CustomerOverview { id: Id name: String? orders: Int turnover: Int? } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name, COUNT(id) AS orders, SUM(id) AS turnover FROM customers GROUP BY id, name } columns { id name orders turnover } }",
         )
         .unwrap())
         .unwrap();
-        assert!(check_program(&program, &source_schema()).is_ok());
+        let result = check_program(&program, &source_schema());
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn rejects_missing_record_tableview_projection_field() {
+        let program = parse(&lex(
+            "struct CustomerOverview { id: Id name: String? orders: Int } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name FROM customers } columns { id name orders } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&program, &source_schema()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("orders") && error.message.contains("missing")));
+    }
+
+    #[test]
+    fn rejects_incompatible_record_tableview_projection_type() {
+        let program = parse(&lex(
+            "struct CustomerOverview { id: Id name: String? orders: String } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name, COUNT(id) AS orders FROM customers } columns { id name orders } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&program, &source_schema()).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("tableview result field `orders` expects `String`, but SQL produces `Int`")));
     }
 }

@@ -276,9 +276,10 @@ tableview Customers {
 }
 ~~~
 
-This creates a server-rendered view at `/views/customers`. Its SQL source and
-declared columns are checked against the schema; search, sorting, pagination,
-URL state, and HTML escaping remain on the safe server-side path. See
+This creates a server-rendered view at `/views/customers`. Its SQL source,
+aliases, result fields, and declared columns are checked against the schema and
+the struct; search, sorting, pagination, URL state, and HTML escaping remain on
+the safe server-side path. See
 `examples/tableview.zyl` for a complete MariaDB example.
 
 ## A first schema-aware form

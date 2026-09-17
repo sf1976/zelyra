@@ -283,10 +283,10 @@ tableview Customers {
 ~~~
 
 Dadurch entsteht eine serverseitig gerenderte Ansicht unter
-`/views/customers`. SQL-Quelle und deklarierte Spalten werden gegen das Schema
-geprüft; Suche, Sortierung, Pagination, URL-Zustand und HTML-Escaping bleiben
-Teil des sicheren Serverpfads. Ein vollständiges MariaDB-Beispiel steht in
-`examples/tableview.zyl`.
+`/views/customers`. SQL-Quelle, Aliase, Ergebnisfelder und deklarierte Spalten
+werden gegen Schema und Struct geprüft; Suche, Sortierung, Pagination,
+URL-Zustand und HTML-Escaping bleiben Teil des sicheren Serverpfads. Ein
+vollständiges MariaDB-Beispiel steht in `examples/tableview.zyl`.
 
 ## Ein erstes schemaabhängiges Formular
 

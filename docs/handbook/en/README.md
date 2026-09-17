@@ -568,8 +568,9 @@ tableview Customers {
 }
 ~~~
 
-The generated route is `/views/customers`. The SQL result type and declared
-columns are checked against the schema. Search terms are applied to the
+The generated route is `/views/customers`. The SQL result type, projection
+aliases, and declared columns are checked against the schema and the target
+struct. Search terms are applied to the
 declared result columns, sorting is restricted to the declared allowlist, and
 pagination values are bound parameters. See `examples/tableview.zyl`.
 

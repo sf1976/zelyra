@@ -625,8 +625,9 @@ tableview Customers {
 }
 ~~~
 
-Die erzeugte Route lautet `/views/customers`. Ergebnis-Typ und deklarierte
-Spalten werden gegen das Schema geprüft. Suchbegriffe werden auf die
+Die erzeugte Route lautet `/views/customers`. Ergebnis-Typ, Projektionsaliase
+und deklarierte Spalten werden gegen Schema und Ziel-Struct geprüft.
+Suchbegriffe werden auf die
 deklarierten Ergebnisspalten angewandt, Sortierung ist auf die Allowlist
 beschränkt und Pagination-Werte werden gebunden. Siehe
 `examples/tableview.zyl`.
