@@ -12,7 +12,7 @@ use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
     inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
-    Backend, QueryValue, Risk, Schema,
+    Backend, Query, QueryResult, QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -31,7 +31,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -3100,6 +3100,7 @@ fn auth_usage() {
 struct AuthRoleTables {
     assignments: String,
     permissions: String,
+    audit: Option<String>,
 }
 
 fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
@@ -3123,6 +3124,7 @@ fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
     Ok(AuthRoleTables {
         assignments,
         permissions,
+        audit: auth.audit_table.clone(),
     })
 }
 
@@ -3138,6 +3140,39 @@ fn auth_role_database_url() -> Result<String, ExitCode> {
             Err(ExitCode::from(1))
         }
     }
+}
+
+fn execute_auth_role_mutation(
+    database_url: &str,
+    sql: String,
+    params: Vec<(String, QueryValue)>,
+    audit_table: Option<&str>,
+    event: &str,
+    target_user_id: Option<i64>,
+    details: String,
+) -> Result<(), zelyra_database::DatabaseError> {
+    let mut queries = vec![Query { sql, params }];
+    if let Some(audit_table) = audit_table {
+        queries.push(Query {
+            sql: format!(
+                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
+                quote_identifier(audit_table)
+            ),
+            params: vec![
+                ("actor_user_id".into(), QueryValue::Null),
+                ("event".into(), QueryValue::String(event.into())),
+                (
+                    "target_user_id".into(),
+                    target_user_id.map_or(QueryValue::Null, QueryValue::Int),
+                ),
+                (
+                    "details".into(),
+                    QueryValue::String(details.chars().take(1000).collect()),
+                ),
+            ],
+        });
+    }
+    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
 }
 
 fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -3188,13 +3223,19 @@ fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             "role revoked",
         )
     };
-    match zelyra_database::execute_mariadb_query(
+    let event = format!("role.{operation}");
+    let details = format!("source=cli;role={role}");
+    match execute_auth_role_mutation(
         &database_url,
-        &sql,
+        sql,
         vec![
             ("user_id".into(), QueryValue::Int(user_id)),
             ("role".into(), QueryValue::String(role.clone())),
         ],
+        tables.audit.as_deref(),
+        &event,
+        Some(user_id),
+        details,
     ) {
         Ok(_) => {
             println!("{message}: user {user_id} -> {role}");
@@ -3258,13 +3299,19 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
             "permission revoked",
         )
     };
-    match zelyra_database::execute_mariadb_query(
+    let event = format!("role_permission.{operation}");
+    let details = format!("source=cli;role={role};permission={permission}");
+    match execute_auth_role_mutation(
         &database_url,
-        &sql,
+        sql,
         vec![
             ("role".into(), QueryValue::String(role.clone())),
             ("permission".into(), QueryValue::String(permission.clone())),
         ],
+        tables.audit.as_deref(),
+        &event,
+        None,
+        details,
     ) {
         Ok(_) => {
             println!("{message}: {role} -> {permission}");
@@ -3275,6 +3322,200 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
             ExitCode::from(1)
         }
     }
+}
+
+fn audit_usage() {
+    eprintln!(
+        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000."
+    );
+}
+
+fn audit_project(path: &str) -> Result<(String, String), ExitCode> {
+    let program = match validate(path) {
+        Ok(program) => program,
+        Err(()) => return Err(ExitCode::from(1)),
+    };
+    let Some(auth) = program.auth.first() else {
+        eprintln!("error[E-AUDIT-001]: audit commands require an auth definition");
+        return Err(ExitCode::from(1));
+    };
+    let Some(audit_table) = auth.audit_table.clone() else {
+        eprintln!(
+            "error[E-AUDIT-001]: audit commands require audit: <table> in the auth definition"
+        );
+        return Err(ExitCode::from(1));
+    };
+    let database_url = match env::var("DATABASE_URL") {
+        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
+        Ok(_) => {
+            eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB DATABASE_URL");
+            return Err(ExitCode::from(1));
+        }
+        Err(_) => {
+            eprintln!("error[E-AUDIT-003]: DATABASE_URL is required for audit commands");
+            return Err(ExitCode::from(1));
+        }
+    };
+    Ok((database_url, audit_table))
+}
+
+fn audit_limit(value: &str) -> Result<usize, ExitCode> {
+    match value.parse::<usize>() {
+        Ok(limit) if (1..=10_000).contains(&limit) => Ok(limit),
+        _ => {
+            eprintln!("error[E-AUDIT-004]: limit must be an integer between 1 and 10000");
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+fn audit_rows(
+    database_url: &str,
+    audit_table: &str,
+    limit: usize,
+) -> Result<QueryResult, zelyra_database::DatabaseError> {
+    zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT actor_user_id, event, target_user_id, details, created_at FROM {} ORDER BY created_at DESC LIMIT {limit}",
+            quote_identifier(audit_table)
+        ),
+        Vec::new(),
+    )
+}
+
+fn audit_optional_value(row: &[String], index: usize) -> Option<&str> {
+    row.get(index)
+        .map(String::as_str)
+        .filter(|value| *value != "NULL")
+}
+
+fn audit_csv_value(value: Option<&str>) -> String {
+    let value = value.unwrap_or_default().replace('"', "\"\"");
+    format!("\"{value}\"")
+}
+
+fn audit_rows_csv(result: &QueryResult) -> String {
+    let mut output = String::from("actor_user_id,event,target_user_id,details,created_at\n");
+    for row in &result.rows {
+        let fields = (0..5)
+            .map(|index| audit_csv_value(audit_optional_value(row, index)))
+            .collect::<Vec<_>>();
+        let _ = writeln!(output, "{}", fields.join(","));
+    }
+    output
+}
+
+fn audit_json_number(value: Option<&str>) -> String {
+    value
+        .and_then(|value| value.parse::<i64>().ok())
+        .map_or_else(|| "null".into(), |value| value.to_string())
+}
+
+fn audit_rows_json(result: &QueryResult) -> String {
+    let rows = result
+        .rows
+        .iter()
+        .map(|row| {
+            format!(
+                "{{\"actor_user_id\":{},\"event\":{},\"target_user_id\":{},\"details\":{},\"created_at\":{}}}",
+                audit_json_number(audit_optional_value(row, 0)),
+                audit_optional_value(row, 1).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
+                audit_json_number(audit_optional_value(row, 2)),
+                audit_optional_value(row, 3).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
+                audit_optional_value(row, 4).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
+            )
+        })
+        .collect::<Vec<_>>();
+    format!("[{}]", rows.join(","))
+}
+
+fn audit_rows_inspect(result: &QueryResult) -> String {
+    let mut output = format!(
+        "Audit log: {} entr{}\n",
+        result.rows.len(),
+        if result.rows.len() == 1 { "y" } else { "ies" }
+    );
+    output.push_str("actor_user_id | event | target_user_id | details | created_at\n");
+    for row in &result.rows {
+        let fields = (0..5)
+            .map(|index| {
+                audit_optional_value(row, index)
+                    .unwrap_or("-")
+                    .replace(['\n', '\r', '\t'], " ")
+            })
+            .collect::<Vec<_>>();
+        let _ = writeln!(output, "{}", fields.join(" | "));
+    }
+    output
+}
+
+fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let Some(operation) = args.next() else {
+        audit_usage();
+        return ExitCode::from(2);
+    };
+    let Some(path) = args.next() else {
+        audit_usage();
+        return ExitCode::from(2);
+    };
+    let mut limit = 100usize;
+    let mut format = "inspect";
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--limit" => {
+                let Some(value) = args.next() else {
+                    audit_usage();
+                    return ExitCode::from(2);
+                };
+                limit = match audit_limit(&value) {
+                    Ok(limit) => limit,
+                    Err(code) => return code,
+                };
+            }
+            "--format" if operation == "export" => {
+                let Some(value) = args.next() else {
+                    audit_usage();
+                    return ExitCode::from(2);
+                };
+                if !matches!(value.as_str(), "json" | "csv") {
+                    eprintln!("error[E-AUDIT-005]: format must be json or csv");
+                    return ExitCode::from(2);
+                }
+                format = if value == "json" { "json" } else { "csv" };
+            }
+            _ => {
+                audit_usage();
+                return ExitCode::from(2);
+            }
+        }
+    }
+    if !matches!(operation.as_str(), "inspect" | "export") {
+        audit_usage();
+        return ExitCode::from(2);
+    }
+    if operation == "inspect" && format != "inspect" {
+        audit_usage();
+        return ExitCode::from(2);
+    }
+    let (database_url, audit_table) = match audit_project(&path) {
+        Ok(project) => project,
+        Err(code) => return code,
+    };
+    let result = match audit_rows(&database_url, &audit_table, limit) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("error[E-AUDIT-006]: cannot read audit log: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    match operation.as_str() {
+        "inspect" => print!("{}", audit_rows_inspect(&result)),
+        "export" if format == "json" => println!("{}", audit_rows_json(&result)),
+        "export" => print!("{}", audit_rows_csv(&result)),
+        _ => unreachable!(),
+    }
+    ExitCode::SUCCESS
 }
 
 fn password_from_stdin() -> Result<String, String> {
@@ -3369,6 +3610,9 @@ fn main() -> ExitCode {
     }
     if command == "auth" {
         return auth_command(args);
+    }
+    if command == "audit" {
+        return audit_command(args);
     }
     if command == "new" {
         let Some(path) = args.next() else {
@@ -3565,6 +3809,33 @@ mod tests {
         assert_eq!(
             format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
             r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
+        );
+    }
+
+    #[test]
+    fn formats_audit_rows_as_json_and_csv_without_losing_nulls() {
+        let result = QueryResult {
+            columns: vec![
+                "actor_user_id".into(),
+                "event".into(),
+                "target_user_id".into(),
+                "details".into(),
+                "created_at".into(),
+            ],
+            rows: vec![vec![
+                "NULL".into(),
+                "auth.login_failed".into(),
+                "NULL".into(),
+                "email=anna@example.test;note=\"unknown\"".into(),
+                "2026-09-17 12:00:00".into(),
+            ]],
+        };
+        let json: serde_json::Value = serde_json::from_str(&audit_rows_json(&result)).unwrap();
+        assert_eq!(json[0]["actor_user_id"], serde_json::Value::Null);
+        assert_eq!(json[0]["target_user_id"], serde_json::Value::Null);
+        assert_eq!(json[0]["event"], "auth.login_failed");
+        assert!(
+            audit_rows_csv(&result).contains("\"email=anna@example.test;note=\"\"unknown\"\"\"")
         );
     }
 

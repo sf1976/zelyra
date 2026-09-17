@@ -61,7 +61,8 @@ Implemented today:
   guards, password reset, activation/deactivation, and last-administrator
   protection.
 - optional MariaDB audit logging for login, logout, password, user, role, and
-  permission events, with the latest 100 events visible in administration.
+  permission events, with the latest 100 events visible in administration and
+  inspectable/exportable through the CLI.
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
   permission guards, structured JSON errors, and declared `Result` error
@@ -377,6 +378,10 @@ zelyra doctor [file.zyl] [--port <port>] [--json]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra auth hash-password [--stdin]
+zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>
+zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>
+zelyra audit inspect <file.zyl> [--limit <n>]
+zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db setup <file.zyl>

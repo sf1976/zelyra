@@ -65,7 +65,8 @@ Heute implementiert:
   Berechtigungssperren, Benutzeranlage, Passwort-Zurücksetzung, Aktivierung
   und Deaktivierung sowie Schutz der letzten Administrationszuordnung.
 - optionales MariaDB-Audit-Logging für Login-, Logout-, Passwort-, Benutzer-,
-  Rollen- und Berechtigungsereignisse mit Anzeige der letzten 100 Einträge.
+  Rollen- und Berechtigungsereignisse mit Anzeige der letzten 100 Einträge sowie
+  CLI-Befehlen zum Inspizieren und Exportieren.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
@@ -387,6 +388,10 @@ zelyra doctor [file.zyl] [--port <port>] [--json]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra auth hash-password [--stdin]
+zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>
+zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>
+zelyra audit inspect <file.zyl> [--limit <n>]
+zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db setup <file.zyl>

@@ -185,6 +185,8 @@ Important commands:
 | `zelyra db setup app.zyl` | create a MariaDB database and initial schema |
 | `zelyra db plan app.zyl` | display schema changes |
 | `zelyra db apply app.zyl` | apply an approved plan |
+| `zelyra audit inspect app.zyl` | inspect the latest audit events |
+| `zelyra audit export app.zyl --format json` | export audit events as JSON |
 
 ## 5. Variables, types, and functions
 
@@ -563,7 +565,11 @@ management remain future work.
 
 The optional `auth_audit_log` table records login, logout, password, user,
 role, and permission events with actor, event, target, details, and timestamp.
-The administration screen displays the latest 100 entries.
+CLI role changes use a nullable actor and mark `details` with `source=cli`.
+The administration screen displays the latest 100 entries. Use
+`zelyra audit inspect app.zyl` for a human-readable view or
+`zelyra audit export app.zyl --format json|csv` for a bounded export; the
+default limit is 100 and the maximum is 10,000.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

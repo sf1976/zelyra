@@ -87,11 +87,25 @@ An administrative password reset changes the password and atomically removes
 all persistent sessions belonging to that user.
 
 With `audit: auth_audit_log`, login, logout, password, user, role, and
-permission events are written to an append-only table. It requires the columns `actor_user_id`, `event`,
-`target_user_id`, `details`, and `created_at`. `actor_user_id` is nullable for
-authentication without a database session; `target_user_id` can also be empty
-for user creation because the new auto-increment ID is created by the insert.
-The administration screen shows the latest 100 entries.
+permission events are written to an append-only table. It requires the columns
+`actor_user_id`, `event`, `target_user_id`, `details`, and `created_at`.
+`actor_user_id` is nullable for authentication without a database session and
+for CLI role changes; CLI entries identify themselves with `source=cli` in
+`details`. `target_user_id` can also be empty for user creation because the
+new auto-increment ID is created by the insert. The administration screen
+shows the latest 100 entries.
+
+The same log can be inspected or exported without handwritten SQL:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra audit inspect app.zyl --limit 100
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra audit export app.zyl --format json > audit.json
+~~~
+
+Exports support JSON and CSV. The default limit is 100; values above 10,000
+are rejected to prevent accidental unbounded reads.
 
 When the user table has an `active` column, deactivated users cannot log in;
 deactivation also removes their persistent sessions. The configured

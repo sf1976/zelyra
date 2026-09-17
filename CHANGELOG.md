@@ -24,6 +24,9 @@ compiler and repository release.
   administration, including the latest 100 events in the admin screen.
 - Login, failed-login, and logout events are recorded when audit logging is
   enabled; logout now requires a valid CSRF token.
+- CLI role and role-permission mutations now append transactional audit events
+  when audit logging is enabled. Added `zelyra audit inspect` plus JSON/CSV
+  `zelyra audit export` with bounded limits.
 
 ## 0.1.37 — 2026-09-17
 

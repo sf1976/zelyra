@@ -95,10 +95,23 @@ Mit `audit: auth_audit_log` werden Login-, Logout-, Passwort-, Benutzer-,
 Rollen- und Berechtigungsereignisse in eine append-only Tabelle geschrieben.
 Sie benötigt die Spalten
 `actor_user_id`, `event`, `target_user_id`, `details` und `created_at`.
-`actor_user_id` ist bei einer nicht sitzungsgebundenen Authentifizierung
-nullable; bei einer Benutzeranlage kann auch `target_user_id` leer sein, weil
-die neue Auto-Increment-ID erst während des Inserts entsteht. Die
-Administrationsseite zeigt die letzten 100 Einträge.
+`actor_user_id` ist bei einer nicht sitzungsgebundenen Authentifizierung und
+bei CLI-Rollenänderungen nullable; CLI-Einträge sind in `details` mit
+`source=cli` gekennzeichnet. Bei einer Benutzeranlage kann auch
+`target_user_id` leer sein, weil die neue Auto-Increment-ID erst während des
+Inserts entsteht. Die Administrationsseite zeigt die letzten 100 Einträge.
+
+Dasselbe Protokoll kann ohne eigenes SQL inspiziert oder exportiert werden:
+
+~~~bash
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra audit inspect app.zyl --limit 100
+DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
+  zelyra audit export app.zyl --format json > audit.json
+~~~
+
+Exporte unterstützen JSON und CSV. Das Standardlimit ist 100; Werte über
+10.000 werden abgelehnt, damit keine unbegrenzten Lesevorgänge entstehen.
 
 Wenn die Benutzertabelle eine `active`-Spalte besitzt, können deaktivierte
 Benutzer sich nicht anmelden; beim Deaktivieren werden ihre persistenten

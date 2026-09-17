@@ -214,6 +214,8 @@ Die wichtigsten Befehle:
 | `zelyra db setup app.zyl` | MariaDB und Anfangsschema einrichten |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
+| `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
+| `zelyra audit export app.zyl --format json` | Audit-Ereignisse als JSON exportieren |
 
 ## 5. Variablen, Typen und Funktionen
 
@@ -620,8 +622,12 @@ Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
 
 Die optionale Tabelle `auth_audit_log` protokolliert Login-, Logout-,
 Passwort-, Benutzer-, Rollen- und Berechtigungsereignisse mit Akteur, Ereignis,
-Ziel, Details und Zeitstempel. Die letzten 100 Einträge werden auf der
-Administrationsseite angezeigt.
+Ziel, Details und Zeitstempel. CLI-Rollenänderungen haben keinen
+Sitzungs-Akteur und werden in `details` mit `source=cli` markiert. Die letzten
+100 Einträge werden auf der Administrationsseite angezeigt. Mit
+`zelyra audit inspect app.zyl` lässt sich das Protokoll lesbar anzeigen;
+`zelyra audit export app.zyl --format json|csv` erzeugt einen begrenzten
+Export. Das Standardlimit ist 100, maximal sind 10.000 Einträge erlaubt.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

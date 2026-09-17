@@ -133,6 +133,16 @@ primary_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FRO
 primary_permission_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM role_permissions WHERE role = '${primary_role}' AND permission = 'customers.view'")"
 [[ "${primary_role_count}" == "1" ]]
 [[ "${primary_permission_count}" == "1" ]]
+cli_role_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id IS NULL AND event = 'role.grant' AND target_user_id = '${primary_user_id}' AND details = 'source=cli;role=${primary_role}'")"
+cli_permission_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id IS NULL AND event = 'role_permission.grant' AND target_user_id IS NULL AND details = 'source=cli;role=${primary_role};permission=customers.view'")"
+[[ "${cli_role_audit_count}" == "2" ]]
+[[ "${cli_permission_audit_count}" == "2" ]]
+DATABASE_URL="${database_url}" "${zelyra_bin}" audit inspect "${project_file}" --limit 5 >"${temp_dir}/audit-inspect.txt"
+grep -Fq "Audit log:" "${temp_dir}/audit-inspect.txt"
+DATABASE_URL="${database_url}" "${zelyra_bin}" audit export "${project_file}" --limit 2 --format json >"${temp_dir}/audit-export.json"
+grep -Fq '"event"' "${temp_dir}/audit-export.json"
+DATABASE_URL="${database_url}" "${zelyra_bin}" audit export "${project_file}" --limit 2 --format csv >"${temp_dir}/audit-export.csv"
+grep -Fq "actor_user_id,event,target_user_id,details,created_at" "${temp_dir}/audit-export.csv"
 DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant \
     "${project_file}" "${primary_user_id}" "${temporary_role}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" auth role revoke \
