@@ -258,6 +258,25 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 The unified, composable view data pipeline that will make these operations
 available to arbitrary views remains planned.
 
+Standalone typed table views can already expose a checked MariaDB query:
+
+~~~zelyra
+tableview Customers {
+    source sql<Customer[]> {
+        SELECT id, name, email FROM customers
+    }
+    columns { id name email }
+    searchable
+    sortable
+    paginated 25
+}
+~~~
+
+This creates a server-rendered view at `/views/customers`. Its SQL source and
+declared columns are checked against the schema; search, sorting, pagination,
+URL state, and HTML escaping remain on the safe server-side path. See
+`examples/tableview.zyl` for a complete MariaDB example.
+
 ## A first schema-aware form
 
 Forms can reuse constraints from a table:

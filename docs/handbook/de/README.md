@@ -605,6 +605,29 @@ gegen das Schema geprüft.
 🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
 sind Teil der weiteren View-Roadmap.
 
+### Eigenständige Tabellenansichten
+
+Mit `tableview` kann eine geprüfte MariaDB-Abfrage ohne CRUD-Ressource
+bereitgestellt werden:
+
+~~~zelyra
+tableview Customers {
+    source sql<Customer[]> {
+        SELECT id, name, email FROM customers
+    }
+    columns { id name email }
+    searchable
+    sortable
+    paginated 25
+}
+~~~
+
+Die erzeugte Route lautet `/views/customers`. Ergebnis-Typ und deklarierte
+Spalten werden gegen das Schema geprüft. Suchbegriffe werden auf die
+deklarierten Ergebnisspalten angewandt, Sortierung ist auf die Allowlist
+beschränkt und Pagination-Werte werden gebunden. Siehe
+`examples/tableview.zyl`.
+
 ## 13. Authentifizierung und Berechtigungen
 
 🧪 Zelyra unterstützt Argon2-Login, persistente MariaDB-Sessions, Logout,

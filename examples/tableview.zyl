@@ -1,0 +1,29 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email?
+}
+
+tableview Customers {
+    source sql<Customer[]> {
+        SELECT
+            id,
+            name,
+            email
+        FROM customers
+    }
+
+    columns {
+        id
+        name
+        email
+    }
+
+    searchable
+    sortable
+    paginated 25
+}

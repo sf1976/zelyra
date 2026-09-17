@@ -98,6 +98,9 @@ noch in Prüfung.
   und sicherem Escaping.
 - [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
   Events bleiben geplant.
+- [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,
+  deklarierten Spalten, Suche, Sortierung, Pagination, URL-Zustand und Escaping
+  sind für tabellenbasierte Ergebnistypen verfügbar.
 - [ ] Mehrere benannte Slots, Default-Slots, Fallback-Inhalte und verschachtelte
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.

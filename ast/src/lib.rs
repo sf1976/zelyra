@@ -87,6 +87,7 @@ pub struct Program {
     pub views: Vec<ViewDef>,
     pub components: Vec<ComponentDef>,
     pub pages: Vec<PageDef>,
+    pub tableviews: Vec<TableViewDef>,
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
     pub auth: Vec<AuthDef>,
@@ -123,6 +124,20 @@ pub struct ComponentDef {
 pub struct ComponentProp {
     pub name: String,
     pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct TableViewDef {
+    pub name: String,
+    pub result_type: Type,
+    pub source: String,
+    pub columns: Vec<String>,
+    pub searchable: bool,
+    pub sortable: bool,
+    pub page_size: Option<u32>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub span: Span,
 }
 

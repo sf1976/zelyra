@@ -27,7 +27,7 @@ use zelyra_runtime::{
 };
 use zelyra_web::{
     html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute,
-    CsrfProtection, FormRoute, Response, Route, WebApp,
+    CsrfProtection, FormRoute, Response, Route, TableViewRoute, WebApp,
 };
 
 fn usage() {
@@ -219,6 +219,9 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
             return Err(());
         }
         if !validate_cruds(path, &program, &schema) {
+            return Err(());
+        }
+        if !validate_tableviews(path, &program, &schema) {
             return Err(());
         }
         if let Err(errors) = check_sql_program(&program, &schema) {
@@ -2248,6 +2251,10 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 || !crud.delete_permissions.is_empty()
         })
         || program
+            .tableviews
+            .iter()
+            .any(|tableview| tableview.requires_auth || !tableview.permissions.is_empty())
+        || program
             .apis
             .iter()
             .any(|api| api.requires_auth || !api.permissions.is_empty());
@@ -2354,6 +2361,96 @@ fn crud_column_exists(
                 .columns
                 .iter()
                 .any(|candidate| candidate.name == storage)
+        })
+}
+
+fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
+    let mut valid = true;
+    let mut names = HashSet::new();
+    for tableview in &program.tableviews {
+        if !names.insert(tableview.name.clone()) {
+            diagnostic(
+                path,
+                "E-VIEW-004",
+                &format!("duplicate tableview {}", tableview.name),
+                tableview.span.line,
+                tableview.span.column,
+            );
+            valid = false;
+        }
+        let Some(result_table) = tableview_result_table(&tableview.result_type, schema) else {
+            diagnostic(
+                path,
+                "E-VIEW-005",
+                &format!(
+                    "tableview {} requires a result type that maps to a declared table",
+                    tableview.name
+                ),
+                tableview.span.line,
+                tableview.span.column,
+            );
+            valid = false;
+            continue;
+        };
+        let mut columns = HashSet::new();
+        for column in &tableview.columns {
+            if !columns.insert(column.as_str()) {
+                diagnostic(
+                    path,
+                    "E-VIEW-006",
+                    &format!(
+                        "tableview {} contains column {} more than once",
+                        tableview.name, column
+                    ),
+                    tableview.span.line,
+                    tableview.span.column,
+                );
+                valid = false;
+            } else if !result_table
+                .columns
+                .iter()
+                .any(|candidate| candidate.name == *column)
+            {
+                diagnostic(
+                    path,
+                    "E-VIEW-007",
+                    &format!(
+                        "tableview column {} does not exist in result table {}",
+                        column, result_table.name
+                    ),
+                    tableview.span.line,
+                    tableview.span.column,
+                );
+                valid = false;
+            }
+        }
+    }
+    valid
+}
+
+fn tableview_result_table<'a>(
+    result_type: &zelyra_ast::Type,
+    schema: &'a Schema,
+) -> Option<&'a zelyra_database::Table> {
+    let result_type = match result_type {
+        zelyra_ast::Type::Array(inner) | zelyra_ast::Type::Option(inner) => inner,
+        _ => result_type,
+    };
+    let zelyra_ast::Type::Named(name) = result_type else {
+        return None;
+    };
+    let snake = name.to_ascii_lowercase();
+    schema
+        .tables
+        .iter()
+        .find(|table| table.name == snake)
+        .or_else(|| {
+            let plural = if snake.ends_with('y') {
+                format!("{}ies", &snake[..snake.len() - 1])
+            } else {
+                format!("{snake}s")
+            };
+            schema.tables.iter().find(|table| table.name == plural)
         })
 }
 
@@ -2616,6 +2713,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if program.pages.is_empty()
         && program.forms.is_empty()
         && program.cruds.is_empty()
+        && program.tableviews.is_empty()
         && program.apis.is_empty()
     {
         eprintln!("error[E-WEB-001]: {path} does not define a page, form, CRUD resource, or API");
@@ -2650,6 +2748,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(1);
     }
     if !validate_cruds(&path, &program, &schema) {
+        return ExitCode::from(1);
+    }
+    if !validate_tableviews(&path, &program, &schema) {
         return ExitCode::from(1);
     }
     if let Err(errors) = check_form_program(&program, &schema) {
@@ -2777,6 +2878,21 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
         });
     }
+    let tableview_routes = program
+        .tableviews
+        .iter()
+        .map(|tableview| TableViewRoute {
+            path: format!("/views/{}", tableview.name.to_ascii_lowercase()),
+            title: tableview.name.clone(),
+            source: tableview.source.clone(),
+            columns: tableview.columns.clone(),
+            searchable: tableview.searchable,
+            sortable: tableview.sortable,
+            page_size: tableview.page_size,
+            requires_auth: tableview.requires_auth,
+            permissions: tableview.permissions.clone(),
+        })
+        .collect();
     let database_capability_granted = capability_grants
         .as_ref()
         .is_none_or(|grants| grants.contains("Database"));
@@ -2799,7 +2915,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .map(str::to_owned)
                 .collect(),
         )
-        .with_cruds(crud_routes);
+        .with_cruds(crud_routes)
+        .with_tableviews(tableview_routes);
     let app = if let Some(cors_policy) = cors_policy {
         app.with_cors(cors_policy)
     } else {

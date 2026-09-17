@@ -264,6 +264,27 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 Die einheitliche, zusammensetzbare View-Datenpipeline für beliebige Views
 bleibt als nächster Ausbau geplant.
 
+Eigenständige typisierte Tabellenansichten können bereits eine geprüfte
+MariaDB-Abfrage bereitstellen:
+
+~~~zelyra
+tableview Customers {
+    source sql<Customer[]> {
+        SELECT id, name, email FROM customers
+    }
+    columns { id name email }
+    searchable
+    sortable
+    paginated 25
+}
+~~~
+
+Dadurch entsteht eine serverseitig gerenderte Ansicht unter
+`/views/customers`. SQL-Quelle und deklarierte Spalten werden gegen das Schema
+geprüft; Suche, Sortierung, Pagination, URL-Zustand und HTML-Escaping bleiben
+Teil des sicheren Serverpfads. Ein vollständiges MariaDB-Beispiel steht in
+`examples/tableview.zyl`.
+
 ## Ein erstes schemaabhängiges Formular
 
 Formulare können Einschränkungen einer Tabelle wiederverwenden:

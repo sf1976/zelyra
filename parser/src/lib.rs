@@ -90,6 +90,7 @@ impl<'a> Parser<'a> {
         let mut views = Vec::new();
         let mut components = Vec::new();
         let mut pages = Vec::new();
+        let mut tableviews = Vec::new();
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
         let mut auth = Vec::new();
@@ -111,6 +112,8 @@ impl<'a> Parser<'a> {
                 components.push(self.component_definition()?);
             } else if self.at(&TokenKind::Page) {
                 pages.push(self.page_definition()?);
+            } else if self.at(&TokenKind::TableView) {
+                tableviews.push(self.tableview_definition()?);
             } else if self.at(&TokenKind::Form) {
                 forms.push(self.form_definition()?);
             } else if self.at(&TokenKind::Crud) {
@@ -132,6 +135,7 @@ impl<'a> Parser<'a> {
             views,
             components,
             pages,
+            tableviews,
             forms,
             cruds,
             auth,
@@ -567,6 +571,97 @@ impl<'a> Parser<'a> {
         Ok(ViewDef {
             name,
             html,
+            span: start.join(end),
+        })
+    }
+
+    fn tableview_definition(&mut self) -> Result<TableViewDef, ParseError> {
+        let start = self.expect(TokenKind::TableView, "`tableview`")?;
+        let (name, _) = self.ident("tableview name")?;
+        self.expect(TokenKind::LBrace, "`{` after tableview name")?;
+        let mut result_type = None;
+        let mut source = None;
+        let mut columns = Vec::new();
+        let mut searchable = false;
+        let mut sortable = false;
+        let mut page_size = None;
+        let mut requires_auth = false;
+        let mut permissions = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Source) {
+                self.advance();
+                let sql_start = self.expect(TokenKind::Sql, "`sql` after `source`")?;
+                let expression = self.sql_expression(sql_start)?;
+                let ExprKind::Sql {
+                    result_type: source_type,
+                    query,
+                } = expression.kind
+                else {
+                    return self.error("tableview source must be a SQL query");
+                };
+                result_type = Some(source_type);
+                source = Some(query);
+            } else if self.at(&TokenKind::Columns) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `columns`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    columns.push(self.ident("tableview column name")?.0);
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after tableview columns")?;
+            } else if self.at(&TokenKind::Searchable) {
+                self.advance();
+                searchable = true;
+            } else if self.at(&TokenKind::Sortable) {
+                self.advance();
+                sortable = true;
+            } else if self.at(&TokenKind::Paginated) {
+                self.advance();
+                let value = match self.current().kind.clone() {
+                    TokenKind::Int(value) => value,
+                    _ => return self.error("expected page size after `paginated`"),
+                };
+                self.advance();
+                if !(1..=100).contains(&value) {
+                    return self.error("tableview page size must be between 1 and 100");
+                }
+                page_size = Some(value as u32);
+            } else if self.at(&TokenKind::Requires) {
+                self.advance();
+                self.expect(TokenKind::Auth, "auth after requires")?;
+                requires_auth = true;
+            } else if self.at(&TokenKind::Permits) {
+                self.advance();
+                permissions.push(self.string_value("permission")?);
+            } else {
+                return self.error(
+                    "expected source, columns, searchable, sortable, paginated, requires auth, or permits in tableview definition",
+                );
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after tableview definition")?;
+        let Some(result_type) = result_type else {
+            return self.error("tableview requires a typed SQL source");
+        };
+        let Some(source) = source else {
+            return self.error("tableview requires a SQL source");
+        };
+        if columns.is_empty() {
+            return self.error("tableview requires at least one column");
+        }
+        Ok(TableViewDef {
+            name,
+            result_type,
+            source,
+            columns,
+            searchable,
+            sortable,
+            page_size,
+            requires_auth,
+            permissions,
             span: start.join(end),
         })
     }
@@ -1773,6 +1868,34 @@ mod tests {
             program.components[0].props[1].ty,
             Type::Option(Box::new(Type::Int))
         );
+    }
+
+    #[test]
+    fn parses_tableview_source_and_controls() {
+        let source = r#"
+            table customers { id: Id primary auto name: String(100) }
+            tableview Customers {
+                source sql<Customer[]> {
+                    SELECT id, name FROM customers
+                }
+                columns { id name }
+                searchable
+                sortable
+                paginated 25
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.tableviews.len(), 1);
+        let tableview = &program.tableviews[0];
+        assert_eq!(tableview.name, "Customers");
+        assert_eq!(
+            tableview.result_type,
+            Type::Array(Box::new(Type::Named("Customer".into())))
+        );
+        assert_eq!(tableview.columns, ["id", "name"]);
+        assert!(tableview.searchable);
+        assert!(tableview.sortable);
+        assert_eq!(tableview.page_size, Some(25));
     }
 
     #[test]

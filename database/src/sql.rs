@@ -67,6 +67,15 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             check_block(&block, schema, &mut environment, &mut errors);
         }
     }
+    for tableview in &program.tableviews {
+        errors.extend(check_query(
+            &tableview.source,
+            &tableview.result_type,
+            schema,
+            &HashMap::new(),
+            tableview.span,
+        ));
+    }
     if errors.is_empty() {
         Ok(())
     } else {
@@ -703,5 +712,28 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("not available in this scope")));
+    }
+
+    #[test]
+    fn checks_tableview_source_sql_against_schema() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } tableview Customers { source sql<Customer[]> { SELECT id, name FROM customers } columns { id name } }",
+        )
+        .unwrap())
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_tableview_source_column() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } tableview Customers { source sql<Customer[]> { SELECT username FROM customers } columns { id } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&program, &source_schema()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("username")));
     }
 }

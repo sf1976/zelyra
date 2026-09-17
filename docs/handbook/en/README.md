@@ -549,6 +549,27 @@ schema.
 🗺️ Fully custom typed components and fine-grained view overrides are part of
 the continuing view roadmap.
 
+### Standalone table views
+
+`tableview` exposes a checked MariaDB query without requiring a CRUD resource:
+
+~~~zelyra
+tableview Customers {
+    source sql<Customer[]> {
+        SELECT id, name, email FROM customers
+    }
+    columns { id name email }
+    searchable
+    sortable
+    paginated 25
+}
+~~~
+
+The generated route is `/views/customers`. The SQL result type and declared
+columns are checked against the schema. Search terms are applied to the
+declared result columns, sorting is restricted to the declared allowlist, and
+pagination values are bound parameters. See `examples/tableview.zyl`.
+
 ## 13. Authentication and permissions
 
 🧪 Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route

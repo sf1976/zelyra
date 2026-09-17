@@ -29,6 +29,7 @@ pub enum TokenKind {
     Match,
     Sql,
     Page,
+    TableView,
     View,
     Component,
     Props,
@@ -54,6 +55,11 @@ pub enum TokenKind {
     Title,
     List,
     Search,
+    Sortable,
+    Searchable,
+    Paginated,
+    Source,
+    Columns,
     Filter,
     Field,
     Action,
@@ -189,6 +195,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "engine" => TokenKind::Engine,
                 "postgres" => TokenKind::Postgres,
                 "page" => TokenKind::Page,
+                "tableview" => TokenKind::TableView,
                 "view" => TokenKind::View,
                 "component" => TokenKind::Component,
                 "props" => TokenKind::Props,
@@ -214,6 +221,11 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "title" => TokenKind::Title,
                 "list" => TokenKind::List,
                 "search" => TokenKind::Search,
+                "sortable" => TokenKind::Sortable,
+                "searchable" => TokenKind::Searchable,
+                "paginated" => TokenKind::Paginated,
+                "source" => TokenKind::Source,
+                "columns" => TokenKind::Columns,
                 "filter" => TokenKind::Filter,
                 "field" => TokenKind::Field,
                 "action" => TokenKind::Action,
@@ -619,5 +631,20 @@ mod tests {
         assert!(tokens
             .iter()
             .any(|token| matches!(token.kind, TokenKind::Props)));
+    }
+
+    #[test]
+    fn lexes_tableview_keywords() {
+        let tokens = lex("tableview Customers { source sql<Customer[]> { SELECT id FROM customers } columns { id } searchable sortable paginated 25 }").unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::TableView));
+        assert!(tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Source)));
+        assert!(tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Columns)));
+        assert!(tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Paginated)));
     }
 }

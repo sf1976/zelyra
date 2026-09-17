@@ -280,6 +280,19 @@ pub struct CrudRoute {
 }
 
 #[derive(Clone, Debug)]
+pub struct TableViewRoute {
+    pub path: String,
+    pub title: String,
+    pub source: String,
+    pub columns: Vec<String>,
+    pub searchable: bool,
+    pub sortable: bool,
+    pub page_size: Option<u32>,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct AuthRoute {
     pub table: String,
     pub session_table: Option<String>,
@@ -317,6 +330,7 @@ pub struct WebApp {
     pub apis: Vec<ApiRoute>,
     pub forms: Vec<FormRoute>,
     pub cruds: Vec<CrudRoute>,
+    pub tableviews: Vec<TableViewRoute>,
     pub database_url: Option<String>,
     pub database_capability_granted: Option<bool>,
     pub auth_token: Option<String>,
@@ -334,6 +348,7 @@ impl WebApp {
             apis: Vec::new(),
             forms,
             cruds: Vec::new(),
+            tableviews: Vec::new(),
             database_url: None,
             database_capability_granted: None,
             auth_token: None,
@@ -355,6 +370,7 @@ impl WebApp {
             apis: Vec::new(),
             forms,
             cruds: Vec::new(),
+            tableviews: Vec::new(),
             database_url,
             database_capability_granted: None,
             auth_token: None,
@@ -368,6 +384,11 @@ impl WebApp {
 
     pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
         self.cruds = cruds;
+        self
+    }
+
+    pub fn with_tableviews(mut self, tableviews: Vec<TableViewRoute>) -> Self {
+        self.tableviews = tableviews;
         self
     }
 
@@ -526,6 +547,23 @@ impl WebApp {
                     self.database_url.as_deref(),
                     crud_ui_actions(crud, request, self),
                 );
+            }
+        }
+        for tableview in &self.tableviews {
+            if match_path(&tableview.path, &request.path).is_some() {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
+                if let Some(response) = authorize(
+                    tableview.requires_auth,
+                    &tableview.permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
+                }
+                return dispatch_tableview(tableview, request, self.database_url.as_deref());
             }
         }
         for route in &self.routes {
@@ -2777,6 +2815,309 @@ fn dispatch_crud(
     )
 }
 
+fn dispatch_tableview(
+    tableview: &TableViewRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    if request.method != "GET" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(database_url) = database_url else {
+        return Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for table views.</p>",
+        );
+    };
+    let query_string = request
+        .target
+        .split_once('?')
+        .map_or("", |(_, query)| query);
+    let query_values = match parse_urlencoded(query_string) {
+        Ok(values) => values,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    let search = query_values.get("search").cloned().unwrap_or_default();
+    let page = positive_query_value(&query_values, "page").unwrap_or(1);
+    let per_page = u64::from(tableview.page_size.unwrap_or(50));
+    let offset = (page.saturating_sub(1)).saturating_mul(per_page);
+    let Some(default_sort) = tableview.columns.first().map(String::as_str) else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    let sort = query_values
+        .get("sort")
+        .map(String::as_str)
+        .unwrap_or(default_sort);
+    if !tableview.sortable && query_values.contains_key("sort") {
+        return Response::html(
+            400,
+            "<h1>400 Bad Request</h1><p>This table view is not sortable.</p>",
+        );
+    }
+    if !tableview.columns.iter().any(|column| column == sort) {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown sort column.</p>");
+    }
+    let order = match query_values
+        .get("order")
+        .map(String::as_str)
+        .unwrap_or("asc")
+    {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ => {
+            return Response::html(
+                400,
+                "<h1>400 Bad Request</h1><p>order must be asc or desc.</p>",
+            )
+        }
+    };
+    if !tableview.sortable && query_values.contains_key("order") {
+        return Response::html(
+            400,
+            "<h1>400 Bad Request</h1><p>This table view is not sortable.</p>",
+        );
+    }
+    let source = tableview.source.trim().trim_end_matches(';').trim();
+    if source.is_empty() {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    }
+    let select_columns = tableview
+        .columns
+        .iter()
+        .map(|column| {
+            format!(
+                "{}.{} AS {}",
+                quote_identifier("zelyra_view"),
+                quote_identifier(column),
+                quote_identifier(column)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut query = format!(
+        "SELECT {select_columns} FROM ({source}) AS {}",
+        quote_identifier("zelyra_view")
+    );
+    if tableview.searchable && !search.is_empty() {
+        let search_conditions = tableview
+            .columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "CAST({}.{} AS CHAR) LIKE CONCAT('%', :search, '%')",
+                    quote_identifier("zelyra_view"),
+                    quote_identifier(column)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        query.push_str(" WHERE (");
+        query.push_str(&search_conditions);
+        query.push(')');
+    } else if !search.is_empty() {
+        return Response::html(
+            400,
+            "<h1>400 Bad Request</h1><p>This table view is not searchable.</p>",
+        );
+    }
+    if tableview.sortable {
+        query.push_str(&format!(
+            " ORDER BY {}.{} {order}",
+            quote_identifier("zelyra_view"),
+            quote_identifier(sort)
+        ));
+    }
+    query.push_str(" LIMIT :limit OFFSET :offset");
+    let mut params = vec![
+        (
+            "limit".into(),
+            zelyra_database::QueryValue::Int(per_page as i64),
+        ),
+        (
+            "offset".into(),
+            zelyra_database::QueryValue::Int(offset as i64),
+        ),
+    ];
+    if tableview.searchable && !search.is_empty() {
+        params.push((
+            "search".into(),
+            zelyra_database::QueryValue::String(search.clone()),
+        ));
+    }
+    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("zelyra web: tableview query failed: {error}");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        }
+    };
+    Response::html(
+        200,
+        render_tableview(
+            tableview,
+            &result.rows,
+            TableViewRenderState {
+                query_values: &query_values,
+                search: &search,
+                sort,
+                order,
+                page,
+                per_page,
+            },
+        ),
+    )
+}
+
+struct TableViewRenderState<'a> {
+    query_values: &'a HashMap<String, String>,
+    search: &'a str,
+    sort: &'a str,
+    order: &'a str,
+    page: u64,
+    per_page: u64,
+}
+
+fn render_tableview(
+    tableview: &TableViewRoute,
+    rows: &[Vec<String>],
+    state: TableViewRenderState<'_>,
+) -> String {
+    let TableViewRenderState {
+        query_values,
+        search,
+        sort,
+        order,
+        page,
+        per_page,
+    } = state;
+    let mut html = String::from("<main><h1>");
+    html.push_str(&html_escape(&tableview.title));
+    html.push_str("</h1><form method=\"get\" action=\"");
+    html.push_str(&html_escape(&tableview.path));
+    html.push_str("\">");
+    if tableview.searchable {
+        html.push_str(
+            "<label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
+        );
+        html.push_str(&html_escape(search));
+        html.push_str("\">");
+    }
+    if tableview.sortable {
+        html.push_str("<label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+        for column in &tableview.columns {
+            html.push_str("<option value=\"");
+            html.push_str(&html_escape(column));
+            html.push('"');
+            if column == sort {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(&html_escape(column));
+            html.push_str("</option>");
+        }
+        html.push_str(
+            "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
+        );
+        for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+            html.push_str("<option value=\"");
+            html.push_str(value);
+            html.push('"');
+            if value.eq_ignore_ascii_case(order) {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(label);
+            html.push_str("</option>");
+        }
+        html.push_str("</select>");
+    }
+    html.push_str("<button type=\"submit\">Apply</button></form>");
+    if rows.is_empty() {
+        html.push_str("<p>No records found.</p>");
+    } else {
+        html.push_str("<table><thead><tr>");
+        for column in &tableview.columns {
+            html.push_str("<th>");
+            html.push_str(&html_escape(column));
+            html.push_str("</th>");
+        }
+        html.push_str("</tr></thead><tbody>");
+        for row in rows {
+            html.push_str("<tr>");
+            for index in 0..tableview.columns.len() {
+                html.push_str("<td>");
+                html.push_str(&html_escape(
+                    row.get(index).map(String::as_str).unwrap_or(""),
+                ));
+                html.push_str("</td>");
+            }
+            html.push_str("</tr>");
+        }
+        html.push_str("</tbody></table>");
+    }
+    html.push_str("<nav class=\"zelyra-pagination\">");
+    if page > 1 {
+        html.push_str("<a href=\"");
+        html.push_str(&html_escape(&tableview_page_url(
+            tableview,
+            query_values,
+            search,
+            sort,
+            order,
+            page - 1,
+        )));
+        html.push_str("\">Previous</a> ");
+    }
+    html.push_str("<span>Page ");
+    html.push_str(&page.to_string());
+    html.push_str("</span>");
+    if rows.len() as u64 == per_page {
+        html.push_str(" <a href=\"");
+        html.push_str(&html_escape(&tableview_page_url(
+            tableview,
+            query_values,
+            search,
+            sort,
+            order,
+            page + 1,
+        )));
+        html.push_str("\">Next</a>");
+    }
+    html.push_str("</nav></main>");
+    html
+}
+
+fn tableview_page_url(
+    tableview: &TableViewRoute,
+    query_values: &HashMap<String, String>,
+    search: &str,
+    sort: &str,
+    order: &str,
+    page: u64,
+) -> String {
+    let mut url = format!(
+        "{}?page={page}&sort={sort}&order={}",
+        tableview.path,
+        order.to_ascii_lowercase()
+    );
+    if !search.is_empty() {
+        url.push_str("&search=");
+        url.push_str(&url_encode(search));
+    }
+    for (name, value) in query_values {
+        if matches!(name.as_str(), "page" | "sort" | "order" | "search") || value.is_empty() {
+            continue;
+        }
+        url.push('&');
+        url.push_str(&url_encode(name));
+        url.push('=');
+        url.push_str(&url_encode(value));
+    }
+    url
+}
+
 fn dispatch_crud_detail(
     crud: &CrudRoute,
     request: &Request,
@@ -4559,6 +4900,42 @@ mod tests {
             filter_condition(&table, "name", FilterOperator::IsNull),
             "`base`.`name` IS NULL"
         );
+    }
+
+    #[test]
+    fn renders_tableview_with_escaped_values_and_pagination_state() {
+        let tableview = TableViewRoute {
+            path: "/views/customers".into(),
+            title: "Customers".into(),
+            source: "SELECT id, name FROM customers".into(),
+            columns: vec!["id".into(), "name".into()],
+            searchable: true,
+            sortable: true,
+            page_size: Some(1),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let query_values = HashMap::from([
+            ("search".into(), "CNC machine".into()),
+            ("sort".into(), "name".into()),
+            ("order".into(), "desc".into()),
+        ]);
+        let html = render_tableview(
+            &tableview,
+            &[vec!["1".into(), "<unsafe>".into()]],
+            TableViewRenderState {
+                query_values: &query_values,
+                search: "CNC machine",
+                sort: "name",
+                order: "DESC",
+                page: 2,
+                per_page: 1,
+            },
+        );
+        assert!(html.contains("&lt;unsafe&gt;"));
+        assert!(html.contains("value=\"CNC machine\""));
+        assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
+        assert!(html.contains("name=\"sort\""));
     }
 
     #[test]
