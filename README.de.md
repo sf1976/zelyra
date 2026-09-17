@@ -76,8 +76,8 @@ Heute implementiert:
   benötigen eine ausdrückliche Funktionsdeklaration und Projektfreigabe;
 - sichere Zufallszahlen über random_int(min, max) und die Random-Capability;
   inklusive Grenzen und ungültige Bereiche werden zur Laufzeit geprüft;
-- read_text(path) für ausdrücklich freigegebene UTF-8-Dateizugriffe über die
-  FileSystem-Capability;
+- read_text(path), write_text(path, content), delete_file(path) und
+  list_dir(path) über die FileSystem-Capability mit Projektpfadgrenzen;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und

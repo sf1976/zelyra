@@ -560,6 +560,9 @@ impl<'a> Resolver<'a> {
                             | "env"
                             | "random_int"
                             | "read_text"
+                            | "write_text"
+                            | "delete_file"
+                            | "list_dir"
                     )
                 {
                     self.error(expr.span, format!("unknown function `{name}`"));

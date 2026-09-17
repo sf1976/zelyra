@@ -1,6 +1,7 @@
 use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
@@ -3060,6 +3061,33 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "write_text" {
+                require_capability(
+                    "FileSystem",
+                    "file-system write access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            } else if name == "delete_file" {
+                require_capability(
+                    "FileSystem",
+                    "file-system delete access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            } else if name == "list_dir" {
+                require_capability(
+                    "FileSystem",
+                    "file-system read access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             }
             if let Some(callee) = functions.get(name.as_str()) {
                 for capability in &callee.capabilities {
@@ -3908,6 +3936,35 @@ impl<'a> Checker<'a> {
                     let path = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &path, args[0].span);
                     Type::String
+                } else if name == "write_text" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "write_text expects a String path and String content",
+                        );
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    let content = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    self.expect_type(&Type::String, &content, args[1].span);
+                    Type::Unit
+                } else if name == "delete_file" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "delete_file expects one String path");
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    Type::Unit
+                } else if name == "list_dir" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "list_dir expects one String path");
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    Type::Array(Box::new(Type::String))
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -4237,6 +4294,13 @@ pub struct RuntimeError {
     pub span: Span,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileSystemPolicy {
+    pub base_dir: PathBuf,
+    pub read_roots: Vec<PathBuf>,
+    pub write_roots: Vec<PathBuf>,
+}
+
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
@@ -4306,21 +4370,21 @@ enum Flow {
 }
 
 pub fn execute(program: &Program) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, None, None)
+    execute_internal(program, None, None, None)
 }
 
 pub fn execute_with_database(
     program: &Program,
     database_url: &str,
 ) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, Some(database_url.to_owned()), None)
+    execute_internal(program, Some(database_url.to_owned()), None, None)
 }
 
 pub fn execute_with_capabilities(
     program: &Program,
     grants: Option<&HashSet<String>>,
 ) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, None, grants.cloned())
+    execute_internal(program, None, grants.cloned(), None)
 }
 
 pub fn execute_with_database_and_capabilities(
@@ -4328,7 +4392,34 @@ pub fn execute_with_database_and_capabilities(
     database_url: &str,
     grants: Option<&HashSet<String>>,
 ) -> Result<Vec<String>, RuntimeError> {
-    execute_internal(program, Some(database_url.to_owned()), grants.cloned())
+    execute_internal(
+        program,
+        Some(database_url.to_owned()),
+        grants.cloned(),
+        None,
+    )
+}
+
+pub fn execute_with_capabilities_and_filesystem_policy(
+    program: &Program,
+    grants: Option<&HashSet<String>>,
+    filesystem_policy: Option<&FileSystemPolicy>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(program, None, grants.cloned(), filesystem_policy.cloned())
+}
+
+pub fn execute_with_database_and_capabilities_and_filesystem_policy(
+    program: &Program,
+    database_url: &str,
+    grants: Option<&HashSet<String>>,
+    filesystem_policy: Option<&FileSystemPolicy>,
+) -> Result<Vec<String>, RuntimeError> {
+    execute_internal(
+        program,
+        Some(database_url.to_owned()),
+        grants.cloned(),
+        filesystem_policy.cloned(),
+    )
 }
 
 pub fn execute_function(
@@ -4337,7 +4428,14 @@ pub fn execute_function(
     args: Vec<Value>,
     database_url: Option<&str>,
 ) -> Result<Value, RuntimeError> {
-    execute_function_with_capabilities(program, name, args, database_url, None)
+    execute_function_with_capabilities_and_filesystem_policy(
+        program,
+        name,
+        args,
+        database_url,
+        None,
+        None,
+    )
 }
 
 pub fn execute_function_with_capabilities(
@@ -4346,6 +4444,24 @@ pub fn execute_function_with_capabilities(
     args: Vec<Value>,
     database_url: Option<&str>,
     grants: Option<&HashSet<String>>,
+) -> Result<Value, RuntimeError> {
+    execute_function_with_capabilities_and_filesystem_policy(
+        program,
+        name,
+        args,
+        database_url,
+        grants,
+        None,
+    )
+}
+
+pub fn execute_function_with_capabilities_and_filesystem_policy(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+    grants: Option<&HashSet<String>>,
+    filesystem_policy: Option<&FileSystemPolicy>,
 ) -> Result<Value, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
@@ -4357,6 +4473,7 @@ pub fn execute_function_with_capabilities(
         steps: 0,
         database_url: database_url.map(str::to_owned),
         granted_capabilities: grants.cloned(),
+        filesystem_policy: filesystem_policy.cloned(),
         active_capabilities: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
@@ -4366,6 +4483,7 @@ fn execute_internal(
     program: &Program,
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
+    filesystem_policy: Option<FileSystemPolicy>,
 ) -> Result<Vec<String>, RuntimeError> {
     let mut interpreter = Interpreter {
         functions: program
@@ -4377,6 +4495,7 @@ fn execute_internal(
         steps: 0,
         database_url,
         granted_capabilities,
+        filesystem_policy,
         active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
@@ -4389,6 +4508,7 @@ struct Interpreter {
     steps: usize,
     database_url: Option<String>,
     granted_capabilities: Option<HashSet<String>>,
+    filesystem_policy: Option<FileSystemPolicy>,
     active_capabilities: Vec<HashSet<String>>,
 }
 
@@ -4429,6 +4549,59 @@ impl Interpreter {
         }
         Ok(())
     }
+
+    fn resolve_filesystem_path(
+        &self,
+        path: &str,
+        roots: &[PathBuf],
+        operation: &str,
+        span: Span,
+        allow_missing: bool,
+    ) -> Result<PathBuf, RuntimeError> {
+        let Some(policy) = &self.filesystem_policy else {
+            return Ok(PathBuf::from(path));
+        };
+        let candidate = if Path::new(path).is_absolute() {
+            PathBuf::from(path)
+        } else {
+            policy.base_dir.join(path)
+        };
+        let resolved = if allow_missing && !candidate.exists() && !candidate.is_symlink() {
+            let Some(file_name) = candidate.file_name() else {
+                return Err(self.runtime_error(
+                    span,
+                    format!("file-system {operation} requires a file path"),
+                ));
+            };
+            let parent = candidate.parent().unwrap_or(Path::new("."));
+            let parent = std::fs::canonicalize(parent).map_err(|error| {
+                self.runtime_error(
+                    span,
+                    format!("file-system {operation} failed for {path}: {error}"),
+                )
+            })?;
+            parent.join(file_name)
+        } else {
+            std::fs::canonicalize(&candidate).map_err(|error| {
+                self.runtime_error(
+                    span,
+                    format!("file-system {operation} failed for {path}: {error}"),
+                )
+            })?
+        };
+        if roots
+            .iter()
+            .any(|root| resolved == *root || resolved.starts_with(root))
+        {
+            Ok(resolved)
+        } else {
+            Err(self.runtime_error(
+                span,
+                format!("file-system {operation} denied for {path}: path is outside the configured roots"),
+            ))
+        }
+    }
+
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
         let function = self
             .functions
@@ -4729,6 +4902,7 @@ impl Interpreter {
                             steps: 0,
                             database_url: self.database_url.clone(),
                             granted_capabilities: self.granted_capabilities.clone(),
+                            filesystem_policy: self.filesystem_policy.clone(),
                             active_capabilities: self.active_capabilities.clone(),
                         };
                         let mut child_env = env.clone();
@@ -5026,14 +5200,139 @@ impl Interpreter {
                             self.runtime_error(args[0].span, "read_text expects a non-empty path")
                         );
                     }
+                    let path = self.resolve_filesystem_path(
+                        &path,
+                        &self
+                            .filesystem_policy
+                            .as_ref()
+                            .map_or_else(Vec::new, |policy| policy.read_roots.clone()),
+                        "read",
+                        expr.span,
+                        false,
+                    )?;
                     std::fs::read_to_string(&path)
                         .map_err(|error| {
                             self.runtime_error(
                                 expr.span,
-                                format!("file-system read failed for {path}: {error}"),
+                                format!("file-system read failed: {error}"),
                             )
                         })
                         .map(Value::String)
+                } else if name == "write_text" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "write_text expects a String path and String content",
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system write access",
+                        expr.span,
+                    )?;
+                    let path = self.eval(&args[0], env)?;
+                    let content = self.eval(&args[1], env)?;
+                    let (Value::String(path), Value::String(content)) = (path, content) else {
+                        return Err(
+                            self.runtime_error(expr.span, "write_text expects String arguments")
+                        );
+                    };
+                    if path.is_empty() {
+                        return Err(
+                            self.runtime_error(args[0].span, "write_text expects a non-empty path")
+                        );
+                    }
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |policy| policy.write_roots.clone());
+                    let path =
+                        self.resolve_filesystem_path(&path, &roots, "write", expr.span, true)?;
+                    std::fs::write(&path, content).map_err(|error| {
+                        self.runtime_error(expr.span, format!("file-system write failed: {error}"))
+                    })?;
+                    Ok(Value::Unit)
+                } else if name == "delete_file" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "delete_file expects one String path")
+                        );
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system delete access",
+                        expr.span,
+                    )?;
+                    let path = self.eval(&args[0], env)?;
+                    let Value::String(path) = path else {
+                        return Err(
+                            self.runtime_error(args[0].span, "delete_file expects a String path")
+                        );
+                    };
+                    if path.is_empty() {
+                        return Err(self
+                            .runtime_error(args[0].span, "delete_file expects a non-empty path"));
+                    }
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |policy| policy.write_roots.clone());
+                    let path =
+                        self.resolve_filesystem_path(&path, &roots, "delete", expr.span, false)?;
+                    std::fs::remove_file(&path).map_err(|error| {
+                        self.runtime_error(expr.span, format!("file-system delete failed: {error}"))
+                    })?;
+                    Ok(Value::Unit)
+                } else if name == "list_dir" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "list_dir expects one String path")
+                        );
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system read access",
+                        expr.span,
+                    )?;
+                    let path = self.eval(&args[0], env)?;
+                    let Value::String(path) = path else {
+                        return Err(
+                            self.runtime_error(args[0].span, "list_dir expects a String path")
+                        );
+                    };
+                    if path.is_empty() {
+                        return Err(
+                            self.runtime_error(args[0].span, "list_dir expects a non-empty path")
+                        );
+                    }
+                    let roots = self
+                        .filesystem_policy
+                        .as_ref()
+                        .map_or_else(Vec::new, |policy| policy.read_roots.clone());
+                    let path =
+                        self.resolve_filesystem_path(&path, &roots, "list", expr.span, false)?;
+                    let mut entries = std::fs::read_dir(&path)
+                        .map_err(|error| {
+                            self.runtime_error(
+                                expr.span,
+                                format!("file-system list failed: {error}"),
+                            )
+                        })?
+                        .map(|entry| {
+                            entry
+                                .map(|entry| {
+                                    Value::String(entry.file_name().to_string_lossy().into_owned())
+                                })
+                                .map_err(|error| {
+                                    self.runtime_error(
+                                        expr.span,
+                                        format!("file-system list failed: {error}"),
+                                    )
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    entries.sort_by_key(Value::output);
+                    Ok(Value::Array(entries))
                 } else {
                     let values = args
                         .iter()
@@ -5760,6 +6059,96 @@ mod tests {
         let grants = HashSet::from([String::from("FileSystem")]);
         let read_error = execute_with_capabilities(&missing, Some(&grants)).unwrap_err();
         assert!(read_error.message.contains("file-system read failed"));
+    }
+
+    #[test]
+    fn writes_lists_and_deletes_with_a_file_system_policy() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-filesystem-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let program = parse(
+            &lex(
+                "fn write_file(path: String) uses FileSystem { write_text(path, \"hello\") } fn read_file(path: String) -> String uses FileSystem { return read_text(path) } fn list_entries(path: String) -> String[] uses FileSystem { return list_dir(path) } fn remove_file(path: String) uses FileSystem { delete_file(path) } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let policy = FileSystemPolicy {
+            base_dir: root.clone(),
+            read_roots: vec![root.clone()],
+            write_roots: vec![root.clone()],
+        };
+        let grants = HashSet::from([String::from("FileSystem")]);
+        let path = Value::String(String::from("note.txt"));
+        execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "write_file",
+            vec![path.clone()],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        let content = execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "read_file",
+            vec![path.clone()],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        assert_eq!(content, Value::String(String::from("hello")));
+        let entries = execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "list_entries",
+            vec![Value::String(String::from("."))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        assert_eq!(
+            entries,
+            Value::Array(vec![Value::String(String::from("note.txt"))])
+        );
+        execute_function_with_capabilities_and_filesystem_policy(
+            &program,
+            "remove_file",
+            vec![path],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        assert!(!root.join("note.txt").exists());
+        std::fs::remove_dir(&root).unwrap();
+    }
+
+    #[test]
+    fn rejects_file_system_writes_outside_configured_roots() {
+        let program = parse(
+            &lex("fn main() uses FileSystem { write_text(\"blocked.txt\", \"no\") }").unwrap(),
+        )
+        .unwrap();
+        let root = std::env::current_dir().unwrap();
+        let policy = FileSystemPolicy {
+            base_dir: root.clone(),
+            read_roots: vec![root.clone()],
+            write_roots: Vec::new(),
+        };
+        let grants = HashSet::from([String::from("FileSystem")]);
+        let error =
+            execute_with_capabilities_and_filesystem_policy(&program, Some(&grants), Some(&policy))
+                .unwrap_err();
+        assert!(error.message.contains("outside the configured roots"));
     }
 
     #[test]

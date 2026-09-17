@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]
@@ -653,17 +653,40 @@ The range is inclusive on both sides. Invalid ranges fail at runtime, and
 random values are not emitted implicitly. Network, file-system, and process
 APIs remain planned until their resource and error contracts are defined.
 
-The first FileSystem host API reads one UTF-8 text file:
+The FileSystem host APIs are:
 
 ~~~zelyra
-fn source_text(path: String) -> String uses FileSystem {
+fn read_source(path: String) -> String uses FileSystem {
     return read_text(path)
+}
+
+fn write_note(path: String, content: String) uses FileSystem {
+    write_text(path, content)
+}
+
+fn entries(path: String) -> String[] uses FileSystem {
+    return list_dir(path)
+}
+
+fn remove_note(path: String) uses FileSystem {
+    delete_file(path)
 }
 ~~~
 
-Missing files, permission failures, directories, and invalid UTF-8 become
-explicit runtime errors. Writing, deleting, directory listing, and path
-allowlisting are not exposed yet.
+All four APIs require FileSystem. Reads and directory listings use read_roots;
+writes and deletes use write_roots. Relative paths are resolved from the
+project directory, and existing symlink targets are canonicalized before
+access. Without a filesystem section, project reads are limited to the
+project directory while writes and deletes are denied:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
+~~~
+
+The configured directories must already exist. A new write target must have an
+existing parent directory.
 
 ## 15. Contracts and verification
 
@@ -769,7 +792,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]

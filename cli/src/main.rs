@@ -4,6 +4,7 @@ use std::{
     fmt::Write as _,
     fs,
     net::TcpListener,
+    path::PathBuf,
     process::Command,
     process::ExitCode,
 };
@@ -18,9 +19,11 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
-    check, check_apis, check_capabilities_with_grants, execute_function_with_capabilities,
-    execute_with_capabilities, execute_with_database_and_capabilities, verify as verify_program,
-    Value, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    check, check_apis, check_capabilities_with_grants,
+    execute_function_with_capabilities_and_filesystem_policy,
+    execute_with_capabilities_and_filesystem_policy,
+    execute_with_database_and_capabilities_and_filesystem_policy, verify as verify_program,
+    FileSystemPolicy, Value, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
@@ -48,9 +51,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.20\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.23\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.20\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.23\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -70,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.20\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.23\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -175,6 +178,10 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     if validate_capabilities(path, &program).is_err() {
+        return Err(());
+    }
+    if let Err(error) = project_filesystem_policy(path) {
+        diagnostic(path, "E-FS-002", &error, 1, 1);
         return Err(());
     }
     if let Err(errors) = check_apis(&program) {
@@ -1121,13 +1128,13 @@ fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<()
     Ok(())
 }
 
-fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
+fn project_config_path(path: &str) -> Result<Option<PathBuf>, String> {
     let source_path =
         fs::canonicalize(path).map_err(|error| format!("cannot locate source: {error}"))?;
     let mut directory = source_path
         .parent()
         .ok_or_else(|| "source has no parent directory".to_owned())?;
-    let Some(config_path) = (loop {
+    Ok(loop {
         let candidate = directory.join("zelyra.toml");
         if candidate.is_file() {
             break Some(candidate);
@@ -1139,7 +1146,11 @@ fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, Stri
             break None;
         }
         directory = parent;
-    }) else {
+    })
+}
+
+fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
+    let Some(config_path) = project_config_path(path)? else {
         return Ok(None);
     };
     let contents = fs::read_to_string(&config_path)
@@ -1187,6 +1198,113 @@ fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, Stri
         }
     }
     Ok(Some(grants))
+}
+
+fn parse_string_array(value: &str) -> Result<Vec<String>, String> {
+    let value = value.trim();
+    if !value.starts_with('[') || !value.ends_with(']') {
+        return Err("filesystem roots must be a TOML string array".into());
+    }
+    let inner = value[1..value.len() - 1].trim();
+    if inner.is_empty() {
+        return Ok(Vec::new());
+    }
+    inner
+        .split(',')
+        .map(|item| {
+            let item = item.trim();
+            let Some(item) = item
+                .strip_prefix('"')
+                .and_then(|item| item.strip_suffix('"'))
+            else {
+                return Err("filesystem roots must contain quoted strings".into());
+            };
+            Ok(item.replace("\\\\", "\\").replace("\\\"", "\""))
+        })
+        .collect()
+}
+
+fn project_filesystem_policy(path: &str) -> Result<Option<FileSystemPolicy>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut read_roots = None;
+    let mut write_roots = None;
+    let mut seen = HashSet::new();
+    let mut in_filesystem = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_filesystem = line == "[filesystem]";
+            continue;
+        }
+        if !in_filesystem {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid filesystem setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim();
+        if !seen.insert(key) {
+            return Err(format!(
+                "filesystem setting {key} is configured more than once"
+            ));
+        }
+        match key {
+            "read_roots" => read_roots = Some(parse_string_array(raw_value)?),
+            "write_roots" => write_roots = Some(parse_string_array(raw_value)?),
+            _ => return Err(format!("unknown filesystem setting {key}")),
+        }
+    }
+    let base_dir = config_path
+        .parent()
+        .ok_or_else(|| "project configuration has no parent directory".to_owned())?
+        .to_path_buf();
+    let canonical_root = |root: &str| {
+        let candidate = if PathBuf::from(root).is_absolute() {
+            PathBuf::from(root)
+        } else {
+            base_dir.join(root)
+        };
+        let canonical = fs::canonicalize(&candidate).map_err(|error| {
+            format!(
+                "filesystem root {} is not accessible: {error}",
+                candidate.display()
+            )
+        })?;
+        if !canonical.is_dir() {
+            return Err(format!(
+                "filesystem root {} is not a directory",
+                candidate.display()
+            ));
+        }
+        Ok(canonical)
+    };
+    let read_roots = read_roots
+        .unwrap_or_else(|| vec![".".into()])
+        .iter()
+        .map(String::as_str)
+        .map(canonical_root)
+        .collect::<Result<Vec<_>, _>>()?;
+    let write_roots = write_roots
+        .unwrap_or_default()
+        .iter()
+        .map(String::as_str)
+        .map(canonical_root)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(FileSystemPolicy {
+        base_dir,
+        read_roots,
+        write_roots,
+    }))
 }
 
 fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -1653,6 +1771,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let filesystem_policy = match project_filesystem_policy(&path) {
+        Ok(policy) => policy,
+        Err(error) => {
+            diagnostic(&path, "E-FS-002", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if program.pages.is_empty()
         && program.forms.is_empty()
         && program.cruds.is_empty()
@@ -1803,7 +1928,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let database_capability_granted = capability_grants
         .as_ref()
         .is_none_or(|grants| grants.contains("Database"));
-    let api_routes = generated_api_routes(&program, capability_grants.as_ref());
+    let api_routes = generated_api_routes(
+        &program,
+        capability_grants.as_ref(),
+        filesystem_policy.as_ref(),
+    );
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
         .with_database_capability(database_capability_granted)
@@ -1925,6 +2054,7 @@ fn generated_crud_form(
 fn generated_api_routes(
     program: &zelyra_ast::Program,
     capability_grants: Option<&HashSet<String>>,
+    filesystem_policy: Option<&FileSystemPolicy>,
 ) -> Vec<ApiRoute> {
     let database_url = env::var("DATABASE_URL").ok();
     program
@@ -1936,6 +2066,7 @@ fn generated_api_routes(
             let program = program.clone();
             let database_url = database_url.clone();
             let capability_grants = capability_grants.cloned();
+            let filesystem_policy = filesystem_policy.cloned();
             let requires_auth = api.requires_auth;
             let permissions = api.permissions.clone();
             Some(
@@ -1949,8 +2080,11 @@ fn generated_api_routes(
                             &handler,
                             request,
                             path_params,
-                            database_url.as_deref(),
-                            capability_grants.as_ref(),
+                            ApiRuntimeContext {
+                                database_url: database_url.as_deref(),
+                                capability_grants: capability_grants.as_ref(),
+                                filesystem_policy: filesystem_policy.as_ref(),
+                            },
                         )
                     },
                 )
@@ -1975,9 +2109,19 @@ fn dispatch_api(
         handler,
         request,
         path_params,
-        database_url,
-        None,
+        ApiRuntimeContext {
+            database_url,
+            capability_grants: None,
+            filesystem_policy: None,
+        },
     )
+}
+
+#[derive(Clone, Copy)]
+struct ApiRuntimeContext<'a> {
+    database_url: Option<&'a str>,
+    capability_grants: Option<&'a HashSet<String>>,
+    filesystem_policy: Option<&'a FileSystemPolicy>,
 }
 
 fn dispatch_api_with_capabilities(
@@ -1986,8 +2130,7 @@ fn dispatch_api_with_capabilities(
     handler: &str,
     request: &zelyra_web::Request,
     path_params: &HashMap<String, String>,
-    database_url: Option<&str>,
-    capability_grants: Option<&HashSet<String>>,
+    context: ApiRuntimeContext<'_>,
 ) -> Response {
     let values = if matches!(api.method.as_str(), "GET" | "DELETE") {
         request.target.split_once('?').map_or_else(
@@ -2028,12 +2171,13 @@ fn dispatch_api_with_capabilities(
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
     }
-    match execute_function_with_capabilities(
+    match execute_function_with_capabilities_and_filesystem_policy(
         program,
         handler,
         arguments,
-        database_url,
-        capability_grants,
+        context.database_url,
+        context.capability_grants,
+        context.filesystem_policy,
     ) {
         Ok(value) => api_result_response(api, &value),
         Err(error) => api_error_response(500, "InternalServerError", &error.message),
@@ -2540,11 +2684,25 @@ fn main() -> ExitCode {
                     return Err(());
                 }
             };
-            let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => {
-                    execute_with_database_and_capabilities(&program, &database_url, grants.as_ref())
+            let filesystem_policy = match project_filesystem_policy(&path) {
+                Ok(policy) => policy,
+                Err(error) => {
+                    diagnostic(&path, "E-FS-002", &error, 1, 1);
+                    return Err(());
                 }
-                Err(_) => execute_with_capabilities(&program, grants.as_ref()),
+            };
+            let result = match env::var("DATABASE_URL") {
+                Ok(database_url) => execute_with_database_and_capabilities_and_filesystem_policy(
+                    &program,
+                    &database_url,
+                    grants.as_ref(),
+                    filesystem_policy.as_ref(),
+                ),
+                Err(_) => execute_with_capabilities_and_filesystem_policy(
+                    &program,
+                    grants.as_ref(),
+                    filesystem_policy.as_ref(),
+                ),
             };
             result.map_err(|error| {
                 diagnostic(
@@ -2961,5 +3119,17 @@ mod tests {
             .unwrap();
         assert!(grants.contains("Database"));
         assert!(grants.contains("Network"));
+    }
+
+    #[test]
+    fn defaults_project_file_system_policy_to_project_root() {
+        let policy = project_filesystem_policy("../examples/filesystem_api.zyl")
+            .unwrap()
+            .unwrap();
+        assert!(policy
+            .read_roots
+            .iter()
+            .any(|root| root.ends_with("zelyra")));
+        assert!(policy.write_roots.is_empty());
     }
 }

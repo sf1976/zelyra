@@ -99,19 +99,47 @@ Minimum größer als das Maximum ist. Zufallswerte werden niemals automatisch
 protokolliert oder ausgegeben. Netzwerk-, Datei- und Prozess-APIs benötigen
 weiterhin eigene Ressourcen- und Fehlerverträge.
 
-Die erste FileSystem-Host-API liest eine UTF-8-Textdatei:
+Die FileSystem-Host-APIs sind:
 
 ~~~zelyra
-fn source_text(path: String) -> String uses FileSystem {
+fn read_source(path: String) -> String uses FileSystem {
     return read_text(path)
+}
+
+fn write_note(path: String, content: String) uses FileSystem {
+    write_text(path, content)
+}
+
+fn entries(path: String) -> String[] uses FileSystem {
+    return list_dir(path)
+}
+
+fn remove_note(path: String) uses FileSystem {
+    delete_file(path)
 }
 ~~~
 
-read_text(path) benötigt FileSystem und lehnt einen leeren Pfad ab. Fehlende
-Dateien, fehlende Berechtigungen, Verzeichnisse und ungültiges UTF-8 werden zu
-ausdrücklichen Runtime-Fehlern. Dieser erste Schnitt besitzt keine Schreib-,
-Lösch-, Verzeichnislisten- oder Pfad-Allowlist-API; diese Regeln müssen vor
-einer größeren Dateisystem-Oberfläche definiert werden.
+Alle vier APIs benötigen FileSystem. read_text(path) liest UTF-8-Text,
+write_text(path, content) erstellt oder ersetzt eine Datei, delete_file(path)
+löscht eine Datei und list_dir(path) liefert sortierte Eintragsnamen. Leere
+Pfade, fehlende Dateien, fehlende Berechtigungen, als Dateien verwendete
+Verzeichnisse und ungültiges UTF-8 werden zu ausdrücklichen Runtime-Fehlern.
+
+Projekte können den Zugriff mit bereits existierenden Verzeichnisgrenzen
+beschränken:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
+~~~
+
+Relative Pfade werden ausgehend vom Projektverzeichnis aufgelöst. Lesen und
+Verzeichnislisten verwenden read_roots; Schreiben und Löschen verwenden
+write_roots. Symlink-Ziele werden vor dem Zugriff kanonisiert, und ein neues
+Schreibziel benötigt ein bereits existierendes Elternverzeichnis. Ohne
+filesystem-Abschnitt sind Projektlesezugriffe auf das Projektverzeichnis
+begrenzt; Schreiben und Löschen sind gesperrt.
 
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:

@@ -4,6 +4,57 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.23 — 2026-09-17
+
+### Added
+
+- Added write_text(path, content), delete_file(path), and list_dir(path).
+- Added project FileSystem policies with read_roots and write_roots.
+- Relative paths are resolved from the project directory, and symlink targets
+  are canonicalized before access.
+- Extended CLI execution and API handlers with the project FileSystem policy.
+- Added positive and negative tests and synchronized German and English
+  documentation.
+
+### Known limitations
+
+- File-system roots must already exist; broader sandboxing and special file
+  handling remain future work.
+
+## 0.1.22 — 2026-09-17
+
+### Added
+
+- Added write_text(path, content), delete_file(path), and list_dir(path).
+- Added project FileSystem policies with read_roots and write_roots.
+- Relative paths are resolved from the project directory, and symlink targets
+  are canonicalized before access.
+- Extended CLI execution and API handlers with the project FileSystem policy.
+- Added positive and negative tests and synchronized German and English
+  documentation.
+
+### Known limitations
+
+- File-system roots must already exist; broader sandboxing and special file
+  handling remain future work.
+
+## 0.1.21 — 2026-09-17
+
+### Added
+
+- Added write_text(path, content), delete_file(path), and list_dir(path).
+- Added project FileSystem policies with read_roots and write_roots.
+- Relative paths are resolved from the project directory, and symlink targets
+  are canonicalized before access.
+- Extended CLI execution and API handlers with the project FileSystem policy.
+- Added positive and negative tests and synchronized German and English
+  documentation.
+
+### Known limitations
+
+- File-system roots must already exist; broader sandboxing and special file
+  handling remain future work.
+
 ## 0.1.20 — 2026-09-17
 
 ### Added

@@ -96,19 +96,45 @@ random source and rejects minimum values greater than maximum values. Random
 values are never logged or printed implicitly. Network, file-system, and
 process APIs still require separate resource and error contracts.
 
-The first FileSystem host API reads one UTF-8 text file:
+The FileSystem host APIs are:
 
 ~~~zelyra
-fn source_text(path: String) -> String uses FileSystem {
+fn read_source(path: String) -> String uses FileSystem {
     return read_text(path)
+}
+
+fn write_note(path: String, content: String) uses FileSystem {
+    write_text(path, content)
+}
+
+fn entries(path: String) -> String[] uses FileSystem {
+    return list_dir(path)
+}
+
+fn remove_note(path: String) uses FileSystem {
+    delete_file(path)
 }
 ~~~
 
-read_text(path) requires FileSystem and rejects an empty path. Missing files,
-permission failures, directories, and invalid UTF-8 become explicit runtime
-errors. This first slice has no write, delete, directory-listing, or path
-allowlist API; those are required before a broader file-system surface is
-added.
+All four APIs require FileSystem. read_text(path) reads UTF-8 text,
+write_text(path, content) creates or replaces one file, delete_file(path)
+removes one file, and list_dir(path) returns sorted entry names. Empty paths,
+missing files, permission failures, directories used as files, and invalid
+UTF-8 become explicit runtime errors.
+
+Projects can restrict access with existing directory roots:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
+~~~
+
+Relative paths are resolved from the project directory. Reads and directory
+listing use read_roots; writes and deletes use write_roots. Symlink targets are
+canonicalized before access, and a new write target must have an existing
+parent directory. If no filesystem section exists, project reads are limited
+to the project directory and writes/deletes are denied.
 
 The first structured-concurrency slice is available through `parallel` and
 `await`:

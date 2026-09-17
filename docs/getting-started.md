@@ -67,8 +67,8 @@ The current repository contains:
   declaration and a project grant;
 - secure random_int(min, max) through the Random capability; its bounds are
   inclusive and an invalid range is a runtime error;
-- read_text(path) for explicit UTF-8 file reads through the FileSystem
-  capability;
+- read_text(path), write_text(path, content), delete_file(path), and
+  list_dir(path) through FileSystem with project path roots;
 - runtime-checked function contracts using `requires` and `ensures`.
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
@@ -263,7 +263,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]
@@ -278,6 +278,15 @@ functions, then run the example:
 [capabilities]
 clock = true
 environment = true
+~~~
+
+File-system writes and deletes additionally need an allowlist. Roots are
+relative to the project file and must already exist:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
 ~~~
 
 ~~~bash

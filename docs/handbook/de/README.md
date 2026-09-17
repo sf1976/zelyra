@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]
@@ -712,17 +712,40 @@ einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben. Netzwerk-,
 Datei- und Prozess-APIs bleiben geplant, bis ihre Ressourcen- und Fehlerverträge
 definiert sind.
 
-Die erste FileSystem-Host-API liest eine UTF-8-Textdatei:
+Die FileSystem-Host-APIs sind:
 
 ~~~zelyra
-fn source_text(path: String) -> String uses FileSystem {
+fn read_source(path: String) -> String uses FileSystem {
     return read_text(path)
+}
+
+fn write_note(path: String, content: String) uses FileSystem {
+    write_text(path, content)
+}
+
+fn entries(path: String) -> String[] uses FileSystem {
+    return list_dir(path)
+}
+
+fn remove_note(path: String) uses FileSystem {
+    delete_file(path)
 }
 ~~~
 
-Fehlende Dateien, fehlende Berechtigungen, Verzeichnisse und ungültiges UTF-8
-werden zu ausdrücklichen Runtime-Fehlern. Schreiben, Löschen,
-Verzeichnislisten und Pfad-Allowlisting sind noch nicht verfügbar.
+Alle vier APIs benötigen FileSystem. Lesen und Verzeichnislisten verwenden
+read_roots; Schreiben und Löschen verwenden write_roots. Relative Pfade werden
+ausgehend vom Projektverzeichnis aufgelöst, vorhandene Symlink-Ziele vor dem
+Zugriff kanonisiert. Ohne filesystem-Abschnitt sind Projektlesezugriffe auf
+das Projektverzeichnis begrenzt; Schreiben und Löschen sind gesperrt:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
+~~~
+
+Die konfigurierten Verzeichnisse müssen bereits existieren. Ein neues
+Schreibziel benötigt ein bereits existierendes Elternverzeichnis.
 
 ## 15. Contracts und Verify
 
@@ -834,7 +857,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]

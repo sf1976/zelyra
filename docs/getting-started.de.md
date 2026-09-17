@@ -71,8 +71,8 @@ Das aktuelle Repository enthält:
   Funktionsdeklaration und Projektfreigabe;
 - sichere Zufallszahlen mit random_int(min, max) über die Random-Capability;
   die Grenzen sind inklusiv, ein ungültiger Bereich ist ein Runtime-Fehler;
-- read_text(path) für ausdrücklich freigegebene UTF-8-Dateizugriffe über die
-  FileSystem-Capability;
+- read_text(path), write_text(path, content), delete_file(path) und
+  list_dir(path) über FileSystem mit Projektpfadgrenzen;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -272,7 +272,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.20"
+version = "0.1.23"
 zelyra = "0.1"
 
 [capabilities]
@@ -287,6 +287,16 @@ für deine Funktionen benötigten Freigaben und starte anschließend das Beispie
 [capabilities]
 clock = true
 environment = true
+~~~
+
+Schreib- und Löschzugriffe benötigen zusätzlich eine Allowlist. Die Pfade
+beziehen sich auf das Projektverzeichnis und die Verzeichnisse müssen bereits
+existieren:
+
+~~~toml
+[filesystem]
+read_roots = ["."]
+write_roots = ["data"]
 ~~~
 
 ~~~bash
