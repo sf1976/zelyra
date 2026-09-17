@@ -75,6 +75,8 @@ Das aktuelle Repository enthält:
   list_dir(path) über FileSystem mit Projektpfadgrenzen;
 - http_get(url) über Network mit ausdrücklicher Host-Allowlist sowie
   begrenzter Zeit und Antwortgröße;
+- run_process(command, args) über Process ohne Shell, mit exakter
+  Befehls-Allowlist und begrenzter Ausführung;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -274,7 +276,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.25"
+version = "0.1.26"
 zelyra = "0.1"
 
 [capabilities]

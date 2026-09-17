@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.25"
+version = "0.1.26"
 zelyra = "0.1"
 
 [capabilities]
@@ -708,8 +708,9 @@ fn dice_roll() -> Int uses Random {
 ~~~
 
 Der Bereich ist auf beiden Seiten inklusiv. Ungültige Bereiche führen zu
-einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben. Prozess-
-APIs bleiben geplant, bis ihre Ressourcen- und Fehlerverträge definiert sind.
+einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben.
+Prozessausführung ist nur über die folgende, ausdrücklich begrenzte API
+verfügbar.
 
 Die erste Network-Host-API ist `http_get`:
 
@@ -734,6 +735,28 @@ standardmäßig aktiviert. Es werden keine Redirects verfolgt und nur
 erfolgreiche UTF-8-GET-Response-Bodies innerhalb der konfigurierten Grenzen
 geliefert. Request-Header, Request-Bodies und umfangreichere HTTP-Funktionen
 folgen später.
+
+Die Process-Capability stellt eine Befehls-API ohne Shell bereit:
+
+~~~zelyra
+fn render_report(input: String) -> String uses Process {
+    return run_process("/usr/bin/printf", ["%s", input])
+}
+~~~
+
+Für Projekte ist eine exakte Befehls-Allowlist erforderlich:
+
+~~~toml
+[process]
+allowed_commands = ["/usr/bin/printf"]
+timeout_ms = 5000
+max_output_bytes = 1048576
+~~~
+
+Ohne `[process]` darf kein Befehl laufen. Die Umgebung des Kindprozesses wird
+geleert, stdin geschlossen, Prozesse werden nach dem Timeout beendet und
+stdout/stderr begrenzt. Shell-Ausführung, Umgebungsweitergabe,
+Arbeitsverzeichnisse und Pipelines folgen später.
 
 Die FileSystem-Host-APIs sind:
 
@@ -880,7 +903,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.25"
+version = "0.1.26"
 zelyra = "0.1"
 
 [capabilities]

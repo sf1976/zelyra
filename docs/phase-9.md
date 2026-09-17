@@ -121,6 +121,32 @@ not follow redirects and limits response size and total request time. The API
 remains intentionally limited to GET and UTF-8 response bodies; request
 headers, request bodies, and richer HTTP client features remain future work.
 
+The Process capability exposes a deliberately narrow command API:
+
+~~~zelyra
+fn render_report(input: String) -> String uses Process {
+    return run_process("/usr/bin/printf", ["%s", input])
+}
+~~~
+
+`run_process(command, args)` never invokes a shell. Each argument is passed as
+one separate operating-system argument. Project execution requires an exact
+command allowlist and bounded resources:
+
+~~~toml
+[process]
+allowed_commands = ["/usr/bin/printf"]
+timeout_ms = 5000
+max_output_bytes = 1048576
+~~~
+
+Without `[process]`, no command may run. The runtime clears the child process
+environment, provides no stdin, kills processes that exceed the timeout, and
+limits captured stdout and stderr. Non-zero exit status, invalid UTF-8, and
+resource violations become explicit runtime errors. Shell execution,
+arbitrary environment forwarding, working-directory selection, and process
+pipelines remain future work.
+
 The FileSystem host APIs are:
 
 ~~~zelyra

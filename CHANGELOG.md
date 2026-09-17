@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.26 — 2026-09-17
+
+### Added
+
+- Added `run_process(command, args)` through the Process capability.
+- Added exact command allowlists, shell-free argument passing, cleared child
+  environments, closed stdin, timeouts, and bounded stdout/stderr capture.
+- Added explicit runtime errors for denied commands, failed processes,
+  timeouts, invalid UTF-8, and output-limit violations.
+- Synchronized German and English documentation.
+
+### Known limitations
+
+- Working-directory selection, environment forwarding, shell pipelines, and
+  process streaming remain future work.
+
 ## 0.1.25 — 2026-09-17
 
 ### Added

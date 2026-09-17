@@ -125,6 +125,32 @@ sowie gesamte Anfragezeit begrenzt. Die API bleibt bewusst auf GET und
 UTF-8-Response-Bodies beschränkt; Request-Header, Request-Bodies und
 umfangreichere HTTP-Funktionen folgen später.
 
+Die Process-Capability stellt eine bewusst enge Befehls-API bereit:
+
+~~~zelyra
+fn render_report(input: String) -> String uses Process {
+    return run_process("/usr/bin/printf", ["%s", input])
+}
+~~~
+
+`run_process(command, args)` startet niemals eine Shell. Jedes Argument wird
+als separates Betriebssystemargument übergeben. Für Projekte sind eine exakte
+Befehls-Allowlist und begrenzte Ressourcen erforderlich:
+
+~~~toml
+[process]
+allowed_commands = ["/usr/bin/printf"]
+timeout_ms = 5000
+max_output_bytes = 1048576
+~~~
+
+Ohne `[process]` darf kein Befehl laufen. Die Runtime leert die Umgebung des
+Kindprozesses, stellt kein stdin bereit, beendet Prozesse nach dem Timeout und
+begrenzt stdout und stderr. Exit-Status ungleich null, ungültiges UTF-8 und
+Ressourcenverletzungen werden zu ausdrücklichen Runtime-Fehlern.
+Shell-Ausführung, beliebige Umgebungsweitergabe, Arbeitsverzeichnisse und
+Prozess-Pipelines folgen später.
+
 Die FileSystem-Host-APIs sind:
 
 ~~~zelyra

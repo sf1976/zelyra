@@ -1,8 +1,10 @@
 use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3061,6 +3063,15 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "run_process" {
+                require_capability(
+                    "Process",
+                    "process execution",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             } else if name == "read_text" {
                 require_capability(
                     "FileSystem",
@@ -3945,6 +3956,23 @@ impl<'a> Checker<'a> {
                     let url = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &url, args[0].span);
                     Type::String
+                } else if name == "run_process" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "run_process expects a String command and String[] arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let command = self.check_expr(&args[0], scopes);
+                    let arguments = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::String, &command, args[0].span);
+                    self.expect_type(
+                        &Type::Array(Box::new(Type::String)),
+                        &arguments,
+                        args[1].span,
+                    );
+                    Type::String
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         self.error(expr.span, "read_text expects exactly one String path");
@@ -4325,10 +4353,18 @@ pub struct NetworkPolicy {
     pub max_response_bytes: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessPolicy {
+    pub allowed_commands: Vec<String>,
+    pub timeout_ms: u64,
+    pub max_output_bytes: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RuntimePolicy {
     pub filesystem: Option<FileSystemPolicy>,
     pub network: Option<NetworkPolicy>,
+    pub process: Option<ProcessPolicy>,
 }
 
 impl fmt::Display for RuntimeError {
@@ -4442,6 +4478,7 @@ pub fn execute_with_capabilities_and_filesystem_policy(
         Some(RuntimePolicy {
             filesystem: filesystem_policy.cloned(),
             network: None,
+            process: None,
         }),
     )
 }
@@ -4467,6 +4504,7 @@ pub fn execute_with_database_and_capabilities_and_filesystem_policy(
         Some(RuntimePolicy {
             filesystem: filesystem_policy.cloned(),
             network: None,
+            process: None,
         }),
     )
 }
@@ -4521,6 +4559,7 @@ pub fn execute_function_with_capabilities_and_policies(
         granted_capabilities: grants.cloned(),
         filesystem_policy: policy.and_then(|policy| policy.filesystem.clone()),
         network_policy: policy.and_then(|policy| policy.network.clone()),
+        process_policy: policy.and_then(|policy| policy.process.clone()),
         active_capabilities: Vec::new(),
     };
     interpreter.call(name, args, Span::default())
@@ -4560,6 +4599,7 @@ pub fn execute_function_with_capabilities_and_filesystem_policy(
         Some(&RuntimePolicy {
             filesystem: filesystem_policy.cloned(),
             network: None,
+            process: None,
         }),
     )
 }
@@ -4581,7 +4621,8 @@ fn execute_internal(
         database_url,
         granted_capabilities,
         filesystem_policy: policy.as_ref().and_then(|policy| policy.filesystem.clone()),
-        network_policy: policy.and_then(|policy| policy.network),
+        network_policy: policy.as_ref().and_then(|policy| policy.network.clone()),
+        process_policy: policy.and_then(|policy| policy.process),
         active_capabilities: Vec::new(),
     };
     interpreter.call("main", Vec::new(), Span::default())?;
@@ -4596,6 +4637,7 @@ struct Interpreter {
     granted_capabilities: Option<HashSet<String>>,
     filesystem_policy: Option<FileSystemPolicy>,
     network_policy: Option<NetworkPolicy>,
+    process_policy: Option<ProcessPolicy>,
     active_capabilities: Vec<HashSet<String>>,
 }
 
@@ -4778,6 +4820,141 @@ impl Interpreter {
         }
         String::from_utf8(body)
             .map_err(|_| self.runtime_error(span, "network response is not valid UTF-8"))
+    }
+
+    fn run_process(
+        &self,
+        command: &str,
+        arguments: &[String],
+        span: Span,
+    ) -> Result<String, RuntimeError> {
+        let Some(policy) = &self.process_policy else {
+            return Err(self.runtime_error(
+                span,
+                "process execution denied: no process policy is configured",
+            ));
+        };
+        if command.is_empty() || command.contains(['\r', '\n']) {
+            return Err(self.runtime_error(span, "run_process received an invalid command"));
+        }
+        if !policy
+            .allowed_commands
+            .iter()
+            .any(|allowed| allowed == command)
+        {
+            return Err(self.runtime_error(
+                span,
+                format!("process execution denied for command `{command}`"),
+            ));
+        }
+        if policy.timeout_ms == 0 || policy.max_output_bytes == 0 {
+            return Err(self.runtime_error(
+                span,
+                "process policy requires positive timeout and output limits",
+            ));
+        }
+        let mut child = Command::new(command)
+            .args(arguments)
+            .env_clear()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                self.runtime_error(
+                    span,
+                    format!("process start failed for `{command}`: {error}"),
+                )
+            })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| self.runtime_error(span, "process stdout pipe was unavailable"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| self.runtime_error(span, "process stderr pipe was unavailable"))?;
+        let output_limit = u64::try_from(policy.max_output_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        let stdout_reader = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            stdout
+                .take(output_limit)
+                .read_to_end(&mut output)
+                .map(|_| output)
+        });
+        let stderr_reader = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            stderr
+                .take(output_limit)
+                .read_to_end(&mut output)
+                .map(|_| output)
+        });
+        let timeout = Duration::from_millis(policy.timeout_ms);
+        let deadline = Instant::now() + timeout;
+        let mut timed_out = false;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if Instant::now() >= deadline => {
+                    timed_out = true;
+                    let _ = child.kill();
+                    break child.wait().map_err(|error| {
+                        self.runtime_error(span, format!("process termination failed: {error}"))
+                    })?;
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(5)),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(self.runtime_error(span, format!("process status failed: {error}")));
+                }
+            }
+        };
+        let stdout = stdout_reader
+            .join()
+            .map_err(|_| self.runtime_error(span, "process stdout reader terminated unexpectedly"))?
+            .map_err(|error| {
+                self.runtime_error(span, format!("process stdout read failed: {error}"))
+            })?;
+        let stderr = stderr_reader
+            .join()
+            .map_err(|_| self.runtime_error(span, "process stderr reader terminated unexpectedly"))?
+            .map_err(|error| {
+                self.runtime_error(span, format!("process stderr read failed: {error}"))
+            })?;
+        if timed_out {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "process `{command}` exceeded the {} ms timeout",
+                    policy.timeout_ms
+                ),
+            ));
+        }
+        if stdout.len() > policy.max_output_bytes || stderr.len() > policy.max_output_bytes {
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "process `{command}` exceeded the {} byte output limit",
+                    policy.max_output_bytes
+                ),
+            ));
+        }
+        if !status.success() {
+            let error_output = String::from_utf8_lossy(&stderr);
+            return Err(self.runtime_error(
+                span,
+                format!(
+                    "process `{command}` exited unsuccessfully ({}): {}",
+                    status,
+                    error_output.trim()
+                ),
+            ));
+        }
+        String::from_utf8(stdout)
+            .map_err(|_| self.runtime_error(span, "process stdout is not valid UTF-8"))
     }
 
     fn call(&mut self, name: &str, args: Vec<Value>, span: Span) -> Result<Value, RuntimeError> {
@@ -5082,6 +5259,7 @@ impl Interpreter {
                             granted_capabilities: self.granted_capabilities.clone(),
                             filesystem_policy: self.filesystem_policy.clone(),
                             network_policy: self.network_policy.clone(),
+                            process_policy: self.process_policy.clone(),
                             active_capabilities: self.active_capabilities.clone(),
                         };
                         let mut child_env = env.clone();
@@ -5369,6 +5547,38 @@ impl Interpreter {
                         );
                     };
                     self.http_get(&url, expr.span).map(Value::String)
+                } else if name == "run_process" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "run_process expects a String command and String[] arguments",
+                        ));
+                    }
+                    self.require_runtime_capability("Process", "process execution", expr.span)?;
+                    let command = self.eval(&args[0], env)?;
+                    let arguments = self.eval(&args[1], env)?;
+                    let Value::String(command) = command else {
+                        return Err(self
+                            .runtime_error(args[0].span, "run_process expects a String command"));
+                    };
+                    let Value::Array(arguments) = arguments else {
+                        return Err(self.runtime_error(
+                            args[1].span,
+                            "run_process expects String[] arguments",
+                        ));
+                    };
+                    let mut argument_strings = Vec::with_capacity(arguments.len());
+                    for argument in arguments {
+                        let Value::String(argument) = argument else {
+                            return Err(self.runtime_error(
+                                args[1].span,
+                                "run_process expects String[] arguments",
+                            ));
+                        };
+                        argument_strings.push(argument);
+                    }
+                    self.run_process(&command, &argument_strings, expr.span)
+                        .map(Value::String)
                 } else if name == "read_text" {
                     if args.len() != 1 {
                         return Err(self.runtime_error(
@@ -5826,7 +6036,6 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read as _;
     use std::net::TcpListener;
     use std::thread;
     use zelyra_lexer::lex;
@@ -6139,6 +6348,7 @@ mod tests {
                 timeout_ms: 1_000,
                 max_response_bytes: 100,
             }),
+            process: None,
         };
         let body = execute_function_with_capabilities_and_policies(
             &program,
@@ -6167,6 +6377,7 @@ mod tests {
                 timeout_ms: 100,
                 max_response_bytes: 100,
             }),
+            process: None,
         };
         let error = execute_function_with_capabilities_and_policies(
             &program,
@@ -6178,6 +6389,97 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.message.contains("network access denied"));
+    }
+
+    #[test]
+    fn requires_process_capability_for_run_process() {
+        let program = parse(
+            &lex("fn main() { print(run_process(\"/usr/bin/printf\", [\"hello\"])) }").unwrap(),
+        )
+        .unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("does not declare capability `Process`")));
+    }
+
+    #[test]
+    fn runs_allowlisted_process_without_a_shell() {
+        let source =
+            "fn run() -> String uses Process { return run_process(\"/usr/bin/printf\", [\"%s\", \"hello\"]) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Process")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: None,
+            process: Some(ProcessPolicy {
+                allowed_commands: vec![String::from("/usr/bin/printf")],
+                timeout_ms: 1_000,
+                max_output_bytes: 100,
+            }),
+        };
+        let output = execute_function_with_capabilities_and_policies(
+            &program,
+            "run",
+            Vec::new(),
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        assert_eq!(output, Value::String("hello".into()));
+    }
+
+    #[test]
+    fn rejects_processes_outside_allowlist_and_output_limit() {
+        let source =
+            "fn run(command: String) -> String uses Process { return run_process(command, [\"%s\", \"hello\"]) } fn main() { }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let grants = HashSet::from([String::from("Process")]);
+        let error = execute_function_with_capabilities_and_policies(
+            &program,
+            "run",
+            vec![Value::String(String::from("/usr/bin/printf"))],
+            None,
+            Some(&grants),
+            None,
+        )
+        .unwrap_err();
+        assert!(error.message.contains("no process policy"));
+
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: None,
+            process: Some(ProcessPolicy {
+                allowed_commands: vec![String::from("/usr/bin/printf")],
+                timeout_ms: 1_000,
+                max_output_bytes: 3,
+            }),
+        };
+        let error = execute_function_with_capabilities_and_policies(
+            &program,
+            "run",
+            vec![Value::String(String::from("/usr/bin/echo"))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("process execution denied"));
+
+        let error = execute_function_with_capabilities_and_policies(
+            &program,
+            "run",
+            vec![Value::String(String::from("/usr/bin/printf"))],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("output limit"));
     }
 
     #[test]

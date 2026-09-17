@@ -560,6 +560,7 @@ impl<'a> Resolver<'a> {
                             | "env"
                             | "random_int"
                             | "http_get"
+                            | "run_process"
                             | "read_text"
                             | "write_text"
                             | "delete_file"

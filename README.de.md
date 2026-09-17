@@ -80,6 +80,8 @@ Heute implementiert:
   list_dir(path) über die FileSystem-Capability mit Projektpfadgrenzen;
 - http_get(url) über die Network-Capability mit Projekt-Host-Allowlists,
   Zeitlimits und Antwortgrößenbegrenzung;
+- run_process(command, args) über Process mit exakter Befehls-Allowlist,
+  ohne Shell, Timeout und begrenzter Ausgabe;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und

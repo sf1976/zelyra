@@ -79,6 +79,8 @@ Implemented today:
   list_dir(path) through the FileSystem capability with project path roots;
 - http_get(url) through the Network capability with project host allowlists,
   timeouts, and response-size limits;
+- run_process(command, args) through Process with an exact command allowlist,
+  no shell, timeout, and bounded output;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches

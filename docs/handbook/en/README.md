@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.25"
+version = "0.1.26"
 zelyra = "0.1"
 
 [capabilities]
@@ -650,8 +650,8 @@ fn dice_roll() -> Int uses Random {
 ~~~
 
 The range is inclusive on both sides. Invalid ranges fail at runtime, and
-random values are not emitted implicitly. Process APIs remain planned until
-their resource and error contracts are defined.
+random values are not emitted implicitly. Process execution is available only
+through the explicitly bounded API below.
 
 The first Network host API is `http_get`:
 
@@ -675,6 +675,28 @@ Without `[network]`, a project allows no hosts. The transport supports
 default. It does not follow redirects and returns only successful UTF-8 GET
 response bodies within the configured limits. Request headers, request bodies,
 and richer HTTP features are future work.
+
+The Process capability exposes a shell-free command API:
+
+~~~zelyra
+fn render_report(input: String) -> String uses Process {
+    return run_process("/usr/bin/printf", ["%s", input])
+}
+~~~
+
+Project execution requires an exact command allowlist:
+
+~~~toml
+[process]
+allowed_commands = ["/usr/bin/printf"]
+timeout_ms = 5000
+max_output_bytes = 1048576
+~~~
+
+Without `[process]`, no command may run. The child environment is cleared,
+stdin is closed, timeouts terminate the process, and stdout/stderr are
+bounded. Shell execution, environment forwarding, working directories, and
+pipelines are future work.
 
 The FileSystem host APIs are:
 
@@ -815,7 +837,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.25"
+version = "0.1.26"
 zelyra = "0.1"
 
 [capabilities]

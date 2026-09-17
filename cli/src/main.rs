@@ -22,8 +22,8 @@ use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
     execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
     execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, NetworkPolicy, RuntimePolicy, Value, VerificationResult, VerificationStatus,
-    KNOWN_CAPABILITIES,
+    FileSystemPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value, VerificationResult,
+    VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
@@ -73,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.25\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.26\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -186,6 +186,10 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     }
     if let Err(error) = project_network_policy(path) {
         diagnostic(path, "E-NET-002", &error, 1, 1);
+        return Err(());
+    }
+    if let Err(error) = project_process_policy(path) {
+        diagnostic(path, "E-PROC-002", &error, 1, 1);
         return Err(());
     }
     if let Err(errors) = check_apis(&program) {
@@ -1377,14 +1381,79 @@ fn project_network_policy(path: &str) -> Result<Option<NetworkPolicy>, String> {
 fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     let filesystem = project_filesystem_policy(path)?;
     let network = project_network_policy(path)?;
-    if filesystem.is_none() && network.is_none() {
+    let process = project_process_policy(path)?;
+    if filesystem.is_none() && network.is_none() && process.is_none() {
         Ok(None)
     } else {
         Ok(Some(RuntimePolicy {
             filesystem,
             network,
+            process,
         }))
     }
+}
+
+fn project_process_policy(path: &str) -> Result<Option<ProcessPolicy>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut allowed_commands = None;
+    let mut timeout_ms = 5_000;
+    let mut max_output_bytes = 1_048_576;
+    let mut seen = HashSet::new();
+    let mut in_process = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_process = line == "[process]";
+            continue;
+        }
+        if !in_process {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid process setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim();
+        if !seen.insert(key) {
+            return Err(format!(
+                "process setting {key} is configured more than once"
+            ));
+        }
+        match key {
+            "allowed_commands" => allowed_commands = Some(parse_string_array(raw_value)?),
+            "timeout_ms" => {
+                timeout_ms = raw_value.trim().parse().map_err(|_| {
+                    "process setting timeout_ms must be a positive integer".to_owned()
+                })?;
+                if timeout_ms == 0 {
+                    return Err("process setting timeout_ms must be positive".into());
+                }
+            }
+            "max_output_bytes" => {
+                max_output_bytes = raw_value.trim().parse().map_err(|_| {
+                    "process setting max_output_bytes must be a positive integer".to_owned()
+                })?;
+                if max_output_bytes == 0 {
+                    return Err("process setting max_output_bytes must be positive".into());
+                }
+            }
+            _ => return Err(format!("unknown process setting {key}")),
+        }
+    }
+    Ok(Some(ProcessPolicy {
+        allowed_commands: allowed_commands.unwrap_or_default(),
+        timeout_ms,
+        max_output_bytes,
+    }))
 }
 
 fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -3221,5 +3290,15 @@ mod tests {
         assert!(policy.allowed_hosts.is_empty());
         assert_eq!(policy.timeout_ms, 5_000);
         assert_eq!(policy.max_response_bytes, 1_048_576);
+    }
+
+    #[test]
+    fn defaults_project_process_policy_to_no_allowed_commands() {
+        let policy = project_process_policy("../examples/filesystem_api.zyl")
+            .unwrap()
+            .unwrap();
+        assert!(policy.allowed_commands.is_empty());
+        assert_eq!(policy.timeout_ms, 5_000);
+        assert_eq!(policy.max_output_bytes, 1_048_576);
     }
 }
