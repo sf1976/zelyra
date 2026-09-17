@@ -46,6 +46,7 @@ pub enum Type {
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
     Array(Box<Type>),
+    HttpResult(Box<Type>),
     Named(String),
     Unknown,
 }
@@ -69,6 +70,7 @@ impl fmt::Display for Type {
             Type::Option(inner) => return write!(f, "Option<{inner}>"),
             Type::Result(ok, err) => return write!(f, "Result<{ok}, {err}>"),
             Type::Array(inner) => return write!(f, "{inner}[]"),
+            Type::HttpResult(inner) => return write!(f, "HttpResult<{inner}>"),
             Type::Named(name) => name,
             Type::Unknown => "unknown",
         };
