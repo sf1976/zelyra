@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.37 — 2026-09-17
+
+### Added
+
+- Added tag-based GitHub release automation for Linux and Windows CLI
+  archives.
+- Added SHA-256 checksums to every generated release archive.
+- Alpha tags now create GitHub pre-releases automatically with bilingual
+  release notes.
+
+### Compatibility
+
+- Source installation remains available and unchanged.
+- Release archives contain the CLI binary, both README files, and license
+  notices; MariaDB remains the recommended application backend.
+
 ## 0.1.36 — 2026-09-17
 
 ### Added

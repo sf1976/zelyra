@@ -150,12 +150,17 @@ For a local MariaDB and web-server template, use `zelyra new machine-management
 `docker-compose.mariadb.yml`. Set `ZELYRA_WEB_PORT` in `.env` to choose the
 port used by the internal Zelyra server and its local published port.
 
+Users who do not want to install Rust can download the prebuilt Linux or
+Windows archive from the [GitHub Releases page](https://github.com/sf1976/zelyra/releases).
+Each archive includes a SHA-256 checksum, the CLI, both README languages, and
+the license notices.
+
 Minimal `zelyra.toml`:
 
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.36"
+version = "0.1.37"
 zelyra = "0.1"
 
 [capabilities]
@@ -943,7 +948,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.36"
+version = "0.1.37"
 zelyra = "0.1"
 
 [capabilities]

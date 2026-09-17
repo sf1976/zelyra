@@ -179,12 +179,17 @@ maschinenverwaltung --mariadb` verwenden. Dadurch entstehen `.env.example`,
 wird der Port des internen Zelyra-Servers und seines lokalen veröffentlichten
 Ports gewählt.
 
+Nutzer, die Rust nicht installieren möchten, können das vorgefertigte Linux-
+oder Windows-Archiv von der [GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases)
+herunterladen. Jedes Archiv enthält eine SHA-256-Prüfsumme, die CLI, beide
+README-Sprachen und die Lizenzhinweise.
+
 Eine minimale `zelyra.toml`:
 
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.36"
+version = "0.1.37"
 zelyra = "0.1"
 
 [capabilities]
@@ -1015,7 +1020,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.36"
+version = "0.1.37"
 zelyra = "0.1"
 
 [capabilities]

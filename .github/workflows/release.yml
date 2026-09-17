@@ -1,0 +1,95 @@
+name: Zelyra Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build release binary
+        run: cargo build --release --package zelyra-cli --target ${{ matrix.target }}
+      - name: Package Linux release
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          package="zelyra-${RELEASE_TAG}-${TARGET}"
+          mkdir "${package}"
+          cp "target/${TARGET}/release/zelyra" "${package}/zelyra"
+          cp README.md README.de.md LICENSE LICENSE-MIT "${package}/"
+          tar -czf "${package}.tar.gz" "${package}"
+          sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256"
+      - name: Package Windows release
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          $package = "zelyra-$env:RELEASE_TAG-$env:TARGET"
+          New-Item -ItemType Directory -Path $package | Out-Null
+          Copy-Item "target/$env:TARGET/release/zelyra.exe" "$package/zelyra.exe"
+          Copy-Item README.md, README.de.md, LICENSE, LICENSE-MIT $package
+          Compress-Archive -Path $package -DestinationPath "$package.zip"
+          (Get-FileHash "$package.zip" -Algorithm SHA256).Hash.ToLower() + "  $package.zip" |
+            Set-Content "$package.zip.sha256"
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: zelyra-${{ matrix.target }}
+          path: |
+            zelyra-*.tar.gz
+            zelyra-*.tar.gz.sha256
+            zelyra-*.zip
+            zelyra-*.zip.sha256
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish release and assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            ## Zelyra 0.1 Alpha
+
+            This is an early alpha release. Do not use it for production.
+
+            ## Zelyra 0.1 Alpha (Deutsch)
+
+            Dies ist eine frühe Alpha-Version. Nicht für Produktivsysteme verwenden.
+          files: release-assets/*

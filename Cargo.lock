@@ -554,11 +554,11 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "zelyra-ast"
-version = "0.1.36"
+version = "0.1.37"
 
 [[package]]
 name = "zelyra-cli"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "rpassword",
  "serde_json",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-database"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -591,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-hir"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -600,14 +600,14 @@ dependencies = [
 
 [[package]]
 name = "zelyra-lexer"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
 name = "zelyra-parser"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -615,7 +615,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "rand_core",
  "serde_json",
@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-web"
-version = "0.1.36"
+version = "0.1.37"
 dependencies = [
  "argon2",
  "blake2",

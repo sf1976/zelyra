@@ -427,6 +427,8 @@ The long-term specification is organized into these phases:
 12. API request media-type and body-size validation, complete multi-read
     request handling, and secure default response headers are implemented.
 13. MariaDB CRUD end-to-end coverage and GitHub Actions CI are implemented.
+14. Tag-based Linux and Windows release archives with SHA-256 checksums are
+    generated automatically.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
 positive and negative tests, documentation, and examples.

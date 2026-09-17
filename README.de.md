@@ -434,6 +434,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
     über mehrere Netzwerk-Reads sowie sichere Standard-Response-Header sind
     vorhanden.
 13. MariaDB-CRUD-End-to-End-Abdeckung und GitHub-Actions-CI sind vorhanden.
+14. Linux- und Windows-Release-Archive mit SHA-256-Prüfsummen werden
+    automatisch aus Tags erzeugt.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.

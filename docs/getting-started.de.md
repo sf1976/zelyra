@@ -164,6 +164,13 @@ Das Script baut die CLI im Release-Modus und installiert sie unter:
 ~/.local/bin/zelyra
 ~~~
 
+Für Nutzer, die Rust nicht installieren möchten, stellen Alpha- und spätere
+stabile Releases vorgefertigte Linux- und Windows-Archive auf der
+[GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases) bereit. Das
+passende Archiv herunterladen, die `.sha256`-Datei prüfen, entpacken und
+`zelyra` beziehungsweise `zelyra.exe` in den Benutzer-PATH legen. Das Archiv
+enthält die CLI, beide README-Sprachen und die Lizenzhinweise.
+
 Falls die Shell zelyra nicht findet, das Verzeichnis für die aktuelle Shell
 zum PATH hinzufügen:
 
@@ -290,7 +297,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.36"
+version = "0.1.37"
 zelyra = "0.1"
 
 [capabilities]
