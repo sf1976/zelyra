@@ -51,7 +51,7 @@ database, backend, form, and API. Zelyra aims to turn those copies into one
 traceable chain:
 
 ~~~text
-Table → Types → SQL → Forms → CRUD → Web page
+Table → Types → SQL → Forms → CRUD → Web page → API/OpenAPI
 ~~~
 
 This field:
@@ -167,6 +167,7 @@ Important commands:
 | `zelyra run app.zyl` | run a program |
 | `zelyra serve app.zyl` | start the HTTP server |
 | `zelyra verify app.zyl` | classify contracts |
+| `zelyra doc app.zyl --openapi` | generate an OpenAPI document |
 | `zelyra db inspect app.zyl` | inspect the live schema |
 | `zelyra db plan app.zyl` | display schema changes |
 | `zelyra db apply app.zyl` | apply an approved plan |
@@ -707,7 +708,7 @@ Major planned areas include:
 - activity, audit, and technical logs;
 - typed connections and secret providers;
 - ODBC and external read-only databases;
-- APIs and OpenAPI;
+- executable API handlers and runtime request/response processing;
 - structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.

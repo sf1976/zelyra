@@ -30,6 +30,10 @@ pub enum TokenKind {
     Form,
     Crud,
     Auth,
+    Api,
+    Input,
+    Output,
+    Errors,
     Requires,
     Permits,
     Sessions,
@@ -172,6 +176,10 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "form" => TokenKind::Form,
                 "crud" => TokenKind::Crud,
                 "auth" => TokenKind::Auth,
+                "api" => TokenKind::Api,
+                "input" => TokenKind::Input,
+                "output" => TokenKind::Output,
+                "errors" => TokenKind::Errors,
                 "requires" => TokenKind::Requires,
                 "permits" => TokenKind::Permits,
                 "sessions" => TokenKind::Sessions,
@@ -501,6 +509,15 @@ mod tests {
         let tokens = lex("fn main() { return 1 + 2 >= 3 }").unwrap();
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Fn));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::GreaterEqual));
+    }
+
+    #[test]
+    fn lexes_api_keywords() {
+        let tokens = lex("api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } }").unwrap();
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Api));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Input));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Output));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Errors));
     }
     #[test]
     fn lexes_escaped_strings() {

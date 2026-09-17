@@ -1,4 +1,5 @@
 use std::{collections::HashSet, env, fs, process::ExitCode};
+use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
     inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
@@ -9,13 +10,13 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
-    check, check_capabilities_with_grants, execute, execute_with_database,
+    check, check_apis, check_capabilities_with_grants, execute, execute_with_database,
     verify as verify_program, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl> [--json]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -133,6 +134,18 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     if validate_capabilities(path, &program).is_err() {
         return Err(());
     }
+    if let Err(errors) = check_apis(&program) {
+        for error in errors {
+            diagnostic(
+                path,
+                "E-API-001",
+                &error.message,
+                error.span.line,
+                error.span.column,
+            );
+        }
+        return Err(());
+    }
     if let Ok(schema) = build_schema(&program) {
         if !validate_auth(path, &program, &schema) {
             return Err(());
@@ -195,6 +208,219 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = args.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    match args.next() {
+        None => {}
+        Some(flag) if flag == "--openapi" => {}
+        Some(_) => {
+            usage();
+            return ExitCode::from(2);
+        }
+    }
+    if args.next().is_some() {
+        usage();
+        return ExitCode::from(2);
+    }
+    let program = match validate(&path) {
+        Ok(program) => program,
+        Err(()) => return ExitCode::from(1),
+    };
+    println!("{}", format_openapi(&program));
+    ExitCode::SUCCESS
+}
+
+fn format_openapi(program: &zelyra_ast::Program) -> String {
+    let paths = program
+        .apis
+        .iter()
+        .map(|api| {
+            let method = api.method.to_ascii_lowercase();
+            let path_parameters = api
+                .input
+                .iter()
+                .filter(|field| api.path.contains(&format!("{{{}}}", field.name)))
+                .map(|field| {
+                    format!(
+                        "{{\"name\":\"{}\",\"in\":\"path\",\"required\":true,\"schema\":{}}}",
+                        json_escape(&field.name),
+                        openapi_schema(&field.ty)
+                    )
+                })
+                .collect::<Vec<_>>();
+            let query_parameters = if matches!(api.method.as_str(), "GET" | "DELETE") {
+                api.input
+                    .iter()
+                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
+                    .map(|field| {
+                        format!(
+                            "{{\"name\":\"{}\",\"in\":\"query\",\"required\":{},\"schema\":{}}}",
+                            json_escape(&field.name),
+                            !matches!(field.ty, Type::Option(_)),
+                            openapi_schema(&field.ty)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            let request_body = if matches!(api.method.as_str(), "GET" | "DELETE") {
+                String::new()
+            } else {
+                let properties = api
+                    .input
+                    .iter()
+                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
+                    .map(|field| {
+                        format!(
+                            "\"{}\":{}",
+                            json_escape(&field.name),
+                            openapi_schema(&field.ty)
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let required = api
+                    .input
+                    .iter()
+                    .filter(|field| {
+                        !api.path.contains(&format!("{{{}}}", field.name))
+                            && !matches!(field.ty, Type::Option(_))
+                    })
+                    .map(|field| format!("\"{}\"", json_escape(&field.name)))
+                    .collect::<Vec<_>>();
+                if properties.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "\"requestBody\":{{\"required\":true,\"content\":{{\"application/json\":{{\"schema\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}}}}}}},",
+                        properties.join(","),
+                        required.join(",")
+                    )
+                }
+            };
+            let mut parameters = path_parameters;
+            parameters.extend(query_parameters);
+            let responses = std::iter::once(format!(
+                "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
+                openapi_schema(&api.output)
+            ))
+            .chain(api.errors.iter().map(|error| {
+                format!(
+                    "\"{}\":{{\"description\":\"{}\"}}",
+                    error.status,
+                    json_escape(&error.name)
+                )
+            }))
+            .collect::<Vec<_>>()
+            .join(",");
+            let operation_id = format!(
+                "{}_{}",
+                method,
+                api.path
+                    .trim_matches('/')
+                    .replace(['{', '}'], "")
+                    .replace('/', "_")
+            );
+            format!(
+                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}}}}}",
+                json_escape(&api.path),
+                method,
+                json_escape(&operation_id),
+                parameters.join(","),
+                request_body,
+                responses
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let components = format_openapi_components(program);
+    format!(
+        "{{\"openapi\":\"3.0.3\",\"info\":{{\"title\":\"Zelyra API\",\"version\":\"0.1.0\"}},\"paths\":{{{paths}}},\"components\":{{\"schemas\":{{{components}}}}}}}"
+    )
+}
+
+fn format_openapi_components(program: &zelyra_ast::Program) -> String {
+    let mut components = Vec::new();
+    for definition in &program.types {
+        components.push(format!(
+            "\"{}\":{}",
+            json_escape(&definition.name),
+            openapi_schema(&definition.target)
+        ));
+    }
+    for table in &program.tables {
+        let properties = table
+            .columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "\"{}\":{}",
+                    json_escape(&column.name),
+                    openapi_schema(&column.ty)
+                )
+            })
+            .collect::<Vec<_>>();
+        let required = table
+            .columns
+            .iter()
+            .filter(|column| column.required && !matches!(column.ty, Type::Option(_)))
+            .map(|column| format!("\"{}\"", json_escape(&column.name)))
+            .collect::<Vec<_>>();
+        let schema = format!(
+            "{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
+            properties.join(","),
+            required.join(",")
+        );
+        components.push(format!(
+            "\"{}\":{}",
+            json_escape(&table.name),
+            schema.clone()
+        ));
+        if let Some(singular) = singular_type_name(&table.name) {
+            components.push(format!("\"{}\":{}", json_escape(&singular), schema));
+        }
+    }
+    components.join(",")
+}
+
+fn singular_type_name(table: &str) -> Option<String> {
+    let singular = if let Some(stem) = table.strip_suffix("ies") {
+        format!("{stem}y")
+    } else if let Some(stem) = table.strip_suffix('s') {
+        stem.to_owned()
+    } else {
+        table.to_owned()
+    };
+    let mut chars = singular.chars();
+    let first = chars.next()?.to_ascii_uppercase();
+    Some(std::iter::once(first).chain(chars).collect())
+}
+
+fn openapi_schema(ty: &Type) -> String {
+    match ty {
+        Type::Int | Type::UInt => "{\"type\":\"integer\"}".into(),
+        Type::Float | Type::Decimal => "{\"type\":\"number\"}".into(),
+        Type::Bool => "{\"type\":\"boolean\"}".into(),
+        Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
+        Type::Option(inner) => openapi_schema(inner),
+        Type::Result(ok, _) => openapi_schema(ok),
+        Type::Named(name) => match name.as_str() {
+            "Id" => "{\"type\":\"integer\",\"format\":\"int64\"}".into(),
+            "Email" => "{\"type\":\"string\",\"format\":\"email\"}".into(),
+            "Url" => "{\"type\":\"string\",\"format\":\"uri\"}".into(),
+            "Uuid" => "{\"type\":\"string\",\"format\":\"uuid\"}".into(),
+            _ => format!(
+                "{{\"$ref\":\"#/components/schemas/{}\"}}",
+                json_escape(name)
+            ),
+        },
+        _ => "{\"type\":\"string\"}".into(),
     }
 }
 
@@ -1261,6 +1487,9 @@ fn main() -> ExitCode {
     if command == "serve" {
         return serve_command(args);
     }
+    if command == "doc" {
+        return doc_command(args);
+    }
     if command == "verify" {
         let Some(path) = args.next() else {
             usage();
@@ -1363,6 +1592,22 @@ mod tests {
             format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
             r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
         );
+    }
+
+    #[test]
+    fn formats_api_declarations_as_openapi() {
+        let program = parse(
+            &lex(
+                "type CustomerId = Id table customers { id: CustomerId primary auto name: String(100) required } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let document = format_openapi(&program);
+        assert!(document.contains("\"openapi\":\"3.0.3\""));
+        assert!(document.contains("\"/customers/{id}\""));
+        assert!(document.contains("\"404\":{\"description\":\"NotFound\"}"));
+        assert!(document.contains("#/components/schemas/Customer"));
     }
 
     #[test]

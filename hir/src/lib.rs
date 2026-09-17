@@ -23,6 +23,7 @@ impl fmt::Display for ResolveError {
 #[derive(Clone, Debug)]
 pub struct HirProgram {
     pub types: Vec<TypeDef>,
+    pub apis: Vec<ApiDef>,
     pub functions: Vec<HirFunction>,
     pub functions_by_name: HashMap<String, FunctionId>,
 }
@@ -236,6 +237,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
     if errors.is_empty() {
         Ok(HirProgram {
             types: program.types.clone(),
+            apis: program.apis.clone(),
             functions,
             functions_by_name,
         })

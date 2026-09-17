@@ -52,7 +52,7 @@ Formular und schließlich in der API. Zelyra versucht, daraus eine einzige
 nachvollziehbare Kette zu machen:
 
 ~~~text
-Tabelle → Typen → SQL → Formulare → CRUD → Webseite
+Tabelle → Typen → SQL → Formulare → CRUD → Webseite → API/OpenAPI
 ~~~
 
 Eine Spalte wie diese:
@@ -195,6 +195,7 @@ Die wichtigsten Befehle:
 | `zelyra run app.zyl` | Programm ausführen |
 | `zelyra serve app.zyl` | HTTP-Server starten |
 | `zelyra verify app.zyl` | Contracts klassifizieren |
+| `zelyra doc app.zyl --openapi` | OpenAPI-Dokument erzeugen |
 | `zelyra db inspect app.zyl` | Ist-Schema lesen |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
@@ -783,7 +784,7 @@ Die wichtigsten geplanten Bereiche:
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
-- APIs und OpenAPI;
+- ausführbare API-Handler und Request-/Response-Verarbeitung zur Laufzeit;
 - strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.

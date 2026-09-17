@@ -53,6 +53,8 @@ Heute implementiert:
   Formularen und CSRF-geschütztem Löschen.
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
+- typisierte API-Deklarationen mit Routen-/Typprüfung und OpenAPI-3.0.3-Ausgabe
+  über `zelyra doc`.
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
@@ -74,7 +76,7 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
+Vollständige CRUD-Erzeugung, Datenbankrollen, ausführbare API-Handler, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
@@ -316,6 +318,7 @@ zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
 zelyra verify <file.zyl> [--json]
+zelyra doc <file.zyl> [--openapi]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>
@@ -368,7 +371,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Runtime-Contracts und begrenzte symbolische Verifikation sind vorhanden;
    Runtime-Rechte, allgemeine formale Verifikation und strukturierte
    Nebenläufigkeit folgen.
-10. APIs, OpenAPI, Client State, WebAssembly und Optimierungsschnittstellen.
+10. Typisierte API-Deklarationen und OpenAPI-3.0.3-Erzeugung sind vorhanden;
+    ausführbare Handler, Client State, WebAssembly und
+    Optimierungsschnittstellen folgen.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.

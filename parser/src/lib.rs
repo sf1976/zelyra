@@ -70,6 +70,7 @@ impl<'a> Parser<'a> {
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
         let mut auth = Vec::new();
+        let mut apis = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::Eof) {
@@ -87,6 +88,8 @@ impl<'a> Parser<'a> {
                 cruds.push(self.crud_definition()?);
             } else if self.at(&TokenKind::Auth) {
                 auth.push(self.auth_definition()?);
+            } else if self.at(&TokenKind::Api) {
+                apis.push(self.api_definition()?);
             } else {
                 functions.push(self.function()?);
             }
@@ -100,7 +103,79 @@ impl<'a> Parser<'a> {
             forms,
             cruds,
             auth,
+            apis,
             functions,
+        })
+    }
+
+    fn api_definition(&mut self) -> Result<ApiDef, ParseError> {
+        let start = self.expect(TokenKind::Api, "`api`")?;
+        let method = self
+            .ident("HTTP method after `api`")?
+            .0
+            .to_ascii_uppercase();
+        if !matches!(method.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
+            return self.error(format!("unsupported HTTP method `{method}`"));
+        }
+        let path = self.string_value("API path")?;
+        self.expect(TokenKind::LBrace, "`{` after API path")?;
+        let mut input = Vec::new();
+        let mut output = None;
+        let mut errors = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Input) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `input`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (name, span) = self.ident("API input field name")?;
+                    self.expect(TokenKind::Colon, "`:` after API input field name")?;
+                    let ty = self.type_name()?;
+                    input.push(ApiField { name, ty, span });
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after API input")?;
+            } else if self.at(&TokenKind::Output) {
+                self.advance();
+                output = Some(self.type_name()?);
+            } else if self.at(&TokenKind::Errors) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `errors`")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let status = match self.current().kind.clone() {
+                        TokenKind::Int(value) if (100..=599).contains(&value) => {
+                            self.advance();
+                            value as u16
+                        }
+                        _ => return self.error("expected HTTP status code in API errors"),
+                    };
+                    let (name, span) = self.ident("API error name")?;
+                    errors.push(ApiError { status, name, span });
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after API errors")?;
+            } else {
+                return self.error("expected `input`, `output`, or `errors` in API definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after API definition")?;
+        let Some(output) = output else {
+            return self.error("API definition requires an `output` type");
+        };
+        Ok(ApiDef {
+            method,
+            path,
+            input,
+            output,
+            errors,
+            span: start.join(end),
         })
     }
 
@@ -1345,6 +1420,32 @@ mod tests {
         );
         assert!(program.cruds[0].requires_auth);
         assert_eq!(program.cruds[0].permissions, ["customers.view"]);
+    }
+
+    #[test]
+    fn parses_typed_api_definition() {
+        let program = parse(
+            &lex(r#"
+                api GET "/customers/{id}" {
+                    input {
+                        id: CustomerId
+                    }
+                    output Customer
+                    errors {
+                        403 Forbidden
+                        404 NotFound
+                    }
+                }
+                fn main() { }
+            "#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.apis.len(), 1);
+        assert_eq!(program.apis[0].method, "GET");
+        assert_eq!(program.apis[0].path, "/customers/{id}");
+        assert_eq!(program.apis[0].input[0].name, "id");
+        assert_eq!(program.apis[0].errors[1].status, 404);
     }
 
     #[test]

@@ -85,6 +85,7 @@ pub struct Program {
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
     pub auth: Vec<AuthDef>,
+    pub apis: Vec<ApiDef>,
     pub functions: Vec<Function>,
 }
 
@@ -147,6 +148,30 @@ pub struct AuthDef {
     pub table: String,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiDef {
+    pub method: String,
+    pub path: String,
+    pub input: Vec<ApiField>,
+    pub output: Type,
+    pub errors: Vec<ApiError>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiField {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ApiError {
+    pub status: u16,
+    pub name: String,
     pub span: Span,
 }
 

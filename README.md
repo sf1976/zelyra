@@ -53,6 +53,8 @@ Implemented today:
   CSRF-protected delete.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
+- typed API declarations with route/type validation and OpenAPI 3.0.3 output
+  through `zelyra doc`.
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
@@ -73,7 +75,7 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, database roles, APIs, general formal verification,
+Full CRUD generation, database roles, executable API handlers, general formal verification,
 and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
@@ -309,6 +311,7 @@ zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
 zelyra verify <file.zyl> [--json]
+zelyra doc <file.zyl> [--openapi]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>
@@ -361,7 +364,9 @@ The long-term specification is organized into these phases:
    contracts, and limited symbolic verification are implemented; runtime
    privilege enforcement, general formal verification, and structured
    concurrency remain.
-10. APIs, OpenAPI, client state, WebAssembly, and optimization interfaces.
+10. Typed API declarations and OpenAPI 3.0.3 generation are implemented;
+    executable handlers, client state, WebAssembly, and optimization
+    interfaces remain.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
 positive and negative tests, documentation, and examples.

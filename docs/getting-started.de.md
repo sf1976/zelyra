@@ -19,9 +19,10 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - Formulare und Validierung;
 - erste CRUD-Listen, Details, Create-/Edit-Formulare, konfigurierbare Spalten
   und Löschaktionen;
-- erste Versionen von CRUD, Authentifizierung, Autorisierung und Contract-
-  Verifikation sind vorhanden; umfassendere Ausbaustufen sind weiterhin
-  geplant.
+- erste Versionen von CRUD, Authentifizierung, Autorisierung, Contract-
+  Verifikation, typisierten API-Deklarationen und OpenAPI-Erzeugung sind
+  vorhanden; ausführbare API-Handler und umfassendere Ausbaustufen sind
+  weiterhin geplant.
 
 Das zentrale Ziel ist, wichtige Informationen nur einmal zu definieren. Ein
 Pflichtfeld mit maximaler String-Länge in einer Tabelle kann beispielsweise
@@ -60,7 +61,7 @@ Das aktuelle Repository enthält:
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, weitergehende formale Verifikation,
+Login-Drosselung, Passwortverwaltungs-Kommandos, ausführbare API-Handler, weitergehende formale Verifikation,
 Runtime-Capability-Durchsetzung, strukturierte
 Nebenläufigkeit und Produktionspaketierung.
 
@@ -552,6 +553,7 @@ zelyra build <file.zyl>                 Quellcode prüfen/bauen
 zelyra run <file.zyl>                   Programm ausführen
 zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
 zelyra verify <file.zyl>                Contract-Prüfungen klassifizieren
+zelyra doc <file.zyl> [--openapi]       OpenAPI-Dokument erzeugen
 zelyra form validate <file> <Form> ...  Formularwerte validieren
 zelyra db create <file.zyl>             Schema-DDL ausgeben
 zelyra db bootstrap <file.zyl>          Anfangsschema erzeugen/anwenden
@@ -618,6 +620,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 7: CRUD](phase-7.de.md).
 - [Phase 8: Authentifizierung und Autorisierung](phase-8.de.md).
 - [Phase 9: Capabilities](phase-9.de.md).
+- [Phase 10: Typisierte APIs und OpenAPI](phase-10.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 

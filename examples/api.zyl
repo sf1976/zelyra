@@ -1,0 +1,31 @@
+type CustomerId = Id
+
+table customers {
+    id: CustomerId primary auto
+    name: String(100) required
+    email: Email
+}
+
+api GET "/customers/{id}" {
+    input {
+        id: CustomerId
+    }
+    output Customer
+    errors {
+        404 NotFound
+    }
+}
+
+api POST "/customers" {
+    input {
+        name: String
+        email: Email?
+    }
+    output Customer
+    errors {
+        400 ValidationError
+    }
+}
+
+fn main() {
+}

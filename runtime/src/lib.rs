@@ -20,6 +20,18 @@ pub struct CapabilityError {
     pub span: Span,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct ApiDiagnostic {
+    pub message: String,
+    pub span: Span,
+}
+
+impl fmt::Display for ApiDiagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
 impl fmt::Display for CapabilityError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
@@ -35,6 +47,153 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
     "Clock",
     "Random",
 ];
+
+pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
+    let mut errors = Vec::new();
+    let mut known_types = [
+        "Id",
+        "Email",
+        "Url",
+        "Uuid",
+        "Money",
+        "Int",
+        "UInt",
+        "Float",
+        "Decimal",
+        "Bool",
+        "String",
+        "Char",
+        "Bytes",
+        "Timestamp",
+        "Date",
+        "Time",
+        "Duration",
+        "Unit",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect::<HashSet<_>>();
+    for definition in &program.types {
+        known_types.insert(definition.name.clone());
+    }
+    for table in &program.tables {
+        known_types.insert(table.name.clone());
+        if let Some(singular) = singular_table_type(&table.name) {
+            known_types.insert(singular);
+        }
+    }
+
+    let mut routes = HashSet::new();
+    for api in &program.apis {
+        if !routes.insert((api.method.clone(), api.path.clone())) {
+            errors.push(ApiDiagnostic {
+                message: format!("duplicate API route `{}` `{}`", api.method, api.path),
+                span: api.span,
+            });
+        }
+        let parameters = match api_path_parameters(&api.path) {
+            Ok(parameters) => parameters,
+            Err(message) => {
+                errors.push(ApiDiagnostic {
+                    message,
+                    span: api.span,
+                });
+                Vec::new()
+            }
+        };
+        let mut fields = HashSet::new();
+        for field in &api.input {
+            if !fields.insert(field.name.clone()) {
+                errors.push(ApiDiagnostic {
+                    message: format!("duplicate API input field `{}`", field.name),
+                    span: field.span,
+                });
+            }
+            if !api_type_known(&field.ty, &known_types) {
+                errors.push(ApiDiagnostic {
+                    message: format!("unknown API input type `{}`", field.ty),
+                    span: field.span,
+                });
+            }
+        }
+        for parameter in parameters {
+            if !fields.contains(&parameter) {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "path parameter `{parameter}` must be declared in the API input"
+                    ),
+                    span: api.span,
+                });
+            }
+        }
+        if !api_type_known(&api.output, &known_types) {
+            errors.push(ApiDiagnostic {
+                message: format!("unknown API output type `{}`", api.output),
+                span: api.span,
+            });
+        }
+        let mut statuses = HashSet::new();
+        for error in &api.errors {
+            if !statuses.insert(error.status) {
+                errors.push(ApiDiagnostic {
+                    message: format!("duplicate API error status `{}`", error.status),
+                    span: error.span,
+                });
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
+    match ty {
+        Type::Named(name) => known_types.contains(name),
+        Type::Option(inner) | Type::Array(inner) => api_type_known(inner, known_types),
+        Type::Result(ok, error) => {
+            api_type_known(ok, known_types) && api_type_known(error, known_types)
+        }
+        _ => true,
+    }
+}
+
+fn api_path_parameters(path: &str) -> Result<Vec<String>, String> {
+    if !path.starts_with('/') || path.contains(['?', '#']) {
+        return Err("API path must start with `/` and must not contain a query or fragment".into());
+    }
+    let mut parameters = Vec::new();
+    for segment in path.split('/').skip(1) {
+        if segment.is_empty() {
+            continue;
+        }
+        if let Some(name) = segment
+            .strip_prefix('{')
+            .and_then(|segment| segment.strip_suffix('}'))
+        {
+            if name.is_empty()
+                || !name.chars().enumerate().all(|(index, character)| {
+                    if index == 0 {
+                        character == '_' || character.is_ascii_alphabetic()
+                    } else {
+                        character == '_' || character.is_ascii_alphanumeric()
+                    }
+                })
+            {
+                return Err(format!("invalid API path parameter `{segment}`"));
+            }
+            if parameters.iter().any(|existing| existing == name) {
+                return Err(format!("duplicate API path parameter `{name}`"));
+            }
+            parameters.push(name.to_owned());
+        } else if segment.contains(['{', '}']) {
+            return Err(format!("invalid API path segment `{segment}`"));
+        }
+    }
+    Ok(parameters)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContractKind {
@@ -4672,5 +4831,25 @@ mod tests {
         assert_eq!(results[2].status, VerificationStatus::Proven);
         assert_eq!(results[3].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[4].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn validates_api_types_and_path_parameters() {
+        let program = parse(
+            &lex("type CustomerId = Id table customers { id: Id primary auto } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+    }
+
+    #[test]
+    fn rejects_api_paths_without_declared_inputs() {
+        let program =
+            parse(&lex("api GET \"/customers/{id}\" { output String } fn main() { }").unwrap())
+                .unwrap();
+        let errors = check_apis(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("path parameter `id`")));
     }
 }

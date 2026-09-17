@@ -18,8 +18,9 @@ data. The language is intended to bring together:
 - forms and validation;
 - initial CRUD lists, details, Create/Edit forms, configurable columns, and
   delete actions;
-- initial CRUD, authentication, authorization, and contract verification are
-  available; broader versions of these systems are still planned.
+- initial CRUD, authentication, authorization, contract verification, typed API
+  declarations, and OpenAPI generation are available; executable API handlers
+  and broader versions of these systems are still planned.
 
 The central design goal is to define important information once. For example,
 a required String with a maximum length in a table can also provide the basis
@@ -55,7 +56,7 @@ The current repository contains:
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
 The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, APIs, broader formal verification,
+throttling, password-management commands, executable API handlers, broader formal verification,
 runtime capability enforcement, structured concurrency,
 and production packaging.
 
@@ -534,6 +535,7 @@ zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
 zelyra verify <file.zyl>                classify contract checks
+zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
 zelyra form validate <file> <Form> ...  validate form input
 zelyra db create <file.zyl>             print schema DDL
 zelyra db bootstrap <file.zyl>          create/apply initial schema
@@ -601,6 +603,7 @@ Read the phase documents for implementation details:
 - [Phase 7: CRUD](phase-7.md).
 - [Phase 8: Authentication and authorization](phase-8.md).
 - [Phase 9: Capabilities](phase-9.md).
+- [Phase 10: Typed APIs and OpenAPI](phase-10.md).
 
 The German versions use the same filenames with the .de.md suffix.
 
