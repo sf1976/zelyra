@@ -12,6 +12,8 @@ suffix="$(date +%s)"
 primary_email="zelyra-protected-primary-${suffix}@example.test"
 secondary_email="zelyra-protected-secondary-${suffix}@example.test"
 viewer_email="zelyra-protected-viewer-${suffix}@example.test"
+primary_role="zelyra-protected-manager-${suffix}"
+viewer_role="zelyra-protected-viewer-${suffix}"
 test_password="ZelyraProtected-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
@@ -56,6 +58,10 @@ cleanup() {
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM user_permissions
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
+DELETE FROM user_roles
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
+DELETE FROM role_permissions
+WHERE role IN ('${primary_role}', '${viewer_role}');
 DELETE FROM auth_sessions
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
@@ -83,7 +89,7 @@ fi
 echo "[1/10] setting up MariaDB protected-resource schema"
 "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/10] creating users, permission data, and a customer"
+echo "[2/10] creating users, role data, and a customer"
 primary_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 secondary_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 viewer_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
@@ -96,12 +102,16 @@ SET @primary_user_id = (SELECT id FROM users WHERE email = '${primary_email}');
 SET @secondary_user_id = (SELECT id FROM users WHERE email = '${secondary_email}');
 SET @viewer_user_id = (SELECT id FROM users WHERE email = '${viewer_email}');
 INSERT INTO user_permissions (user_id, permission)
-VALUES (@primary_user_id, 'customers.view'),
-       (@primary_user_id, 'customers.create'),
-       (@primary_user_id, 'customers.edit'),
-       (@primary_user_id, 'customers.delete'),
-       (@secondary_user_id, 'other.permission'),
-       (@viewer_user_id, 'customers.view');
+VALUES (@secondary_user_id, 'other.permission');
+INSERT INTO user_roles (user_id, role)
+VALUES (@primary_user_id, '${primary_role}'),
+       (@viewer_user_id, '${viewer_role}');
+INSERT INTO role_permissions (role, permission)
+VALUES ('${primary_role}', 'customers.view'),
+       ('${primary_role}', 'customers.create'),
+       ('${primary_role}', 'customers.edit'),
+       ('${primary_role}', 'customers.delete'),
+       ('${viewer_role}', 'customers.view');
 INSERT INTO customers (name) VALUES ('${customer_name}');
 SQL
 customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${customer_name}'")"

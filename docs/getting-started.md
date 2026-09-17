@@ -93,8 +93,8 @@ The current repository contains:
   `break`/`continue`, and explicit `while` loop invariants. Only `PROVEN` is
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
-The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, richer domain-error values, broader
+The following are not complete yet: full CRUD generation, role administration,
+login throttling, password-management commands, richer domain-error values, broader
 formal verification, operating-system capability integration, cancellation, database
 pool integration for parallel work, and production packaging.
 

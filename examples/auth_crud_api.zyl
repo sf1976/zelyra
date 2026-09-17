@@ -4,6 +4,8 @@ auth users {
     table: users
     sessions: auth_sessions
     permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
 }
 
 table users {
@@ -22,6 +24,18 @@ table auth_sessions {
 table user_permissions {
     id: Id primary auto
     user: User required
+    permission: String(100) required
+}
+
+table user_roles {
+    id: Id primary auto
+    user: User required
+    role: String(100) required
+}
+
+table role_permissions {
+    id: Id primary auto
+    role: String(100) required
     permission: String(100) required
 }
 

@@ -581,6 +581,9 @@ printf '%s\n' 'dieses-passwort-aendern' | zelyra auth hash-password --stdin
 ~~~zelyra
 auth users {
     table: users
+    permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
 }
 
 page "/admin" {
@@ -592,6 +595,12 @@ page "/admin" {
     }
 }
 ~~~
+
+Die optionale Tabelle `permissions` enthält `user_id` und `permission` für
+direkte Vergaben. Rollengruppen werden mit `roles` und `role_permissions`
+aktiviert: Die erste Tabelle enthält `user_id` und `role`, die zweite `role`
+und `permission`. Effektive Berechtigungen sind die Vereinigung direkter
+Vergaben und aller Berechtigungen aus den Rollen des Benutzers.
 
 Dieselben Schutzregeln sichern typisierte API-Handler:
 

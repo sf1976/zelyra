@@ -59,6 +59,14 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok((name.clone(), span))
             }
+            TokenKind::Roles => {
+                let span = self.advance().span;
+                Ok(("roles".into(), span))
+            }
+            TokenKind::RolePermissions => {
+                let span = self.advance().span;
+                Ok(("role_permissions".into(), span))
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -219,13 +227,20 @@ impl<'a> Parser<'a> {
         let mut table = None;
         let mut session_table = None;
         let mut permissions_table = None;
+        let mut roles_table = None;
+        let mut role_permissions_table = None;
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            let field = match self.current().kind.clone() {
-                TokenKind::Table => "table",
-                TokenKind::Sessions => "sessions",
-                TokenKind::Permissions => "permissions",
-                _ => return self.error("expected table, sessions, or permissions option"),
-            };
+            let field =
+                match self.current().kind.clone() {
+                    TokenKind::Table => "table",
+                    TokenKind::Sessions => "sessions",
+                    TokenKind::Permissions => "permissions",
+                    TokenKind::Roles => "roles",
+                    TokenKind::RolePermissions => "role_permissions",
+                    _ => return self.error(
+                        "expected table, sessions, permissions, roles, or role_permissions option",
+                    ),
+                };
             self.advance();
             self.expect(TokenKind::Colon, "colon after authentication option")?;
             let value = self.ident("authentication option value")?.0;
@@ -233,6 +248,8 @@ impl<'a> Parser<'a> {
                 "table" => table = Some(value),
                 "sessions" => session_table = Some(value),
                 "permissions" => permissions_table = Some(value),
+                "roles" => roles_table = Some(value),
+                "role_permissions" => role_permissions_table = Some(value),
                 _ => return self.error("unknown authentication option"),
             }
             self.skip_newlines();
@@ -249,6 +266,8 @@ impl<'a> Parser<'a> {
             table,
             session_table,
             permissions_table,
+            roles_table,
+            role_permissions_table,
             span: start.join(end),
         })
     }
@@ -1657,6 +1676,8 @@ mod tests {
                     table: users
                     sessions: auth_sessions
                     permissions: user_permissions
+                    roles: user_roles
+                    role_permissions: role_permissions
                 }
 
                 crud Customer -> customers {
@@ -1678,6 +1699,11 @@ mod tests {
         assert_eq!(
             program.auth[0].permissions_table.as_deref(),
             Some("user_permissions")
+        );
+        assert_eq!(program.auth[0].roles_table.as_deref(), Some("user_roles"));
+        assert_eq!(
+            program.auth[0].role_permissions_table.as_deref(),
+            Some("role_permissions")
         );
         assert!(program.cruds[0].requires_auth);
         assert_eq!(program.cruds[0].permissions, ["customers.view"]);

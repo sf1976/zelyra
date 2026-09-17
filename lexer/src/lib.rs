@@ -42,6 +42,8 @@ pub enum TokenKind {
     Permits,
     Sessions,
     Permissions,
+    Roles,
+    RolePermissions,
     Title,
     List,
     Search,
@@ -193,6 +195,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "permits" => TokenKind::Permits,
                 "sessions" => TokenKind::Sessions,
                 "permissions" => TokenKind::Permissions,
+                "roles" => TokenKind::Roles,
+                "role_permissions" => TokenKind::RolePermissions,
                 "title" => TokenKind::Title,
                 "list" => TokenKind::List,
                 "search" => TokenKind::Search,
@@ -540,6 +544,17 @@ mod tests {
         assert!(tokens.iter().any(|token| token.kind == TokenKind::Output));
         assert!(tokens.iter().any(|token| token.kind == TokenKind::Errors));
     }
+
+    #[test]
+    fn lexes_auth_role_keywords() {
+        let tokens =
+            lex("auth users { roles: user_roles role_permissions: role_permissions }").unwrap();
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Roles));
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::RolePermissions));
+    }
+
     #[test]
     fn lexes_escaped_strings() {
         assert_eq!(

@@ -284,6 +284,8 @@ pub struct AuthRoute {
     pub table: String,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
+    pub roles_table: Option<String>,
+    pub role_permissions_table: Option<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -825,15 +827,27 @@ fn dispatch_login(
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 }
             } else {
+                let Some(user_id) = result
+                    .rows
+                    .first()
+                    .and_then(|row| row.first())
+                    .and_then(|value| value.parse::<i64>().ok())
+                else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                let permissions =
+                    match load_user_permissions(auth, database_url, user_id, &app.auth_permissions)
+                    {
+                        Ok(permissions) => permissions,
+                        Err(error) => {
+                            eprintln!("zelyra web: permission lookup failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    };
                 let Ok(mut sessions) = app.sessions.lock() else {
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 };
-                sessions.insert(
-                    session_id.clone(),
-                    Session {
-                        permissions: app.auth_permissions.clone(),
-                    },
-                );
+                sessions.insert(session_id.clone(), Session { permissions });
             }
             Response::redirect("/").with_header(
                 "Set-Cookie",
@@ -992,6 +1006,59 @@ fn cookie_value(request: &Request, name: &str) -> Option<String> {
         })
 }
 
+fn load_user_permissions(
+    auth: &AuthRoute,
+    database_url: &str,
+    user_id: i64,
+    fallback: &[String],
+) -> Result<Vec<String>, String> {
+    let has_database_permissions = auth.permissions_table.is_some() || auth.roles_table.is_some();
+    if !has_database_permissions {
+        return Ok(fallback.to_vec());
+    }
+    let mut permissions = Vec::new();
+    if let Some(permissions_table) = &auth.permissions_table {
+        let query = format!(
+            "SELECT permission FROM {} WHERE user_id = :user_id",
+            quote_identifier(permissions_table)
+        );
+        let result = zelyra_database::execute_mariadb_query(
+            database_url,
+            &query,
+            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+        )
+        .map_err(|error| error.to_string())?;
+        permissions.extend(
+            result
+                .rows
+                .into_iter()
+                .filter_map(|row| row.into_iter().next()),
+        );
+    }
+    if let (Some(roles_table), Some(role_permissions_table)) =
+        (&auth.roles_table, &auth.role_permissions_table)
+    {
+        let query = format!(
+            "SELECT rp.permission FROM {} AS ur INNER JOIN {} AS rp ON rp.role = ur.role WHERE ur.user_id = :user_id",
+            quote_identifier(roles_table),
+            quote_identifier(role_permissions_table),
+        );
+        let result = zelyra_database::execute_mariadb_query(
+            database_url,
+            &query,
+            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+        )
+        .map_err(|error| error.to_string())?;
+        permissions.extend(
+            result
+                .rows
+                .into_iter()
+                .filter_map(|row| row.into_iter().next()),
+        );
+    }
+    Ok(permissions)
+}
+
 fn session_from_request(
     app: &WebApp,
     request: &Request,
@@ -1030,29 +1097,14 @@ fn session_from_request(
         .first()
         .and_then(|row| row.first())
         .and_then(|value| value.parse::<i64>().ok())?;
-    let permissions = if let Some(permissions_table) = &auth.permissions_table {
-        let query = format!(
-            "SELECT permission FROM {} WHERE user_id = :user_id",
-            quote_identifier(permissions_table)
-        );
-        match zelyra_database::execute_mariadb_query(
-            database_url,
-            &query,
-            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
-        ) {
-            Ok(result) => result
-                .rows
-                .into_iter()
-                .filter_map(|row| row.into_iter().next())
-                .collect(),
+    let permissions =
+        match load_user_permissions(auth, database_url, user_id, &app.auth_permissions) {
+            Ok(permissions) => permissions,
             Err(error) => {
                 eprintln!("zelyra web: permission lookup failed: {error}");
                 return None;
             }
-        }
-    } else {
-        app.auth_permissions.clone()
-    };
+        };
     Some(Session { permissions })
 }
 
@@ -3273,6 +3325,8 @@ mod tests {
             table: "users".into(),
             session_table: None,
             permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -3592,6 +3646,8 @@ mod tests {
             table: "users".into(),
             session_table: Some("sessions".into()),
             permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),

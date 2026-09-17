@@ -100,7 +100,7 @@ Das aktuelle Repository enthält:
   Nur `PROVEN` ist ein Beweis; nicht unterstützte Fälle bleiben
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
+Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Rollenverwaltung,
 Login-Drosselung, Passwortverwaltungs-Kommandos, umfangreichere fachliche
 Fehlerwerte, weitergehende formale Verifikation,
 Betriebssystem-Integration für Capabilities, Abbruch laufender Branches,

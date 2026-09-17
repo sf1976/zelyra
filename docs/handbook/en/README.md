@@ -525,6 +525,9 @@ printf '%s\n' 'change-this-password' | zelyra auth hash-password --stdin
 ~~~zelyra
 auth users {
     table: users
+    permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
 }
 
 page "/admin" {
@@ -536,6 +539,12 @@ page "/admin" {
     }
 }
 ~~~
+
+The optional `permissions` table contains `user_id` and `permission` for
+direct grants. Role groups are enabled with `roles` and `role_permissions`:
+the first table contains `user_id` and `role`, and the second contains `role`
+and `permission`. Effective permissions are the union of direct grants and
+all permissions inherited from the user's roles.
 
 The same guards protect typed API handlers:
 

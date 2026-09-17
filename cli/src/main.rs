@@ -1719,6 +1719,94 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        if auth.roles_table.is_some() != auth.role_permissions_table.is_some() {
+            diagnostic(
+                path,
+                "E-AUTH-009",
+                "authentication roles require both roles and role_permissions options",
+                auth.span.line,
+                auth.span.column,
+            );
+            valid = false;
+        }
+        if let Some(roles_table_name) = &auth.roles_table {
+            let Some(roles_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *roles_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-010",
+                    &format!(
+                        "authentication refers to unknown roles table {}",
+                        roles_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["user_id", "role"] {
+                if !roles_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-012",
+                        &format!(
+                            "authentication roles table {} requires column {}",
+                            roles_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+        }
+        if let Some(role_permissions_table_name) = &auth.role_permissions_table {
+            let Some(role_permissions_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *role_permissions_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-011",
+                    &format!(
+                        "authentication refers to unknown role permissions table {}",
+                        role_permissions_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            for required_column in ["role", "permission"] {
+                if !role_permissions_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-013",
+                        &format!(
+                            "authentication role permissions table {} requires column {}",
+                            role_permissions_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+        }
     }
     let protected = program
         .pages
@@ -2163,6 +2251,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             table: auth.table.clone(),
             session_table: auth.session_table.clone(),
             permissions_table: auth.permissions_table.clone(),
+            roles_table: auth.roles_table.clone(),
+            role_permissions_table: auth.role_permissions_table.clone(),
             schema: schema.clone(),
             csrf,
         })
@@ -3583,6 +3673,8 @@ mod tests {
                 table: users
                 sessions: auth_sessions
                 permissions: user_permissions
+                roles: user_roles
+                role_permissions: role_permissions
             }
 
             table users {
@@ -3603,10 +3695,47 @@ mod tests {
                 user: User required
                 permission: String(100) required
             }
+
+            table user_roles {
+                id: Id primary auto
+                user: User required
+                role: String(100) required
+            }
+
+            table role_permissions {
+                id: Id primary auto
+                role: String(100) required
+                permission: String(100) required
+            }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_partial_auth_role_configuration() {
+        let source = r#"
+            auth users {
+                table: users
+                roles: user_roles
+            }
+
+            table users {
+                id: Id primary auto
+                email: Email required
+                password_hash: String(255) required
+            }
+
+            table user_roles {
+                id: Id primary auto
+                user: User required
+                role: String(100) required
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
     }
 
     #[test]

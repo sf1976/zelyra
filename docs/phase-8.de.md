@@ -10,6 +10,8 @@ auth users {
     table: users
     sessions: auth_sessions
     permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
 }
 ~~~
 
@@ -52,6 +54,14 @@ passende Berechtigung erhält HTTP 403. Ohne permissions-Option bleibt die
 ausdrückliche ZELYRA_AUTH_PERMISSIONS-Allowlist für lokale Entwicklung und
 Reverse-Proxy-Deployments verfügbar.
 
+Rollenbasierte Berechtigungen werden gemeinsam mit `roles` und
+`role_permissions` aktiviert. Die Rollenzuordnungstabelle muss `user_id` und
+`role` enthalten; die Rollenberechtigungstabelle muss `role` und `permission`
+enthalten. Die effektiven Berechtigungen eines Benutzers sind die Vereinigung
+direkter Berechtigungen und der Berechtigungen aller zugewiesenen Rollen.
+Rollennamen sind Anwendungsdaten; eine eigene Rollenkatalogtabelle ist nicht
+erforderlich.
+
 Für Deployments, die Benutzer in einem Reverse Proxy authentifizieren,
 akzeptiert der Server zusätzlich ein Bearer-Token, wenn ZELYRA_AUTH_TOKEN
 ausdrücklich gesetzt ist. Die serverseitige Berechtigungsliste wird über
@@ -87,9 +97,10 @@ Echte Passwörter nicht als Kommandoargument oder in der Versionsverwaltung
 ablegen.
 
 Dies ist die erste funktionierende Authentifizierungsscheibe mit persistenten
-Sessions und datenbankgestützter Berechtigungsabfrage. Login-Drosselung und
-Session-Rotation sind implementiert; Datenbankrollen bleiben eine zukünftige
-Authentifizierungsaufgabe.
+Sessions, datenbankgestützter Berechtigungsabfrage und rollenbasierten
+Berechtigungsgruppen. Login-Drosselung und Session-Rotation sind implementiert;
+Rollenverwaltungsseiten und automatische Rollenverwaltung bleiben zukünftige
+Arbeiten.
 
 Der Repository-Test `tests/mariadb-auth-e2e.sh` prüft diesen Ablauf gegen
 MariaDB mit zwei temporären Benutzern: anonymer Zugriff wird abgelehnt, falsche

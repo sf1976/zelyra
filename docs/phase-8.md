@@ -10,6 +10,8 @@ auth users {
     table: users
     sessions: auth_sessions
     permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
 }
 ~~~
 
@@ -50,6 +52,13 @@ HTTP 403. Without the permissions option, the explicit
 ZELYRA_AUTH_PERMISSIONS allowlist remains available for local development and
 reverse-proxy deployments.
 
+Role-based permissions can be enabled with `roles` and `role_permissions`
+together. The roles table must contain `user_id` and `role`; the role
+permissions table must contain `role` and `permission`. A user's effective
+permissions are the union of direct permissions and permissions inherited from
+all assigned roles. Role names are application data, so no separate role
+catalog is required.
+
 For deployments that authenticate users in a reverse proxy, the server also
 accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The
 server-side permission allowlist is configured with
@@ -83,9 +92,10 @@ For deliberate automation, `zelyra auth hash-password --stdin` reads one
 password line from standard input. Do not place real passwords in command-line
 arguments or source control.
 
-This is the first working authentication slice with persistent sessions and
-database-backed permission lookup. Login throttling and session rotation are
-implemented; database roles remain a future authentication step.
+This is the first working authentication slice with persistent sessions,
+database-backed permission lookup, and role-based permission groups. Login
+throttling and session rotation are implemented; role administration screens
+and automatic role management remain future work.
 
 The repository test `tests/mariadb-auth-e2e.sh` exercises this flow against
 MariaDB with two temporary users: anonymous access is rejected, invalid

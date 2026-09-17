@@ -4,6 +4,14 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## Unreleased
+
+### Added
+
+- Added database-backed role permission groups through `roles` and
+  `role_permissions` authentication options. Direct user permissions and
+  inherited role permissions are combined for protected requests.
+
 ## 0.1.37 — 2026-09-17
 
 ### Added

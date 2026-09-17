@@ -158,6 +158,8 @@ pub struct AuthDef {
     pub table: String,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
+    pub roles_table: Option<String>,
+    pub role_permissions_table: Option<String>,
     pub span: Span,
 }
 
