@@ -67,8 +67,9 @@ Implemented today:
   explicit loop invariants with individual verification statuses and
   caller-assumption-aware callee precondition checks are included. Each result
   includes a stable code, source range, explanation, and marked source excerpt;
+  a bounded counterexample is included when it can be safely found.
   `zelyra verify <file.zyl> --json` provides structured output with `message`
-  for IDEs and CI.
+  and `counterexample` for IDEs and CI.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the

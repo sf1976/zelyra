@@ -1,0 +1,9 @@
+fn bad(value: Int) -> Int
+    requires { value >= 0 }
+    ensures { result > value }
+{
+    return value
+}
+
+fn main() {
+}

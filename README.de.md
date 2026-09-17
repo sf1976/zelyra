@@ -68,8 +68,9 @@ Heute implementiert:
   expliziten Schleifeninvarianten mit individuellen Prüfstatus sowie
   aufruferabhängiger Prüfung von Callee-Vorbedingungen. Jedes Ergebnis enthält
   einen stabilen Code, Quellbereich, Erklärung und markierten
-  Quellzeilenausschnitt; `zelyra verify <file.zyl> --json` liefert strukturierte
-  Daten mit `message` für IDEs und CI.
+  Quellzeilenausschnitt; ein begrenztes Gegenbeispiel wird ausgegeben, wenn es
+  sicher gefunden werden kann. `zelyra verify <file.zyl> --json` liefert
+  strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

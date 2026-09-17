@@ -103,6 +103,13 @@ pub struct VerificationResult {
     pub status: VerificationStatus,
     pub span: Span,
     pub message: String,
+    pub counterexample: Option<Vec<(String, i64)>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct VerificationEvidence {
+    status: VerificationStatus,
+    counterexample: Option<Vec<(String, i64)>>,
 }
 
 pub fn verify(program: &Program) -> Vec<VerificationResult> {
@@ -114,21 +121,26 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
     let mut results = Vec::new();
     for function in &program.functions {
         for (index, contract) in function.requires.iter().enumerate() {
-            let status = verify_contract(contract, None, &functions);
+            let evidence = verify_contract(contract, None, &functions);
             results.push(VerificationResult {
                 function: function.name.clone(),
                 kind: ContractKind::Requires,
                 index,
-                message: verification_message(ContractKind::Requires, status, Some(contract)),
-                status,
+                message: verification_message(
+                    ContractKind::Requires,
+                    evidence.status,
+                    Some(contract),
+                ),
+                status: evidence.status,
                 span: contract.span,
+                counterexample: evidence.counterexample,
             });
         }
         let mut invariant_diagnostics = HashMap::new();
         let return_paths =
             symbolic_return_paths(function, Some(&functions), &mut invariant_diagnostics);
         for (index, contract) in function.ensures.iter().enumerate() {
-            let status = verify_postcondition(
+            let evidence = verify_postcondition(
                 contract,
                 &function.requires,
                 return_paths.as_deref(),
@@ -138,9 +150,14 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 function: function.name.clone(),
                 kind: ContractKind::Ensures,
                 index,
-                message: verification_message(ContractKind::Ensures, status, Some(contract)),
-                status,
+                message: verification_message(
+                    ContractKind::Ensures,
+                    evidence.status,
+                    Some(contract),
+                ),
+                status: evidence.status,
                 span: contract.span,
+                counterexample: evidence.counterexample,
             });
         }
         let mut loop_invariants = Vec::new();
@@ -150,7 +167,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 let status = invariant_diagnostics
                     .get(&(loop_id, index))
                     .copied()
-                    .unwrap_or_else(|| verify_contract(invariant, None, &functions));
+                    .unwrap_or_else(|| verify_contract(invariant, None, &functions).status);
                 results.push(VerificationResult {
                     function: function.name.clone(),
                     kind: ContractKind::LoopInvariant,
@@ -162,6 +179,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                     ),
                     status,
                     span: invariant.span,
+                    counterexample: None,
                 });
             }
         }
@@ -177,6 +195,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                     VerificationStatus::Unproven,
                     None,
                 ),
+                counterexample: None,
             });
         }
     }
@@ -232,21 +251,38 @@ fn verify_contract(
     contract: &Expr,
     return_expression: Option<&Expr>,
     functions: &HashMap<String, &Function>,
-) -> VerificationStatus {
-    match constant_value(contract) {
-        Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
-        Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
-        Some(_) => VerificationStatus::Unproven,
-        None => symbolic_bool(contract, return_expression, None, None, Some(functions), 0).map_or(
-            VerificationStatus::RuntimeCheck,
-            |value| {
-                if value {
-                    VerificationStatus::Proven
-                } else {
-                    VerificationStatus::Failed
-                }
-            },
-        ),
+) -> VerificationEvidence {
+    let status =
+        match constant_value(contract) {
+            Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
+            Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
+            Some(_) => VerificationStatus::Unproven,
+            None => symbolic_bool(contract, return_expression, None, None, Some(functions), 0)
+                .map_or(VerificationStatus::RuntimeCheck, |value| {
+                    if value {
+                        VerificationStatus::Proven
+                    } else {
+                        VerificationStatus::Failed
+                    }
+                }),
+        };
+    let counterexample = if status == VerificationStatus::Failed
+        && !matches!(constant_value(contract), Some(ConstantValue::Bool(false)))
+    {
+        find_symbolic_counterexample(
+            contract,
+            return_expression,
+            &[],
+            &HashMap::new(),
+            &HashMap::new(),
+            Some(functions),
+        )
+    } else {
+        None
+    };
+    VerificationEvidence {
+        status,
+        counterexample,
     }
 }
 
@@ -255,14 +291,26 @@ fn verify_postcondition(
     preconditions: &[Expr],
     return_paths: Option<&[ReturnPath<'_>]>,
     functions: &HashMap<String, &Function>,
-) -> VerificationStatus {
+) -> VerificationEvidence {
     match constant_value(contract) {
-        Some(ConstantValue::Bool(true)) => VerificationStatus::Proven,
-        Some(ConstantValue::Bool(false)) => VerificationStatus::Failed,
-        Some(_) => VerificationStatus::Unproven,
+        Some(ConstantValue::Bool(true)) => VerificationEvidence {
+            status: VerificationStatus::Proven,
+            counterexample: None,
+        },
+        Some(ConstantValue::Bool(false)) => VerificationEvidence {
+            status: VerificationStatus::Failed,
+            counterexample: None,
+        },
+        Some(_) => VerificationEvidence {
+            status: VerificationStatus::Unproven,
+            counterexample: None,
+        },
         None => {
             let Some(return_paths) = return_paths else {
-                return VerificationStatus::RuntimeCheck;
+                return VerificationEvidence {
+                    status: VerificationStatus::RuntimeCheck,
+                    counterexample: None,
+                };
             };
             let mut saw_feasible_path = false;
             let mut saw_unknown_path = false;
@@ -337,15 +385,33 @@ fn verify_postcondition(
                         0,
                     ) {
                         Some(true) => {}
-                        Some(false) => return VerificationStatus::Failed,
+                        Some(false) => {
+                            return VerificationEvidence {
+                                status: VerificationStatus::Failed,
+                                counterexample: find_symbolic_counterexample(
+                                    contract,
+                                    Some(expression),
+                                    &guards,
+                                    &path.bindings,
+                                    &path.substitutions,
+                                    Some(functions),
+                                ),
+                            }
+                        }
                         None => saw_unknown_path = true,
                     }
                 }
             }
             if saw_feasible_path && !saw_unknown_path {
-                VerificationStatus::Proven
+                VerificationEvidence {
+                    status: VerificationStatus::Proven,
+                    counterexample: None,
+                }
             } else {
-                VerificationStatus::RuntimeCheck
+                VerificationEvidence {
+                    status: VerificationStatus::RuntimeCheck,
+                    counterexample: None,
+                }
             }
         }
     }
@@ -1661,6 +1727,101 @@ fn constraints_satisfiable(constraints: Vec<PathConstraint>) -> Option<bool> {
             .iter()
             .all(|constraint| constraint.constant >= 0),
     )
+}
+
+fn find_symbolic_counterexample(
+    predicate: &Expr,
+    return_expression: Option<&Expr>,
+    guards: &[PathConstraint],
+    bindings: &HashMap<String, &Expr>,
+    substitutions: &HashMap<String, LinearValue>,
+    functions: Option<&HashMap<String, &Function>>,
+) -> Option<Vec<(String, i64)>> {
+    let violations = constraints_for_bool(
+        predicate,
+        false,
+        return_expression,
+        Some(bindings),
+        Some(substitutions),
+        functions,
+        0,
+    )?;
+    let alternatives = combine_alternatives(vec![guards.to_vec()], violations);
+    for constraints in alternatives {
+        if constraints_satisfiable(constraints.clone()) == Some(false) {
+            continue;
+        }
+        if let Some(model) = find_linear_model(&constraints) {
+            return Some(model);
+        }
+    }
+    None
+}
+
+fn find_linear_model(constraints: &[PathConstraint]) -> Option<Vec<(String, i64)>> {
+    let mut linear_constraints = Vec::new();
+    for constraint in constraints {
+        match constraint {
+            PathConstraint::Linear(constraint) => linear_constraints.push(constraint),
+            PathConstraint::Constructor { .. } => return None,
+        }
+    }
+    let mut variables = linear_constraints
+        .iter()
+        .flat_map(|constraint| constraint.coefficients.keys().cloned())
+        .collect::<Vec<_>>();
+    variables.sort();
+    variables.dedup();
+    if variables.len() > 2 {
+        return None;
+    }
+
+    let mut model = HashMap::new();
+    match variables.as_slice() {
+        [] => {
+            if linear_model_satisfies(&linear_constraints, &model) {
+                return Some(Vec::new());
+            }
+        }
+        [variable] => {
+            for value in -32..=32 {
+                model.insert(variable.clone(), value);
+                if linear_model_satisfies(&linear_constraints, &model) {
+                    return Some(vec![(variable.clone(), value)]);
+                }
+            }
+        }
+        [first, second] => {
+            for first_value in -32..=32 {
+                model.insert(first.clone(), first_value);
+                for second_value in -32..=32 {
+                    model.insert(second.clone(), second_value);
+                    if linear_model_satisfies(&linear_constraints, &model) {
+                        return Some(vec![
+                            (first.clone(), first_value),
+                            (second.clone(), second_value),
+                        ]);
+                    }
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+    None
+}
+
+fn linear_model_satisfies(constraints: &[&LinearConstraint], model: &HashMap<String, i64>) -> bool {
+    constraints.iter().all(|constraint| {
+        let Some(value) = constraint.coefficients.iter().try_fold(
+            constraint.constant,
+            |total, (name, coefficient)| {
+                total.checked_add(coefficient.checked_mul(i128::from(*model.get(name)?))?)
+            },
+        ) else {
+            return false;
+        };
+        value >= 0
+    })
 }
 
 fn prove_symbolic_predicate(
@@ -4177,6 +4338,17 @@ mod tests {
             "Constant contradiction: this condition evaluates to false for every input."
         );
         assert_eq!(results[3].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn reports_a_small_linear_counterexample_for_a_failed_postcondition() {
+        let program = parse(
+            &lex("fn bad(value: Int) -> Int requires { value >= 0 } ensures { result > value } { return value } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[1].status, VerificationStatus::Failed);
+        assert_eq!(results[1].counterexample, Some(vec![("value".into(), 0)]));
     }
 
     #[test]

@@ -178,8 +178,20 @@ zelyra verify examples/contracts.zyl --json
 ~~~
 
 The JSON result contains `status`, `code`, `message`, `function`, `kind`,
-`index`, and a `location` object with `file`, `start`, and `end` line/column
-positions.
+`index`, `counterexample`, and a `location` object with `file`, `start`, and
+`end` line/column positions. `counterexample` is an object when a small
+linear integer witness was found, otherwise `null`. The current bounded
+search handles at most two linear variables in the range `-32..=32`; no
+counterexample is not evidence that none exists.
+
+The included negative example demonstrates a concrete witness:
+
+~~~bash
+zelyra verify examples/counterexample.zyl
+~~~
+
+Its failed postcondition reports `value = 0`. The command exits with a failure
+status because a contract was disproved.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

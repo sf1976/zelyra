@@ -259,8 +259,9 @@ preserved on an analyzed path; `RUNTIME_CHECK` means that runtime checking is
 needed because the symbolic proof is incomplete. Every result includes a
 verification code and source range as
 `(file.zyl:start-line:start-column-end-line:end-column)`. Use `--json` for IDEs
-or CI. Text output includes an explanation and a caret-marked source-line
-excerpt; JSON adds the same explanation as `message`. Only `PROVEN` is a proof:
+or CI. Text output includes an explanation, an optional counterexample, and a
+caret-marked source-line excerpt; JSON adds the same explanation as `message`
+and the counterexample as an object or `null`. Only `PROVEN` is a proof:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl

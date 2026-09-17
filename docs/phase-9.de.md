@@ -189,8 +189,21 @@ zelyra verify examples/contracts.zyl --json
 ~~~
 
 Das JSON-Ergebnis enthält `status`, `code`, `message`, `function`, `kind`,
-`index` sowie ein `location`-Objekt mit Datei und Start-/Endposition in Zeile
-und Spalte.
+`index`, `counterexample` sowie ein `location`-Objekt mit Datei und
+Start-/Endposition in Zeile und Spalte. `counterexample` ist ein Objekt, wenn
+ein kleines lineares Integer-Gegenbeispiel gefunden wurde, sonst `null`. Die
+aktuelle begrenzte Suche verarbeitet höchstens zwei lineare Variablen im
+Bereich `-32..=32`; kein Gegenbeispiel bedeutet daher nicht, dass keines
+existiert.
+
+Das enthaltene negative Beispiel zeigt einen konkreten Zeugen:
+
+~~~bash
+zelyra verify examples/counterexample.zyl
+~~~
+
+Für den fehlgeschlagenen Postcondition-Contract wird `value = 0` gemeldet. Der
+Befehl endet mit einem Fehlerstatus, weil ein Contract widerlegt wurde.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`

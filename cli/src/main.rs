@@ -215,8 +215,21 @@ fn format_verification_result(path: &str, source: &str, result: &VerificationRes
         result.message
     );
     match format_source_excerpt(source, result.span) {
-        Some(excerpt) => format!("{header}\n{excerpt}"),
-        None => header,
+        Some(excerpt) => {
+            let counterexample = result
+                .counterexample
+                .as_ref()
+                .map(|values| format!("\n  = Counterexample: {}", format_counterexample(values)))
+                .unwrap_or_default();
+            format!("{header}{counterexample}\n{excerpt}")
+        }
+        None => match &result.counterexample {
+            Some(values) => format!(
+                "{header}\n  = Counterexample: {}",
+                format_counterexample(values)
+            ),
+            None => header,
+        },
     }
 }
 
@@ -225,14 +238,20 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
         .iter()
         .map(|result| {
             let (end_line, end_column) = source_position(source, result.span.end);
+            let counterexample = result
+                .counterexample
+                .as_ref()
+                .map(|values| format_counterexample_json(values))
+                .unwrap_or_else(|| "null".into());
             format!(
-                "{{\"status\":\"{}\",\"code\":\"{}\",\"message\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
+                "{{\"status\":\"{}\",\"code\":\"{}\",\"message\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"counterexample\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
                 result.status,
                 result.status.code(),
                 json_escape(&result.message),
                 json_escape(&result.function),
                 result.kind,
                 result.index,
+                counterexample,
                 json_escape(path),
                 result.span.line,
                 result.span.column,
@@ -242,6 +261,22 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
         })
         .collect::<Vec<_>>();
     format!("[{}]", entries.join(","))
+}
+
+fn format_counterexample(values: &[(String, i64)]) -> String {
+    values
+        .iter()
+        .map(|(name, value)| format!("{name} = {value}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn format_counterexample_json(values: &[(String, i64)]) -> String {
+    let entries = values
+        .iter()
+        .map(|(name, value)| format!("\"{}\":{}", json_escape(name), value))
+        .collect::<Vec<_>>();
+    format!("{{{}}}", entries.join(","))
 }
 
 fn json_escape(value: &str) -> String {
@@ -1305,6 +1340,7 @@ mod tests {
             status: VerificationStatus::Proven,
             span: zelyra_ast::Span::new(6, 12, 2, 1),
             message: "The verifier proved this condition for all analyzed paths.".into(),
+            counterexample: None,
         };
         assert_eq!(
             format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
@@ -1321,10 +1357,11 @@ mod tests {
             status: VerificationStatus::RuntimeCheck,
             span: zelyra_ast::Span::new(6, 12, 2, 1),
             message: "This postcondition needs a runtime check because not all return paths are symbolically modeled.".into(),
+            counterexample: Some(vec![("value".into(), 0)]),
         };
         assert_eq!(
             format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
+            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
         );
     }
 

@@ -677,9 +677,11 @@ Jedes Ergebnis enthält einen stabilen Code und einen Quellbereich als
 `V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`) und
 `V-004` (`FAILED`). Für IDEs und CI kann `zelyra verify app.zyl --json`
 verwendet werden; die JSON-Ausgabe enthält dieselben Ergebnisdaten, eine
-verständliche `message` und ein strukturiertes `location`-Objekt. Die
-Textausgabe zeigt außerdem für jedes Ergebnis eine Erklärung und einen
-Quellzeilenausschnitt mit Caret-Marker.
+verständliche `message`, ein optionales `counterexample`-Objekt und ein
+strukturiertes `location`-Objekt. Ein Gegenbeispiel wird nur ausgegeben, wenn
+eine begrenzte Suche einen kleinen linearen Integerzeugen sicher bestätigt;
+sonst ist der Wert `null`. Die Textausgabe zeigt außerdem für jedes Ergebnis
+eine Erklärung und einen Quellzeilenausschnitt mit Caret-Marker.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`
