@@ -244,7 +244,8 @@ type OrderId = Id
 UserId und OrderId sind unterschiedliche Typen, obwohl beide auf Id basieren.
 Damit wird eine wichtige Klasse von Fehlern in der Geschäftslogik verhindert.
 
-Schleifen unterstützen expliziten Kontrollfluss und optionale Invarianten:
+Schleifen unterstützen expliziten Kontrollfluss und optionale Invarianten bei
+`while` und unbedingtem `loop`:
 
 ~~~zelyra
 mutable current = 3
@@ -259,7 +260,8 @@ while current > 0
 `break` beendet die aktuelle Schleife und `continue` startet ihren nächsten
 Durchlauf. Die Runtime prüft deklarierte Invarianten vor und nach den
 Durchläufen. Der Verifier kann eine bewiesene Invariante verwenden, um
-unterstützte lineare Schleifen zusammenzufassen:
+unterstützte lineare Schleifen zusammenzufassen; bei `loop` wird dafür ein
+modellierter `break`-Austritt benötigt:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl

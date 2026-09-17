@@ -644,7 +644,8 @@ unbeschränkte Schleifen ohne bewiesene Invariante bleiben konservativ.
 
 ### Schleifeninvarianten
 
-Eine `while`-Schleife kann eine oder mehrere explizite Invarianten deklarieren:
+Eine `while`- oder unbedingte `loop`-Schleife kann eine oder mehrere explizite
+Invarianten deklarieren:
 
 ~~~zelyra
 while current > 0
@@ -656,9 +657,10 @@ while current > 0
 
 Der Verifier prüft die Invariante beim Eintritt und nach unterstützten
 Körperpfaden. Eine bewiesene Invariante kann eine ansonsten unbeschränkte
-lineare Schleife zusammenfassen. Die Runtime prüft sie vor und nach jedem
-Durchlauf. Nicht unterstützte oder nicht beweisbare Invarianten bleiben
-konservativ und erzeugen kein `PROVEN`-Ergebnis.
+lineare `while`-Schleife zusammenfassen; eine unbedingte `loop`-Schleife kann
+sie mit einem modellierten `break`-Austritt verwenden. Die Runtime prüft sie
+vor und nach jedem Durchlauf. Nicht unterstützte oder nicht beweisbare
+Invarianten bleiben konservativ und erzeugen kein `PROVEN`-Ergebnis.
 
 ## 16. Konfiguration und Geheimnisse
 

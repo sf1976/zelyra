@@ -136,7 +136,8 @@ werden ebenfalls verfolgt, etwa `next = next + 1`. Statisch begrenzte
 Schleifen mit linear verändertem Zähler werden pfadweise entfaltet. `break`
 beendet dabei die aktuelle Schleife, `continue` startet ihren nächsten
 Durchlauf; beide werden als eigene symbolische Kontrollflusspfade modelliert.
-Explizite Schleifeninvarianten können direkt an einer `while`-Schleife stehen:
+Explizite Schleifeninvarianten können direkt an einer `while`- oder `loop`-
+Schleife stehen:
 
 ~~~zelyra
 while current > 0
@@ -148,7 +149,9 @@ while current > 0
 
 Der Verifier prüft die Invariante beim Schleifeneintritt und nach unterstützten
 Körperpfaden. Wenn sie bewiesen ist, kann sie eine ansonsten unbeschränkte
-lineare Schleife zusammenfassen. Nichtlineare Zuweisungen, ungültige oder nicht
+lineare `while`-Schleife zusammenfassen. Eine unbedingte `loop`-Schleife kann
+die Invariante zusammen mit einem symbolisch modellierten `break` zum Beweis
+ihrer Austrittspfade verwenden. Nichtlineare Zuweisungen, ungültige oder nicht
 unterstützte Invarianten und andere nicht unterstützte Zustandsflüsse bleiben
 `RUNTIME_CHECK`. Die Runtime prüft die Invariante ebenfalls vor und nach jedem
 Durchlauf.

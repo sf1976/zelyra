@@ -122,7 +122,12 @@ fn check_block(
                 }
                 check_block(body, schema, environment, errors);
             }
-            Stmt::Loop { body, .. } => {
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    check_expr(invariant, schema, environment, errors);
+                }
                 check_block(body, schema, environment, errors);
             }
             Stmt::Break { .. } | Stmt::Continue { .. } => {}

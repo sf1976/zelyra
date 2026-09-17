@@ -88,6 +88,7 @@ pub enum HirStmt {
         span: Span,
     },
     Loop {
+        invariants: Vec<HirExpr>,
         body: HirBlock,
         span: Span,
     },
@@ -364,7 +365,15 @@ impl<'a> Resolver<'a> {
                 body: self.block(body),
                 span: *span,
             },
-            Stmt::Loop { body, span } => HirStmt::Loop {
+            Stmt::Loop {
+                invariants,
+                body,
+                span,
+            } => HirStmt::Loop {
+                invariants: invariants
+                    .iter()
+                    .map(|invariant| self.expr(invariant))
+                    .collect(),
                 body: self.block(body),
                 span: *span,
             },

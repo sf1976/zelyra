@@ -36,7 +36,23 @@ fn count_without_two() -> Int
     return total
 }
 
+fn stop_unconditional() -> Int
+    ensures { result == 1 }
+{
+    mutable i = 0
+
+    loop
+        invariant { i >= 0 }
+    {
+        i = i + 1
+        break
+    }
+
+    return i
+}
+
 fn main() {
     print(stop_after_one())
     print(count_without_two())
+    print(stop_unconditional())
 }

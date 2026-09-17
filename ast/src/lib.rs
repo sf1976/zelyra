@@ -258,6 +258,7 @@ pub enum Stmt {
         span: Span,
     },
     Loop {
+        invariants: Vec<Expr>,
         body: Block,
         span: Span,
     },

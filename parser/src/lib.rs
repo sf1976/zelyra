@@ -835,8 +835,18 @@ impl<'a> Parser<'a> {
         }
         if self.at(&TokenKind::Loop) {
             let start = self.advance().span;
+            self.skip_newlines();
+            let mut invariants = Vec::new();
+            while self.at(&TokenKind::Invariant) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `invariant`")?;
+                invariants.push(self.expression()?);
+                self.expect(TokenKind::RBrace, "`}` after loop invariant")?;
+                self.skip_newlines();
+            }
             let body = self.block()?;
             return Ok(Stmt::Loop {
+                invariants,
                 body: body.clone(),
                 span: start.join(body.span),
             });
@@ -1184,6 +1194,28 @@ mod tests {
             panic!("expected while statement");
         };
         assert_eq!(invariants.len(), 1);
+    }
+
+    #[test]
+    fn parses_invariants_on_unconditional_loops() {
+        let program =
+            parse(&lex("fn main() { loop invariant { true } { break } }").unwrap()).unwrap();
+        let Stmt::Loop { invariants, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected loop statement");
+        };
+        assert_eq!(invariants.len(), 1);
+    }
+
+    #[test]
+    fn parses_multiple_loop_invariants() {
+        let program = parse(
+            &lex("fn main() { loop invariant { true } invariant { 1 < 2 } { break } }").unwrap(),
+        )
+        .unwrap();
+        let Stmt::Loop { invariants, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected loop statement");
+        };
+        assert_eq!(invariants.len(), 2);
     }
 
     #[test]

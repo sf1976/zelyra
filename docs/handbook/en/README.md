@@ -589,7 +589,7 @@ proven invariant remain conservative.
 
 ### Loop invariants
 
-A `while` loop may declare one or more explicit invariants:
+A `while` or unconditional `loop` may declare one or more explicit invariants:
 
 ~~~zelyra
 while current > 0
@@ -600,9 +600,10 @@ while current > 0
 ~~~
 
 The verifier checks the invariant at entry and after supported body paths. A
-proven invariant can summarize an otherwise unbounded linear loop. Runtime
-execution checks it before and after each iteration. Unsupported or unproven
-invariants remain conservative and do not produce `PROVEN` results.
+proven invariant can summarize an otherwise unbounded linear `while` loop; an
+unconditional `loop` can use it with a modeled `break` exit. Runtime execution
+checks it before and after each iteration. Unsupported or unproven invariants
+remain conservative and do not produce `PROVEN` results.
 
 ## 16. Configuration and secrets
 

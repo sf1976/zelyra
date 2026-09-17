@@ -591,6 +591,22 @@ fn symbolic_states<'a>(
                             0,
                         )?);
                     }
+                    Stmt::Loop {
+                        invariants, body, ..
+                    } => {
+                        next.extend(symbolic_unconditional_loop_states(
+                            invariants,
+                            body,
+                            SymbolicState::Continue {
+                                guards,
+                                bindings,
+                                substitutions,
+                            },
+                            parameters,
+                            functions,
+                            0,
+                        )?);
+                    }
                     _ => return None,
                 },
             }
@@ -775,6 +791,99 @@ fn symbolic_loop_states<'a>(
                     functions,
                     iterations + 1,
                 )?)
+            }
+        }
+    }
+    Some(states)
+}
+
+fn symbolic_unconditional_loop_states<'a>(
+    invariants: &'a [Expr],
+    body: &'a Block,
+    state: SymbolicState<'a>,
+    parameters: &HashSet<String>,
+    functions: Option<&HashMap<String, &Function>>,
+    iterations: usize,
+) -> Option<Vec<SymbolicState<'a>>> {
+    let SymbolicState::Continue {
+        guards,
+        bindings,
+        substitutions,
+    } = state
+    else {
+        return None;
+    };
+    for invariant in invariants {
+        if !prove_symbolic_predicate(invariant, &guards, &bindings, &substitutions, functions)? {
+            return None;
+        }
+    }
+
+    let mut body_guards = guards;
+    for invariant in invariants {
+        body_guards.push(SymbolicGuard::Condition {
+            expression: invariant,
+            expected: true,
+        });
+    }
+    let mut states = Vec::new();
+    for state in symbolic_states(
+        body,
+        body_guards,
+        bindings,
+        substitutions,
+        parameters,
+        functions,
+    )? {
+        match state {
+            SymbolicState::Return { .. } => states.push(state),
+            SymbolicState::Break {
+                guards,
+                bindings,
+                substitutions,
+            } => {
+                for invariant in invariants {
+                    if !prove_symbolic_predicate(
+                        invariant,
+                        &guards,
+                        &bindings,
+                        &substitutions,
+                        functions,
+                    )? {
+                        return None;
+                    }
+                }
+                states.push(SymbolicState::Continue {
+                    guards,
+                    bindings,
+                    substitutions,
+                });
+            }
+            SymbolicState::LoopContinue {
+                guards,
+                bindings,
+                substitutions,
+            }
+            | SymbolicState::Continue {
+                guards,
+                bindings,
+                substitutions,
+            } => {
+                if iterations >= 32 {
+                    return None;
+                }
+                states.extend(symbolic_unconditional_loop_states(
+                    invariants,
+                    body,
+                    SymbolicState::Continue {
+                        guards,
+                        bindings,
+                        substitutions,
+                    },
+                    parameters,
+                    functions,
+                    iterations + 1,
+                )?);
             }
         }
     }
@@ -2170,7 +2279,15 @@ fn check_capability_block(
                 }
                 check_capability_block(body, function, functions, declared, errors);
             }
-            Stmt::Loop { body, .. } | Stmt::Transaction { body, .. } => {
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    check_capability_expr(invariant, function, functions, declared, errors);
+                }
+                check_capability_block(body, function, functions, declared, errors);
+            }
+            Stmt::Transaction { body, .. } => {
                 check_capability_block(body, function, functions, declared, errors);
             }
         }
@@ -2527,7 +2644,13 @@ impl<'a> Checker<'a> {
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
             }
-            Stmt::Loop { body, .. } => {
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    let invariant_type = self.check_expr(invariant, scopes);
+                    self.expect_type(&Type::Bool, &invariant_type, invariant.span);
+                }
                 self.loop_depth += 1;
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
@@ -3255,9 +3378,16 @@ impl Interpreter {
                 }
                 Ok(Flow::Continue)
             }
-            Stmt::Loop { body, .. } => {
+            Stmt::Loop {
+                invariants,
+                body,
+                span,
+            } => {
                 loop {
-                    match self.exec_block(body, env)? {
+                    self.check_loop_invariants(invariants, env, *span, "before")?;
+                    let flow = self.exec_block(body, env)?;
+                    self.check_loop_invariants(invariants, env, *span, "after")?;
+                    match flow {
                         Flow::Continue => {}
                         Flow::LoopContinue => continue,
                         Flow::Break => break,
@@ -3669,6 +3799,14 @@ mod tests {
     }
 
     #[test]
+    fn checks_invariants_on_unconditional_loops() {
+        let output = run(
+            "fn main() { mutable i = 0 loop invariant { i >= 0 } { i = i + 1 if i == 2 { break } } print(i) }",
+        );
+        assert_eq!(output, ["2"]);
+    }
+
+    #[test]
     fn rejects_non_boolean_loop_invariants() {
         let program =
             parse(&lex("fn main() { while true invariant { 1 } { break } }").unwrap()).unwrap();
@@ -3899,6 +4037,17 @@ mod tests {
         assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[1].status, VerificationStatus::Proven);
         assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_invariant_controlled_unconditional_loops() {
+        let program = parse(
+            &lex("fn stop_after_one() -> Int ensures { result == 1 } { mutable i = 0 loop invariant { i >= 0 } { i = i + 1 break } return i } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::Proven);
+        assert_eq!(results[1].status, VerificationStatus::Unproven);
     }
 
     #[test]

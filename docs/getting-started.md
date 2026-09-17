@@ -237,7 +237,8 @@ type OrderId = Id
 A UserId and an OrderId are different types even though both are based on Id.
 This prevents an important class of business-logic mistakes.
 
-Loops support explicit control flow and optional invariants:
+Loops support explicit control flow and optional invariants on `while` and
+unconditional `loop`:
 
 ~~~zelyra
 mutable current = 3

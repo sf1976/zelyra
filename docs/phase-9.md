@@ -128,7 +128,7 @@ initialization and assignment are also tracked, for example `next = next + 1`.
 Statically bounded loops with a linearly changing counter are also unfolded
 path by path. `break` exits the current loop and `continue` starts its next
 iteration; both are represented as separate symbolic control-flow paths.
-Explicit loop invariants can be declared directly on a `while` loop:
+Explicit loop invariants can be declared directly on a `while` or `loop`:
 
 ~~~zelyra
 while current > 0
@@ -140,9 +140,11 @@ while current > 0
 
 The verifier checks the invariant at loop entry and after supported body paths.
 When the invariant is proven, it may summarize an otherwise unbounded linear
-loop. Nonlinear assignments, invalid or unsupported invariants, and other
-unsupported state flow remain `RUNTIME_CHECK`. Runtime execution checks the
-invariant before and after every iteration as well.
+`while` loop. An unconditional `loop` can use the invariant together with a
+symbolically modeled `break` to prove its exit paths. Nonlinear assignments,
+invalid or unsupported invariants, and other unsupported state flow remain
+`RUNTIME_CHECK`. Runtime execution checks the invariant before and after every
+iteration as well.
 
 The command exits unsuccessfully for a failed constant contract or a compiler
 diagnostic. No status other than `PROVEN` is a mathematical proof.
