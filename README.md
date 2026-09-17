@@ -75,6 +75,8 @@ Implemented today:
   require explicit function declarations and project grants;
 - secure random_int(min, max) through the Random capability, with inclusive
   bounds and runtime rejection of invalid ranges;
+- read_text(path) for explicit UTF-8 file reads through the FileSystem
+  capability;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches

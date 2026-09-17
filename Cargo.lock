@@ -272,11 +272,11 @@ dependencies = [
 
 [[package]]
 name = "zelyra-ast"
-version = "0.1.18"
+version = "0.1.20"
 
 [[package]]
 name = "zelyra-cli"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "rpassword",
  "serde_json",
@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-database"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -301,7 +301,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-forms"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "zelyra-ast",
  "zelyra-database",
@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-hir"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -318,14 +318,14 @@ dependencies = [
 
 [[package]]
 name = "zelyra-lexer"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "zelyra-ast",
 ]
 
 [[package]]
 name = "zelyra-parser"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "zelyra-ast",
  "zelyra-lexer",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-runtime"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "rand_core",
  "zelyra-ast",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "zelyra-web"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "argon2",
  "blake2",

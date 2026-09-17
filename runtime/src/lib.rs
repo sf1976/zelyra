@@ -3051,6 +3051,15 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "read_text" {
+                require_capability(
+                    "FileSystem",
+                    "file-system read access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             }
             if let Some(callee) = functions.get(name.as_str()) {
                 for capability in &callee.capabilities {
@@ -3891,6 +3900,14 @@ impl<'a> Checker<'a> {
                     self.expect_type(&Type::Int, &minimum, args[0].span);
                     self.expect_type(&Type::Int, &maximum, args[1].span);
                     Type::Int
+                } else if name == "read_text" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "read_text expects exactly one String path");
+                        return Type::Unknown;
+                    }
+                    let path = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &path, args[0].span);
+                    Type::String
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -4986,6 +5003,37 @@ impl Interpreter {
                             return Ok(Value::Int(value as i64));
                         }
                     }
+                } else if name == "read_text" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "read_text expects exactly one String path",
+                        ));
+                    }
+                    self.require_runtime_capability(
+                        "FileSystem",
+                        "file-system read access",
+                        expr.span,
+                    )?;
+                    let path = self.eval(&args[0], env)?;
+                    let Value::String(path) = path else {
+                        return Err(
+                            self.runtime_error(args[0].span, "read_text expects a String path")
+                        );
+                    };
+                    if path.is_empty() {
+                        return Err(
+                            self.runtime_error(args[0].span, "read_text expects a non-empty path")
+                        );
+                    }
+                    std::fs::read_to_string(&path)
+                        .map_err(|error| {
+                            self.runtime_error(
+                                expr.span,
+                                format!("file-system read failed for {path}: {error}"),
+                            )
+                        })
+                        .map(Value::String)
                 } else {
                     let values = args
                         .iter()
@@ -5664,6 +5712,54 @@ mod tests {
         let grants = HashSet::new();
         let error = execute_with_capabilities(&program, Some(&grants)).unwrap_err();
         assert!(error.message.contains("random access requires"));
+    }
+
+    #[test]
+    fn reads_utf8_text_with_file_system_capability() {
+        let program = parse(
+            &lex("fn read(path: String) -> String uses FileSystem { return read_text(path) } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+
+        let grants = HashSet::from([String::from("FileSystem")]);
+        let path = format!("{}/../examples/fibonacci.zyl", env!("CARGO_MANIFEST_DIR"));
+        let value = execute_function_with_capabilities(
+            &program,
+            "read",
+            vec![Value::String(path)],
+            None,
+            Some(&grants),
+        )
+        .unwrap();
+        assert!(matches!(value, Value::String(value) if value.contains("fibonacci")));
+    }
+
+    #[test]
+    fn enforces_file_system_capability_and_read_errors() {
+        let program =
+            parse(&lex("fn main() { print(read_text(\"README.md\")) }").unwrap()).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("FileSystem")));
+
+        let grants = HashSet::new();
+        let capability_error = execute_with_capabilities(&program, Some(&grants)).unwrap_err();
+        assert!(capability_error
+            .message
+            .contains("file-system read access requires"));
+
+        let missing = parse(
+            &lex("fn main() uses FileSystem { print(read_text(\"/zelyra/path-that-does-not-exist\")) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let grants = HashSet::from([String::from("FileSystem")]);
+        let read_error = execute_with_capabilities(&missing, Some(&grants)).unwrap_err();
+        assert!(read_error.message.contains("file-system read failed"));
     }
 
     #[test]

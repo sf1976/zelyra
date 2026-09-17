@@ -4,6 +4,36 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.20 — 2026-09-17
+
+### Added
+
+- Added read_text(path) for explicit UTF-8 file reads through the FileSystem
+  capability.
+- Added static and runtime enforcement of the FileSystem capability.
+- Added the runnable examples/filesystem_api.zyl example and synchronized the
+  German and English documentation.
+
+### Known limitations
+
+- Writing, deleting, directory listing, and path allowlisting are not exposed
+  yet.
+
+## 0.1.19 — 2026-09-17
+
+### Added
+
+- Added read_text(path) for explicit UTF-8 file reads through the FileSystem
+  capability.
+- Added static and runtime enforcement of the FileSystem capability.
+- Added the runnable examples/filesystem_api.zyl example and synchronized the
+  German and English documentation.
+
+### Known limitations
+
+- Writing, deleting, directory listing, and path allowlisting are not exposed
+  yet.
+
 ## 0.1.18 — 2026-09-17
 
 ### Added

@@ -71,6 +71,8 @@ Das aktuelle Repository enthält:
   Funktionsdeklaration und Projektfreigabe;
 - sichere Zufallszahlen mit random_int(min, max) über die Random-Capability;
   die Grenzen sind inklusiv, ein ungültiger Bereich ist ein Runtime-Fehler;
+- read_text(path) für ausdrücklich freigegebene UTF-8-Dateizugriffe über die
+  FileSystem-Capability;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -270,7 +272,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.18"
+version = "0.1.20"
 zelyra = "0.1"
 
 [capabilities]

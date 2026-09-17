@@ -99,6 +99,20 @@ Minimum größer als das Maximum ist. Zufallswerte werden niemals automatisch
 protokolliert oder ausgegeben. Netzwerk-, Datei- und Prozess-APIs benötigen
 weiterhin eigene Ressourcen- und Fehlerverträge.
 
+Die erste FileSystem-Host-API liest eine UTF-8-Textdatei:
+
+~~~zelyra
+fn source_text(path: String) -> String uses FileSystem {
+    return read_text(path)
+}
+~~~
+
+read_text(path) benötigt FileSystem und lehnt einen leeren Pfad ab. Fehlende
+Dateien, fehlende Berechtigungen, Verzeichnisse und ungültiges UTF-8 werden zu
+ausdrücklichen Runtime-Fehlern. Dieser erste Schnitt besitzt keine Schreib-,
+Lösch-, Verzeichnislisten- oder Pfad-Allowlist-API; diese Regeln müssen vor
+einer größeren Dateisystem-Oberfläche definiert werden.
+
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:
 

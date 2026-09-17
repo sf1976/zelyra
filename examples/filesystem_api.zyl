@@ -1,0 +1,3 @@
+fn main() uses FileSystem {
+    print(read_text("examples/fibonacci.zyl"))
+}

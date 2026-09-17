@@ -96,6 +96,20 @@ random source and rejects minimum values greater than maximum values. Random
 values are never logged or printed implicitly. Network, file-system, and
 process APIs still require separate resource and error contracts.
 
+The first FileSystem host API reads one UTF-8 text file:
+
+~~~zelyra
+fn source_text(path: String) -> String uses FileSystem {
+    return read_text(path)
+}
+~~~
+
+read_text(path) requires FileSystem and rejects an empty path. Missing files,
+permission failures, directories, and invalid UTF-8 become explicit runtime
+errors. This first slice has no write, delete, directory-listing, or path
+allowlist API; those are required before a broader file-system surface is
+added.
+
 The first structured-concurrency slice is available through `parallel` and
 `await`:
 

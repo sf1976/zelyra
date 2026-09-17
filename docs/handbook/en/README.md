@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.18"
+version = "0.1.20"
 zelyra = "0.1"
 
 [capabilities]
@@ -653,6 +653,18 @@ The range is inclusive on both sides. Invalid ranges fail at runtime, and
 random values are not emitted implicitly. Network, file-system, and process
 APIs remain planned until their resource and error contracts are defined.
 
+The first FileSystem host API reads one UTF-8 text file:
+
+~~~zelyra
+fn source_text(path: String) -> String uses FileSystem {
+    return read_text(path)
+}
+~~~
+
+Missing files, permission failures, directories, and invalid UTF-8 become
+explicit runtime errors. Writing, deleting, directory listing, and path
+allowlisting are not exposed yet.
+
 ## 15. Contracts and verification
 
 🧪 Preconditions and postconditions:
@@ -757,7 +769,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.18"
+version = "0.1.20"
 zelyra = "0.1"
 
 [capabilities]
