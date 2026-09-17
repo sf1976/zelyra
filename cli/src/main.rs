@@ -1509,37 +1509,42 @@ fn api_value(value: &str, ty: &Type, program: &zelyra_ast::Program) -> Result<Va
 }
 
 fn api_json_value(value: &Value) -> String {
+    api_json_value_node(value).to_string()
+}
+
+fn api_json_value_node(value: &Value) -> serde_json::Value {
     match value {
-        Value::Int(value) => value.to_string(),
-        Value::UInt(value) => value.to_string(),
-        Value::Float(value) => value.to_string(),
-        Value::Bool(value) => value.to_string(),
-        Value::String(value) => format!("\"{}\"", json_escape(value)),
-        Value::Char(value) => format!("\"{}\"", json_escape(&value.to_string())),
-        Value::Option(Some(value)) => api_json_value(value),
-        Value::Option(None) => "null".into(),
-        Value::Result(Ok(value)) => api_json_value(value),
-        Value::Result(Err(value)) => format!("{{\"error\":{}}}", api_json_value(value)),
-        Value::Rows { columns, rows } => format!(
-            "[{}]",
+        Value::Int(value) => serde_json::Value::from(*value),
+        Value::UInt(value) => serde_json::Value::from(*value),
+        Value::Float(value) => serde_json::Number::from_f64(*value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        Value::Bool(value) => serde_json::Value::from(*value),
+        Value::String(value) => serde_json::Value::String(value.clone()),
+        Value::Char(value) => serde_json::Value::String(value.to_string()),
+        Value::Option(Some(value)) => api_json_value_node(value),
+        Value::Option(None) => serde_json::Value::Null,
+        Value::Result(Ok(value)) => api_json_value_node(value),
+        Value::Result(Err(value)) => {
+            let mut object = serde_json::Map::new();
+            object.insert("error".into(), api_json_value_node(value));
+            serde_json::Value::Object(object)
+        }
+        Value::Rows { columns, rows } => serde_json::Value::Array(
             rows.iter()
                 .map(|row| {
-                    format!(
-                        "{{{}}}",
-                        columns
-                            .iter()
-                            .zip(row)
-                            .map(|(column, value)| {
-                                format!("\"{}\":\"{}\"", json_escape(column), json_escape(value))
-                            })
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    )
+                    let object = columns
+                        .iter()
+                        .zip(row)
+                        .map(|(column, value)| {
+                            (column.clone(), serde_json::Value::String(value.clone()))
+                        })
+                        .collect();
+                    serde_json::Value::Object(object)
                 })
-                .collect::<Vec<_>>()
-                .join(",")
+                .collect(),
         ),
-        Value::Unit => "null".into(),
+        Value::Unit => serde_json::Value::Null,
     }
 }
 
@@ -1555,32 +1560,26 @@ fn api_error_response(status: u16, code: &str, message: &str) -> Response {
 }
 
 fn parse_api_json_object(source: &str) -> Result<HashMap<String, String>, String> {
-    let source = source.trim();
-    if source == "{}" {
-        return Ok(HashMap::new());
-    }
-    let inner = source
-        .strip_prefix('{')
-        .and_then(|source| source.strip_suffix('}'))
-        .ok_or_else(|| "JSON request body must be an object".to_owned())?;
-    let mut values = HashMap::new();
-    for pair in inner.split(',') {
-        let (key, value) = pair
-            .split_once(':')
-            .ok_or_else(|| "JSON object field is missing `:`".to_owned())?;
-        let key = key.trim().trim_matches('"');
-        if key.is_empty() {
-            return Err("JSON object field name is empty".into());
-        }
-        let value = value.trim();
-        let value = if value.starts_with('"') && value.ends_with('"') {
-            value[1..value.len() - 1].replace("\\\"", "\"")
-        } else {
-            value.to_owned()
-        };
-        values.insert(key.to_owned(), value);
-    }
-    Ok(values)
+    let value: serde_json::Value = serde_json::from_str(source)
+        .map_err(|error| format!("invalid JSON request body: {error}"))?;
+    let serde_json::Value::Object(object) = value else {
+        return Err("JSON request body must be an object".into());
+    };
+    object
+        .into_iter()
+        .map(|(key, value)| {
+            let value = match value {
+                serde_json::Value::String(value) => value,
+                serde_json::Value::Null => "null".into(),
+                serde_json::Value::Bool(value) => value.to_string(),
+                serde_json::Value::Number(value) => value.to_string(),
+                serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                    return Err(format!("API input `{key}` must be a scalar JSON value"));
+                }
+            };
+            Ok((key, value))
+        })
+        .collect()
 }
 
 fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
@@ -1882,6 +1881,63 @@ mod tests {
         assert_eq!(response.content_type, "application/json; charset=utf-8");
         assert!(response.body.contains("\"code\":\"BadRequest\""));
         assert!(response.body.contains("missing API input"));
+    }
+
+    #[test]
+    fn decodes_json_strings_with_commas_colons_and_escapes() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":\"a,b: \\\"quoted\\\"\"}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, "\"a,b: \\\"quoted\\\"\"");
+    }
+
+    #[test]
+    fn decodes_json_booleans_and_null_options() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { active: Bool? } output Bool? } fn echo(active: Bool?) -> Bool? { return active } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"active\":null}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, "null");
+    }
+
+    #[test]
+    fn rejects_nested_json_values_until_array_types_are_supported() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":{\"nested\":true}}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("scalar JSON value"));
     }
 
     #[test]

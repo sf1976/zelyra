@@ -93,6 +93,6 @@ Laufzeitimplementierung leitet aus einem fachlichen Fehlerwert des Handlers
 noch keinen anwendungsspezifischen Statuscode ab; eine explizite
 Fehlerzuordnung ist geplant.
 
-Die Handler-Brücke bleibt bewusst klein: verschachteltes JSON-Decoding,
-generierte Client-Bindings und anwendungsspezifische Fehlerzuordnung folgen in
-späteren Web/API-Schritten.
+Die Handler-Brücke bleibt bewusst klein: skalare JSON-Werte werden unterstützt;
+typisierte Arrays und verschachtelte Eingabeobjekte, generierte Client-Bindings
+und anwendungsspezifische Fehlerzuordnung folgen in späteren Web/API-Schritten.

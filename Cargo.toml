@@ -8,6 +8,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+serde_json = "1.0"
 zelyra-ast = { path = "ast" }
 zelyra-lexer = { path = "lexer" }
 zelyra-parser = { path = "parser" }

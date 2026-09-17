@@ -90,6 +90,6 @@ The declared `errors` block documents possible HTTP responses in OpenAPI. The
 initial runtime does not yet infer application-specific status codes from a
 handler's domain error value; explicit error mapping remains planned.
 
-The handler bridge is intentionally small: nested JSON decoding, generated
-client bindings, and application-specific error mapping remain later Web/API
-work.
+The handler bridge is intentionally small: scalar JSON values are supported;
+typed arrays and nested input objects, generated client bindings, and
+application-specific error mapping remain later Web/API work.
