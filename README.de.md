@@ -58,6 +58,8 @@ Heute implementiert:
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
   `Result`-Fehlerzuordnung einschließlich typisierter API-Arrays und
   verschachtelter JSON-Objekte über `struct`-Records;
+- einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten über
+  `zelyra doc <file.zyl> --typescript`;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
@@ -327,7 +329,7 @@ zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
 zelyra verify <file.zyl> [--json]
-zelyra doc <file.zyl> [--openapi]
+zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

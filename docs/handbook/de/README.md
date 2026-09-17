@@ -178,7 +178,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]
@@ -601,6 +601,18 @@ Die Array-Iteration verwendet `for ... in`; die Schleifenvariable ist
 unveränderlich und nur im Schleifenkörper sichtbar. `break` und `continue`
 werden unterstützt.
 
+Einen mit Browsern und Node kompatiblen TypeScript-Client aus denselben
+API-Deklarationen erzeugen:
+
+~~~bash
+zelyra doc examples/api_records.zyl --typescript > customer-client.ts
+~~~
+
+Der erzeugte Client verwendet die standardmäßige `fetch`-API, enthält
+deklarierte Records und Tabellen als TypeScript-Typen und behandelt
+Pfad-/Query-Parameter, JSON-Bodies, Bearer-Tokens, Response-Typen und
+HTTP-Fehler.
+
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
@@ -747,7 +759,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]

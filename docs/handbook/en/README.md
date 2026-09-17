@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]
@@ -547,6 +547,17 @@ print(customer.address.city)
 Array iteration uses `for ... in`; the loop variable is immutable and scoped to
 the loop body. `break` and `continue` are supported.
 
+Generate a browser or Node-compatible TypeScript client from the same API
+declarations:
+
+~~~bash
+zelyra doc examples/api_records.zyl --typescript > customer-client.ts
+~~~
+
+The generated client uses standard `fetch`, includes declared records and
+tables as TypeScript types, and handles path/query parameters, JSON bodies,
+bearer tokens, response types, and HTTP errors.
+
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
@@ -686,7 +697,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]

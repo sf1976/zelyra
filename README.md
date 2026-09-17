@@ -58,6 +58,8 @@ Implemented today:
   permission guards, structured JSON errors, and declared `Result` error
   mapping, including typed API arrays and nested JSON objects via `struct`
   records;
+- a dependency-free TypeScript client generator via
+  `zelyra doc <file.zyl> --typescript`;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
 - structured `for ... in` array iteration with `break` and `continue`;
@@ -319,7 +321,7 @@ zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
 zelyra verify <file.zyl> [--json]
-zelyra doc <file.zyl> [--openapi]
+zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

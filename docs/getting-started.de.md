@@ -55,6 +55,7 @@ Das aktuelle Repository enthält:
   strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung
   einschließlich typisierter API-Arrays und verschachtelter JSON-Objekte über
   `struct`-Records;
+- einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`;
 - strukturierte `for ... in`-Iteration über Arrays mit `break` und `continue`;
@@ -199,7 +200,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]
@@ -563,6 +564,7 @@ zelyra run <file.zyl>                   Programm ausführen
 zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
 zelyra verify <file.zyl>                Contract-Prüfungen klassifizieren
 zelyra doc <file.zyl> [--openapi]       OpenAPI-Dokument erzeugen
+zelyra doc <file.zyl> --typescript     TypeScript-Client erzeugen
 zelyra form validate <file> <Form> ...  Formularwerte validieren
 zelyra db create <file.zyl>             Schema-DDL ausgeben
 zelyra db bootstrap <file.zyl>          Anfangsschema erzeugen/anwenden

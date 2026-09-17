@@ -52,6 +52,7 @@ The current repository contains:
   authentication and permission guards, structured JSON errors, and declared
   `Result` error mapping, including typed API arrays and nested JSON objects
   declared with `struct` records;
+- a dependency-free TypeScript client generator;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`;
 - structured `for ... in` array iteration with `break` and `continue`;
@@ -192,7 +193,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.2"
+version = "0.1.3"
 zelyra = "0.1"
 
 [capabilities]
@@ -544,6 +545,7 @@ zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
 zelyra verify <file.zyl>                classify contract checks
 zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
+zelyra doc <file.zyl> --typescript     generate a TypeScript client
 zelyra form validate <file> <Form> ...  validate form input
 zelyra db create <file.zyl>             print schema DDL
 zelyra db bootstrap <file.zyl>          create/apply initial schema

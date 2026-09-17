@@ -68,6 +68,17 @@ Generate an OpenAPI 3.0.3 document:
 zelyra doc examples/api.zyl --openapi > openapi.json
 ~~~
 
+Generate a dependency-free TypeScript client from the same declarations:
+
+~~~bash
+zelyra doc examples/api_records.zyl --typescript > customer-client.ts
+~~~
+
+The generated client contains TypeScript aliases/interfaces for Zelyra types,
+records, and tables, plus a `ZelyraClient` using the standard `fetch` API. It
+handles path encoding, query parameters, JSON request bodies, bearer tokens,
+typed response promises, and structured HTTP errors.
+
 The array example can be checked and served without a database:
 
 ~~~bash
@@ -171,5 +182,5 @@ api POST "/customers" {
 
 Record values are supported both at the JSON API boundary and in the language
 core. Record literals and field access are checked against the declared record
-definition. Generated client bindings and richer domain-error values remain
+definition. More advanced client features and richer domain-error values remain
 later Web/API work.

@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.3 — 2026-09-17
+
+### Added
+
+- `zelyra doc <file.zyl> --typescript` generates a dependency-free TypeScript
+  client from API, record, type, and table declarations.
+- Generated clients support standard `fetch`, path/query parameters, JSON
+  request bodies, bearer tokens, typed responses, and HTTP errors.
+- OpenAPI output now reports the compiler package version automatically.
+
+### Dokumentation
+
+- README, Getting Started, Handbook, and Phase 10 documentation updated in
+  English and German.
+
 ## 0.1.2 — 2026-09-17
 
 ### Added
