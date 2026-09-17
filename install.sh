@@ -25,7 +25,7 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 1
 fi
 
-"${CARGO_HOME:-${HOME}/.cargo}/bin/cargo" install --path "${script_dir}/cli" --root "${install_root}"
+"${CARGO_HOME:-${HOME}/.cargo}/bin/cargo" install --path "${script_dir}/cli" --root "${install_root}" --force
 
 echo
 echo "Zelyra installed to ${install_root}/bin/zelyra"

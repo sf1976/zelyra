@@ -48,7 +48,7 @@ fn create_project(path: &str, allow_current_directory: bool) -> ExitCode {
     let files = [
         (
             "zelyra.toml",
-            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.5\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
+            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.6\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
         ),
         (
             "main.zyl",

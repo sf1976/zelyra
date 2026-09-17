@@ -4,6 +4,19 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.6 — 2026-09-17
+
+### Added
+
+- Windows PowerShell and `cmd.exe` installers with user-local installation,
+  automatic Rust bootstrap, and user PATH setup.
+- Repeated Linux/macOS installations now replace the existing CLI binary with
+  `cargo install --force`.
+
+### Documentation
+
+- Cross-platform installation instructions added in English and German.
+
 ## 0.1.5 — 2026-09-17
 
 ### Added

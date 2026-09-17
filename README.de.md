@@ -113,7 +113,9 @@ Erwartete Ausgabe:
 Der Installer baut Zelyra für den aktuellen Benutzer und installiert das
 Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt weder sudo,
 eine globale Rust-Installation, Apache noch einen Datenbankserver für die
-Sprachkern-Beispiele.
+Sprachkern-Beispiele. Unter Windows `install.ps1` in PowerShell oder
+`install.cmd` verwenden; der Installer nutzt das lokale Benutzerverzeichnis
+und aktualisiert den Benutzer-PATH ohne Administratorrechte.
 
 Eine Quelldatei direkt aus dem Repository ausführen:
 

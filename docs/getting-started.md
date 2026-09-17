@@ -74,14 +74,16 @@ and production packaging.
 
 For the easiest source installation you need:
 
-- a Unix-like shell with Bash;
+- Bash on Linux/macOS, or PowerShell on Windows;
 - Git;
 - curl, if Rust is not already installed;
 - a network connection for the first Rust toolchain installation.
 
-The installer is designed for Linux and macOS style environments. It installs
-only for the current user and does not use sudo. A platform-native standalone
-release installer for users who do not want Rust is planned.
+The installers build Zelyra for the current user and do not use sudo or
+administrator privileges. They install Rust automatically when it is missing.
+The source installers still need an internet connection for the first toolchain
+installation; a standalone release installer for users who do not want Rust is
+planned.
 
 Apache is not required. A database server is not required for the language
 core, web, and local form examples. MariaDB is needed only when you want to
@@ -101,6 +103,23 @@ Install the command:
 ~~~bash
 ./install.sh
 ~~~
+
+On Windows, use PowerShell from the repository directory:
+
+~~~powershell
+.\install.ps1
+~~~
+
+Alternatively, double-click `install.cmd` or run it from `cmd.exe`. If the
+PowerShell execution policy blocks the script, run it for the current terminal:
+
+~~~powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install.ps1
+~~~
+
+The Windows installer uses the current user's `%LOCALAPPDATA%\Zelyra\bin`
+directory and updates the user PATH. No administrator password is required.
 
 The script builds the CLI in release mode and installs it at:
 
@@ -194,7 +213,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.5"
+version = "0.1.6"
 zelyra = "0.1"
 
 [capabilities]

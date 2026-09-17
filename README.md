@@ -112,6 +112,9 @@ Expected output:
 The installer builds Zelyra for the current user and installs the executable
 in the user-local bin directory. It does not require sudo, a global Rust
 installation, Apache, or a database server for the language-core examples.
+On Windows, run `install.ps1` in PowerShell or use `install.cmd`; it installs
+to the user's local application directory and updates the user PATH without
+administrator privileges.
 
 Run a source file without installing the binary:
 

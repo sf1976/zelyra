@@ -80,14 +80,15 @@ Nebenläufigkeit und Produktionspaketierung.
 
 Für die einfachste Installation aus dem Quellcode werden benötigt:
 
-- eine Unix-ähnliche Shell mit Bash;
+- Bash unter Linux/macOS oder PowerShell unter Windows;
 - Git;
 - curl, falls Rust noch nicht installiert ist;
 - eine Netzwerkverbindung für die erste Installation der Rust-Toolchain.
 
-Der Installer ist für Linux- und macOS-ähnliche Umgebungen ausgelegt. Er
-installiert nur für den aktuellen Benutzer und verwendet kein sudo. Ein
-plattformnativer Installer für eigenständige Releases ohne Rust ist geplant.
+Die Installer bauen Zelyra für den aktuellen Benutzer und verwenden weder sudo
+noch Administratorrechte. Falls Rust fehlt, wird es automatisch installiert.
+Die Quellcode-Installer benötigen für die erste Toolchain-Installation eine
+Internetverbindung; ein eigenständiger Release-Installer ohne Rust ist geplant.
 
 Apache ist nicht erforderlich. Für Sprachkern-, Web- und lokale
 Formularbeispiele wird kein Datenbankserver benötigt. MariaDB wird nur
@@ -107,6 +108,25 @@ Befehl installieren:
 ~~~bash
 ./install.sh
 ~~~
+
+Unter Windows PowerShell aus dem Repository-Verzeichnis verwenden:
+
+~~~powershell
+.\install.ps1
+~~~
+
+Alternativ kann `install.cmd` doppelt angeklickt oder aus `cmd.exe` gestartet
+werden. Falls die PowerShell-Ausführungsrichtlinie das Script blockiert, gilt
+für das aktuelle Terminal:
+
+~~~powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install.ps1
+~~~
+
+Der Windows-Installer verwendet das benutzerbezogene Verzeichnis
+`%LOCALAPPDATA%\Zelyra\bin` und ergänzt den Benutzer-PATH. Ein
+Administratorpasswort ist nicht erforderlich.
 
 Das Script baut die CLI im Release-Modus und installiert sie unter:
 
@@ -201,7 +221,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.5"
+version = "0.1.6"
 zelyra = "0.1"
 
 [capabilities]
