@@ -247,9 +247,16 @@ page "/status" {
 ~~~
 
 Search, filtering, sorting, and pagination are already available on generated
-CRUD lists. A unified, composable view data pipeline for these operations is
-planned so the same typed declaration can drive both the query and its
-accessible controls.
+CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
+`is_null`; the same controls preserve their state in the URL. For example:
+
+~~~text
+/customers?filter_name__contains=Press
+/customers?filter_quantity__gte=10
+~~~
+
+The unified, composable view data pipeline that will make these operations
+available to arbitrary views remains planned.
 
 ## A first schema-aware form
 

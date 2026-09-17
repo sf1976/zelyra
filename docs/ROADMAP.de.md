@@ -102,13 +102,15 @@ noch in Prüfung.
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
 - [ ] View-lokales Laden von Daten mit expliziten Query- und Berechtigungsgrenzen.
+- [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
+  NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
+- [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
+  URLs; stabile Sortierung und weitere Barrierefreiheitsverbesserungen bleiben
+  offen.
 - [ ] Einheitliche typisierte View-Datenpipelines wie `.search(...)`,
-  `.filter(...)`, `.sort(...)` und `.page(...)`, die in sichere serverseitige
-  SQL-Abfragen kompiliert werden.
-- [ ] Direkt aus derselben Pipeline erzeugte zugängliche Filter- und
-  Sortiersteuerung mit stabiler Sortierung und URL-Zustand.
-- [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für Strings,
-  Zahlen, Datum, Boolesche Werte, Relationen und Volltextsuche.
+  `.filter(...)`, `.sort(...)` und `.page(...)` für beliebige Views.
+- [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
+  Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,
   Pagination und Validierungsfehler-Komponenten.
 - [ ] CRUD-View-Überschreibungen für Liste, Detail, Create, Edit, Delete, leer,

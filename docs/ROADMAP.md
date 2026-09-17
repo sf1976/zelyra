@@ -104,12 +104,14 @@ under evaluation.
 - [ ] Multiple named slots, default slots, fallback content, and nested views.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.
+- [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,
+  and null checks) are compiled to safe server-side SQL.
+- [~] Generated CRUD filter controls preserve operator and value state in URLs;
+  stable ordering and accessibility improvements remain open.
 - [ ] Unified typed view data pipelines such as `.search(...)`, `.filter(...)`,
-  `.sort(...)`, and `.page(...)`, compiled to safe server-side SQL.
-- [ ] Filter and sort controls generated directly from the same pipeline,
-  including accessible forms, stable ordering, and URL state persistence.
-- [ ] Composable filter expressions with typed operators for strings, numbers,
-  dates, booleans, relations, and full-text search.
+  `.sort(...)`, and `.page(...)` for arbitrary views.
+- [ ] Composable filter expressions with typed operators for dates, booleans,
+  relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and
   validation-error components.
 - [ ] CRUD view overrides for list, detail, create, edit, delete, empty, loading,

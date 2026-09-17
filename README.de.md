@@ -253,9 +253,16 @@ page "/status" {
 ~~~
 
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
-verfügbar. Eine einheitliche, zusammensetzbare View-Datenpipeline dafür ist
-geplant, damit dieselbe typisierte Definition sowohl die Abfrage als auch die
-zugänglichen Bedienelemente erzeugt.
+verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
+`is_null`; die Bedienelemente erhalten ihren Zustand über die URL. Beispiele:
+
+~~~text
+/customers?filter_name__contains=Presse
+/customers?filter_quantity__gte=10
+~~~
+
+Die einheitliche, zusammensetzbare View-Datenpipeline für beliebige Views
+bleibt als nächster Ausbau geplant.
 
 ## Ein erstes schemaabhängiges Formular
 

@@ -2,7 +2,7 @@ use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
 use rand_core::OsRng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -2598,15 +2598,70 @@ fn dispatch_crud(
         }
     };
     let mut filters = Vec::new();
+    let mut seen_filter_columns = HashSet::new();
     for (name, value) in &query_values {
-        let Some(column) = name.strip_prefix("filter_") else {
+        let Some(filter_name) = name.strip_prefix("filter_") else {
             continue;
         };
+        if filter_name.ends_with("__operator") {
+            let column = filter_name.trim_end_matches("__operator");
+            if !filter_columns.contains(&column) {
+                return Response::html(
+                    400,
+                    "<h1>400 Bad Request</h1><p>Unknown filter column.</p>",
+                );
+            }
+            if FilterOperator::parse(value).is_none() {
+                return Response::html(
+                    400,
+                    format!("<h1>400 Bad Request</h1><p>Unknown filter operator for {column}.</p>"),
+                );
+            }
+            continue;
+        }
+        let (column, direct_operator) = filter_name
+            .split_once("__")
+            .map_or((filter_name, None), |(column, operator)| {
+                (column, FilterOperator::parse(operator))
+            });
         if !filter_columns.contains(&column) {
             return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown filter column.</p>");
         }
-        if !value.is_empty() {
-            filters.push((column, value));
+        if filter_name.contains("__") && direct_operator.is_none() {
+            return Response::html(
+                400,
+                format!("<h1>400 Bad Request</h1><p>Unknown filter operator for {column}.</p>"),
+            );
+        }
+        let operator =
+            direct_operator.unwrap_or_else(|| selected_filter_operator(&query_values, column));
+        let Some(schema_column) = table.columns.iter().find(|candidate| {
+            let storage_column = crud_foreign_key(table, column)
+                .map(|foreign_key| foreign_key.column.as_str())
+                .unwrap_or(column);
+            candidate.name == storage_column
+        }) else {
+            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        };
+        if !filter_operator_supported(schema_column, operator) {
+            return Response::html(
+                400,
+                format!(
+                    "<h1>400 Bad Request</h1><p>Operator `{}` is not supported for filter `{column}`.</p>",
+                    operator.key()
+                ),
+            );
+        }
+        if !operator.needs_value() || !value.is_empty() {
+            if !seen_filter_columns.insert(column) {
+                return Response::html(
+                    400,
+                    format!(
+                        "<h1>400 Bad Request</h1><p>Filter `{column}` was specified more than once.</p>"
+                    ),
+                );
+            }
+            filters.push((column, value, operator));
         }
     }
     let mut query = format!(
@@ -2645,11 +2700,8 @@ fn dispatch_crud(
                 .join(" OR ")
         ));
     }
-    for (column, _) in &filters {
-        conditions.push(format!(
-            "{} = :filter_{column}",
-            crud_storage_expression(table, column)
-        ));
+    for (column, _, operator) in &filters {
+        conditions.push(filter_condition(table, column, *operator));
     }
     if !conditions.is_empty() {
         query.push_str(" WHERE ");
@@ -2676,7 +2728,10 @@ fn dispatch_crud(
             zelyra_database::QueryValue::String(search.clone()),
         ));
     }
-    for (column, value) in filters {
+    for (column, value, operator) in filters {
+        if !operator.needs_value() {
+            continue;
+        }
         let storage_column = crud_foreign_key(table, column)
             .map(|foreign_key| foreign_key.column.as_str())
             .unwrap_or(column);
@@ -2858,6 +2913,173 @@ fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<
         .filter(|value| *value > 0)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FilterOperator {
+    Equal,
+    Contains,
+    StartsWith,
+    EndsWith,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    IsNull,
+    IsNotNull,
+}
+
+impl FilterOperator {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "eq" => Some(Self::Equal),
+            "contains" => Some(Self::Contains),
+            "starts_with" => Some(Self::StartsWith),
+            "ends_with" => Some(Self::EndsWith),
+            "gt" => Some(Self::GreaterThan),
+            "gte" => Some(Self::GreaterThanOrEqual),
+            "lt" => Some(Self::LessThan),
+            "lte" => Some(Self::LessThanOrEqual),
+            "is_null" => Some(Self::IsNull),
+            "is_not_null" => Some(Self::IsNotNull),
+            _ => None,
+        }
+    }
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::Equal => "eq",
+            Self::Contains => "contains",
+            Self::StartsWith => "starts_with",
+            Self::EndsWith => "ends_with",
+            Self::GreaterThan => "gt",
+            Self::GreaterThanOrEqual => "gte",
+            Self::LessThan => "lt",
+            Self::LessThanOrEqual => "lte",
+            Self::IsNull => "is_null",
+            Self::IsNotNull => "is_not_null",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Equal => "is",
+            Self::Contains => "contains",
+            Self::StartsWith => "starts with",
+            Self::EndsWith => "ends with",
+            Self::GreaterThan => "greater than",
+            Self::GreaterThanOrEqual => "at least",
+            Self::LessThan => "less than",
+            Self::LessThanOrEqual => "at most",
+            Self::IsNull => "is empty",
+            Self::IsNotNull => "is not empty",
+        }
+    }
+
+    fn needs_value(self) -> bool {
+        !matches!(self, Self::IsNull | Self::IsNotNull)
+    }
+}
+
+fn column_is_text(column: &zelyra_database::Column) -> bool {
+    let sql_type = column.sql_type.to_ascii_uppercase();
+    sql_type.contains("CHAR") || sql_type.contains("TEXT")
+}
+
+fn column_is_numeric(column: &zelyra_database::Column) -> bool {
+    let sql_type = column.sql_type.to_ascii_uppercase();
+    sql_type.contains("INT")
+        || sql_type.contains("DECIMAL")
+        || sql_type.contains("NUMERIC")
+        || sql_type.contains("DOUBLE")
+        || sql_type.contains("FLOAT")
+        || sql_type.contains("REAL")
+}
+
+fn filter_operator_supported(column: &zelyra_database::Column, operator: FilterOperator) -> bool {
+    match operator {
+        FilterOperator::Equal | FilterOperator::IsNull | FilterOperator::IsNotNull => true,
+        FilterOperator::Contains | FilterOperator::StartsWith | FilterOperator::EndsWith => {
+            column_is_text(column)
+        }
+        FilterOperator::GreaterThan
+        | FilterOperator::GreaterThanOrEqual
+        | FilterOperator::LessThan
+        | FilterOperator::LessThanOrEqual => column_is_numeric(column) || column_is_text(column),
+    }
+}
+
+fn filter_operator_options(column: &zelyra_database::Column) -> &'static [FilterOperator] {
+    if column_is_text(column) {
+        &[
+            FilterOperator::Equal,
+            FilterOperator::Contains,
+            FilterOperator::StartsWith,
+            FilterOperator::EndsWith,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ]
+    } else if column_is_numeric(column) {
+        &[
+            FilterOperator::Equal,
+            FilterOperator::GreaterThan,
+            FilterOperator::GreaterThanOrEqual,
+            FilterOperator::LessThan,
+            FilterOperator::LessThanOrEqual,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ]
+    } else {
+        &[
+            FilterOperator::Equal,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ]
+    }
+}
+
+fn selected_filter_operator(
+    query_values: &HashMap<String, String>,
+    column: &str,
+) -> FilterOperator {
+    let operator_name = format!("filter_{column}__operator");
+    if let Some(operator) = query_values
+        .get(&operator_name)
+        .and_then(|value| FilterOperator::parse(value))
+    {
+        return operator;
+    }
+    let prefix = format!("filter_{column}__");
+    query_values
+        .keys()
+        .filter_map(|name| name.strip_prefix(&prefix))
+        .find_map(FilterOperator::parse)
+        .unwrap_or(FilterOperator::Equal)
+}
+
+fn filter_condition(
+    table: &zelyra_database::Table,
+    column: &str,
+    operator: FilterOperator,
+) -> String {
+    let expression = crud_storage_expression(table, column);
+    let parameter = format!(":filter_{column}");
+    match operator {
+        FilterOperator::Equal => format!("{expression} = {parameter}"),
+        FilterOperator::Contains => {
+            format!("{expression} LIKE CONCAT('%', {parameter}, '%')")
+        }
+        FilterOperator::StartsWith => {
+            format!("{expression} LIKE CONCAT({parameter}, '%')")
+        }
+        FilterOperator::EndsWith => format!("{expression} LIKE CONCAT('%', {parameter})"),
+        FilterOperator::GreaterThan => format!("{expression} > {parameter}"),
+        FilterOperator::GreaterThanOrEqual => format!("{expression} >= {parameter}"),
+        FilterOperator::LessThan => format!("{expression} < {parameter}"),
+        FilterOperator::LessThanOrEqual => format!("{expression} <= {parameter}"),
+        FilterOperator::IsNull => format!("{expression} IS NULL"),
+        FilterOperator::IsNotNull => format!("{expression} IS NOT NULL"),
+    }
+}
+
 fn filter_query_value(
     column: &zelyra_database::Column,
     value: &str,
@@ -2976,6 +3198,22 @@ fn render_crud_list_with_actions(
     }
     html.push_str("</select>");
     for column in filter_columns {
+        let schema_table = crud
+            .schema
+            .tables
+            .iter()
+            .find(|table| table.name == crud.table);
+        let storage_column = schema_table
+            .and_then(|table| crud_foreign_key(table, column))
+            .map(|foreign_key| foreign_key.column.as_str())
+            .unwrap_or(column);
+        let schema_column = schema_table.and_then(|table| {
+            table
+                .columns
+                .iter()
+                .find(|candidate| candidate.name == storage_column)
+        });
+        let selected_operator = selected_filter_operator(query_values, column);
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
@@ -2983,7 +3221,27 @@ fn render_crud_list_with_actions(
             "Filter {}",
             crud_column_label(&crud.schema, &crud.table, column)
         )));
-        html.push_str("</label><input id=\"filter_");
+        html.push_str("</label><select id=\"filter_");
+        html.push_str(&html_escape(column));
+        html.push_str("__operator\" name=\"filter_");
+        html.push_str(&html_escape(column));
+        html.push_str("__operator\">");
+        if let Some(schema_column) = schema_column {
+            for operator in filter_operator_options(schema_column) {
+                html.push_str("<option value=\"");
+                html.push_str(operator.key());
+                html.push('"');
+                if *operator == selected_operator {
+                    html.push_str(" selected");
+                }
+                html.push('>');
+                html.push_str(operator.label());
+                html.push_str("</option>");
+            }
+        } else {
+            html.push_str("<option value=\"eq\" selected>is</option>");
+        }
+        html.push_str("</select><input id=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\" name=\"filter_");
         html.push_str(&html_escape(column));
@@ -4242,6 +4500,65 @@ mod tests {
         validate_relation_values(&route, &options, &values, &mut errors);
         assert_eq!(errors[0].field, "department");
         assert_eq!(errors[0].message, "selected value does not exist");
+    }
+
+    #[test]
+    fn supports_typed_filter_operators() {
+        let text = zelyra_database::Column {
+            name: "name".into(),
+            sql_type: "VARCHAR(100)".into(),
+            nullable: false,
+            primary_key: false,
+            auto: false,
+            unique: false,
+            default: None,
+        };
+        let number = zelyra_database::Column {
+            name: "quantity".into(),
+            sql_type: "BIGINT".into(),
+            nullable: false,
+            primary_key: false,
+            auto: false,
+            unique: false,
+            default: None,
+        };
+        assert_eq!(
+            FilterOperator::parse("contains"),
+            Some(FilterOperator::Contains)
+        );
+        assert!(filter_operator_supported(&text, FilterOperator::Contains));
+        assert!(!filter_operator_supported(
+            &number,
+            FilterOperator::Contains
+        ));
+        assert_eq!(FilterOperator::GreaterThanOrEqual.key(), "gte");
+    }
+
+    #[test]
+    fn builds_safe_filter_conditions_for_text_and_null_checks() {
+        let table = zelyra_database::Table {
+            name: "machines".into(),
+            columns: vec![zelyra_database::Column {
+                name: "name".into(),
+                sql_type: "VARCHAR(100)".into(),
+                nullable: true,
+                primary_key: false,
+                auto: false,
+                unique: false,
+                default: None,
+            }],
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        };
+        assert_eq!(
+            filter_condition(&table, "name", FilterOperator::Contains),
+            "`base`.`name` LIKE CONCAT('%', :filter_name, '%')"
+        );
+        assert_eq!(
+            filter_condition(&table, "name", FilterOperator::IsNull),
+            "`base`.`name` IS NULL"
+        );
     }
 
     #[test]

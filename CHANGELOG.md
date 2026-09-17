@@ -12,6 +12,8 @@ compiler and repository release.
   compiler-validated `<slot />` content boundary.
 - Added typed self-closing view components with declared properties and safe
   literal-property escaping.
+- Added schema-aware CRUD filter operators for text matching, numeric
+  comparisons, and null checks, with operator controls and URL state.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

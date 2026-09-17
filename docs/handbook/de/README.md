@@ -587,10 +587,20 @@ Beispiele für URLs:
 /machines
 /machines?search=Presse
 /machines?filter_active=true
+/machines?filter_number__contains=CNC
+/machines?filter_quantity__gte=10
 /machines?sort=number&order=asc
 /machines/new
 /machines/42/edit
 ~~~
+
+Filteroperatoren werden anhand des Schemas in den Bedienelementen angeboten.
+Textspalten unterstützen `eq`, `contains`, `starts_with` und `ends_with`;
+numerische Spalten unterstützen `eq`, `gt`, `gte`, `lt` und `lte`. Für alle
+unterstützten Spalten gibt es außerdem `is_null` und `is_not_null`. Die
+explizite URL-Form `filter_<column>__<operator>=<value>` eignet sich für Links
+und gespeicherte Suchen. Werte bleiben gebundene Parameter, Spaltennamen werden
+gegen das Schema geprüft.
 
 🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
 sind Teil der weiteren View-Roadmap.

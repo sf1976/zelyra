@@ -531,10 +531,20 @@ Example URLs:
 /machines
 /machines?search=Press
 /machines?filter_active=true
+/machines?filter_number__contains=CNC
+/machines?filter_quantity__gte=10
 /machines?sort=number&order=asc
 /machines/new
 /machines/42/edit
 ~~~
+
+Filter operators are selected from controls generated from the schema. Text
+columns support `eq`, `contains`, `starts_with`, and `ends_with`; numeric
+columns support `eq`, `gt`, `gte`, `lt`, and `lte`. All supported columns also
+provide `is_null` and `is_not_null`. The explicit URL form
+`filter_<column>__<operator>=<value>` is useful for links and saved searches.
+Values remain bound parameters and column names are validated against the
+schema.
 
 🗺️ Fully custom typed components and fine-grained view overrides are part of
 the continuing view roadmap.
