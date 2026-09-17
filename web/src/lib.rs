@@ -1159,6 +1159,106 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
 }
 
 pub const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
+const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+
+#[derive(Debug)]
+enum RequestReadError {
+    Io(io::Error),
+    Http(HttpError),
+    PayloadTooLarge,
+}
+
+fn find_header_end(buffer: &[u8]) -> Option<usize> {
+    buffer.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+fn declared_content_length(header_text: &str) -> Result<Option<usize>, HttpError> {
+    let mut content_length = None;
+    for line in header_text.split("\r\n").skip(1) {
+        let Some((name, value)) = line.split_once(':') else {
+            if !line.is_empty() {
+                return Err(HttpError {
+                    message: "malformed HTTP header".into(),
+                });
+            }
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            let parsed = value.trim().parse::<usize>().map_err(|_| HttpError {
+                message: "content-length must be a non-negative integer".into(),
+            })?;
+            if let Some(previous) = content_length {
+                if previous != parsed {
+                    return Err(HttpError {
+                        message: "conflicting content-length headers".into(),
+                    });
+                }
+            }
+            content_length = Some(parsed);
+        }
+    }
+    Ok(content_length)
+}
+
+fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, RequestReadError> {
+    let mut buffer = Vec::new();
+    let total_length = loop {
+        let mut chunk = [0_u8; 8192];
+        let size = reader.read(&mut chunk).map_err(RequestReadError::Io)?;
+        if size == 0 {
+            break None;
+        }
+        buffer.extend_from_slice(&chunk[..size]);
+        if buffer.len() > MAX_REQUEST_HEADER_BYTES && find_header_end(&buffer).is_none() {
+            return Err(RequestReadError::Http(HttpError {
+                message: "HTTP headers exceed the configured limit".into(),
+            }));
+        }
+        let Some(header_end) = find_header_end(&buffer) else {
+            continue;
+        };
+        if header_end > MAX_REQUEST_HEADER_BYTES {
+            return Err(RequestReadError::Http(HttpError {
+                message: "HTTP headers exceed the configured limit".into(),
+            }));
+        }
+        let header_text = std::str::from_utf8(&buffer[..header_end]).map_err(|error| {
+            RequestReadError::Http(HttpError {
+                message: error.to_string(),
+            })
+        })?;
+        let content_length = declared_content_length(header_text)
+            .map_err(RequestReadError::Http)?
+            .unwrap_or(0);
+        if content_length > MAX_REQUEST_BODY_BYTES {
+            return Err(RequestReadError::PayloadTooLarge);
+        }
+        let total_length = header_end + 4 + content_length;
+        if buffer.len() >= total_length {
+            break Some(total_length);
+        }
+        while buffer.len() < total_length {
+            let size = reader.read(&mut chunk).map_err(RequestReadError::Io)?;
+            if size == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&chunk[..size]);
+        }
+        break Some(total_length);
+    };
+    if let Some(total_length) = total_length {
+        buffer.truncate(total_length);
+    }
+    String::from_utf8(buffer).map_err(|error| {
+        RequestReadError::Http(HttpError {
+            message: error.to_string(),
+        })
+    })
+}
+
+fn read_http_request(stream: &mut TcpStream) -> Result<String, RequestReadError> {
+    read_http_request_from(stream)
+}
 
 pub fn html_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -2539,20 +2639,24 @@ pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
 }
 
 fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
-    let mut buffer = [0_u8; 16 * 1024];
-    let size = stream.read(&mut buffer)?;
-    let response = match std::str::from_utf8(&buffer[..size])
-        .map_err(|error| HttpError {
-            message: error.to_string(),
-        })
-        .and_then(parse_request)
-    {
-        Ok(request) => app.dispatch(&request),
-        Err(error) if error.message.contains("request body exceeds") => Response::json(
+    let response = match read_http_request(stream) {
+        Ok(raw) => match parse_request(&raw) {
+            Ok(request) => app.dispatch(&request),
+            Err(error) if error.message.contains("request body exceeds") => Response::json(
+                413,
+                "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
+            ),
+            Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
+        },
+        Err(RequestReadError::PayloadTooLarge) => Response::json(
             413,
             "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
         ),
-        Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
+        Err(RequestReadError::Http(error)) => {
+            drop(error);
+            Response::html(400, "<h1>400 Bad Request</h1>")
+        }
+        Err(RequestReadError::Io(error)) => return Err(error),
     };
     stream.write_all(response.to_http().as_bytes())
 }
@@ -2796,6 +2900,44 @@ mod tests {
         );
         let error = parse_request(&raw).unwrap_err();
         assert!(error.message.contains("exceeds"));
+    }
+
+    #[test]
+    fn reads_complete_requests_across_multiple_network_reads() {
+        let body = "x".repeat(12_000);
+        let raw = format!(
+            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let mut reader = std::io::Cursor::new(raw.into_bytes());
+        let request = parse_request(&read_http_request_from(&mut reader).unwrap()).unwrap();
+        assert_eq!(request.body, body);
+    }
+
+    #[test]
+    fn rejects_oversized_requests_before_reading_the_body() {
+        let raw = format!(
+            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_REQUEST_BODY_BYTES + 1
+        );
+        let mut reader = std::io::Cursor::new(raw.into_bytes());
+        assert!(matches!(
+            read_http_request_from(&mut reader),
+            Err(RequestReadError::PayloadTooLarge)
+        ));
+    }
+
+    #[test]
+    fn rejects_headers_over_the_limit() {
+        let raw = format!(
+            "GET /echo HTTP/1.1\r\nX-Large: {}\r\n\r\n",
+            "x".repeat(MAX_REQUEST_HEADER_BYTES)
+        );
+        let mut reader = std::io::Cursor::new(raw.into_bytes());
+        assert!(matches!(
+            read_http_request_from(&mut reader),
+            Err(RequestReadError::Http(_))
+        ));
     }
 
     #[test]

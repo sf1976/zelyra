@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.34 — 2026-09-17
+
+### Added
+
+- The HTTP server now reads complete requests across multiple network reads.
+- Oversized bodies are rejected from their declared `Content-Length` before
+  the body is read.
+- Added a 64 KiB HTTP-header limit and regression coverage for incomplete and
+  fragmented requests.
+
+### Compatibility
+
+- The public `parse_request` API remains unchanged.
+- Requests without a body continue to work as before.
+
 ## 0.1.33 — 2026-09-17
 
 ### Added

@@ -9,10 +9,11 @@ Nicht unterstützte Medientypen liefern `415 Unsupported Media Type` als
 strukturierten JSON-Fehler. JSON-Bodies müssen weiterhin ein Objekt sein;
 danach wird jedes deklarierte Feld in den Zelyra-Typ umgewandelt und geprüft.
 
-Der HTTP-Parser prüft `Content-Length`, lehnt ungültige Werte und unvollständige
-Bodies ab und begrenzt Request-Bodies auf ein Mebibyte. Ein zu großer Body
-führt zu `413 Payload Too Large`. Die Prüfung erfolgt vor der Ausführung des
-API-Handlers.
+Der HTTP-Parser prüft `Content-Length`, liest vollständige Bodies über mehrere
+Netzwerk-Reads ein, lehnt ungültige oder unvollständige Bodies ab und begrenzt
+Request-Bodies auf ein Mebibyte. Header sind auf 64 KiB begrenzt. Ein zu großer
+Body führt zu `413 Payload Too Large`. Die Prüfung erfolgt vor der Ausführung
+des API-Handlers.
 
 Antworten enthalten diese sicheren Standard-Header:
 

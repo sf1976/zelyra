@@ -9,10 +9,11 @@ Non-`GET`/`DELETE` API bodies may use `application/json` or
 to require an object at the API boundary, after which every declared field is
 converted and checked against its Zelyra type.
 
-The HTTP parser validates `Content-Length`, rejects malformed values, rejects
-incomplete bodies, and limits request bodies to one mebibyte. A body exceeding
-the limit receives `413 Payload Too Large`. The limit applies before API
-handler execution.
+The HTTP parser validates `Content-Length`, reads complete bodies across
+multiple network reads, rejects malformed or incomplete bodies, and limits
+request bodies to one mebibyte. Headers are limited to 64 KiB. A body
+exceeding the limit receives `413 Payload Too Large`. The limit applies before
+API handler execution.
 
 Responses include these secure defaults:
 
