@@ -551,8 +551,13 @@ all permissions inherited from the user's roles.
 
 When all three `admin_*` options are present, Zelyra also provides an opt-in
 browser administration screen at the configured path. It is protected by the
-declared permission and CSRF tokens. The last assignment of the configured
-administrator role cannot be revoked.
+declared permission and CSRF tokens. Administrators can create users, reset
+passwords, activate or deactivate users, and manage roles and role
+permissions. With an `active` column, deactivated users cannot log in and
+their persistent sessions are removed on deactivation. The last assignment
+of the configured administrator role and the last active administrator are
+protected. User deletion and self-service account management remain future
+work.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

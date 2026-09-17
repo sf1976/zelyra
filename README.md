@@ -57,8 +57,9 @@ Implemented today:
   HttpOnly sessions, logout, direct and role-based permission checks.
 - CLI role and role-permission grant/revoke commands with schema validation and
   idempotent MariaDB writes.
-- opt-in browser role administration with CSRF protection, permission guards,
-  and last-administrator assignment protection.
+- opt-in browser user and role administration with CSRF protection, permission
+  guards, password reset, activation/deactivation, and last-administrator
+  protection.
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
   permission guards, structured JSON errors, and declared `Result` error

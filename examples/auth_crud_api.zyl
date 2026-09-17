@@ -15,6 +15,7 @@ table users {
     id: Id primary auto
     email: Email required unique
     password_hash: String(255) required
+    active: Bool default true
 }
 
 table auth_sessions {

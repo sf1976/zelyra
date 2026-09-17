@@ -12,11 +12,14 @@ suffix="$(date +%s)"
 primary_email="zelyra-protected-primary-${suffix}@example.test"
 secondary_email="zelyra-protected-secondary-${suffix}@example.test"
 viewer_email="zelyra-protected-viewer-${suffix}@example.test"
+managed_email="zelyra-protected-managed-${suffix}@example.test"
 primary_role="zelyra-protected-manager-${suffix}"
 viewer_role="zelyra-protected-viewer-${suffix}"
 temporary_role="zelyra-protected-temporary-${suffix}"
 admin_role="admin"
 test_password="ZelyraProtected-${suffix}-Password"
+managed_password="ZelyraManaged-${suffix}-Password"
+managed_new_password="ZelyraManagedNew-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
 edited_customer_name="Zelyra Edited Customer-${suffix}"
@@ -59,14 +62,14 @@ cleanup() {
     fi
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM user_permissions
-WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}', '${managed_email}'));
 DELETE FROM user_roles
-WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}', '${managed_email}'));
 DELETE FROM role_permissions
 WHERE role IN ('${primary_role}', '${viewer_role}', '${temporary_role}', '${admin_role}');
 DELETE FROM auth_sessions
-WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
-DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}', '${managed_email}'));
+DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}', '${managed_email}');
 DELETE FROM customers
 WHERE name IN ('${customer_name}', '${created_customer_name}', '${edited_customer_name}');
 DELETE FROM customers WHERE name = '${custom_action_customer_name}';
@@ -208,6 +211,52 @@ admin_grant_status="$(request_status "${temp_dir}/primary-admin-grant.html" \
 [[ "${admin_grant_status}" == "303" ]]
 admin_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${viewer_user_id}' AND role = '${temporary_role}'")"
 [[ "${admin_role_count}" == "1" ]]
+admin_create_user_status="$(request_status "${temp_dir}/primary-admin-create-user.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=create_user" \
+    --data-urlencode "email=${managed_email}" \
+    --data-urlencode "password=${managed_password}" \
+    "${base_url}/admin/access")"
+[[ "${admin_create_user_status}" == "303" ]]
+managed_user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${managed_email}'")"
+[[ -n "${managed_user_id}" ]]
+admin_deactivate_status="$(request_status "${temp_dir}/primary-admin-deactivate.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=deactivate_user" \
+    --data-urlencode "user_id=${managed_user_id}" \
+    "${base_url}/admin/access")"
+[[ "${admin_deactivate_status}" == "303" ]]
+managed_login_status="$(request_status "${temp_dir}/managed-login-disabled.html" \
+    --cookie-jar "${temp_dir}/managed.cookies" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${managed_email}" \
+    --data-urlencode "password=${managed_password}" \
+    "${base_url}/login")"
+[[ "${managed_login_status}" == "401" ]]
+admin_activate_status="$(request_status "${temp_dir}/primary-admin-activate.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=activate_user" \
+    --data-urlencode "user_id=${managed_user_id}" \
+    "${base_url}/admin/access")"
+[[ "${admin_activate_status}" == "303" ]]
+admin_reset_password_status="$(request_status "${temp_dir}/primary-admin-reset-password.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=reset_password" \
+    --data-urlencode "user_id=${managed_user_id}" \
+    --data-urlencode "password=${managed_new_password}" \
+    "${base_url}/admin/access")"
+[[ "${admin_reset_password_status}" == "303" ]]
+managed_login_enabled_status="$(request_status "${temp_dir}/managed-login-enabled.html" \
+    --cookie-jar "${temp_dir}/managed-enabled.cookies" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${managed_email}" \
+    --data-urlencode "password=${managed_new_password}" \
+    "${base_url}/login")"
+[[ "${managed_login_enabled_status}" == "303" ]]
 admin_last_role_status="$(request_status "${temp_dir}/primary-admin-last-role.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${admin_csrf}" \

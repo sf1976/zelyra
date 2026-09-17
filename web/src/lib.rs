@@ -1040,7 +1040,7 @@ fn dispatch_auth_admin(
         "GET" => match load_auth_admin_data(auth, database_url) {
             Ok(data) => Response::html(
                 200,
-                render_auth_admin(auth, &data.assignments, &data.permissions),
+                render_auth_admin(auth, &data.users, &data.assignments, &data.permissions),
             ),
             Err(error) => {
                 eprintln!("zelyra web: auth administration query failed: {error}");
@@ -1053,6 +1053,7 @@ fn dispatch_auth_admin(
 }
 
 struct AuthAdminData {
+    users: Vec<Vec<String>>,
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
 }
@@ -1064,6 +1065,34 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     let Some(role_permissions_table) = auth.role_permissions_table.as_deref() else {
         return Err("role administration has no role permissions table".into());
     };
+    let Some(user_table) = auth
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+    else {
+        return Err("role administration has no user table".into());
+    };
+    let active_column = if user_table
+        .columns
+        .iter()
+        .any(|column| column.name == "active")
+    {
+        "active"
+    } else {
+        "true AS active"
+    };
+    let users = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT id, email, {} FROM {} ORDER BY email",
+            active_column,
+            quote_identifier(&auth.table),
+        ),
+        Vec::new(),
+    )
+    .map_err(|error| error.to_string())?
+    .rows;
     let assignments = zelyra_database::execute_mariadb_query(
         database_url,
         &format!(
@@ -1086,6 +1115,7 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     .map_err(|error| error.to_string())?
     .rows;
     Ok(AuthAdminData {
+        users,
         assignments,
         permissions,
     })
@@ -1119,7 +1149,231 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
     let Some(role_permissions_table) = auth.role_permissions_table.as_deref() else {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
     };
+    let active_supported = auth
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+        .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let result = match operation {
+        "create_user" => {
+            let email = input
+                .get("email")
+                .map(|value| value.trim())
+                .unwrap_or_default();
+            let password = input
+                .get("password")
+                .map(String::as_str)
+                .unwrap_or_default();
+            if !email.contains('@') || email.starts_with('@') || email.ends_with('@') {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid email address is required.</p>",
+                );
+            }
+            if password.chars().count() < 8 {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>Password must contain at least 8 characters.</p>",
+                );
+            }
+            let password_hash = match hash_password(password) {
+                Ok(hash) => hash,
+                Err(error) => {
+                    eprintln!("zelyra web: user password hashing failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            };
+            let (sql, params) = if active_supported {
+                (
+                    format!(
+                        "INSERT INTO {} (email, password_hash, active) VALUES (:email, :password_hash, true)",
+                        quote_identifier(&auth.table)
+                    ),
+                    vec![
+                        ("email".into(), zelyra_database::QueryValue::String(email.into())),
+                        (
+                            "password_hash".into(),
+                            zelyra_database::QueryValue::String(password_hash),
+                        ),
+                    ],
+                )
+            } else {
+                (
+                    format!(
+                        "INSERT INTO {} (email, password_hash) VALUES (:email, :password_hash)",
+                        quote_identifier(&auth.table)
+                    ),
+                    vec![
+                        (
+                            "email".into(),
+                            zelyra_database::QueryValue::String(email.into()),
+                        ),
+                        (
+                            "password_hash".into(),
+                            zelyra_database::QueryValue::String(password_hash),
+                        ),
+                    ],
+                )
+            };
+            zelyra_database::execute_mariadb_query(database_url, &sql, params)
+        }
+        "reset_password" => {
+            let Some(user_id) = user_id else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            let password = input
+                .get("password")
+                .map(String::as_str)
+                .unwrap_or_default();
+            if password.chars().count() < 8 {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>Password must contain at least 8 characters.</p>",
+                );
+            }
+            let password_hash = match hash_password(password) {
+                Ok(hash) => hash,
+                Err(error) => {
+                    eprintln!("zelyra web: user password hashing failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            };
+            let sql = format!(
+                "UPDATE {} SET password_hash = :password_hash WHERE id = :user_id",
+                quote_identifier(&auth.table)
+            );
+            zelyra_database::execute_mariadb_query(
+                database_url,
+                &sql,
+                vec![
+                    (
+                        "password_hash".into(),
+                        zelyra_database::QueryValue::String(password_hash),
+                    ),
+                    ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                ],
+            )
+        }
+        "activate_user" | "deactivate_user" => {
+            let Some(user_id) = user_id else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            if !active_supported {
+                return Response::html(
+                    409,
+                    "<h1>409 Conflict</h1><p>User activation requires an active column.</p>",
+                );
+            }
+            let activating = operation == "activate_user";
+            if !activating {
+                if let (Some(admin_role), Some(roles_table)) =
+                    (auth.admin_role.as_deref(), auth.roles_table.as_deref())
+                {
+                    let target_query = format!(
+                        "SELECT COUNT(*) FROM {} WHERE user_id = :user_id AND role = :role",
+                        quote_identifier(roles_table)
+                    );
+                    let target_is_admin = match zelyra_database::execute_mariadb_query(
+                        database_url,
+                        &target_query,
+                        vec![
+                            ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                            (
+                                "role".into(),
+                                zelyra_database::QueryValue::String(admin_role.into()),
+                            ),
+                        ],
+                    ) {
+                        Ok(result) => result
+                            .rows
+                            .first()
+                            .and_then(|row| row.first())
+                            .and_then(|value| value.parse::<u64>().ok())
+                            .is_some_and(|count| count > 0),
+                        Err(error) => {
+                            eprintln!("zelyra web: admin role lookup failed: {error}");
+                            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        }
+                    };
+                    if target_is_admin {
+                        let active_admin_query = format!(
+                            "SELECT COUNT(*) FROM {} AS ur INNER JOIN {} AS u ON u.id = ur.user_id WHERE ur.role = :role AND u.active = true",
+                            quote_identifier(roles_table),
+                            quote_identifier(&auth.table),
+                        );
+                        let active_admins = match zelyra_database::execute_mariadb_query(
+                            database_url,
+                            &active_admin_query,
+                            vec![(
+                                "role".into(),
+                                zelyra_database::QueryValue::String(admin_role.into()),
+                            )],
+                        ) {
+                            Ok(result) => result
+                                .rows
+                                .first()
+                                .and_then(|row| row.first())
+                                .and_then(|value| value.parse::<u64>().ok())
+                                .unwrap_or(0),
+                            Err(error) => {
+                                eprintln!("zelyra web: active admin count failed: {error}");
+                                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                            }
+                        };
+                        if active_admins <= 1 {
+                            return Response::html(
+                                409,
+                                "<h1>409 Conflict</h1><p>The last active administrator cannot be deactivated.</p>",
+                            );
+                        }
+                    }
+                }
+            }
+            let value = if activating { "true" } else { "false" };
+            let update = zelyra_database::Query {
+                sql: format!(
+                    "UPDATE {} SET active = {} WHERE id = :user_id",
+                    quote_identifier(&auth.table),
+                    value
+                ),
+                params: vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+            };
+            if !activating {
+                if let Some(session_table) = auth.session_table.as_deref() {
+                    zelyra_database::execute_mariadb_queries(
+                        database_url,
+                        &[
+                            update,
+                            zelyra_database::Query {
+                                sql: format!(
+                                    "DELETE FROM {} WHERE user_id = :user_id",
+                                    quote_identifier(session_table)
+                                ),
+                                params: vec![(
+                                    "user_id".into(),
+                                    zelyra_database::QueryValue::Int(user_id),
+                                )],
+                            },
+                        ],
+                        true,
+                    )
+                    .map(|_| zelyra_database::QueryResult::default())
+                } else {
+                    zelyra_database::execute_mariadb_queries(database_url, &[update], true)
+                        .map(|_| zelyra_database::QueryResult::default())
+                }
+            } else {
+                zelyra_database::execute_mariadb_queries(database_url, &[update], true)
+                    .map(|_| zelyra_database::QueryResult::default())
+            }
+        }
         "grant_role" => {
             let Some(user_id) = user_id else {
                 return Response::html(
@@ -1262,14 +1516,51 @@ fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &
 
 fn render_auth_admin(
     auth: &AuthRoute,
+    users: &[Vec<String>],
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
+    let active_supported = auth
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+        .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main><h1>Role administration</h1><h2>Assign role</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>User ID</label><input name=\"user_id\" type=\"number\" required><label>Role</label><input name=\"role\" required><button type=\"submit\">Grant role</button></form>"
+        "<main><h1>Role administration</h1><h2>User administration</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label>Email</label><input name=\"email\" type=\"email\" required><label>Initial password</label><input name=\"password\" type=\"password\" minlength=\"8\" required><button type=\"submit\">Create user</button></form><table><tr><th>Email</th><th>Status</th><th>Actions</th></tr>"
     );
+    for row in users {
+        if let (Some(user_id), Some(email), Some(active)) = (row.first(), row.get(1), row.get(2)) {
+            let is_active = matches!(active.as_str(), "1" | "true" | "TRUE");
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input name=\"password\" type=\"password\" minlength=\"8\" required placeholder=\"New password\"><button type=\"submit\">Reset password</button></form>{}</td></tr>",
+                html_escape(email),
+                if is_active { "Active" } else { "Inactive" },
+                path,
+                csrf,
+                html_escape(user_id),
+                if active_supported {
+                    format!(
+                        "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form>",
+                        path,
+                        csrf,
+                        if is_active { "deactivate_user" } else { "activate_user" },
+                        html_escape(user_id),
+                        if is_active { "Deactivate" } else { "Activate" },
+                    )
+                } else {
+                    String::new()
+                },
+            ));
+        }
+    }
+    html.push_str("</table><h2>Assign role</h2><form method=\"post\" action=\"");
+    html.push_str(&path);
+    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+    html.push_str(&csrf);
+    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>User ID</label><input name=\"user_id\" type=\"number\" required><label>Role</label><input name=\"role\" required><button type=\"submit\">Grant role</button></form>");
     html.push_str(
         "<h2>Role assignments</h2><table><tr><th>User</th><th>Role</th><th>Action</th></tr>",
     );
@@ -1388,10 +1679,24 @@ fn session_from_request(
     if app.database_capability_granted == Some(false) {
         return None;
     }
-    let query = format!(
-        "SELECT user_id FROM {} WHERE token_hash = :token_hash AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
-        quote_identifier(session_table)
-    );
+    let active_clause = auth
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+        .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
+    let query = if active_clause {
+        format!(
+            "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND u.active = true LIMIT 1",
+            quote_identifier(session_table),
+            quote_identifier(&auth.table),
+        )
+    } else {
+        format!(
+            "SELECT user_id FROM {} WHERE token_hash = :token_hash AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
+            quote_identifier(session_table)
+        )
+    };
     let result = match zelyra_database::execute_mariadb_query(
         database_url,
         &query,

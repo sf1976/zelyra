@@ -606,9 +606,15 @@ und `permission`. Effektive Berechtigungen sind die Vereinigung direkter
 Vergaben und aller Berechtigungen aus den Rollen des Benutzers.
 
 Wenn alle drei `admin_*`-Optionen gesetzt sind, stellt Zelyra zusätzlich eine
-optionale Browser-Rollenverwaltung unter dem konfigurierten Pfad bereit. Sie
-ist durch die deklarierte Berechtigung und CSRF-Tokens geschützt. Die letzte
-Zuweisung der konfigurierten Administrationsrolle kann nicht entzogen werden.
+optionale Browser-Administrationsseite unter dem konfigurierten Pfad bereit.
+Sie ist durch die deklarierte Berechtigung und CSRF-Tokens geschützt.
+Administratoren können dort Benutzer anlegen, Passwörter zurücksetzen,
+Benutzer aktivieren oder deaktivieren sowie Rollen und
+Rollenberechtigungen verwalten. Mit einer `active`-Spalte können deaktivierte
+Benutzer sich nicht anmelden; ihre persistenten Sessions werden beim
+Deaktivieren entfernt. Die letzte Zuweisung der konfigurierten
+Administrationsrolle und der letzte aktive Administrator sind geschützt.
+Benutzerlöschung und Self-Service-Kontoverwaltung folgen später.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

@@ -80,13 +80,20 @@ Zuweisung oder Rollenberechtigung. Die Befehle verwenden die erste
 `auth`-Definition, verlangen MariaDB, prüfen zuerst das Projektschema und
 binden Benutzer-IDs und Werte als SQL-Parameter.
 
-Eine optionale Browser-Rollenverwaltung wird gemeinsam mit `admin_path`,
-`admin_permission` und `admin_role` aktiviert. Sie listet Zuweisungen und
-Rollenberechtigungen auf und bietet CSRF-geschützte Grant-/Revoke-Formulare.
-Die konfigurierte Administrationsrolle kann ihrem letzten zugewiesenen
-Benutzer nicht entzogen werden. Das Entfernen der letzten Berechtigung dieser
-Rolle, das Löschen von Benutzern und eine vollständige nebenläufigkeitssichere
-Policy-Verwaltung sind durch diese Sperre noch nicht abgedeckt.
+Eine optionale Browser-Administrationsseite wird gemeinsam mit `admin_path`,
+`admin_permission` und `admin_role` aktiviert. Sie verwaltet Benutzer und
+Rollen: Administratoren können Benutzer anlegen, Passwörter zurücksetzen,
+Benutzer aktivieren oder deaktivieren sowie Rollen und
+Rollenberechtigungen vergeben und entziehen. Alle Formulare sind
+CSRF-geschützt und durch die deklarierte Berechtigung gesichert.
+
+Wenn die Benutzertabelle eine `active`-Spalte besitzt, können deaktivierte
+Benutzer sich nicht anmelden; beim Deaktivieren werden ihre persistenten
+Sessions entfernt. Die konfigurierte Administrationsrolle kann ihrem letzten
+aktiven Benutzer nicht entzogen und der letzte aktive Administrator nicht
+deaktiviert werden. Benutzerlöschung, Self-Service-Kontoverwaltung und eine
+vollständig nebenläufigkeitssichere Policy-Verwaltung sind noch nicht
+abgedeckt.
 
 Für Deployments, die Benutzer in einem Reverse Proxy authentifizieren,
 akzeptiert der Server zusätzlich ein Bearer-Token, wenn ZELYRA_AUTH_TOKEN
@@ -123,10 +130,9 @@ Echte Passwörter nicht als Kommandoargument oder in der Versionsverwaltung
 ablegen.
 
 Dies ist die erste funktionierende Authentifizierungsscheibe mit persistenten
-Sessions, datenbankgestützter Berechtigungsabfrage und rollenbasierten
-Berechtigungsgruppen. Login-Drosselung und Session-Rotation sind implementiert;
-Rollenverwaltungsseiten und automatische Rollenverwaltung bleiben zukünftige
-Arbeiten.
+Sessions, datenbankgestützter Berechtigungsabfrage, rollenbasierten
+Berechtigungsgruppen und einer opt-in Benutzer- und Rollenverwaltung.
+Login-Drosselung und Session-Rotation sind implementiert.
 
 Der Repository-Test `tests/mariadb-auth-e2e.sh` prüft diesen Ablauf gegen
 MariaDB mit zwei temporären Benutzern: anonymer Zugriff wird abgelehnt, falsche
@@ -162,3 +168,6 @@ werden die getrennten Berechtigungen `customers.create`,
 CRUD-Aktionen geprüft.
 Der gleiche Test prüft außerdem eine aktionsbezogene Berechtigung an einer
 eigenen Formularaktion.
+Er prüft zusätzlich die Browser-Administrationsseite: Benutzeranlage,
+Passwort-Zurücksetzung, Aktivierung/Deaktivierung mit Session-Entzug,
+Rollenverwaltung und den Schutz des letzten aktiven Administrators.

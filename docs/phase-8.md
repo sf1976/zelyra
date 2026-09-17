@@ -78,11 +78,17 @@ require MariaDB, validate the project schema first, and bind user IDs and
 values as SQL parameters.
 
 An optional browser administration screen is enabled by `admin_path`,
-`admin_permission`, and `admin_role` together. It lists assignments and role
-permissions and provides CSRF-protected grant/revoke forms. The configured
-administrator role cannot be removed from its last assigned user. Removing
-the last permission from that role, deleting users, and concurrent policy
-administration are not yet covered by this guard.
+`admin_permission`, and `admin_role` together. It manages users and roles:
+administrators can create users, reset passwords, activate or deactivate
+users, and grant or revoke roles and role permissions. All forms use CSRF
+protection and the declared permission guard.
+
+When the user table has an `active` column, deactivated users cannot log in;
+deactivation also removes their persistent sessions. The configured
+administrator role cannot be removed from its last active user, and the last
+active administrator cannot be deactivated. User deletion, self-service
+account management, and fully concurrency-safe policy administration are not
+covered yet.
 
 For deployments that authenticate users in a reverse proxy, the server also
 accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The
@@ -118,9 +124,9 @@ password line from standard input. Do not place real passwords in command-line
 arguments or source control.
 
 This is the first working authentication slice with persistent sessions,
-database-backed permission lookup, and role-based permission groups. Login
-throttling and session rotation are implemented; role administration screens
-and automatic role management remain future work.
+database-backed permission lookup, role-based permission groups, and opt-in
+browser user and role administration. Login throttling and session rotation
+are implemented.
 
 The repository test `tests/mariadb-auth-e2e.sh` exercises this flow against
 MariaDB with two temporary users: anonymous access is rejected, invalid
@@ -153,3 +159,6 @@ endpoints, and an authenticated user without `customers.view` receives HTTP
 `customers.create`, `customers.edit`, and `customers.delete`
 permissions on the generated CRUD actions.
 The same test also covers an action-level permission on a custom form action.
+It additionally covers the browser administration screen: user creation,
+password reset, activation/deactivation with session revocation, role
+administration, and protection of the last active administrator.

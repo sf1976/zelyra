@@ -62,7 +62,8 @@ Heute implementiert:
   Rollenberechtigungen mit Schemavalidierung und idempotenten MariaDB-
   Schreibvorgängen.
 - optionale browserbasierte Rollenverwaltung mit CSRF-Schutz,
-  Berechtigungssperren und Schutz der letzten Administrationszuordnung.
+  Berechtigungssperren, Benutzeranlage, Passwort-Zurücksetzung, Aktivierung
+  und Deaktivierung sowie Schutz der letzten Administrationszuordnung.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter

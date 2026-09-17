@@ -15,6 +15,9 @@ compiler and repository release.
   permissions with `zelyra auth role` and `zelyra auth role-permission`.
 - Added opt-in browser role administration with CSRF-protected grant/revoke
   forms and protection for the last assignment of the configured admin role.
+- Added opt-in browser user administration for creating users, resetting
+  passwords, and activating/deactivating accounts with persistent-session
+  revocation and last-active-administrator protection.
 
 ## 0.1.37 — 2026-09-17
 
