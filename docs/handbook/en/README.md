@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.28"
+version = "0.1.29"
 zelyra = "0.1"
 
 [capabilities]
@@ -715,6 +715,23 @@ records, nested records, arrays, options, and scalar values. `json_encode`
 serializes the same value families. Malformed JSON, type mismatches, unknown
 record fields, and missing required fields are explicit runtime errors.
 
+For a complete typed JSON request/response flow, use `http_json` with separate
+request and response type arguments:
+
+~~~zelyra
+struct CustomerCreate { name: String }
+struct Customer { id: Int name: String }
+
+fn create_customer(url: String, payload: CustomerCreate) -> Customer uses Network {
+    return http_json<CustomerCreate, Customer>("POST", url, [], Some(payload))
+}
+~~~
+
+The request record is serialized automatically and the response body is
+decoded into the response record. If no `Content-Type` header is supplied,
+`application/json` is added. Non-2xx responses are explicit runtime errors;
+the helper returns the decoded value rather than response headers.
+
 The Process capability exposes a shell-free command API:
 
 ~~~zelyra
@@ -876,7 +893,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.28"
+version = "0.1.29"
 zelyra = "0.1"
 
 [capabilities]

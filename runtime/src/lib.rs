@@ -3057,7 +3057,7 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
-            } else if name == "http_get" || name == "http_request" {
+            } else if matches!(name.as_str(), "http_get" | "http_request" | "http_json") {
                 require_capability(
                     "Network",
                     "network access",
@@ -3987,6 +3987,38 @@ impl<'a> Checker<'a> {
                     let source = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &source, args[0].span);
                     type_args.first().cloned().unwrap_or(Type::Unknown)
+                } else if name == "http_json" {
+                    if type_args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "http_json expects request and response type arguments",
+                        );
+                    } else {
+                        self.check_type(&type_args[0], expr.span);
+                        self.check_type(&type_args[1], expr.span);
+                    }
+                    if args.len() != 4 {
+                        self.error(
+                            expr.span,
+                            "http_json expects String method, String URL, String[] headers, and Request? body",
+                        );
+                        return Type::Unknown;
+                    }
+                    let method = self.check_expr(&args[0], scopes);
+                    let url = self.check_expr(&args[1], scopes);
+                    let headers = self.check_expr(&args[2], scopes);
+                    let body = self.check_expr(&args[3], scopes);
+                    self.expect_type(&Type::String, &method, args[0].span);
+                    self.expect_type(&Type::String, &url, args[1].span);
+                    self.expect_type(&Type::Array(Box::new(Type::String)), &headers, args[2].span);
+                    if let Some(request_type) = type_args.first() {
+                        self.expect_type(
+                            &Type::Option(Box::new(request_type.clone())),
+                            &body,
+                            args[3].span,
+                        );
+                    }
+                    type_args.get(1).cloned().unwrap_or(Type::Unknown)
                 } else if name == "http_request" {
                     if args.len() != 4 {
                         self.error(
@@ -4965,6 +4997,38 @@ impl Interpreter {
                 ("body".into(), Value::String(body)),
             ]),
         })
+    }
+
+    fn http_json(
+        &self,
+        method: &str,
+        url: &str,
+        request_headers: &[String],
+        request_body: Option<&Value>,
+        response_type: &Type,
+        span: Span,
+    ) -> Result<Value, RuntimeError> {
+        let encoded_body = request_body
+            .map(|value| self.json_encode(value, span))
+            .transpose()?;
+        let response =
+            self.http_request(method, url, request_headers, encoded_body.as_deref(), span)?;
+        let Value::Object { fields, .. } = response else {
+            return Err(self.runtime_error(span, "http_json received an invalid response"));
+        };
+        let status = match fields.get("status") {
+            Some(Value::Int(status)) => *status,
+            _ => return Err(self.runtime_error(span, "http_json received an invalid status")),
+        };
+        if !(200..300).contains(&status) {
+            return Err(
+                self.runtime_error(span, format!("http_json received HTTP status {status}"))
+            );
+        }
+        let Some(Value::String(body)) = fields.get("body") else {
+            return Err(self.runtime_error(span, "http_json received an invalid body"));
+        };
+        self.json_decode(body, response_type, span)
     }
 
     fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
@@ -5966,6 +6030,68 @@ impl Interpreter {
                         );
                     };
                     self.json_decode(&source, &type_args[0], expr.span)
+                } else if name == "http_json" {
+                    if type_args.len() != 2 || args.len() != 4 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "http_json expects request and response type arguments plus four values",
+                        ));
+                    }
+                    self.require_runtime_capability("Network", "network access", expr.span)?;
+                    let method = self.eval(&args[0], env)?;
+                    let url = self.eval(&args[1], env)?;
+                    let headers = self.eval(&args[2], env)?;
+                    let body = self.eval(&args[3], env)?;
+                    let Value::String(method) = method else {
+                        return Err(
+                            self.runtime_error(args[0].span, "http_json expects a String method")
+                        );
+                    };
+                    let Value::String(url) = url else {
+                        return Err(
+                            self.runtime_error(args[1].span, "http_json expects a String URL")
+                        );
+                    };
+                    let Value::Array(headers) = headers else {
+                        return Err(
+                            self.runtime_error(args[2].span, "http_json expects String[] headers")
+                        );
+                    };
+                    let mut header_strings = Vec::with_capacity(headers.len() + 1);
+                    let mut has_content_type = false;
+                    for header in headers {
+                        let Value::String(header) = header else {
+                            return Err(self.runtime_error(
+                                args[2].span,
+                                "http_json expects String[] headers",
+                            ));
+                        };
+                        if header.split_once(':').is_some_and(|(name, _)| {
+                            name.trim().eq_ignore_ascii_case("content-type")
+                        }) {
+                            has_content_type = true;
+                        }
+                        header_strings.push(header);
+                    }
+                    if !has_content_type {
+                        header_strings.push("Content-Type: application/json".into());
+                    }
+                    let body = match body {
+                        Value::Option(Some(body)) => Some(body),
+                        Value::Option(None) => None,
+                        _ => {
+                            return Err(self
+                                .runtime_error(args[3].span, "http_json expects a Request? body"));
+                        }
+                    };
+                    self.http_json(
+                        &method,
+                        &url,
+                        &header_strings,
+                        body.as_deref(),
+                        &type_args[1],
+                        expr.span,
+                    )
                 } else if name == "http_request" {
                     if args.len() != 4 {
                         return Err(self.runtime_error(
@@ -6795,6 +6921,17 @@ mod tests {
     }
 
     #[test]
+    fn requires_network_capability_for_http_json() {
+        let source = "struct Customer { name: String } fn main() { customer = http_json<Customer, Customer>(\"POST\", \"http://example.test\", [], None) }";
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("does not declare capability `Network`")));
+    }
+
+    #[test]
     fn performs_http_get_with_network_policy() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -6925,6 +7062,81 @@ mod tests {
         assert!(
             matches!(fields.get("headers"), Some(Value::Array(headers)) if headers.iter().any(|header| header == &Value::String("x-request-id: test-1".into())))
         );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn sends_and_decodes_typed_json_http_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 512];
+            while !request
+                .windows(b"{\"name\":\"Anna\"}".len())
+                .any(|window| window == b"{\"name\":\"Anna\"}")
+            {
+                let size = stream.read(&mut chunk).unwrap();
+                if size == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..size]);
+            }
+            let request = String::from_utf8_lossy(&request);
+            let request_lower = request.to_ascii_lowercase();
+            assert!(request.starts_with("POST /customers HTTP/1.1"));
+            assert!(request_lower.contains("content-type: application/json"));
+            assert!(request.contains("{\"name\":\"Anna\"}"));
+            let body = b"{\"id\":42,\"name\":\"Anna\"}";
+            let response = format!(
+                "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                String::from_utf8_lossy(body)
+            );
+            std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
+        });
+        let source = r#"
+            struct CustomerCreate { name: String }
+            struct Customer { id: Int name: String }
+            fn create(url: String, payload: CustomerCreate) -> Customer uses Network {
+                return http_json<CustomerCreate, Customer>("POST", url, [], Some(payload))
+            }
+            fn main() { }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+        let grants = HashSet::from([String::from("Network")]);
+        let policy = RuntimePolicy {
+            filesystem: None,
+            network: Some(NetworkPolicy {
+                allowed_hosts: vec![format!("127.0.0.1:{port}")],
+                timeout_ms: 1_000,
+                max_response_bytes: 100,
+            }),
+            process: None,
+        };
+        let customer = execute_function_with_capabilities_and_policies(
+            &program,
+            "create",
+            vec![
+                Value::String(format!("http://127.0.0.1:{port}/customers")),
+                Value::Object {
+                    type_name: "CustomerCreate".into(),
+                    fields: HashMap::from([(String::from("name"), Value::String("Anna".into()))]),
+                },
+            ],
+            None,
+            Some(&grants),
+            Some(&policy),
+        )
+        .unwrap();
+        let Value::Object { fields, .. } = customer else {
+            panic!("expected decoded Customer object");
+        };
+        assert_eq!(fields.get("id"), Some(&Value::Int(42)));
+        assert_eq!(fields.get("name"), Some(&Value::String("Anna".into())));
         server.join().unwrap();
     }
 

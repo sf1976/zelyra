@@ -170,6 +170,24 @@ Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
 zu JSON `null`. Ungültiges JSON, Typfehler, unbekannte Record-Felder und
 fehlende Pflichtfelder werden als ausdrückliche Laufzeitfehler gemeldet.
 
+Für einen vollständigen typisierten JSON-Request-/Response-Ablauf gibt es
+`http_json` mit getrennten Request- und Response-Typargumenten:
+
+~~~zelyra
+struct CustomerCreate { name: String }
+struct Customer { id: Int name: String }
+
+fn create_customer(url: String, payload: CustomerCreate) -> Customer uses Network {
+    return http_json<CustomerCreate, Customer>("POST", url, [], Some(payload))
+}
+~~~
+
+Der Request-Record wird automatisch serialisiert und der Response-Body in den
+Response-Record dekodiert. Wenn kein `Content-Type` angegeben ist, wird
+`application/json` ergänzt. Nicht-2xx-Antworten bleiben ausdrückliche
+Laufzeitfehler; der Helper liefert den dekodierten Wert und nicht die
+Response-Header zurück.
+
 Die Process-Capability stellt eine bewusst enge Befehls-API bereit:
 
 ~~~zelyra

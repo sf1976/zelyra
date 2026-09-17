@@ -1304,7 +1304,9 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
-                let type_args = if name == "json_decode" && self.at(&TokenKind::Less) {
+                let type_args = if matches!(name.as_str(), "json_decode" | "http_json")
+                    && self.at(&TokenKind::Less)
+                {
                     self.advance();
                     let mut type_args = Vec::new();
                     loop {

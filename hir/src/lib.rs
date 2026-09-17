@@ -569,6 +569,7 @@ impl<'a> Resolver<'a> {
                             | "http_request"
                             | "json_encode"
                             | "json_decode"
+                            | "http_json"
                             | "run_process"
                             | "read_text"
                             | "write_text"

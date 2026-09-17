@@ -1,0 +1,20 @@
+struct CustomerCreate {
+    name: String
+}
+
+struct Customer {
+    id: Int
+    name: String
+}
+
+fn create_customer(url: String, payload: CustomerCreate) -> Customer uses Network {
+    return http_json<CustomerCreate, Customer>(
+        "POST",
+        url,
+        [],
+        Some(payload)
+    )
+}
+
+fn main() {
+}

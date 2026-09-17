@@ -79,6 +79,8 @@ Das aktuelle Repository enthält:
   Ergebnissen;
 - json_encode(value) und json_decode<Typ>(text) für geprüfte JSON-Konvertierung
   von Records, Arrays, Optionen und Skalarwerten;
+- http_json<Request, Response>(...) für automatische typisierte JSON-HTTP-
+  Anfragen und -Antworten;
 - run_process(command, args) über Process ohne Shell, mit exakter
   Befehls-Allowlist und begrenzter Ausführung;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
@@ -280,7 +282,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.28"
+version = "0.1.29"
 zelyra = "0.1"
 
 [capabilities]

@@ -74,6 +74,8 @@ The current repository contains:
 - http_request(method, url, headers, body) with typed HttpResponse results;
 - json_encode(value) and json_decode<Type>(text) for checked JSON conversion
   of records, arrays, options, and scalar values;
+- http_json<Request, Response>(...) for automatic typed JSON HTTP requests and
+  responses;
 - run_process(command, args) through Process without a shell, using an exact
   command allowlist and bounded execution;
 - runtime-checked function contracts using `requires` and `ensures`.
@@ -270,7 +272,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.28"
+version = "0.1.29"
 zelyra = "0.1"
 
 [capabilities]

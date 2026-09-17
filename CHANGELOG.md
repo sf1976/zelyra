@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.29 — 2026-09-17
+
+### Added
+
+- Added `http_json<Request, Response>(method, url, headers, body)` for
+  automatic JSON encoding of request records and typed response decoding.
+- Added automatic `Content-Type: application/json` when no content type is
+  supplied, while preserving the existing Network policy and response limits.
+- Added end-to-end local HTTP coverage and synchronized examples and docs.
+
+### Known limitations
+
+- `http_json` treats non-2xx responses as runtime errors and currently returns
+  the decoded response value without exposing response headers to the caller.
+
 ## 0.1.28 — 2026-09-17
 
 ### Added

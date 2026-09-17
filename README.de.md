@@ -83,6 +83,8 @@ Heute implementiert:
 - http_request(method, url, headers, body) mit typisierten HttpResponse-Werten;
 - json_encode(value) und json_decode<Typ>(text) für geprüfte JSON-Konvertierung
   von Records, Arrays, Optionen und Skalarwerten;
+- http_json<Request, Response>(...) für automatische typisierte JSON-HTTP-
+  Anfragen und -Antworten;
 - run_process(command, args) über Process mit exakter Befehls-Allowlist,
   ohne Shell, Timeout und begrenzter Ausgabe;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
