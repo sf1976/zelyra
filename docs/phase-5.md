@@ -40,4 +40,24 @@ stripping, basic HTTP request parsing, and HTML responses. Sessions, cookies,
 CSRF protection, forms, static files, API declarations, and live
 database-backed page data are subsequent phases.
 
+Named views provide the first composition layer for custom page design:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+Each named view must contain exactly one `<slot />`. The page's HTML is inserted
+into that slot before the route is created. This keeps layout customization
+separate from authentication, routing, and output escaping. Multiple slots,
+typed components, styling, and CRUD view overrides are planned next.
+
 Apache is not required for local development or this standalone server.

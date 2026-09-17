@@ -29,6 +29,7 @@ pub enum TokenKind {
     Match,
     Sql,
     Page,
+    View,
     Html,
     Form,
     Crud,
@@ -186,6 +187,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "engine" => TokenKind::Engine,
                 "postgres" => TokenKind::Postgres,
                 "page" => TokenKind::Page,
+                "view" => TokenKind::View,
                 "html" => TokenKind::Html,
                 "form" => TokenKind::Form,
                 "crud" => TokenKind::Crud,
@@ -596,5 +598,13 @@ mod tests {
             &token.kind,
             TokenKind::HtmlBody(body) if body.contains("{name}")
         )));
+    }
+
+    #[test]
+    fn lexes_named_view_keyword() {
+        assert!(matches!(
+            lex("view AppShell { html { <slot /> } }").unwrap()[0].kind,
+            TokenKind::View
+        ));
     }
 }

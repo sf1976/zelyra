@@ -84,6 +84,7 @@ pub struct Program {
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
     pub records: Vec<RecordDef>,
+    pub views: Vec<ViewDef>,
     pub pages: Vec<PageDef>,
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
@@ -96,8 +97,16 @@ pub struct Program {
 pub struct PageDef {
     pub path: String,
     pub html: String,
+    pub view: Option<String>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewDef {
+    pub name: String,
+    pub html: String,
     pub span: Span,
 }
 

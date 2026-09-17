@@ -8,6 +8,8 @@ compiler and repository release.
 
 ### Added
 
+- Added named web views with page-level `view: Name` composition and a
+  compiler-validated `<slot />` content boundary.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

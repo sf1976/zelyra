@@ -208,6 +208,9 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
         return Err(());
     }
+    if !validate_views(path, &program) {
+        return Err(());
+    }
     if let Ok(schema) = build_schema(&program) {
         if !validate_auth(path, &program, &schema) {
             return Err(());
@@ -241,6 +244,52 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    let mut names = HashSet::new();
+    for view in &program.views {
+        if !names.insert(view.name.as_str()) {
+            diagnostic(
+                path,
+                "E-VIEW-001",
+                &format!("duplicate view definition `{}`", view.name),
+                view.span.line,
+                view.span.column,
+            );
+            valid = false;
+        }
+        let slots = view.html.matches("<slot />").count();
+        if slots != 1 {
+            diagnostic(
+                path,
+                "E-VIEW-002",
+                &format!(
+                    "view `{}` must contain exactly one `<slot />` content slot (found {slots})",
+                    view.name
+                ),
+                view.span.line,
+                view.span.column,
+            );
+            valid = false;
+        }
+    }
+    for page in &program.pages {
+        if let Some(view_name) = &page.view {
+            if !program.views.iter().any(|view| view.name == *view_name) {
+                diagnostic(
+                    path,
+                    "E-VIEW-003",
+                    &format!("page `{}` refers to unknown view `{view_name}`", page.path),
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            }
+        }
+    }
+    valid
 }
 
 fn verify_command(path: &str, json: bool) -> ExitCode {
@@ -2301,7 +2350,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .iter()
         .map(|page| Route {
             path: page.path.clone(),
-            html: page.html.clone(),
+            html: compose_page_view(&program, page),
             requires_auth: page.requires_auth,
             permissions: page.permissions.clone(),
         })
@@ -3004,6 +3053,18 @@ fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
         })
         .map(|column| column.name.clone())
         .unwrap_or_else(|| field.into())
+}
+
+fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
+    let Some(view_name) = page.view.as_deref() else {
+        return page.html.clone();
+    };
+    let view = program
+        .views
+        .iter()
+        .find(|view| view.name == view_name)
+        .expect("page views are validated before route generation");
+    view.html.replace("<slot />", &page.html)
 }
 
 fn quote_identifier(identifier: &str) -> String {
@@ -3984,6 +4045,40 @@ mod tests {
         assert!(
             audit_rows_csv(&result).contains("\"email=anna@example.test;note=\"\"unknown\"\"\"")
         );
+    }
+
+    #[test]
+    fn composes_a_page_inside_its_named_view() {
+        let source = r#"
+            view Shell {
+                html { <body><slot /></body> }
+            }
+            page "/hello/{name}" {
+                view: Shell
+                html { <h1>Hello, {name}!</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<body>"));
+        assert!(html.contains("<h1>Hello, {name}!</h1>"));
+        assert!(!html.contains("<slot />"));
+    }
+
+    #[test]
+    fn rejects_invalid_named_view_composition() {
+        let source = r#"
+            view Shell {
+                html { <body>No content slot</body> }
+            }
+            page "/customers" {
+                view: MissingShell
+                html { <h1>Customers</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
     }
 
     #[test]

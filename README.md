@@ -22,6 +22,9 @@ Zelyra 0.1 is an active early implementation. The repository is real,
 buildable, tested Rust code, but the complete long-term language specification
 is not implemented yet.
 
+See the maintained [roadmap](ROADMAP.md) for required and optional future
+work, including the Views System and cryptographic audit chaining.
+
 ## License and implementation
 
 Zelyra is implemented in Rust. Rust is used as the implementation language;
@@ -43,8 +46,8 @@ Implemented today:
 - MariaDB database inspection, schema application, and native SQL runtime
   execution;
 - native SQL blocks with schema, column, parameter, and result checks;
-- an initial Web Core with page definitions, GET routing, path parameters, and
-  a built-in HTTP server;
+- an initial Web Core with page definitions, reusable named views with content
+  slots, GET routing, path parameters, and a built-in HTTP server;
 - an initial Forms Core with schema-aware field definitions and validation;
 - validated form actions with safe MariaDB parameter binding, transactions,
   HTTP redirects, and action-level authentication/permission checks.
@@ -208,6 +211,27 @@ Open http://127.0.0.1:3000/hello/Zelyra. Route parameters are HTML-escaped by
 default. The current Web Core supports the first safe vertical slice: GET
 routes, path parameters, query-string handling, request parsing, and HTML
 responses.
+
+Reusable views let a page customize its own content while sharing a safe
+application shell:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+The compiler requires exactly one `<slot />` in every named view. The page
+content is composed into that slot before routing, so authentication and
+escaping continue to use the existing web pipeline. See
+`examples/views.zyl` for a complete example.
 
 ## A first schema-aware form
 

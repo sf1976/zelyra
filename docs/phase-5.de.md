@@ -44,3 +44,25 @@ Phasen.
 
 Für lokale Entwicklung oder diesen eigenständigen Server ist Apache nicht
 erforderlich.
+
+Benannte Views bilden die erste Kompositionsschicht für individuelle
+Seitengestaltung:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+Jeder benannte View muss genau einen `<slot />` enthalten. Das HTML der Seite
+wird vor dem Erzeugen der Route in diesen Slot eingesetzt. So bleibt die
+Layout-Anpassung von Authentifizierung, Routing und Output-Escaping getrennt.
+Mehrere Slots, typisierte Komponenten, Styling und CRUD-spezifische
+Überschreibungen sind als nächste Ausbaustufen geplant.

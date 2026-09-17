@@ -71,6 +71,10 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok(("audit".into(), span))
             }
+            TokenKind::View => {
+                let span = self.advance().span;
+                Ok(("view".into(), span))
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -79,6 +83,7 @@ impl<'a> Parser<'a> {
         let mut tables = Vec::new();
         let mut types = Vec::new();
         let mut records = Vec::new();
+        let mut views = Vec::new();
         let mut pages = Vec::new();
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
@@ -95,6 +100,8 @@ impl<'a> Parser<'a> {
                 types.push(self.type_definition()?);
             } else if self.at(&TokenKind::Struct) {
                 records.push(self.record_definition()?);
+            } else if self.at(&TokenKind::View) {
+                views.push(self.view_definition()?);
             } else if self.at(&TokenKind::Page) {
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::Form) {
@@ -115,6 +122,7 @@ impl<'a> Parser<'a> {
             tables,
             types,
             records,
+            views,
             pages,
             forms,
             cruds,
@@ -345,6 +353,10 @@ impl<'a> Parser<'a> {
                                 self.advance();
                                 Some(scope)
                             }
+                            TokenKind::View => {
+                                self.advance();
+                                Some("view".into())
+                            }
                             _ => None,
                         };
                         let permission = self.string_value("permission")?;
@@ -469,11 +481,16 @@ impl<'a> Parser<'a> {
         let path = self.string_value("page path")?;
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
+        let mut view = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Html) {
+            if self.at(&TokenKind::View) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after `view`")?;
+                view = Some(self.ident("view name")?.0);
+            } else if self.at(&TokenKind::Html) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `html`")?;
                 let body = match self.current().kind.clone() {
@@ -504,8 +521,44 @@ impl<'a> Parser<'a> {
         Ok(PageDef {
             path,
             html,
+            view,
             requires_auth,
             permissions,
+            span: start.join(end),
+        })
+    }
+
+    fn view_definition(&mut self) -> Result<ViewDef, ParseError> {
+        let start = self.expect(TokenKind::View, "`view`")?;
+        let (name, _) = self.ident("view name")?;
+        self.expect(TokenKind::LBrace, "`{` after view name")?;
+        let mut html = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if self.at(&TokenKind::Html) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `html`")?;
+                let body = match self.current().kind.clone() {
+                    TokenKind::HtmlBody(body) => {
+                        self.advance();
+                        body
+                    }
+                    _ => return self.error("expected HTML body"),
+                };
+                self.expect(TokenKind::RBrace, "`}` after HTML body")?;
+                html = Some(body);
+            } else {
+                return self.error("expected `html` in view definition");
+            }
+            self.skip_newlines();
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after view definition")?;
+        let Some(html) = html else {
+            return self.error("view definition requires an `html` block");
+        };
+        Ok(ViewDef {
+            name,
+            html,
             span: start.join(end),
         })
     }
@@ -1614,6 +1667,28 @@ mod tests {
         assert_eq!(program.pages.len(), 1);
         assert_eq!(program.pages[0].path, "/hello/{name}");
         assert!(program.pages[0].html.contains("{name}"));
+    }
+
+    #[test]
+    fn parses_named_view_and_page_view_assignment() {
+        let source = r#"
+            view AppShell {
+                html {
+                    <html><body><main><slot /></main></body></html>
+                }
+            }
+            page "/customers" {
+                view: AppShell
+                html {
+                    <h1>Customers</h1>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.views.len(), 1);
+        assert_eq!(program.views[0].name, "AppShell");
+        assert!(program.views[0].html.contains("<slot />"));
+        assert_eq!(program.pages[0].view.as_deref(), Some("AppShell"));
     }
 
     #[test]

@@ -23,6 +23,10 @@ Zelyra 0.1 ist eine aktive frühe Implementierung. Das Repository enthält echte
 kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
 Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
 
+Die gepflegte [Roadmap](ROADMAP.de.md) enthält alle geplanten Pflicht- und
+optionalen Arbeiten, einschließlich Views-System und kryptografischer
+Audit-Verkettung.
+
 ## Lizenz und Implementierung
 
 Zelyra ist in Rust implementiert. Rust ist die Implementierungssprache;
@@ -213,6 +217,27 @@ http://127.0.0.1:3000/hello/Zelyra öffnen. Routenparameter werden standardmäß
 HTML-escaped. Der aktuelle Web Core unterstützt den ersten sicheren vertikalen
 Schritt: GET-Routen, Pfadparameter, Query-String-Verarbeitung, Request-Parsing
 und HTML-Responses.
+
+Wiederverwendbare Views ermöglichen individuelle Seiteninhalte bei gemeinsamem
+Anwendungsrahmen:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+Der Compiler verlangt in jedem benannten View genau einen `<slot />`-Slot. Der
+Seiteninhalt wird vor dem Routing in diesen Slot eingesetzt; Authentifizierung
+und Escaping bleiben dadurch in der bestehenden sicheren Web-Pipeline. Ein
+vollständiges Beispiel steht in `examples/views.zyl`.
 
 ## Ein erstes schemaabhängiges Formular
 

@@ -460,6 +460,29 @@ GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und
 HTML-Antworten. Ein vollständiges Komponenten- und Client-State-System steht
 auf der Roadmap.
 
+### Wiederverwendbare Views
+
+Benannte Views bilden eine sichere Layout-Grenze für die individuelle
+Seitengestaltung:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><header>Zelyra</header><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+Der Compiler verlangt in einem benannten View genau einen `<slot />`. Der
+Seiteninhalt wird vor dem Routing eingesetzt; Authentifizierung,
+Autorisierung und Escaping bleiben aktiv. Typisierte Komponenten, benannte
+Slots, Themes und CRUD-View-Überschreibungen sind geplante Erweiterungen.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

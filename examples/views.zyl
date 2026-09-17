@@ -1,0 +1,27 @@
+view SiteShell {
+    html {
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <title>Zelyra view</title>
+            </head>
+            <body>
+                <header><strong>Zelyra</strong></header>
+                <main><slot /></main>
+                <footer>Describe intent. Prove correctness.</footer>
+            </body>
+        </html>
+    }
+}
+
+page "/hello/{name}" {
+    view: SiteShell
+    html {
+        <h1>Hello, {name}!</h1>
+        <p>This page is composed inside a reusable view.</p>
+    }
+}
+
+fn main() {
+    print("Run: zelyra serve examples/views.zyl")
+}

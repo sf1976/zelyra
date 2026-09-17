@@ -406,6 +406,28 @@ Path values are HTML-escaped by default. The current Web Core includes GET
 routes, path parameters, query-string handling, HTTP parsing, and HTML
 responses. A full component and client-state system remains on the roadmap.
 
+### Reusable views
+
+Named views provide a safe layout boundary for page-specific design:
+
+~~~zelyra
+view SiteShell {
+    html {
+        <html><body><header>Zelyra</header><main><slot /></main></body></html>
+    }
+}
+
+page "/customers" {
+    view: SiteShell
+    html { <h1>Customers</h1> }
+}
+~~~
+
+The compiler requires exactly one `<slot />` in a named view. The page content
+is inserted before routing, while existing authentication, authorization, and
+escaping remain active. Typed components, named slots, themes, and CRUD view
+overrides are planned extensions.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:
