@@ -57,6 +57,8 @@ pub enum TokenKind {
     Success,
     Redirect,
     Transaction,
+    Parallel,
+    Await,
     Uses,
     Ensures,
     True,
@@ -225,6 +227,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "match" => TokenKind::Match,
                 "sql" => TokenKind::Sql,
                 "transaction" => TokenKind::Transaction,
+                "parallel" => TokenKind::Parallel,
+                "await" => TokenKind::Await,
                 "uses" => TokenKind::Uses,
                 "ensures" => TokenKind::Ensures,
                 "true" => TokenKind::True,
@@ -519,6 +523,13 @@ mod tests {
         let tokens = lex("fn main() { return 1 + 2 >= 3 }").unwrap();
         assert!(tokens.iter().any(|t| t.kind == TokenKind::Fn));
         assert!(tokens.iter().any(|t| t.kind == TokenKind::GreaterEqual));
+    }
+
+    #[test]
+    fn lexes_parallel_and_await_keywords() {
+        let tokens = lex("parallel { value = await load() }").unwrap();
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Parallel));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Await));
     }
 
     #[test]

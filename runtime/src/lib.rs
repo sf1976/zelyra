@@ -1351,7 +1351,8 @@ fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
             Stmt::While { body, .. }
             | Stmt::For { body, .. }
             | Stmt::Loop { body, .. }
-            | Stmt::Transaction { body, .. } => collect_loop_modified_names(body, names),
+            | Stmt::Transaction { body, .. }
+            | Stmt::Parallel { body, .. } => collect_loop_modified_names(body, names),
             Stmt::Match { arms, .. } => {
                 for arm in arms {
                     collect_loop_modified_names(&arm.body, names);
@@ -1399,7 +1400,9 @@ fn collect_loop_invariants<'a>(block: &'a Block, loops: &mut Vec<(usize, &'a [Ex
                 }
             }
             Stmt::For { body, .. } => collect_loop_invariants(body, loops),
-            Stmt::Transaction { body, .. } => collect_loop_invariants(body, loops),
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                collect_loop_invariants(body, loops)
+            }
             Stmt::Let { .. }
             | Stmt::BindOrAssign { .. }
             | Stmt::Expr(_)
@@ -1430,6 +1433,7 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
             expression_contains_variable(target, name) || expression_contains_variable(index, name)
         }
         ExprKind::Field { target, .. } => expression_contains_variable(target, name),
+        ExprKind::Await(inner) => expression_contains_variable(inner, name),
         ExprKind::Int(..)
         | ExprKind::UInt(..)
         | ExprKind::Float(..)
@@ -2798,7 +2802,8 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
         | ExprKind::Field { .. }
         | ExprKind::Variable(_)
         | ExprKind::Call { .. }
-        | ExprKind::Sql { .. } => None,
+        | ExprKind::Sql { .. }
+        | ExprKind::Await(_) => None,
     }
 }
 
@@ -2993,6 +2998,9 @@ fn check_capability_block(
             Stmt::Transaction { body, .. } => {
                 check_capability_block(body, function, functions, declared, errors);
             }
+            Stmt::Parallel { body, .. } => {
+                check_capability_block(body, function, functions, declared, errors);
+            }
         }
     }
 }
@@ -3057,6 +3065,9 @@ fn check_capability_expr(
         ExprKind::Field { target, .. } => {
             check_capability_expr(target, function, functions, declared, errors);
         }
+        ExprKind::Await(inner) => {
+            check_capability_expr(inner, function, functions, declared, errors);
+        }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
         | ExprKind::Float(..)
@@ -3103,6 +3114,7 @@ struct Checker<'a> {
     known_types: std::collections::HashSet<String>,
     errors: Vec<TypeError>,
     loop_depth: usize,
+    parallel_depth: usize,
     _program: &'a Program,
 }
 
@@ -3204,6 +3216,7 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
         known_types,
         errors,
         loop_depth: 0,
+        parallel_depth: 0,
         _program: program,
     };
     for function in &program.functions {
@@ -3458,6 +3471,48 @@ impl<'a> Checker<'a> {
                 self.check_exhaustiveness(&value_type, &covered, *span);
             }
             Stmt::Transaction { body, .. } => self.check_block(body, scopes, expected),
+            Stmt::Parallel { body, span } => {
+                let mut names = HashSet::new();
+                let mut new_bindings = Vec::new();
+                self.parallel_depth += 1;
+                for statement in &body.statements {
+                    let Stmt::BindOrAssign { name, value, span } = statement else {
+                        self.error(
+                            *span,
+                            "parallel blocks may contain only `name = await expression` bindings",
+                        );
+                        continue;
+                    };
+                    if !matches!(&value.kind, ExprKind::Await(_)) {
+                        self.error(value.span, "parallel bindings must await their expression");
+                    }
+                    if !names.insert(name.clone()) {
+                        self.error(
+                            *span,
+                            format!("parallel binding `{name}` is declared twice"),
+                        );
+                    }
+                    let actual = self.check_expr(value, scopes);
+                    if let Some(existing) = self.lookup(scopes, name).cloned() {
+                        if !existing.mutable {
+                            self.error(
+                                *span,
+                                format!("cannot assign to immutable variable `{name}`"),
+                            );
+                        }
+                        self.expect_type(&existing.ty, &actual, value.span);
+                    } else {
+                        new_bindings.push((name.clone(), actual));
+                    }
+                }
+                self.parallel_depth -= 1;
+                for (name, ty) in new_bindings {
+                    scopes
+                        .last_mut()
+                        .unwrap()
+                        .insert(name, Variable { ty, mutable: false });
+                }
+            }
         }
     }
     fn check_type(&mut self, ty: &Type, span: Span) {
@@ -3895,6 +3950,12 @@ impl<'a> Checker<'a> {
                 self.check_type(result_type, expr.span);
                 result_type.clone()
             }
+            ExprKind::Await(inner) => {
+                if self.parallel_depth == 0 {
+                    self.error(expr.span, "`await` is only valid inside a `parallel` block");
+                }
+                self.check_expr(inner, scopes)
+            }
         }
     }
     fn numeric_result(&mut self, left: &Type, right: &Type, span: Span) -> Type {
@@ -4112,6 +4173,7 @@ struct RuntimeVariable {
     mutable: bool,
 }
 
+#[derive(Clone)]
 struct Environment {
     scopes: Vec<HashMap<String, RuntimeVariable>>,
 }
@@ -4478,6 +4540,88 @@ impl Interpreter {
                 )?;
                 Ok(Flow::Continue)
             }
+            Stmt::Parallel { body, span } => {
+                let mut branches = Vec::new();
+                let mut names = HashSet::new();
+                for statement in &body.statements {
+                    let Stmt::BindOrAssign { name, value, .. } = statement else {
+                        return Err(self.runtime_error(
+                            *span,
+                            "parallel blocks may contain only `name = await expression` bindings",
+                        ));
+                    };
+                    let ExprKind::Await(inner) = &value.kind else {
+                        return Err(self.runtime_error(
+                            value.span,
+                            "parallel bindings must await their expression",
+                        ));
+                    };
+                    if !names.insert(name.clone()) {
+                        return Err(self.runtime_error(
+                            value.span,
+                            format!("parallel binding `{name}` is declared twice"),
+                        ));
+                    }
+                    branches.push((name.clone(), (**inner).clone(), value.span));
+                }
+                let handles = branches
+                    .into_iter()
+                    .map(|(name, expression, span)| {
+                        let mut child = Interpreter {
+                            functions: self.functions.clone(),
+                            output: Vec::new(),
+                            steps: 0,
+                            database_url: self.database_url.clone(),
+                        };
+                        let mut child_env = env.clone();
+                        std::thread::spawn(move || {
+                            child
+                                .eval(&expression, &mut child_env)
+                                .map(|value| (name, value, child.output))
+                                .map_err(|error| (span, error))
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let mut results = Vec::new();
+                let mut first_error = None;
+                for handle in handles {
+                    match handle.join() {
+                        Ok(Ok(result)) => results.push(result),
+                        Ok(Err((_, error))) => {
+                            if first_error.is_none() {
+                                first_error = Some(error);
+                            }
+                        }
+                        Err(_) => {
+                            if first_error.is_none() {
+                                first_error =
+                                    Some(self.runtime_error(*span, "parallel task panicked"));
+                            }
+                        }
+                    }
+                }
+                if let Some(error) = first_error {
+                    return Err(error);
+                }
+                for (name, value, output) in results {
+                    self.output.extend(output);
+                    if env.contains(&name) {
+                        env.assign(&name, value).map_err(|reason| {
+                            self.runtime_error(
+                                *span,
+                                if reason == "immutable" {
+                                    format!("cannot assign to immutable variable `{name}`")
+                                } else {
+                                    format!("unknown variable `{name}`")
+                                },
+                            )
+                        })?;
+                    } else {
+                        env.declare(name, value, false);
+                    }
+                }
+                Ok(Flow::Continue)
+            }
         }
     }
     fn expect_bool(&self, value: Value, span: Span) -> Result<bool, RuntimeError> {
@@ -4705,6 +4849,7 @@ impl Interpreter {
                     rows: result.rows,
                 })
             }
+            ExprKind::Await(inner) => self.eval(inner, env),
         }
     }
     fn binary(
@@ -4947,6 +5092,39 @@ mod tests {
             "fn main() { mutable total = 0 for value in [1, 2, 3, 4] { if value == 2 { continue } if value == 4 { break } total = total + value } print(total) }",
         );
         assert_eq!(output, ["4"]);
+    }
+
+    #[test]
+    fn executes_parallel_await_bindings_and_merges_results() {
+        let output = run(
+            "fn load_customer() -> String { return \"customer\" } fn load_orders() -> Int { return 3 } fn main() { parallel { customer = await load_customer() orders = await load_orders() } print(customer) print(orders) }",
+        );
+        assert_eq!(output, ["customer", "3"]);
+    }
+
+    #[test]
+    fn rejects_await_outside_parallel_block() {
+        let program = parse(
+            &lex("fn load() -> Int { return 1 } fn main() { value = await load() }").unwrap(),
+        )
+        .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors.iter().any(|error| error
+            .message
+            .contains("only valid inside a `parallel` block")));
+    }
+
+    #[test]
+    fn rejects_parallel_bindings_without_await() {
+        let program = parse(
+            &lex("fn load() -> Int { return 1 } fn main() { parallel { value = load() } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("must await their expression")));
     }
 
     #[test]

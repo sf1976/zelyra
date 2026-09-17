@@ -71,6 +71,9 @@ Heute implementiert:
   `zelyra.toml`.
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
+- einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
+  `await`: Branches laufen mit unveränderlichem Umgebungs-Snapshot, werden vor
+  der Fortsetzung zusammengeführt und in Quellreihenfolge übernommen;
 - ein erster `zelyra verify`-Befehl, der Contract-Ausdrücke zwischen `PROVEN`,
   `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` unterscheidet, einschließlich
   einfacher symbolischer Integer-Beziehungen bei direkten Rückgaben,
@@ -394,9 +397,9 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.
 9. Capabilities und Contracts — erste Deklarationen, statische Prüfungen,
-   Runtime-Contracts und begrenzte symbolische Verifikation sind vorhanden;
-   Runtime-Rechte, allgemeine formale Verifikation und strukturierte
-   Nebenläufigkeit folgen.
+   Runtime-Contracts, begrenzte symbolische Verifikation sowie ein erster
+   `parallel`/`await`-Baustein für strukturierte Nebenläufigkeit sind vorhanden;
+   Runtime-Rechte und allgemeine formale Verifikation folgen.
 10. Typisierte API-Deklarationen, ausführbare Handler, API-Authentifizierung
     und Berechtigungen sowie OpenAPI-3.0.3-Erzeugung sind vorhanden; Client
     State, WebAssembly und Optimierungsschnittstellen folgen.

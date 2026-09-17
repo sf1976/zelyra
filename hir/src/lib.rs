@@ -116,6 +116,10 @@ pub enum HirStmt {
         body: HirBlock,
         span: Span,
     },
+    Parallel {
+        body: HirBlock,
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -194,6 +198,7 @@ pub enum HirExprKind {
         result_type: Type,
         query: String,
     },
+    Await(Box<HirExpr>),
 }
 
 pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
@@ -444,6 +449,43 @@ impl<'a> Resolver<'a> {
                 body: self.block(body),
                 span: *span,
             },
+            Stmt::Parallel { body, span } => {
+                let statements = body
+                    .statements
+                    .iter()
+                    .map(|statement| match statement {
+                        Stmt::BindOrAssign { name, value, span } => {
+                            let value = self.expr(value);
+                            if let Some(local) = self.lookup(name) {
+                                HirStmt::Assign {
+                                    name: name.clone(),
+                                    local,
+                                    value,
+                                    span: *span,
+                                }
+                            } else {
+                                let local = self.bind(name.clone(), *span);
+                                HirStmt::Let {
+                                    name: name.clone(),
+                                    local,
+                                    ty: None,
+                                    value,
+                                    mutable: false,
+                                    span: *span,
+                                }
+                            }
+                        }
+                        statement => self.statement(statement),
+                    })
+                    .collect();
+                HirStmt::Parallel {
+                    body: HirBlock {
+                        statements,
+                        span: body.span,
+                    },
+                    span: *span,
+                }
+            }
         }
     }
     fn pattern(&mut self, pattern: &Pattern) -> HirPattern {
@@ -545,6 +587,7 @@ impl<'a> Resolver<'a> {
                 result_type: result_type.clone(),
                 query: query.clone(),
             },
+            ExprKind::Await(inner) => HirExprKind::Await(Box::new(self.expr(inner))),
         };
         HirExpr {
             kind,
@@ -621,6 +664,20 @@ mod tests {
         assert!(matches!(
             hir.functions[0].body.statements[6],
             HirStmt::For { ref name, .. } if name == "item"
+        ));
+    }
+
+    #[test]
+    fn lowers_parallel_await_bindings() {
+        let program = parse(
+            &lex("fn load() -> Int { return 1 } fn main() { parallel { value = await load() } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[1].body.statements[0],
+            HirStmt::Parallel { .. }
         ));
     }
 }

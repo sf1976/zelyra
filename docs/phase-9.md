@@ -55,8 +55,26 @@ there. A missing entry or `false` value is denied by `zelyra check`, `build`,
 single-file development behavior and only receive declaration checking.
 
 This phase does not yet grant operating-system privileges or implement network
-and file APIs. Runtime capability enforcement for those APIs and
-capability-aware concurrency remain future work.
+and file APIs. Runtime capability enforcement for those APIs remains future
+work.
+
+The first structured-concurrency slice is available through `parallel` and
+`await`:
+
+~~~zelyra
+parallel {
+    customer = await load_customer()
+    orders = await load_orders()
+}
+~~~
+
+Each branch must bind a distinct result with `await`. Branches receive an
+immutable snapshot of the surrounding state and are joined before execution
+continues. Results are merged in source order, and a failed branch causes the
+whole block to fail after all branches have been joined. `await` outside a
+`parallel` block is rejected by the type checker. This initial runtime uses
+one worker thread per branch; cancellation and database connection-pool
+integration remain future work.
 
 ## Diagnostics
 

@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]
@@ -788,7 +788,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]
@@ -874,7 +874,7 @@ Die wichtigsten geplanten Bereiche:
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
 - umfangreichere fachliche Fehlerwerte und weitergehende Request-/Response-Verarbeitung zur Laufzeit;
-- strukturierte Nebenläufigkeit;
+- Abbruch und Datenbank-Pool-Integration für strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.
 

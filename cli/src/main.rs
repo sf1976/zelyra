@@ -48,9 +48,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.12\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.13\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.12\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.13\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -70,7 +70,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.12\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.13\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",

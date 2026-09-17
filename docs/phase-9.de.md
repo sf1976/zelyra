@@ -57,8 +57,27 @@ ohne Projektdatei behalten das Entwicklungsverhalten und prüfen nur die
 Deklaration.
 
 Diese Phase vergibt noch keine Betriebssystemrechte und implementiert noch
-keine Netzwerk- oder Datei-APIs. Runtime-Durchsetzung für diese APIs und
-capability-bewusste Nebenläufigkeit folgen später.
+keine Netzwerk- oder Datei-APIs. Runtime-Durchsetzung für diese APIs bleibt
+eine zukünftige Aufgabe.
+
+Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
+verfügbar:
+
+~~~zelyra
+parallel {
+    customer = await load_customer()
+    orders = await load_orders()
+}
+~~~
+
+Jeder Zweig muss ein eigenes Ergebnis mit `await` binden. Die Zweige erhalten
+eine unveränderliche Momentaufnahme des umgebenden Zustands und werden vor dem
+Fortsetzen der Ausführung zusammengeführt. Ergebnisse werden in
+Quelltextreihenfolge übernommen; ein Fehler in einem Zweig lässt den gesamten
+Block fehlschlagen, nachdem alle Zweige beendet wurden. `await` außerhalb eines
+`parallel`-Blocks weist der Type Checker zurück. Diese erste Runtime verwendet
+einen Worker-Thread pro Zweig; Abbruch und Integration in den Datenbank-
+Connection-Pool bleiben zukünftige Aufgaben.
 
 ## Diagnosen
 

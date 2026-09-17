@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]
@@ -724,7 +724,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]
@@ -794,7 +794,7 @@ Major planned areas include:
 - typed connections and secret providers;
 - ODBC and external read-only databases;
 - richer domain-error values and runtime request/response processing;
-- structured concurrency;
+- cancellation and database-pool integration for structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.
 

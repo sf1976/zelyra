@@ -144,6 +144,9 @@ fn check_block(
             Stmt::Transaction { body, .. } => {
                 check_block(body, schema, environment, errors);
             }
+            Stmt::Parallel { body, .. } => {
+                check_block(body, schema, environment, errors);
+            }
         }
     }
 }
@@ -189,6 +192,7 @@ fn check_expr(
             check_expr(index, schema, environment, errors);
         }
         ExprKind::Field { target, .. } => check_expr(target, schema, environment, errors),
+        ExprKind::Await(inner) => check_expr(inner, schema, environment, errors),
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -218,6 +222,7 @@ fn expr_type(expression: &Expr) -> Type {
         | ExprKind::Call { .. }
         | ExprKind::Unary { .. }
         | ExprKind::Binary { .. } => Type::Unknown,
+        ExprKind::Await(inner) => expr_type(inner),
     }
 }
 

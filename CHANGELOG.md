@@ -4,6 +4,24 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.13 — 2026-09-17
+
+### Added
+
+- Initial structured concurrency with `parallel` blocks and `await`
+  expressions.
+- Parallel branches run from immutable environment snapshots, are joined
+  before execution continues, and merge their results in source order.
+- Static diagnostics reject `await` outside `parallel` and invalid or duplicate
+  parallel bindings.
+- Added the runnable `examples/parallel.zyl` example and synchronized German
+  and English documentation.
+
+### Known limitations
+
+- Cancellation and database connection-pool integration for parallel work are
+  planned for a later release.
+
 ## 0.1.12 — 2026-09-17
 
 ### Added

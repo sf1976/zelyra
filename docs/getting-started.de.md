@@ -65,6 +65,9 @@ Das aktuelle Repository enthält:
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
+- einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
+  `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
+  bevor alle Branches vor der Fortsetzung zusammengeführt werden.
 - erste `zelyra verify`-Unterstützung für symbolische Integer-Pfade, begrenzte
   Schleifen, `break`/`continue` und explizite `while`-Schleifeninvarianten.
   Nur `PROVEN` ist ein Beweis; nicht unterstützte Fälle bleiben
@@ -73,8 +76,8 @@ Das aktuelle Repository enthält:
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
 Login-Drosselung, Passwortverwaltungs-Kommandos, umfangreichere fachliche
 Fehlerwerte, weitergehende formale Verifikation,
-Runtime-Capability-Durchsetzung, strukturierte
-Nebenläufigkeit und Produktionspaketierung.
+Runtime-Capability-Durchsetzung, Abbruch laufender Branches,
+Datenbank-Pool-Integration für parallele Arbeit und Produktionspaketierung.
 
 ## 1. Voraussetzungen
 
@@ -260,7 +263,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]

@@ -61,14 +61,17 @@ The current repository contains:
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime-checked function contracts using `requires` and `ensures`.
+- an initial structured-concurrency slice using `parallel` and `await`; each
+  branch uses an immutable environment snapshot and all branches are joined
+  before execution continues.
 - initial `zelyra verify` support for symbolic integer paths, bounded loops,
   `break`/`continue`, and explicit `while` loop invariants. Only `PROVEN` is
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
 The following are not complete yet: full CRUD generation, database roles, login
 throttling, password-management commands, richer domain-error values, broader
-formal verification, runtime capability enforcement, structured concurrency,
-and production packaging.
+formal verification, runtime capability enforcement, cancellation, database
+pool integration for parallel work, and production packaging.
 
 ## 1. Requirements
 
@@ -251,7 +254,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.12"
+version = "0.1.13"
 zelyra = "0.1"
 
 [capabilities]

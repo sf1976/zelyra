@@ -1033,6 +1033,14 @@ impl<'a> Parser<'a> {
                 body,
             });
         }
+        if self.at(&TokenKind::Parallel) {
+            let start = self.advance().span;
+            let body = self.block()?;
+            return Ok(Stmt::Parallel {
+                span: start.join(body.span),
+                body,
+            });
+        }
         if self.at(&TokenKind::Mutable) {
             let start = self.advance().span;
             let (name, _) = self.ident("binding name")?;
@@ -1183,6 +1191,14 @@ impl<'a> Parser<'a> {
     }
     fn unary(&mut self) -> Result<Expr, ParseError> {
         self.skip_newlines();
+        if self.at(&TokenKind::Await) {
+            let start = self.advance().span;
+            let expression = self.unary()?;
+            return Ok(Expr {
+                kind: ExprKind::Await(Box::new(expression.clone())),
+                span: start.join(expression.span),
+            });
+        }
         if self.at(&TokenKind::Minus) {
             let span = self.advance().span;
             let expr = self.unary()?;
@@ -1688,6 +1704,28 @@ mod tests {
         assert!(matches!(
             program.functions[0].body.statements[0],
             Stmt::For { ref name, .. } if name == "value"
+        ));
+    }
+
+    #[test]
+    fn parses_parallel_await_bindings() {
+        let program = parse(
+            &lex("fn load() -> Int { return 1 } fn main() { parallel { value = await load() } print(value) }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::Parallel { body, .. } = &program.functions[1].body.statements[0] else {
+            panic!("expected parallel statement");
+        };
+        assert!(matches!(
+            body.statements[0],
+            Stmt::BindOrAssign {
+                value: Expr {
+                    kind: ExprKind::Await(_),
+                    ..
+                },
+                ..
+            }
         ));
     }
 

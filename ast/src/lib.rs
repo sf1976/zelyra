@@ -326,6 +326,10 @@ pub enum Stmt {
         body: Block,
         span: Span,
     },
+    Parallel {
+        body: Block,
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -400,6 +404,7 @@ pub enum ExprKind {
         result_type: Type,
         query: String,
     },
+    Await(Box<Expr>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

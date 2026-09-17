@@ -70,6 +70,9 @@ Implemented today:
   `zelyra.toml`.
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
+- an initial structured-concurrency slice with `parallel` and `await`: branches
+  run from an immutable environment snapshot, are joined before continuation,
+  and merge their results in source order;
 - an initial `zelyra verify` command distinguishing `PROVEN`, `RUNTIME_CHECK`,
   `UNPROVEN`, and `FAILED` for contract expressions, including simple symbolic
   integer relationships in direct-return postconditions, basic control-flow
@@ -388,9 +391,9 @@ The long-term specification is organized into these phases:
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities and contracts — initial declarations, static checks, runtime
-   contracts, and limited symbolic verification are implemented; runtime
-   privilege enforcement, general formal verification, and structured
-   concurrency remain.
+   contracts, limited symbolic verification, and an initial `parallel`/`await`
+   structured-concurrency slice are implemented; runtime privilege enforcement
+   and general formal verification remain.
 10. Typed API declarations, executable handlers, API authentication and
     permissions, and OpenAPI 3.0.3 generation are implemented; client state,
     WebAssembly, and optimization interfaces remain.

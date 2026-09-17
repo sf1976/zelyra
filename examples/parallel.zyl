@@ -1,0 +1,17 @@
+fn load_customer() -> String {
+    return "customer"
+}
+
+fn load_order_count() -> Int {
+    return 3
+}
+
+fn main() {
+    parallel {
+        customer = await load_customer()
+        order_count = await load_order_count()
+    }
+
+    print(customer)
+    print(order_count)
+}
