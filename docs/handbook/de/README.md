@@ -784,7 +784,7 @@ Die wichtigsten geplanten Bereiche:
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
-- ausführbare API-Handler und Request-/Response-Verarbeitung zur Laufzeit;
+- weitergehende API-Fehler-/Authentifizierungsbehandlung und Request-/Response-Verarbeitung zur Laufzeit;
 - strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.

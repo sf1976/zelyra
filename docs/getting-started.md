@@ -19,8 +19,8 @@ data. The language is intended to bring together:
 - initial CRUD lists, details, Create/Edit forms, configurable columns, and
   delete actions;
 - initial CRUD, authentication, authorization, contract verification, typed API
-  declarations, and OpenAPI generation are available; executable API handlers
-  and broader versions of these systems are still planned.
+  declarations, OpenAPI generation, and optional executable API handlers are
+  available; richer versions of these systems are still planned.
 
 The central design goal is to define important information once. For example,
 a required String with a maximum length in a table can also provide the basis
@@ -56,7 +56,7 @@ The current repository contains:
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
 The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, executable API handlers, broader formal verification,
+throttling, password-management commands, richer API error/auth handling, broader formal verification,
 runtime capability enforcement, structured concurrency,
 and production packaging.
 

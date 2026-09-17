@@ -708,7 +708,7 @@ Major planned areas include:
 - activity, audit, and technical logs;
 - typed connections and secret providers;
 - ODBC and external read-only databases;
-- executable API handlers and runtime request/response processing;
+- richer API error/auth handling and runtime request/response processing;
 - structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.

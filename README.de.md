@@ -53,8 +53,8 @@ Heute implementiert:
   Formularen und CSRF-geschütztem Löschen.
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
-- typisierte API-Deklarationen mit Routen-/Typprüfung und OpenAPI-3.0.3-Ausgabe
-  über `zelyra doc`.
+- typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
+  Handlern und OpenAPI-3.0.3-Ausgabe über `zelyra doc`.
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
@@ -76,7 +76,7 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, ausführbare API-Handler, allgemeine formale Verifikation und
+Vollständige CRUD-Erzeugung, Datenbankrollen, weitergehende API-Fehler- und Authentifizierungsbehandlung, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).

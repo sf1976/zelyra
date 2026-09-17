@@ -53,8 +53,8 @@ Implemented today:
   CSRF-protected delete.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
-- typed API declarations with route/type validation and OpenAPI 3.0.3 output
-  through `zelyra doc`.
+- typed API declarations with route/type validation, optional executable
+  handlers, and OpenAPI 3.0.3 output through `zelyra doc`.
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
@@ -75,7 +75,7 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, database roles, executable API handlers, general formal verification,
+Full CRUD generation, database roles, richer API error/auth handling, general formal verification,
 and production deployment tooling are still being developed. See the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).

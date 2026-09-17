@@ -21,8 +21,7 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
   und Löschaktionen;
 - erste Versionen von CRUD, Authentifizierung, Autorisierung, Contract-
   Verifikation, typisierten API-Deklarationen und OpenAPI-Erzeugung sind
-  vorhanden; ausführbare API-Handler und umfassendere Ausbaustufen sind
-  weiterhin geplant.
+  vorhanden; weitergehende Ausbaustufen sind weiterhin geplant.
 
 Das zentrale Ziel ist, wichtige Informationen nur einmal zu definieren. Ein
 Pflichtfeld mit maximaler String-Länge in einer Tabelle kann beispielsweise
@@ -61,7 +60,7 @@ Das aktuelle Repository enthält:
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, ausführbare API-Handler, weitergehende formale Verifikation,
+Login-Drosselung, Passwortverwaltungs-Kommandos, weitergehende API-Fehler- und Authentifizierungsbehandlung, weitergehende formale Verifikation,
 Runtime-Capability-Durchsetzung, strukturierte
 Nebenläufigkeit und Produktionspaketierung.
 

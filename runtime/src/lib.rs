@@ -84,6 +84,11 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
     }
 
     let mut routes = HashSet::new();
+    let functions = program
+        .functions
+        .iter()
+        .map(|function| (function.name.as_str(), function))
+        .collect::<HashMap<_, _>>();
     for api in &program.apis {
         if !routes.insert((api.method.clone(), api.path.clone())) {
             errors.push(ApiDiagnostic {
@@ -131,6 +136,49 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                 message: format!("unknown API output type `{}`", api.output),
                 span: api.span,
             });
+        }
+        if let Some(handler) = &api.handler {
+            let Some(function) = functions.get(handler.as_str()) else {
+                errors.push(ApiDiagnostic {
+                    message: format!("API handler function `{handler}` does not exist"),
+                    span: api.span,
+                });
+                continue;
+            };
+            if function.params.len() != api.input.len() {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "API handler `{handler}` expects {} input field(s), but the API declares {}",
+                        function.params.len(),
+                        api.input.len()
+                    ),
+                    span: api.span,
+                });
+            }
+            for (parameter, field) in function.params.iter().zip(&api.input) {
+                if parameter.name != field.name || parameter.ty != field.ty {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API handler parameter `{}` must match input field `{}` with type `{}`",
+                            parameter.name, field.name, field.ty
+                        ),
+                        span: field.span,
+                    });
+                }
+            }
+            if function.return_type.as_ref() != Some(&api.output) {
+                errors.push(ApiDiagnostic {
+                    message: format!(
+                        "API handler `{handler}` must return `{}`, found `{}`",
+                        api.output,
+                        function
+                            .return_type
+                            .as_ref()
+                            .map_or_else(|| "Unit".into(), ToString::to_string)
+                    ),
+                    span: api.span,
+                });
+            }
         }
         let mut statuses = HashSet::new();
         for error in &api.errors {
@@ -3809,6 +3857,25 @@ pub fn execute_with_database(
     execute_internal(program, Some(database_url.to_owned()))
 }
 
+pub fn execute_function(
+    program: &Program,
+    name: &str,
+    args: Vec<Value>,
+    database_url: Option<&str>,
+) -> Result<Value, RuntimeError> {
+    let mut interpreter = Interpreter {
+        functions: program
+            .functions
+            .iter()
+            .map(|function| (function.name.clone(), function.clone()))
+            .collect(),
+        output: Vec::new(),
+        steps: 0,
+        database_url: database_url.map(str::to_owned),
+    };
+    interpreter.call(name, args, Span::default())
+}
+
 fn execute_internal(
     program: &Program,
     database_url: Option<String>,
@@ -4837,6 +4904,15 @@ mod tests {
     fn validates_api_types_and_path_parameters() {
         let program = parse(
             &lex("type CustomerId = Id table customers { id: Id primary auto } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+    }
+
+    #[test]
+    fn validates_api_handler_signature() {
+        let program = parse(
+            &lex("type CustomerId = Id table customers { id: Id primary auto } fn get_customer(id: CustomerId) -> Customer { } api GET \"/customers/{id}\" { handler get_customer input { id: CustomerId } output Customer } fn main() { }").unwrap(),
         )
         .unwrap();
         assert!(check_apis(&program).is_ok());

@@ -26,6 +26,39 @@ pub struct Request {
     pub body: String,
 }
 
+type ApiHandler = dyn Fn(&Request, &HashMap<String, String>) -> Response + Send + Sync;
+
+#[derive(Clone)]
+pub struct ApiRoute {
+    pub method: String,
+    pub path: String,
+    handler: Arc<ApiHandler>,
+}
+
+impl fmt::Debug for ApiRoute {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ApiRoute")
+            .field("method", &self.method)
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ApiRoute {
+    pub fn new(
+        method: impl Into<String>,
+        path: impl Into<String>,
+        handler: impl Fn(&Request, &HashMap<String, String>) -> Response + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            method: method.into(),
+            path: path.into(),
+            handler: Arc::new(handler),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     pub status: u16,
@@ -42,6 +75,17 @@ impl Response {
             status,
             reason: reason_phrase(status).into(),
             content_type: "text/html; charset=utf-8".into(),
+            body: body.into(),
+            location: None,
+            headers: Vec::new(),
+        }
+    }
+
+    pub fn json(status: u16, body: impl Into<String>) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: "application/json; charset=utf-8".into(),
             body: body.into(),
             location: None,
             headers: Vec::new(),
@@ -172,6 +216,7 @@ struct Session {
 #[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
+    pub apis: Vec<ApiRoute>,
     pub forms: Vec<FormRoute>,
     pub cruds: Vec<CrudRoute>,
     pub database_url: Option<String>,
@@ -185,6 +230,7 @@ impl WebApp {
     pub fn new(routes: Vec<Route>, forms: Vec<FormRoute>) -> Self {
         Self {
             routes,
+            apis: Vec::new(),
             forms,
             cruds: Vec::new(),
             database_url: None,
@@ -202,6 +248,7 @@ impl WebApp {
     ) -> Self {
         Self {
             routes,
+            apis: Vec::new(),
             forms,
             cruds: Vec::new(),
             database_url,
@@ -214,6 +261,11 @@ impl WebApp {
 
     pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
         self.cruds = cruds;
+        self
+    }
+
+    pub fn with_apis(mut self, apis: Vec<ApiRoute>) -> Self {
+        self.apis = apis;
         self
     }
 
@@ -235,6 +287,14 @@ impl WebApp {
             }
             if request.path == "/logout" {
                 return dispatch_logout(self, request, self.database_url.as_deref());
+            }
+        }
+        for api in &self.apis {
+            if let Some(path_params) = match_path(&api.path, &request.path) {
+                if api.method != request.method {
+                    return Response::json(405, "{\"error\":\"method not allowed\"}");
+                }
+                return (api.handler)(request, &path_params);
             }
         }
         for form in &self.forms {
@@ -2172,6 +2232,28 @@ mod tests {
         let response = router().dispatch("GET", "/hello/Zelyra");
         assert_eq!(response.status, 200);
         assert_eq!(response.body, "<h1>Hello, Zelyra!</h1>");
+    }
+
+    #[test]
+    fn dispatches_typed_api_routes_through_a_handler() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
+            "GET",
+            "/customers/{id}",
+            |_request, parameters| {
+                Response::json(200, format!("{{\"id\":\"{}\"}}", parameters["id"]))
+            },
+        )]);
+        let request =
+            parse_request("GET /customers/42 HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.content_type, "application/json; charset=utf-8");
+        assert_eq!(response.body, "{\"id\":\"42\"}");
+        assert_eq!(
+            app.dispatch(&parse_request("POST /customers/42 HTTP/1.1\r\n\r\n").unwrap())
+                .status,
+            405
+        );
     }
 
     #[test]

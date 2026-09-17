@@ -1,4 +1,8 @@
-use std::{collections::HashSet, env, fs, process::ExitCode};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    process::ExitCode,
+};
 use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
@@ -10,10 +14,14 @@ use zelyra_hir::lower;
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
-    check, check_apis, check_capabilities_with_grants, execute, execute_with_database,
-    verify as verify_program, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
+    check, check_apis, check_capabilities_with_grants, execute, execute_function,
+    execute_with_database, verify as verify_program, Value, VerificationResult, VerificationStatus,
+    KNOWN_CAPABILITIES,
 };
-use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
+use zelyra_web::{
+    parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
+    Response, Route, WebApp,
+};
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -1091,8 +1099,12 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     if validate_capabilities(&path, &program).is_err() {
         return ExitCode::from(1);
     }
-    if program.pages.is_empty() && program.forms.is_empty() && program.cruds.is_empty() {
-        eprintln!("error[E-WEB-001]: {path} does not define a page, form, or CRUD resource");
+    if program.pages.is_empty()
+        && program.forms.is_empty()
+        && program.cruds.is_empty()
+        && program.apis.is_empty()
+    {
+        eprintln!("error[E-WEB-001]: {path} does not define a page, form, CRUD resource, or API");
         return ExitCode::from(1);
     }
     let routes = program
@@ -1234,8 +1246,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
         });
     }
+    let api_routes = generated_api_routes(&program);
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+        .with_apis(api_routes)
         .with_auth(
             env::var("ZELYRA_AUTH_TOKEN").ok(),
             env::var("ZELYRA_AUTH_PERMISSIONS")
@@ -1348,6 +1362,194 @@ fn generated_crud_form(
         schema: Some(schema.clone()),
         csrf,
     }
+}
+
+fn generated_api_routes(program: &zelyra_ast::Program) -> Vec<ApiRoute> {
+    let database_url = env::var("DATABASE_URL").ok();
+    program
+        .apis
+        .iter()
+        .filter_map(|api| {
+            let handler = api.handler.as_ref()?.clone();
+            let api = api.clone();
+            let program = program.clone();
+            let database_url = database_url.clone();
+            Some(ApiRoute::new(
+                api.method.clone(),
+                api.path.clone(),
+                move |request, path_params| {
+                    dispatch_api(
+                        &program,
+                        &api,
+                        &handler,
+                        request,
+                        path_params,
+                        database_url.as_deref(),
+                    )
+                },
+            ))
+        })
+        .collect()
+}
+
+fn dispatch_api(
+    program: &zelyra_ast::Program,
+    api: &zelyra_ast::ApiDef,
+    handler: &str,
+    request: &zelyra_web::Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Response {
+    let values = if matches!(api.method.as_str(), "GET" | "DELETE") {
+        request
+            .target
+            .split_once('?')
+            .map_or_else(|| Ok(HashMap::new()), |(_, query)| parse_urlencoded(query))
+    } else if request
+        .headers
+        .get("content-type")
+        .is_some_and(|content_type| content_type.starts_with("application/json"))
+    {
+        parse_api_json_object(&request.body).map_err(|message| zelyra_web::HttpError { message })
+    } else {
+        parse_urlencoded(&request.body)
+    };
+    let mut values = match values {
+        Ok(values) => values,
+        Err(error) => return api_error_response(400, &error.to_string()),
+    };
+    for (name, value) in path_params {
+        values.insert(name.clone(), value.clone());
+    }
+    let mut arguments = Vec::new();
+    for field in &api.input {
+        let Some(value) = values.get(&field.name) else {
+            if matches!(field.ty, Type::Option(_)) {
+                arguments.push(Value::Option(None));
+                continue;
+            }
+            return api_error_response(400, &format!("missing API input `{}`", field.name));
+        };
+        match api_value(value, &field.ty, program) {
+            Ok(value) => arguments.push(value),
+            Err(error) => return api_error_response(400, &error),
+        }
+    }
+    match execute_function(program, handler, arguments, database_url) {
+        Ok(value) => Response::json(200, api_json_value(&value)),
+        Err(error) => api_error_response(500, &error.message),
+    }
+}
+
+fn api_value(value: &str, ty: &Type, program: &zelyra_ast::Program) -> Result<Value, String> {
+    if let Type::Option(inner) = ty {
+        if value == "null" {
+            return Ok(Value::Option(None));
+        }
+        return Ok(Value::Option(Some(Box::new(api_value(
+            value, inner, program,
+        )?))));
+    }
+    if let Type::Named(name) = ty {
+        if let Some(definition) = program
+            .types
+            .iter()
+            .find(|definition| definition.name == *name)
+        {
+            return api_value(value, &definition.target, program);
+        }
+    }
+    match ty {
+        Type::Int => value
+            .parse()
+            .map(Value::Int)
+            .map_err(|_| format!("invalid Int value `{value}`")),
+        Type::UInt => value
+            .parse()
+            .map(Value::UInt)
+            .map_err(|_| format!("invalid UInt value `{value}`")),
+        Type::Float | Type::Decimal => value
+            .parse()
+            .map(Value::Float)
+            .map_err(|_| format!("invalid numeric value `{value}`")),
+        Type::Bool => match value {
+            "true" | "1" => Ok(Value::Bool(true)),
+            "false" | "0" => Ok(Value::Bool(false)),
+            _ => Err(format!("invalid Bool value `{value}`")),
+        },
+        _ => Ok(Value::String(value.to_owned())),
+    }
+}
+
+fn api_json_value(value: &Value) -> String {
+    match value {
+        Value::Int(value) => value.to_string(),
+        Value::UInt(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::String(value) => format!("\"{}\"", json_escape(value)),
+        Value::Char(value) => format!("\"{}\"", json_escape(&value.to_string())),
+        Value::Option(Some(value)) => api_json_value(value),
+        Value::Option(None) => "null".into(),
+        Value::Result(Ok(value)) => api_json_value(value),
+        Value::Result(Err(value)) => format!("{{\"error\":{}}}", api_json_value(value)),
+        Value::Rows { columns, rows } => format!(
+            "[{}]",
+            rows.iter()
+                .map(|row| {
+                    format!(
+                        "{{{}}}",
+                        columns
+                            .iter()
+                            .zip(row)
+                            .map(|(column, value)| {
+                                format!("\"{}\":\"{}\"", json_escape(column), json_escape(value))
+                            })
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Value::Unit => "null".into(),
+    }
+}
+
+fn api_error_response(status: u16, message: &str) -> Response {
+    Response::json(
+        status,
+        format!("{{\"error\":\"{}\"}}", json_escape(message)),
+    )
+}
+
+fn parse_api_json_object(source: &str) -> Result<HashMap<String, String>, String> {
+    let source = source.trim();
+    if source == "{}" {
+        return Ok(HashMap::new());
+    }
+    let inner = source
+        .strip_prefix('{')
+        .and_then(|source| source.strip_suffix('}'))
+        .ok_or_else(|| "JSON request body must be an object".to_owned())?;
+    let mut values = HashMap::new();
+    for pair in inner.split(',') {
+        let (key, value) = pair
+            .split_once(':')
+            .ok_or_else(|| "JSON object field is missing `:`".to_owned())?;
+        let key = key.trim().trim_matches('"');
+        if key.is_empty() {
+            return Err("JSON object field name is empty".into());
+        }
+        let value = value.trim();
+        let value = if value.starts_with('"') && value.ends_with('"') {
+            value[1..value.len() - 1].replace("\\\"", "\"")
+        } else {
+            value.to_owned()
+        };
+        values.insert(key.to_owned(), value);
+    }
+    Ok(values)
 }
 
 fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
@@ -1608,6 +1810,26 @@ mod tests {
         assert!(document.contains("\"/customers/{id}\""));
         assert!(document.contains("\"404\":{\"description\":\"NotFound\"}"));
         assert!(document.contains("#/components/schemas/Customer"));
+    }
+
+    #[test]
+    fn dispatches_json_api_input_to_a_typed_handler() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n{\"value\":42}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.content_type, "application/json; charset=utf-8");
+        assert_eq!(response.body, "42");
     }
 
     #[test]

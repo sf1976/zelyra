@@ -119,12 +119,16 @@ impl<'a> Parser<'a> {
         }
         let path = self.string_value("API path")?;
         self.expect(TokenKind::LBrace, "`{` after API path")?;
+        let mut handler = None;
         let mut input = Vec::new();
         let mut output = None;
         let mut errors = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Input) {
+            if self.at(&TokenKind::Handler) {
+                self.advance();
+                handler = Some(self.ident("API handler function name")?.0);
+            } else if self.at(&TokenKind::Input) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `input`")?;
                 self.skip_newlines();
@@ -161,7 +165,8 @@ impl<'a> Parser<'a> {
                 }
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
-                return self.error("expected `input`, `output`, or `errors` in API definition");
+                return self
+                    .error("expected `handler`, `input`, `output`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -172,6 +177,7 @@ impl<'a> Parser<'a> {
         Ok(ApiDef {
             method,
             path,
+            handler,
             input,
             output,
             errors,
@@ -1427,6 +1433,7 @@ mod tests {
         let program = parse(
             &lex(r#"
                 api GET "/customers/{id}" {
+                    handler get_customer
                     input {
                         id: CustomerId
                     }
@@ -1444,6 +1451,7 @@ mod tests {
         assert_eq!(program.apis.len(), 1);
         assert_eq!(program.apis[0].method, "GET");
         assert_eq!(program.apis[0].path, "/customers/{id}");
+        assert_eq!(program.apis[0].handler.as_deref(), Some("get_customer"));
         assert_eq!(program.apis[0].input[0].name, "id");
         assert_eq!(program.apis[0].errors[1].status, 404);
     }

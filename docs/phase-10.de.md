@@ -9,6 +9,7 @@ laufenden Server geprüft werden kann:
 type CustomerId = Id
 
 api GET "/customers/{id}" {
+    handler get_customer
     input {
         id: CustomerId
     }
@@ -24,6 +25,18 @@ Die Deklaration beschreibt HTTP-Methode, Route, Eingabetypen, Antworttyp und
 dokumentierte Fehlerstatus. HTTP-Methoden werden in Großbuchstaben
 normalisiert. Die erste Implementierung unterstützt `GET`, `POST`, `PUT`,
 `PATCH` und `DELETE`.
+
+Eine ausführbare Route kann mit `handler` eine Zelyra-Funktion benennen. Ihre
+Parameter müssen Namen und Typen der API-Eingabefelder in derselben Reihenfolge
+besitzen; der Rückgabetyp muss `output` entsprechen:
+
+~~~zelyra
+fn get_customer(id: CustomerId) -> Customer uses Database {
+    return sql<Customer> {
+        SELECT id, name, email FROM customers WHERE id = :id
+    }
+}
+~~~
 
 `zelyra check` prüft API-Deklarationen. Abgelehnt werden doppelte Routen,
 unbekannte Ein- oder Ausgabetypen, doppelte Eingaben oder Fehlerstatus,
@@ -43,7 +56,13 @@ Methoden, typisierte Erfolgsantworten, deklarierte Fehlerantworten sowie
 grundlegende Schemas für deklarierte Typen und Tabellen. `zelyra doc
 file.zyl` entspricht der ausdrücklichen Variante mit `--openapi`.
 
-Diese Phase bildet bewusst zunächst die Grenze zwischen Deklaration und
-Dokumentation. Ausführbare Handler, Request-Decoding zur Laufzeit und die
-Serialisierung von Datenbankzeilen sind noch nicht angeschlossen. Die späteren
-Web/API-Phasen werden dasselbe API-Modell dafür verwenden.
+Ist ein Handler vorhanden, stellt `zelyra serve` die Route bereit. Pfad- und
+Querywerte werden entsprechend den deklarierten Eingabetypen konvertiert; für
+nicht-GET-Methoden werden JSON-Request-Bodies unterstützt und Handler-Ergebnisse
+als JSON zurückgegeben. Datenbank-Handler verwenden `DATABASE_URL`, im
+Zelyra-Runtime standardmäßig MariaDB.
+
+Die aktuelle Handler-Brücke bleibt bewusst klein: Fehlerdeklarationen werden
+in OpenAPI dokumentiert, aber anwendungsspezifische Fehlerzuordnung,
+Authentifizierungssperren und umfangreicheres JSON-Decoding folgen in späteren
+Web/API-Schritten.

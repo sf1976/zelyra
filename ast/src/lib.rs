@@ -155,6 +155,7 @@ pub struct AuthDef {
 pub struct ApiDef {
     pub method: String,
     pub path: String,
+    pub handler: Option<String>,
     pub input: Vec<ApiField>,
     pub output: Type,
     pub errors: Vec<ApiError>,
