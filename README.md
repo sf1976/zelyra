@@ -73,6 +73,8 @@ Implemented today:
   the CLI;
 - safe Clock and Environment host APIs through now() and env(name); both
   require explicit function declarations and project grants;
+- secure random_int(min, max) through the Random capability, with inclusive
+  bounds and runtime rejection of invalid ranges;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches

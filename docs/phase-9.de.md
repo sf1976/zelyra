@@ -85,6 +85,20 @@ automatisch; eine Ausgabe erfolgt nur, wenn das Programm ausdrücklich print
 oder eine andere Anwendungsoperation verwendet. Netzwerk-, Datei-, Prozess-
 und Zufalls-APIs folgen in späteren Schritten.
 
+Die Random-Capability stellt sichere Ganzzahl-Erzeugung bereit:
+
+~~~zelyra
+fn dice_roll() -> Int uses Random {
+    return random_int(1, 6)
+}
+~~~
+
+Beide Grenzen sind inklusiv. Die Runtime verwendet die sichere
+Zufallsquelle des Betriebssystems und lehnt Bereiche ab, bei denen das
+Minimum größer als das Maximum ist. Zufallswerte werden niemals automatisch
+protokolliert oder ausgegeben. Netzwerk-, Datei- und Prozess-APIs benötigen
+weiterhin eigene Ressourcen- und Fehlerverträge.
+
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:
 

@@ -74,6 +74,8 @@ Heute implementiert:
   Projektfreigaben übergibt;
 - sichere Host-APIs für Clock und Environment über now() und env(name); beide
   benötigen eine ausdrückliche Funktionsdeklaration und Projektfreigabe;
+- sichere Zufallszahlen über random_int(min, max) und die Random-Capability;
+  inklusive Grenzen und ungültige Bereiche werden zur Laufzeit geprüft;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und

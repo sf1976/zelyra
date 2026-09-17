@@ -1,6 +1,6 @@
 [project]
 name = "zelyra"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [database.main]
@@ -11,3 +11,4 @@ database = true
 network = true
 clock = true
 environment = true
+random = true

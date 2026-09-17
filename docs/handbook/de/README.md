@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]
@@ -699,6 +699,19 @@ Environment und liefert String?; eine fehlende Variable wird zu None. Werte
 werden nicht automatisch protokolliert oder veröffentlicht. Netzwerk-, Datei-,
 Prozess- und Zufalls-APIs sind weiterhin geplant.
 
+Die Random-Capability erzeugt sichere Ganzzahlen:
+
+~~~zelyra
+fn dice_roll() -> Int uses Random {
+    return random_int(1, 6)
+}
+~~~
+
+Der Bereich ist auf beiden Seiten inklusiv. Ungültige Bereiche führen zu
+einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben. Netzwerk-,
+Datei- und Prozess-APIs bleiben geplant, bis ihre Ressourcen- und Fehlerverträge
+definiert sind.
+
 ## 15. Contracts und Verify
 
 🧪 Vor- und Nachbedingungen:
@@ -809,7 +822,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]

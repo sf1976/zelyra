@@ -65,6 +65,8 @@ The current repository contains:
 - safe Clock and Environment host APIs: now() returns a Unix-epoch timestamp
   in milliseconds, while env(name) returns String?; both require a function
   declaration and a project grant;
+- secure random_int(min, max) through the Random capability; its bounds are
+  inclusive and an invalid range is a runtime error;
 - runtime-checked function contracts using `requires` and `ensures`.
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
@@ -259,7 +261,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]

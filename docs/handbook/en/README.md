@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]
@@ -641,6 +641,18 @@ Environment and returns String?; a missing variable becomes None. Values are
 not logged or exposed automatically. Network, file-system, process, and random
 host APIs remain planned.
 
+The Random capability provides secure integer generation:
+
+~~~zelyra
+fn dice_roll() -> Int uses Random {
+    return random_int(1, 6)
+}
+~~~
+
+The range is inclusive on both sides. Invalid ranges fail at runtime, and
+random values are not emitted implicitly. Network, file-system, and process
+APIs remain planned until their resource and error contracts are defined.
+
 ## 15. Contracts and verification
 
 🧪 Preconditions and postconditions:
@@ -745,7 +757,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]

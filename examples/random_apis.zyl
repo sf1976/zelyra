@@ -1,0 +1,3 @@
+fn main() uses Random {
+    print(random_int(1, 100))
+}

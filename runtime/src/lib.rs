@@ -1,3 +1,4 @@
+use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -3041,6 +3042,15 @@ fn check_capability_expr(
                     declared,
                     errors,
                 );
+            } else if name == "random_int" {
+                require_capability(
+                    "Random",
+                    "random access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
             }
             if let Some(callee) = functions.get(name.as_str()) {
                 for capability in &callee.capabilities {
@@ -3868,6 +3878,19 @@ impl<'a> Checker<'a> {
                     let argument = self.check_expr(&args[0], scopes);
                     self.expect_type(&Type::String, &argument, args[0].span);
                     Type::Option(Box::new(Type::String))
+                } else if name == "random_int" {
+                    if args.len() != 2 {
+                        self.error(
+                            expr.span,
+                            "random_int expects minimum and maximum Int arguments",
+                        );
+                        return Type::Unknown;
+                    }
+                    let minimum = self.check_expr(&args[0], scopes);
+                    let maximum = self.check_expr(&args[1], scopes);
+                    self.expect_type(&Type::Int, &minimum, args[0].span);
+                    self.expect_type(&Type::Int, &maximum, args[1].span);
+                    Type::Int
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -4928,6 +4951,41 @@ impl Interpreter {
                     Ok(Value::Option(
                         value.map(|value| Box::new(Value::String(value))),
                     ))
+                } else if name == "random_int" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "random_int expects minimum and maximum Int arguments",
+                        ));
+                    }
+                    self.require_runtime_capability("Random", "random access", expr.span)?;
+                    let minimum = self.eval(&args[0], env)?;
+                    let maximum = self.eval(&args[1], env)?;
+                    let (Value::Int(minimum), Value::Int(maximum)) = (minimum, maximum) else {
+                        return Err(
+                            self.runtime_error(expr.span, "random_int expects Int arguments")
+                        );
+                    };
+                    if minimum > maximum {
+                        return Err(
+                            self.runtime_error(expr.span, "random_int requires minimum <= maximum")
+                        );
+                    }
+                    let range = (i128::from(maximum) - i128::from(minimum) + 1) as u128;
+                    let limit = u128::from(u64::MAX) + 1;
+                    let cutoff = limit - (limit % range);
+                    let mut random = OsRng;
+                    loop {
+                        let mut bytes = [0_u8; 8];
+                        random.try_fill_bytes(&mut bytes).map_err(|error| {
+                            self.runtime_error(expr.span, format!("random access failed: {error}"))
+                        })?;
+                        let candidate = u128::from(u64::from_ne_bytes(bytes));
+                        if candidate < cutoff {
+                            let value = i128::from(minimum) + (candidate % range) as i128;
+                            return Ok(Value::Int(value as i64));
+                        }
+                    }
                 } else {
                     let values = args
                         .iter()
@@ -5567,6 +5625,45 @@ mod tests {
             execute_with_capabilities(&environment_program, Some(&grants)).unwrap_err();
         assert!(environment_error.message.contains("function"));
         assert!(environment_error.message.contains("Environment"));
+    }
+
+    #[test]
+    fn accepts_secure_random_int_with_random_capability() {
+        let program = parse(
+            &lex("fn roll() -> Int uses Random { return random_int(1, 6) } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+
+        let grants = HashSet::from([String::from("Random")]);
+        let value =
+            execute_function_with_capabilities(&program, "roll", Vec::new(), None, Some(&grants))
+                .unwrap();
+        assert!(matches!(value, Value::Int(value) if (1..=6).contains(&value)));
+    }
+
+    #[test]
+    fn rejects_invalid_random_range() {
+        let program =
+            parse(&lex("fn main() uses Random { print(random_int(6, 1)) }").unwrap()).unwrap();
+        let grants = HashSet::from([String::from("Random")]);
+        let error = execute_with_capabilities(&program, Some(&grants)).unwrap_err();
+        assert!(error.message.contains("minimum <= maximum"));
+    }
+
+    #[test]
+    fn requires_random_capability_for_random_int() {
+        let program = parse(&lex("fn main() { print(random_int(1, 6)) }").unwrap()).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("does not declare capability")));
+        assert!(errors.iter().any(|error| error.message.contains("Random")));
+
+        let grants = HashSet::new();
+        let error = execute_with_capabilities(&program, Some(&grants)).unwrap_err();
+        assert!(error.message.contains("random access requires"));
     }
 
     #[test]

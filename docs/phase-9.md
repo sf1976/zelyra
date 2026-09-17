@@ -83,6 +83,19 @@ only occurs when the program explicitly uses print or another application
 operation. Network, file-system, process, and random host APIs remain future
 work.
 
+The Random capability exposes secure integer generation:
+
+~~~zelyra
+fn dice_roll() -> Int uses Random {
+    return random_int(1, 6)
+}
+~~~
+
+Both bounds are inclusive. The runtime uses the operating system's secure
+random source and rejects minimum values greater than maximum values. Random
+values are never logged or printed implicitly. Network, file-system, and
+process APIs still require separate resource and error contracts.
+
 The first structured-concurrency slice is available through `parallel` and
 `await`:
 

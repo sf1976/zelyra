@@ -558,6 +558,7 @@ impl<'a> Resolver<'a> {
                             | "Err"
                             | "now"
                             | "env"
+                            | "random_int"
                     )
                 {
                     self.error(expr.span, format!("unknown function `{name}`"));
@@ -708,6 +709,22 @@ mod tests {
                 },
                 ..
             } if name == "env"
+        ));
+    }
+
+    #[test]
+    fn resolves_random_builtin() {
+        let program = parse(&lex("fn main() { value = random_int(1, 6) }").unwrap()).unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { ref name, .. },
+                    ..
+                },
+                ..
+            } if name == "random_int"
         ));
     }
 }

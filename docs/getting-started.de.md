@@ -69,6 +69,8 @@ Das aktuelle Repository enthält:
 - sichere Host-APIs für Clock und Environment: now() liefert einen Unix-Epoch-
   Zeitstempel in Millisekunden, env(name) liefert String?; beide benötigen
   Funktionsdeklaration und Projektfreigabe;
+- sichere Zufallszahlen mit random_int(min, max) über die Random-Capability;
+  die Grenzen sind inklusiv, ein ungültiger Bereich ist ein Runtime-Fehler;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -268,7 +270,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.17"
+version = "0.1.18"
 zelyra = "0.1"
 
 [capabilities]
