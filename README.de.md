@@ -252,6 +252,22 @@ page "/status" {
 }
 ~~~
 
+Komponenten können über einen Default-Slot auch beliebiges HTML umschließen:
+
+~~~zelyra
+component Panel {
+    html { <section class="panel"><slot /></section> }
+}
+
+page "/dashboard" {
+    html { <Panel><h1>Dashboard</h1></Panel> }
+}
+~~~
+
+Verschachtelte Komponenten werden von innen nach außen erweitert. Inhalt darf
+nur an Komponenten übergeben werden, die `<slot />` enthalten; ungenutzter
+Inhalt wird abgelehnt.
+
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
 verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 `is_null`; die Bedienelemente erhalten ihren Zustand über die URL. Beispiele:

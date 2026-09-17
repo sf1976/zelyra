@@ -246,6 +246,21 @@ page "/status" {
 }
 ~~~
 
+Components can also wrap arbitrary HTML through one default slot:
+
+~~~zelyra
+component Panel {
+    html { <section class="panel"><slot /></section> }
+}
+
+page "/dashboard" {
+    html { <Panel><h1>Dashboard</h1></Panel> }
+}
+~~~
+
+Nested components are expanded from the inside out. Component content requires
+the declared component to contain `<slot />`; unused content is rejected.
+
 Search, filtering, sorting, and pagination are already available on generated
 CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 `is_null`; the same controls preserve their state in the URL. For example:

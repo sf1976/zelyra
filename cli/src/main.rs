@@ -299,7 +299,15 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     valid
 }
 
-fn component_invocations(html: &str) -> Result<Vec<(String, String)>, String> {
+struct ComponentInvocation {
+    name: String,
+    attributes: String,
+    body: Option<String>,
+    start: usize,
+    end: usize,
+}
+
+fn component_invocations(html: &str) -> Result<Vec<ComponentInvocation>, String> {
     let mut invocations = Vec::new();
     let mut search_from = 0;
     while let Some(relative_start) = html[search_from..].find('<') {
@@ -319,14 +327,41 @@ fn component_invocations(html: &str) -> Result<Vec<(String, String)>, String> {
             .sum::<usize>();
         let name = after_open[..name_length].to_owned();
         let after_name = start + 1 + name_length;
-        let Some(relative_end) = html[after_name..].find("/>") else {
+        let Some(relative_tag_end) = html[after_name..].find('>') else {
             return Err(format!(
-                "component `<{name}>` must be self-closing with `/>`"
+                "component `<{name}>` has an unterminated opening tag"
             ));
         };
-        let end = after_name + relative_end;
-        invocations.push((name, html[after_name..end].to_owned()));
-        search_from = end + 2;
+        let tag_end = after_name + relative_tag_end;
+        let tag_content = &html[after_name..tag_end];
+        if tag_content.trim_end().ends_with('/') {
+            let attributes = tag_content.trim_end().trim_end_matches('/').trim_end();
+            let end = tag_end + 1;
+            invocations.push(ComponentInvocation {
+                name,
+                attributes: attributes.to_owned(),
+                body: None,
+                start,
+                end,
+            });
+            search_from = end;
+        } else {
+            let closing = format!("</{name}>");
+            let body_start = tag_end + 1;
+            let Some(relative_closing_start) = html[body_start..].find(&closing) else {
+                return Err(format!("component `<{name}>` is missing `{closing}`"));
+            };
+            let closing_start = body_start + relative_closing_start;
+            let end = closing_start + closing.len();
+            invocations.push(ComponentInvocation {
+                name,
+                attributes: tag_content.to_owned(),
+                body: Some(html[body_start..closing_start].to_owned()),
+                start,
+                end,
+            });
+            search_from = end;
+        }
     }
     Ok(invocations)
 }
@@ -424,7 +459,13 @@ fn validate_component_template(
             return false;
         }
     };
-    for (name, attributes) in invocations {
+    for invocation in invocations {
+        let ComponentInvocation {
+            name,
+            attributes,
+            body,
+            ..
+        } = invocation;
         let Some(component) = program
             .components
             .iter()
@@ -448,6 +489,19 @@ fn validate_component_template(
                 continue;
             }
         };
+        if let Some(body) = body.as_deref() {
+            if !body.trim().is_empty() && !component.html.contains("<slot />") {
+                diagnostic(
+                    path,
+                    "E-VIEW-011",
+                    &format!("component `{name}` receives content but has no `<slot />`"),
+                    line,
+                    column,
+                );
+                valid = false;
+            }
+            valid &= validate_component_template(path, program, body, line, column);
+        }
         for attribute in attributes.keys() {
             if !component.props.iter().any(|prop| prop.name == *attribute) {
                 diagnostic(
@@ -522,6 +576,20 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                 path,
                 "E-VIEW-005",
                 &format!("duplicate view component `{}`", component.name),
+                component.span.line,
+                component.span.column,
+            );
+            valid = false;
+        }
+        let slot_count = component.html.matches("<slot />").count();
+        if slot_count > 1 {
+            diagnostic(
+                path,
+                "E-VIEW-011",
+                &format!(
+                    "component `{}` may contain at most one default `<slot />`",
+                    component.name
+                ),
                 component.span.line,
                 component.span.column,
             );
@@ -3600,7 +3668,11 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
     expand_view_components(program, html)
 }
 
-fn render_view_component(component: &zelyra_ast::ComponentDef, attributes: &str) -> String {
+fn render_view_component(
+    component: &zelyra_ast::ComponentDef,
+    attributes: &str,
+    body: Option<&str>,
+) -> String {
     let attributes = component_attributes(attributes).expect("view components are validated");
     component
         .props
@@ -3614,36 +3686,30 @@ fn render_view_component(component: &zelyra_ast::ComponentDef, attributes: &str)
             };
             html.replace(&format!("{{{}}}", prop.name), &replacement)
         })
+        .replace("<slot />", body.unwrap_or_default())
 }
 
 fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
     for _ in 0..16 {
-        let mut changed = false;
-        for component in &program.components {
-            let marker = format!("<{}", component.name);
-            while let Some(start) = html.find(&marker) {
-                let after_name = start + marker.len();
-                if html
-                    .as_bytes()
-                    .get(after_name)
-                    .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-                {
-                    break;
-                } else {
-                    let Some(relative_end) = html[after_name..].find("/>") else {
-                        break;
-                    };
-                    let end = after_name + relative_end;
-                    let attributes = html[after_name..end].to_owned();
-                    let rendered = render_view_component(component, &attributes);
-                    html.replace_range(start..end + 2, &rendered);
-                    changed = true;
-                }
-            }
-        }
-        if !changed {
+        let Ok(invocations) = component_invocations(&html) else {
             break;
-        }
+        };
+        let Some(invocation) = invocations.into_iter().next() else {
+            break;
+        };
+        let Some(component) = program
+            .components
+            .iter()
+            .find(|component| component.name == invocation.name)
+        else {
+            break;
+        };
+        let rendered = render_view_component(
+            component,
+            &invocation.attributes,
+            invocation.body.as_deref(),
+        );
+        html.replace_range(invocation.start..invocation.end, &rendered);
     }
     html
 }
@@ -4645,6 +4711,44 @@ mod tests {
         assert!(html.contains("<body>"));
         assert!(html.contains("<h1>Hello, {name}!</h1>"));
         assert!(!html.contains("<slot />"));
+    }
+
+    #[test]
+    fn composes_default_component_slots_and_nested_components() {
+        let source = r#"
+            component Panel {
+                html { <section class="panel"><slot /></section> }
+            }
+            component Badge {
+                props { text: String }
+                html { <strong>{text}</strong> }
+            }
+            page "/status" {
+                html {
+                    <Panel><Badge text="Ready" /></Panel>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_components("components.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<section class=\"panel\">"));
+        assert!(html.contains("<strong>Ready</strong>"));
+        assert!(!html.contains("<slot />"));
+    }
+
+    #[test]
+    fn rejects_component_content_without_a_default_slot() {
+        let source = r#"
+            component Panel {
+                html { <section /> }
+            }
+            page "/status" {
+                html { <Panel><p>Unexpected content</p></Panel> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_components("components.zyl", &program));
     }
 
     #[test]

@@ -494,6 +494,23 @@ page "/status" {
 }
 ~~~
 
+Komponenten können außerdem über einen Default-Slot HTML-Kindelemente
+aufnehmen:
+
+~~~zelyra
+component Panel {
+    html { <section class="panel"><slot /></section> }
+}
+
+page "/dashboard" {
+    html { <Panel><h1>Dashboard</h1></Panel> }
+}
+~~~
+
+Verschachtelte Komponenten werden von innen nach außen erweitert. Inhalt an
+eine Komponente ohne `<slot />` ist ein Fehler zur Compile-Zeit. Mehrere
+benannte Slots bleiben für eine spätere Sprachversion geplant.
+
 Benannte Slots, verschachtelte Komposition, Themes und CRUD-View-
 Überschreibungen sind geplante Erweiterungen.
 
