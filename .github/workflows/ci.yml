@@ -46,3 +46,10 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
+      - name: Run MariaDB authentication integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_AUTH_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_AUTH_E2E_ADDRESS: 127.0.0.1:38505
+        run: ./tests/mariadb-auth-e2e.sh

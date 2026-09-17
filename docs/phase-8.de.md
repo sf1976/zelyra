@@ -90,3 +90,9 @@ Dies ist die erste funktionierende Authentifizierungsscheibe mit persistenten
 Sessions und datenbankgestützter Berechtigungsabfrage. Login-Drosselung und
 Session-Rotation sind implementiert; Datenbankrollen bleiben eine zukünftige
 Authentifizierungsaufgabe.
+
+Der Repository-Test `tests/mariadb-auth-e2e.sh` prüft diesen Ablauf gegen
+MariaDB mit zwei temporären Benutzern: anonymer Zugriff wird abgelehnt, falsche
+Zugangsdaten schlagen fehl, der berechtigte Benutzer erhält eine persistente
+Session und erreicht `/admin`, ein eingeloggter Benutzer ohne `admin.view`
+erhält HTTP 403, und Logout entfernt die Session aus MariaDB.

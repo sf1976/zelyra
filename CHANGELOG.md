@@ -16,6 +16,8 @@ compiler and repository release.
 - Extended the MariaDB CRUD end-to-end test to cover search, relationship and
   boolean filters, allowlisted sorting, pagination, invalid query fields, and
   complete cleanup.
+- Added a MariaDB authentication end-to-end test covering login, persistent
+  sessions, permission denial, and logout.
 
 ### Fixed
 

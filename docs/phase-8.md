@@ -86,3 +86,9 @@ arguments or source control.
 This is the first working authentication slice with persistent sessions and
 database-backed permission lookup. Login throttling and session rotation are
 implemented; database roles remain a future authentication step.
+
+The repository test `tests/mariadb-auth-e2e.sh` exercises this flow against
+MariaDB with two temporary users: anonymous access is rejected, invalid
+credentials fail, the permitted user receives a persistent session and can
+access `/admin`, a logged-in user without `admin.view` receives HTTP 403, and
+logout removes the session from MariaDB.

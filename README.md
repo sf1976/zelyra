@@ -446,6 +446,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 GitHub Actions additionally runs the credential-free MariaDB CRUD integration
 test from `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
+The MariaDB authentication integration test from
+`tests/mariadb-auth-e2e.sh` additionally covers login, persistent sessions,
+permission denial, and logout.
 
 Please keep German and English user documentation synchronized. Architectural
 decisions should preserve safety, control, and extensibility.
