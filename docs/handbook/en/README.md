@@ -551,14 +551,17 @@ the continuing view roadmap.
 
 ### Standalone table views
 
-`tableview` exposes a checked MariaDB query without requiring a CRUD resource:
+`tableview` exposes a checked MariaDB query without requiring a CRUD resource.
+The result can be a table type or a dedicated struct for joins and aggregates:
 
 ~~~zelyra
 tableview Customers {
-    source sql<Customer[]> {
-        SELECT id, name, email FROM customers
+    source sql<CustomerOverview[]> {
+        SELECT c.id, c.name, COUNT(o.id) AS orders
+        FROM customers c LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name
     }
-    columns { id name email }
+    columns { id name orders }
     searchable
     sortable
     paginated 25

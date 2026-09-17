@@ -8,19 +8,36 @@ table customers {
     email: Email?
 }
 
+table orders {
+    id: Id primary auto
+    customer: Customer required
+    total: Decimal required
+}
+
+struct CustomerOverview {
+    id: Id
+    name: String
+    orders: Int
+    turnover: Decimal?
+}
+
 tableview Customers {
-    source sql<Customer[]> {
+    source sql<CustomerOverview[]> {
         SELECT
-            id,
-            name,
-            email
-        FROM customers
+            c.id,
+            c.name,
+            COUNT(o.id) AS orders,
+            SUM(o.total) AS turnover
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name
     }
 
     columns {
         id
         name
-        email
+        orders
+        turnover
     }
 
     searchable

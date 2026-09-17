@@ -100,7 +100,7 @@ noch in Prüfung.
   Events bleiben geplant.
 - [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,
   deklarierten Spalten, Suche, Sortierung, Pagination, URL-Zustand und Escaping
-  sind für tabellenbasierte Ergebnistypen verfügbar.
+  sind für tabellen- und struct-basierte Ergebnistypen verfügbar.
 - [ ] Mehrere benannte Slots, Default-Slots, Fallback-Inhalte und verschachtelte
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.

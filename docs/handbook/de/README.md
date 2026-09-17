@@ -608,14 +608,17 @@ sind Teil der weiteren View-Roadmap.
 ### Eigenständige Tabellenansichten
 
 Mit `tableview` kann eine geprüfte MariaDB-Abfrage ohne CRUD-Ressource
-bereitgestellt werden:
+bereitgestellt werden. Das Ergebnis kann ein Tabellentyp oder ein eigener
+`struct` für Joins und Aggregationen sein:
 
 ~~~zelyra
 tableview Customers {
-    source sql<Customer[]> {
-        SELECT id, name, email FROM customers
+    source sql<CustomerOverview[]> {
+        SELECT c.id, c.name, COUNT(o.id) AS orders
+        FROM customers c LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name
     }
-    columns { id name email }
+    columns { id name orders }
     searchable
     sortable
     paginated 25

@@ -2378,7 +2378,9 @@ fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schem
             );
             valid = false;
         }
-        let Some(result_table) = tableview_result_table(&tableview.result_type, schema) else {
+        let Some(result_fields) =
+            tableview_result_fields(&tableview.result_type, schema, &program.records)
+        else {
             diagnostic(
                 path,
                 "E-VIEW-005",
@@ -2406,17 +2408,13 @@ fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schem
                     tableview.span.column,
                 );
                 valid = false;
-            } else if !result_table
-                .columns
-                .iter()
-                .any(|candidate| candidate.name == *column)
-            {
+            } else if !result_fields.iter().any(|candidate| *candidate == column) {
                 diagnostic(
                     path,
                     "E-VIEW-007",
                     &format!(
-                        "tableview column {} does not exist in result table {}",
-                        column, result_table.name
+                        "tableview column {} does not exist in its result type",
+                        column
                     ),
                     tableview.span.line,
                     tableview.span.column,
@@ -2428,10 +2426,11 @@ fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schem
     valid
 }
 
-fn tableview_result_table<'a>(
+fn tableview_result_fields<'a>(
     result_type: &zelyra_ast::Type,
     schema: &'a Schema,
-) -> Option<&'a zelyra_database::Table> {
+    records: &'a [zelyra_ast::RecordDef],
+) -> Option<Vec<&'a str>> {
     let result_type = match result_type {
         zelyra_ast::Type::Array(inner) | zelyra_ast::Type::Option(inner) => inner,
         _ => result_type,
@@ -2440,7 +2439,7 @@ fn tableview_result_table<'a>(
         return None;
     };
     let snake = name.to_ascii_lowercase();
-    schema
+    if let Some(table) = schema
         .tables
         .iter()
         .find(|table| table.name == snake)
@@ -2451,6 +2450,25 @@ fn tableview_result_table<'a>(
                 format!("{snake}s")
             };
             schema.tables.iter().find(|table| table.name == plural)
+        })
+    {
+        return Some(
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.as_str())
+                .collect(),
+        );
+    }
+    records
+        .iter()
+        .find(|record| record.name == *name)
+        .map(|record| {
+            record
+                .fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect()
         })
 }
 

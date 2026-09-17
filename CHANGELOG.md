@@ -14,6 +14,7 @@ compiler and repository release.
   literal-property escaping.
 - Added declarative MariaDB-backed `tableview` routes with checked SQL sources,
   allowlisted columns, search, sorting, pagination, URL state, and escaping.
+- Added struct-backed tableview results for typed join and aggregate views.
 - Added schema-aware CRUD filter operators for text matching, numeric
   comparisons, and null checks, with operator controls and URL state.
 - Added database-backed role permission groups through `roles` and

@@ -258,14 +258,18 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 The unified, composable view data pipeline that will make these operations
 available to arbitrary views remains planned.
 
-Standalone typed table views can already expose a checked MariaDB query:
+Standalone typed table views can already expose a checked MariaDB query. Their
+result may be a declared table type or a dedicated `struct` for joins and
+aggregates:
 
 ~~~zelyra
 tableview Customers {
-    source sql<Customer[]> {
-        SELECT id, name, email FROM customers
+    source sql<CustomerOverview[]> {
+        SELECT c.id, c.name, COUNT(o.id) AS orders
+        FROM customers c LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name
     }
-    columns { id name email }
+    columns { id name orders }
     searchable
     sortable
     paginated 25

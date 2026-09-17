@@ -103,7 +103,7 @@ under evaluation.
   planned.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
   declared columns, search, sorting, pagination, URL state, and escaping are
-  available for table-backed result types.
+  available for table- and struct-backed result types.
 - [ ] Multiple named slots, default slots, fallback content, and nested views.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.

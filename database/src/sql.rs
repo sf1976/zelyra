@@ -68,11 +68,12 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         }
     }
     for tableview in &program.tableviews {
-        errors.extend(check_query(
+        errors.extend(check_tableview_query(
             &tableview.source,
             &tableview.result_type,
             schema,
             &HashMap::new(),
+            &program.records,
             tableview.span,
         ));
     }
@@ -304,6 +305,38 @@ fn check_query(
         ));
     }
     errors
+}
+
+fn check_tableview_query(
+    query: &str,
+    result_type: &Type,
+    schema: &Schema,
+    environment: &HashMap<String, Type>,
+    records: &[zelyra_ast::RecordDef],
+    span: Span,
+) -> Vec<SqlError> {
+    let mut errors = check_query(query, result_type, schema, environment, span);
+    if let Some(record_name) = result_record_name(result_type) {
+        if records.iter().any(|record| record.name == record_name) {
+            errors.retain(|error| {
+                !error.message.contains(&format!(
+                    "SQL result type `{record_name}` does not map to a table"
+                ))
+            });
+        }
+    }
+    errors
+}
+
+fn result_record_name(result_type: &Type) -> Option<&str> {
+    let result_type = match result_type {
+        Type::Array(inner) | Type::Option(inner) => inner,
+        _ => result_type,
+    };
+    match result_type {
+        Type::Named(name) => Some(name),
+        _ => None,
+    }
 }
 
 fn query_tables(
@@ -735,5 +768,15 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("username")));
+    }
+
+    #[test]
+    fn accepts_record_tableview_results() {
+        let program = parse(&lex(
+            "struct CustomerOverview { id: Id name: String orders: Int turnover: Decimal? } tableview Customers { source sql<CustomerOverview[]> { SELECT id, name, COUNT(id) AS orders, SUM(id) AS turnover FROM customers GROUP BY id, name } columns { id name orders turnover } }",
+        )
+        .unwrap())
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
     }
 }
