@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.15"
+version = "0.1.16"
 zelyra = "0.1"
 
 [capabilities]
@@ -675,10 +675,10 @@ database = true
 network = false
 ~~~
 
-Statische Prüfung und Runtime-Durchsetzung an Funktions- und nativen
-SQL-Grenzen sind bei vorhandenen Projektfreigaben implementiert. Eine
-vollständige Betriebssystem-Sandbox für alle Capabilities ist noch nicht
-vorhanden.
+Statische Prüfung und Runtime-Durchsetzung an Funktions-, nativen SQL-,
+Formular-, CRUD- und Authentifizierungs-Datenbankgrenzen sind bei vorhandenen
+Projektfreigaben implementiert. Eine vollständige Betriebssystem-Sandbox für
+alle Capabilities ist noch nicht vorhanden.
 
 ## 15. Contracts und Verify
 
@@ -790,7 +790,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.15"
+version = "0.1.16"
 zelyra = "0.1"
 
 [capabilities]

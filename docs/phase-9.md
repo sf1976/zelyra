@@ -59,7 +59,8 @@ operating-system privileges. Runtime capability boundaries are nevertheless
 enforced: a function call with a project grant set is denied unless the
 function's declared capabilities are granted, and native SQL is denied unless
 the current function declares `Database`. The CLI passes the grants from
-`zelyra.toml` to `run`, `serve`, and executable API handlers.
+`zelyra.toml` to `run`, `serve`, executable API handlers, forms, CRUD, and
+database-backed authentication.
 
 The first structured-concurrency slice is available through `parallel` and
 `await`:

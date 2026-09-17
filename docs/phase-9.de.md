@@ -62,7 +62,7 @@ durchgesetzt: Ein Funktionsaufruf mit Projektfreigaben wird abgewiesen, wenn
 die deklarierten Capabilities der Funktion nicht freigegeben sind; natives SQL
 wird abgewiesen, wenn die aktuelle Funktion nicht `Database` deklariert. Die
 CLI übergibt die Freigaben aus `zelyra.toml` an `run`, `serve` und ausführbare
-API-Handler.
+API-Handler, Formulare, CRUD und datenbankgestützte Authentifizierung.
 
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:

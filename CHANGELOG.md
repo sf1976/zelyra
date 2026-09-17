@@ -4,6 +4,23 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.16 — 2026-09-17
+
+### Added
+
+- WebApp database capability configuration through
+  `with_database_capability`.
+- Runtime denial of generated form, CRUD, and persistent-authentication
+  database operations when the project does not grant `Database`.
+- CLI `serve` now propagates the project database grant to the WebApp.
+- Added WebApp capability tests and synchronized German and English
+  documentation.
+
+### Known limitations
+
+- The OS-level capability sandbox and non-database host APIs remain future
+  work.
+
 ## 0.1.15 — 2026-09-17
 
 ### Added

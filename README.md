@@ -68,8 +68,9 @@ Implemented today:
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
-- runtime enforcement of declared function capabilities and native SQL access
-  when project grants are supplied by the CLI;
+- runtime enforcement of declared function capabilities, native SQL, forms,
+  CRUD, and authentication database access when project grants are supplied by
+  the CLI;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches
@@ -91,8 +92,8 @@ Implemented today:
   and `counterexample` for IDEs and CI.
 
 Full CRUD generation, database roles, richer language-level domain-error values,
-general formal verification, and production deployment tooling are still being
-developed. See
+general formal verification, operating-system capability integration, and
+production deployment tooling are still being developed. See
 the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).

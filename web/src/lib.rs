@@ -259,6 +259,7 @@ pub struct WebApp {
     pub forms: Vec<FormRoute>,
     pub cruds: Vec<CrudRoute>,
     pub database_url: Option<String>,
+    pub database_capability_granted: Option<bool>,
     pub auth_token: Option<String>,
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
@@ -274,6 +275,7 @@ impl WebApp {
             forms,
             cruds: Vec::new(),
             database_url: None,
+            database_capability_granted: None,
             auth_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
@@ -293,6 +295,7 @@ impl WebApp {
             forms,
             cruds: Vec::new(),
             database_url,
+            database_capability_granted: None,
             auth_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
@@ -303,6 +306,11 @@ impl WebApp {
 
     pub fn with_cruds(mut self, cruds: Vec<CrudRoute>) -> Self {
         self.cruds = cruds;
+        self
+    }
+
+    pub fn with_database_capability(mut self, granted: bool) -> Self {
+        self.database_capability_granted = Some(granted);
         self
     }
 
@@ -353,11 +361,17 @@ impl WebApp {
         }
         for form in &self.forms {
             if let Some(path_params) = match_path(&form.path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
                 return dispatch_form(form, request, &path_params, self.database_url.as_deref());
             }
         }
         for crud in &self.cruds {
             if match_path(&crud.path, &request.path).is_some() {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
                 if let Some(response) = authorize(
                     crud.requires_auth,
                     &crud.permissions,
@@ -371,6 +385,9 @@ impl WebApp {
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
                 if let Some(response) = authorize(
                     crud.requires_auth,
                     &crud.permissions,
@@ -389,6 +406,9 @@ impl WebApp {
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&detail_path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
                 if let Some(response) = authorize(
                     crud.requires_auth,
                     &crud.permissions,
@@ -533,6 +553,9 @@ fn dispatch_login(
     match request.method.as_str() {
         "GET" => Response::html(200, render_login(auth)),
         "POST" => {
+            if app.database_capability_granted == Some(false) {
+                return database_capability_denied();
+            }
             let Some(database_url) = database_url else {
                 return Response::html(
                     503,
@@ -750,6 +773,14 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
+    if app.database_capability_granted == Some(false)
+        && app
+            .auth_route
+            .as_ref()
+            .is_some_and(|auth| auth.session_table.is_some())
+    {
+        return database_capability_denied();
+    }
     if let Some(session_id) = cookie_value(request, "zelyra_session") {
         if let Some(auth) = &app.auth_route {
             if let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) {
@@ -814,6 +845,9 @@ fn session_from_request(
     let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) else {
         return app.sessions.lock().ok()?.get(&session_id).cloned();
     };
+    if app.database_capability_granted == Some(false) {
+        return None;
+    }
     let query = format!(
         "SELECT user_id FROM {} WHERE token_hash = :token_hash AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
         quote_identifier(session_table)
@@ -861,6 +895,13 @@ fn session_from_request(
         app.auth_permissions.clone()
     };
     Some(Session { permissions })
+}
+
+fn database_capability_denied() -> Response {
+    Response::html(
+        403,
+        "<h1>403 Forbidden</h1><p>The Database capability is not granted.</p>",
+    )
 }
 
 impl Router {
@@ -2700,6 +2741,65 @@ mod tests {
         }]);
         let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(app.dispatch(&request).status, 503);
+    }
+
+    #[test]
+    fn database_capability_denies_crud_before_connecting() {
+        let app = WebApp::with_database_url(
+            Vec::new(),
+            Vec::new(),
+            Some("mariadb://root:invalid@127.0.0.1:1/test".into()),
+        )
+        .with_database_capability(false)
+        .with_cruds(vec![CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema: zelyra_database::Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        }]);
+        let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("Database capability is not granted"));
+    }
+
+    #[test]
+    fn database_capability_denies_forms_before_database_access() {
+        let app = WebApp::new(Vec::new(), vec![form_route()]).with_database_capability(false);
+        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("Database capability is not granted"));
+    }
+
+    #[test]
+    fn database_capability_denies_persistent_login() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: Some("sessions".into()),
+            permissions_table: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_database_capability(false)
+            .with_auth_route(auth);
+        let request = parse_request("POST /login HTTP/1.1\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("Database capability is not granted"));
     }
 
     #[test]

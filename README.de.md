@@ -69,8 +69,9 @@ Heute implementiert:
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
-- Runtime-Durchsetzung deklarierter Funktions-Capabilities und nativer
-  SQL-Zugriffe, wenn die CLI Projektfreigaben übergibt;
+- Runtime-Durchsetzung deklarierter Funktions-Capabilities sowie nativer SQL-,
+  Formular-, CRUD- und Authentifizierungs-Datenbankzugriffe, wenn die CLI
+  Projektfreigaben übergibt;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
@@ -93,8 +94,8 @@ Heute implementiert:
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, umfangreichere fachliche
-Fehlerwerte, allgemeine formale Verifikation und Produktionswerkzeuge werden
-noch entwickelt. Siehe die
+Fehlerwerte, allgemeine formale Verifikation, Betriebssystem-Integration der
+Capabilities und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
 
