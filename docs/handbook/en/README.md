@@ -621,8 +621,10 @@ Every result includes a stable code and a source range as
 JSON output contains the same result data, a human-readable `message`, an
 optional `counterexample` object, and a structured `location` object. A
 counterexample is emitted only when a bounded search verifies a small linear
-integer witness; otherwise it is `null`. Text output also shows an explanation
-and a source-line excerpt with a caret marker for every result.
+integer witness. The current search covers up to three linear variables in the
+range `-32..=32`, including failed loop-invariant checks; otherwise it is
+`null`. Text output also shows an explanation and a source-line excerpt with a
+caret marker for every result.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

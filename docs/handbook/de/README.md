@@ -679,9 +679,11 @@ Jedes Ergebnis enthält einen stabilen Code und einen Quellbereich als
 verwendet werden; die JSON-Ausgabe enthält dieselben Ergebnisdaten, eine
 verständliche `message`, ein optionales `counterexample`-Objekt und ein
 strukturiertes `location`-Objekt. Ein Gegenbeispiel wird nur ausgegeben, wenn
-eine begrenzte Suche einen kleinen linearen Integerzeugen sicher bestätigt;
-sonst ist der Wert `null`. Die Textausgabe zeigt außerdem für jedes Ergebnis
-eine Erklärung und einen Quellzeilenausschnitt mit Caret-Marker.
+eine begrenzte Suche einen kleinen linearen Integerzeugen sicher bestätigt.
+Die aktuelle Suche umfasst bis zu drei lineare Variablen im Bereich
+`-32..=32`, auch bei fehlgeschlagenen Schleifeninvarianten; sonst ist der Wert
+`null`. Die Textausgabe zeigt außerdem für jedes Ergebnis eine Erklärung und
+einen Quellzeilenausschnitt mit Caret-Marker.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`

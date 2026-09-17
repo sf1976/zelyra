@@ -164,22 +164,22 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
         collect_loop_invariants(&function.body, &mut loop_invariants);
         for (loop_id, invariants) in loop_invariants {
             for (index, invariant) in invariants.iter().enumerate() {
-                let status = invariant_diagnostics
+                let evidence = invariant_diagnostics
                     .get(&(loop_id, index))
-                    .copied()
-                    .unwrap_or_else(|| verify_contract(invariant, None, &functions).status);
+                    .cloned()
+                    .unwrap_or_else(|| verify_contract(invariant, None, &functions));
                 results.push(VerificationResult {
                     function: function.name.clone(),
                     kind: ContractKind::LoopInvariant,
                     index,
                     message: verification_message(
                         ContractKind::LoopInvariant,
-                        status,
+                        evidence.status,
                         Some(invariant),
                     ),
-                    status,
+                    status: evidence.status,
                     span: invariant.span,
-                    counterexample: None,
+                    counterexample: evidence.counterexample,
                 });
             }
         }
@@ -443,7 +443,7 @@ struct ReturnPath<'a> {
     substitutions: HashMap<String, LinearValue>,
 }
 
-type InvariantDiagnostics = HashMap<(usize, usize), VerificationStatus>;
+type InvariantDiagnostics = HashMap<(usize, usize), VerificationEvidence>;
 
 struct LoopSymbolicContext<'a> {
     parameters: &'a HashSet<String>,
@@ -833,15 +833,15 @@ fn symbolic_loop_states<'a>(
         return None;
     };
     for (index, invariant) in invariants.iter().enumerate() {
-        let status = invariant_status(
+        let evidence = invariant_status(
             invariant,
             &guards,
             &bindings,
             &substitutions,
             context.functions,
         );
-        record_invariant_status(context.diagnostics, loop_id, index, status);
-        if status != VerificationStatus::Proven {
+        record_invariant_status(context.diagnostics, loop_id, index, evidence.clone());
+        if evidence.status != VerificationStatus::Proven {
             return None;
         }
     }
@@ -940,15 +940,15 @@ fn symbolic_loop_states<'a>(
                 substitutions,
             } => {
                 for (index, invariant) in invariants.iter().enumerate() {
-                    let status = invariant_status(
+                    let evidence = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
                         context.functions,
                     );
-                    record_invariant_status(context.diagnostics, loop_id, index, status);
-                    if status != VerificationStatus::Proven {
+                    record_invariant_status(context.diagnostics, loop_id, index, evidence.clone());
+                    if evidence.status != VerificationStatus::Proven {
                         return None;
                     }
                 }
@@ -981,15 +981,15 @@ fn symbolic_loop_states<'a>(
                 substitutions,
             } => {
                 for (index, invariant) in invariants.iter().enumerate() {
-                    let status = invariant_status(
+                    let evidence = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
                         context.functions,
                     );
-                    record_invariant_status(context.diagnostics, loop_id, index, status);
-                    if status != VerificationStatus::Proven {
+                    record_invariant_status(context.diagnostics, loop_id, index, evidence.clone());
+                    if evidence.status != VerificationStatus::Proven {
                         return None;
                     }
                 }
@@ -1029,15 +1029,15 @@ fn symbolic_unconditional_loop_states<'a>(
         return None;
     };
     for (index, invariant) in invariants.iter().enumerate() {
-        let status = invariant_status(
+        let evidence = invariant_status(
             invariant,
             &guards,
             &bindings,
             &substitutions,
             context.functions,
         );
-        record_invariant_status(context.diagnostics, loop_id, index, status);
-        if status != VerificationStatus::Proven {
+        record_invariant_status(context.diagnostics, loop_id, index, evidence.clone());
+        if evidence.status != VerificationStatus::Proven {
             return None;
         }
     }
@@ -1068,15 +1068,15 @@ fn symbolic_unconditional_loop_states<'a>(
                 substitutions,
             } => {
                 for (index, invariant) in invariants.iter().enumerate() {
-                    let status = invariant_status(
+                    let evidence = invariant_status(
                         invariant,
                         &guards,
                         &bindings,
                         &substitutions,
                         context.functions,
                     );
-                    record_invariant_status(context.diagnostics, loop_id, index, status);
-                    if status != VerificationStatus::Proven {
+                    record_invariant_status(context.diagnostics, loop_id, index, evidence.clone());
+                    if evidence.status != VerificationStatus::Proven {
                         return None;
                     }
                 }
@@ -1759,6 +1759,9 @@ fn find_symbolic_counterexample(
 }
 
 fn find_linear_model(constraints: &[PathConstraint]) -> Option<Vec<(String, i64)>> {
+    const COUNTEREXAMPLE_BOUND: i64 = 32;
+    const MAX_COUNTEREXAMPLE_VARIABLES: usize = 3;
+
     let mut linear_constraints = Vec::new();
     for constraint in constraints {
         match constraint {
@@ -1772,41 +1775,51 @@ fn find_linear_model(constraints: &[PathConstraint]) -> Option<Vec<(String, i64)
         .collect::<Vec<_>>();
     variables.sort();
     variables.dedup();
-    if variables.len() > 2 {
+    if variables.len() > MAX_COUNTEREXAMPLE_VARIABLES {
         return None;
     }
 
     let mut model = HashMap::new();
-    match variables.as_slice() {
-        [] => {
-            if linear_model_satisfies(&linear_constraints, &model) {
-                return Some(Vec::new());
-            }
+    find_linear_model_values(
+        &linear_constraints,
+        &variables,
+        0,
+        &mut model,
+        COUNTEREXAMPLE_BOUND,
+    )
+}
+
+fn find_linear_model_values(
+    constraints: &[&LinearConstraint],
+    variables: &[String],
+    index: usize,
+    model: &mut HashMap<String, i64>,
+    bound: i64,
+) -> Option<Vec<(String, i64)>> {
+    if index == variables.len() {
+        if !linear_model_satisfies(constraints, model) {
+            return None;
         }
-        [variable] => {
-            for value in -32..=32 {
-                model.insert(variable.clone(), value);
-                if linear_model_satisfies(&linear_constraints, &model) {
-                    return Some(vec![(variable.clone(), value)]);
-                }
-            }
-        }
-        [first, second] => {
-            for first_value in -32..=32 {
-                model.insert(first.clone(), first_value);
-                for second_value in -32..=32 {
-                    model.insert(second.clone(), second_value);
-                    if linear_model_satisfies(&linear_constraints, &model) {
-                        return Some(vec![
-                            (first.clone(), first_value),
-                            (second.clone(), second_value),
-                        ]);
-                    }
-                }
-            }
-        }
-        _ => unreachable!(),
+        return Some(
+            variables
+                .iter()
+                .map(|name| (name.clone(), *model.get(name).expect("model value")))
+                .collect(),
+        );
     }
+
+    let name = &variables[index];
+    for distance in 0..=bound {
+        for value in [distance, -distance] {
+            model.insert(name.clone(), value);
+            if let Some(result) =
+                find_linear_model_values(constraints, variables, index + 1, model, bound)
+            {
+                return Some(result);
+            }
+        }
+    }
+    model.remove(name);
     None
 }
 
@@ -1831,6 +1844,25 @@ fn prove_symbolic_predicate(
     substitutions: &HashMap<String, LinearValue>,
     functions: Option<&HashMap<String, &Function>>,
 ) -> Option<bool> {
+    let alternatives =
+        symbolic_predicate_alternatives(predicate, guards, bindings, substitutions, functions)?;
+    for constraints in alternatives {
+        match constraints_satisfiable(constraints) {
+            Some(false) => {}
+            Some(true) => return Some(false),
+            None => return None,
+        }
+    }
+    Some(true)
+}
+
+fn symbolic_predicate_alternatives(
+    predicate: &Expr,
+    guards: &[SymbolicGuard<'_>],
+    bindings: &HashMap<String, &Expr>,
+    substitutions: &HashMap<String, LinearValue>,
+    functions: Option<&HashMap<String, &Function>>,
+) -> Option<Vec<Vec<PathConstraint>>> {
     let mut guard_alternatives = vec![Vec::new()];
     for guard in guards {
         let alternatives = constraints_for_guard(
@@ -1853,14 +1885,27 @@ fn prove_symbolic_predicate(
         0,
     )?;
     let alternatives = combine_alternatives(guard_alternatives, violations);
-    for constraints in alternatives {
-        match constraints_satisfiable(constraints) {
-            Some(false) => {}
-            Some(true) => return Some(false),
-            None => return None,
+    Some(alternatives)
+}
+
+fn find_symbolic_predicate_counterexample(
+    predicate: &Expr,
+    guards: &[SymbolicGuard<'_>],
+    bindings: &HashMap<String, &Expr>,
+    substitutions: &HashMap<String, LinearValue>,
+    functions: Option<&HashMap<String, &Function>>,
+) -> Option<Vec<(String, i64)>> {
+    for constraints in
+        symbolic_predicate_alternatives(predicate, guards, bindings, substitutions, functions)?
+    {
+        if constraints_satisfiable(constraints.clone()) == Some(false) {
+            continue;
+        }
+        if let Some(model) = find_linear_model(&constraints) {
+            return Some(model);
         }
     }
-    Some(true)
+    None
 }
 
 fn invariant_status(
@@ -1869,11 +1914,27 @@ fn invariant_status(
     bindings: &HashMap<String, &Expr>,
     substitutions: &HashMap<String, LinearValue>,
     functions: Option<&HashMap<String, &Function>>,
-) -> VerificationStatus {
-    match prove_symbolic_predicate(predicate, guards, bindings, substitutions, functions) {
-        Some(true) => VerificationStatus::Proven,
-        Some(false) => VerificationStatus::Failed,
-        None => VerificationStatus::RuntimeCheck,
+) -> VerificationEvidence {
+    let status =
+        match prove_symbolic_predicate(predicate, guards, bindings, substitutions, functions) {
+            Some(true) => VerificationStatus::Proven,
+            Some(false) => VerificationStatus::Failed,
+            None => VerificationStatus::RuntimeCheck,
+        };
+    let counterexample = (status == VerificationStatus::Failed)
+        .then(|| {
+            find_symbolic_predicate_counterexample(
+                predicate,
+                guards,
+                bindings,
+                substitutions,
+                functions,
+            )
+        })
+        .flatten();
+    VerificationEvidence {
+        status,
+        counterexample,
     }
 }
 
@@ -1881,22 +1942,29 @@ fn record_invariant_status(
     diagnostics: &mut InvariantDiagnostics,
     loop_id: usize,
     index: usize,
-    status: VerificationStatus,
+    evidence: VerificationEvidence,
 ) {
     diagnostics
         .entry((loop_id, index))
         .and_modify(|existing| {
-            *existing = match (*existing, status) {
-                (VerificationStatus::Failed, _) | (_, VerificationStatus::Failed) => {
-                    VerificationStatus::Failed
-                }
-                (VerificationStatus::RuntimeCheck, _) | (_, VerificationStatus::RuntimeCheck) => {
-                    VerificationStatus::RuntimeCheck
-                }
-                _ => VerificationStatus::Proven,
-            };
+            let existing_priority = verification_status_priority(existing.status);
+            let new_priority = verification_status_priority(evidence.status);
+            if new_priority > existing_priority {
+                *existing = evidence.clone();
+            } else if existing.counterexample.is_none() {
+                existing.counterexample = evidence.counterexample.clone();
+            }
         })
-        .or_insert(status);
+        .or_insert(evidence);
+}
+
+fn verification_status_priority(status: VerificationStatus) -> u8 {
+    match status {
+        VerificationStatus::Proven => 0,
+        VerificationStatus::Unproven => 1,
+        VerificationStatus::RuntimeCheck => 2,
+        VerificationStatus::Failed => 3,
+    }
 }
 
 fn symbolic_bool_with_constraints(
@@ -4352,6 +4420,20 @@ mod tests {
     }
 
     #[test]
+    fn reports_a_small_linear_counterexample_with_three_variables() {
+        let program = parse(
+            &lex("fn bad(a: Int, b: Int, c: Int) -> Int requires { a >= 0 && c <= b } ensures { result > b } { return c } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[1].status, VerificationStatus::Failed);
+        assert_eq!(
+            results[1].counterexample,
+            Some(vec![("a".into(), 0), ("b".into(), 0), ("c".into(), 0)])
+        );
+    }
+
+    #[test]
     fn proves_simple_integer_postconditions_from_direct_returns() {
         let program = parse(
             &lex("fn increment(value: Int) -> Int ensures { result > value } { return value + 1 } fn unchanged(value: Int) -> Int ensures { result > value } { return value } fn absolute(value: Int) -> Int ensures { result >= 0 } { if value >= 0 { return value } else { return -value } } fn classify(value: Int) -> Int ensures { result >= 0 } { match value { 0 => { return 0 } _ => { return 1 } } } fn bool_value(value: Bool) -> Int ensures { result >= 0 } { match value { true => { return 1 } false => { return 0 } } } fn main() { }").unwrap(),
@@ -4484,6 +4566,7 @@ mod tests {
         assert_eq!(results[2].kind, ContractKind::LoopInvariant);
         assert_eq!(results[2].status, VerificationStatus::Failed);
         assert!(results[2].message.contains("not preserved"));
+        assert!(results[2].counterexample.is_some());
         assert_eq!(results[3].status, VerificationStatus::Unproven);
     }
 

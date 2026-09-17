@@ -192,8 +192,9 @@ Das JSON-Ergebnis enthält `status`, `code`, `message`, `function`, `kind`,
 `index`, `counterexample` sowie ein `location`-Objekt mit Datei und
 Start-/Endposition in Zeile und Spalte. `counterexample` ist ein Objekt, wenn
 ein kleines lineares Integer-Gegenbeispiel gefunden wurde, sonst `null`. Die
-aktuelle begrenzte Suche verarbeitet höchstens zwei lineare Variablen im
-Bereich `-32..=32`; kein Gegenbeispiel bedeutet daher nicht, dass keines
+aktuelle begrenzte Suche verarbeitet höchstens drei lineare Variablen im
+Bereich `-32..=32` für fehlgeschlagene Vorbedingungen, Nachbedingungen und
+Schleifeninvarianten; kein Gegenbeispiel bedeutet daher nicht, dass keines
 existiert.
 
 Das enthaltene negative Beispiel zeigt einen konkreten Zeugen:

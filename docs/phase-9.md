@@ -181,8 +181,9 @@ The JSON result contains `status`, `code`, `message`, `function`, `kind`,
 `index`, `counterexample`, and a `location` object with `file`, `start`, and
 `end` line/column positions. `counterexample` is an object when a small
 linear integer witness was found, otherwise `null`. The current bounded
-search handles at most two linear variables in the range `-32..=32`; no
-counterexample is not evidence that none exists.
+search handles at most three linear variables in the range `-32..=32`, for
+failed preconditions, postconditions, and loop invariants; no counterexample
+is not evidence that none exists.
 
 The included negative example demonstrates a concrete witness:
 

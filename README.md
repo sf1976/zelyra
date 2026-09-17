@@ -67,7 +67,9 @@ Implemented today:
   explicit loop invariants with individual verification statuses and
   caller-assumption-aware callee precondition checks are included. Each result
   includes a stable code, source range, explanation, and marked source excerpt;
-  a bounded counterexample is included when it can be safely found.
+  a bounded counterexample is included when it can be safely found. The
+  current search covers up to three linear integer variables and also reports
+  witnesses for failed loop invariants.
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
