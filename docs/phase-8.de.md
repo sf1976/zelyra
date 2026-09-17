@@ -32,9 +32,13 @@ geschützte Routen eine Auth-Definition besitzen. Die Weblaufzeit verweigert
 geschützte Routen standardmäßig. Er stellt jetzt einen datenbankgestützten
 Login unter /login bereit. Die konfigurierte Benutzertabelle muss die Spalten
 id, email und password_hash besitzen; password_hash-Werte verwenden Argon2.
-Eine optionale active-Spalte deaktiviert inaktive Benutzer.
+Eine optionale active-Spalte deaktiviert inaktive Benutzer. Fehlgeschlagene
+Loginversuche werden pro normalisierter E-Mail-Adresse gezählt. Nach fünf
+Fehlern innerhalb von 15 Minuten werden weitere Versuche 60 Sekunden lang mit
+HTTP 429 und dem Header `Retry-After: 60` abgelehnt.
 
-Ein erfolgreicher Login erzeugt ein HttpOnly-SameSite-Session-Cookie. Wenn die
+Ein erfolgreicher Login erzeugt ein HttpOnly-SameSite-Session-Cookie und rotiert
+ein vorhandenes Session-Token dieses Browsers. Wenn die
 optionale Session-Tabelle konfiguriert ist, wird nur ein Blake2s-256-Hash des
 Session-Tokens in MariaDB gespeichert; das Cookie selbst wird nie in der
 Datenbank gespeichert. Sessions laufen nach 24 Stunden ab und Logout entfernt
@@ -83,6 +87,6 @@ Echte Passwörter nicht als Kommandoargument oder in der Versionsverwaltung
 ablegen.
 
 Dies ist die erste funktionierende Authentifizierungsscheibe mit persistenten
-Sessions und datenbankgestützter Berechtigungsabfrage. Datenbankrollen,
-Login-Drosselung und Session-Rotation bleiben zukünftige
-Authentifizierungsschritte.
+Sessions und datenbankgestützter Berechtigungsabfrage. Login-Drosselung und
+Session-Rotation sind implementiert; Datenbankrollen bleiben eine zukünftige
+Authentifizierungsaufgabe.

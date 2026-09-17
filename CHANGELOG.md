@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.12 — 2026-09-17
+
+### Added
+
+- Failed logins are throttled per normalized e-mail address after five failed
+  attempts within 15 minutes.
+- A blocked login responds with HTTP 429 and `Retry-After: 60`.
+- Successful logins rotate the session token and invalidate the previous
+  token.
+
+### Documentation
+
+- Authentication throttling and session rotation documented in English and
+  German.
+
 ## 0.1.11 — 2026-09-17
 
 ### Added

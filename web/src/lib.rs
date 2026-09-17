@@ -7,6 +7,7 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use zelyra_ast::{FormDef, TableDef, Type};
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
@@ -241,6 +242,17 @@ struct Session {
 }
 
 #[derive(Clone, Debug)]
+struct LoginThrottle {
+    window_started: Instant,
+    failures: u32,
+    blocked_until: Option<Instant>,
+}
+
+const LOGIN_FAILURE_LIMIT: u32 = 5;
+const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
+const LOGIN_BLOCK_DURATION: Duration = Duration::from_secs(60);
+
+#[derive(Clone, Debug)]
 pub struct WebApp {
     pub routes: Vec<Route>,
     pub apis: Vec<ApiRoute>,
@@ -251,6 +263,7 @@ pub struct WebApp {
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
+    login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
 
 impl WebApp {
@@ -265,6 +278,7 @@ impl WebApp {
             auth_permissions: Vec::new(),
             auth_route: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -283,6 +297,7 @@ impl WebApp {
             auth_permissions: Vec::new(),
             auth_route: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -544,6 +559,11 @@ fn dispatch_login(
                     "<h1>422 Unprocessable Entity</h1><p>Email and password are required.</p>",
                 );
             }
+            let throttle_key = login_throttle_key(&email);
+            if login_is_blocked(app, &throttle_key) {
+                return Response::html(429, "<h1>429 Too Many Requests</h1><p>Too many failed login attempts. Try again later.</p>")
+                    .with_header("Retry-After", LOGIN_BLOCK_DURATION.as_secs().to_string());
+            }
             let Some(table) = auth
                 .schema
                 .tables
@@ -583,7 +603,13 @@ fn dispatch_login(
                     })
             });
             if !valid_password {
+                record_login_failure(app, throttle_key);
                 return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
+            }
+            clear_login_failures(app, &throttle_key);
+            if let Err(error) = rotate_existing_session(app, auth, request, Some(database_url)) {
+                eprintln!("zelyra web: session rotation failed: {error}");
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
             }
             let Ok(session_id) = CsrfProtection::generate().map(|csrf| csrf.token().to_owned())
             else {
@@ -634,6 +660,90 @@ fn dispatch_login(
         }
         _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
     }
+}
+
+fn login_throttle_key(email: &str) -> String {
+    email.trim().to_ascii_lowercase()
+}
+
+fn login_is_blocked(app: &WebApp, key: &str) -> bool {
+    let Ok(mut throttle) = app.login_throttle.lock() else {
+        return false;
+    };
+    let Some(state) = throttle.get_mut(key) else {
+        return false;
+    };
+    let now = Instant::now();
+    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
+        throttle.remove(key);
+        return false;
+    }
+    if let Some(blocked_until) = state.blocked_until {
+        if now < blocked_until {
+            return true;
+        }
+        state.failures = 0;
+        state.blocked_until = None;
+        state.window_started = now;
+    }
+    false
+}
+
+fn record_login_failure(app: &WebApp, key: String) {
+    let Ok(mut throttle) = app.login_throttle.lock() else {
+        return;
+    };
+    let now = Instant::now();
+    let state = throttle.entry(key).or_insert(LoginThrottle {
+        window_started: now,
+        failures: 0,
+        blocked_until: None,
+    });
+    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
+        state.window_started = now;
+        state.failures = 0;
+        state.blocked_until = None;
+    }
+    state.failures = state.failures.saturating_add(1);
+    if state.failures >= LOGIN_FAILURE_LIMIT {
+        state.blocked_until = Some(now + LOGIN_BLOCK_DURATION);
+    }
+}
+
+fn clear_login_failures(app: &WebApp, key: &str) {
+    if let Ok(mut throttle) = app.login_throttle.lock() {
+        throttle.remove(key);
+    }
+}
+
+fn rotate_existing_session(
+    app: &WebApp,
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Result<(), String> {
+    let Some(session_id) = cookie_value(request, "zelyra_session") else {
+        return Ok(());
+    };
+    if let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) {
+        let query = format!(
+            "DELETE FROM {} WHERE token_hash = :token_hash",
+            quote_identifier(session_table)
+        );
+        if let Err(error) = zelyra_database::execute_mariadb_query(
+            database_url,
+            &query,
+            vec![(
+                "token_hash".into(),
+                zelyra_database::QueryValue::String(session_token_hash(&session_id)),
+            )],
+        ) {
+            return Err(error.to_string());
+        }
+    } else if let Ok(mut sessions) = app.sessions.lock() {
+        sessions.remove(&session_id);
+    }
+    Ok(())
 }
 
 fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) -> Response {
@@ -2185,6 +2295,7 @@ fn reason_phrase(status: u16) -> &'static str {
         502 => "Bad Gateway",
         503 => "Service Unavailable",
         422 => "Unprocessable Entity",
+        429 => "Too Many Requests",
         303 => "See Other",
         _ => "Response",
     }
@@ -2404,6 +2515,52 @@ mod tests {
     #[test]
     fn password_hash_rejects_empty_password() {
         assert!(hash_password("").is_err());
+    }
+
+    #[test]
+    fn throttles_after_five_failed_login_attempts() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let key = login_throttle_key(" User@Example.test ");
+        assert_eq!(key, "user@example.test");
+        for attempt in 1..=4 {
+            record_login_failure(&app, key.clone());
+            assert!(
+                !login_is_blocked(&app, &key),
+                "blocked on attempt {attempt}"
+            );
+        }
+        record_login_failure(&app, key.clone());
+        assert!(login_is_blocked(&app, &key));
+        clear_login_failures(&app, &key);
+        assert!(!login_is_blocked(&app, &key));
+    }
+
+    #[test]
+    fn rotating_memory_session_invalidates_previous_token() {
+        let old_token = "old-session-token";
+        let app = WebApp::new(Vec::new(), Vec::new());
+        app.sessions.lock().unwrap().insert(
+            old_token.into(),
+            Session {
+                permissions: Vec::new(),
+            },
+        );
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let request = parse_request(&format!(
+            "POST /login HTTP/1.1\r\nCookie: zelyra_session={old_token}\r\n\r\n"
+        ))
+        .unwrap();
+        rotate_existing_session(&app, &auth, &request, None).unwrap();
+        assert!(!app.sessions.lock().unwrap().contains_key(old_token));
     }
 
     #[test]

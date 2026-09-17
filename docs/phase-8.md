@@ -31,9 +31,12 @@ protected routes have an auth definition. The web runtime denies protected
 routes by default. It now provides a database-backed login at /login. The
 configured user table must contain id, email, and password_hash columns;
 password_hash values use Argon2. An optional active column disables inactive
-users.
+users. Failed login attempts are tracked per normalized e-mail address. After
+five failures within 15 minutes, further attempts are rejected with HTTP 429
+for 60 seconds and include a `Retry-After: 60` header.
 
-Successful login creates an HttpOnly, SameSite session cookie. When the
+Successful login creates an HttpOnly, SameSite session cookie and rotates any
+previous session token from that browser. When the
 optional sessions table is configured, only a Blake2s-256 hash of the session
 token is stored in MariaDB; the cookie itself is never stored in the database.
 Sessions expire after 24 hours and logout removes the database record. Without
@@ -81,5 +84,5 @@ password line from standard input. Do not place real passwords in command-line
 arguments or source control.
 
 This is the first working authentication slice with persistent sessions and
-database-backed permission lookup. Database roles, login throttling, and
-session rotation remain future authentication steps.
+database-backed permission lookup. Login throttling and session rotation are
+implemented; database roles remain a future authentication step.

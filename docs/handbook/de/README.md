@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.11"
+version = "0.1.12"
 zelyra = "0.1"
 
 [capabilities]
@@ -544,7 +544,10 @@ sind Teil der weiteren View-Roadmap.
 ## 13. Authentifizierung und Berechtigungen
 
 🧪 Zelyra unterstützt Argon2-Login, persistente MariaDB-Sessions, Logout,
-Routenschutz und datenbankgestützte Berechtigungsprüfungen.
+Routenschutz und datenbankgestützte Berechtigungsprüfungen. Fünf
+Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
+Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
+rotiert das vorherige Session-Token dieses Browsers und entwertet es.
 
 Einen Wert für die erforderliche Spalte `password_hash` mit der CLI erzeugen.
 Der interaktive Befehl schaltet die Passwortanzeige aus und verlangt eine
@@ -785,7 +788,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.11"
+version = "0.1.12"
 zelyra = "0.1"
 
 [capabilities]

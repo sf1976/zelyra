@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.11"
+version = "0.1.12"
 zelyra = "0.1"
 
 [capabilities]
@@ -490,7 +490,10 @@ the continuing view roadmap.
 ## 13. Authentication and permissions
 
 🧪 Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route
-guards, and database-backed permission checks.
+guards, and database-backed permission checks. Five failed attempts for the
+same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
+lockout. A successful login rotates and invalidates the previous browser
+session token.
 
 Create a value for the required `password_hash` column with the CLI. The
 interactive command disables password echo and asks for confirmation:
@@ -721,7 +724,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.11"
+version = "0.1.12"
 zelyra = "0.1"
 
 [capabilities]
