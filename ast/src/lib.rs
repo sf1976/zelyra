@@ -253,6 +253,7 @@ pub enum Stmt {
     },
     While {
         condition: Expr,
+        invariants: Vec<Expr>,
         body: Block,
         span: Span,
     },

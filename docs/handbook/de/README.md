@@ -640,7 +640,25 @@ Einfache lineare Mutable-Zuweisungen wie `next = next + 1` werden ebenfalls
 verfolgt. Statisch begrenzte Schleifen mit linearem Zähler werden entfaltet;
 `break` beendet die aktuelle Schleife und `continue` startet ihren nächsten
 Durchlauf als eigene symbolische Pfade. Nichtlineare Zuweisungen und
-unbeschränkte Schleifen bleiben konservativ.
+unbeschränkte Schleifen ohne bewiesene Invariante bleiben konservativ.
+
+### Schleifeninvarianten
+
+Eine `while`-Schleife kann eine oder mehrere explizite Invarianten deklarieren:
+
+~~~zelyra
+while current > 0
+    invariant { current >= 0 }
+{
+    current = current - 1
+}
+~~~
+
+Der Verifier prüft die Invariante beim Eintritt und nach unterstützten
+Körperpfaden. Eine bewiesene Invariante kann eine ansonsten unbeschränkte
+lineare Schleife zusammenfassen. Die Runtime prüft sie vor und nach jedem
+Durchlauf. Nicht unterstützte oder nicht beweisbare Invarianten bleiben
+konservativ und erzeugen kein `PROVEN`-Ergebnis.
 
 ## 16. Konfiguration und Geheimnisse
 

@@ -584,8 +584,25 @@ the concise `next = value + 1`, followed by `return next`, are analyzed like a
 direct return. Simple linear mutable assignments such as `next = next + 1` are
 also tracked. Statically bounded loops with a linear counter are unfolded;
 `break` exits the current loop and `continue` starts its next iteration as
-separate symbolic paths. Nonlinear assignments and unbounded loops remain
-conservative.
+separate symbolic paths. Nonlinear assignments and unbounded loops without a
+proven invariant remain conservative.
+
+### Loop invariants
+
+A `while` loop may declare one or more explicit invariants:
+
+~~~zelyra
+while current > 0
+    invariant { current >= 0 }
+{
+    current = current - 1
+}
+~~~
+
+The verifier checks the invariant at entry and after supported body paths. A
+proven invariant can summarize an otherwise unbounded linear loop. Runtime
+execution checks it before and after each iteration. Unsupported or unproven
+invariants remain conservative and do not produce `PROVEN` results.
 
 ## 16. Configuration and secrets
 

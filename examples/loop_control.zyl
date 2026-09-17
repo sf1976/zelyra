@@ -5,7 +5,9 @@ fn stop_after_one() -> Int
 {
     mutable i = 0
 
-    while i < 5 {
+    while i < 5
+        invariant { i >= 0 }
+    {
         i = i + 1
         break
     }
@@ -19,7 +21,9 @@ fn count_without_two() -> Int
     mutable i = 0
     mutable total = 0
 
-    while i < 3 {
+    while i < 3
+        invariant { i >= 0 }
+    {
         i = i + 1
 
         if i == 2 {

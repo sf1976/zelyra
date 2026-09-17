@@ -817,9 +817,18 @@ impl<'a> Parser<'a> {
         if self.at(&TokenKind::While) {
             let start = self.advance().span;
             let condition = self.expression()?;
+            let mut invariants = Vec::new();
+            while self.at(&TokenKind::Invariant) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after `invariant`")?;
+                invariants.push(self.expression()?);
+                self.expect(TokenKind::RBrace, "`}` after loop invariant")?;
+                self.skip_newlines();
+            }
             let body = self.block()?;
             return Ok(Stmt::While {
                 condition,
+                invariants,
                 body: body.clone(),
                 span: start.join(body.span),
             });
@@ -1162,6 +1171,19 @@ mod tests {
         };
         assert!(matches!(body.statements[0], Stmt::Continue { .. }));
         assert!(matches!(body.statements[1], Stmt::Break { .. }));
+    }
+
+    #[test]
+    fn parses_loop_invariants() {
+        let program = parse(
+            &lex("fn main() { mutable i = 0 while i < 3 invariant { i >= 0 } { i = i + 1 } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let Stmt::While { invariants, .. } = &program.functions[0].body.statements[1] else {
+            panic!("expected while statement");
+        };
+        assert_eq!(invariants.len(), 1);
     }
 
     #[test]

@@ -18,7 +18,8 @@ data. The language is intended to bring together:
 - forms and validation;
 - initial CRUD lists, details, Create/Edit forms, configurable columns, and
   delete actions;
-- later, full CRUD, APIs, authentication, authorization, and verification.
+- initial CRUD, authentication, authorization, and contract verification are
+  available; broader versions of these systems are still planned.
 
 The central design goal is to define important information once. For example,
 a required String with a maximum length in a table can also provide the basis
@@ -49,9 +50,12 @@ The current repository contains:
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime-checked function contracts using `requires` and `ensures`.
+- initial `zelyra verify` support for symbolic integer paths, bounded loops,
+  `break`/`continue`, and explicit `while` loop invariants. Only `PROVEN` is
+  a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
 The following are not complete yet: full CRUD generation, database roles, login
-throttling, password-management commands, APIs, formal verification,
+throttling, password-management commands, APIs, broader formal verification,
 runtime capability enforcement, structured concurrency,
 and production packaging.
 
@@ -232,6 +236,26 @@ type OrderId = Id
 
 A UserId and an OrderId are different types even though both are based on Id.
 This prevents an important class of business-logic mistakes.
+
+Loops support explicit control flow and optional invariants:
+
+~~~zelyra
+mutable current = 3
+
+while current > 0
+    invariant { current >= 0 }
+{
+    current = current - 1
+}
+~~~
+
+`break` exits the current loop and `continue` starts its next iteration. The
+runtime checks declared invariants before and after iterations. The verifier
+can use a proven invariant to summarize supported linear loops:
+
+~~~bash
+zelyra verify examples/loop_control.zyl
+~~~
 
 ## 6. Start a web page without Apache
 

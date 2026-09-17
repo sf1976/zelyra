@@ -65,7 +65,8 @@ Heute implementiert:
   bekannten Payload-Bindings, begrenzten pfadsensitiven Zusammenfassungen von
   Funktionsaufrufen, lokalen Bindings mit einfachen linearen Zuweisungen,
   begrenzten Schleifen sowie modellierten `break`-/`continue`-Pfaden und
-  aufruferabhängiger Prüfung von Callee-Vorbedingungen.
+  expliziten Schleifeninvarianten sowie aufruferabhängiger Prüfung von Callee-
+  Vorbedingungen.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

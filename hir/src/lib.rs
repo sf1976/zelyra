@@ -83,6 +83,7 @@ pub enum HirStmt {
     },
     While {
         condition: HirExpr,
+        invariants: Vec<HirExpr>,
         body: HirBlock,
         span: Span,
     },
@@ -351,10 +352,15 @@ impl<'a> Resolver<'a> {
             },
             Stmt::While {
                 condition,
+                invariants,
                 body,
                 span,
             } => HirStmt::While {
                 condition: self.expr(condition),
+                invariants: invariants
+                    .iter()
+                    .map(|invariant| self.expr(invariant))
+                    .collect(),
                 body: self.block(body),
                 span: *span,
             },

@@ -111,9 +111,15 @@ fn check_block(
                 }
             }
             Stmt::While {
-                condition, body, ..
+                condition,
+                invariants,
+                body,
+                ..
             } => {
                 check_expr(condition, schema, environment, errors);
+                for invariant in invariants {
+                    check_expr(invariant, schema, environment, errors);
+                }
                 check_block(body, schema, environment, errors);
             }
             Stmt::Loop { body, .. } => {

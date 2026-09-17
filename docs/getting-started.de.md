@@ -19,8 +19,9 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - Formulare und Validierung;
 - erste CRUD-Listen, Details, Create-/Edit-Formulare, konfigurierbare Spalten
   und Löschaktionen;
-- später vollständiges CRUD, APIs, Authentifizierung, Autorisierung und
-  Verifikation.
+- erste Versionen von CRUD, Authentifizierung, Autorisierung und Contract-
+  Verifikation sind vorhanden; umfassendere Ausbaustufen sind weiterhin
+  geplant.
 
 Das zentrale Ziel ist, wichtige Informationen nur einmal zu definieren. Ein
 Pflichtfeld mit maximaler String-Länge in einer Tabelle kann beispielsweise
@@ -53,9 +54,13 @@ Das aktuelle Repository enthält:
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
+- erste `zelyra verify`-Unterstützung für symbolische Integer-Pfade, begrenzte
+  Schleifen, `break`/`continue` und explizite `while`-Schleifeninvarianten.
+  Nur `PROVEN` ist ein Beweis; nicht unterstützte Fälle bleiben
+  `RUNTIME_CHECK` oder `UNPROVEN`.
 
 Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Datenbankrollen,
-Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, formale Verifikation,
+Login-Drosselung, Passwortverwaltungs-Kommandos, APIs, weitergehende formale Verifikation,
 Runtime-Capability-Durchsetzung, strukturierte
 Nebenläufigkeit und Produktionspaketierung.
 
@@ -238,6 +243,27 @@ type OrderId = Id
 
 UserId und OrderId sind unterschiedliche Typen, obwohl beide auf Id basieren.
 Damit wird eine wichtige Klasse von Fehlern in der Geschäftslogik verhindert.
+
+Schleifen unterstützen expliziten Kontrollfluss und optionale Invarianten:
+
+~~~zelyra
+mutable current = 3
+
+while current > 0
+    invariant { current >= 0 }
+{
+    current = current - 1
+}
+~~~
+
+`break` beendet die aktuelle Schleife und `continue` startet ihren nächsten
+Durchlauf. Die Runtime prüft deklarierte Invarianten vor und nach den
+Durchläufen. Der Verifier kann eine bewiesene Invariante verwenden, um
+unterstützte lineare Schleifen zusammenzufassen:
+
+~~~bash
+zelyra verify examples/loop_control.zyl
+~~~
 
 ## 6. Web-Seite ohne Apache starten
 

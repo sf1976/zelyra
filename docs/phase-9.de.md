@@ -136,8 +136,22 @@ werden ebenfalls verfolgt, etwa `next = next + 1`. Statisch begrenzte
 Schleifen mit linear verändertem Zähler werden pfadweise entfaltet. `break`
 beendet dabei die aktuelle Schleife, `continue` startet ihren nächsten
 Durchlauf; beide werden als eigene symbolische Kontrollflusspfade modelliert.
-Nichtlineare Zuweisungen, unbeschränkte Schleifen und andere nicht unterstützte
-Zustandsflüsse bleiben `RUNTIME_CHECK`.
+Explizite Schleifeninvarianten können direkt an einer `while`-Schleife stehen:
+
+~~~zelyra
+while current > 0
+    invariant { current >= 0 }
+{
+    current = current - 1
+}
+~~~
+
+Der Verifier prüft die Invariante beim Schleifeneintritt und nach unterstützten
+Körperpfaden. Wenn sie bewiesen ist, kann sie eine ansonsten unbeschränkte
+lineare Schleife zusammenfassen. Nichtlineare Zuweisungen, ungültige oder nicht
+unterstützte Invarianten und andere nicht unterstützte Zustandsflüsse bleiben
+`RUNTIME_CHECK`. Die Runtime prüft die Invariante ebenfalls vor und nach jedem
+Durchlauf.
 
 Der Befehl endet bei einem fehlgeschlagenen konstanten Contract oder einem
 Compilerfehler mit einem Fehlerstatus. Kein Status außer `PROVEN` ist ein

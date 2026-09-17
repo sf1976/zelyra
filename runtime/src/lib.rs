@@ -304,9 +304,17 @@ fn symbolic_return_paths<'a>(
         .iter()
         .map(|parameter| parameter.name.clone())
         .collect::<HashSet<_>>();
+    let initial_guards = function
+        .requires
+        .iter()
+        .map(|expression| SymbolicGuard::Condition {
+            expression,
+            expected: true,
+        })
+        .collect();
     let states = symbolic_states(
         &function.body,
-        Vec::new(),
+        initial_guards,
         HashMap::new(),
         HashMap::new(),
         &parameters,
@@ -564,10 +572,14 @@ fn symbolic_states<'a>(
                         }
                     }
                     Stmt::While {
-                        condition, body, ..
+                        condition,
+                        invariants,
+                        body,
+                        ..
                     } => {
                         next.extend(symbolic_loop_states(
                             condition,
+                            invariants,
                             body,
                             SymbolicState::Continue {
                                 guards,
@@ -590,6 +602,7 @@ fn symbolic_states<'a>(
 
 fn symbolic_loop_states<'a>(
     condition: &'a Expr,
+    invariants: &'a [Expr],
     body: &'a Block,
     state: SymbolicState<'a>,
     parameters: &HashSet<String>,
@@ -604,6 +617,11 @@ fn symbolic_loop_states<'a>(
     else {
         return None;
     };
+    for invariant in invariants {
+        if !prove_symbolic_predicate(invariant, &guards, &bindings, &substitutions, functions)? {
+            return None;
+        }
+    }
     let true_constraints = constraints_for_bool(
         condition,
         true,
@@ -614,6 +632,12 @@ fn symbolic_loop_states<'a>(
         0,
     )?;
     let mut exit_guards = guards.clone();
+    for invariant in invariants {
+        exit_guards.push(SymbolicGuard::Condition {
+            expression: invariant,
+            expected: true,
+        });
+    }
     exit_guards.push(SymbolicGuard::ConditionSnapshot {
         expression: condition,
         expected: false,
@@ -632,10 +656,42 @@ fn symbolic_loop_states<'a>(
         return Some(states);
     }
     if iterations >= 32 {
+        if !invariants.is_empty() {
+            let mut abstract_substitutions = substitutions.clone();
+            let mut modified = HashSet::new();
+            collect_loop_modified_names(body, &mut modified);
+            for name in modified {
+                abstract_substitutions.remove(&name);
+            }
+            let mut abstract_exit_guards = guards;
+            for invariant in invariants {
+                abstract_exit_guards.push(SymbolicGuard::Condition {
+                    expression: invariant,
+                    expected: true,
+                });
+            }
+            abstract_exit_guards.push(SymbolicGuard::ConditionSnapshot {
+                expression: condition,
+                expected: false,
+                substitutions: abstract_substitutions.clone(),
+            });
+            states.push(SymbolicState::Continue {
+                guards: abstract_exit_guards,
+                bindings,
+                substitutions: abstract_substitutions,
+            });
+            return Some(states);
+        }
         return None;
     }
 
     let mut body_guards = guards;
+    for invariant in invariants {
+        body_guards.push(SymbolicGuard::Condition {
+            expression: invariant,
+            expected: true,
+        });
+    }
     body_guards.push(SymbolicGuard::ConditionSnapshot {
         expression: condition,
         expected: true,
@@ -655,17 +711,31 @@ fn symbolic_loop_states<'a>(
                 guards,
                 bindings,
                 substitutions,
-            } => states.push(SymbolicState::Continue {
-                guards,
-                bindings,
-                substitutions,
-            }),
+            } => {
+                for invariant in invariants {
+                    if !prove_symbolic_predicate(
+                        invariant,
+                        &guards,
+                        &bindings,
+                        &substitutions,
+                        functions,
+                    )? {
+                        return None;
+                    }
+                }
+                states.push(SymbolicState::Continue {
+                    guards,
+                    bindings,
+                    substitutions,
+                })
+            }
             SymbolicState::LoopContinue {
                 guards,
                 bindings,
                 substitutions,
             } => states.extend(symbolic_loop_states(
                 condition,
+                invariants,
                 body,
                 SymbolicState::Continue {
                     guards,
@@ -680,21 +750,73 @@ fn symbolic_loop_states<'a>(
                 guards,
                 bindings,
                 substitutions,
-            } => states.extend(symbolic_loop_states(
-                condition,
-                body,
-                SymbolicState::Continue {
-                    guards,
-                    bindings,
-                    substitutions,
-                },
-                parameters,
-                functions,
-                iterations + 1,
-            )?),
+            } => {
+                for invariant in invariants {
+                    if !prove_symbolic_predicate(
+                        invariant,
+                        &guards,
+                        &bindings,
+                        &substitutions,
+                        functions,
+                    )? {
+                        return None;
+                    }
+                }
+                states.extend(symbolic_loop_states(
+                    condition,
+                    invariants,
+                    body,
+                    SymbolicState::Continue {
+                        guards,
+                        bindings,
+                        substitutions,
+                    },
+                    parameters,
+                    functions,
+                    iterations + 1,
+                )?)
+            }
         }
     }
     Some(states)
+}
+
+fn collect_loop_modified_names(block: &Block, names: &mut HashSet<String>) {
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let {
+                name,
+                mutable: true,
+                ..
+            }
+            | Stmt::BindOrAssign { name, .. } => {
+                names.insert(name.clone());
+            }
+            Stmt::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_loop_modified_names(then_block, names);
+                if let Some(else_block) = else_block {
+                    collect_loop_modified_names(else_block, names);
+                }
+            }
+            Stmt::While { body, .. } | Stmt::Loop { body, .. } | Stmt::Transaction { body, .. } => {
+                collect_loop_modified_names(body, names)
+            }
+            Stmt::Match { arms, .. } => {
+                for arm in arms {
+                    collect_loop_modified_names(&arm.body, names);
+                }
+            }
+            Stmt::Let { .. }
+            | Stmt::Expr(_)
+            | Stmt::Return { .. }
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. } => {}
+        }
+    }
 }
 
 fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
@@ -1226,6 +1348,45 @@ fn constraints_satisfiable(constraints: Vec<PathConstraint>) -> Option<bool> {
             .iter()
             .all(|constraint| constraint.constant >= 0),
     )
+}
+
+fn prove_symbolic_predicate(
+    predicate: &Expr,
+    guards: &[SymbolicGuard<'_>],
+    bindings: &HashMap<String, &Expr>,
+    substitutions: &HashMap<String, LinearValue>,
+    functions: Option<&HashMap<String, &Function>>,
+) -> Option<bool> {
+    let mut guard_alternatives = vec![Vec::new()];
+    for guard in guards {
+        let alternatives = constraints_for_guard(
+            guard,
+            None,
+            Some(bindings),
+            Some(substitutions),
+            functions,
+            0,
+        )?;
+        guard_alternatives = combine_alternatives(guard_alternatives, alternatives);
+    }
+    let violations = constraints_for_bool(
+        predicate,
+        false,
+        None,
+        Some(bindings),
+        Some(substitutions),
+        functions,
+        0,
+    )?;
+    let alternatives = combine_alternatives(guard_alternatives, violations);
+    for constraints in alternatives {
+        match constraints_satisfiable(constraints) {
+            Some(false) => {}
+            Some(true) => return Some(false),
+            None => return None,
+        }
+    }
+    Some(true)
 }
 
 fn symbolic_bool_with_constraints(
@@ -1998,9 +2159,15 @@ fn check_capability_block(
                 }
             }
             Stmt::While {
-                condition, body, ..
+                condition,
+                invariants,
+                body,
+                ..
             } => {
                 check_capability_expr(condition, function, functions, declared, errors);
+                for invariant in invariants {
+                    check_capability_expr(invariant, function, functions, declared, errors);
+                }
                 check_capability_block(body, function, functions, declared, errors);
             }
             Stmt::Loop { body, .. } | Stmt::Transaction { body, .. } => {
@@ -2345,10 +2512,17 @@ impl<'a> Checker<'a> {
                 }
             }
             Stmt::While {
-                condition, body, ..
+                condition,
+                invariants,
+                body,
+                ..
             } => {
                 let condition_type = self.check_expr(condition, scopes);
                 self.expect_type(&Type::Bool, &condition_type, condition.span);
+                for invariant in invariants {
+                    let invariant_type = self.check_expr(invariant, scopes);
+                    self.expect_type(&Type::Bool, &invariant_type, invariant.span);
+                }
                 self.loop_depth += 1;
                 self.check_block(body, scopes, expected);
                 self.loop_depth -= 1;
@@ -2962,6 +3136,24 @@ impl Interpreter {
         }
         Ok(result)
     }
+    fn check_loop_invariants(
+        &mut self,
+        invariants: &[Expr],
+        env: &mut Environment,
+        span: Span,
+        phase: &str,
+    ) -> Result<(), RuntimeError> {
+        for invariant in invariants {
+            let value = self.eval(invariant, env)?;
+            if !self.expect_bool(value, invariant.span)? {
+                return Err(self.runtime_error(
+                    span,
+                    format!("loop invariant failed {phase} loop iteration"),
+                ));
+            }
+        }
+        Ok(())
+    }
     fn exec_block(&mut self, block: &Block, env: &mut Environment) -> Result<Flow, RuntimeError> {
         env.push();
         for statement in &block.statements {
@@ -3042,15 +3234,19 @@ impl Interpreter {
             }
             Stmt::While {
                 condition,
+                invariants,
                 body,
                 span,
             } => {
                 loop {
+                    self.check_loop_invariants(invariants, env, *span, "before")?;
                     let condition_value = self.eval(condition, env)?;
                     if !self.expect_bool(condition_value, *span)? {
                         break;
                     }
-                    match self.exec_block(body, env)? {
+                    let flow = self.exec_block(body, env)?;
+                    self.check_loop_invariants(invariants, env, *span, "after")?;
+                    match flow {
                         Flow::Continue => {}
                         Flow::LoopContinue => continue,
                         Flow::Break => break,
@@ -3456,6 +3652,33 @@ mod tests {
     }
 
     #[test]
+    fn checks_loop_invariants_at_runtime() {
+        let output = run(
+            "fn main() { mutable i = 0 while i < 2 invariant { i >= 0 } { i = i + 1 } print(i) }",
+        );
+        assert_eq!(output, ["2"]);
+
+        let program = parse(
+            &lex("fn main() { mutable i = 0 while i < 1 invariant { i > 0 } { i = i + 1 } }")
+                .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.message.contains("loop invariant failed"));
+    }
+
+    #[test]
+    fn rejects_non_boolean_loop_invariants() {
+        let program =
+            parse(&lex("fn main() { while true invariant { 1 } { break } }").unwrap()).unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("expected `Bool`")));
+    }
+
+    #[test]
     fn supports_float_comparisons_and_inferred_returns() {
         let output = run(
             "fn twice(value: Float) { return value * 2.0 } fn main() { if twice(1.5) < 4.0 { print(twice(1.5)) } }",
@@ -3664,6 +3887,30 @@ mod tests {
         let results = verify(&program);
         assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
         assert_eq!(results[1].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn proves_unbounded_linear_loops_with_invariants() {
+        let program = parse(
+            &lex("fn reduce(value: Int) -> Int requires { value >= 0 } ensures { result == 0 } { mutable current = value while current > 0 invariant { current >= 0 } { current = current - 1 } return current } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::Proven);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
+    }
+
+    #[test]
+    fn does_not_prove_a_non_preserved_loop_invariant() {
+        let program = parse(
+            &lex("fn reduce(value: Int) -> Int requires { value > 0 } ensures { result == 0 } { mutable current = value while current > 0 invariant { current == value } { current = current - 1 } return current } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let results = verify(&program);
+        assert_eq!(results[0].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[1].status, VerificationStatus::RuntimeCheck);
+        assert_eq!(results[2].status, VerificationStatus::Unproven);
     }
 
     #[test]
