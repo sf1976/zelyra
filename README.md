@@ -66,7 +66,8 @@ Implemented today:
   linear assignments, bounded loops, and modeled `break`/`continue` paths;
   explicit loop invariants with individual verification statuses and
   caller-assumption-aware callee precondition checks are included. Each result
-  includes its source location as `file.zyl:line:column`.
+  includes a stable code and source range; `zelyra verify <file.zyl> --json`
+  provides structured output for IDEs and CI.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the
@@ -303,7 +304,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
-zelyra verify <file.zyl>
+zelyra verify <file.zyl> [--json]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

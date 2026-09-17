@@ -151,13 +151,24 @@ function's `ensures` results. The result name uses the zero-based invariant
 index, for example:
 
 ~~~text
-PROVEN: reduce.ensures[0]
-PROVEN: reduce.invariant[0]
-FAILED: reduce.invariant[1]
+PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
+PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
+FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
 ~~~
 
-Each line also includes the source location in the form
-`(file.zyl:line:column)`, so a result can be opened directly in an editor.
+Each line includes a stable verification code and a source range in the form
+`(file.zyl:start-line:start-column-end-line:end-column)`, so a result can be
+opened directly in an editor. The codes are `V-001` for `PROVEN`, `V-002` for
+`RUNTIME_CHECK`, `V-003` for `UNPROVEN`, and `V-004` for `FAILED`.
+
+For IDEs and CI, request machine-readable output:
+
+~~~bash
+zelyra verify examples/contracts.zyl --json
+~~~
+
+The JSON result contains `status`, `code`, `function`, `kind`, `index`, and a
+`location` object with `file`, `start`, and `end` line/column positions.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

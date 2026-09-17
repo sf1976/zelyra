@@ -266,11 +266,13 @@ deklarierte Invariante einzeln, mit nullbasierten Namen wie
 `reduce.invariant[0]`. `FAILED` bedeutet, dass eine Invariante auf einem
 analysierten Pfad falsch ist oder nicht erhalten bleibt; `RUNTIME_CHECK`
 bedeutet, dass wegen eines unvollständigen symbolischen Beweises eine
-Laufzeitprüfung nötig ist. Jedes Ergebnis enthält die Quellposition als
-`(datei.zyl:zeile:spalte)`. Nur `PROVEN` ist ein Beweis:
+Laufzeitprüfung nötig ist. Jedes Ergebnis enthält einen Verifikationscode und
+einen Quellbereich als `(datei.zyl:startzeile:startspalte-endzeile:endspalte)`.
+Für IDEs oder CI kann `--json` verwendet werden. Nur `PROVEN` ist ein Beweis:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl
+zelyra verify examples/loop_control.zyl --json
 ~~~
 
 ## 6. Web-Seite ohne Apache starten

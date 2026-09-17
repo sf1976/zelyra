@@ -67,7 +67,8 @@ Heute implementiert:
   begrenzten Schleifen sowie modellierten `break`-/`continue`-Pfaden und
   expliziten Schleifeninvarianten mit individuellen Prüfstatus sowie
   aufruferabhängiger Prüfung von Callee-Vorbedingungen. Jedes Ergebnis enthält
-  seine Quellposition als `datei.zyl:zeile:spalte`.
+  einen stabilen Code und Quellbereich; `zelyra verify <file.zyl> --json`
+  liefert strukturierte Daten für IDEs und CI.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die
@@ -310,7 +311,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
-zelyra verify <file.zyl>
+zelyra verify <file.zyl> [--json]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db bootstrap <file.zyl>

@@ -609,12 +609,16 @@ remain conservative and do not produce `PROVEN` results.
 `ensures` results. Invariant indexes are zero-based:
 
 ~~~text
-PROVEN: reduce.ensures[0]
-PROVEN: reduce.invariant[0]
-FAILED: reduce.invariant[1]
+PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
+PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
+FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
 ~~~
 
-Every result also includes its source location as `(file.zyl:line:column)`.
+Every result includes a stable code and a source range as
+`(file.zyl:start-line:start-column-end-line:end-column)`. The codes are
+`V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`), and
+`V-004` (`FAILED`). For IDEs and CI, use `zelyra verify app.zyl --json`; the
+JSON output contains the same result data and a structured `location` object.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

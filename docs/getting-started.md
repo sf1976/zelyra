@@ -256,11 +256,14 @@ can use a proven invariant to summarize supported linear loops. `zelyra verify`
 also reports every declared invariant separately, using zero-based names such
 as `reduce.invariant[0]`. `FAILED` means that an invariant is false or not
 preserved on an analyzed path; `RUNTIME_CHECK` means that runtime checking is
-needed because the symbolic proof is incomplete. Every result includes its
-source location as `(file.zyl:line:column)`. Only `PROVEN` is a proof:
+needed because the symbolic proof is incomplete. Every result includes a
+verification code and source range as
+`(file.zyl:start-line:start-column-end-line:end-column)`. Use `--json` for IDEs
+or CI. Only `PROVEN` is a proof:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl
+zelyra verify examples/loop_control.zyl --json
 ~~~
 
 ## 6. Start a web page without Apache

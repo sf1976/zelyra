@@ -161,14 +161,25 @@ Durchlauf.
 der Invariante, zum Beispiel:
 
 ~~~text
-PROVEN: reduce.ensures[0]
-PROVEN: reduce.invariant[0]
-FAILED: reduce.invariant[1]
+PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
+PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
+FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
 ~~~
 
-Jede Zeile enthält außerdem die Quellposition im Format
-`(datei.zyl:zeile:spalte)`, sodass das Ergebnis direkt im Editor gefunden
-werden kann.
+Jede Zeile enthält einen stabilen Verifikationscode und einen Quellbereich im
+Format `(datei.zyl:startzeile:startspalte-endzeile:endspalte)`, sodass das
+Ergebnis direkt im Editor gefunden werden kann. Die Codes sind `V-001` für
+`PROVEN`, `V-002` für `RUNTIME_CHECK`, `V-003` für `UNPROVEN` und `V-004` für
+`FAILED`.
+
+Für IDEs und CI kann eine maschinenlesbare Ausgabe angefordert werden:
+
+~~~bash
+zelyra verify examples/contracts.zyl --json
+~~~
+
+Das JSON-Ergebnis enthält `status`, `code`, `function`, `kind`, `index` sowie
+ein `location`-Objekt mit Datei und Start-/Endposition in Zeile und Spalte.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`

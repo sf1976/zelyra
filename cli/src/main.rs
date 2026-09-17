@@ -15,7 +15,7 @@ use zelyra_runtime::{
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl>\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra verify <file.zyl> [--json]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -168,17 +168,28 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     Ok(program)
 }
 
-fn verify_command(path: &str) -> ExitCode {
+fn verify_command(path: &str, json: bool) -> ExitCode {
     let program = match validate(path) {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
+    };
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("error[E-IO-001]: cannot read `{path}`: {error}");
+            return ExitCode::from(1);
+        }
     };
     let results = verify_program(&program);
     let failed = results
         .iter()
         .any(|result| result.status == VerificationStatus::Failed);
-    for result in results {
-        println!("{}", format_verification_result(path, &result));
+    if json {
+        println!("{}", format_verification_json(path, &source, &results));
+    } else {
+        for result in &results {
+            println!("{}", format_verification_result(path, &source, result));
+        }
     }
     if failed {
         ExitCode::from(1)
@@ -187,17 +198,76 @@ fn verify_command(path: &str) -> ExitCode {
     }
 }
 
-fn format_verification_result(path: &str, result: &VerificationResult) -> String {
+fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
+    let (end_line, end_column) = source_position(source, result.span.end);
     format!(
-        "{}: {}.{}[{}] ({}:{}:{})",
+        "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})",
         result.status,
+        result.status.code(),
         result.function,
         result.kind,
         result.index,
         path,
         result.span.line,
-        result.span.column
+        result.span.column,
+        end_line,
+        end_column
     )
+}
+
+fn format_verification_json(path: &str, source: &str, results: &[VerificationResult]) -> String {
+    let entries = results
+        .iter()
+        .map(|result| {
+            let (end_line, end_column) = source_position(source, result.span.end);
+            format!(
+                "{{\"status\":\"{}\",\"code\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
+                result.status,
+                result.status.code(),
+                json_escape(&result.function),
+                result.kind,
+                result.index,
+                json_escape(path),
+                result.span.line,
+                result.span.column,
+                end_line,
+                end_column
+            )
+        })
+        .collect::<Vec<_>>();
+    format!("[{}]", entries.join(","))
+}
+
+fn json_escape(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|character| match character {
+            '"' => "\\\"".chars().collect::<Vec<_>>(),
+            '\\' => "\\\\".chars().collect::<Vec<_>>(),
+            '\n' => "\\n".chars().collect::<Vec<_>>(),
+            '\r' => "\\r".chars().collect::<Vec<_>>(),
+            '\t' => "\\t".chars().collect::<Vec<_>>(),
+            character if character.is_control() => {
+                format!("\\u{:04x}", character as u32).chars().collect()
+            }
+            character => vec![character],
+        })
+        .collect()
+}
+
+fn source_position(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    let end = offset.min(source.len());
+    for byte in &source.as_bytes()[..end] {
+        if *byte == b'\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+    (line, column)
 }
 
 fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
@@ -1132,11 +1202,19 @@ fn main() -> ExitCode {
             usage();
             return ExitCode::from(2);
         };
+        let json = match args.next() {
+            None => false,
+            Some(flag) if flag == "--json" => true,
+            Some(_) => {
+                usage();
+                return ExitCode::from(2);
+            }
+        };
         if args.next().is_some() {
             usage();
             return ExitCode::from(2);
         }
-        return verify_command(&path);
+        return verify_command(&path, json);
     }
     let Some(path) = args.next() else {
         usage();
@@ -1196,11 +1274,26 @@ mod tests {
             kind: zelyra_runtime::ContractKind::LoopInvariant,
             index: 0,
             status: VerificationStatus::Proven,
-            span: zelyra_ast::Span::new(42, 54, 7, 19),
+            span: zelyra_ast::Span::new(6, 12, 2, 1),
         };
         assert_eq!(
-            format_verification_result("src/reduce.zyl", &result),
-            "PROVEN: reduce.invariant[0] (src/reduce.zyl:7:19)"
+            format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
+            "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)"
+        );
+    }
+
+    #[test]
+    fn formats_verification_results_as_json() {
+        let result = VerificationResult {
+            function: "say\"hello".into(),
+            kind: zelyra_runtime::ContractKind::Ensures,
+            index: 1,
+            status: VerificationStatus::RuntimeCheck,
+            span: zelyra_ast::Span::new(6, 12, 2, 1),
+        };
+        assert_eq!(
+            format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
+            r#"[{"status":"RUNTIME_CHECK","code":"V-002","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
         );
     }
 

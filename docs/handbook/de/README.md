@@ -667,13 +667,17 @@ Invarianten bleiben konservativ und erzeugen kein `PROVEN`-Ergebnis.
 null:
 
 ~~~text
-PROVEN: reduce.ensures[0]
-PROVEN: reduce.invariant[0]
-FAILED: reduce.invariant[1]
+PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
+PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
+FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
 ~~~
 
-Jedes Ergebnis enthält außerdem seine Quellposition als
-`(datei.zyl:zeile:spalte)`.
+Jedes Ergebnis enthält einen stabilen Code und einen Quellbereich als
+`(datei.zyl:startzeile:startspalte-endzeile:endspalte)`. Die Codes sind
+`V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`) und
+`V-004` (`FAILED`). Für IDEs und CI kann `zelyra verify app.zyl --json`
+verwendet werden; die JSON-Ausgabe enthält dieselben Ergebnisdaten und ein
+strukturiertes `location`-Objekt.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`

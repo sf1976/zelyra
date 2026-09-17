@@ -73,6 +73,17 @@ impl fmt::Display for VerificationStatus {
     }
 }
 
+impl VerificationStatus {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Proven => "V-001",
+            Self::RuntimeCheck => "V-002",
+            Self::Unproven => "V-003",
+            Self::Failed => "V-004",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerificationResult {
     pub function: String,
