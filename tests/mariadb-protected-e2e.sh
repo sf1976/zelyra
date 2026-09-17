@@ -137,6 +137,19 @@ cli_role_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) F
 cli_permission_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id IS NULL AND event = 'role_permission.grant' AND target_user_id IS NULL AND details = 'source=cli;role=${primary_role};permission=customers.view'")"
 [[ "${cli_role_audit_count}" == "2" ]]
 [[ "${cli_permission_audit_count}" == "2" ]]
+DATABASE_URL="${database_url}" "${zelyra_bin}" audit verify "${project_file}" | grep -Fq "no invalid rows"
+client -e "INSERT INTO auth_audit_log (actor_user_id, event, target_user_id, details, created_at) VALUES (NULL, 'e2e.old', NULL, 'old event', '2000-01-01 00:00:00')"
+if DATABASE_URL="${database_url}" "${zelyra_bin}" audit prune "${project_file}" --before 2001-01-01T00:00:00; then
+    prune_plan_status=0
+else
+    prune_plan_status=$?
+fi
+[[ "${prune_plan_status}" == "2" ]]
+DATABASE_URL="${database_url}" "${zelyra_bin}" audit prune "${project_file}" --before 2001-01-01T00:00:00 --confirm
+old_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'e2e.old'")"
+prune_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'audit.prune' AND details = 'source=cli;before=2001-01-01T00:00:00'")"
+[[ "${old_audit_count}" == "0" ]]
+[[ "${prune_audit_count}" == "1" ]]
 DATABASE_URL="${database_url}" "${zelyra_bin}" audit inspect "${project_file}" --limit 5 >"${temp_dir}/audit-inspect.txt"
 grep -Fq "Audit log:" "${temp_dir}/audit-inspect.txt"
 DATABASE_URL="${database_url}" "${zelyra_bin}" audit export "${project_file}" --limit 2 --format json >"${temp_dir}/audit-export.json"

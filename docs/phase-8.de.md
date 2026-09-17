@@ -113,6 +113,20 @@ DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
 Exporte unterstützen JSON und CSV. Das Standardlimit ist 100; Werte über
 10.000 werden abgelehnt, damit keine unbegrenzten Lesevorgänge entstehen.
 
+Das Audit-Protokoll kann auf fehlende Pflichtwerte geprüft werden:
+
+~~~bash
+zelyra audit verify app.zyl
+~~~
+
+Alte Einträge können nur mit einem ausdrücklichen Stichtag und einer
+Bestätigung entfernt werden. Die Bereinigung wird nach dem Löschen in derselben
+Transaktion selbst protokolliert:
+
+~~~bash
+zelyra audit prune app.zyl --before 2025-01-01T00:00:00 --confirm
+~~~
+
 Wenn die Benutzertabelle eine `active`-Spalte besitzt, können deaktivierte
 Benutzer sich nicht anmelden; beim Deaktivieren werden ihre persistenten
 Sessions entfernt. Die konfigurierte Administrationsrolle kann ihrem letzten

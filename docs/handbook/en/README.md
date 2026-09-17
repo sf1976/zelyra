@@ -187,6 +187,8 @@ Important commands:
 | `zelyra db apply app.zyl` | apply an approved plan |
 | `zelyra audit inspect app.zyl` | inspect the latest audit events |
 | `zelyra audit export app.zyl --format json` | export audit events as JSON |
+| `zelyra audit verify app.zyl` | verify required audit fields |
+| `zelyra audit prune app.zyl --before <timestamp> --confirm` | remove old audit events |
 
 ## 5. Variables, types, and functions
 
@@ -569,7 +571,10 @@ CLI role changes use a nullable actor and mark `details` with `source=cli`.
 The administration screen displays the latest 100 entries. Use
 `zelyra audit inspect app.zyl` for a human-readable view or
 `zelyra audit export app.zyl --format json|csv` for a bounded export; the
-default limit is 100 and the maximum is 10,000.
+default limit is 100 and the maximum is 10,000. `zelyra audit verify` checks
+that every row contains an event, details, and timestamp. `zelyra audit prune`
+requires `--before <timestamp>` and never deletes anything without the explicit
+`--confirm` flag; the prune operation is recorded as an audit event.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

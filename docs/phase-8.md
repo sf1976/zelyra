@@ -107,6 +107,19 @@ DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
 Exports support JSON and CSV. The default limit is 100; values above 10,000
 are rejected to prevent accidental unbounded reads.
 
+The audit log can be checked for missing required values:
+
+~~~bash
+zelyra audit verify app.zyl
+~~~
+
+Old entries can be removed only with an explicit cutoff and confirmation. A
+prune operation is recorded after the deletion in the same transaction:
+
+~~~bash
+zelyra audit prune app.zyl --before 2025-01-01T00:00:00 --confirm
+~~~
+
 When the user table has an `active` column, deactivated users cannot log in;
 deactivation also removes their persistent sessions. The configured
 administrator role cannot be removed from its last active user, and the last

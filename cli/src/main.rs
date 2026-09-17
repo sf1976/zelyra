@@ -31,7 +31,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -3326,7 +3326,7 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
 
 fn audit_usage() {
     eprintln!(
-        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000."
+        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000. Prune never changes data without --confirm."
     );
 }
 
@@ -3382,6 +3382,81 @@ fn audit_rows(
         ),
         Vec::new(),
     )
+}
+
+fn audit_integrity(
+    database_url: &str,
+    audit_table: &str,
+) -> Result<(u64, u64), zelyra_database::DatabaseError> {
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL THEN 1 ELSE 0 END), 0) FROM {}",
+            quote_identifier(audit_table)
+        ),
+        Vec::new(),
+    )?;
+    let row = result.rows.first().cloned().unwrap_or_default();
+    let total = row
+        .first()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let invalid = row.get(1).and_then(|value| value.parse().ok()).unwrap_or(0);
+    Ok((total, invalid))
+}
+
+fn audit_prune_count(
+    database_url: &str,
+    audit_table: &str,
+    before: &str,
+) -> Result<u64, zelyra_database::DatabaseError> {
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT COUNT(*) FROM {} WHERE created_at < :before",
+            quote_identifier(audit_table)
+        ),
+        vec![("before".into(), QueryValue::String(before.into()))],
+    )?;
+    Ok(result
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0))
+}
+
+fn audit_prune(
+    database_url: &str,
+    audit_table: &str,
+    before: &str,
+) -> Result<(), zelyra_database::DatabaseError> {
+    let details = format!("source=cli;before={before}");
+    let queries = vec![
+        Query {
+            sql: format!(
+                "DELETE FROM {} WHERE created_at < :before",
+                quote_identifier(audit_table)
+            ),
+            params: vec![("before".into(), QueryValue::String(before.into()))],
+        },
+        Query {
+            sql: format!(
+                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
+                quote_identifier(audit_table)
+            ),
+            params: vec![
+                ("actor_user_id".into(), QueryValue::Null),
+                ("event".into(), QueryValue::String("audit.prune".into())),
+                ("target_user_id".into(), QueryValue::Null),
+                (
+                    "details".into(),
+                    QueryValue::String(details.chars().take(1000).collect()),
+                ),
+            ],
+        },
+    ];
+    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
 }
 
 fn audit_optional_value(row: &[String], index: usize) -> Option<&str> {
@@ -3460,7 +3535,10 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(2);
     };
     let mut limit = 100usize;
+    let mut limit_given = false;
     let mut format = "inspect";
+    let mut before = None;
+    let mut confirm = false;
     while let Some(argument) = args.next() {
         match argument.as_str() {
             "--limit" => {
@@ -3472,6 +3550,7 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     Ok(limit) => limit,
                     Err(code) => return code,
                 };
+                limit_given = true;
             }
             "--format" if operation == "export" => {
                 let Some(value) = args.next() else {
@@ -3484,13 +3563,30 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 }
                 format = if value == "json" { "json" } else { "csv" };
             }
+            "--before" if operation == "prune" => {
+                let Some(value) = args.next() else {
+                    audit_usage();
+                    return ExitCode::from(2);
+                };
+                if value.is_empty() {
+                    eprintln!("error[E-AUDIT-007]: before timestamp must not be empty");
+                    return ExitCode::from(2);
+                }
+                before = Some(value);
+            }
+            "--confirm" if operation == "prune" => {
+                confirm = true;
+            }
             _ => {
                 audit_usage();
                 return ExitCode::from(2);
             }
         }
     }
-    if !matches!(operation.as_str(), "inspect" | "export") {
+    if !matches!(
+        operation.as_str(),
+        "inspect" | "export" | "verify" | "prune"
+    ) {
         audit_usage();
         return ExitCode::from(2);
     }
@@ -3498,10 +3594,61 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         audit_usage();
         return ExitCode::from(2);
     }
+    if operation == "verify" && (format != "inspect" || before.is_some() || confirm || limit_given)
+    {
+        audit_usage();
+        return ExitCode::from(2);
+    }
+    if operation == "prune" && (before.is_none() || format != "inspect" || limit_given) {
+        audit_usage();
+        return ExitCode::from(2);
+    }
+    if operation != "prune" && (before.is_some() || confirm) {
+        audit_usage();
+        return ExitCode::from(2);
+    }
     let (database_url, audit_table) = match audit_project(&path) {
         Ok(project) => project,
         Err(code) => return code,
     };
+    if operation == "verify" {
+        let (total, invalid) = match audit_integrity(&database_url, &audit_table) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("error[E-AUDIT-006]: cannot verify audit log: {error}");
+                return ExitCode::from(1);
+            }
+        };
+        if invalid == 0 {
+            println!("Audit log verified: {total} entries, no invalid rows.");
+            return ExitCode::SUCCESS;
+        }
+        eprintln!("error[E-AUDIT-008]: audit log contains {invalid} invalid rows out of {total}");
+        return ExitCode::from(1);
+    }
+    if operation == "prune" {
+        let before = before
+            .as_deref()
+            .expect("prune requires a before timestamp");
+        let count = match audit_prune_count(&database_url, &audit_table, before) {
+            Ok(count) => count,
+            Err(error) => {
+                eprintln!("error[E-AUDIT-006]: cannot plan audit prune: {error}");
+                return ExitCode::from(1);
+            }
+        };
+        if !confirm {
+            println!("Audit prune plan: {count} entries older than {before} would be removed.");
+            println!("No changes applied. Re-run with --confirm to apply this plan.");
+            return ExitCode::from(2);
+        }
+        if let Err(error) = audit_prune(&database_url, &audit_table, before) {
+            eprintln!("error[E-AUDIT-009]: cannot apply audit prune: {error}");
+            return ExitCode::from(1);
+        }
+        println!("Audit prune applied: {count} entries older than {before} removed.");
+        return ExitCode::SUCCESS;
+    }
     let result = match audit_rows(&database_url, &audit_table, limit) {
         Ok(result) => result,
         Err(error) => {

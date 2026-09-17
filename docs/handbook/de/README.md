@@ -216,6 +216,8 @@ Die wichtigsten Befehle:
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
 | `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
 | `zelyra audit export app.zyl --format json` | Audit-Ereignisse als JSON exportieren |
+| `zelyra audit verify app.zyl` | Pflichtfelder im Audit prüfen |
+| `zelyra audit prune app.zyl --before <timestamp> --confirm` | alte Audit-Ereignisse entfernen |
 
 ## 5. Variablen, Typen und Funktionen
 
@@ -628,6 +630,10 @@ Sitzungs-Akteur und werden in `details` mit `source=cli` markiert. Die letzten
 `zelyra audit inspect app.zyl` lässt sich das Protokoll lesbar anzeigen;
 `zelyra audit export app.zyl --format json|csv` erzeugt einen begrenzten
 Export. Das Standardlimit ist 100, maximal sind 10.000 Einträge erlaubt.
+`zelyra audit verify` prüft, ob jeder Eintrag Ereignis, Details und Zeitstempel
+enthält. `zelyra audit prune` verlangt `--before <timestamp>` und löscht ohne
+das ausdrückliche Flag `--confirm` niemals Daten; die Bereinigung wird selbst
+als Audit-Ereignis protokolliert.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

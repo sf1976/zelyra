@@ -392,6 +392,8 @@ zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>
 zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>
 zelyra audit inspect <file.zyl> [--limit <n>]
 zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]
+zelyra audit verify <file.zyl>
+zelyra audit prune <file.zyl> --before <timestamp> [--confirm]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db setup <file.zyl>

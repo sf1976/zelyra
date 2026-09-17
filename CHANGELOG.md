@@ -27,6 +27,8 @@ compiler and repository release.
 - CLI role and role-permission mutations now append transactional audit events
   when audit logging is enabled. Added `zelyra audit inspect` plus JSON/CSV
   `zelyra audit export` with bounded limits.
+- Added structural audit verification and explicitly confirmed, transactional
+  audit pruning through `zelyra audit verify` and `zelyra audit prune`.
 
 ## 0.1.37 — 2026-09-17
 
