@@ -328,7 +328,7 @@ method chain.
 Currently available:
 
 ~~~text
-zelyra new <directory>
+zelyra new <directory> [--mariadb]
 zelyra init [directory]
 zelyra check <file.zyl>
 zelyra build <file.zyl>

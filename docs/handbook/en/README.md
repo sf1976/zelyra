@@ -145,12 +145,17 @@ cd machine-management
 zelyra init
 ~~~
 
+For a local MariaDB and web-server template, use `zelyra new machine-management
+--mariadb`. This creates `.env.example`, `Dockerfile`, and
+`docker-compose.mariadb.yml`. Set `ZELYRA_WEB_PORT` in `.env` to choose the
+port used by the internal Zelyra server and its local published port.
+
 Minimal `zelyra.toml`:
 
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.9"
+version = "0.1.10"
 zelyra = "0.1"
 
 [capabilities]
@@ -701,7 +706,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.9"
+version = "0.1.10"
 zelyra = "0.1"
 
 [capabilities]

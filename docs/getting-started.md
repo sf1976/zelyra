@@ -228,12 +228,30 @@ cd another-app
 zelyra init
 ~~~
 
+For a ready local MariaDB and web-server template, use:
+
+~~~bash
+zelyra new my-app --mariadb
+cd my-app
+cp .env.example .env
+# Replace every change-me value in .env before using this outside local development.
+docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
+set -a; . ./.env; set +a
+zelyra db setup main.zyl
+~~~
+
+The generated Compose file starts MariaDB and the Zelyra web server. Set
+`ZELYRA_WEB_PORT=8080` in `.env` to run the internal web server and its local
+published port on 8080; the default is 3000. Open
+`http://127.0.0.1:3000` after startup. The template is for local development;
+use a secret manager and TLS for production.
+
 The current project file is intentionally small:
 
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.9"
+version = "0.1.10"
 zelyra = "0.1"
 
 [capabilities]

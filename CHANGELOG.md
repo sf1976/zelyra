@@ -4,6 +4,20 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.10 — 2026-09-17
+
+### Added
+
+- `zelyra new <directory> --mariadb` generates a local MariaDB project template
+  with `.env.example`, Dockerfile, and Docker Compose services for MariaDB and
+  the Zelyra web server.
+- `ZELYRA_WEB_PORT` selects the internal web-server port and the local port
+  published by Docker Compose.
+
+### Documentation
+
+- Local Docker/MariaDB setup documented in English and German.
+
 ## 0.1.9 — 2026-09-17
 
 ### Added

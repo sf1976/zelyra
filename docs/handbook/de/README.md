@@ -173,12 +173,18 @@ cd maschinenverwaltung
 zelyra init
 ~~~
 
+Für eine lokale MariaDB- und Webserver-Vorlage `zelyra new
+maschinenverwaltung --mariadb` verwenden. Dadurch entstehen `.env.example`,
+`Dockerfile` und `docker-compose.mariadb.yml`. Mit `ZELYRA_WEB_PORT` in `.env`
+wird der Port des internen Zelyra-Servers und seines lokalen veröffentlichten
+Ports gewählt.
+
 Eine minimale `zelyra.toml`:
 
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.9"
+version = "0.1.10"
 zelyra = "0.1"
 
 [capabilities]
@@ -763,7 +769,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.9"
+version = "0.1.10"
 zelyra = "0.1"
 
 [capabilities]
