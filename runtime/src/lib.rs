@@ -79,6 +79,7 @@ pub struct VerificationResult {
     pub kind: ContractKind,
     pub index: usize,
     pub status: VerificationStatus,
+    pub span: Span,
 }
 
 pub fn verify(program: &Program) -> Vec<VerificationResult> {
@@ -95,6 +96,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 kind: ContractKind::Requires,
                 index,
                 status: verify_contract(contract, None, &functions),
+                span: contract.span,
             });
         }
         let mut invariant_diagnostics = HashMap::new();
@@ -111,6 +113,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                     return_paths.as_deref(),
                     &functions,
                 ),
+                span: contract.span,
             });
         }
         let mut loop_invariants = Vec::new();
@@ -125,6 +128,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                         .get(&(loop_id, index))
                         .copied()
                         .unwrap_or_else(|| verify_contract(invariant, None, &functions)),
+                    span: invariant.span,
                 });
             }
         }
@@ -134,6 +138,7 @@ pub fn verify(program: &Program) -> Vec<VerificationResult> {
                 kind: ContractKind::Requires,
                 index: 0,
                 status: VerificationStatus::Unproven,
+                span: function.span,
             });
         }
     }

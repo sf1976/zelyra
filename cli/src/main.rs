@@ -10,7 +10,7 @@ use zelyra_lexer::lex;
 use zelyra_parser::parse;
 use zelyra_runtime::{
     check, check_capabilities_with_grants, execute, execute_with_database,
-    verify as verify_program, VerificationStatus, KNOWN_CAPABILITIES,
+    verify as verify_program, VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{serve_app, AuthRoute, CrudRoute, CsrfProtection, FormRoute, Route, WebApp};
 
@@ -178,16 +178,26 @@ fn verify_command(path: &str) -> ExitCode {
         .iter()
         .any(|result| result.status == VerificationStatus::Failed);
     for result in results {
-        println!(
-            "{}: {}.{}[{}]",
-            result.status, result.function, result.kind, result.index
-        );
+        println!("{}", format_verification_result(path, &result));
     }
     if failed {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
     }
+}
+
+fn format_verification_result(path: &str, result: &VerificationResult) -> String {
+    format!(
+        "{}: {}.{}[{}] ({}:{}:{})",
+        result.status,
+        result.function,
+        result.kind,
+        result.index,
+        path,
+        result.span.line,
+        result.span.column
+    )
 }
 
 fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
@@ -1178,6 +1188,21 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_verification_results_with_source_location() {
+        let result = VerificationResult {
+            function: "reduce".into(),
+            kind: zelyra_runtime::ContractKind::LoopInvariant,
+            index: 0,
+            status: VerificationStatus::Proven,
+            span: zelyra_ast::Span::new(42, 54, 7, 19),
+        };
+        assert_eq!(
+            format_verification_result("src/reduce.zyl", &result),
+            "PROVEN: reduce.invariant[0] (src/reduce.zyl:7:19)"
+        );
+    }
 
     #[test]
     fn rejects_unknown_configured_crud_columns() {

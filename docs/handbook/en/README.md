@@ -614,6 +614,8 @@ PROVEN: reduce.invariant[0]
 FAILED: reduce.invariant[1]
 ~~~
 
+Every result also includes its source location as `(file.zyl:line:column)`.
+
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking
 is required because the symbolic verifier cannot complete the proof. Only

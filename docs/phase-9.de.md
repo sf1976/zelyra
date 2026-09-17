@@ -166,6 +166,10 @@ PROVEN: reduce.invariant[0]
 FAILED: reduce.invariant[1]
 ~~~
 
+Jede Zeile enthält außerdem die Quellposition im Format
+`(datei.zyl:zeile:spalte)`, sodass das Ergebnis direkt im Editor gefunden
+werden kann.
+
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`
 bedeutet, dass eine Laufzeitprüfung erforderlich ist, weil der aktuelle

@@ -66,7 +66,8 @@ Heute implementiert:
   Funktionsaufrufen, lokalen Bindings mit einfachen linearen Zuweisungen,
   begrenzten Schleifen sowie modellierten `break`-/`continue`-Pfaden und
   expliziten Schleifeninvarianten mit individuellen Prüfstatus sowie
-  aufruferabhängiger Prüfung von Callee-Vorbedingungen.
+  aufruferabhängiger Prüfung von Callee-Vorbedingungen. Jedes Ergebnis enthält
+  seine Quellposition als `datei.zyl:zeile:spalte`.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

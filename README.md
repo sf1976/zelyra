@@ -65,7 +65,8 @@ Implemented today:
   bounded path-sensitive function-call summaries, local bindings with simple
   linear assignments, bounded loops, and modeled `break`/`continue` paths;
   explicit loop invariants with individual verification statuses and
-  caller-assumption-aware callee precondition checks are included.
+  caller-assumption-aware callee precondition checks are included. Each result
+  includes its source location as `file.zyl:line:column`.
 
 Full CRUD generation, database roles, APIs, general formal verification,
 and production deployment tooling are still being developed. See the
