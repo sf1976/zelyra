@@ -120,5 +120,39 @@ api POST "/customer-ids" {
 }
 ~~~
 
-The handler bridge is intentionally small: nested input objects, generated
-client bindings, and richer domain-error values remain later Web/API work.
+Array literals and the first general array operations are available in the
+language core:
+
+~~~zelyra
+numbers = [1, 2, 3]
+first = numbers[0]
+count = len(numbers)
+extended = append(numbers, 4)
+combined = numbers + [5, 6]
+~~~
+
+Records provide the declared model for nested JSON objects. Missing optional
+fields become `None`; unknown fields and missing required fields are rejected
+at the API boundary:
+
+~~~zelyra
+struct Address {
+    city: String
+}
+
+struct CustomerInput {
+    name: String
+    address: Address
+}
+
+api POST "/customers" {
+    handler create_customer
+    input { customer: CustomerInput }
+    output CustomerInput
+}
+~~~
+
+The current handler bridge intentionally keeps the first record release small:
+record values are fully supported at the JSON API boundary, while source-level
+record literals, field access, generated client bindings, and richer
+domain-error values remain later Web/API work.

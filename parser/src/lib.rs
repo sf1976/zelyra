@@ -66,6 +66,7 @@ impl<'a> Parser<'a> {
         let mut databases = Vec::new();
         let mut tables = Vec::new();
         let mut types = Vec::new();
+        let mut records = Vec::new();
         let mut pages = Vec::new();
         let mut forms = Vec::new();
         let mut cruds = Vec::new();
@@ -80,6 +81,8 @@ impl<'a> Parser<'a> {
                 tables.push(self.table_definition()?);
             } else if self.at(&TokenKind::Type) {
                 types.push(self.type_definition()?);
+            } else if self.at(&TokenKind::Struct) {
+                records.push(self.record_definition()?);
             } else if self.at(&TokenKind::Page) {
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::Form) {
@@ -99,6 +102,7 @@ impl<'a> Parser<'a> {
             databases,
             tables,
             types,
+            records,
             pages,
             forms,
             cruds,
@@ -732,6 +736,38 @@ impl<'a> Parser<'a> {
             span: start,
         })
     }
+
+    fn record_definition(&mut self) -> Result<RecordDef, ParseError> {
+        let start = self.expect(TokenKind::Struct, "`struct`")?;
+        let (name, _) = self.ident("record name")?;
+        self.expect(TokenKind::LBrace, "`{` after record name")?;
+        let mut fields = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (field_name, span) = self.ident("record field name")?;
+            self.expect(TokenKind::Colon, "`:` after record field name")?;
+            let ty = self.type_name()?;
+            fields.push(RecordField {
+                name: field_name,
+                ty,
+                span,
+            });
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after record definition")?;
+        if fields.is_empty() {
+            return self.error("record must contain at least one field");
+        }
+        Ok(RecordDef {
+            name,
+            fields,
+            span: start.join(end),
+        })
+    }
     fn function(&mut self) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
@@ -1156,7 +1192,24 @@ impl<'a> Parser<'a> {
                 },
             });
         }
-        self.primary()
+        let mut expression = self.primary()?;
+        loop {
+            if !self.at(&TokenKind::LBracket) {
+                break;
+            }
+            self.advance();
+            let index = self.expression()?;
+            let end = self.expect(TokenKind::RBracket, "`]` after array index")?;
+            let span = expression.span.join(end);
+            expression = Expr {
+                kind: ExprKind::Index {
+                    target: Box::new(expression),
+                    index: Box::new(index),
+                },
+                span,
+            };
+        }
+        Ok(expression)
     }
     fn primary(&mut self) -> Result<Expr, ParseError> {
         let token = self.advance().clone();
@@ -1185,6 +1238,29 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Bool(false),
                 span: token.span,
             }),
+            TokenKind::LBracket => {
+                let mut values = Vec::new();
+                self.skip_newlines();
+                if !self.at(&TokenKind::RBracket) {
+                    loop {
+                        values.push(self.expression()?);
+                        self.skip_newlines();
+                        if !self.at(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                        self.skip_newlines();
+                        if self.at(&TokenKind::RBracket) {
+                            break;
+                        }
+                    }
+                }
+                let end = self.expect(TokenKind::RBracket, "`]` after array literal")?;
+                Ok(Expr {
+                    kind: ExprKind::Array(values),
+                    span: token.span.join(end),
+                })
+            }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
                 if self.at(&TokenKind::LParen) {
@@ -1482,6 +1558,42 @@ mod tests {
         .unwrap();
         assert!(program.apis[0].requires_auth);
         assert_eq!(program.apis[0].permissions, ["customers.view"]);
+    }
+
+    #[test]
+    fn parses_structured_record_definition() {
+        let program = parse(
+            &lex(r#"struct CustomerInput {
+                    name: String
+                    email: Email?
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.records.len(), 1);
+        assert_eq!(program.records[0].name, "CustomerInput");
+        assert_eq!(
+            program.records[0].fields[1].ty,
+            Type::Option(Box::new(Type::Named("Email".into())))
+        );
+    }
+
+    #[test]
+    fn parses_array_literals_and_indexing() {
+        let program =
+            parse(&lex("fn main() { values = [1, 2, 3] print(values[1]) }").unwrap()).unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected array binding");
+        };
+        assert!(matches!(value.kind, ExprKind::Array(_)));
+        let Stmt::Expr(expression) = &program.functions[0].body.statements[1] else {
+            panic!("expected print expression");
+        };
+        let ExprKind::Call { args, .. } = &expression.kind else {
+            panic!("expected print call");
+        };
+        assert!(matches!(args[0].kind, ExprKind::Index { .. }));
     }
 
     #[test]

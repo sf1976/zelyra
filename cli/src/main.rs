@@ -376,6 +376,31 @@ fn format_openapi_components(program: &zelyra_ast::Program) -> String {
             openapi_schema(&definition.target)
         ));
     }
+    for record in &program.records {
+        let properties = record
+            .fields
+            .iter()
+            .map(|field| {
+                format!(
+                    "\"{}\":{}",
+                    json_escape(&field.name),
+                    openapi_schema(&field.ty)
+                )
+            })
+            .collect::<Vec<_>>();
+        let required = record
+            .fields
+            .iter()
+            .filter(|field| !matches!(field.ty, Type::Option(_)))
+            .map(|field| format!("\"{}\"", json_escape(&field.name)))
+            .collect::<Vec<_>>();
+        components.push(format!(
+            "\"{}\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
+            json_escape(&record.name),
+            properties.join(","),
+            required.join(",")
+        ));
+    }
     for table in &program.tables {
         let properties = table
             .columns
@@ -1512,6 +1537,9 @@ fn api_value_json(
         {
             return api_value_json(value, &definition.target, program);
         }
+        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+            return api_record_value(value, record, program);
+        }
     }
     match ty {
         Type::Array(inner) => {
@@ -1564,6 +1592,49 @@ fn api_value_json(
     }
 }
 
+fn api_record_value(
+    value: &serde_json::Value,
+    record: &zelyra_ast::RecordDef,
+    program: &zelyra_ast::Program,
+) -> Result<Value, String> {
+    let Some(object) = value.as_object() else {
+        return Err(format!("expected JSON object for record `{}`", record.name));
+    };
+    for field in object.keys() {
+        if !record
+            .fields
+            .iter()
+            .any(|candidate| candidate.name == *field)
+        {
+            return Err(format!(
+                "unknown field `{field}` in record `{}`",
+                record.name
+            ));
+        }
+    }
+    let mut fields = HashMap::new();
+    for field in &record.fields {
+        let Some(value) = object.get(&field.name) else {
+            if matches!(field.ty, Type::Option(_)) {
+                fields.insert(field.name.clone(), Value::Option(None));
+                continue;
+            }
+            return Err(format!(
+                "missing field `{}` in record `{}`",
+                field.name, record.name
+            ));
+        };
+        fields.insert(
+            field.name.clone(),
+            api_value_json(value, &field.ty, program)?,
+        );
+    }
+    Ok(Value::Object {
+        type_name: record.name.clone(),
+        fields,
+    })
+}
+
 fn api_json_value(value: &Value) -> String {
     api_json_value_node(value).to_string()
 }
@@ -1580,6 +1651,13 @@ fn api_json_value_node(value: &Value) -> serde_json::Value {
         Value::Char(value) => serde_json::Value::String(value.to_string()),
         Value::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
+        }
+        Value::Object { fields, .. } => {
+            let object = fields
+                .iter()
+                .map(|(name, value)| (name.clone(), api_json_value_node(value)))
+                .collect();
+            serde_json::Value::Object(object)
         }
         Value::Option(Some(value)) => api_json_value_node(value),
         Value::Option(None) => serde_json::Value::Null,
@@ -1999,6 +2077,55 @@ mod tests {
     }
 
     #[test]
+    fn decodes_and_serializes_nested_structured_api_objects() {
+        let program = parse(
+            &lex(
+                "struct Address { city: String } struct CustomerInput { name: String address: Address } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"address\":{\"city\":\"Berlin\"}}}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(body["name"], "Anna");
+        assert_eq!(body["address"]["city"], "Berlin");
+    }
+
+    #[test]
+    fn rejects_unknown_and_missing_record_fields() {
+        let program = parse(
+            &lex(
+                "struct CustomerInput { name: String email: Email? } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        let unknown = zelyra_web::parse_request(
+            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"unknown\":true}}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &unknown, &HashMap::new(), None);
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("unknown field"));
+
+        let missing = zelyra_web::parse_request(
+            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{}}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &missing, &HashMap::new(), None);
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("missing field"));
+    }
+
+    #[test]
     fn maps_declared_result_errors_to_http_responses() {
         let program = parse(
             &lex(
@@ -2032,7 +2159,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_nested_json_values_until_array_types_are_supported() {
+    fn rejects_object_json_for_scalar_input() {
         let program = parse(
             &lex(
                 "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",

@@ -570,8 +570,23 @@ Fehler bei geschützten APIs verwenden JSON mit `code` und `message`. Ein
 Handler kann `Err("NotFound")` zurückgeben, um den passenden Status aus dem
 deklarierten `errors`-Block zu wählen; nicht deklarierte Fehler führen zu 500.
 JSON-Arrays können an typisierte Felder wie `Int[]` oder `MachineId[]` gebunden
-werden; verschachtelte Eingabeobjekte werden noch nicht unterstützt.
-Umfangreichere fachliche Fehlerwerte folgen später.
+werden. Verschachteltes JSON wird über deklarierte Records modelliert:
+
+~~~zelyra
+struct Address { city: String }
+struct CustomerInput { name: String address: Address }
+
+api POST "/customers" {
+    handler echo_customer
+    input { customer: CustomerInput }
+    output CustomerInput
+}
+~~~
+
+Unbekannte Record-Felder und fehlende Pflichtfelder werden abgelehnt. Im
+Sprachkern unterstützen Arrays Literale, Indexzugriff, `len`, `append` und
+Verkettung mit `+`. Record-Literale und Feldzugriff in der Quellsprache folgen
+später.
 
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders

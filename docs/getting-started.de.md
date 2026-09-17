@@ -53,7 +53,9 @@ Das aktuelle Repository enthält:
 - typisierte API-Deklarationen mit optionalen ausführbaren Handlern,
   OpenAPI-Erzeugung, Authentifizierungs- und Berechtigungssperren sowie
   strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung
-  einschließlich typisierter API-Arrays.
+  einschließlich typisierter API-Arrays und verschachtelter JSON-Objekte über
+  `struct`-Records;
+- Array-Literale, Indexzugriff, `len`, `append` und Array-Verkettung mit `+`;
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.

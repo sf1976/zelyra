@@ -1,0 +1,24 @@
+struct Address {
+    city: String
+}
+
+struct CustomerInput {
+    name: String
+    address: Address
+}
+
+fn echo_customer(customer: CustomerInput) -> CustomerInput {
+    return customer
+}
+
+api POST "/customers" {
+    handler echo_customer
+
+    input {
+        customer: CustomerInput
+    }
+
+    output CustomerInput
+}
+
+fn main() {}

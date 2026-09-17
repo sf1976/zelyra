@@ -76,6 +76,9 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
     for definition in &program.types {
         known_types.insert(definition.name.clone());
     }
+    for record in &program.records {
+        known_types.insert(record.name.clone());
+    }
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {
@@ -1414,6 +1417,12 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         ExprKind::Unary { expr, .. } => expression_contains_variable(expr, name),
         ExprKind::Binary { left, right, .. } => {
             expression_contains_variable(left, name) || expression_contains_variable(right, name)
+        }
+        ExprKind::Array(values) => values
+            .iter()
+            .any(|value| expression_contains_variable(value, name)),
+        ExprKind::Index { target, index } => {
+            expression_contains_variable(target, name) || expression_contains_variable(index, name)
         }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
@@ -2777,7 +2786,11 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
             let right = constant_value(right)?;
             constant_binary(left, *op, right)
         }
-        ExprKind::Variable(_) | ExprKind::Call { .. } | ExprKind::Sql { .. } => None,
+        ExprKind::Array(_)
+        | ExprKind::Index { .. }
+        | ExprKind::Variable(_)
+        | ExprKind::Call { .. }
+        | ExprKind::Sql { .. } => None,
     }
 }
 
@@ -3015,6 +3028,15 @@ fn check_capability_expr(
             check_capability_expr(left, function, functions, declared, errors);
             check_capability_expr(right, function, functions, declared, errors);
         }
+        ExprKind::Array(values) => {
+            for value in values {
+                check_capability_expr(value, function, functions, declared, errors);
+            }
+        }
+        ExprKind::Index { target, index } => {
+            check_capability_expr(target, function, functions, declared, errors);
+            check_capability_expr(index, function, functions, declared, errors);
+        }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
         | ExprKind::Float(..)
@@ -3093,6 +3115,14 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             });
         }
     }
+    for record in &program.records {
+        if !known_types.insert(record.name.clone()) {
+            errors.push(TypeError {
+                message: format!("duplicate type `{}`", record.name),
+                span: record.span,
+            });
+        }
+    }
     for table in &program.tables {
         known_types.insert(table.name.clone());
         if let Some(singular) = singular_table_type(&table.name) {
@@ -3106,6 +3136,21 @@ pub fn check(program: &Program) -> Result<(), Vec<TypeError>> {
             &mut errors,
             definition.span,
         );
+    }
+    for record in &program.records {
+        let mut fields = HashSet::new();
+        for field in &record.fields {
+            if !fields.insert(field.name.clone()) {
+                errors.push(TypeError {
+                    message: format!(
+                        "duplicate field `{}` in record `{}`",
+                        field.name, record.name
+                    ),
+                    span: field.span,
+                });
+            }
+            validate_type(&field.ty, &known_types, &mut errors, field.span);
+        }
     }
     let mut functions = HashMap::new();
     for function in &program.functions {
@@ -3523,6 +3568,18 @@ impl<'a> Checker<'a> {
             ExprKind::Bool(_) => Type::Bool,
             ExprKind::String(_) => Type::String,
             ExprKind::Char(_) => Type::Char,
+            ExprKind::Array(values) => {
+                let mut element = Type::Unknown;
+                for value in values {
+                    let value_type = self.check_expr(value, scopes);
+                    if element == Type::Unknown {
+                        element = value_type;
+                    } else {
+                        self.expect_type(&element, &value_type, value.span);
+                    }
+                }
+                Type::Array(Box::new(element))
+            }
             ExprKind::Variable(name) => self
                 .lookup(scopes, name)
                 .map(|v| v.ty.clone())
@@ -3546,6 +3603,37 @@ impl<'a> Checker<'a> {
                         self.check_expr(arg, scopes);
                     }
                     Type::Unit
+                } else if name == "len" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "`len` expects exactly one argument");
+                        return Type::Unknown;
+                    }
+                    let argument = self.check_expr(&args[0], scopes);
+                    if !matches!(argument, Type::Array(_)) && argument != Type::Unknown {
+                        self.error(args[0].span, "`len` expects an array");
+                    }
+                    Type::Int
+                } else if name == "append" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "`append` expects an array and one value");
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[1], scopes);
+                    match array_type {
+                        Type::Array(inner) => {
+                            self.expect_type(&inner, &value_type, args[1].span);
+                            Type::Array(inner)
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`append` expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
                 } else if name == "Some" || name == "Ok" || name == "Err" {
                     if args.len() != 1 {
                         self.error(expr.span, format!("`{name}` expects exactly one argument"));
@@ -3597,6 +3685,27 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            ExprKind::Index { target, index } => {
+                let target_type = self.check_expr(target, scopes);
+                let index_type = self.check_expr(index, scopes);
+                if !matches!(index_type, Type::Int | Type::UInt | Type::Unknown) {
+                    self.error(
+                        index.span,
+                        format!("array index must be an integer, found `{index_type}`"),
+                    );
+                }
+                match target_type {
+                    Type::Array(inner) => *inner,
+                    Type::Unknown => Type::Unknown,
+                    other => {
+                        self.error(
+                            target.span,
+                            format!("array indexing requires an array, found `{other}`"),
+                        );
+                        Type::Unknown
+                    }
+                }
+            }
             ExprKind::Binary { left, op, right } => {
                 let left_ty = self.check_expr(left, scopes);
                 let right_ty = self.check_expr(right, scopes);
@@ -3604,6 +3713,11 @@ impl<'a> Checker<'a> {
                     BinaryOp::Add => {
                         if left_ty == Type::String && right_ty == Type::String {
                             Type::String
+                        } else if let (Type::Array(left), Type::Array(right)) =
+                            (&left_ty, &right_ty)
+                        {
+                            self.expect_type(left, right, expr.span);
+                            Type::Array(left.clone())
                         } else {
                             self.numeric_result(&left_ty, &right_ty, expr.span)
                         }
@@ -3712,6 +3826,10 @@ pub enum Value {
     String(String),
     Char(char),
     Array(Vec<Value>),
+    Object {
+        type_name: String,
+        fields: HashMap<String, Value>,
+    },
     Option(Option<Box<Value>>),
     Result(Result<Box<Value>, Box<Value>>),
     Rows {
@@ -3733,6 +3851,7 @@ impl Value {
             Value::Array(values) => Type::Array(Box::new(
                 values.first().map(Value::ty).unwrap_or(Type::Unknown),
             )),
+            Value::Object { type_name, .. } => Type::Named(type_name.clone()),
             Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
             Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
             Value::Result(Ok(value)) => Type::Result(Box::new(value.ty()), Box::new(Type::Unknown)),
@@ -3756,6 +3875,15 @@ impl Value {
                 values
                     .iter()
                     .map(Value::output)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Object { type_name, fields } => format!(
+                "{}{{{}}}",
+                type_name,
+                fields
+                    .iter()
+                    .map(|(name, value)| format!("{name}={}", value.output()))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -4156,6 +4284,11 @@ impl Interpreter {
             ExprKind::Bool(v) => Ok(Value::Bool(*v)),
             ExprKind::String(v) => Ok(Value::String(v.clone())),
             ExprKind::Char(v) => Ok(Value::Char(*v)),
+            ExprKind::Array(values) => values
+                .iter()
+                .map(|value| self.eval(value, env))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array),
             ExprKind::Variable(name) => env
                 .get(name)
                 .or_else(|| {
@@ -4176,6 +4309,36 @@ impl Interpreter {
                     )?;
                     self.output.push(value.output());
                     Ok(Value::Unit)
+                } else if name == "len" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "`len` expects exactly one argument")
+                        );
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::Array(values) => Ok(Value::Int(values.len() as i64)),
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`len` expects an array, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "append" {
+                    if args.len() != 2 {
+                        return Err(self
+                            .runtime_error(expr.span, "`append` expects an array and one value"));
+                    }
+                    let array = self.eval(&args[0], env)?;
+                    let value = self.eval(&args[1], env)?;
+                    match array {
+                        Value::Array(mut values) => {
+                            values.push(value);
+                            Ok(Value::Array(values))
+                        }
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`append` expects an array, found {}", value.ty()),
+                        )),
+                    }
                 } else if name == "Some" || name == "Ok" || name == "Err" {
                     let argument = args.first().ok_or_else(|| {
                         self.runtime_error(expr.span, format!("`{name}` expects one argument"))
@@ -4212,6 +4375,32 @@ impl Interpreter {
                     (_, value) => Err(self.runtime_error(
                         expr.span,
                         format!("invalid unary operand of type {}", value.ty()),
+                    )),
+                }
+            }
+            ExprKind::Index { target, index } => {
+                let target = self.eval(target, env)?;
+                let index = self.eval(index, env)?;
+                let index = match index {
+                    Value::Int(value) if value >= 0 => value as usize,
+                    Value::UInt(value) => value as usize,
+                    value => {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("array index must be Int or UInt, found {}", value.ty()),
+                        ));
+                    }
+                };
+                match target {
+                    Value::Array(values) => values.get(index).cloned().ok_or_else(|| {
+                        self.runtime_error(
+                            expr.span,
+                            format!("array index {index} is out of bounds"),
+                        )
+                    }),
+                    value => Err(self.runtime_error(
+                        expr.span,
+                        format!("array indexing requires an array, found {}", value.ty()),
                     )),
                 }
             }
@@ -4270,6 +4459,10 @@ impl Interpreter {
             (Value::Float(a), Divide, Value::Float(b)) => Ok(Value::Float(a / b)),
             (Value::Float(a), Remainder, Value::Float(b)) => Ok(Value::Float(a % b)),
             (Value::String(a), Add, Value::String(b)) => Ok(Value::String(a + &b)),
+            (Value::Array(mut a), Add, Value::Array(b)) => {
+                a.extend(b);
+                Ok(Value::Array(a))
+            }
             (a, Equal, b) => Ok(Value::Bool(a == b)),
             (a, NotEqual, b) => Ok(Value::Bool(a != b)),
             (Value::Int(a), Less, Value::Int(b)) => Ok(Value::Bool(a < b)),
@@ -4359,10 +4552,12 @@ fn value_to_query_value(
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
-        Value::Array(_) | Value::Rows { .. } | Value::Result(_) => Err(RuntimeError {
-            message: "SQL parameters must be scalar values".into(),
-            span,
-        }),
+        Value::Array(_) | Value::Object { .. } | Value::Rows { .. } | Value::Result(_) => {
+            Err(RuntimeError {
+                message: "SQL parameters must be scalar values".into(),
+                span,
+            })
+        }
     }
 }
 
@@ -4465,6 +4660,22 @@ mod tests {
     fn mutable_while_loop_works() {
         let output = run("fn main() { mutable i = 0 while i < 3 { print(i) i = i + 1 } }");
         assert_eq!(output, ["0", "1", "2"]);
+    }
+
+    #[test]
+    fn supports_array_literals_indexing_length_append_and_concatenation() {
+        let output = run(
+            "fn main() { values = [1, 2] extended = append(values, 3) combined = extended + [4] print(combined[2]) print(len(combined)) }",
+        );
+        assert_eq!(output, ["3", "4"]);
+    }
+
+    #[test]
+    fn rejects_array_index_out_of_bounds_at_runtime() {
+        let program = parse(&lex("fn main() { values = [1] print(values[1]) }").unwrap()).unwrap();
+        check(&program).unwrap();
+        let error = execute(&program).unwrap_err();
+        assert!(error.message.contains("out of bounds"));
     }
 
     #[test]

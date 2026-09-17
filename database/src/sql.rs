@@ -170,6 +170,15 @@ fn check_expr(
             check_expr(left, schema, environment, errors);
             check_expr(right, schema, environment, errors);
         }
+        ExprKind::Array(values) => {
+            for value in values {
+                check_expr(value, schema, environment, errors);
+            }
+        }
+        ExprKind::Index { target, index } => {
+            check_expr(target, schema, environment, errors);
+            check_expr(index, schema, environment, errors);
+        }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -188,6 +197,10 @@ fn expr_type(expression: &Expr) -> Type {
         ExprKind::Bool(_) => Type::Bool,
         ExprKind::String(_) => Type::String,
         ExprKind::Char(_) => Type::Char,
+        ExprKind::Array(values) => Type::Array(Box::new(
+            values.first().map(expr_type).unwrap_or(Type::Unknown),
+        )),
+        ExprKind::Index { .. } => Type::Unknown,
         ExprKind::Sql { result_type, .. } => result_type.clone(),
         ExprKind::Variable(_)
         | ExprKind::Call { .. }

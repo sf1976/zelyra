@@ -4,6 +4,7 @@ use zelyra_ast::Span;
 pub enum TokenKind {
     Fn,
     Type,
+    Struct,
     Database,
     Table,
     Engine,
@@ -168,6 +169,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             let kind = match word {
                 "fn" => TokenKind::Fn,
                 "type" => TokenKind::Type,
+                "struct" => TokenKind::Struct,
                 "database" => TokenKind::Database,
                 "table" => TokenKind::Table,
                 "engine" => TokenKind::Engine,

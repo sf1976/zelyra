@@ -81,6 +81,7 @@ pub struct Program {
     pub databases: Vec<DatabaseDef>,
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
+    pub records: Vec<RecordDef>,
     pub pages: Vec<PageDef>,
     pub forms: Vec<FormDef>,
     pub cruds: Vec<CrudDef>,
@@ -230,6 +231,20 @@ pub struct TypeDef {
 }
 
 #[derive(Clone, Debug)]
+pub struct RecordDef {
+    pub name: String,
+    pub fields: Vec<RecordField>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct RecordField {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
     pub params: Vec<Param>,
@@ -348,7 +363,12 @@ pub enum ExprKind {
     Bool(bool),
     String(String),
     Char(char),
+    Array(Vec<Expr>),
     Variable(String),
+    Index {
+        target: Box<Expr>,
+        index: Box<Expr>,
+    },
     Call {
         name: String,
         args: Vec<Expr>,

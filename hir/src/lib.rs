@@ -23,6 +23,7 @@ impl fmt::Display for ResolveError {
 #[derive(Clone, Debug)]
 pub struct HirProgram {
     pub types: Vec<TypeDef>,
+    pub records: Vec<RecordDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<HirFunction>,
     pub functions_by_name: HashMap<String, FunctionId>,
@@ -154,7 +155,12 @@ pub enum HirExprKind {
     Bool(bool),
     String(String),
     Char(char),
+    Array(Vec<HirExpr>),
     Local(LocalId),
+    Index {
+        target: Box<HirExpr>,
+        index: Box<HirExpr>,
+    },
     Call {
         name: String,
         function: Option<FunctionId>,
@@ -237,6 +243,7 @@ pub fn lower(program: &Program) -> Result<HirProgram, Vec<ResolveError>> {
     if errors.is_empty() {
         Ok(HirProgram {
             types: program.types.clone(),
+            records: program.records.clone(),
             apis: program.apis.clone(),
             functions,
             functions_by_name,
@@ -437,6 +444,9 @@ impl<'a> Resolver<'a> {
             ExprKind::Bool(value) => HirExprKind::Bool(*value),
             ExprKind::String(value) => HirExprKind::String(value.clone()),
             ExprKind::Char(value) => HirExprKind::Char(*value),
+            ExprKind::Array(values) => {
+                HirExprKind::Array(values.iter().map(|value| self.expr(value)).collect())
+            }
             ExprKind::Variable(name) => match self.lookup(name) {
                 Some(local) => HirExprKind::Local(local),
                 None if name == "None" => HirExprKind::Call {
@@ -451,7 +461,12 @@ impl<'a> Resolver<'a> {
             },
             ExprKind::Call { name, args } => {
                 let function = self.functions.get(name).copied();
-                if function.is_none() && !matches!(name.as_str(), "print" | "Some" | "Ok" | "Err") {
+                if function.is_none()
+                    && !matches!(
+                        name.as_str(),
+                        "print" | "len" | "append" | "Some" | "Ok" | "Err"
+                    )
+                {
                     self.error(expr.span, format!("unknown function `{name}`"));
                 }
                 HirExprKind::Call {
@@ -468,6 +483,10 @@ impl<'a> Resolver<'a> {
                 left: Box::new(self.expr(left)),
                 op: *op,
                 right: Box::new(self.expr(right)),
+            },
+            ExprKind::Index { target, index } => HirExprKind::Index {
+                target: Box::new(self.expr(target)),
+                index: Box::new(self.expr(index)),
             },
             ExprKind::Sql { result_type, query } => HirExprKind::Sql {
                 result_type: result_type.clone(),
@@ -509,5 +528,35 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("unknown variable")));
+    }
+
+    #[test]
+    fn lowers_records_arrays_and_array_builtins() {
+        let program = parse(
+            &lex("struct Address { city: String } fn main() { items = [1, 2] first = items[0] count = len(items) extended = append(items, 3) print(first) print(count) print(extended) }").unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert_eq!(hir.records[0].name, "Address");
+        assert!(matches!(
+            hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Array(_),
+                    ..
+                },
+                ..
+            }
+        ));
+        assert!(matches!(
+            hir.functions[0].body.statements[2],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { ref name, .. },
+                    ..
+                },
+                ..
+            } if name == "len"
+        ));
     }
 }

@@ -50,7 +50,9 @@ The current repository contains:
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
 - typed API declarations with optional executable handlers, OpenAPI generation,
   authentication and permission guards, structured JSON errors, and declared
-  `Result` error mapping, including typed API arrays.
+  `Result` error mapping, including typed API arrays and nested JSON objects
+  declared with `struct` records;
+- array literals, indexing, `len`, `append`, and array concatenation with `+`;
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime-checked function contracts using `requires` and `ensures`.

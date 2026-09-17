@@ -122,6 +122,39 @@ api POST "/customer-ids" {
 }
 ~~~
 
-Die Handler-Brücke bleibt bewusst klein: verschachtelte Eingabeobjekte,
-generierte Client-Bindings und umfangreichere fachliche Fehlerwerte folgen in
-späteren Web/API-Schritten.
+Array-Literale und die ersten allgemeinen Array-Operationen sind im
+Sprachkern verfügbar:
+
+~~~zelyra
+numbers = [1, 2, 3]
+first = numbers[0]
+count = len(numbers)
+extended = append(numbers, 4)
+combined = numbers + [5, 6]
+~~~
+
+Records bilden das deklarierte Modell für verschachtelte JSON-Objekte.
+Fehlende optionale Felder werden zu `None`; unbekannte Felder und fehlende
+Pflichtfelder werden an der API-Grenze abgelehnt:
+
+~~~zelyra
+struct Address {
+    city: String
+}
+
+struct CustomerInput {
+    name: String
+    address: Address
+}
+
+api POST "/customers" {
+    handler create_customer
+    input { customer: CustomerInput }
+    output CustomerInput
+}
+~~~
+
+Die aktuelle Handler-Brücke bleibt bewusst klein: Record-Werte werden an der
+JSON-API-Grenze vollständig unterstützt. Record-Literale und Feldzugriff in
+der Quellsprache, generierte Client-Bindings sowie umfangreichere fachliche
+Fehlerwerte folgen in späteren Web-/API-Schritten.
