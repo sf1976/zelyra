@@ -59,7 +59,8 @@ Implemented today:
   mapping, including typed API arrays and nested JSON objects via `struct`
   records;
 - a dependency-free TypeScript client generator via
-  `zelyra doc <file.zyl> --typescript`;
+  `zelyra doc <file.zyl> --typescript`, including typed declared API error
+  codes and structured HTTP-error parsing;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
 - structured `for ... in` array iteration with `break` and `continue`;
@@ -84,8 +85,9 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, database roles, richer domain-error values, general formal
-verification, and production deployment tooling are still being developed. See
+Full CRUD generation, database roles, richer language-level domain-error values,
+general formal verification, and production deployment tooling are still being
+developed. See
 the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).

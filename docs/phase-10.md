@@ -77,7 +77,10 @@ zelyra doc examples/api_records.zyl --typescript > customer-client.ts
 The generated client contains TypeScript aliases/interfaces for Zelyra types,
 records, and tables, plus a `ZelyraClient` using the standard `fetch` API. It
 handles path encoding, query parameters, JSON request bodies, bearer tokens,
-typed response promises, and structured HTTP errors.
+typed response promises, and structured HTTP errors. Declared API error names
+are emitted as `ZelyraApiErrorCode`; `ZelyraApiError.fromResponse` extracts the
+HTTP status, error code, and server message while retaining the raw response
+body for diagnostics.
 
 The array example can be checked and served without a database:
 

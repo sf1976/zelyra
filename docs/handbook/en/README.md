@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.3"
+version = "0.1.4"
 zelyra = "0.1"
 
 [capabilities]
@@ -556,7 +556,9 @@ zelyra doc examples/api_records.zyl --typescript > customer-client.ts
 
 The generated client uses standard `fetch`, includes declared records and
 tables as TypeScript types, and handles path/query parameters, JSON bodies,
-bearer tokens, response types, and HTTP errors.
+bearer tokens, response types, and HTTP errors. Declared API error names are
+available through `ZelyraApiErrorCode`; `ZelyraApiError.fromResponse` extracts
+the status, code, and server message while preserving the raw response body.
 
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
@@ -697,7 +699,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.3"
+version = "0.1.4"
 zelyra = "0.1"
 
 [capabilities]

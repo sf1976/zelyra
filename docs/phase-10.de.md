@@ -81,7 +81,10 @@ Der erzeugte Client enthält TypeScript-Aliase und Interfaces für Zelyra-Typen,
 Records und Tabellen sowie einen `ZelyraClient` auf Basis der standardmäßigen
 `fetch`-API. Pfadkodierung, Query-Parameter, JSON-Request-Bodies, Bearer-
 Tokens, typisierte Response-Promises und strukturierte HTTP-Fehler werden
-behandelt.
+behandelt. Deklarierte API-Fehlernamen werden als `ZelyraApiErrorCode`
+erzeugt; `ZelyraApiError.fromResponse` liest HTTP-Status, Fehlercode und
+Servermeldung aus und behält zusätzlich den unveränderten Response-Body für
+die Diagnose.
 
 Das Array-Beispiel kann ohne Datenbank geprüft und gestartet werden:
 

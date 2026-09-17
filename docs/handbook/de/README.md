@@ -178,7 +178,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.3"
+version = "0.1.4"
 zelyra = "0.1"
 
 [capabilities]
@@ -611,7 +611,9 @@ zelyra doc examples/api_records.zyl --typescript > customer-client.ts
 Der erzeugte Client verwendet die standardmäßige `fetch`-API, enthält
 deklarierte Records und Tabellen als TypeScript-Typen und behandelt
 Pfad-/Query-Parameter, JSON-Bodies, Bearer-Tokens, Response-Typen und
-HTTP-Fehler.
+HTTP-Fehler. Deklarierte API-Fehlernamen sind über `ZelyraApiErrorCode`
+verfügbar; `ZelyraApiError.fromResponse` liest Status, Code und Servermeldung
+aus und bewahrt den unveränderten Response-Body auf.
 
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
@@ -759,7 +761,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.3"
+version = "0.1.4"
 zelyra = "0.1"
 
 [capabilities]

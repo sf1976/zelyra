@@ -4,6 +4,19 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.4 — 2026-09-17
+
+### Added
+
+- Generated TypeScript clients now expose declared API error names through
+  `ZelyraApiErrorCode`.
+- `ZelyraApiError.fromResponse` extracts HTTP status, error code, and server
+  message from Zelyra's structured JSON error responses and keeps the raw body.
+
+### Documentation
+
+- TypeScript client error handling documented in English and German.
+
 ## 0.1.3 — 2026-09-17
 
 ### Added

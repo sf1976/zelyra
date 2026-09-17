@@ -59,7 +59,8 @@ Heute implementiert:
   `Result`-Fehlerzuordnung einschließlich typisierter API-Arrays und
   verschachtelter JSON-Objekte über `struct`-Records;
 - einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten über
-  `zelyra doc <file.zyl> --typescript`;
+  `zelyra doc <file.zyl> --typescript`, einschließlich typisierter API-
+  Fehlercodes und strukturierter HTTP-Fehlerauswertung;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
