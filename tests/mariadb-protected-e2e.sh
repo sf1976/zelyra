@@ -16,6 +16,7 @@ test_password="ZelyraProtected-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
 edited_customer_name="Zelyra Edited Customer-${suffix}"
+custom_action_customer_name="Zelyra Custom Action Customer-${suffix}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-mariadb-protected-e2e.XXXXXX")"
 server_pid=""
 
@@ -60,6 +61,7 @@ WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${se
 DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
 DELETE FROM customers
 WHERE name IN ('${customer_name}', '${created_customer_name}', '${edited_customer_name}');
+DELETE FROM customers WHERE name = '${custom_action_customer_name}';
 SQL
     rm -rf "${temp_dir}"
 }
@@ -157,6 +159,19 @@ primary_api_status="$(request_status "${temp_dir}/primary-api.json" \
 [[ "${primary_api_status}" == "200" ]]
 grep -Fq "\"name\":\"${customer_name}\"" "${temp_dir}/primary-api.json"
 
+custom_form_status="$(request_status "${temp_dir}/primary-custom-form.html" \
+    --cookie "${primary_cookie}" \
+    "${base_url}/forms/CustomerQuickCreate")"
+[[ "${custom_form_status}" == "200" ]]
+custom_form_csrf="$(extract_csrf "${temp_dir}/primary-custom-form.html")"
+[[ -n "${custom_form_csrf}" ]]
+custom_form_submit_status="$(request_status "${temp_dir}/primary-custom-form-submit.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${custom_form_csrf}" \
+    --data-urlencode "name=${custom_action_customer_name}" \
+    "${base_url}/forms/CustomerQuickCreate")"
+[[ "${custom_form_submit_status}" == "303" ]]
+
 primary_create_status="$(request_status "${temp_dir}/primary-create.html" \
     --cookie "${primary_cookie}" \
     "${base_url}/customers/new")"
@@ -232,6 +247,11 @@ viewer_crud_status="$(request_status "${temp_dir}/viewer-crud.html" \
     "${base_url}/customers")"
 [[ "${viewer_crud_status}" == "200" ]]
 ! grep -Fq 'href="/customers/new"' "${temp_dir}/viewer-crud.html"
+viewer_custom_form_status="$(request_status "${temp_dir}/viewer-custom-form.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/forms/CustomerQuickCreate")"
+[[ "${viewer_custom_form_status}" == "403" ]]
+grep -Fq "Missing permission: customers.create" "${temp_dir}/viewer-custom-form.html"
 viewer_detail_status="$(request_status "${temp_dir}/viewer-detail.html" \
     --cookie "${viewer_cookie}" \
     "${base_url}/customers/${customer_id}")"

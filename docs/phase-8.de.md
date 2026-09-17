@@ -123,3 +123,5 @@ die HTML-CRUD-Route als auch für die JSON-API HTTP 403 erhält. Zusätzlich
 werden die getrennten Berechtigungen `customers.create`,
 `customers.edit` und `customers.delete` an den erzeugten
 CRUD-Aktionen geprüft.
+Der gleiche Test prüft außerdem eine aktionsbezogene Berechtigung an einer
+eigenen Formularaktion.

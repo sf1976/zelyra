@@ -117,3 +117,4 @@ endpoints, and an authenticated user without `customers.view` receives HTTP
 403 from both the HTML CRUD route and the JSON API. It also verifies separate
 `customers.create`, `customers.edit`, and `customers.delete`
 permissions on the generated CRUD actions.
+The same test also covers an action-level permission on a custom form action.

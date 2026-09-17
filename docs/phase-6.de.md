@@ -66,6 +66,24 @@ form CustomerCreate -> customers {
 }
 ~~~
 
+Formularaktionen können eine eigene Autorisierung deklarieren. Die
+Aktionsberechtigung wird beim Anzeigen des Formulars und erneut vor dem
+Absenden geprüft. Sie wird mit Berechtigungen der Formularroute kombiniert,
+damit eigene Datenbankaktionen die Sicherheitsgrenze der Anwendung nicht
+umgehen können:
+
+~~~zelyra
+form CustomerCreate -> customers {
+    fields { name email }
+
+    action save {
+        requires auth
+        permits "customers.save"
+        redirect "/customers"
+    }
+}
+~~~
+
 Der eingebaute Server liest `DATABASE_URL`, bindet deklarierte Felder als
 Prepared-Statement-Parameter und führt alle SQL-Anweisungen der Aktion in
 einer MariaDB-Transaktion aus. Bei Erfolg wird HTTP 303 geliefert. Eine

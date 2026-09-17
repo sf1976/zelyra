@@ -65,6 +65,23 @@ form CustomerCreate -> customers {
 }
 ~~~
 
+Form actions may declare their own authorization. The action permission is
+checked when the form is rendered and again before submission. It is combined
+with any permissions configured on the form route, so custom database actions
+cannot bypass the application's authentication boundary:
+
+~~~zelyra
+form CustomerCreate -> customers {
+    fields { name email }
+
+    action save {
+        requires auth
+        permits "customers.save"
+        redirect "/customers"
+    }
+}
+~~~
+
 The built-in server reads `DATABASE_URL`, binds declared fields as prepared
 parameters, and executes all action SQL in one MariaDB transaction. Success
 returns HTTP 303. Missing configuration returns HTTP 503 and an execution

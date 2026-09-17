@@ -126,6 +126,8 @@ pub struct FormField {
 #[derive(Clone, Debug)]
 pub struct FormAction {
     pub name: String,
+    pub requires_auth: bool,
+    pub permissions: Vec<String>,
     pub statements: Vec<Stmt>,
     pub success: Option<String>,
     pub redirect: Option<String>,

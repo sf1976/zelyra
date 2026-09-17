@@ -43,6 +43,24 @@ crud Customer -> customers {
     }
 }
 
+form CustomerQuickCreate -> customers {
+    fields {
+        name
+    }
+
+    action save {
+        requires auth
+        permits "customers.create"
+
+        sql {
+            INSERT INTO customers (name)
+            VALUES (:name)
+        }
+
+        redirect "/customers"
+    }
+}
+
 fn get_customer(id: CustomerId) -> Customer uses Database {
     return sql<Customer> {
         SELECT id, name

@@ -501,6 +501,8 @@ form CustomerCreate -> customers {
     fields { name email }
 
     action save {
+        requires auth
+        permits "customers.save"
         sql {
             INSERT INTO customers (name, email)
             VALUES (:name, :email)
@@ -510,6 +512,10 @@ form CustomerCreate -> customers {
     }
 }
 ~~~
+
+Formularaktionen können eine eigene Autorisierung deklarieren. Die
+Berechtigung wird beim Anzeigen des Formulars und erneut vor dem Absenden
+geprüft.
 
 ## 12. CRUD
 

@@ -1724,6 +1724,11 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
         .pages
         .iter()
         .any(|page| page.requires_auth || !page.permissions.is_empty())
+        || program.forms.iter().any(|form| {
+            form.actions
+                .iter()
+                .any(|action| action.requires_auth || !action.permissions.is_empty())
+        })
         || program.cruds.iter().any(|crud| {
             crud.requires_auth
                 || !crud.permissions.is_empty()
@@ -2372,6 +2377,8 @@ fn generated_crud_form(
             fields,
             actions: vec![zelyra_ast::FormAction {
                 name: "save".into(),
+                requires_auth: false,
+                permissions: Vec::new(),
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
                     kind: zelyra_ast::ExprKind::Sql {
                         result_type: zelyra_ast::Type::Unit,
@@ -3531,6 +3538,24 @@ mod tests {
 
             crud Customer -> customers {
                 permits create "customers.create"
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_protected_form_action_without_auth_definition() {
+        let source = r#"
+            form CustomerForm {
+                field name: String {
+                    required
+                }
+                action save {
+                    requires auth
+                    permits "customers.save"
+                }
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();

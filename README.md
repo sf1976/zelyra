@@ -46,8 +46,8 @@ Implemented today:
 - an initial Web Core with page definitions, GET routing, path parameters, and
   a built-in HTTP server;
 - an initial Forms Core with schema-aware field definitions and validation;
-- validated form actions with safe MariaDB parameter binding, transactions, and
-  HTTP redirects.
+- validated form actions with safe MariaDB parameter binding, transactions,
+  HTTP redirects, and action-level authentication/permission checks.
 - an initial CRUD resource with MariaDB search, configurable list/search/filter
   columns, sorting, pagination, generated Create/Edit forms, and
   CSRF-protected delete with separate view/create/edit/delete permissions and
@@ -453,7 +453,7 @@ The MariaDB authentication integration test from
 permission denial, and logout.
 The protected CRUD/API test from `tests/mariadb-protected-e2e.sh` verifies the
 permission boundary for HTML CRUD and JSON API endpoints, including separate
-Create, Edit, and Delete permissions.
+Create, Edit, and Delete permissions, plus a protected custom form action.
 
 Please keep German and English user documentation synchronized. Architectural
 decisions should preserve safety, control, and extensibility.

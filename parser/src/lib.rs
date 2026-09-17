@@ -592,9 +592,18 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
         let mut success = None;
         let mut redirect = None;
+        let mut requires_auth = false;
+        let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Success) {
+            if self.at(&TokenKind::Requires) {
+                self.advance();
+                self.expect(TokenKind::Auth, "auth after requires")?;
+                requires_auth = true;
+            } else if self.at(&TokenKind::Permits) {
+                self.advance();
+                permissions.push(self.string_value("permission")?);
+            } else if self.at(&TokenKind::Success) {
                 self.advance();
                 success = Some(self.string_value("success message")?);
             } else if self.at(&TokenKind::Redirect) {
@@ -608,6 +617,8 @@ impl<'a> Parser<'a> {
         let end = self.expect(TokenKind::RBrace, "`}` after form action")?;
         Ok(FormAction {
             name,
+            requires_auth,
+            permissions,
             statements,
             success,
             redirect,
@@ -1576,6 +1587,8 @@ mod tests {
                     widget: email
                 }
                 action save {
+                    requires auth
+                    permits "customers.save"
                     sql {
                         INSERT INTO customers (email) VALUES (:email)
                     }
@@ -1597,6 +1610,8 @@ mod tests {
             program.forms[0].actions[0].redirect.as_deref(),
             Some("/customers")
         );
+        assert!(program.forms[0].actions[0].requires_auth);
+        assert_eq!(program.forms[0].actions[0].permissions, ["customers.save"]);
         assert!(matches!(
             program.forms[0].actions[0].statements[0],
             Stmt::Expr(Expr {

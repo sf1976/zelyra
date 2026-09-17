@@ -25,6 +25,8 @@ compiler and repository release.
   action-specific permission.
 - Generated CRUD lists and detail views now hide action links and buttons that
   the current session is not permitted to use.
+- Form actions can now declare their own authentication and permission
+  requirements; checks run on both render and submit.
 
 ### Fixed
 

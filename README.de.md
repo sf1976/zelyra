@@ -47,7 +47,8 @@ Heute implementiert:
   eingebautem HTTP-Server;
 - ein erster Forms Core mit schemaabhängigen Feldern und Validierung;
 - validierte Formularaktionen mit sicherer MariaDB-Parameterbindung,
-  Transaktionen und HTTP-Weiterleitungen.
+  Transaktionen, HTTP-Weiterleitungen sowie aktionsbezogenen
+  Authentifizierungs- und Berechtigungsprüfungen.
 - eine erste CRUD-Ressource mit MariaDB-Suche, konfigurierbaren Listen-,
   Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
   Formularen und CSRF-geschütztem Löschen mit getrennten Berechtigungen für
@@ -462,7 +463,8 @@ Der MariaDB-Authentifizierungs-Integrationstest aus
 Berechtigungsablehnung und Logout.
 Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft die
 Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte einschließlich
-getrennter Create-, Edit- und Delete-Berechtigungen.
+getrennter Create-, Edit- und Delete-Berechtigungen sowie einer geschützten
+eigenen Formularaktion.
 
 Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
 Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit

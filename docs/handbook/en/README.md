@@ -447,6 +447,8 @@ form CustomerCreate -> customers {
     fields { name email }
 
     action save {
+        requires auth
+        permits "customers.save"
         sql {
             INSERT INTO customers (name, email)
             VALUES (:name, :email)
@@ -456,6 +458,9 @@ form CustomerCreate -> customers {
     }
 }
 ~~~
+
+Form actions may declare their own authorization. The permission is checked
+when the form is rendered and again before submission.
 
 ## 12. CRUD
 

@@ -431,9 +431,10 @@ impl WebApp {
                 if self.database_capability_granted == Some(false) {
                     return database_capability_denied();
                 }
+                let (requires_auth, permissions) = form_authorization(form);
                 if let Some(response) = authorize(
-                    form.requires_auth,
-                    &form.permissions,
+                    requires_auth,
+                    &permissions,
                     request,
                     self,
                     self.database_url.as_deref(),
@@ -1284,6 +1285,18 @@ pub fn html_escape(value: &str) -> String {
         }
     }
     escaped
+}
+
+fn form_authorization(form: &FormRoute) -> (bool, Vec<String>) {
+    let mut permissions = form.permissions.clone();
+    let (action_requires_auth, action_permissions) = form
+        .form
+        .actions
+        .first()
+        .map(|action| (action.requires_auth, action.permissions.as_slice()))
+        .unwrap_or((false, &[]));
+    permissions.extend(action_permissions.iter().cloned());
+    (form.requires_auth || action_requires_auth, permissions)
 }
 
 fn dispatch_form(
@@ -3823,10 +3836,51 @@ mod tests {
     }
 
     #[test]
+    fn protects_custom_form_actions_with_action_permissions() {
+        let mut route = form_route();
+        route.form.actions.push(zelyra_ast::FormAction {
+            name: "save".into(),
+            requires_auth: true,
+            permissions: vec!["customers.save".into()],
+            statements: Vec::new(),
+            success: None,
+            redirect: None,
+            span: zelyra_ast::Span::default(),
+        });
+        let app = WebApp::new(Vec::new(), vec![route])
+            .with_auth(Some("test-token".into()), vec!["customers.save".into()]);
+        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&request).status, 401);
+        let request = parse_request(
+            "GET /forms/CustomerCreate HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&request).status, 200);
+
+        let mut route = form_route();
+        route.form.actions.push(zelyra_ast::FormAction {
+            name: "save".into(),
+            requires_auth: true,
+            permissions: vec!["customers.save".into()],
+            statements: Vec::new(),
+            success: None,
+            redirect: None,
+            span: zelyra_ast::Span::default(),
+        });
+        let app = WebApp::new(Vec::new(), vec![route])
+            .with_auth(Some("test-token".into()), vec!["customers.view".into()]);
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("customers.save"));
+    }
+
+    #[test]
     fn form_action_requires_database_url() {
         let mut route = form_route();
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
+            requires_auth: false,
+            permissions: Vec::new(),
             statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
                 kind: zelyra_ast::ExprKind::Sql {
                     result_type: Type::Unit,
