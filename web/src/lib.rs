@@ -1443,6 +1443,95 @@ fn load_existing_form_values(
     Ok(Some(values))
 }
 
+fn crud_foreign_key<'a>(
+    table: &'a zelyra_database::Table,
+    column: &str,
+) -> Option<&'a zelyra_database::ForeignKey> {
+    table.foreign_keys.iter().find(|foreign_key| {
+        foreign_key.column == column
+            || foreign_key.column == format!("{column}_id")
+            || column
+                == foreign_key
+                    .column
+                    .strip_suffix("_id")
+                    .unwrap_or(&foreign_key.column)
+    })
+}
+
+fn crud_relation_alias(table: &zelyra_database::Table, column: &str) -> Option<String> {
+    table
+        .foreign_keys
+        .iter()
+        .position(|foreign_key| foreign_key.column == column)
+        .map(|index| format!("zelyra_relation_{index}"))
+}
+
+fn crud_column_expression(schema: &Schema, table: &zelyra_database::Table, column: &str) -> String {
+    let Some(foreign_key) = crud_foreign_key(table, column) else {
+        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+    };
+    let Some(alias) = crud_relation_alias(table, &foreign_key.column) else {
+        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+    };
+    let Some(relation_table) = schema
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == foreign_key.referenced_table)
+    else {
+        return format!("{}.{}", quote_identifier("base"), quote_identifier(column));
+    };
+    format!(
+        "{}.{}",
+        quote_identifier(&alias),
+        quote_identifier(relation_display_column(relation_table))
+    )
+}
+
+fn crud_storage_expression(table: &zelyra_database::Table, column: &str) -> String {
+    let storage_column = crud_foreign_key(table, column)
+        .map(|foreign_key| foreign_key.column.as_str())
+        .unwrap_or(column);
+    format!(
+        "{}.{}",
+        quote_identifier("base"),
+        quote_identifier(storage_column)
+    )
+}
+
+fn crud_relation_joins(schema: &Schema, table: &zelyra_database::Table) -> String {
+    table
+        .foreign_keys
+        .iter()
+        .enumerate()
+        .filter_map(|(index, foreign_key)| {
+            let relation_table = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == foreign_key.referenced_table)?;
+            let alias = format!("zelyra_relation_{index}");
+            Some(format!(
+                " LEFT JOIN {} AS {} ON {}.{} = {}.{}",
+                quote_identifier(&relation_table.name),
+                quote_identifier(&alias),
+                quote_identifier("base"),
+                quote_identifier(&foreign_key.column),
+                quote_identifier(&alias),
+                quote_identifier(&foreign_key.referenced_column),
+            ))
+        })
+        .collect()
+}
+
+fn crud_column_label(schema: &Schema, table_name: &str, column: &str) -> String {
+    let Some(table) = schema.tables.iter().find(|table| table.name == table_name) else {
+        return humanize(column);
+    };
+    if crud_foreign_key(table, column).is_some() {
+        return humanize(column.strip_suffix("_id").unwrap_or(column));
+    }
+    humanize(column)
+}
+
 fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -1580,10 +1669,21 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         "SELECT {} FROM {}",
         query_columns
             .iter()
-            .map(|column| quote_identifier(column))
+            .map(|column| {
+                format!(
+                    "{} AS {}",
+                    crud_column_expression(&crud.schema, table, column),
+                    quote_identifier(column)
+                )
+            })
             .collect::<Vec<_>>()
             .join(", "),
-        quote_identifier(&crud.table)
+        format_args!(
+            "{} AS {}{}",
+            quote_identifier(&crud.table),
+            quote_identifier("base"),
+            crud_relation_joins(&crud.schema, table)
+        )
     );
     let mut conditions = Vec::new();
     if !search.is_empty() && !search_columns.is_empty() {
@@ -1594,7 +1694,7 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
                 .map(|column| {
                     format!(
                         "{} LIKE CONCAT('%', :search, '%')",
-                        quote_identifier(column)
+                        crud_column_expression(&crud.schema, table, column)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -1602,7 +1702,10 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         ));
     }
     for (column, _) in &filters {
-        conditions.push(format!("{} = :filter_{column}", quote_identifier(column)));
+        conditions.push(format!(
+            "{} = :filter_{column}",
+            crud_storage_expression(table, column)
+        ));
     }
     if !conditions.is_empty() {
         query.push_str(" WHERE ");
@@ -1610,7 +1713,7 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     }
     query.push_str(&format!(
         " ORDER BY {} {} LIMIT :limit OFFSET :offset",
-        quote_identifier(sort_column),
+        crud_column_expression(&crud.schema, table, sort_column),
         order
     ));
     let mut params = vec![
@@ -1710,11 +1813,22 @@ fn dispatch_crud_detail(
         "SELECT {} FROM {} WHERE {} = :id",
         columns
             .iter()
-            .map(|column| quote_identifier(column))
+            .map(|column| {
+                format!(
+                    "{} AS {}",
+                    crud_column_expression(&crud.schema, table, column),
+                    quote_identifier(column)
+                )
+            })
             .collect::<Vec<_>>()
             .join(", "),
-        quote_identifier(&crud.table),
-        quote_identifier("id")
+        format_args!(
+            "{} AS {}{}",
+            quote_identifier(&crud.table),
+            quote_identifier("base"),
+            crud_relation_joins(&crud.schema, table)
+        ),
+        format_args!("{}.{}", quote_identifier("base"), quote_identifier("id"))
     );
     let result = match zelyra_database::execute_mariadb_query(
         database_url,
@@ -1864,7 +1978,11 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(&html_escape(&humanize(column)));
+        html.push_str(&html_escape(&crud_column_label(
+            &crud.schema,
+            &crud.table,
+            column,
+        )));
         html.push_str("</option>");
     }
     html.push_str(
@@ -1886,7 +2004,10 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
-        html.push_str(&html_escape(&format!("Filter {}", humanize(column))));
+        html.push_str(&html_escape(&format!(
+            "Filter {}",
+            crud_column_label(&crud.schema, &crud.table, column)
+        )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\" name=\"filter_");
@@ -1907,7 +2028,11 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
         html.push_str("<table><thead><tr>");
         for column in display_columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(&humanize(column)));
+            html.push_str(&html_escape(&crud_column_label(
+                &crud.schema,
+                &crud.table,
+                column,
+            )));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -1978,7 +2103,11 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
     html.push_str(" detail</h1><dl>");
     for (column, value) in columns.iter().zip(row) {
         html.push_str("<dt>");
-        html.push_str(&html_escape(&humanize(column)));
+        html.push_str(&html_escape(&crud_column_label(
+            &crud.schema,
+            &crud.table,
+            column,
+        )));
         html.push_str("</dt><dd>");
         html.push_str(&html_escape(value));
         html.push_str("</dd>");
@@ -3137,6 +3266,93 @@ mod tests {
             .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
         assert!(html
             .contains("page=3&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
+    }
+
+    #[test]
+    fn renders_relationship_labels_in_crud_views() {
+        let schema = Schema {
+            database: None,
+            tables: vec![
+                zelyra_database::Table {
+                    name: "departments".into(),
+                    columns: vec![zelyra_database::Column {
+                        name: "name".into(),
+                        sql_type: "VARCHAR(100)".into(),
+                        nullable: false,
+                        primary_key: false,
+                        auto: false,
+                        unique: false,
+                        default: None,
+                    }],
+                    foreign_keys: Vec::new(),
+                    indexes: Vec::new(),
+                    uniques: Vec::new(),
+                },
+                zelyra_database::Table {
+                    name: "machines".into(),
+                    columns: vec![
+                        zelyra_database::Column {
+                            name: "id".into(),
+                            sql_type: "BIGINT".into(),
+                            nullable: false,
+                            primary_key: true,
+                            auto: true,
+                            unique: false,
+                            default: None,
+                        },
+                        zelyra_database::Column {
+                            name: "department_id".into(),
+                            sql_type: "BIGINT".into(),
+                            nullable: false,
+                            primary_key: false,
+                            auto: false,
+                            unique: false,
+                            default: None,
+                        },
+                    ],
+                    foreign_keys: vec![zelyra_database::ForeignKey {
+                        column: "department_id".into(),
+                        referenced_table: "departments".into(),
+                        referenced_column: "id".into(),
+                    }],
+                    indexes: Vec::new(),
+                    uniques: Vec::new(),
+                },
+            ],
+        };
+        let route = CrudRoute {
+            path: "/machines".into(),
+            title: "Machines".into(),
+            table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema,
+        };
+        let columns = ["id", "department_id"];
+        let rows = [vec!["1".into(), "Production".into()]];
+        let html = render_crud_list(
+            &route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &columns,
+                filter_columns: &columns,
+                sort_columns: &columns,
+                rows: &rows,
+                search: "",
+                query_values: &HashMap::new(),
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+            },
+        );
+        assert!(html.contains("<th>Department</th>"));
+        assert!(html.contains("<td>Production</td>"));
+        assert!(html.contains("Filter Department"));
     }
 
     #[test]

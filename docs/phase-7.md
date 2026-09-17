@@ -34,6 +34,12 @@ across text columns with bound parameters, exact filters through
 pagination through the `page` and `per_page` query parameters. Unknown sort or
 filter columns are rejected with HTTP 400.
 
+Foreign-key columns are joined automatically for presentation. For example,
+the stored `department_id` is shown as the department's `name` (`Production`)
+in lists and detail views; the generated form continues to submit the
+validated foreign-key ID. Relationship sort and filter labels use the logical
+field name while filtering remains an exact, parameterized ID comparison.
+
 Each row links to a generated detail route, for example `GET /machines/1`.
 The detail view offers generated Create and Edit forms at `/machines/new` and
 `GET/POST /machines/1/edit`. These forms inherit schema validation,

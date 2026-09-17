@@ -415,8 +415,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 6. Forms — schemaabhängige Syntax, Validierung, Web-Rendering, Aktionen und
    Beziehungs-Selects vorhanden.
 7. CRUD — Liste, Details, Erstellen, Bearbeiten, Suche, Filter, Sortierung,
-   Pagination, konfigurierbare Spalten und CSRF-geschütztes Löschen vorhanden;
-   Autorisierung folgt.
+   Pagination, konfigurierbare Spalten, Beziehungslabels und -Selects sowie
+   CSRF-geschütztes Löschen vorhanden; Autorisierung folgt.
 8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
    Sessions, Logout, Routensperren und datenbankgestützte
    Berechtigungsabfragen vorhanden.

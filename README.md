@@ -410,8 +410,8 @@ The long-term specification is organized into these phases:
 6. Forms — schema-aware parsing, validation, web rendering, actions, and
    relationship selects implemented.
 7. CRUD — list, detail, create, edit, search, filter, sort, pagination,
-   configurable columns, and CSRF-protected delete implemented; authorization
-   remains.
+   configurable columns, relationship labels and selects, and CSRF-protected
+   delete implemented; authorization remains.
 8. Authentication and authorization — Argon2 login, persistent MariaDB
    sessions, logout, route guards, and database-backed permission lookup.
 9. Capabilities and contracts — initial declarations, static checks, runtime

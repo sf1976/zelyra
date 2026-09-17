@@ -35,6 +35,13 @@ Zusätzlich gibt es exakte Filter über `filter_<spalte>` sowie eine Allowlist-
 Sortierung über `sort` und `order`. Unbekannte Sortier- oder Filterspalten
 werden mit HTTP 400 abgelehnt.
 
+Foreign-Key-Spalten werden für die Darstellung automatisch verknüpft. Die
+gespeicherte `department_id` wird beispielsweise in Listen und Details als
+`name` der Abteilung (`Production`) angezeigt; das generierte Formular sendet
+weiterhin die validierte Foreign-Key-ID. Bezeichnungen für Sortierung und
+Filter verwenden den logischen Feldnamen, während der Filter eine exakte,
+parametrisierte ID-Abfrage bleibt.
+
 Jede Zeile verlinkt auf eine generierte Detailroute, beispielsweise
 `GET /machines/1`. Die Detailansicht bietet automatisch erzeugte Create- und
 Edit-Formulare unter `/machines/new` und `GET/POST /machines/1/edit`. Diese

@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.35 — 2026-09-17
+
+### Added
+
+- CRUD lists and detail views now render foreign-key relationships with a
+  readable display value instead of the raw numeric ID.
+- Relationship-aware sort and filter labels no longer expose the storage
+  suffix `_id` in the generated interface.
+- MariaDB CRUD regression coverage now verifies relationship rendering.
+
+### Compatibility
+
+- Foreign-key filtering continues to use the stored ID and remains safely
+  parameterized.
+- Existing CRUD configurations and form bindings remain compatible.
+
 ## 0.1.34 — 2026-09-17
 
 ### Added
