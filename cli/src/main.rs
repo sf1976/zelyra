@@ -27,7 +27,8 @@ use zelyra_runtime::{
 };
 use zelyra_web::{
     html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute,
-    CsrfProtection, FormRoute, Response, Route, TableViewRoute, WebApp,
+    CsrfProtection, FormRoute, Response, Route, TableViewFilter, TableViewFilterKind,
+    TableViewRoute, WebApp,
 };
 
 fn usage() {
@@ -2422,6 +2423,34 @@ fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schem
                 valid = false;
             }
         }
+        let mut filters = HashSet::new();
+        for column in &tableview.filters {
+            if !filters.insert(column.as_str()) {
+                diagnostic(
+                    path,
+                    "E-VIEW-008",
+                    &format!(
+                        "tableview {} contains filter column {} more than once",
+                        tableview.name, column
+                    ),
+                    tableview.span.line,
+                    tableview.span.column,
+                );
+                valid = false;
+            } else if !result_fields.iter().any(|candidate| *candidate == column) {
+                diagnostic(
+                    path,
+                    "E-VIEW-009",
+                    &format!(
+                        "tableview filter column {} does not exist in its result type",
+                        column
+                    ),
+                    tableview.span.line,
+                    tableview.span.column,
+                );
+                valid = false;
+            }
+        }
     }
     valid
 }
@@ -2470,6 +2499,84 @@ fn tableview_result_fields<'a>(
                 .map(|field| field.name.as_str())
                 .collect()
         })
+}
+
+fn tableview_filter_kind(
+    result_type: &Type,
+    column: &str,
+    schema: &Schema,
+    records: &[zelyra_ast::RecordDef],
+) -> TableViewFilterKind {
+    let result_type = match result_type {
+        Type::Array(inner) | Type::Option(inner) => inner,
+        _ => result_type,
+    };
+    let Type::Named(name) = result_type else {
+        return TableViewFilterKind::Other;
+    };
+    let snake = name.to_ascii_lowercase();
+    let table = schema
+        .tables
+        .iter()
+        .find(|table| table.name == snake)
+        .or_else(|| {
+            let plural = if snake.ends_with('y') {
+                format!("{}ies", &snake[..snake.len() - 1])
+            } else {
+                format!("{snake}s")
+            };
+            schema.tables.iter().find(|table| table.name == plural)
+        });
+    if let Some(table) = table {
+        if let Some(schema_column) = table
+            .columns
+            .iter()
+            .find(|candidate| candidate.name == column)
+        {
+            return tableview_sql_filter_kind(&schema_column.sql_type);
+        }
+    }
+    records
+        .iter()
+        .find(|record| record.name == *name)
+        .and_then(|record| record.fields.iter().find(|field| field.name == column))
+        .map(|field| tableview_type_filter_kind(&field.ty))
+        .unwrap_or(TableViewFilterKind::Other)
+}
+
+fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
+    let ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        _ => ty,
+    };
+    match ty {
+        Type::Int | Type::UInt | Type::Float | Type::Decimal => TableViewFilterKind::Numeric,
+        Type::Bool => TableViewFilterKind::Bool,
+        Type::String | Type::Char => TableViewFilterKind::Text,
+        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
+            TableViewFilterKind::Text
+        }
+        _ => TableViewFilterKind::Other,
+    }
+}
+
+fn tableview_sql_filter_kind(sql_type: &str) -> TableViewFilterKind {
+    let sql_type = sql_type.to_ascii_uppercase();
+    if sql_type.contains("BOOL") {
+        TableViewFilterKind::Bool
+    } else if sql_type.contains("CHAR") || sql_type.contains("TEXT") {
+        TableViewFilterKind::Text
+    } else if sql_type.contains("INT")
+        || sql_type.contains("DECIMAL")
+        || sql_type.contains("NUMERIC")
+        || sql_type.contains("DOUBLE")
+        || sql_type.contains("FLOAT")
+        || sql_type.contains("REAL")
+    {
+        TableViewFilterKind::Numeric
+    } else {
+        TableViewFilterKind::Other
+    }
 }
 
 fn configured_crud_columns(
@@ -2904,6 +3011,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             title: tableview.name.clone(),
             source: tableview.source.clone(),
             columns: tableview.columns.clone(),
+            filters: tableview
+                .filters
+                .iter()
+                .map(|name| TableViewFilter {
+                    name: name.clone(),
+                    kind: tableview_filter_kind(
+                        &tableview.result_type,
+                        name,
+                        &schema,
+                        &program.records,
+                    ),
+                })
+                .collect(),
             searchable: tableview.searchable,
             sortable: tableview.sortable,
             page_size: tableview.page_size,

@@ -99,8 +99,9 @@ noch in Prüfung.
 - [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
   Events bleiben geplant.
 - [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,
-  deklarierten Spalten, Suche, Sortierung, Pagination, URL-Zustand und Escaping
-  sind für tabellen- und struct-basierte Ergebnistypen verfügbar.
+  deklarierten Spalten, typisierten Filtern, Suche, Sortierung, Pagination,
+  URL-Zustand und Escaping sind für tabellen- und struct-basierte Ergebnistypen
+  verfügbar.
 - [ ] Mehrere benannte Slots, Default-Slots, Fallback-Inhalte und verschachtelte
   Views.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
@@ -110,8 +111,9 @@ noch in Prüfung.
 - [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
   URLs; stabile Sortierung und weitere Barrierefreiheitsverbesserungen bleiben
   offen.
-- [ ] Einheitliche typisierte View-Datenpipelines wie `.search(...)`,
-  `.filter(...)`, `.sort(...)` und `.page(...)` für beliebige Views.
+- [~] Der erste Teil einer einheitlichen typisierten View-Pipeline ist für
+  `tableview`-Routen mit deklarativen Filtern, Suche, Sortierung und Pagination
+  verfügbar; dieselbe Pipeline für beliebige Views bleibt geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

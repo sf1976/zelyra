@@ -40,6 +40,12 @@ tableview Customers {
         turnover
     }
 
+    filter {
+        name
+        orders
+        turnover
+    }
+
     searchable
     sortable
     paginated 25

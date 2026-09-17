@@ -562,6 +562,7 @@ tableview Customers {
         GROUP BY c.id, c.name
     }
     columns { id name orders }
+    filter { name orders }
     searchable
     sortable
     paginated 25
@@ -573,6 +574,13 @@ aliases, and declared columns are checked against the schema and the target
 struct. Search terms are applied to the
 declared result columns, sorting is restricted to the declared allowlist, and
 pagination values are bound parameters. See `examples/tableview.zyl`.
+
+Optional `filter` fields use the same safe URL contract as CRUD filters:
+`filter_<column>=<value>` defaults to equality, while
+`filter_<column>__<operator>=<value>` selects an operator such as `contains`,
+`gte`, or `is_null`. The compiler derives the available operators from the
+typed result field; unknown fields, unsupported operators, and invalid numeric
+or boolean values are rejected with HTTP 400.
 
 ## 13. Authentication and permissions
 

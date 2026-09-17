@@ -133,6 +133,7 @@ pub struct TableViewDef {
     pub result_type: Type,
     pub source: String,
     pub columns: Vec<String>,
+    pub filters: Vec<String>,
     pub searchable: bool,
     pub sortable: bool,
     pub page_size: Option<u32>,

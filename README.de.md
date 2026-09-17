@@ -261,8 +261,9 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 /customers?filter_quantity__gte=10
 ~~~
 
-Die einheitliche, zusammensetzbare View-Datenpipeline für beliebige Views
-bleibt als nächster Ausbau geplant.
+Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
+`tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
+Views bleibt geplant.
 
 Eigenständige typisierte Tabellenansichten können bereits eine geprüfte
 MariaDB-Abfrage bereitstellen. Das Ergebnis darf ein deklarierter Tabellentyp
@@ -276,6 +277,7 @@ tableview Customers {
         GROUP BY c.id, c.name
     }
     columns { id name orders }
+    filter { name orders }
     searchable
     sortable
     paginated 25
@@ -284,8 +286,9 @@ tableview Customers {
 
 Dadurch entsteht eine serverseitig gerenderte Ansicht unter
 `/views/customers`. SQL-Quelle, Aliase, Ergebnisfelder und deklarierte Spalten
-werden gegen Schema und Struct geprüft; Suche, Sortierung, Pagination,
-URL-Zustand und HTML-Escaping bleiben Teil des sicheren Serverpfads. Ein
+werden gegen Schema und Struct geprüft; typisierte Filter, Suche, Sortierung,
+Pagination, URL-Zustand und HTML-Escaping bleiben Teil des sicheren
+Serverpfads. Ein
 vollständiges MariaDB-Beispiel steht in `examples/tableview.zyl`.
 
 ## Ein erstes schemaabhängiges Formular

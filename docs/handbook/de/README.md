@@ -619,6 +619,7 @@ tableview Customers {
         GROUP BY c.id, c.name
     }
     columns { id name orders }
+    filter { name orders }
     searchable
     sortable
     paginated 25
@@ -631,6 +632,13 @@ Suchbegriffe werden auf die
 deklarierten Ergebnisspalten angewandt, Sortierung ist auf die Allowlist
 beschränkt und Pagination-Werte werden gebunden. Siehe
 `examples/tableview.zyl`.
+
+Optionale `filter`-Felder verwenden denselben sicheren URL-Vertrag wie CRUD-
+Filter: `filter_<column>=<value>` bedeutet standardmäßig Gleichheit,
+`filter_<column>__<operator>=<value>` wählt einen Operator wie `contains`,
+`gte` oder `is_null`. Der Compiler leitet die erlaubten Operatoren aus dem
+typisierten Ergebnisfeld ab; unbekannte Felder, nicht unterstützte Operatoren
+und ungültige Zahlen- oder Boolean-Werte werden mit HTTP 400 abgelehnt.
 
 ## 13. Authentifizierung und Berechtigungen
 

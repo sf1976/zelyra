@@ -102,8 +102,8 @@ under evaluation.
 - [~] Named components with typed properties are available; typed events remain
   planned.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
-  declared columns, search, sorting, pagination, URL state, and escaping are
-  available for table- and struct-backed result types.
+  declared columns, typed filters, search, sorting, pagination, URL state, and
+  escaping are available for table- and struct-backed result types.
 - [ ] Multiple named slots, default slots, fallback content, and nested views.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.
@@ -111,8 +111,9 @@ under evaluation.
   and null checks) are compiled to safe server-side SQL.
 - [~] Generated CRUD filter controls preserve operator and value state in URLs;
   stable ordering and accessibility improvements remain open.
-- [ ] Unified typed view data pipelines such as `.search(...)`, `.filter(...)`,
-  `.sort(...)`, and `.page(...)` for arbitrary views.
+- [~] The first unified typed view pipeline slice is available on `tableview`
+  routes through declarative filters, search, sorting, and pagination; the
+  same pipeline for arbitrary views remains planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

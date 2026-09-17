@@ -159,6 +159,33 @@ grep -Fq "${escaped_beta_name}" "${temp_dir}/search.html"
 ! grep -Fq "${alpha_name}" "${temp_dir}/search.html"
 ! grep -Fq "${gamma_name}" "${temp_dir}/search.html"
 
+curl --silent --show-error --fail --get \
+    --data-urlencode "filter_orders=2" \
+    "${base_url}/views/customers" -o "${temp_dir}/filter-equal.html"
+grep -Fq "${alpha_name}" "${temp_dir}/filter-equal.html"
+! grep -Fq "${beta_name}" "${temp_dir}/filter-equal.html"
+! grep -Fq "${gamma_name}" "${temp_dir}/filter-equal.html"
+
+curl --silent --show-error --fail --get \
+    --data-urlencode "filter_orders__operator=gte" \
+    --data-urlencode "filter_orders=1" \
+    "${base_url}/views/customers" -o "${temp_dir}/filter-range.html"
+grep -Fq "${alpha_name}" "${temp_dir}/filter-range.html"
+grep -Fq "${escaped_beta_name}" "${temp_dir}/filter-range.html"
+! grep -Fq "${gamma_name}" "${temp_dir}/filter-range.html"
+
+curl --silent --show-error --fail --get \
+    --data-urlencode "filter_name__operator=contains" \
+    --data-urlencode "filter_name=Beta" \
+    "${base_url}/views/customers" -o "${temp_dir}/filter-text.html"
+grep -Fq "${escaped_beta_name}" "${temp_dir}/filter-text.html"
+! grep -Fq "${alpha_name}" "${temp_dir}/filter-text.html"
+
+filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}/views/customers?filter_not_allowed=value")"
+[[ "${filter_status}" == "400" ]]
+unsupported_filter_status="$(curl --silent --show-error --output "${temp_dir}/unsupported-filter.html" --write-out '%{http_code}' "${base_url}/views/customers?filter_orders__operator=contains&filter_orders=2")"
+[[ "${unsupported_filter_status}" == "400" ]]
+
 echo "[6/7] checking allowlisted sorting and pagination"
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${customer_prefix}" \

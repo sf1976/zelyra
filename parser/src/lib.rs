@@ -582,6 +582,7 @@ impl<'a> Parser<'a> {
         let mut result_type = None;
         let mut source = None;
         let mut columns = Vec::new();
+        let mut filters = Vec::new();
         let mut searchable = false;
         let mut sortable = false;
         let mut page_size = None;
@@ -611,6 +612,15 @@ impl<'a> Parser<'a> {
                     self.skip_newlines();
                 }
                 self.expect(TokenKind::RBrace, "`}` after tableview columns")?;
+            } else if self.at(&TokenKind::Filter) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after tableview filter")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    filters.push(self.ident("tableview filter column name")?.0);
+                    self.skip_newlines();
+                }
+                self.expect(TokenKind::RBrace, "`}` after tableview filter")?;
             } else if self.at(&TokenKind::Searchable) {
                 self.advance();
                 searchable = true;
@@ -637,7 +647,7 @@ impl<'a> Parser<'a> {
                 permissions.push(self.string_value("permission")?);
             } else {
                 return self.error(
-                    "expected source, columns, searchable, sortable, paginated, requires auth, or permits in tableview definition",
+                    "expected source, columns, filter, searchable, sortable, paginated, requires auth, or permits in tableview definition",
                 );
             }
             self.skip_newlines();
@@ -657,6 +667,7 @@ impl<'a> Parser<'a> {
             result_type,
             source,
             columns,
+            filters,
             searchable,
             sortable,
             page_size,
@@ -1879,6 +1890,7 @@ mod tests {
                     SELECT id, name FROM customers
                 }
                 columns { id name }
+                filter { name }
                 searchable
                 sortable
                 paginated 25
@@ -1893,6 +1905,7 @@ mod tests {
             Type::Array(Box::new(Type::Named("Customer".into())))
         );
         assert_eq!(tableview.columns, ["id", "name"]);
+        assert_eq!(tableview.filters, ["name"]);
         assert!(tableview.searchable);
         assert!(tableview.sortable);
         assert_eq!(tableview.page_size, Some(25));

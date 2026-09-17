@@ -285,11 +285,26 @@ pub struct TableViewRoute {
     pub title: String,
     pub source: String,
     pub columns: Vec<String>,
+    pub filters: Vec<TableViewFilter>,
     pub searchable: bool,
     pub sortable: bool,
     pub page_size: Option<u32>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TableViewFilterKind {
+    Text,
+    Numeric,
+    Bool,
+    Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableViewFilter {
+    pub name: String,
+    pub kind: TableViewFilterKind,
 }
 
 #[derive(Clone, Debug)]
@@ -2879,6 +2894,80 @@ fn dispatch_tableview(
             "<h1>400 Bad Request</h1><p>This table view is not sortable.</p>",
         );
     }
+    let mut filters = Vec::new();
+    let mut seen_filter_columns = HashSet::new();
+    for (name, value) in &query_values {
+        let Some(filter_name) = name.strip_prefix("filter_") else {
+            continue;
+        };
+        if filter_name.ends_with("__operator") {
+            let column = filter_name.trim_end_matches("__operator");
+            let Some(filter) = tableview
+                .filters
+                .iter()
+                .find(|filter| filter.name == column)
+            else {
+                return Response::html(
+                    400,
+                    "<h1>400 Bad Request</h1><p>Unknown filter column.</p>",
+                );
+            };
+            let Some(operator) = FilterOperator::parse(value) else {
+                return Response::html(
+                    400,
+                    format!("<h1>400 Bad Request</h1><p>Unknown filter operator for {column}.</p>"),
+                );
+            };
+            if !tableview_filter_operator_supported(filter.kind, operator) {
+                return Response::html(
+                    400,
+                    format!(
+                        "<h1>400 Bad Request</h1><p>Operator `{}` is not supported for filter `{column}`.</p>",
+                        operator.key()
+                    ),
+                );
+            }
+            continue;
+        }
+        let (column, direct_operator) = filter_name
+            .split_once("__")
+            .map_or((filter_name, None), |(column, operator)| {
+                (column, FilterOperator::parse(operator))
+            });
+        let Some(filter) = tableview
+            .filters
+            .iter()
+            .find(|filter| filter.name == column)
+        else {
+            return Response::html(400, "<h1>400 Bad Request</h1><p>Unknown filter column.</p>");
+        };
+        if filter_name.contains("__") && direct_operator.is_none() {
+            return Response::html(
+                400,
+                format!("<h1>400 Bad Request</h1><p>Unknown filter operator for {column}.</p>"),
+            );
+        }
+        let operator =
+            direct_operator.unwrap_or_else(|| selected_filter_operator(&query_values, column));
+        if !tableview_filter_operator_supported(filter.kind, operator) {
+            return Response::html(
+                400,
+                format!(
+                    "<h1>400 Bad Request</h1><p>Operator `{}` is not supported for filter `{column}`.</p>",
+                    operator.key()
+                ),
+            );
+        }
+        if !operator.needs_value() || !value.is_empty() {
+            if !seen_filter_columns.insert(column) {
+                return Response::html(
+                    400,
+                    format!("<h1>400 Bad Request</h1><p>Filter `{column}` was specified more than once.</p>"),
+                );
+            }
+            filters.push((column.to_string(), value.clone(), operator));
+        }
+    }
     let source = tableview.source.trim().trim_end_matches(';').trim();
     if source.is_empty() {
         return Response::html(500, "<h1>500 Internal Server Error</h1>");
@@ -2900,6 +2989,7 @@ fn dispatch_tableview(
         "SELECT {select_columns} FROM ({source}) AS {}",
         quote_identifier("zelyra_view")
     );
+    let mut has_where = false;
     if tableview.searchable && !search.is_empty() {
         let search_conditions = tableview
             .columns
@@ -2916,11 +3006,21 @@ fn dispatch_tableview(
         query.push_str(" WHERE (");
         query.push_str(&search_conditions);
         query.push(')');
+        has_where = true;
     } else if !search.is_empty() {
         return Response::html(
             400,
             "<h1>400 Bad Request</h1><p>This table view is not searchable.</p>",
         );
+    }
+    for (column, _, operator) in &filters {
+        if has_where {
+            query.push_str(" AND ");
+        } else {
+            query.push_str(" WHERE ");
+            has_where = true;
+        }
+        query.push_str(&tableview_filter_condition(column, *operator));
     }
     if tableview.sortable {
         query.push_str(&format!(
@@ -2945,6 +3045,23 @@ fn dispatch_tableview(
             "search".into(),
             zelyra_database::QueryValue::String(search.clone()),
         ));
+    }
+    for (column, value, operator) in filters {
+        if !operator.needs_value() {
+            continue;
+        }
+        let filter = tableview
+            .filters
+            .iter()
+            .find(|filter| filter.name == column)
+            .expect("tableview filter was validated");
+        let value = match tableview_filter_query_value(filter, &value) {
+            Ok(value) => value,
+            Err(message) => {
+                return Response::html(400, format!("<h1>400 Bad Request</h1><p>{message}</p>"))
+            }
+        };
+        params.push((format!("filter_{column}"), value));
     }
     let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
         Ok(result) => result,
@@ -3032,6 +3149,42 @@ fn render_tableview(
             html.push_str("</option>");
         }
         html.push_str("</select>");
+    }
+    for filter in &tableview.filters {
+        let selected_operator = selected_filter_operator(query_values, &filter.name);
+        html.push_str("<label for=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\">");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("</label><select id=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\" name=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\">");
+        for operator in tableview_filter_operator_options(filter.kind) {
+            html.push_str("<option value=\"");
+            html.push_str(operator.key());
+            html.push('"');
+            if *operator == selected_operator {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(operator.label());
+            html.push_str("</option>");
+        }
+        html.push_str("</select><input id=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\" name=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\" value=\"");
+        let value_name = format!("filter_{}", filter.name);
+        html.push_str(&html_escape(
+            query_values
+                .get(&value_name)
+                .map(String::as_str)
+                .unwrap_or(""),
+        ));
+        html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">Apply</button></form>");
     if rows.is_empty() {
@@ -3317,6 +3470,105 @@ impl FilterOperator {
 
     fn needs_value(self) -> bool {
         !matches!(self, Self::IsNull | Self::IsNotNull)
+    }
+}
+
+fn tableview_filter_operator_supported(
+    kind: TableViewFilterKind,
+    operator: FilterOperator,
+) -> bool {
+    match kind {
+        TableViewFilterKind::Text => matches!(
+            operator,
+            FilterOperator::Equal
+                | FilterOperator::Contains
+                | FilterOperator::StartsWith
+                | FilterOperator::EndsWith
+                | FilterOperator::IsNull
+                | FilterOperator::IsNotNull
+        ),
+        TableViewFilterKind::Numeric => matches!(
+            operator,
+            FilterOperator::Equal
+                | FilterOperator::GreaterThan
+                | FilterOperator::GreaterThanOrEqual
+                | FilterOperator::LessThan
+                | FilterOperator::LessThanOrEqual
+                | FilterOperator::IsNull
+                | FilterOperator::IsNotNull
+        ),
+        TableViewFilterKind::Bool | TableViewFilterKind::Other => matches!(
+            operator,
+            FilterOperator::Equal | FilterOperator::IsNull | FilterOperator::IsNotNull
+        ),
+    }
+}
+
+fn tableview_filter_operator_options(kind: TableViewFilterKind) -> &'static [FilterOperator] {
+    match kind {
+        TableViewFilterKind::Text => &[
+            FilterOperator::Equal,
+            FilterOperator::Contains,
+            FilterOperator::StartsWith,
+            FilterOperator::EndsWith,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ],
+        TableViewFilterKind::Numeric => &[
+            FilterOperator::Equal,
+            FilterOperator::GreaterThan,
+            FilterOperator::GreaterThanOrEqual,
+            FilterOperator::LessThan,
+            FilterOperator::LessThanOrEqual,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ],
+        TableViewFilterKind::Bool | TableViewFilterKind::Other => &[
+            FilterOperator::Equal,
+            FilterOperator::IsNull,
+            FilterOperator::IsNotNull,
+        ],
+    }
+}
+
+fn tableview_filter_condition(column: &str, operator: FilterOperator) -> String {
+    let expression = format!(
+        "{}.{}",
+        quote_identifier("zelyra_view"),
+        quote_identifier(column)
+    );
+    let parameter = format!(":filter_{column}");
+    match operator {
+        FilterOperator::Equal => format!("{expression} = {parameter}"),
+        FilterOperator::Contains => format!("{expression} LIKE CONCAT('%', {parameter}, '%')"),
+        FilterOperator::StartsWith => format!("{expression} LIKE CONCAT({parameter}, '%')"),
+        FilterOperator::EndsWith => format!("{expression} LIKE CONCAT('%', {parameter})"),
+        FilterOperator::GreaterThan => format!("{expression} > {parameter}"),
+        FilterOperator::GreaterThanOrEqual => format!("{expression} >= {parameter}"),
+        FilterOperator::LessThan => format!("{expression} < {parameter}"),
+        FilterOperator::LessThanOrEqual => format!("{expression} <= {parameter}"),
+        FilterOperator::IsNull => format!("{expression} IS NULL"),
+        FilterOperator::IsNotNull => format!("{expression} IS NOT NULL"),
+    }
+}
+
+fn tableview_filter_query_value(
+    filter: &TableViewFilter,
+    value: &str,
+) -> Result<zelyra_database::QueryValue, String> {
+    match filter.kind {
+        TableViewFilterKind::Bool => match value {
+            "true" | "1" => Ok(zelyra_database::QueryValue::Bool(true)),
+            "false" | "0" => Ok(zelyra_database::QueryValue::Bool(false)),
+            _ => Err(format!("filter_{} must be true or false", filter.name)),
+        },
+        TableViewFilterKind::Numeric => value
+            .parse::<f64>()
+            .map(zelyra_database::QueryValue::Float)
+            .map_err(|_| format!("filter_{} must be a number", filter.name)),
+        TableViewFilterKind::Text | TableViewFilterKind::Other => {
+            Ok(zelyra_database::QueryValue::String(value.into()))
+        }
     }
 }
 
@@ -4909,6 +5161,7 @@ mod tests {
             title: "Customers".into(),
             source: "SELECT id, name FROM customers".into(),
             columns: vec!["id".into(), "name".into()],
+            filters: Vec::new(),
             searchable: true,
             sortable: true,
             page_size: Some(1),
@@ -4936,6 +5189,56 @@ mod tests {
         assert!(html.contains("value=\"CNC machine\""));
         assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
         assert!(html.contains("name=\"sort\""));
+    }
+
+    #[test]
+    fn renders_typed_tableview_filters_and_preserves_state() {
+        let tableview = TableViewRoute {
+            path: "/views/customers".into(),
+            title: "Customers".into(),
+            source: "SELECT id, orders FROM customer_overview".into(),
+            columns: vec!["id".into(), "orders".into()],
+            filters: vec![TableViewFilter {
+                name: "orders".into(),
+                kind: TableViewFilterKind::Numeric,
+            }],
+            searchable: false,
+            sortable: true,
+            page_size: Some(25),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let query_values = HashMap::from([
+            ("filter_orders".into(), "3".into()),
+            ("filter_orders__operator".into(), "gte".into()),
+        ]);
+        let html = render_tableview(
+            &tableview,
+            &[vec!["1".into(), "3".into()]],
+            TableViewRenderState {
+                query_values: &query_values,
+                search: "",
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 25,
+            },
+        );
+        assert!(html.contains("name=\"filter_orders__operator\""));
+        assert!(html.contains("<option value=\"gte\" selected>at least</option>"));
+        assert!(html.contains("name=\"filter_orders\" value=\"3\""));
+        assert_eq!(
+            tableview_filter_condition("orders", FilterOperator::GreaterThanOrEqual),
+            "`zelyra_view`.`orders` >= :filter_orders"
+        );
+        assert!(tableview_filter_operator_supported(
+            TableViewFilterKind::Numeric,
+            FilterOperator::GreaterThanOrEqual
+        ));
+        assert!(!tableview_filter_operator_supported(
+            TableViewFilterKind::Numeric,
+            FilterOperator::Contains
+        ));
     }
 
     #[test]

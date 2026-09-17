@@ -255,8 +255,9 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 /customers?filter_quantity__gte=10
 ~~~
 
-The unified, composable view data pipeline that will make these operations
-available to arbitrary views remains planned.
+The first typed slice of the unified view data pipeline is now available on
+`tableview` routes; applying the same operations to arbitrary views remains
+planned.
 
 Standalone typed table views can already expose a checked MariaDB query. Their
 result may be a declared table type or a dedicated `struct` for joins and
@@ -270,6 +271,7 @@ tableview Customers {
         GROUP BY c.id, c.name
     }
     columns { id name orders }
+    filter { name orders }
     searchable
     sortable
     paginated 25
@@ -278,8 +280,8 @@ tableview Customers {
 
 This creates a server-rendered view at `/views/customers`. Its SQL source,
 aliases, result fields, and declared columns are checked against the schema and
-the struct; search, sorting, pagination, URL state, and HTML escaping remain on
-the safe server-side path. See
+the struct; typed filters, search, sorting, pagination, URL state, and HTML
+escaping remain on the safe server-side path. See
 `examples/tableview.zyl` for a complete MariaDB example.
 
 ## A first schema-aware form
