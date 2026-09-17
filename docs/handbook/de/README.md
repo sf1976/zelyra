@@ -178,7 +178,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]
@@ -198,6 +198,7 @@ Die wichtigsten Befehle:
 | `zelyra verify app.zyl` | Contracts klassifizieren |
 | `zelyra doc app.zyl --openapi` | OpenAPI-Dokument erzeugen |
 | `zelyra db inspect app.zyl` | Ist-Schema lesen |
+| `zelyra db setup app.zyl` | MariaDB und Anfangsschema einrichten |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
 
@@ -762,7 +763,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]

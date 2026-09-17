@@ -242,7 +242,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]
@@ -418,7 +418,15 @@ Schemaunterschiede planen:
 zelyra db plan examples/machine_management_mariadb.zyl
 ~~~
 
-Neue MariaDB-Datenbank und Anfangsschema erzeugen:
+`DATABASE_URL` in der Shell setzen und anschließend mit dem einsteigerfreundlichen
+Setup-Befehl eine neue MariaDB-Datenbank samt Anfangsschema erzeugen:
+
+~~~bash
+export DATABASE_URL='mariadb://user:<passwort>@127.0.0.1:3306/meine_app'
+zelyra db setup examples/machine_management_mariadb.zyl
+~~~
+
+`db bootstrap` bleibt als kompatibler Alias verfügbar:
 
 ~~~bash
 zelyra db bootstrap examples/machine_management_mariadb.zyl
@@ -610,6 +618,7 @@ zelyra doc <file.zyl> [--openapi]       OpenAPI-Dokument erzeugen
 zelyra doc <file.zyl> --typescript     TypeScript-Client erzeugen
 zelyra form validate <file> <Form> ...  Formularwerte validieren
 zelyra db create <file.zyl>             Schema-DDL ausgeben
+zelyra db setup <file.zyl>              MariaDB und Anfangsschema einrichten
 zelyra db bootstrap <file.zyl>          Anfangsschema erzeugen/anwenden
 zelyra db inspect <file.zyl>            aktuelle Datenbank inspizieren
 zelyra db plan <file.zyl>               Schemaänderungen anzeigen

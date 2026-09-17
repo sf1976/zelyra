@@ -4,6 +4,19 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.9 — 2026-09-17
+
+### Added
+
+- `zelyra db setup <file.zyl>` provides a clear beginner-friendly alias for
+  creating a MariaDB database and applying its initial schema.
+- Missing `DATABASE_URL` now includes safe Bash and PowerShell setup hints with
+  password placeholders only; credentials are never stored or printed.
+
+### Documentation
+
+- MariaDB setup instructions updated in English and German.
+
 ## 0.1.8 — 2026-09-17
 
 ### Added

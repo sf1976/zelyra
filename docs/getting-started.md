@@ -233,7 +233,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]
@@ -403,7 +403,15 @@ Preview the schema difference:
 zelyra db plan examples/machine_management_mariadb.zyl
 ~~~
 
-Bootstrap a new MariaDB database and apply its initial schema:
+Set `DATABASE_URL` in the shell, then create a new MariaDB database and apply
+its initial schema with the beginner-friendly setup command:
+
+~~~bash
+export DATABASE_URL='mariadb://user:<password>@127.0.0.1:3306/my_app'
+zelyra db setup examples/machine_management_mariadb.zyl
+~~~
+
+`db bootstrap` remains available as a compatible alias:
 
 ~~~bash
 zelyra db bootstrap examples/machine_management_mariadb.zyl
@@ -589,6 +597,7 @@ zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
 zelyra doc <file.zyl> --typescript     generate a TypeScript client
 zelyra form validate <file> <Form> ...  validate form input
 zelyra db create <file.zyl>             print schema DDL
+zelyra db setup <file.zyl>              create MariaDB database and initial schema
 zelyra db bootstrap <file.zyl>          create/apply initial schema
 zelyra db inspect <file.zyl>            inspect current database
 zelyra db plan <file.zyl>               show schema changes

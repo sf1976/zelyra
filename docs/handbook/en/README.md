@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]
@@ -170,6 +170,7 @@ Important commands:
 | `zelyra verify app.zyl` | classify contracts |
 | `zelyra doc app.zyl --openapi` | generate an OpenAPI document |
 | `zelyra db inspect app.zyl` | inspect the live schema |
+| `zelyra db setup app.zyl` | create a MariaDB database and initial schema |
 | `zelyra db plan app.zyl` | display schema changes |
 | `zelyra db apply app.zyl` | apply an approved plan |
 
@@ -700,7 +701,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.8"
+version = "0.1.9"
 zelyra = "0.1"
 
 [capabilities]

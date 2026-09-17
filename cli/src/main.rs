@@ -28,12 +28,12 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by bootstrap, inspect, plan, and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
     );
 }
 
@@ -50,7 +50,7 @@ fn create_project(path: &str, allow_current_directory: bool) -> ExitCode {
     let files = [
         (
             "zelyra.toml",
-            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.8\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
+            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.9\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
         ),
         (
             "main.zyl",
@@ -1473,9 +1473,19 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             println!("{}", schema.create_sql());
             ExitCode::SUCCESS
         }
-        "bootstrap" => {
+        "setup" | "bootstrap" => {
             let Ok(url) = env::var("DATABASE_URL") else {
-                eprintln!("error[E-DB-003]: DATABASE_URL is required for db bootstrap");
+                eprintln!(
+                    "error[E-DB-003]: DATABASE_URL is required for db {}",
+                    subcommand
+                );
+                if subcommand == "setup" {
+                    eprintln!("hint: set a MariaDB URL without committing it to source control");
+                    eprintln!(
+                        "  export DATABASE_URL='mariadb://user:<password>@127.0.0.1:3306/my_app'"
+                    );
+                    eprintln!("  # PowerShell: $env:DATABASE_URL = 'mariadb://user:<password>@127.0.0.1:3306/my_app'");
+                }
                 return ExitCode::from(1);
             };
             let result = match schema.backend() {
@@ -1483,12 +1493,15 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
                 Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
                 Backend::Postgres => Err(zelyra_database::DatabaseError {
-                    message: "db bootstrap currently supports mariadb and sqlite; use db apply for postgres".into(),
+                    message: format!(
+                        "db {} currently supports mariadb and sqlite; use db apply for postgres",
+                        subcommand
+                    ),
                 }),
             };
             match result {
                 Ok(()) => {
-                    println!("database bootstrapped successfully");
+                    println!("database {} completed successfully", subcommand);
                     ExitCode::SUCCESS
                 }
                 Err(error) => {

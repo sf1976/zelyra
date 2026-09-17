@@ -345,6 +345,7 @@ zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
+zelyra db setup <file.zyl>
 zelyra db bootstrap <file.zyl>
 zelyra db inspect <file.zyl>
 zelyra db plan <file.zyl>
