@@ -82,6 +82,17 @@ impl VerificationStatus {
             Self::Failed => "V-004",
         }
     }
+
+    pub const fn explanation(self) -> &'static str {
+        match self {
+            Self::Proven => "The verifier proved this condition for all analyzed paths.",
+            Self::RuntimeCheck => {
+                "The verifier could not complete a symbolic proof; runtime checking is required."
+            }
+            Self::Unproven => "No proof is available for this condition.",
+            Self::Failed => "The condition is false on a feasible analyzed path.",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

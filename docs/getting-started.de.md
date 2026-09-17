@@ -268,7 +268,9 @@ analysierten Pfad falsch ist oder nicht erhalten bleibt; `RUNTIME_CHECK`
 bedeutet, dass wegen eines unvollständigen symbolischen Beweises eine
 Laufzeitprüfung nötig ist. Jedes Ergebnis enthält einen Verifikationscode und
 einen Quellbereich als `(datei.zyl:startzeile:startspalte-endzeile:endspalte)`.
-Für IDEs oder CI kann `--json` verwendet werden. Nur `PROVEN` ist ein Beweis:
+Für IDEs oder CI kann `--json` verwendet werden. Die Textausgabe enthält
+zusätzlich eine Erklärung und einen Quellzeilenausschnitt mit Caret-Marker;
+JSON liefert dieselbe Erklärung im Feld `message`. Nur `PROVEN` ist ein Beweis:
 
 ~~~bash
 zelyra verify examples/loop_control.zyl

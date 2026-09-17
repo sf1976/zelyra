@@ -200,8 +200,8 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
 
 fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
     let (end_line, end_column) = source_position(source, result.span.end);
-    format!(
-        "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})",
+    let header = format!(
+        "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})\n  = {}",
         result.status,
         result.status.code(),
         result.function,
@@ -211,8 +211,13 @@ fn format_verification_result(path: &str, source: &str, result: &VerificationRes
         result.span.line,
         result.span.column,
         end_line,
-        end_column
-    )
+        end_column,
+        result.status.explanation()
+    );
+    match format_source_excerpt(source, result.span) {
+        Some(excerpt) => format!("{header}\n{excerpt}"),
+        None => header,
+    }
 }
 
 fn format_verification_json(path: &str, source: &str, results: &[VerificationResult]) -> String {
@@ -221,9 +226,10 @@ fn format_verification_json(path: &str, source: &str, results: &[VerificationRes
         .map(|result| {
             let (end_line, end_column) = source_position(source, result.span.end);
             format!(
-                "{{\"status\":\"{}\",\"code\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
+                "{{\"status\":\"{}\",\"code\":\"{}\",\"message\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
                 result.status,
                 result.status.code(),
+                json_escape(result.status.explanation()),
                 json_escape(&result.function),
                 result.kind,
                 result.index,
@@ -253,6 +259,29 @@ fn json_escape(value: &str) -> String {
             character => vec![character],
         })
         .collect()
+}
+
+fn format_source_excerpt(source: &str, span: zelyra_ast::Span) -> Option<String> {
+    let source_line = source
+        .split('\n')
+        .nth(span.line.checked_sub(1)?)?
+        .trim_end_matches('\r');
+    let start = span.column.checked_sub(1)?.min(source_line.len());
+    let (end_line, end_column) = source_position(source, span.end);
+    let width = if end_line == span.line {
+        end_column
+            .saturating_sub(span.column)
+            .max(1)
+            .min(source_line.len().saturating_sub(start).max(1))
+    } else {
+        source_line.len().saturating_sub(start).max(1)
+    };
+    let line_number = span.line.to_string();
+    let padding = " ".repeat(line_number.len());
+    let marker = format!("{}{}", " ".repeat(start), "^".repeat(width));
+    Some(format!(
+        "  {padding} |\n  {line_number} | {source_line}\n  {padding} | {marker}"
+    ))
 }
 
 fn source_position(source: &str, offset: usize) -> (usize, usize) {
@@ -1278,7 +1307,7 @@ mod tests {
         };
         assert_eq!(
             format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
-            "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)"
+            "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)\n  = The verifier proved this condition for all analyzed paths.\n    |\n  2 | second value\n    | ^^^^^^"
         );
     }
 
@@ -1293,7 +1322,7 @@ mod tests {
         };
         assert_eq!(
             format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-            r#"[{"status":"RUNTIME_CHECK","code":"V-002","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
+            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"The verifier could not complete a symbolic proof; runtime checking is required.","function":"say\"hello","kind":"ensures","index":1,"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
         );
     }
 

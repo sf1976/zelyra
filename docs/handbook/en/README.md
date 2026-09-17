@@ -618,7 +618,9 @@ Every result includes a stable code and a source range as
 `(file.zyl:start-line:start-column-end-line:end-column)`. The codes are
 `V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`), and
 `V-004` (`FAILED`). For IDEs and CI, use `zelyra verify app.zyl --json`; the
-JSON output contains the same result data and a structured `location` object.
+JSON output contains the same result data, a human-readable `message`, and a
+structured `location` object. Text output also shows an explanation and a
+source-line excerpt with a caret marker for every result.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

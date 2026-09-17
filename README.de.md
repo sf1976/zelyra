@@ -67,8 +67,9 @@ Heute implementiert:
   begrenzten Schleifen sowie modellierten `break`-/`continue`-Pfaden und
   expliziten Schleifeninvarianten mit individuellen Prüfstatus sowie
   aufruferabhängiger Prüfung von Callee-Vorbedingungen. Jedes Ergebnis enthält
-  einen stabilen Code und Quellbereich; `zelyra verify <file.zyl> --json`
-  liefert strukturierte Daten für IDEs und CI.
+  einen stabilen Code, Quellbereich, Erklärung und markierten
+  Quellzeilenausschnitt; `zelyra verify <file.zyl> --json` liefert strukturierte
+  Daten mit `message` für IDEs und CI.
 
 Vollständige CRUD-Erzeugung, Datenbankrollen, APIs, allgemeine formale Verifikation und
 Produktionswerkzeuge werden noch entwickelt. Siehe die

@@ -161,14 +161,25 @@ Each line includes a stable verification code and a source range in the form
 opened directly in an editor. The codes are `V-001` for `PROVEN`, `V-002` for
 `RUNTIME_CHECK`, `V-003` for `UNPROVEN`, and `V-004` for `FAILED`.
 
+The text formatter then prints a short explanation and the affected source
+line with a caret marker:
+
+~~~text
+  = The condition is false on a feasible analyzed path.
+    |
+  8 |     invariant { current == value }
+    |                ^^^^^^^^^^^^^^^^^^^
+~~~
+
 For IDEs and CI, request machine-readable output:
 
 ~~~bash
 zelyra verify examples/contracts.zyl --json
 ~~~
 
-The JSON result contains `status`, `code`, `function`, `kind`, `index`, and a
-`location` object with `file`, `start`, and `end` line/column positions.
+The JSON result contains `status`, `code`, `message`, `function`, `kind`,
+`index`, and a `location` object with `file`, `start`, and `end` line/column
+positions.
 
 `FAILED` means that the invariant is false on a feasible analyzed path or is
 not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking

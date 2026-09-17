@@ -172,14 +172,25 @@ Ergebnis direkt im Editor gefunden werden kann. Die Codes sind `V-001` für
 `PROVEN`, `V-002` für `RUNTIME_CHECK`, `V-003` für `UNPROVEN` und `V-004` für
 `FAILED`.
 
+Die Textausgabe zeigt anschließend eine kurze Erklärung und die betroffene
+Quellzeile mit einem Caret-Marker:
+
+~~~text
+  = The condition is false on a feasible analyzed path.
+    |
+  8 |     invariant { current == value }
+    |                ^^^^^^^^^^^^^^^^^^^
+~~~
+
 Für IDEs und CI kann eine maschinenlesbare Ausgabe angefordert werden:
 
 ~~~bash
 zelyra verify examples/contracts.zyl --json
 ~~~
 
-Das JSON-Ergebnis enthält `status`, `code`, `function`, `kind`, `index` sowie
-ein `location`-Objekt mit Datei und Start-/Endposition in Zeile und Spalte.
+Das JSON-Ergebnis enthält `status`, `code`, `message`, `function`, `kind`,
+`index` sowie ein `location`-Objekt mit Datei und Start-/Endposition in Zeile
+und Spalte.
 
 `FAILED` bedeutet, dass die Invariante auf einem möglichen analysierten Pfad
 falsch ist oder vom Schleifenkörper nicht erhalten bleibt. `RUNTIME_CHECK`
