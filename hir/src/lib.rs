@@ -156,10 +156,18 @@ pub enum HirExprKind {
     String(String),
     Char(char),
     Array(Vec<HirExpr>),
+    Record {
+        type_name: String,
+        fields: Vec<(String, HirExpr)>,
+    },
     Local(LocalId),
     Index {
         target: Box<HirExpr>,
         index: Box<HirExpr>,
+    },
+    Field {
+        target: Box<HirExpr>,
+        field: String,
     },
     Call {
         name: String,
@@ -447,6 +455,13 @@ impl<'a> Resolver<'a> {
             ExprKind::Array(values) => {
                 HirExprKind::Array(values.iter().map(|value| self.expr(value)).collect())
             }
+            ExprKind::Record { type_name, fields } => HirExprKind::Record {
+                type_name: type_name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(name, value)| (name.clone(), self.expr(value)))
+                    .collect(),
+            },
             ExprKind::Variable(name) => match self.lookup(name) {
                 Some(local) => HirExprKind::Local(local),
                 None if name == "None" => HirExprKind::Call {
@@ -464,7 +479,15 @@ impl<'a> Resolver<'a> {
                 if function.is_none()
                     && !matches!(
                         name.as_str(),
-                        "print" | "len" | "append" | "Some" | "Ok" | "Err"
+                        "print"
+                            | "len"
+                            | "append"
+                            | "contains"
+                            | "first"
+                            | "last"
+                            | "Some"
+                            | "Ok"
+                            | "Err"
                     )
                 {
                     self.error(expr.span, format!("unknown function `{name}`"));
@@ -487,6 +510,10 @@ impl<'a> Resolver<'a> {
             ExprKind::Index { target, index } => HirExprKind::Index {
                 target: Box::new(self.expr(target)),
                 index: Box::new(self.expr(index)),
+            },
+            ExprKind::Field { target, field } => HirExprKind::Field {
+                target: Box::new(self.expr(target)),
+                field: field.clone(),
             },
             ExprKind::Sql { result_type, query } => HirExprKind::Sql {
                 result_type: result_type.clone(),
@@ -533,7 +560,7 @@ mod tests {
     #[test]
     fn lowers_records_arrays_and_array_builtins() {
         let program = parse(
-            &lex("struct Address { city: String } fn main() { items = [1, 2] first = items[0] count = len(items) extended = append(items, 3) print(first) print(count) print(extended) }").unwrap(),
+            &lex("struct Address { city: String } fn main() { address = Address { city: \"Berlin\" } print(address.city) items = [1, 2] first = items[0] count = len(items) extended = append(items, 3) print(first) print(count) print(extended) }").unwrap(),
         )
         .unwrap();
         let hir = lower(&program).unwrap();
@@ -542,14 +569,21 @@ mod tests {
             hir.functions[0].body.statements[0],
             HirStmt::Let {
                 value: HirExpr {
-                    kind: HirExprKind::Array(_),
+                    kind: HirExprKind::Record { .. },
                     ..
                 },
                 ..
             }
         ));
         assert!(matches!(
-            hir.functions[0].body.statements[2],
+            hir.functions[0].body.statements[1],
+            HirStmt::Expr(HirExpr {
+                kind: HirExprKind::Call { .. },
+                ..
+            })
+        ));
+        assert!(matches!(
+            hir.functions[0].body.statements[4],
             HirStmt::Let {
                 value: HirExpr {
                     kind: HirExprKind::Call { ref name, .. },

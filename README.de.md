@@ -58,7 +58,10 @@ Heute implementiert:
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
   `Result`-Fehlerzuordnung einschließlich typisierter API-Arrays und
   verschachtelter JSON-Objekte über `struct`-Records;
-- Array-Literale, Indexzugriff, `len`, `append` und Array-Verkettung mit `+`;
+- Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
+  und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
+  sicher ein `Option`-Ergebnis;
+- Record-Literale und geprüfter Feldzugriff für verschachtelte Fachobjekte;
 - erste Capability-Deklarationen und statische Weitergabe über
   Funktionsaufrufe; natives SQL benötigt `Database`, mit Projektfreigaben aus
   `zelyra.toml`.
@@ -80,9 +83,9 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Datenbankrollen, Record-Literale und Feldzugriff in
-der Quellsprache, umfangreichere fachliche Fehlerwerte, allgemeine formale
-Verifikation und Produktionswerkzeuge werden noch entwickelt. Siehe die
+Vollständige CRUD-Erzeugung, Datenbankrollen, umfangreichere fachliche
+Fehlerwerte, allgemeine formale Verifikation und Produktionswerkzeuge werden
+noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
 [Getting-Started-Leitfaden](docs/getting-started.de.md).
 

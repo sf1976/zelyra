@@ -55,7 +55,9 @@ Das aktuelle Repository enthält:
   strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung
   einschließlich typisierter API-Arrays und verschachtelter JSON-Objekte über
   `struct`-Records;
-- Array-Literale, Indexzugriff, `len`, `append` und Array-Verkettung mit `+`;
+- Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
+  und Array-Verkettung mit `+`;
+- Record-Literale und geprüfter Feldzugriff für verschachtelte Werte;
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.

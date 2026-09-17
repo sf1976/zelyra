@@ -129,7 +129,13 @@ first = numbers[0]
 count = len(numbers)
 extended = append(numbers, 4)
 combined = numbers + [5, 6]
+has_two = contains(numbers, 2)
+first = first(numbers)
+last = last(numbers)
 ~~~
+
+`first` and `last` return `Option<T>`, so empty arrays are handled without a
+runtime null value.
 
 Records provide the declared model for nested JSON objects. Missing optional
 fields become `None`; unknown fields and missing required fields are rejected
@@ -152,7 +158,7 @@ api POST "/customers" {
 }
 ~~~
 
-The current handler bridge intentionally keeps the first record release small:
-record values are fully supported at the JSON API boundary, while source-level
-record literals, field access, generated client bindings, and richer
-domain-error values remain later Web/API work.
+Record values are supported both at the JSON API boundary and in the language
+core. Record literals and field access are checked against the declared record
+definition. Generated client bindings and richer domain-error values remain
+later Web/API work.

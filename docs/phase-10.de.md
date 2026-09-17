@@ -131,7 +131,13 @@ first = numbers[0]
 count = len(numbers)
 extended = append(numbers, 4)
 combined = numbers + [5, 6]
+has_two = contains(numbers, 2)
+first = first(numbers)
+last = last(numbers)
 ~~~
+
+`first` und `last` liefern `Option<T`; leere Arrays werden dadurch ohne einen
+Laufzeit-Nullwert sicher behandelt.
 
 Records bilden das deklarierte Modell für verschachtelte JSON-Objekte.
 Fehlende optionale Felder werden zu `None`; unbekannte Felder und fehlende
@@ -154,7 +160,7 @@ api POST "/customers" {
 }
 ~~~
 
-Die aktuelle Handler-Brücke bleibt bewusst klein: Record-Werte werden an der
-JSON-API-Grenze vollständig unterstützt. Record-Literale und Feldzugriff in
-der Quellsprache, generierte Client-Bindings sowie umfangreichere fachliche
-Fehlerwerte folgen in späteren Web-/API-Schritten.
+Record-Werte werden sowohl an der JSON-API-Grenze als auch im Sprachkern
+unterstützt. Record-Literale und Feldzugriff werden gegen die deklarierte
+Record-Definition geprüft. Generierte Client-Bindings sowie umfangreichere
+fachliche Fehlerwerte folgen in späteren Web-/API-Schritten.

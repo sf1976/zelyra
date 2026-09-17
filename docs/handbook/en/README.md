@@ -531,8 +531,18 @@ api POST "/customers" {
 ~~~
 
 Unknown record fields and missing required fields are rejected. In the language
-core, arrays support literals, indexing, `len`, `append`, and concatenation
-with `+`. Source-level record literals and field access are still future work.
+core, arrays support literals, indexing, `len`, `append`, `contains`, `first`,
+`last`, and concatenation with `+`. Record literals and checked field access
+are available for nested values:
+
+~~~zelyra
+customer = CustomerInput {
+    name: "Anna"
+    address: Address { city: "Berlin" }
+}
+
+print(customer.address.city)
+~~~
 
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.

@@ -52,7 +52,9 @@ The current repository contains:
   authentication and permission guards, structured JSON errors, and declared
   `Result` error mapping, including typed API arrays and nested JSON objects
   declared with `struct` records;
-- array literals, indexing, `len`, `append`, and array concatenation with `+`;
+- array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
+  array concatenation with `+`;
+- record literals and checked field access for nested values;
 - initial capability declarations, call propagation, and static enforcement of
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime-checked function contracts using `requires` and `ensures`.

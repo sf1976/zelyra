@@ -364,10 +364,18 @@ pub enum ExprKind {
     String(String),
     Char(char),
     Array(Vec<Expr>),
+    Record {
+        type_name: String,
+        fields: Vec<(String, Expr)>,
+    },
     Variable(String),
     Index {
         target: Box<Expr>,
         index: Box<Expr>,
+    },
+    Field {
+        target: Box<Expr>,
+        field: String,
     },
     Call {
         name: String,

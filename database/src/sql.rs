@@ -175,10 +175,16 @@ fn check_expr(
                 check_expr(value, schema, environment, errors);
             }
         }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                check_expr(value, schema, environment, errors);
+            }
+        }
         ExprKind::Index { target, index } => {
             check_expr(target, schema, environment, errors);
             check_expr(index, schema, environment, errors);
         }
+        ExprKind::Field { target, .. } => check_expr(target, schema, environment, errors),
         ExprKind::Int(_)
         | ExprKind::UInt(_)
         | ExprKind::Float(_)
@@ -201,6 +207,8 @@ fn expr_type(expression: &Expr) -> Type {
             values.first().map(expr_type).unwrap_or(Type::Unknown),
         )),
         ExprKind::Index { .. } => Type::Unknown,
+        ExprKind::Record { type_name, .. } => Type::Named(type_name.clone()),
+        ExprKind::Field { .. } => Type::Unknown,
         ExprKind::Sql { result_type, .. } => result_type.clone(),
         ExprKind::Variable(_)
         | ExprKind::Call { .. }

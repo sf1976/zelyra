@@ -1421,9 +1421,13 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         ExprKind::Array(values) => values
             .iter()
             .any(|value| expression_contains_variable(value, name)),
+        ExprKind::Record { fields, .. } => fields
+            .iter()
+            .any(|(_, value)| expression_contains_variable(value, name)),
         ExprKind::Index { target, index } => {
             expression_contains_variable(target, name) || expression_contains_variable(index, name)
         }
+        ExprKind::Field { target, .. } => expression_contains_variable(target, name),
         ExprKind::Int(..)
         | ExprKind::UInt(..)
         | ExprKind::Float(..)
@@ -2787,7 +2791,9 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
             constant_binary(left, *op, right)
         }
         ExprKind::Array(_)
+        | ExprKind::Record { .. }
         | ExprKind::Index { .. }
+        | ExprKind::Field { .. }
         | ExprKind::Variable(_)
         | ExprKind::Call { .. }
         | ExprKind::Sql { .. } => None,
@@ -3033,9 +3039,17 @@ fn check_capability_expr(
                 check_capability_expr(value, function, functions, declared, errors);
             }
         }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                check_capability_expr(value, function, functions, declared, errors);
+            }
+        }
         ExprKind::Index { target, index } => {
             check_capability_expr(target, function, functions, declared, errors);
             check_capability_expr(index, function, functions, declared, errors);
+        }
+        ExprKind::Field { target, .. } => {
+            check_capability_expr(target, function, functions, declared, errors);
         }
         ExprKind::Int(..)
         | ExprKind::UInt(..)
@@ -3580,6 +3594,50 @@ impl<'a> Checker<'a> {
                 }
                 Type::Array(Box::new(element))
             }
+            ExprKind::Record { type_name, fields } => {
+                let Some(record) = self
+                    ._program
+                    .records
+                    .iter()
+                    .find(|record| record.name == *type_name)
+                    .cloned()
+                else {
+                    for (_, value) in fields {
+                        self.check_expr(value, scopes);
+                    }
+                    self.error(expr.span, format!("unknown record type `{type_name}`"));
+                    return Type::Unknown;
+                };
+                let mut provided = HashSet::new();
+                for (field_name, value) in fields {
+                    let actual = self.check_expr(value, scopes);
+                    if !provided.insert(field_name) {
+                        self.error(
+                            value.span,
+                            format!("record field `{field_name}` is specified more than once"),
+                        );
+                        continue;
+                    }
+                    let Some(field) = record.fields.iter().find(|field| field.name == *field_name)
+                    else {
+                        self.error(
+                            value.span,
+                            format!("unknown field `{field_name}` in record `{type_name}`"),
+                        );
+                        continue;
+                    };
+                    self.expect_type(&field.ty, &actual, value.span);
+                }
+                for field in &record.fields {
+                    if !provided.contains(&field.name) && !matches!(field.ty, Type::Option(_)) {
+                        self.error(
+                            expr.span,
+                            format!("missing field `{}` in record `{type_name}`", field.name),
+                        );
+                    }
+                }
+                Type::Named(type_name.clone())
+            }
             ExprKind::Variable(name) => self
                 .lookup(scopes, name)
                 .map(|v| v.ty.clone())
@@ -3630,6 +3688,44 @@ impl<'a> Checker<'a> {
                             self.error(
                                 args[0].span,
                                 format!("`append` expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "contains" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "`contains` expects an array and one value");
+                        return Type::Unknown;
+                    }
+                    let array_type = self.check_expr(&args[0], scopes);
+                    let value_type = self.check_expr(&args[1], scopes);
+                    match array_type {
+                        Type::Array(inner) => {
+                            self.expect_type(&inner, &value_type, args[1].span);
+                            Type::Bool
+                        }
+                        Type::Unknown => Type::Bool,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`contains` expects an array, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "first" || name == "last" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("`{name}` expects exactly one argument"));
+                        return Type::Unknown;
+                    }
+                    let argument = self.check_expr(&args[0], scopes);
+                    match argument {
+                        Type::Array(inner) => Type::Option(inner),
+                        Type::Unknown => Type::Option(Box::new(Type::Unknown)),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`{name}` expects an array, found `{other}`"),
                             );
                             Type::Unknown
                         }
@@ -3706,6 +3802,20 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            ExprKind::Field { target, field } => {
+                let target_type = self.check_expr(target, scopes);
+                match self.record_field_type(&target_type, field) {
+                    Some(field_type) => field_type,
+                    None if target_type == Type::Unknown => Type::Unknown,
+                    None => {
+                        self.error(
+                            expr.span,
+                            format!("unknown field `{field}` on `{target_type}`"),
+                        );
+                        Type::Unknown
+                    }
+                }
+            }
             ExprKind::Binary { left, op, right } => {
                 let left_ty = self.check_expr(left, scopes);
                 let right_ty = self.check_expr(right, scopes);
@@ -3762,6 +3872,40 @@ impl<'a> Checker<'a> {
                 format!("numeric operands must have the same type, found `{left}` and `{right}`"),
             );
             Type::Unknown
+        }
+    }
+
+    fn record_field_type(&self, ty: &Type, field: &str) -> Option<Type> {
+        let Type::Named(initial_name) = ty else {
+            return None;
+        };
+        let mut name = initial_name.as_str();
+        let mut visited = HashSet::new();
+        loop {
+            if !visited.insert(name) {
+                return None;
+            }
+            if let Some(record) = self
+                ._program
+                .records
+                .iter()
+                .find(|record| record.name == name)
+            {
+                return record
+                    .fields
+                    .iter()
+                    .find(|candidate| candidate.name == field)
+                    .map(|candidate| candidate.ty.clone());
+            }
+            let alias = self
+                ._program
+                .types
+                .iter()
+                .find(|definition| definition.name == name)?;
+            let Type::Named(next_name) = &alias.target else {
+                return None;
+            };
+            name = next_name;
         }
     }
 }
@@ -4289,6 +4433,16 @@ impl Interpreter {
                 .map(|value| self.eval(value, env))
                 .collect::<Result<Vec<_>, _>>()
                 .map(Value::Array),
+            ExprKind::Record { type_name, fields } => {
+                let mut values = HashMap::new();
+                for (field, value) in fields {
+                    values.insert(field.clone(), self.eval(value, env)?);
+                }
+                Ok(Value::Object {
+                    type_name: type_name.clone(),
+                    fields: values,
+                })
+            }
             ExprKind::Variable(name) => env
                 .get(name)
                 .or_else(|| {
@@ -4337,6 +4491,45 @@ impl Interpreter {
                         value => Err(self.runtime_error(
                             expr.span,
                             format!("`append` expects an array, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "contains" {
+                    if args.len() != 2 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "`contains` expects an array and one value",
+                        ));
+                    }
+                    let array = self.eval(&args[0], env)?;
+                    let value = self.eval(&args[1], env)?;
+                    match array {
+                        Value::Array(values) => {
+                            Ok(Value::Bool(values.iter().any(|item| item == &value)))
+                        }
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`contains` expects an array, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "first" || name == "last" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("`{name}` expects exactly one argument"),
+                        ));
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::Array(values) => {
+                            let value = if name == "first" {
+                                values.first()
+                            } else {
+                                values.last()
+                            };
+                            Ok(Value::Option(value.cloned().map(Box::new)))
+                        }
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`{name}` expects an array, found {}", value.ty()),
                         )),
                     }
                 } else if name == "Some" || name == "Ok" || name == "Err" {
@@ -4401,6 +4594,18 @@ impl Interpreter {
                     value => Err(self.runtime_error(
                         expr.span,
                         format!("array indexing requires an array, found {}", value.ty()),
+                    )),
+                }
+            }
+            ExprKind::Field { target, field } => {
+                let value = self.eval(target, env)?;
+                match value {
+                    Value::Object { fields, .. } => fields.get(field).cloned().ok_or_else(|| {
+                        self.runtime_error(expr.span, format!("record field `{field}` is missing"))
+                    }),
+                    value => Err(self.runtime_error(
+                        expr.span,
+                        format!("field access requires a record, found {}", value.ty()),
                     )),
                 }
             }
@@ -4668,6 +4873,26 @@ mod tests {
             "fn main() { values = [1, 2] extended = append(values, 3) combined = extended + [4] print(combined[2]) print(len(combined)) }",
         );
         assert_eq!(output, ["3", "4"]);
+    }
+
+    #[test]
+    fn supports_record_literals_field_access_and_array_queries() {
+        let output = run(
+            "struct Address { city: String } struct Customer { name: String address: Address } fn main() { customer = Customer { name: \"Anna\", address: Address { city: \"Berlin\" } } print(customer.address.city) print(contains([1, 2, 3], 2)) print(first([4, 5])) print(last([4, 5])) }",
+        );
+        assert_eq!(output, ["Berlin", "true", "Some(4)", "Some(5)"]);
+    }
+
+    #[test]
+    fn rejects_unknown_record_fields() {
+        let program = parse(
+            &lex("struct Address { city: String } fn main() { address = Address { country: \"DE\" } }").unwrap(),
+        )
+        .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("unknown field `country`")));
     }
 
     #[test]

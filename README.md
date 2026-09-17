@@ -58,7 +58,9 @@ Implemented today:
   permission guards, structured JSON errors, and declared `Result` error
   mapping, including typed API arrays and nested JSON objects via `struct`
   records;
-- array literals, indexing, `len`, `append`, and array concatenation with `+`;
+- array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
+  array concatenation with `+`, with `Option` results for empty-safe queries;
+- record literals and checked field access for nested business values;
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.
@@ -79,9 +81,8 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, database roles, source-level record literals and field
-access, richer domain-error values, general formal verification, and production
-deployment tooling are still being developed. See
+Full CRUD generation, database roles, richer domain-error values, general formal
+verification, and production deployment tooling are still being developed. See
 the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).

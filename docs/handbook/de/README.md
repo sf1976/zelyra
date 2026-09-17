@@ -584,9 +584,18 @@ api POST "/customers" {
 ~~~
 
 Unbekannte Record-Felder und fehlende Pflichtfelder werden abgelehnt. Im
-Sprachkern unterstützen Arrays Literale, Indexzugriff, `len`, `append` und
-Verkettung mit `+`. Record-Literale und Feldzugriff in der Quellsprache folgen
-später.
+Sprachkern unterstützen Arrays Literale, Indexzugriff, `len`, `append`,
+`contains`, `first`, `last` und Verkettung mit `+`. Record-Literale und
+geprüfter Feldzugriff stehen für verschachtelte Werte zur Verfügung:
+
+~~~zelyra
+customer = CustomerInput {
+    name: "Anna"
+    address: Address { city: "Berlin" }
+}
+
+print(customer.address.city)
+~~~
 
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders

@@ -1194,20 +1194,32 @@ impl<'a> Parser<'a> {
         }
         let mut expression = self.primary()?;
         loop {
-            if !self.at(&TokenKind::LBracket) {
+            if self.at(&TokenKind::LBracket) {
+                self.advance();
+                let index = self.expression()?;
+                let end = self.expect(TokenKind::RBracket, "`]` after array index")?;
+                let span = expression.span.join(end);
+                expression = Expr {
+                    kind: ExprKind::Index {
+                        target: Box::new(expression),
+                        index: Box::new(index),
+                    },
+                    span,
+                };
+            } else if self.at(&TokenKind::Dot) {
+                self.advance();
+                let (field, end) = self.ident("field name after `.`")?;
+                let span = expression.span.join(end);
+                expression = Expr {
+                    kind: ExprKind::Field {
+                        target: Box::new(expression),
+                        field,
+                    },
+                    span,
+                };
+            } else {
                 break;
             }
-            self.advance();
-            let index = self.expression()?;
-            let end = self.expect(TokenKind::RBracket, "`]` after array index")?;
-            let span = expression.span.join(end);
-            expression = Expr {
-                kind: ExprKind::Index {
-                    target: Box::new(expression),
-                    index: Box::new(index),
-                },
-                span,
-            };
         }
         Ok(expression)
     }
@@ -1283,6 +1295,8 @@ impl<'a> Parser<'a> {
                         kind: ExprKind::Call { name, args },
                         span: token.span.join(end),
                     })
+                } else if self.at(&TokenKind::LBrace) && self.looks_like_record_literal() {
+                    self.record_literal(name, token.span)
                 } else {
                     Ok(Expr {
                         kind: ExprKind::Variable(name),
@@ -1297,6 +1311,45 @@ impl<'a> Parser<'a> {
             }
             found => self.error(format!("expected expression, found {found:?}")),
         }
+    }
+
+    fn record_literal(&mut self, type_name: String, start: Span) -> Result<Expr, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after record type")?;
+        let mut fields = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (field, _) = self.ident("record field name")?;
+            self.expect(TokenKind::Colon, "`:` after record field name")?;
+            let value = self.expression()?;
+            fields.push((field, value));
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after record literal")?;
+        Ok(Expr {
+            kind: ExprKind::Record { type_name, fields },
+            span: start.join(end),
+        })
+    }
+
+    fn looks_like_record_literal(&self) -> bool {
+        let mut position = self.pos + 1;
+        while matches!(
+            self.tokens.get(position).map(|token| &token.kind),
+            Some(TokenKind::Newline | TokenKind::Semicolon)
+        ) {
+            position += 1;
+        }
+        matches!(
+            (
+                self.tokens.get(position).map(|token| &token.kind),
+                self.tokens.get(position + 1).map(|token| &token.kind)
+            ),
+            (Some(TokenKind::Ident(_)), Some(TokenKind::Colon))
+        )
     }
 
     fn sql_expression(&mut self, start: Span) -> Result<Expr, ParseError> {
@@ -1594,6 +1647,25 @@ mod tests {
             panic!("expected print call");
         };
         assert!(matches!(args[0].kind, ExprKind::Index { .. }));
+    }
+
+    #[test]
+    fn parses_record_literals_and_field_access() {
+        let program = parse(
+            &lex("struct Address { city: String } fn main() { address = Address { city: \"Berlin\" } print(address.city) }").unwrap(),
+        )
+        .unwrap();
+        let Stmt::BindOrAssign { value, .. } = &program.functions[0].body.statements[0] else {
+            panic!("expected record binding");
+        };
+        assert!(matches!(value.kind, ExprKind::Record { .. }));
+        let Stmt::Expr(expression) = &program.functions[0].body.statements[1] else {
+            panic!("expected print expression");
+        };
+        let ExprKind::Call { args, .. } = &expression.kind else {
+            panic!("expected print call");
+        };
+        assert!(matches!(args[0].kind, ExprKind::Field { .. }));
     }
 
     #[test]
