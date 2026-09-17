@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.4"
+version = "0.1.5"
 zelyra = "0.1"
 
 [capabilities]
@@ -699,7 +699,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.4"
+version = "0.1.5"
 zelyra = "0.1"
 
 [capabilities]

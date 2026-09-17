@@ -194,7 +194,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.4"
+version = "0.1.5"
 zelyra = "0.1"
 
 [capabilities]
