@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]
@@ -667,6 +667,22 @@ der erzeugte Client stellt es über `ZelyraApiErrorPayloads` und das generische
 Feld `ZelyraApiError.details` bereit. Bestehende ungetypte API-Fehler bleiben
 kompatibel.
 
+Browserzugriff ist standardmäßig deaktiviert. Wenn ein separates Frontend
+eine API aufrufen soll, werden exakte Origins in der Projektkonfiguration
+freigegeben:
+
+~~~toml
+[web]
+allowed_origins = ["http://localhost:5173"]
+allow_credentials = false
+~~~
+
+Zelyra beantwortet API-`OPTIONS`-Preflight-Anfragen automatisch und fügt
+CORS-Header nur bei deklarierten API-Routen hinzu. Wildcard-Origins werden
+abgelehnt; CORS umgeht weder Authentifizierung noch Berechtigungen. Aktiviere
+Credentials nur für benötigte Browser-Session-Cookies; der Client muss dann
+zusätzlich `credentials: "include"` verwenden.
+
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
@@ -999,7 +1015,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]

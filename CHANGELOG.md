@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.32 — 2026-09-17
+
+### Added
+
+- Added explicit, exact-origin CORS configuration through the `[web]` section
+  in `zelyra.toml`.
+- Added automatic API preflight handling with `OPTIONS`, allowed methods and
+  headers, credential support, and bounded preflight caching.
+- Added CORS integration tests and synchronized German and English guides.
+
+### Security
+
+- CORS remains disabled unless `allowed_origins` is configured; wildcard
+  origins are rejected and CORS does not bypass API authorization.
+
 ## 0.1.31 — 2026-09-17
 
 ### Added

@@ -54,6 +54,8 @@ The current repository contains:
   declared with `struct` records;
 - typed API error payloads with `error.details`, OpenAPI schemas, and
   TypeScript payload types;
+- browser API integration with exact-origin CORS configuration and automatic
+  `OPTIONS` preflight handling;
 - a dependency-free TypeScript client generator with declared API error codes
   and structured HTTP-error parsing;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
@@ -276,13 +278,26 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
 ~~~
+
+Browser access to APIs is disabled by default. Enable only the exact frontend
+origins your application needs:
+
+~~~toml
+[web]
+allowed_origins = ["http://localhost:5173"]
+allow_credentials = false
+~~~
+
+Wildcard origins are rejected. Credentialed browser requests require
+`allow_credentials = true` and an explicit client-side `credentials:
+"include"` setting.
 
 Host APIs are explicitly permissioned. Add the grants needed by your
 functions, then run the example:
@@ -732,6 +747,7 @@ Read the phase documents for implementation details:
 - [Phase 8: Authentication and authorization](phase-8.md).
 - [Phase 9: Capabilities](phase-9.md).
 - [Phase 10: Typed APIs and OpenAPI](phase-10.md).
+- [Phase 11: Browser API integration and CORS](phase-11.md).
 
 The German versions use the same filenames with the .de.md suffix.
 

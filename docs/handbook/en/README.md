@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]
@@ -608,6 +608,21 @@ payload as `error.details`. OpenAPI includes the details schema, while the
 generated client exposes it through `ZelyraApiErrorPayloads` and the generic
 `ZelyraApiError.details` field. Existing untyped API errors remain compatible.
 
+Browser access is disabled by default. Enable exact origins in the project
+configuration when a separate frontend needs to call an API:
+
+~~~toml
+[web]
+allowed_origins = ["http://localhost:5173"]
+allow_credentials = false
+~~~
+
+Zelyra answers API `OPTIONS` preflight requests automatically and adds CORS
+headers only to declared API routes. Wildcard origins are rejected, and CORS
+does not bypass authentication or permissions. Enable credentials only when
+browser session cookies are required; the client must also use
+`credentials: "include"`.
+
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
@@ -928,7 +943,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]

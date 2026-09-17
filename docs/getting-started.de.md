@@ -57,6 +57,8 @@ Das aktuelle Repository enthält:
   `struct`-Records;
 - typisierte API-Fehler-Payloads mit `error.details`, OpenAPI-Schemas und
   TypeScript-Payload-Typen;
+- Browser-API-Integration mit exakter CORS-Origin-Allowlist und automatischer
+  `OPTIONS`-Preflight-Verarbeitung;
 - einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten mit
   deklarierten API-Fehlercodes und strukturierter HTTP-Fehlerauswertung;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
@@ -286,13 +288,26 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.31"
+version = "0.1.32"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
 ~~~
+
+Browserzugriff auf APIs ist standardmäßig deaktiviert. Aktiviere nur die
+exakten Origins deiner Anwendung:
+
+~~~toml
+[web]
+allowed_origins = ["http://localhost:5173"]
+allow_credentials = false
+~~~
+
+Wildcard-Origins werden abgelehnt. Credentialed Browser-Anfragen benötigen
+`allow_credentials = true` und zusätzlich die clientseitige Einstellung
+`credentials: "include"`.
 
 Host-APIs benötigen ausdrücklich freigegebene Berechtigungen. Ergänze die
 für deine Funktionen benötigten Freigaben und starte anschließend das Beispiel:
@@ -754,6 +769,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 8: Authentifizierung und Autorisierung](phase-8.de.md).
 - [Phase 9: Capabilities](phase-9.de.md).
 - [Phase 10: Typisierte APIs und OpenAPI](phase-10.de.md).
+- [Phase 11: Browser-API-Integration und CORS](phase-11.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 

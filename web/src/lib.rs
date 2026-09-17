@@ -29,6 +29,42 @@ pub struct Request {
     pub body: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CorsPolicy {
+    pub allowed_origins: Vec<String>,
+    pub allow_credentials: bool,
+}
+
+impl CorsPolicy {
+    pub fn new(allowed_origins: Vec<String>, allow_credentials: bool) -> Result<Self, HttpError> {
+        if let Some(origin) = allowed_origins.iter().find(|origin| !valid_origin(origin)) {
+            return Err(HttpError {
+                message: format!("invalid CORS origin `{origin}`"),
+            });
+        }
+        Ok(Self {
+            allowed_origins,
+            allow_credentials,
+        })
+    }
+
+    fn allows(&self, origin: &str) -> bool {
+        self.allowed_origins.iter().any(|allowed| allowed == origin)
+    }
+}
+
+fn valid_origin(origin: &str) -> bool {
+    let Some(host) = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    !host.is_empty()
+        && !host.contains(['/', '?', '#', '*', ' ', '\t', '\r', '\n'])
+        && !origin.ends_with('/')
+}
+
 type ApiHandler = dyn Fn(&Request, &HashMap<String, String>) -> Response + Send + Sync;
 
 #[derive(Clone)]
@@ -102,6 +138,17 @@ impl Response {
             reason: reason_phrase(status).into(),
             content_type: "application/json; charset=utf-8".into(),
             body: body.into(),
+            location: None,
+            headers: Vec::new(),
+        }
+    }
+
+    pub fn empty(status: u16) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: "text/plain; charset=utf-8".into(),
+            body: String::new(),
             location: None,
             headers: Vec::new(),
         }
@@ -263,6 +310,7 @@ pub struct WebApp {
     pub auth_token: Option<String>,
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
+    pub cors_policy: Option<CorsPolicy>,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
@@ -279,6 +327,7 @@ impl WebApp {
             auth_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
+            cors_policy: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -299,6 +348,7 @@ impl WebApp {
             auth_token: None,
             auth_permissions: Vec::new(),
             auth_route: None,
+            cors_policy: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -316,6 +366,11 @@ impl WebApp {
 
     pub fn with_apis(mut self, apis: Vec<ApiRoute>) -> Self {
         self.apis = apis;
+        self
+    }
+
+    pub fn with_cors(mut self, policy: CorsPolicy) -> Self {
+        self.cors_policy = Some(policy);
         self
     }
 
@@ -341,10 +396,17 @@ impl WebApp {
         }
         for api in &self.apis {
             if let Some(path_params) = match_path(&api.path, &request.path) {
+                if request.method == "OPTIONS" {
+                    return self.api_preflight(&request.path, request);
+                }
                 if api.method != request.method {
-                    return Response::json(
+                    return self.apply_api_cors(
+                        request,
+                        Response::json(
                         405,
                         "{\"error\":{\"code\":\"MethodNotAllowed\",\"message\":\"method not allowed\"}}",
+                        )
+                        .with_header("Allow", self.api_allowed_methods(&request.path)),
                     );
                 }
                 if let Some(response) = authorize_api(
@@ -354,9 +416,9 @@ impl WebApp {
                     self,
                     self.database_url.as_deref(),
                 ) {
-                    return response;
+                    return self.apply_api_cors(request, response);
                 }
-                return (api.handler)(request, &path_params);
+                return self.apply_api_cors(request, (api.handler)(request, &path_params));
             }
         }
         for form in &self.forms {
@@ -441,6 +503,91 @@ impl WebApp {
             }
         }
         Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
+    }
+
+    fn api_allowed_methods(&self, path: &str) -> String {
+        let mut methods = self
+            .apis
+            .iter()
+            .filter(|api| match_path(&api.path, path).is_some())
+            .map(|api| api.method.clone())
+            .collect::<Vec<_>>();
+        methods.sort();
+        methods.dedup();
+        methods.join(", ")
+    }
+
+    fn api_preflight(&self, path: &str, request: &Request) -> Response {
+        let methods = self.api_allowed_methods(path);
+        let origin = request.headers.get("origin");
+        if let Some(origin) = origin {
+            let Some(policy) = &self.cors_policy else {
+                return Response::json(
+                    403,
+                    "{\"error\":{\"code\":\"CorsDenied\",\"message\":\"CORS is not enabled\"}}",
+                );
+            };
+            if !policy.allows(origin) {
+                return Response::json(
+                    403,
+                    "{\"error\":{\"code\":\"CorsDenied\",\"message\":\"origin is not allowed\"}}",
+                );
+            }
+        }
+        let requested_method = request
+            .headers
+            .get("access-control-request-method")
+            .map(String::as_str)
+            .unwrap_or("GET");
+        if !methods.split(", ").any(|method| method == requested_method) {
+            return Response::json(
+                405,
+                "{\"error\":{\"code\":\"MethodNotAllowed\",\"message\":\"requested CORS method is not allowed\"}}",
+            )
+            .with_header("Allow", methods);
+        }
+        let mut response = Response::empty(204).with_header("Allow", methods.clone());
+        if let Some(origin) = origin {
+            response = response
+                .with_header("Access-Control-Allow-Origin", origin)
+                .with_header("Vary", "Origin")
+                .with_header("Access-Control-Allow-Methods", methods)
+                .with_header(
+                    "Access-Control-Allow-Headers",
+                    request
+                        .headers
+                        .get("access-control-request-headers")
+                        .cloned()
+                        .unwrap_or_default(),
+                )
+                .with_header("Access-Control-Max-Age", "600");
+            if self
+                .cors_policy
+                .as_ref()
+                .is_some_and(|policy| policy.allow_credentials)
+            {
+                response = response.with_header("Access-Control-Allow-Credentials", "true");
+            }
+        }
+        response
+    }
+
+    fn apply_api_cors(&self, request: &Request, mut response: Response) -> Response {
+        let Some(origin) = request.headers.get("origin") else {
+            return response;
+        };
+        let Some(policy) = &self.cors_policy else {
+            return response;
+        };
+        if policy.allows(origin) {
+            response = response
+                .with_header("Access-Control-Allow-Origin", origin)
+                .with_header("Vary", "Origin");
+            if policy.allow_credentials {
+                response = response.with_header("Access-Control-Allow-Credentials", "true");
+            }
+        }
+        response
     }
 }
 
@@ -2326,6 +2473,7 @@ fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
 
 fn reason_phrase(status: u16) -> &'static str {
     match status {
+        204 => "No Content",
         200 => "OK",
         202 => "Accepted",
         400 => "Bad Request",
@@ -2501,6 +2649,74 @@ mod tests {
                 .status,
             405
         );
+    }
+
+    #[test]
+    fn adds_cors_headers_for_an_allowed_api_origin() {
+        let policy = CorsPolicy::new(vec!["http://localhost:5173".into()], false).unwrap();
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![ApiRoute::new("GET", "/health", |_request, _| {
+                Response::json(200, "{}")
+            })])
+            .with_cors(policy);
+        let request =
+            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost:5173\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 200);
+        assert!(response.headers.contains(&(
+            "Access-Control-Allow-Origin".into(),
+            "http://localhost:5173".into()
+        )));
+        assert!(response.headers.contains(&("Vary".into(), "Origin".into())));
+    }
+
+    #[test]
+    fn answers_cors_preflight_for_an_allowed_api_method() {
+        let policy = CorsPolicy::new(vec!["https://app.example".into()], true).unwrap();
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![ApiRoute::new("POST", "/customers", |_request, _| {
+                Response::json(201, "{}")
+            })])
+            .with_cors(policy);
+        let request = parse_request(
+            "OPTIONS /customers HTTP/1.1\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 204);
+        assert!(response
+            .headers
+            .contains(&("Access-Control-Allow-Methods".into(), "POST".into())));
+        assert!(response.headers.contains(&(
+            "Access-Control-Allow-Headers".into(),
+            "content-type, authorization".into()
+        )));
+        assert!(response
+            .headers
+            .contains(&("Access-Control-Allow-Credentials".into(), "true".into())));
+    }
+
+    #[test]
+    fn rejects_disallowed_cors_preflight_origin() {
+        let policy = CorsPolicy::new(vec!["https://app.example".into()], false).unwrap();
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![ApiRoute::new("GET", "/health", |_request, _| {
+                Response::json(200, "{}")
+            })])
+            .with_cors(policy);
+        let request = parse_request(
+            "OPTIONS /health HTTP/1.1\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("CorsDenied"));
+    }
+
+    #[test]
+    fn rejects_invalid_cors_origins() {
+        assert!(CorsPolicy::new(vec!["*".into()], false).is_err());
+        assert!(CorsPolicy::new(vec!["https://app.example/path".into()], false).is_err());
     }
 
     #[test]

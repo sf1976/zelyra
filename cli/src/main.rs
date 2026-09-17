@@ -26,8 +26,8 @@ use zelyra_runtime::{
     VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
-    parse_urlencoded, serve_app, ApiRoute, AuthRoute, CrudRoute, CsrfProtection, FormRoute,
-    Response, Route, WebApp,
+    parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute, CsrfProtection,
+    FormRoute, Response, Route, WebApp,
 };
 
 fn usage() {
@@ -51,9 +51,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.31\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.32\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.31\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.32\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -73,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.31\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.32\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -190,6 +190,10 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     }
     if let Err(error) = project_process_policy(path) {
         diagnostic(path, "E-PROC-002", &error, 1, 1);
+        return Err(());
+    }
+    if let Err(error) = project_cors_policy(path) {
+        diagnostic(path, "E-WEB-004", &error, 1, 1);
         return Err(());
     }
     if let Err(errors) = check_apis(&program) {
@@ -1474,6 +1478,59 @@ fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
     }
 }
 
+fn project_cors_policy(path: &str) -> Result<Option<CorsPolicy>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut allowed_origins = None;
+    let mut allow_credentials = false;
+    let mut seen = HashSet::new();
+    let mut in_web = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_web = line == "[web]";
+            continue;
+        }
+        if !in_web {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!("invalid web setting on line {}", line_index + 1));
+        };
+        let key = raw_key.trim();
+        if !seen.insert(key) {
+            return Err(format!("web setting {key} is configured more than once"));
+        }
+        match key {
+            "allowed_origins" => allowed_origins = Some(parse_string_array(raw_value)?),
+            "allow_credentials" => {
+                allow_credentials = match raw_value.trim() {
+                    "true" => true,
+                    "false" => false,
+                    value => {
+                        return Err(format!(
+                            "web setting allow_credentials must be true or false, found `{value}`"
+                        ));
+                    }
+                };
+            }
+            _ => return Err(format!("unknown web setting {key}")),
+        }
+    }
+    let Some(allowed_origins) = allowed_origins else {
+        return Ok(None);
+    };
+    CorsPolicy::new(allowed_origins, allow_credentials)
+        .map(Some)
+        .map_err(|error| error.message)
+}
+
 fn project_process_policy(path: &str) -> Result<Option<ProcessPolicy>, String> {
     let Some(config_path) = project_config_path(path)? else {
         return Ok(None);
@@ -2008,6 +2065,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let cors_policy = match project_cors_policy(&path) {
+        Ok(policy) => policy,
+        Err(error) => {
+            diagnostic(&path, "E-WEB-004", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     if program.pages.is_empty()
         && program.forms.is_empty()
         && program.cruds.is_empty()
@@ -2178,6 +2242,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .collect(),
         )
         .with_cruds(crud_routes);
+    let app = if let Some(cors_policy) = cors_policy {
+        app.with_cors(cors_policy)
+    } else {
+        app
+    };
     let app = if let Some(auth_route) = auth_route {
         app.with_auth_route(auth_route)
     } else {

@@ -63,6 +63,8 @@ Implemented today:
   codes and structured HTTP-error parsing;
 - typed API error payloads through `errors { 422 ValidationError: Problem }`,
   including `error.details`, OpenAPI schemas, and TypeScript payload types;
+- exact-origin CORS configuration for browser APIs with automatic `OPTIONS`
+  preflight handling, disabled by default;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
 - structured `for ... in` array iteration with `break` and `continue`;
@@ -420,6 +422,8 @@ The long-term specification is organized into these phases:
 10. Typed API declarations, executable handlers, API authentication and
     permissions, and OpenAPI 3.0.3 generation are implemented; client state,
     WebAssembly, and optimization interfaces remain.
+11. Browser API integration with explicit CORS origins and automatic preflight
+    handling is implemented.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
 positive and negative tests, documentation, and examples.

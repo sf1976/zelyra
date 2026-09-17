@@ -63,6 +63,8 @@ Heute implementiert:
   Fehlercodes und strukturierter HTTP-Fehlerauswertung;
 - typisierte API-Fehler-Payloads über `errors { 422 ValidationError: Problem }`,
   einschließlich `error.details`, OpenAPI-Schemas und TypeScript-Payload-Typen;
+- exakte CORS-Origin-Konfiguration für Browser-APIs mit automatischer
+  `OPTIONS`-Preflight-Verarbeitung, standardmäßig deaktiviert;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
@@ -426,6 +428,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 10. Typisierte API-Deklarationen, ausführbare Handler, API-Authentifizierung
     und Berechtigungen sowie OpenAPI-3.0.3-Erzeugung sind vorhanden; Client
     State, WebAssembly und Optimierungsschnittstellen folgen.
+11. Browser-API-Integration mit ausdrücklichen CORS-Origins und automatischer
+    Preflight-Verarbeitung ist vorhanden.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.
