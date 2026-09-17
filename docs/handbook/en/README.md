@@ -516,7 +516,8 @@ api GET "/api/machines/{id}" {
 Protected API failures use JSON with an error `code` and `message`. A handler
 can return `Err("NotFound")` to select a matching status from the declared
 `errors` block; undeclared errors become 500 responses. Richer domain-error
-values remain future work.
+values remain future work. JSON arrays can be bound to typed fields such as
+`Int[]` or `MachineId[]`; nested input objects are not supported yet.
 
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.

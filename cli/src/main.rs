@@ -1424,10 +1424,10 @@ fn dispatch_api(
     database_url: Option<&str>,
 ) -> Response {
     let values = if matches!(api.method.as_str(), "GET" | "DELETE") {
-        request
-            .target
-            .split_once('?')
-            .map_or_else(|| Ok(HashMap::new()), |(_, query)| parse_urlencoded(query))
+        request.target.split_once('?').map_or_else(
+            || Ok(HashMap::new()),
+            |(_, query)| parse_api_url_values(query),
+        )
     } else if request
         .headers
         .get("content-type")
@@ -1435,14 +1435,14 @@ fn dispatch_api(
     {
         parse_api_json_object(&request.body).map_err(|message| zelyra_web::HttpError { message })
     } else {
-        parse_urlencoded(&request.body)
+        parse_api_url_values(&request.body)
     };
     let mut values = match values {
         Ok(values) => values,
         Err(error) => return api_error_response(400, "BadRequest", &error.to_string()),
     };
     for (name, value) in path_params {
-        values.insert(name.clone(), value.clone());
+        values.insert(name.clone(), serde_json::Value::String(value.clone()));
     }
     let mut arguments = Vec::new();
     for field in &api.input {
@@ -1457,7 +1457,7 @@ fn dispatch_api(
                 &format!("missing API input `{}`", field.name),
             );
         };
-        match api_value(value, &field.ty, program) {
+        match api_value_json(value, &field.ty, program) {
             Ok(value) => arguments.push(value),
             Err(error) => return api_error_response(400, "BadRequest", &error),
         }
@@ -1491,12 +1491,16 @@ fn api_result_response(api: &zelyra_ast::ApiDef, value: &Value) -> Response {
     Response::json(200, api_json_value(value))
 }
 
-fn api_value(value: &str, ty: &Type, program: &zelyra_ast::Program) -> Result<Value, String> {
+fn api_value_json(
+    value: &serde_json::Value,
+    ty: &Type,
+    program: &zelyra_ast::Program,
+) -> Result<Value, String> {
     if let Type::Option(inner) = ty {
-        if value == "null" {
+        if value.is_null() {
             return Ok(Value::Option(None));
         }
-        return Ok(Value::Option(Some(Box::new(api_value(
+        return Ok(Value::Option(Some(Box::new(api_value_json(
             value, inner, program,
         )?))));
     }
@@ -1506,28 +1510,57 @@ fn api_value(value: &str, ty: &Type, program: &zelyra_ast::Program) -> Result<Va
             .iter()
             .find(|definition| definition.name == *name)
         {
-            return api_value(value, &definition.target, program);
+            return api_value_json(value, &definition.target, program);
         }
     }
     match ty {
+        Type::Array(inner) => {
+            let Some(values) = value.as_array() else {
+                return Err("expected a JSON array".into());
+            };
+            values
+                .iter()
+                .map(|value| api_value_json(value, inner, program))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array)
+        }
         Type::Int => value
-            .parse()
+            .as_i64()
+            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
             .map(Value::Int)
-            .map_err(|_| format!("invalid Int value `{value}`")),
+            .ok_or_else(|| format!("invalid Int JSON value `{value}`")),
         Type::UInt => value
-            .parse()
+            .as_u64()
+            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
             .map(Value::UInt)
-            .map_err(|_| format!("invalid UInt value `{value}`")),
+            .ok_or_else(|| format!("invalid UInt JSON value `{value}`")),
         Type::Float | Type::Decimal => value
-            .parse()
+            .as_f64()
+            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
             .map(Value::Float)
-            .map_err(|_| format!("invalid numeric value `{value}`")),
-        Type::Bool => match value {
-            "true" | "1" => Ok(Value::Bool(true)),
-            "false" | "0" => Ok(Value::Bool(false)),
-            _ => Err(format!("invalid Bool value `{value}`")),
-        },
-        _ => Ok(Value::String(value.to_owned())),
+            .ok_or_else(|| format!("invalid numeric JSON value `{value}`")),
+        Type::Bool => value
+            .as_bool()
+            .or_else(|| {
+                value.as_str().and_then(|value| match value {
+                    "true" | "1" => Some(true),
+                    "false" | "0" => Some(false),
+                    _ => None,
+                })
+            })
+            .map(Value::Bool)
+            .ok_or_else(|| format!("invalid Bool JSON value `{value}`")),
+        _ => value
+            .as_str()
+            .map(|value| Value::String(value.to_owned()))
+            .or_else(|| {
+                if value.is_number() || value.is_boolean() {
+                    Some(Value::String(value.to_string()))
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| format!("expected a scalar JSON value, found `{value}`")),
     }
 }
 
@@ -1545,6 +1578,9 @@ fn api_json_value_node(value: &Value) -> serde_json::Value {
         Value::Bool(value) => serde_json::Value::from(*value),
         Value::String(value) => serde_json::Value::String(value.clone()),
         Value::Char(value) => serde_json::Value::String(value.to_string()),
+        Value::Array(values) => {
+            serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
+        }
         Value::Option(Some(value)) => api_json_value_node(value),
         Value::Option(None) => serde_json::Value::Null,
         Value::Result(Ok(value)) => api_json_value_node(value),
@@ -1582,27 +1618,24 @@ fn api_error_response(status: u16, code: &str, message: &str) -> Response {
     )
 }
 
-fn parse_api_json_object(source: &str) -> Result<HashMap<String, String>, String> {
+fn parse_api_json_object(source: &str) -> Result<HashMap<String, serde_json::Value>, String> {
     let value: serde_json::Value = serde_json::from_str(source)
         .map_err(|error| format!("invalid JSON request body: {error}"))?;
     let serde_json::Value::Object(object) = value else {
         return Err("JSON request body must be an object".into());
     };
-    object
-        .into_iter()
-        .map(|(key, value)| {
-            let value = match value {
-                serde_json::Value::String(value) => value,
-                serde_json::Value::Null => "null".into(),
-                serde_json::Value::Bool(value) => value.to_string(),
-                serde_json::Value::Number(value) => value.to_string(),
-                serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
-                    return Err(format!("API input `{key}` must be a scalar JSON value"));
-                }
-            };
-            Ok((key, value))
-        })
-        .collect()
+    object.into_iter().map(Ok).collect()
+}
+
+fn parse_api_url_values(
+    source: &str,
+) -> Result<HashMap<String, serde_json::Value>, zelyra_web::HttpError> {
+    parse_urlencoded(source).map(|values| {
+        values
+            .into_iter()
+            .map(|(name, value)| (name, serde_json::Value::String(value)))
+            .collect()
+    })
 }
 
 fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
@@ -1943,6 +1976,26 @@ mod tests {
         let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
         assert_eq!(response.status, 200);
         assert_eq!(response.body, "null");
+    }
+
+    #[test]
+    fn decodes_and_serializes_typed_json_arrays() {
+        let program = parse(
+            &lex(
+                "api POST \"/echo\" { handler echo input { values: Int[] } output Int[] } fn echo(values: Int[]) -> Int[] { return values } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"values\":[1,2,3]}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, "[1,2,3]");
     }
 
     #[test]

@@ -569,6 +569,8 @@ api GET "/api/machines/{id}" {
 Fehler bei geschützten APIs verwenden JSON mit `code` und `message`. Ein
 Handler kann `Err("NotFound")` zurückgeben, um den passenden Status aus dem
 deklarierten `errors`-Block zu wählen; nicht deklarierte Fehler führen zu 500.
+JSON-Arrays können an typisierte Felder wie `Int[]` oder `MachineId[]` gebunden
+werden; verschachtelte Eingabeobjekte werden noch nicht unterstützt.
 Umfangreichere fachliche Fehlerwerte folgen später.
 
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen

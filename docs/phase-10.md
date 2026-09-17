@@ -68,6 +68,13 @@ Generate an OpenAPI 3.0.3 document:
 zelyra doc examples/api.zyl --openapi > openapi.json
 ~~~
 
+The array example can be checked and served without a database:
+
+~~~bash
+zelyra check examples/api_arrays.zyl
+zelyra serve examples/api_arrays.zyl
+~~~
+
 The generated document contains path operations, path parameters, query
 parameters for `GET` and `DELETE`, JSON request bodies for other methods, typed
 success responses, declared error responses, and basic schemas for declared
@@ -86,7 +93,7 @@ Input and runtime failures use the same transport shape, for example:
 {"error":{"code":"BadRequest","message":"missing API input `id`"}}
 ~~~
 
-The declared `errors` block documents possible HTTP responses in OpenAPI. The
+The declared `errors` block documents possible HTTP responses in OpenAPI.
 When a handler returns `Err("NotFound")`, and `NotFound` is declared with a
 status, the runtime returns that status as a structured JSON error. An
 undeclared error is never guessed and becomes a 500 response.
@@ -103,7 +110,15 @@ api GET "/customers/{id}" {
 }
 ~~~
 
-The handler bridge is intentionally small: scalar JSON values are supported;
-typed arrays and nested input objects, generated client bindings, and
-generated client bindings, and richer domain-error values remain later Web/API
-work.
+Typed arrays are supported for API input and output:
+
+~~~zelyra
+api POST "/customer-ids" {
+    handler echo_ids
+    input { ids: CustomerId[] }
+    output CustomerId[]
+}
+~~~
+
+The handler bridge is intentionally small: nested input objects, generated
+client bindings, and richer domain-error values remain later Web/API work.

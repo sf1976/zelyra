@@ -56,7 +56,7 @@ Implemented today:
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
   permission guards, structured JSON errors, and declared `Result` error
-  mapping.
+  mapping, including typed API arrays.
 - initial capability declarations and static propagation through function calls;
   native SQL requires the `Database` capability, with project grants from
   `zelyra.toml`.

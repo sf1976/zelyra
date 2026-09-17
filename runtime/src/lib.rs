@@ -3711,6 +3711,7 @@ pub enum Value {
     Bool(bool),
     String(String),
     Char(char),
+    Array(Vec<Value>),
     Option(Option<Box<Value>>),
     Result(Result<Box<Value>, Box<Value>>),
     Rows {
@@ -3729,6 +3730,9 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
+            Value::Array(values) => Type::Array(Box::new(
+                values.first().map(Value::ty).unwrap_or(Type::Unknown),
+            )),
             Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
             Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
             Value::Result(Ok(value)) => Type::Result(Box::new(value.ty()), Box::new(Type::Unknown)),
@@ -3747,6 +3751,14 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
+            Value::Array(values) => format!(
+                "[{}]",
+                values
+                    .iter()
+                    .map(Value::output)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Value::Option(Some(v)) => format!("Some({})", v.output()),
             Value::Option(None) => "None".into(),
             Value::Result(Ok(v)) => format!("Ok({})", v.output()),
@@ -4347,7 +4359,7 @@ fn value_to_query_value(
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
-        Value::Rows { .. } | Value::Result(_) => Err(RuntimeError {
+        Value::Array(_) | Value::Rows { .. } | Value::Result(_) => Err(RuntimeError {
             message: "SQL parameters must be scalar values".into(),
             span,
         }),

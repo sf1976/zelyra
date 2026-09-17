@@ -70,6 +70,13 @@ OpenAPI-3.0.3-Dokument erzeugen:
 zelyra doc examples/api.zyl --openapi > openapi.json
 ~~~
 
+Das Array-Beispiel kann ohne Datenbank geprüft und gestartet werden:
+
+~~~bash
+zelyra check examples/api_arrays.zyl
+zelyra serve examples/api_arrays.zyl
+~~~
+
 Das erzeugte Dokument enthält Pfadoperationen, Pfadparameter,
 Query-Parameter für `GET` und `DELETE`, JSON-Request-Bodies für die übrigen
 Methoden, typisierte Erfolgsantworten, deklarierte Fehlerantworten sowie
@@ -105,6 +112,16 @@ api GET "/customers/{id}" {
 }
 ~~~
 
-Die Handler-Brücke bleibt bewusst klein: skalare JSON-Werte werden unterstützt;
-typisierte Arrays und verschachtelte Eingabeobjekte, generierte Client-Bindings
-und umfangreichere fachliche Fehlerwerte folgen in späteren Web/API-Schritten.
+Typisierte Arrays werden für API-Eingaben und -Ausgaben unterstützt:
+
+~~~zelyra
+api POST "/customer-ids" {
+    handler echo_ids
+    input { ids: CustomerId[] }
+    output CustomerId[]
+}
+~~~
+
+Die Handler-Brücke bleibt bewusst klein: verschachtelte Eingabeobjekte,
+generierte Client-Bindings und umfangreichere fachliche Fehlerwerte folgen in
+späteren Web/API-Schritten.

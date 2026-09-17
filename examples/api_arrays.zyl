@@ -1,0 +1,17 @@
+type CustomerId = Id
+
+fn echo_ids(ids: CustomerId[]) -> CustomerId[] {
+    return ids
+}
+
+api POST "/customer-ids" {
+    handler echo_ids
+
+    input {
+        ids: CustomerId[]
+    }
+
+    output CustomerId[]
+}
+
+fn main() {}

@@ -52,7 +52,8 @@ Das aktuelle Repository enthält:
   geschützten Routen.
 - typisierte API-Deklarationen mit optionalen ausführbaren Handlern,
   OpenAPI-Erzeugung, Authentifizierungs- und Berechtigungssperren sowie
-  strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung.
+  strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung
+  einschließlich typisierter API-Arrays.
 - erste Capability-Deklarationen, Weitergabe über Funktionsaufrufe und
   statische Durchsetzung von `Database` für natives SQL sowie Projektfreigaben
   in `zelyra.toml`.
