@@ -47,6 +47,8 @@ project can grant capabilities explicitly in `zelyra.toml`:
 [capabilities]
 database = true
 network = false
+clock = true
+environment = true
 ~~~
 
 When a project file is present, every declared capability must be enabled
@@ -61,6 +63,25 @@ function's declared capabilities are granted, and native SQL is denied unless
 the current function declares `Database`. The CLI passes the grants from
 `zelyra.toml` to `run`, `serve`, executable API handlers, forms, CRUD, and
 database-backed authentication.
+
+Two safe host APIs are now available:
+
+~~~zelyra
+fn runtime_timestamp() -> Timestamp uses Clock {
+    return now()
+}
+
+fn configured_mode() -> String? uses Environment {
+    return env("ZELYRA_MODE")
+}
+~~~
+
+now() requires Clock and returns the current Unix-epoch timestamp in
+milliseconds. env(name) requires Environment and returns None when the
+variable is missing. Neither API logs or exposes values automatically; output
+only occurs when the program explicitly uses print or another application
+operation. Network, file-system, process, and random host APIs remain future
+work.
 
 The first structured-concurrency slice is available through `parallel` and
 `await`:

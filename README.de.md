@@ -72,6 +72,8 @@ Heute implementiert:
 - Runtime-Durchsetzung deklarierter Funktions-Capabilities sowie nativer SQL-,
   Formular-, CRUD- und Authentifizierungs-Datenbankzugriffe, wenn die CLI
   Projektfreigaben übergibt;
+- sichere Host-APIs für Clock und Environment über now() und env(name); beide
+  benötigen eine ausdrückliche Funktionsdeklaration und Projektfreigabe;
 - erste zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`;
   diese Prüfungen werden nicht als formale Beweise ausgegeben.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und

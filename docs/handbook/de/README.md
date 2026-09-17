@@ -184,12 +184,14 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
+clock = true
+environment = true
 ~~~
 
 Die wichtigsten Befehle:
@@ -680,6 +682,23 @@ Formular-, CRUD- und Authentifizierungs-Datenbankgrenzen sind bei vorhandenen
 Projektfreigaben implementiert. Eine vollständige Betriebssystem-Sandbox für
 alle Capabilities ist noch nicht vorhanden.
 
+Zwei sichere Host-APIs sind implementiert:
+
+~~~zelyra
+fn runtime_timestamp() -> Timestamp uses Clock {
+    return now()
+}
+
+fn configured_mode() -> String? uses Environment {
+    return env("ZELYRA_MODE")
+}
+~~~
+
+now() benötigt Clock und liefert Unix-Epoch-Millisekunden. env(name) benötigt
+Environment und liefert String?; eine fehlende Variable wird zu None. Werte
+werden nicht automatisch protokolliert oder veröffentlicht. Netzwerk-, Datei-,
+Prozess- und Zufalls-APIs sind weiterhin geplant.
+
 ## 15. Contracts und Verify
 
 🧪 Vor- und Nachbedingungen:
@@ -790,7 +809,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]

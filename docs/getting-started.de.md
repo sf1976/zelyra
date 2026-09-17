@@ -66,6 +66,9 @@ Das aktuelle Repository enthält:
   in `zelyra.toml`.
 - Runtime-Durchsetzung von Funktions-Capabilities und nativen SQL-Grenzen beim
   Ausführen mit Projektfreigaben;
+- sichere Host-APIs für Clock und Environment: now() liefert einen Unix-Epoch-
+  Zeitstempel in Millisekunden, env(name) liefert String?; beide benötigen
+  Funktionsdeklaration und Projektfreigabe;
 - zur Laufzeit geprüfte Funktions-Contracts mit `requires` und `ensures`.
 - einen ersten Baustein für strukturierte Nebenläufigkeit mit `parallel` und
   `await`; jeder Branch verwendet einen unveränderlichen Umgebungs-Snapshot,
@@ -265,13 +268,29 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
 ~~~
+
+Host-APIs benötigen ausdrücklich freigegebene Berechtigungen. Ergänze die
+für deine Funktionen benötigten Freigaben und starte anschließend das Beispiel:
+
+~~~toml
+[capabilities]
+clock = true
+environment = true
+~~~
+
+~~~bash
+zelyra run examples/host_apis.zyl
+~~~
+
+Das Beispiel gibt den aktuellen Unix-Epoch-Zeitstempel und den optionalen
+Umgebungswert ZELYRA_MODE aus. Fehlende Werte werden als None dargestellt.
 
 ## 5. Grundlagen der Sprache
 

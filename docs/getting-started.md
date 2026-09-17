@@ -62,6 +62,9 @@ The current repository contains:
   `Database` for native SQL, with project-level grants in `zelyra.toml`.
 - runtime enforcement of function capabilities and native SQL boundaries when
   running with project grants;
+- safe Clock and Environment host APIs: now() returns a Unix-epoch timestamp
+  in milliseconds, while env(name) returns String?; both require a function
+  declaration and a project grant;
 - runtime-checked function contracts using `requires` and `ensures`.
 - an initial structured-concurrency slice using `parallel` and `await`; each
   branch uses an immutable environment snapshot and all branches are joined
@@ -256,13 +259,29 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
 ~~~
+
+Host APIs are explicitly permissioned. Add the grants needed by your
+functions, then run the example:
+
+~~~toml
+[capabilities]
+clock = true
+environment = true
+~~~
+
+~~~bash
+zelyra run examples/host_apis.zyl
+~~~
+
+The example prints the current Unix-epoch timestamp and the optional
+ZELYRA_MODE environment value. Missing values are represented as None.
 
 ## 5. Language basics
 

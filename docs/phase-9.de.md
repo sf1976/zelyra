@@ -48,6 +48,8 @@ Projekt kann Capabilities ausdrücklich in `zelyra.toml` freigeben:
 [capabilities]
 database = true
 network = false
+clock = true
+environment = true
 ~~~
 
 Wenn eine Projektdatei vorhanden ist, muss jede deklarierte Capability dort
@@ -63,6 +65,25 @@ die deklarierten Capabilities der Funktion nicht freigegeben sind; natives SQL
 wird abgewiesen, wenn die aktuelle Funktion nicht `Database` deklariert. Die
 CLI übergibt die Freigaben aus `zelyra.toml` an `run`, `serve` und ausführbare
 API-Handler, Formulare, CRUD und datenbankgestützte Authentifizierung.
+
+Zwei sichere Host-APIs sind jetzt verfügbar:
+
+~~~zelyra
+fn runtime_timestamp() -> Timestamp uses Clock {
+    return now()
+}
+
+fn configured_mode() -> String? uses Environment {
+    return env("ZELYRA_MODE")
+}
+~~~
+
+now() benötigt Clock und liefert den aktuellen Unix-Epoch-Zeitstempel in
+Millisekunden. env(name) benötigt Environment und liefert None, wenn die
+Variable fehlt. Keine der beiden APIs protokolliert oder veröffentlicht Werte
+automatisch; eine Ausgabe erfolgt nur, wenn das Programm ausdrücklich print
+oder eine andere Anwendungsoperation verwendet. Netzwerk-, Datei-, Prozess-
+und Zufalls-APIs folgen in späteren Schritten.
 
 Der erste Structured-Concurrency-Schnitt ist über `parallel` und `await`
 verfügbar:

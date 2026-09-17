@@ -155,12 +155,14 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]
 database = true
 network = false
+clock = true
+environment = true
 ~~~
 
 Important commands:
@@ -622,6 +624,23 @@ and authentication database boundaries are implemented when project grants are
 supplied. A complete operating-system sandbox for every capability is not yet
 available.
 
+Two safe host APIs are implemented:
+
+~~~zelyra
+fn runtime_timestamp() -> Timestamp uses Clock {
+    return now()
+}
+
+fn configured_mode() -> String? uses Environment {
+    return env("ZELYRA_MODE")
+}
+~~~
+
+now() requires Clock and returns Unix-epoch milliseconds. env(name) requires
+Environment and returns String?; a missing variable becomes None. Values are
+not logged or exposed automatically. Network, file-system, process, and random
+host APIs remain planned.
+
 ## 15. Contracts and verification
 
 🧪 Preconditions and postconditions:
@@ -726,7 +745,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [capabilities]

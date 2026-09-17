@@ -1,0 +1,4 @@
+fn main() uses Clock, Environment {
+    print(now())
+    print(env("ZELYRA_MODE"))
+}

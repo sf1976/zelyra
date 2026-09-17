@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.17 — 2026-09-17
+
+### Added
+
+- Safe Clock and Environment host APIs: now() returns a Unix-epoch timestamp
+  in milliseconds and env(name) returns an optional String.
+- Static and runtime capability checks for Clock and Environment.
+- Added the runnable examples/host_apis.zyl example and synchronized the
+  German and English documentation.
+
+### Known limitations
+
+- Network, file-system, process, and random host APIs are still planned.
+- Host APIs do not provide a complete operating-system sandbox.
+
 ## 0.1.16 — 2026-09-17
 
 ### Added

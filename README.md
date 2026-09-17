@@ -71,6 +71,8 @@ Implemented today:
 - runtime enforcement of declared function capabilities, native SQL, forms,
   CRUD, and authentication database access when project grants are supplied by
   the CLI;
+- safe Clock and Environment host APIs through now() and env(name); both
+  require explicit function declarations and project grants;
 - initial runtime-checked function contracts with `requires` and `ensures`;
   these checks are not presented as formal proofs.
 - an initial structured-concurrency slice with `parallel` and `await`: branches

@@ -1,6 +1,6 @@
 [project]
 name = "zelyra"
-version = "0.1.16"
+version = "0.1.17"
 zelyra = "0.1"
 
 [database.main]
@@ -9,3 +9,5 @@ engine = "mariadb"
 [capabilities]
 database = true
 network = true
+clock = true
+environment = true

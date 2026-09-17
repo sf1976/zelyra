@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::time::{SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3022,6 +3023,25 @@ fn check_capability_expr(
             errors,
         ),
         ExprKind::Call { name, args } => {
+            if name == "now" {
+                require_capability(
+                    "Clock",
+                    "clock access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            } else if name == "env" {
+                require_capability(
+                    "Environment",
+                    "environment access",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            }
             if let Some(callee) = functions.get(name.as_str()) {
                 for capability in &callee.capabilities {
                     if KNOWN_CAPABILITIES.contains(&capability.as_str())
@@ -3835,6 +3855,19 @@ impl<'a> Checker<'a> {
                     } else {
                         Type::Result(Box::new(Type::Unknown), Box::new(inner))
                     }
+                } else if name == "now" {
+                    if !args.is_empty() {
+                        self.error(expr.span, "now expects no arguments");
+                    }
+                    Type::Timestamp
+                } else if name == "env" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "env expects exactly one argument");
+                        return Type::Unknown;
+                    }
+                    let argument = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &argument, args[0].span);
+                    Type::Option(Box::new(Type::String))
                 } else if let Some(signature) = self.functions.get(name).cloned() {
                     if args.len() != signature.params.len() {
                         self.error(
@@ -4067,6 +4100,7 @@ pub enum Value {
     Bool(bool),
     String(String),
     Char(char),
+    Timestamp(i64),
     Array(Vec<Value>),
     Object {
         type_name: String,
@@ -4090,6 +4124,7 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Char(_) => Type::Char,
+            Value::Timestamp(_) => Type::Timestamp,
             Value::Array(values) => Type::Array(Box::new(
                 values.first().map(Value::ty).unwrap_or(Type::Unknown),
             )),
@@ -4112,6 +4147,7 @@ impl Value {
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
             Value::Char(v) => v.to_string(),
+            Value::Timestamp(v) => v.to_string(),
             Value::Array(values) => format!(
                 "[{}]",
                 values
@@ -4840,6 +4876,58 @@ impl Interpreter {
                         "Ok" => Ok(Value::Result(Ok(value))),
                         _ => Ok(Value::Result(Err(value))),
                     }
+                } else if name == "now" {
+                    if !args.is_empty() {
+                        return Err(self.runtime_error(expr.span, "now expects no arguments"));
+                    }
+                    self.require_runtime_capability("Clock", "clock access", expr.span)?;
+                    let timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map_err(|error| {
+                            self.runtime_error(
+                                expr.span,
+                                format!("clock access failed: system time is before Unix epoch: {error}"),
+                            )
+                        })?
+                        .as_millis();
+                    let timestamp = i64::try_from(timestamp).map_err(|_| {
+                        self.runtime_error(expr.span, "clock access failed: timestamp overflow")
+                    })?;
+                    Ok(Value::Timestamp(timestamp))
+                } else if name == "env" {
+                    if args.len() != 1 {
+                        return Err(
+                            self.runtime_error(expr.span, "env expects exactly one argument")
+                        );
+                    }
+                    self.require_runtime_capability(
+                        "Environment",
+                        "environment access",
+                        expr.span,
+                    )?;
+                    let key = self.eval(&args[0], env)?;
+                    let Value::String(key) = key else {
+                        return Err(
+                            self.runtime_error(args[0].span, "env expects a String variable name")
+                        );
+                    };
+                    if key.is_empty() {
+                        return Err(self
+                            .runtime_error(args[0].span, "env expects a non-empty variable name"));
+                    }
+                    let value = std::env::var_os(&key)
+                        .map(|value| {
+                            value.into_string().map_err(|_| {
+                                self.runtime_error(
+                                    args[0].span,
+                                    format!("environment variable {key} is not valid UTF-8"),
+                                )
+                            })
+                        })
+                        .transpose()?;
+                    Ok(Value::Option(
+                        value.map(|value| Box::new(Value::String(value))),
+                    ))
                 } else {
                     let values = args
                         .iter()
@@ -5049,6 +5137,7 @@ fn value_to_query_value(
         Value::Bool(value) => Ok(QueryValue::Bool(*value)),
         Value::String(value) => Ok(QueryValue::String(value.clone())),
         Value::Char(value) => Ok(QueryValue::String(value.to_string())),
+        Value::Timestamp(value) => Ok(QueryValue::Int(*value)),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
         Value::Array(_) | Value::Object { .. } | Value::Rows { .. } | Value::Result(_) => {
@@ -5411,6 +5500,73 @@ mod tests {
             execute_with_capabilities(&program, Some(&grants)).unwrap(),
             ["1"]
         );
+    }
+
+    #[test]
+    fn accepts_clock_and_environment_host_apis() {
+        let program = parse(
+            &lex(
+                "fn current_time() -> Timestamp uses Clock { return now() } fn read_env(name: String) -> String? uses Environment { return env(name) } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+
+        let grants = HashSet::from([String::from("Clock"), String::from("Environment")]);
+        let timestamp = execute_function_with_capabilities(
+            &program,
+            "current_time",
+            Vec::new(),
+            None,
+            Some(&grants),
+        )
+        .unwrap();
+        assert!(matches!(timestamp, Value::Timestamp(value) if value > 0));
+
+        let environment = execute_function_with_capabilities(
+            &program,
+            "read_env",
+            vec![Value::String(String::from("PATH"))],
+            None,
+            Some(&grants),
+        )
+        .unwrap();
+        assert!(matches!(
+            environment,
+            Value::Option(Some(value)) if matches!(*value, Value::String(_))
+        ));
+    }
+
+    #[test]
+    fn requires_clock_and_environment_capabilities_for_host_apis() {
+        let program =
+            parse(&lex("fn main() { print(now()) print(env(\"PATH\")) }").unwrap()).unwrap();
+        let errors = check_capabilities(&program).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error.message.contains("does not declare capability") && error.message.contains("Clock")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.message.contains("does not declare capability")
+                && error.message.contains("Environment")
+        }));
+    }
+
+    #[test]
+    fn enforces_runtime_host_api_capabilities() {
+        let clock_program = parse(&lex("fn main() { print(now()) }").unwrap()).unwrap();
+        let clock_error = execute(&clock_program).unwrap_err();
+        assert!(clock_error.message.contains("clock access requires"));
+        assert!(clock_error.message.contains("Clock"));
+
+        let environment_program =
+            parse(&lex("fn main() uses Environment { print(env(\"PATH\")) }").unwrap()).unwrap();
+        let grants = HashSet::new();
+        let environment_error =
+            execute_with_capabilities(&environment_program, Some(&grants)).unwrap_err();
+        assert!(environment_error.message.contains("function"));
+        assert!(environment_error.message.contains("Environment"));
     }
 
     #[test]
