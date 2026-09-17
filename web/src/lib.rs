@@ -156,7 +156,7 @@ impl Response {
 
     pub fn to_http(&self) -> String {
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
@@ -1109,7 +1109,7 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
             message: "request line contains too many fields".into(),
         });
     }
-    let mut headers = HashMap::new();
+    let mut headers: HashMap<String, String> = HashMap::new();
     for line in lines {
         if line.is_empty() {
             break;
@@ -1118,6 +1118,35 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
             message: "malformed HTTP header".into(),
         })?;
         headers.insert(name.trim().to_ascii_lowercase(), value.trim().into());
+    }
+    if let Some(content_length) = headers.get("content-length") {
+        let content_length = content_length.parse::<usize>().map_err(|_| HttpError {
+            message: "content-length must be a non-negative integer".into(),
+        })?;
+        if content_length > MAX_REQUEST_BODY_BYTES {
+            return Err(HttpError {
+                message: format!(
+                    "request body exceeds the {} byte limit",
+                    MAX_REQUEST_BODY_BYTES
+                ),
+            });
+        }
+        if content_length != body.len() {
+            return Err(HttpError {
+                message: format!(
+                    "content-length declares {content_length} bytes, received {}",
+                    body.len()
+                ),
+            });
+        }
+    }
+    if body.len() > MAX_REQUEST_BODY_BYTES {
+        return Err(HttpError {
+            message: format!(
+                "request body exceeds the {} byte limit",
+                MAX_REQUEST_BODY_BYTES
+            ),
+        });
     }
     let path = target.split_once('?').map_or(target, |(path, _)| path);
     Ok(Request {
@@ -1128,6 +1157,8 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         body: body.into(),
     })
 }
+
+pub const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 
 pub fn html_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -2475,6 +2506,8 @@ fn reason_phrase(status: u16) -> &'static str {
     match status {
         204 => "No Content",
         200 => "OK",
+        413 => "Payload Too Large",
+        415 => "Unsupported Media Type",
         202 => "Accepted",
         400 => "Bad Request",
         403 => "Forbidden",
@@ -2515,6 +2548,10 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
         .and_then(parse_request)
     {
         Ok(request) => app.dispatch(&request),
+        Err(error) if error.message.contains("request body exceeds") => Response::json(
+            413,
+            "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
+        ),
         Err(_) => Response::html(400, "<h1>400 Bad Request</h1>"),
     };
     stream.write_all(response.to_http().as_bytes())
@@ -2743,10 +2780,32 @@ mod tests {
     }
 
     #[test]
+    fn validates_declared_request_body_length() {
+        assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 2\r\n\r\nok").is_ok());
+        assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 3\r\n\r\nok").is_err());
+        assert!(
+            parse_request("POST /echo HTTP/1.1\r\nContent-Length: not-a-number\r\n\r\nok").is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_request_bodies_over_the_limit() {
+        let raw = format!(
+            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_REQUEST_BODY_BYTES + 1
+        );
+        let error = parse_request(&raw).unwrap_err();
+        assert!(error.message.contains("exceeds"));
+    }
+
+    #[test]
     fn serializes_http_response() {
         let wire = Response::html(200, "ok").to_http();
         assert!(wire.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(wire.contains("Content-Length: 2\r\n"));
+        assert!(wire.contains("X-Content-Type-Options: nosniff\r\n"));
+        assert!(wire.contains("X-Frame-Options: DENY\r\n"));
+        assert!(wire.contains("Referrer-Policy: no-referrer\r\n"));
         assert!(wire.ends_with("\r\n\r\nok"));
     }
 
@@ -3106,7 +3165,7 @@ mod tests {
             },
         }]);
         let request = parse_request(
-            "POST /machines/1/delete HTTP/1.1\r\nContent-Length: 20\r\n\r\n_zelyra_csrf=wrong",
+            "POST /machines/1/delete HTTP/1.1\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
         )
         .unwrap();
         assert_eq!(app.dispatch(&request).status, 403);
@@ -3139,7 +3198,7 @@ mod tests {
     fn form_post_requires_csrf_and_reports_validation_errors() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let invalid_csrf = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nContent-Length: 24\r\n\r\n_zelyra_csrf=wrong",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
         )
         .unwrap();
         assert_eq!(app.dispatch(&invalid_csrf).status, 403);

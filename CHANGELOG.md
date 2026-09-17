@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.33 — 2026-09-17
+
+### Added
+
+- Added API media-type validation for JSON and URL-encoded request bodies.
+- Added `Content-Length` validation and a one-mebibyte request-body limit.
+- Added secure default response headers for content sniffing, framing, and
+  referrer disclosure.
+- Added Phase 12 documentation and regression tests.
+
+### Compatibility
+
+- Existing JSON and URL-encoded API clients remain supported.
+- Unsupported body media types now receive a structured 415 response.
+
 ## 0.1.32 — 2026-09-17
 
 ### Added

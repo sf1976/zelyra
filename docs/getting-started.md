@@ -56,6 +56,7 @@ The current repository contains:
   TypeScript payload types;
 - browser API integration with exact-origin CORS configuration and automatic
   `OPTIONS` preflight handling;
+- API media-type and body-size validation with secure default response headers;
 - a dependency-free TypeScript client generator with declared API error codes
   and structured HTTP-error parsing;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
@@ -278,7 +279,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.32"
+version = "0.1.33"
 zelyra = "0.1"
 
 [capabilities]
@@ -748,6 +749,7 @@ Read the phase documents for implementation details:
 - [Phase 9: Capabilities](phase-9.md).
 - [Phase 10: Typed APIs and OpenAPI](phase-10.md).
 - [Phase 11: Browser API integration and CORS](phase-11.md).
+- [Phase 12: Request validation and secure response defaults](phase-12.md).
 
 The German versions use the same filenames with the .de.md suffix.
 

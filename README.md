@@ -424,6 +424,8 @@ The long-term specification is organized into these phases:
     WebAssembly, and optimization interfaces remain.
 11. Browser API integration with explicit CORS origins and automatic preflight
     handling is implemented.
+12. API request media-type and body-size validation plus secure default
+    response headers are implemented.
 
 Each feature is expected to include syntax, AST/HIR support, diagnostics,
 positive and negative tests, documentation, and examples.

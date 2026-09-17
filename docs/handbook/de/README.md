@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.32"
+version = "0.1.33"
 zelyra = "0.1"
 
 [capabilities]
@@ -1015,7 +1015,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.32"
+version = "0.1.33"
 zelyra = "0.1"
 
 [capabilities]

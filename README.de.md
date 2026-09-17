@@ -430,6 +430,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
     State, WebAssembly und Optimierungsschnittstellen folgen.
 11. Browser-API-Integration mit ausdrücklichen CORS-Origins und automatischer
     Preflight-Verarbeitung ist vorhanden.
+12. API-Validierung von Medientypen und Body-Größe sowie sichere Standard-
+    Response-Header sind vorhanden.
 
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.

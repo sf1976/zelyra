@@ -59,6 +59,8 @@ Das aktuelle Repository enthält:
   TypeScript-Payload-Typen;
 - Browser-API-Integration mit exakter CORS-Origin-Allowlist und automatischer
   `OPTIONS`-Preflight-Verarbeitung;
+- API-Validierung von Medientypen und Body-Größe mit sicheren Standard-
+  Response-Headern;
 - einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten mit
   deklarierten API-Fehlercodes und strukturierter HTTP-Fehlerauswertung;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
@@ -288,7 +290,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.32"
+version = "0.1.33"
 zelyra = "0.1"
 
 [capabilities]
@@ -770,6 +772,7 @@ Weitere technische Details stehen in den Phasendokumenten:
 - [Phase 9: Capabilities](phase-9.de.md).
 - [Phase 10: Typisierte APIs und OpenAPI](phase-10.de.md).
 - [Phase 11: Browser-API-Integration und CORS](phase-11.de.md).
+- [Phase 12: Request-Validierung und sichere Antwort-Defaults](phase-12.de.md).
 
 Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
