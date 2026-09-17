@@ -1733,10 +1733,13 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
         ));
     }
     for (column, value) in filters {
+        let storage_column = crud_foreign_key(table, column)
+            .map(|foreign_key| foreign_key.column.as_str())
+            .unwrap_or(column);
         let schema_column = table
             .columns
             .iter()
-            .find(|candidate| candidate.name == column)
+            .find(|candidate| candidate.name == storage_column)
             .expect("filter column was validated against the schema");
         let value = match filter_query_value(schema_column, value) {
             Ok(value) => value,

@@ -9,9 +9,14 @@ address="${ZELYRA_E2E_ADDRESS:-127.0.0.1:38500}"
 base_url="http://${address}"
 suffix="$(date +%s)"
 department_name="Zelyra E2E Department-${suffix}"
-machine_number="ZELYRA-E2E-${suffix}"
-machine_name="Zelyra E2E Machine"
-updated_machine_name="Zelyra E2E Machine Updated"
+secondary_department_name="Zelyra E2E Department Secondary-${suffix}"
+machine_number="ZELYRA-E2E-${suffix}-1"
+machine_two_number="ZELYRA-E2E-${suffix}-2"
+machine_three_number="ZELYRA-E2E-${suffix}-3"
+machine_name="Zelyra E2E Machine A-${suffix}"
+machine_two_name="Zelyra E2E Search Target-${suffix}"
+machine_three_name="Zelyra E2E Machine C-${suffix}"
+updated_machine_name="Zelyra E2E Machine Updated-${suffix}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-mariadb-e2e.XXXXXX")"
 server_pid=""
 
@@ -37,19 +42,19 @@ if [[ ! -x "${zelyra_bin}" ]]; then
     exit 1
 fi
 
-echo "[1/8] setting up MariaDB schema"
+echo "[1/10] setting up MariaDB schema"
 "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/8] inspecting MariaDB schema"
+echo "[2/10] inspecting MariaDB schema"
 inspect_output="$("${zelyra_bin}" db inspect "${project_file}")"
 grep -Fq "2 tables" <<<"${inspect_output}"
 grep -Fq "1 foreign keys" <<<"${inspect_output}"
 
-echo "[3/8] checking schema plan"
+echo "[3/10] checking schema plan"
 plan_output="$("${zelyra_bin}" db plan "${project_file}")"
 grep -Fq "No schema changes." <<<"${plan_output}"
 
-echo "[4/8] starting Zelyra web server"
+echo "[4/10] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
@@ -74,7 +79,55 @@ post_form() {
     curl --silent --show-error --fail --output "${response_file}" --write-out '%{http_code}' "$@"
 }
 
-echo "[5/8] creating a related department through CRUD"
+extract_option_id() {
+    local html_file="$1"
+    local label="$2"
+    sed -n "s/.*<option value=\"\([^\"]*\)\">${label}<\\/option>.*/\1/p" "${html_file}"
+}
+
+create_machine() {
+    local number="$1"
+    local name="$2"
+    local related_department_id="$3"
+    local active="$4"
+    local file_prefix="$5"
+
+    curl --silent --show-error --fail "${base_url}/machines/new" -o "${temp_dir}/${file_prefix}-form.html"
+    local csrf
+    csrf="$(extract_csrf "${temp_dir}/${file_prefix}-form.html")"
+    [[ -n "${csrf}" ]]
+    local status
+    status="$(post_form "${temp_dir}/${file_prefix}-response.html" \
+        --data-urlencode "_zelyra_csrf=${csrf}" \
+        --data-urlencode "number=${number}" \
+        --data-urlencode "name=${name}" \
+        --data-urlencode "department=${related_department_id}" \
+        --data-urlencode "active=${active}" \
+        "${base_url}/machines/new")"
+    [[ "${status}" == "303" ]]
+
+    curl --silent --show-error --fail --get \
+        --data-urlencode "search=${number}" \
+        "${base_url}/machines" -o "${temp_dir}/${file_prefix}-list.html"
+    grep -Fq "${name}" "${temp_dir}/${file_prefix}-list.html"
+    created_machine_id="$(sed -n 's#.*href="/machines/\([0-9][0-9]*\)">.*#\1#p' "${temp_dir}/${file_prefix}-list.html" | head -1)"
+    [[ -n "${created_machine_id}" ]]
+}
+
+delete_machine() {
+    local machine_id_to_delete="$1"
+    local file_prefix="$2"
+    curl --silent --show-error --fail "${base_url}/machines/${machine_id_to_delete}" -o "${temp_dir}/${file_prefix}-detail.html"
+    local csrf
+    csrf="$(extract_csrf "${temp_dir}/${file_prefix}-detail.html")"
+    local status
+    status="$(post_form "${temp_dir}/${file_prefix}-delete-response.html" \
+        --data-urlencode "_zelyra_csrf=${csrf}" \
+        "${base_url}/machines/${machine_id_to_delete}/delete")"
+    [[ "${status}" == "303" ]]
+}
+
+echo "[5/10] creating related departments through CRUD"
 curl --silent --show-error --fail "${base_url}/departments/new" -o "${temp_dir}/department-form.html"
 department_csrf="$(extract_csrf "${temp_dir}/department-form.html")"
 [[ -n "${department_csrf}" ]]
@@ -84,29 +137,90 @@ department_status="$(post_form "${temp_dir}/department-response.html" \
     "${base_url}/departments/new")"
 [[ "${department_status}" == "303" ]]
 
-echo "[6/8] creating and reading a related machine"
+curl --silent --show-error --fail "${base_url}/departments/new" -o "${temp_dir}/secondary-department-form.html"
+secondary_department_csrf="$(extract_csrf "${temp_dir}/secondary-department-form.html")"
+[[ -n "${secondary_department_csrf}" ]]
+secondary_department_status="$(post_form "${temp_dir}/secondary-department-response.html" \
+    --data-urlencode "_zelyra_csrf=${secondary_department_csrf}" \
+    --data-urlencode "name=${secondary_department_name}" \
+    "${base_url}/departments/new")"
+[[ "${secondary_department_status}" == "303" ]]
+
+echo "[6/10] creating and reading related machines"
 curl --silent --show-error --fail "${base_url}/machines/new" -o "${temp_dir}/machine-form.html"
-machine_csrf="$(extract_csrf "${temp_dir}/machine-form.html")"
-department_id="$(sed -n 's/.*<option value="\([^"]*\)">Zelyra E2E Department-[0-9]*<\/option>.*/\1/p' "${temp_dir}/machine-form.html")"
-[[ -n "${machine_csrf}" && -n "${department_id}" ]]
-machine_status="$(post_form "${temp_dir}/machine-response.html" \
-    --data-urlencode "_zelyra_csrf=${machine_csrf}" \
-    --data-urlencode "number=${machine_number}" \
-    --data-urlencode "name=${machine_name}" \
-    --data-urlencode "department=${department_id}" \
-    --data-urlencode "active=true" \
-    "${base_url}/machines/new")"
-[[ "${machine_status}" == "303" ]]
+department_id="$(extract_option_id "${temp_dir}/machine-form.html" "${department_name}")"
+secondary_department_id="$(extract_option_id "${temp_dir}/machine-form.html" "${secondary_department_name}")"
+[[ -n "${department_id}" && -n "${secondary_department_id}" ]]
+create_machine "${machine_number}" "${machine_name}" "${department_id}" true machine-one
+machine_id="${created_machine_id}"
+create_machine "${machine_two_number}" "${machine_two_name}" "${department_id}" false machine-two
+machine_two_id="${created_machine_id}"
+create_machine "${machine_three_number}" "${machine_three_name}" "${secondary_department_id}" true machine-three
+machine_three_id="${created_machine_id}"
 curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list.html"
 grep -Fq "<th>Department</th>" "${temp_dir}/machine-list.html"
 grep -Fq "<td>${department_name}</td>" "${temp_dir}/machine-list.html"
 grep -Fq "<td>${machine_number}</td>" "${temp_dir}/machine-list.html"
-machine_id="$(sed -n 's#.*href="/machines/\([0-9][0-9]*\)">.*#\1#p' "${temp_dir}/machine-list.html" | head -1)"
-[[ -n "${machine_id}" ]]
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-detail.html"
 grep -Fq "<dt>Department</dt><dd>${department_name}</dd>" "${temp_dir}/machine-detail.html"
 
-echo "[7/8] editing and deleting through CSRF-protected CRUD"
+echo "[7/10] searching, filtering, sorting, and paginating"
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    "${base_url}/machines" -o "${temp_dir}/search.html"
+grep -Fq "${machine_two_name}" "${temp_dir}/search.html"
+grep -Fq "${machine_three_name}" "${temp_dir}/search.html"
+
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    --data-urlencode "filter_active=false" \
+    "${base_url}/machines" -o "${temp_dir}/active-filter.html"
+grep -Fq "${machine_two_name}" "${temp_dir}/active-filter.html"
+! grep -Fq "${machine_name}" "${temp_dir}/active-filter.html"
+! grep -Fq "${machine_three_name}" "${temp_dir}/active-filter.html"
+
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    --data-urlencode "filter_department=${secondary_department_id}" \
+    "${base_url}/machines" -o "${temp_dir}/department-filter.html"
+grep -Fq "${machine_three_name}" "${temp_dir}/department-filter.html"
+! grep -Fq "${machine_name}" "${temp_dir}/department-filter.html"
+! grep -Fq "${machine_two_name}" "${temp_dir}/department-filter.html"
+
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    --data-urlencode "sort=name" \
+    --data-urlencode "order=desc" \
+    --data-urlencode "per_page=3" \
+    "${base_url}/machines" -o "${temp_dir}/sorted.html"
+two_offset="$(grep -b -o -m1 "${machine_two_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
+three_offset="$(grep -b -o -m1 "${machine_three_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
+one_offset="$(grep -b -o -m1 "${machine_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
+[[ "${two_offset}" -lt "${three_offset}" && "${three_offset}" -lt "${one_offset}" ]]
+
+for page in 1 2 3; do
+    curl --silent --show-error --fail --get \
+        --data-urlencode "search=${suffix}" \
+        --data-urlencode "sort=number" \
+        --data-urlencode "order=asc" \
+        --data-urlencode "per_page=1" \
+        --data-urlencode "page=${page}" \
+        "${base_url}/machines" -o "${temp_dir}/page-${page}.html"
+done
+grep -Fq "${machine_name}" "${temp_dir}/page-1.html"
+! grep -Fq "${machine_two_name}" "${temp_dir}/page-1.html"
+grep -Fq "${machine_two_name}" "${temp_dir}/page-2.html"
+! grep -Fq "${machine_three_name}" "${temp_dir}/page-2.html"
+grep -Fq "${machine_three_name}" "${temp_dir}/page-3.html"
+grep -Fq "page=2" "${temp_dir}/page-1.html"
+
+echo "[8/10] rejecting unknown CRUD query fields"
+sort_status="$(curl --silent --show-error --output "${temp_dir}/invalid-sort.html" --write-out '%{http_code}' "${base_url}/machines?sort=not_allowed")"
+[[ "${sort_status}" == "400" ]]
+filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}/machines?filter_not_allowed=value")"
+[[ "${filter_status}" == "400" ]]
+
+echo "[9/10] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"
 edit_csrf="$(extract_csrf "${temp_dir}/machine-edit.html")"
 edit_status="$(post_form "${temp_dir}/machine-edit-response.html" \
@@ -127,12 +241,24 @@ delete_status="$(post_form "${temp_dir}/machine-delete-response.html" \
 curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list-after-delete.html"
 ! grep -Fq "${machine_number}" "${temp_dir}/machine-list-after-delete.html"
 
-echo "[8/8] cleaning the related department"
-curl --silent --show-error --fail "${base_url}/departments/${department_id}" -o "${temp_dir}/department-detail.html"
-department_delete_csrf="$(extract_csrf "${temp_dir}/department-detail.html")"
-department_delete_status="$(post_form "${temp_dir}/department-delete-response.html" \
-    --data-urlencode "_zelyra_csrf=${department_delete_csrf}" \
-    "${base_url}/departments/${department_id}/delete")"
-[[ "${department_delete_status}" == "303" ]]
+delete_machine "${machine_two_id}" machine-two
+delete_machine "${machine_three_id}" machine-three
+
+curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list-after-cleanup.html"
+! grep -Fq "${machine_number}" "${temp_dir}/machine-list-after-cleanup.html"
+! grep -Fq "${machine_two_number}" "${temp_dir}/machine-list-after-cleanup.html"
+! grep -Fq "${machine_three_number}" "${temp_dir}/machine-list-after-cleanup.html"
+
+echo "[10/10] cleaning the related departments"
+for department_pair in "${department_id}:department" "${secondary_department_id}:secondary-department"; do
+    department_to_delete="${department_pair%%:*}"
+    department_file_prefix="${department_pair##*:}"
+    curl --silent --show-error --fail "${base_url}/departments/${department_to_delete}" -o "${temp_dir}/${department_file_prefix}-detail.html"
+    department_delete_csrf="$(extract_csrf "${temp_dir}/${department_file_prefix}-detail.html")"
+    department_delete_status="$(post_form "${temp_dir}/${department_file_prefix}-delete-response.html" \
+        --data-urlencode "_zelyra_csrf=${department_delete_csrf}" \
+        "${base_url}/departments/${department_to_delete}/delete")"
+    [[ "${department_delete_status}" == "303" ]]
+done
 
 echo "MariaDB E2E passed"

@@ -42,6 +42,11 @@ weiterhin die validierte Foreign-Key-ID. Bezeichnungen für Sortierung und
 Filter verwenden den logischen Feldnamen, während der Filter eine exakte,
 parametrisierte ID-Abfrage bleibt.
 
+Konfigurierte Beziehungsfilter behalten außerdem den logischen Query-Namen.
+Für das obige Beispiel wird `filter_department=<department-id>` verwendet;
+Zelyra bildet diesen Wert intern auf die gespeicherte Spalte `department_id`
+ab.
+
 Jede Zeile verlinkt auf eine generierte Detailroute, beispielsweise
 `GET /machines/1`. Die Detailansicht bietet automatisch erzeugte Create- und
 Edit-Formulare unter `/machines/new` und `GET/POST /machines/1/edit`. Diese
@@ -71,3 +76,9 @@ zelyra serve examples/machine_form.zyl
 ~~~
 
 Öffne anschließend http://127.0.0.1:3000/machines.
+
+Der Integrationstest `tests/mariadb-e2e.sh` prüft den vollständigen vertikalen
+Schnitt gegen MariaDB: Schema-Setup und Inspektion, verbundene CRUD-Erstellung,
+Suche, exakte Beziehungs- und Boolean-Filter, erlaubte Sortierung, Pagination,
+die Ablehnung unbekannter Query-Felder, Bearbeiten, CSRF-geschütztes Löschen
+und Bereinigung.

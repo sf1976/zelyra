@@ -13,6 +13,15 @@ compiler and repository release.
 - Added SHA-256 checksums to every generated release archive.
 - Alpha tags now create GitHub pre-releases automatically with bilingual
   release notes.
+- Extended the MariaDB CRUD end-to-end test to cover search, relationship and
+  boolean filters, allowlisted sorting, pagination, invalid query fields, and
+  complete cleanup.
+
+### Fixed
+
+- Configured relationship filters now preserve their logical query names,
+  such as `filter_department`, while still using the stored foreign-key column
+  safely.
 
 ### Compatibility
 

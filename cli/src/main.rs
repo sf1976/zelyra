@@ -1860,6 +1860,28 @@ fn configured_crud_columns(
         .collect()
 }
 
+fn configured_crud_filter_columns(
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+    crud: &zelyra_ast::CrudDef,
+    configured: &[String],
+    default: impl FnOnce(&zelyra_database::Table) -> Vec<String>,
+) -> Vec<String> {
+    let table = schema
+        .tables
+        .iter()
+        .find(|table| table.name == crud.table)
+        .expect("CRUD table was validated before route generation");
+    if configured.is_empty() {
+        return default(table);
+    }
+    configured
+        .iter()
+        .filter(|column| crud_column_exists(program, schema, crud, column))
+        .cloned()
+        .collect()
+}
+
 fn load_schema(path: &str) -> Result<Schema, ()> {
     let program = load(path)?;
     match build_schema(&program) {
@@ -2198,7 +2220,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     .collect()
             });
         let filter_columns =
-            configured_crud_columns(&program, &schema, crud, &crud.filters, |table| {
+            configured_crud_filter_columns(&program, &schema, crud, &crud.filters, |table| {
                 table
                     .columns
                     .iter()

@@ -40,6 +40,10 @@ in lists and detail views; the generated form continues to submit the
 validated foreign-key ID. Relationship sort and filter labels use the logical
 field name while filtering remains an exact, parameterized ID comparison.
 
+Configured relationship filters keep the logical query name as well. For the
+example above, use `filter_department=<department-id>`; Zelyra maps that value
+to the stored `department_id` column internally.
+
 Each row links to a generated detail route, for example `GET /machines/1`.
 The detail view offers generated Create and Edit forms at `/machines/new` and
 `GET/POST /machines/1/edit`. These forms inherit schema validation,
@@ -67,3 +71,9 @@ zelyra serve examples/machine_form.zyl
 ~~~
 
 Open http://127.0.0.1:3000/machines.
+
+The repository integration test `tests/mariadb-e2e.sh` exercises the complete
+vertical slice against MariaDB: schema setup and inspection, related CRUD
+creation, search, exact relationship and boolean filters, allowlisted sorting,
+pagination, validation of unknown query fields, editing, CSRF-protected
+deletion, and cleanup.
