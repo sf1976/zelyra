@@ -51,7 +51,9 @@ Heute implementiert:
 - eine erste CRUD-Ressource mit MariaDB-Suche, konfigurierbaren Listen-,
   Such- und Filterspalten, Sortierung, Pagination, erzeugten Create-/Edit-
   Formularen und CSRF-geschütztem Löschen mit getrennten Berechtigungen für
-  View/Create/Edit/Delete sowie abwärtskompatiblem Berechtigungs-Fallback.
+  View/Create/Edit/Delete sowie abwärtskompatiblem Berechtigungs-Fallback;
+  nicht verfügbare Aktionen werden in erzeugten Ansichten ausgeblendet,
+  direkte Requests bleiben geschützt.
 - erste Authentifizierungssperren, Argon2-Login gegen eine MariaDB-
   Benutzertabelle, HttpOnly-Sessions, Logout und Berechtigungsprüfungen.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren

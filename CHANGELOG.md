@@ -23,6 +23,8 @@ compiler and repository release.
 - Added scoped CRUD permissions for `create`, `edit`, and
   `delete`; generated forms and delete routes now enforce their
   action-specific permission.
+- Generated CRUD lists and detail views now hide action links and buttons that
+  the current session is not permitted to use.
 
 ### Fixed
 

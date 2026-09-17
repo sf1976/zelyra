@@ -11,6 +11,7 @@ database_url="${DATABASE_URL:-}"
 suffix="$(date +%s)"
 primary_email="zelyra-protected-primary-${suffix}@example.test"
 secondary_email="zelyra-protected-secondary-${suffix}@example.test"
+viewer_email="zelyra-protected-viewer-${suffix}@example.test"
 test_password="ZelyraProtected-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
@@ -53,10 +54,10 @@ cleanup() {
     fi
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM user_permissions
-WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}'));
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM auth_sessions
-WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}'));
-DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}');
+WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
+DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
 DELETE FROM customers
 WHERE name IN ('${customer_name}', '${created_customer_name}', '${edited_customer_name}');
 SQL
@@ -77,30 +78,34 @@ if [[ ! -x "${zelyra_bin}" ]]; then
     exit 1
 fi
 
-echo "[1/9] setting up MariaDB protected-resource schema"
+echo "[1/10] setting up MariaDB protected-resource schema"
 "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/9] creating users, permission data, and a customer"
+echo "[2/10] creating users, permission data, and a customer"
 primary_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 secondary_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
+viewer_hash="$(printf '%s\n' "${test_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 client <<SQL
 INSERT INTO users (email, password_hash)
 VALUES ('${primary_email}', '${primary_hash}'),
-       ('${secondary_email}', '${secondary_hash}');
+       ('${secondary_email}', '${secondary_hash}'),
+       ('${viewer_email}', '${viewer_hash}');
 SET @primary_user_id = (SELECT id FROM users WHERE email = '${primary_email}');
 SET @secondary_user_id = (SELECT id FROM users WHERE email = '${secondary_email}');
+SET @viewer_user_id = (SELECT id FROM users WHERE email = '${viewer_email}');
 INSERT INTO user_permissions (user_id, permission)
 VALUES (@primary_user_id, 'customers.view'),
        (@primary_user_id, 'customers.create'),
        (@primary_user_id, 'customers.edit'),
        (@primary_user_id, 'customers.delete'),
-       (@secondary_user_id, 'other.permission');
+       (@secondary_user_id, 'other.permission'),
+       (@viewer_user_id, 'customers.view');
 INSERT INTO customers (name) VALUES ('${customer_name}');
 SQL
 customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${customer_name}'")"
 [[ -n "${customer_id}" ]]
 
-echo "[3/9] starting the protected CRUD and API server"
+echo "[3/10] starting the protected CRUD and API server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
@@ -121,7 +126,7 @@ request_status() {
     curl --silent --show-error --output "${output_file}" --write-out '%{http_code}' "$@"
 }
 
-echo "[4/9] rejecting anonymous CRUD, form, and API requests"
+echo "[4/10] rejecting anonymous CRUD, form, and API requests"
 anonymous_crud_status="$(request_status "${temp_dir}/anonymous-crud.html" "${base_url}/customers")"
 [[ "${anonymous_crud_status}" == "401" ]]
 anonymous_create_status="$(request_status "${temp_dir}/anonymous-create.html" "${base_url}/customers/new")"
@@ -132,7 +137,7 @@ grep -Fq '"code":"Unauthorized"' "${temp_dir}/anonymous-api.json"
 csrf="$(extract_csrf "${temp_dir}/login.html")"
 [[ -n "${csrf}" ]]
 
-echo "[5/9] allowing view and action permissions for the primary user"
+echo "[5/10] allowing view and action permissions for the primary user"
 primary_cookie="${temp_dir}/primary.cookies"
 primary_login_status="$(request_status "${temp_dir}/primary-login.html" \
     --cookie-jar "${primary_cookie}" \
@@ -182,7 +187,7 @@ primary_edit_submit_status="$(request_status "${temp_dir}/primary-edit-submit.ht
 edited_customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${edited_customer_name}'")"
 [[ "${edited_customer_id}" == "${created_customer_id}" ]]
 
-echo "[6/9] denying a logged-in user without the CRUD/API permission"
+echo "[6/10] denying a logged-in user without the CRUD/API permission"
 secondary_cookie="${temp_dir}/secondary.cookies"
 secondary_login_status="$(request_status "${temp_dir}/secondary-login.html" \
     --cookie-jar "${secondary_cookie}" \
@@ -213,7 +218,43 @@ secondary_edit_status="$(request_status "${temp_dir}/secondary-edit.html" \
 [[ "${secondary_edit_status}" == "403" ]]
 grep -Fq "Missing permission: customers.edit" "${temp_dir}/secondary-edit.html"
 
-echo "[7/9] denying a delete without the delete permission"
+echo "[7/10] showing only permitted CRUD actions to a view-only user"
+viewer_cookie="${temp_dir}/viewer.cookies"
+viewer_login_status="$(request_status "${temp_dir}/viewer-login.html" \
+    --cookie-jar "${viewer_cookie}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${viewer_email}" \
+    --data-urlencode "password=${test_password}" \
+    "${base_url}/login")"
+[[ "${viewer_login_status}" == "303" ]]
+viewer_crud_status="$(request_status "${temp_dir}/viewer-crud.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/customers")"
+[[ "${viewer_crud_status}" == "200" ]]
+! grep -Fq 'href="/customers/new"' "${temp_dir}/viewer-crud.html"
+viewer_detail_status="$(request_status "${temp_dir}/viewer-detail.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/customers/${customer_id}")"
+[[ "${viewer_detail_status}" == "200" ]]
+! grep -Fq "href=\"/customers/${customer_id}/edit\"" "${temp_dir}/viewer-detail.html"
+! grep -Fq 'href="/customers/new"' "${temp_dir}/viewer-detail.html"
+! grep -Fq "action=\"/customers/${customer_id}/delete\"" "${temp_dir}/viewer-detail.html"
+viewer_create_status="$(request_status "${temp_dir}/viewer-create.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/customers/new")"
+[[ "${viewer_create_status}" == "403" ]]
+viewer_edit_status="$(request_status "${temp_dir}/viewer-edit.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/customers/${customer_id}/edit")"
+[[ "${viewer_edit_status}" == "403" ]]
+viewer_delete_status="$(request_status "${temp_dir}/viewer-delete.html" \
+    --cookie "${viewer_cookie}" \
+    --request POST \
+    --data-urlencode "_zelyra_csrf=not-authorized" \
+    "${base_url}/customers/${customer_id}/delete")"
+[[ "${viewer_delete_status}" == "403" ]]
+
+echo "[8/10] denying a delete without the delete permission"
 secondary_delete_status="$(request_status "${temp_dir}/secondary-delete.html" \
     --cookie "${secondary_cookie}" \
     --request POST \
@@ -222,7 +263,7 @@ secondary_delete_status="$(request_status "${temp_dir}/secondary-delete.html" \
 [[ "${secondary_delete_status}" == "403" ]]
 grep -Fq "Missing permission: customers.delete" "${temp_dir}/secondary-delete.html"
 
-echo "[8/9] allowing delete for the primary user"
+echo "[9/10] allowing delete for the primary user"
 primary_detail_status="$(request_status "${temp_dir}/primary-detail.html" \
     --cookie "${primary_cookie}" \
     "${base_url}/customers/${created_customer_id}")"
@@ -238,5 +279,5 @@ primary_delete_status="$(request_status "${temp_dir}/primary-delete.html" \
 remaining_created="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM customers WHERE id = '${created_customer_id}'")"
 [[ "${remaining_created}" == "0" ]]
 
-echo "[9/9] protected-resource E2E cleanup completed"
+echo "[10/10] protected-resource E2E cleanup completed"
 echo "MariaDB protected CRUD/API E2E passed"

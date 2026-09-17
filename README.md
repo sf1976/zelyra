@@ -51,7 +51,8 @@ Implemented today:
 - an initial CRUD resource with MariaDB search, configurable list/search/filter
   columns, sorting, pagination, generated Create/Edit forms, and
   CSRF-protected delete with separate view/create/edit/delete permissions and
-  backward-compatible permission fallback.
+  backward-compatible permission fallback; generated views hide unavailable
+  actions while direct requests remain protected.
 - initial authentication guards, Argon2 login against a MariaDB user table,
   HttpOnly sessions, logout, and permission checks.
 - typed API declarations with route/type validation, optional executable

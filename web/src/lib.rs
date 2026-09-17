@@ -457,7 +457,12 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_crud(crud, request, self.database_url.as_deref());
+                return dispatch_crud(
+                    crud,
+                    request,
+                    self.database_url.as_deref(),
+                    crud_ui_actions(crud, request, self),
+                );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
@@ -499,6 +504,7 @@ impl WebApp {
                     request,
                     &path_params,
                     self.database_url.as_deref(),
+                    crud_ui_actions(crud, request, self),
                 );
             }
         }
@@ -605,17 +611,14 @@ impl WebApp {
     }
 }
 
-fn authorize(
-    requires_auth: bool,
-    permissions: &[String],
-    request: &Request,
+fn authenticated_permissions(
     app: &WebApp,
+    request: &Request,
     database_url: Option<&str>,
-) -> Option<Response> {
-    if !requires_auth && permissions.is_empty() {
-        return None;
+) -> Option<Vec<String>> {
+    if let Some(session) = session_from_request(app, request, database_url) {
+        return Some(session.permissions);
     }
-    let session = session_from_request(app, request, database_url);
     let bearer_authenticated = app
         .auth_token
         .as_deref()
@@ -626,16 +629,25 @@ fn authorize(
             };
             constant_time_equal(expected.as_bytes(), token.as_bytes())
         });
-    let authenticated = session.is_some() || bearer_authenticated;
-    if !authenticated {
+    bearer_authenticated.then(|| app.auth_permissions.clone())
+}
+
+fn authorize(
+    requires_auth: bool,
+    permissions: &[String],
+    request: &Request,
+    app: &WebApp,
+    database_url: Option<&str>,
+) -> Option<Response> {
+    if !requires_auth && permissions.is_empty() {
+        return None;
+    }
+    let Some(granted_permissions) = authenticated_permissions(app, request, database_url) else {
         return Some(Response::html(
             401,
             "<h1>401 Unauthorized</h1><p>Authentication is required.</p>",
         ));
-    }
-    let granted_permissions = session
-        .map(|session| session.permissions)
-        .unwrap_or_else(|| app.auth_permissions.clone());
+    };
     if let Some(permission) = permissions.iter().find(|permission| {
         !granted_permissions
             .iter()
@@ -659,27 +671,12 @@ fn authorize_api(
     if !requires_auth && permissions.is_empty() {
         return None;
     }
-    let session = session_from_request(app, request, database_url);
-    let bearer_authenticated = app
-        .auth_token
-        .as_deref()
-        .zip(request.headers.get("authorization").map(String::as_str))
-        .is_some_and(|(expected, header)| {
-            let Some(token) = header.strip_prefix("Bearer ") else {
-                return false;
-            };
-            constant_time_equal(expected.as_bytes(), token.as_bytes())
-        });
-    let authenticated = session.is_some() || bearer_authenticated;
-    if !authenticated {
+    let Some(granted_permissions) = authenticated_permissions(app, request, database_url) else {
         return Some(Response::json(
             401,
             "{\"error\":{\"code\":\"Unauthorized\",\"message\":\"authentication is required\"}}",
         ));
-    }
-    let granted_permissions = session
-        .map(|session| session.permissions)
-        .unwrap_or_else(|| app.auth_permissions.clone());
+    };
     if let Some(permission) = permissions.iter().find(|permission| {
         !granted_permissions
             .iter()
@@ -1546,7 +1543,48 @@ fn crud_column_label(schema: &Schema, table_name: &str, column: &str) -> String 
     humanize(column)
 }
 
-fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>) -> Response {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CrudUiActions {
+    create: bool,
+    edit: bool,
+    delete: bool,
+}
+
+fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
+    CrudUiActions {
+        create: can_authorize(crud.requires_auth, &crud.create_permissions, request, app),
+        edit: can_authorize(crud.requires_auth, &crud.edit_permissions, request, app),
+        delete: can_authorize(crud.requires_auth, &crud.delete_permissions, request, app),
+    }
+}
+
+fn can_authorize(
+    requires_auth: bool,
+    permissions: &[String],
+    request: &Request,
+    app: &WebApp,
+) -> bool {
+    if !requires_auth && permissions.is_empty() {
+        return true;
+    }
+    let Some(granted_permissions) =
+        authenticated_permissions(app, request, app.database_url.as_deref())
+    else {
+        return false;
+    };
+    permissions.iter().all(|permission| {
+        granted_permissions
+            .iter()
+            .any(|granted| granted == permission)
+    })
+}
+
+fn dispatch_crud(
+    crud: &CrudRoute,
+    request: &Request,
+    database_url: Option<&str>,
+    ui_actions: CrudUiActions,
+) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -1772,7 +1810,7 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
     };
     Response::html(
         200,
-        render_crud_list(
+        render_crud_list_with_actions(
             crud,
             CrudListView {
                 query_columns: &query_columns,
@@ -1787,6 +1825,7 @@ fn dispatch_crud(crud: &CrudRoute, request: &Request, database_url: Option<&str>
                 page,
                 per_page,
             },
+            ui_actions,
         ),
     )
 }
@@ -1796,6 +1835,7 @@ fn dispatch_crud_detail(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+    ui_actions: CrudUiActions,
 ) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -1861,7 +1901,10 @@ fn dispatch_crud_detail(
     let Some(row) = result.rows.first() else {
         return Response::html(404, "<h1>404 Not Found</h1>");
     };
-    Response::html(200, render_crud_detail(crud, &columns, row, &id_text))
+    Response::html(
+        200,
+        render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions),
+    )
 }
 
 fn dispatch_crud_delete(
@@ -1964,7 +2007,24 @@ struct CrudListView<'a> {
     per_page: u64,
 }
 
+#[cfg(test)]
 fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
+    render_crud_list_with_actions(
+        crud,
+        view,
+        CrudUiActions {
+            create: true,
+            edit: true,
+            delete: true,
+        },
+    )
+}
+
+fn render_crud_list_with_actions(
+    crud: &CrudRoute,
+    view: CrudListView<'_>,
+    ui_actions: CrudUiActions,
+) -> String {
     let CrudListView {
         query_columns,
         display_columns,
@@ -1980,7 +2040,13 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
     } = view;
     let mut html = String::from("<main><h1>");
     html.push_str(&html_escape(&crud.title));
-    html.push_str("</h1><form method=\"get\" action=\"");
+    html.push_str("</h1>");
+    if ui_actions.create {
+        html.push_str("<p><a href=\"");
+        html.push_str(&html_escape(&format!("{}/new", crud.path)));
+        html.push_str("\">Create new</a></p>");
+    }
+    html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str(
         "\"><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
@@ -2112,7 +2178,28 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
     html
 }
 
+#[cfg(test)]
 fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &str) -> String {
+    render_crud_detail_with_actions(
+        crud,
+        columns,
+        row,
+        id,
+        CrudUiActions {
+            create: true,
+            edit: true,
+            delete: true,
+        },
+    )
+}
+
+fn render_crud_detail_with_actions(
+    crud: &CrudRoute,
+    columns: &[&str],
+    row: &[String],
+    id: &str,
+    ui_actions: CrudUiActions,
+) -> String {
     let mut html = String::from("<main><p><a href=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str("\">Back to list</a></p><h1>");
@@ -2129,15 +2216,33 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
         html.push_str(&html_escape(value));
         html.push_str("</dd>");
     }
-    html.push_str("</dl><p><a href=\"");
-    html.push_str(&html_escape(&format!("{}/{}/edit", crud.path, id)));
-    html.push_str("\">Edit</a> <a href=\"");
-    html.push_str(&html_escape(&format!("{}/new", crud.path)));
-    html.push_str("\">Create new</a></p><form method=\"post\" action=\"");
-    html.push_str(&html_escape(&format!("{}/{}/delete", crud.path, id)));
-    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&html_escape(crud.csrf.token()));
-    html.push_str("\"><button type=\"submit\">Delete</button></form></main>");
+    if ui_actions.edit || ui_actions.create {
+        html.push_str("</dl><p>");
+        if ui_actions.edit {
+            html.push_str("<a href=\"");
+            html.push_str(&html_escape(&format!("{}/{}/edit", crud.path, id)));
+            html.push_str("\">Edit</a>");
+        }
+        if ui_actions.create {
+            if ui_actions.edit {
+                html.push(' ');
+            }
+            html.push_str("<a href=\"");
+            html.push_str(&html_escape(&format!("{}/new", crud.path)));
+            html.push_str("\">Create new</a>");
+        }
+        html.push_str("</p>");
+    } else {
+        html.push_str("</dl>");
+    }
+    if ui_actions.delete {
+        html.push_str("<form method=\"post\" action=\"");
+        html.push_str(&html_escape(&format!("{}/{}/delete", crud.path, id)));
+        html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+        html.push_str(&html_escape(crud.csrf.token()));
+        html.push_str("\"><button type=\"submit\">Delete</button></form>");
+    }
+    html.push_str("</main>");
     html
 }
 
@@ -3288,6 +3393,29 @@ mod tests {
             .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
         assert!(html
             .contains("page=3&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
+
+        let restricted_html = render_crud_list_with_actions(
+            &route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &columns,
+                filter_columns: &["name"],
+                sort_columns: &columns,
+                rows: &rows,
+                search: "",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+            },
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+            },
+        );
+        assert!(!restricted_html.contains("href=\"/machines/new\""));
     }
 
     #[test]
@@ -3648,6 +3776,21 @@ mod tests {
         assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
         assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
         assert!(html.contains(">Delete</button>"));
+
+        let restricted_html = render_crud_detail_with_actions(
+            &route,
+            &["id", "name"],
+            &["1".into(), "CNC".into()],
+            "1",
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+            },
+        );
+        assert!(!restricted_html.contains("/machines/1/edit"));
+        assert!(!restricted_html.contains("/machines/new"));
+        assert!(!restricted_html.contains(">Delete</button>"));
     }
 
     #[test]

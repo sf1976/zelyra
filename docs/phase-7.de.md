@@ -79,6 +79,12 @@ gescopte Berechtigung definiert ist. Gescopte Berechtigungen schützen die
 generierten Create- und Edit-Formulare sowie den Delete-Endpunkt unabhängig
 voneinander.
 
+Die erzeugten Listen- und Detailansichten blenden Aktionslinks und
+Schaltflächen aus, wenn der aktuellen Session die jeweilige Berechtigung
+fehlt. Das ist eine Bedienungsverbesserung, nicht die Sicherheitsgrenze:
+Direkte Requests werden weiterhin geprüft und erhalten je nach Fall HTTP 401
+oder 403.
+
 Bei fehlender Datenbankkonfiguration wird HTTP 503 geliefert. Abfragefehler
 werden als allgemeiner HTTP-500-Fehler ausgegeben. CRUD-Ressourcen und
 Tabellennamen werden vor dem Serverstart geprüft.

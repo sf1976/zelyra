@@ -73,6 +73,11 @@ for Create, Edit, and Delete when no scoped permission is declared. Scoped
 permissions protect the generated Create and Edit forms as well as the Delete
 endpoint independently.
 
+The generated list and detail views also hide action links and buttons when the
+current session lacks the corresponding permission. This is a usability
+feature, not the security boundary: direct requests are still checked and
+receive HTTP 401 or 403 as appropriate.
+
 Missing database configuration returns HTTP 503. Query failures return a
 generic HTTP 500. CRUD resource and table names are checked before the server
 starts.
