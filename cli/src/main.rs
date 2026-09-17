@@ -28,7 +28,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory>\n  zelyra init [directory]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -50,7 +50,7 @@ fn create_project(path: &str, allow_current_directory: bool) -> ExitCode {
     let files = [
         (
             "zelyra.toml",
-            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.7\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
+            "[project]\nname = \"zelyra-app\"\nversion = \"0.1.8\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n",
         ),
         (
             "main.zyl",
@@ -223,12 +223,44 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
     }
 }
 
+struct DoctorCheck {
+    name: &'static str,
+    status: &'static str,
+    message: String,
+}
+
+fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
+    let failed = checks.iter().any(|check| check.status == "fail");
+    let warnings = checks.iter().filter(|check| check.status == "warn").count();
+    let checks = checks
+        .iter()
+        .map(|check| {
+            serde_json::json!({
+                "name": check.name,
+                "status": check.status,
+                "message": check.message,
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "project": path,
+        "status": if failed { "failed" } else { "ready" },
+        "warnings": warnings,
+        "checks": checks,
+    })
+    .to_string()
+}
+
 fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let mut path = "main.zyl".to_owned();
     let mut path_given = false;
     let mut port = 3000u16;
+    let mut json = false;
     while let Some(argument) = args.next() {
-        if argument == "--port" {
+        if argument == "--json" {
+            json = true;
+        } else if argument == "--port" {
             let Some(value) = args.next() else {
                 usage();
                 return ExitCode::from(2);
@@ -249,79 +281,128 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         }
     }
 
-    let mut failed = false;
-    let mut warnings = 0;
-    println!("Zelyra doctor {}", env!("CARGO_PKG_VERSION"));
-
+    let mut checks = Vec::new();
     let program = if fs::metadata(&path).is_ok() {
-        println!("  [PASS] Project file: {path}");
+        checks.push(DoctorCheck {
+            name: "project_file",
+            status: "pass",
+            message: format!("{path} exists"),
+        });
         match validate(&path) {
             Ok(program) => {
-                println!("  [PASS] Static checks: source, types, APIs, SQL, and forms");
+                checks.push(DoctorCheck {
+                    name: "static_checks",
+                    status: "pass",
+                    message: "source, types, APIs, SQL, and forms are valid".into(),
+                });
                 Some(program)
             }
             Err(()) => {
-                println!("  [FAIL] Static checks: see diagnostics above");
-                failed = true;
+                checks.push(DoctorCheck {
+                    name: "static_checks",
+                    status: "fail",
+                    message: "see diagnostics above".into(),
+                });
                 None
             }
         }
     } else {
-        println!("  [FAIL] Project file: `{path}` does not exist");
-        failed = true;
+        checks.push(DoctorCheck {
+            name: "project_file",
+            status: "fail",
+            message: format!("`{path}` does not exist"),
+        });
         None
     };
 
     match Command::new("cargo").arg("--version").output() {
-        Ok(output) if output.status.success() => {
-            let version = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-            println!("  [PASS] Rust toolchain: {version}");
-        }
-        _ => {
-            warnings += 1;
-            println!("  [WARN] Rust toolchain: cargo is unavailable");
-        }
+        Ok(output) if output.status.success() => checks.push(DoctorCheck {
+            name: "rust_toolchain",
+            status: "pass",
+            message: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        }),
+        _ => checks.push(DoctorCheck {
+            name: "rust_toolchain",
+            status: "warn",
+            message: "cargo is unavailable".into(),
+        }),
     }
 
     if let Some(program) = &program {
-        if let Ok(schema) = build_schema(program) {
-            let backend = schema.backend();
-            match env::var("DATABASE_URL") {
-                Ok(url) => match inspect_for_backend(backend, &url) {
-                    Ok(current) => println!(
-                        "  [PASS] Database ({}): {}",
-                        backend.name(),
-                        current.summary().replace('\n', ", ")
-                    ),
-                    Err(error) => {
-                        println!("  [FAIL] Database ({}): {error}", backend.name());
-                        failed = true;
-                    }
-                },
-                Err(_) => {
-                    warnings += 1;
-                    println!(
-                        "  [WARN] Database ({}): DATABASE_URL is not set",
-                        backend.name()
-                    );
+        match build_schema(program) {
+            Ok(schema) => {
+                let backend = schema.backend();
+                match env::var("DATABASE_URL") {
+                    Ok(url) => match inspect_for_backend(backend, &url) {
+                        Ok(current) => checks.push(DoctorCheck {
+                            name: "database",
+                            status: "pass",
+                            message: format!(
+                                "{}: {}",
+                                backend.name(),
+                                current.summary().replace('\n', ", ")
+                            ),
+                        }),
+                        Err(error) => checks.push(DoctorCheck {
+                            name: "database",
+                            status: "fail",
+                            message: format!("{}: {error}", backend.name()),
+                        }),
+                    },
+                    Err(_) => checks.push(DoctorCheck {
+                        name: "database",
+                        status: "warn",
+                        message: format!("{}: DATABASE_URL is not set", backend.name()),
+                    }),
                 }
             }
+            Err(errors) => checks.push(DoctorCheck {
+                name: "schema",
+                status: "fail",
+                message: errors
+                    .iter()
+                    .map(|error| error.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            }),
         }
     }
 
     match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => {
             let actual_port = listener.local_addr().map_or(port, |address| address.port());
-            println!("  [PASS] Web port: 127.0.0.1:{actual_port} is available");
+            checks.push(DoctorCheck {
+                name: "web_port",
+                status: "pass",
+                message: format!("127.0.0.1:{actual_port} is available"),
+            });
         }
-        Err(error) => {
-            println!("  [FAIL] Web port: 127.0.0.1:{port} is unavailable ({error})");
-            failed = true;
-        }
+        Err(error) => checks.push(DoctorCheck {
+            name: "web_port",
+            status: "fail",
+            message: format!("127.0.0.1:{port} is unavailable ({error})"),
+        }),
     }
 
-    let status = if failed { "failed" } else { "ready" };
-    println!("Doctor result: {status} ({warnings} warning(s))");
+    let failed = checks.iter().any(|check| check.status == "fail");
+    if json {
+        println!("{}", format_doctor_json(&path, &checks));
+    } else {
+        println!("Zelyra doctor {}", env!("CARGO_PKG_VERSION"));
+        for check in &checks {
+            let label = match check.status {
+                "pass" => "PASS",
+                "warn" => "WARN",
+                _ => "FAIL",
+            };
+            println!("  [{label}] {}: {}", check.name, check.message);
+        }
+        let warnings = checks.iter().filter(|check| check.status == "warn").count();
+        println!(
+            "Doctor result: {} ({warnings} warning(s))",
+            if failed { "failed" } else { "ready" }
+        );
+    }
     if failed {
         ExitCode::from(1)
     } else {
@@ -2329,6 +2410,29 @@ mod tests {
     fn doctor_rejects_invalid_port() {
         let arguments = ["--port".to_owned(), "not-a-port".to_owned()];
         assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
+    }
+
+    #[test]
+    fn formats_doctor_json_without_database_credentials() {
+        let checks = vec![
+            DoctorCheck {
+                name: "project_file",
+                status: "pass",
+                message: "app.zyl exists".into(),
+            },
+            DoctorCheck {
+                name: "database",
+                status: "warn",
+                message: "mariadb: DATABASE_URL is not set".into(),
+            },
+        ];
+        let document: serde_json::Value =
+            serde_json::from_str(&format_doctor_json("app.zyl", &checks)).unwrap();
+        assert_eq!(document["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(document["status"], "ready");
+        assert_eq!(document["warnings"], 1);
+        assert_eq!(document["checks"][1]["status"], "warn");
+        assert!(!format_doctor_json("app.zyl", &checks).contains("password"));
     }
 
     #[test]

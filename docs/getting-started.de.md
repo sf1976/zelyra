@@ -161,6 +161,16 @@ Datenbankverbindung ohne Änderungen und testet, ob der Standard-Webport frei
 ist. Eine fehlende `DATABASE_URL` wird als Warnung gemeldet; eine nicht
 erreichbare konfigurierte Datenbank oder ein ungültiges Projekt als Fehler.
 
+Für CI- und IDE-Integrationen kann eine maschinenlesbare Ausgabe angefordert
+werden:
+
+~~~bash
+zelyra doctor examples/machine_management.zyl --json
+~~~
+
+Das JSON-Dokument enthält `version`, `project`, `status`, `warnings` und ein
+`checks`-Array. Zugangsdaten aus `DATABASE_URL` werden niemals ausgegeben.
+
 Die Installation benötigt kein Kontopasswort. Den Installer nicht als root
 ausführen, außer es gibt einen gesonderten Grund für eine systemweite
 Paketierung.
@@ -232,7 +242,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.7"
+version = "0.1.8"
 zelyra = "0.1"
 
 [capabilities]
@@ -594,7 +604,7 @@ zelyra check <file.zyl>                 Quellcode prüfen
 zelyra build <file.zyl>                 Quellcode prüfen/bauen
 zelyra run <file.zyl>                   Programm ausführen
 zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
-zelyra doctor [file.zyl] [--port <port>] Projekt, DB und Web-Bereitschaft prüfen
+zelyra doctor [file.zyl] [--port <port>] [--json] Projekt, DB und Web-Bereitschaft prüfen
 zelyra verify <file.zyl>                Contract-Prüfungen klassifizieren
 zelyra doc <file.zyl> [--openapi]       OpenAPI-Dokument erzeugen
 zelyra doc <file.zyl> --typescript     TypeScript-Client erzeugen

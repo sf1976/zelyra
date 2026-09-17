@@ -116,6 +116,9 @@ Vor dem Start einer Webanwendung die Bereitschaft prüfen:
 zelyra doctor examples/machine_management.zyl
 ~~~
 
+Für CI oder IDE-Werkzeuge liefert `zelyra doctor ... --json` maschinenlesbare
+Prüfungen, ohne Datenbankzugangsdaten offenzulegen.
+
 Der Installer baut Zelyra für den aktuellen Benutzer und installiert das
 Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt weder sudo,
 eine globale Rust-Installation, Apache noch einen Datenbankserver für die
@@ -337,7 +340,7 @@ zelyra check <file.zyl>
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
-zelyra doctor [file.zyl] [--port <port>]
+zelyra doctor [file.zyl] [--port <port>] [--json]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra form validate <file.zyl> <FormName> [field=value ...]

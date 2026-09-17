@@ -4,6 +4,19 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.8 — 2026-09-17
+
+### Added
+
+- `zelyra doctor --json` emits machine-readable readiness checks for CI and IDE
+  integrations.
+- JSON output includes project, compiler version, status, warnings, and named
+  checks without exposing `DATABASE_URL` credentials.
+
+### Documentation
+
+- JSON diagnostics documented in English and German.
+
 ## 0.1.7 — 2026-09-17
 
 ### Added

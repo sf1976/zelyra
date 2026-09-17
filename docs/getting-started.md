@@ -154,6 +154,15 @@ connection without changing it, and tests whether the default web port is
 available. A missing `DATABASE_URL` is reported as a warning; an unreachable
 configured database or invalid project is reported as a failure.
 
+For CI and IDE integrations, request machine-readable output:
+
+~~~bash
+zelyra doctor examples/machine_management.zyl --json
+~~~
+
+The JSON document contains `version`, `project`, `status`, `warnings`, and a
+`checks` array. Credentials from `DATABASE_URL` are never included.
+
 The installation does not require an account password. Do not run the installer
 as root unless there is a separate system-wide packaging reason.
 
@@ -224,7 +233,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.7"
+version = "0.1.8"
 zelyra = "0.1"
 
 [capabilities]
@@ -574,7 +583,7 @@ zelyra check <file.zyl>                 check source
 zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
-zelyra doctor [file.zyl] [--port <port>] check project, database, and web readiness
+zelyra doctor [file.zyl] [--port <port>] [--json] check project, database, and web readiness
 zelyra verify <file.zyl>                classify contract checks
 zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
 zelyra doc <file.zyl> --typescript     generate a TypeScript client

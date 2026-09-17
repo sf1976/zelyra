@@ -150,7 +150,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.7"
+version = "0.1.8"
 zelyra = "0.1"
 
 [capabilities]
@@ -166,7 +166,7 @@ Important commands:
 | `zelyra build app.zyl` | check and build an application |
 | `zelyra run app.zyl` | run a program |
 | `zelyra serve app.zyl` | start the HTTP server |
-| `zelyra doctor app.zyl` | check project, database, and web readiness |
+| `zelyra doctor app.zyl [--json]` | check project, database, and web readiness |
 | `zelyra verify app.zyl` | classify contracts |
 | `zelyra doc app.zyl --openapi` | generate an OpenAPI document |
 | `zelyra db inspect app.zyl` | inspect the live schema |
@@ -700,7 +700,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.7"
+version = "0.1.8"
 zelyra = "0.1"
 
 [capabilities]
