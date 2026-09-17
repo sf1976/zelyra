@@ -1,8 +1,6 @@
 use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
@@ -4692,24 +4690,31 @@ impl Interpreter {
     }
 
     fn http_get(&self, url: &str, span: Span) -> Result<String, RuntimeError> {
-        let Some(authority_and_path) = url.strip_prefix("http://") else {
-            return Err(self.runtime_error(span, "http_get currently supports only http:// URLs"));
+        let Some((scheme, authority_and_path)) = url.split_once("://") else {
+            return Err(
+                self.runtime_error(span, "http_get supports only http:// and https:// URLs")
+            );
         };
-        if authority_and_path.is_empty()
-            || authority_and_path.contains('@')
-            || authority_and_path.contains(['\r', '\n'])
-        {
+        if !matches!(scheme, "http" | "https") {
+            return Err(
+                self.runtime_error(span, "http_get supports only http:// and https:// URLs")
+            );
+        }
+        let authority_end = authority_and_path
+            .find(['/', '?', '#'])
+            .unwrap_or(authority_and_path.len());
+        let authority = &authority_and_path[..authority_end];
+        if authority.is_empty() || authority.contains('@') || authority.contains(['\r', '\n']) {
             return Err(self.runtime_error(span, "http_get received an invalid URL"));
         }
-        let (authority, target) = authority_and_path
-            .split_once('/')
-            .map_or((authority_and_path, "/".to_owned()), |(authority, path)| {
-                (authority, format!("/{path}"))
-            });
-        let (host, port) = authority
-            .rsplit_once(':')
-            .and_then(|(host, port)| port.parse::<u16>().ok().map(|port| (host, port)))
-            .unwrap_or((authority, 80));
+        let host = if let Some((host, port)) = authority.rsplit_once(':') {
+            if port.parse::<u16>().is_err() {
+                return Err(self.runtime_error(span, "http_get received an invalid port"));
+            }
+            host
+        } else {
+            authority
+        };
         if host.is_empty() || host.contains(['/', '?', '#', '[', ']', '\\']) {
             return Err(self.runtime_error(span, "http_get received an invalid host"));
         }
@@ -4733,97 +4738,45 @@ impl Interpreter {
                 self.runtime_error(span, "http_get requires a positive maximum response size")
             );
         }
-        let addresses = (host, port).to_socket_addrs().map_err(|error| {
-            self.runtime_error(span, format!("network address lookup failed: {error}"))
-        })?;
-        let mut stream = None;
-        let mut last_error = None;
-        for address in addresses {
-            match TcpStream::connect_timeout(&address, timeout) {
-                Ok(candidate) => {
-                    stream = Some(candidate);
-                    break;
-                }
-                Err(error) => last_error = Some(error),
-            }
-        }
-        let mut stream = stream.ok_or_else(|| {
-            self.runtime_error(
-                span,
-                format!(
-                    "network connection to `{authority}` failed: {}",
-                    last_error.map_or_else(
-                        || "no address was available".to_owned(),
-                        |error| error.to_string()
-                    )
-                ),
-            )
-        })?;
-        stream.set_read_timeout(Some(timeout)).map_err(|error| {
-            self.runtime_error(span, format!("network read timeout setup failed: {error}"))
-        })?;
-        stream.set_write_timeout(Some(timeout)).map_err(|error| {
-            self.runtime_error(span, format!("network write timeout setup failed: {error}"))
-        })?;
-        let request =
-            format!("GET {target} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n");
-        stream.write_all(request.as_bytes()).map_err(|error| {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(timeout))
+            .max_redirects(0)
+            .http_status_as_error(false)
+            .build()
+            .into();
+        let mut response = agent.get(url).call().map_err(|error| {
             self.runtime_error(span, format!("network request failed: {error}"))
         })?;
-        let mut response = Vec::new();
-        stream
-            .take((maximum.saturating_add(65_536)) as u64)
-            .read_to_end(&mut response)
-            .map_err(|error| {
-                self.runtime_error(span, format!("network response failed: {error}"))
-            })?;
-        let Some(header_end) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
-            return Err(self.runtime_error(span, "network response has no valid headers"));
-        };
-        if header_end > 65_536 {
-            return Err(self.runtime_error(span, "network response headers are too large"));
-        }
-        let headers = String::from_utf8_lossy(&response[..header_end]);
-        let status_line = headers.lines().next().unwrap_or_default();
-        let status = status_line
-            .split_whitespace()
-            .nth(1)
-            .and_then(|status| status.parse::<u16>().ok())
-            .ok_or_else(|| self.runtime_error(span, "network response has an invalid status"))?;
+        let status = response.status().as_u16();
         if !(200..300).contains(&status) {
             return Err(self.runtime_error(span, format!("http_get received HTTP status {status}")));
         }
-        if headers.lines().any(|line| {
-            line.split_once(':').is_some_and(|(name, value)| {
-                name.eq_ignore_ascii_case("transfer-encoding")
-                    && !value.trim().eq_ignore_ascii_case("identity")
-            })
-        }) {
-            return Err(
-                self.runtime_error(span, "http_get does not support transfer-encoded responses")
-            );
-        }
-        let content_length = headers.lines().find_map(|line| {
-            line.split_once(':').and_then(|(name, value)| {
-                name.eq_ignore_ascii_case("content-length")
-                    .then(|| value.trim().parse::<usize>().ok())
-                    .flatten()
-            })
-        });
+        let content_length = response
+            .headers()
+            .get("content-length")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<usize>().ok());
         if content_length.is_some_and(|content_length| content_length > maximum) {
             return Err(self.runtime_error(
                 span,
                 format!("network response exceeds the {maximum} byte limit"),
             ));
         }
-        let body = &response[header_end + 4..];
+        let body = response
+            .body_mut()
+            .with_config()
+            .limit(u64::try_from(maximum).unwrap_or(u64::MAX).saturating_add(1))
+            .read_to_vec()
+            .map_err(|error| {
+                self.runtime_error(span, format!("network response failed: {error}"))
+            })?;
         if body.len() > maximum {
             return Err(self.runtime_error(
                 span,
                 format!("network response exceeds the {maximum} byte limit"),
             ));
         }
-        String::from_utf8(body.to_vec())
+        String::from_utf8(body)
             .map_err(|_| self.runtime_error(span, "network response is not valid UTF-8"))
     }
 
@@ -5873,6 +5826,7 @@ fn match_pattern(value: &Value, pattern: &Pattern) -> Option<Vec<(String, Value)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read as _;
     use std::net::TcpListener;
     use std::thread;
     use zelyra_lexer::lex;

@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.24"
+version = "0.1.25"
 zelyra = "0.1"
 
 [capabilities]
@@ -728,10 +728,12 @@ timeout_ms = 5000
 max_response_bytes = 1048576
 ~~~
 
-Ohne `[network]` sind in einem Projekt keine Hosts erlaubt. Die erste
-Implementierung ist auf `http://` begrenzt, folgt keinen Redirects, lehnt
-transfer-kodierte Antworten ab und liefert nur erfolgreiche UTF-8-Response-
-Bodies. HTTPS/TLS und ein umfangreicherer HTTP-Client folgen später.
+Ohne `[network]` sind in einem Projekt keine Hosts erlaubt. Der Transport
+unterstützt `http://` und `https://`; die Zertifikatsprüfung über Rustls ist
+standardmäßig aktiviert. Es werden keine Redirects verfolgt und nur
+erfolgreiche UTF-8-GET-Response-Bodies innerhalb der konfigurierten Grenzen
+geliefert. Request-Header, Request-Bodies und umfangreichere HTTP-Funktionen
+folgen später.
 
 Die FileSystem-Host-APIs sind:
 
@@ -878,7 +880,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.24"
+version = "0.1.25"
 zelyra = "0.1"
 
 [capabilities]

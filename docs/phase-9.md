@@ -115,10 +115,11 @@ max_response_bytes = 1048576
 ~~~
 
 The allowlist matches a host or host-and-port exactly. A project with no
-`[network]` section has no allowed hosts. The initial implementation supports
-only `http://`, does not follow redirects, rejects transfer-encoded responses,
-and limits response size and connection time. HTTPS/TLS and a richer HTTP
-client remain future work.
+`[network]` section has no allowed hosts. The transport supports `http://` and
+`https://` with Rustls certificate verification enabled by default. It does
+not follow redirects and limits response size and total request time. The API
+remains intentionally limited to GET and UTF-8 response bodies; request
+headers, request bodies, and richer HTTP client features remain future work.
 
 The FileSystem host APIs are:
 

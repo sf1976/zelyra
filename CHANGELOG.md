@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.25 — 2026-09-17
+
+### Added
+
+- Added HTTPS/TLS support to `http_get(url)` through the Rustls-backed `ureq`
+  transport.
+- Kept certificate verification enabled, disabled redirects, and preserved
+  project host allowlists, timeouts, and response-size limits.
+- Synchronized German and English documentation.
+
+### Known limitations
+
+- The Network API remains GET-only and returns successful UTF-8 response bodies;
+  request headers, request bodies, and richer HTTP features remain future work.
+
 ## 0.1.24 — 2026-09-17
 
 ### Added
