@@ -28,7 +28,7 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 fn database_usage() {
@@ -48,9 +48,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.10\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.11\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.10\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.11\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -70,7 +70,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.10\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.11\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -2319,6 +2319,78 @@ fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 }
 
+fn auth_usage() {
+    eprintln!(
+        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n\nThe interactive form does not echo passwords. Use --stdin for automation."
+    );
+}
+
+fn password_from_stdin() -> Result<String, String> {
+    let mut password = String::new();
+    std::io::stdin()
+        .read_line(&mut password)
+        .map_err(|error| format!("cannot read password from stdin: {error}"))?;
+    Ok(password.trim_end_matches(['\r', '\n']).to_owned())
+}
+
+fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
+    if args.next().as_deref() != Some("hash-password") {
+        auth_usage();
+        return ExitCode::from(2);
+    }
+    let use_stdin = match args.next().as_deref() {
+        None => false,
+        Some("--stdin") => true,
+        Some(_) => {
+            auth_usage();
+            return ExitCode::from(2);
+        }
+    };
+    if args.next().is_some() {
+        auth_usage();
+        return ExitCode::from(2);
+    }
+    let password = if use_stdin {
+        match password_from_stdin() {
+            Ok(password) => password,
+            Err(error) => {
+                eprintln!("error[E-AUTH-001]: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        let password = match rpassword::prompt_password("Password: ") {
+            Ok(password) => password,
+            Err(error) => {
+                eprintln!("error[E-AUTH-001]: cannot read password: {error}");
+                return ExitCode::from(1);
+            }
+        };
+        let confirmation = match rpassword::prompt_password("Confirm password: ") {
+            Ok(password) => password,
+            Err(error) => {
+                eprintln!("error[E-AUTH-001]: cannot read password confirmation: {error}");
+                return ExitCode::from(1);
+            }
+        };
+        if password != confirmation {
+            eprintln!("error[E-AUTH-002]: passwords do not match");
+            return ExitCode::from(1);
+        }
+        password
+    };
+    match zelyra_web::hash_password(&password) {
+        Ok(hash) => {
+            println!("{hash}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error[E-AUTH-003]: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
@@ -2334,6 +2406,9 @@ fn main() -> ExitCode {
     }
     if command == "form" {
         return form_command(args);
+    }
+    if command == "auth" {
+        return auth_command(args);
     }
     if command == "new" {
         let Some(path) = args.next() else {

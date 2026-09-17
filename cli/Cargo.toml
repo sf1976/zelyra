@@ -9,6 +9,7 @@ name = "zelyra"
 path = "src/main.rs"
 
 [dependencies]
+rpassword = "7"
 serde_json.workspace = true
 zelyra-ast.workspace = true
 zelyra-database.workspace = true

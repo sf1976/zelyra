@@ -1,5 +1,7 @@
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
+use argon2::password_hash::SaltString;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
+use rand_core::OsRng;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -153,6 +155,19 @@ pub struct Router {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CsrfProtection {
     token: String,
+}
+
+/// Creates an Argon2 password hash suitable for the `password_hash` column of
+/// an authenticated user table.
+pub fn hash_password(password: &str) -> Result<String, String> {
+    if password.is_empty() {
+        return Err("password must not be empty".into());
+    }
+    let salt = SaltString::generate(&mut OsRng);
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|hash| hash.to_string())
+        .map_err(|error| format!("could not hash password: {error}"))
 }
 
 impl CsrfProtection {
@@ -2372,6 +2387,23 @@ mod tests {
         let wire = Response::redirect("/customers").to_http();
         assert!(wire.starts_with("HTTP/1.1 303 See Other\r\n"));
         assert!(wire.contains("Location: /customers\r\n"));
+    }
+
+    #[test]
+    fn generated_password_hash_is_argon2_and_verifiable() {
+        let encoded = hash_password("correct horse battery staple").unwrap();
+        let parsed = PasswordHash::new(&encoded).unwrap();
+        assert!(Argon2::default()
+            .verify_password(b"correct horse battery staple", &parsed)
+            .is_ok());
+        assert!(Argon2::default()
+            .verify_password(b"wrong", &parsed)
+            .is_err());
+    }
+
+    #[test]
+    fn password_hash_rejects_empty_password() {
+        assert!(hash_password("").is_err());
     }
 
     #[test]

@@ -4,6 +4,21 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.11 — 2026-09-17
+
+### Added
+
+- `zelyra auth hash-password` creates Argon2 password hashes for authenticated
+  user tables.
+- Interactive password entry is hidden and requires confirmation; `--stdin`
+  supports explicit automation without putting a password in command-line
+  arguments.
+
+### Documentation
+
+- Authentication setup now documents the password-hash command in English and
+  German.
+
 ## 0.1.10 — 2026-09-17
 
 ### Added

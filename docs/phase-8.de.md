@@ -70,7 +70,19 @@ Ohne Token liefert die Route HTTP 401. Mit gültigem Token, aber ohne deklariert
 Berechtigung, liefert sie HTTP 403. Tokens und Berechtigungen werden vom
 Compiler niemals im Quelltext gespeichert.
 
+Den für die Spalte `password_hash` erforderlichen Argon2-Wert erzeugt man mit:
+
+~~~bash
+zelyra auth hash-password
+~~~
+
+Der interaktive Befehl zeigt das Passwort nicht an und verlangt eine
+Bestätigung. Für bewusste Automatisierung liest
+`zelyra auth hash-password --stdin` eine Passwortzeile von der Standardeingabe.
+Echte Passwörter nicht als Kommandoargument oder in der Versionsverwaltung
+ablegen.
+
 Dies ist die erste funktionierende Authentifizierungsscheibe mit persistenten
 Sessions und datenbankgestützter Berechtigungsabfrage. Datenbankrollen,
-Login-Drosselung, Session-Rotation und ein eigenes
-Passwortverwaltungs-Kommando bleiben zukünftige Authentifizierungsschritte.
+Login-Drosselung und Session-Rotation bleiben zukünftige
+Authentifizierungsschritte.

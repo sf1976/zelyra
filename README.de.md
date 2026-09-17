@@ -343,6 +343,7 @@ zelyra serve <file.zyl> [address]
 zelyra doctor [file.zyl] [--port <port>] [--json]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
+zelyra auth hash-password [--stdin]
 zelyra form validate <file.zyl> <FormName> [field=value ...]
 zelyra db create <file.zyl>
 zelyra db setup <file.zyl>

@@ -69,7 +69,17 @@ Without the token the response is HTTP 401. With a valid token but without a
 declared permission the response is HTTP 403. Tokens and permissions are never
 stored in source code by the compiler.
 
+To create the Argon2 value required by the `password_hash` column, use:
+
+~~~bash
+zelyra auth hash-password
+~~~
+
+The interactive command does not echo the password and asks for confirmation.
+For deliberate automation, `zelyra auth hash-password --stdin` reads one
+password line from standard input. Do not place real passwords in command-line
+arguments or source control.
+
 This is the first working authentication slice with persistent sessions and
-database-backed permission lookup. Database roles, login throttling, session
-rotation, and a dedicated password-management command remain future
-authentication steps.
+database-backed permission lookup. Database roles, login throttling, and
+session rotation remain future authentication steps.

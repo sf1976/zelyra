@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.10"
+version = "0.1.11"
 zelyra = "0.1"
 
 [capabilities]
@@ -546,6 +546,22 @@ sind Teil der weiteren View-Roadmap.
 🧪 Zelyra unterstützt Argon2-Login, persistente MariaDB-Sessions, Logout,
 Routenschutz und datenbankgestützte Berechtigungsprüfungen.
 
+Einen Wert für die erforderliche Spalte `password_hash` mit der CLI erzeugen.
+Der interaktive Befehl schaltet die Passwortanzeige aus und verlangt eine
+Bestätigung:
+
+~~~bash
+zelyra auth hash-password
+~~~
+
+Für bewusste Automatisierung eine Passwortzeile mit `--stdin` übergeben. Echte
+Passwörter nicht als Kommandoargument verwenden und erzeugte Hashes nicht in
+die Versionsverwaltung übernehmen:
+
+~~~bash
+printf '%s\n' 'dieses-passwort-aendern' | zelyra auth hash-password --stdin
+~~~
+
 ~~~zelyra
 auth users {
     table: users
@@ -769,7 +785,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.10"
+version = "0.1.11"
 zelyra = "0.1"
 
 [capabilities]

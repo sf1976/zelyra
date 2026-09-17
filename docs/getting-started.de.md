@@ -260,7 +260,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.10"
+version = "0.1.11"
 zelyra = "0.1"
 
 [capabilities]
@@ -707,6 +707,20 @@ Die englischen Fassungen verwenden dieselben Namen ohne das Suffix .de.md.
 
 Die CRUD-Liste bietet jetzt außerdem Details, Create-/Edit-Formulare,
 konfigurierbare Spalten und eine CSRF-geschützte Löschaktion. Die
-Authentifizierung unterstützt jetzt persistente Sessions und
-Berechtigungsabfragen über MariaDB-Tabellen; Datenbankrollen und
-Passwortverwaltungs-Workflows bleiben zukünftige Aufgaben.
+Authentifizierung unterstützt persistente Sessions und
+Berechtigungsabfragen über MariaDB-Tabellen.
+
+Für einen Hash in der erforderlichen Spalte `password_hash` verwenden:
+
+~~~bash
+zelyra auth hash-password
+~~~
+
+Das Passwort wird nicht angezeigt und muss zweimal eingegeben werden. Für
+bewusste Automatisierung kann eine Passwortzeile mit `--stdin` übergeben
+werden; echte Passwörter niemals als Kommandoargument verwenden oder den
+erzeugten Wert in die Versionsverwaltung übernehmen:
+
+~~~bash
+printf '%s\n' 'dieses-passwort-aendern' | zelyra auth hash-password --stdin
+~~~

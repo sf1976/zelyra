@@ -251,7 +251,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.10"
+version = "0.1.11"
 zelyra = "0.1"
 
 [capabilities]
@@ -686,6 +686,20 @@ Read the phase documents for implementation details:
 The German versions use the same filenames with the .de.md suffix.
 
 The CRUD list now also provides detail, Create/Edit forms, configurable
-columns, and a CSRF-protected Delete action. Authentication now supports
-persistent sessions and permission lookup through MariaDB tables; database
-roles and password-management workflows remain future work.
+columns, and a CSRF-protected Delete action. Authentication supports persistent
+sessions and permission lookup through MariaDB tables.
+
+To create a password hash for the required `password_hash` column, use the
+interactive command:
+
+~~~bash
+zelyra auth hash-password
+~~~
+
+The password is not echoed and must be entered twice. For explicit automation,
+pipe one password line with `--stdin`; never put a real password in a command
+argument or commit the resulting value to source control:
+
+~~~bash
+printf '%s\n' 'change-this-password' | zelyra auth hash-password --stdin
+~~~
