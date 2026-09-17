@@ -584,6 +584,9 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
 }
 
 page "/admin" {
@@ -601,6 +604,11 @@ direkte Vergaben. Rollengruppen werden mit `roles` und `role_permissions`
 aktiviert: Die erste Tabelle enthält `user_id` und `role`, die zweite `role`
 und `permission`. Effektive Berechtigungen sind die Vereinigung direkter
 Vergaben und aller Berechtigungen aus den Rollen des Benutzers.
+
+Wenn alle drei `admin_*`-Optionen gesetzt sind, stellt Zelyra zusätzlich eine
+optionale Browser-Rollenverwaltung unter dem konfigurierten Pfad bereit. Sie
+ist durch die deklarierte Berechtigung und CSRF-Tokens geschützt. Die letzte
+Zuweisung der konfigurierten Administrationsrolle kann nicht entzogen werden.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

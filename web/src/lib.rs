@@ -286,6 +286,9 @@ pub struct AuthRoute {
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,
     pub role_permissions_table: Option<String>,
+    pub admin_path: Option<String>,
+    pub admin_permission: Option<String>,
+    pub admin_role: Option<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -399,6 +402,18 @@ impl WebApp {
             }
             if request.path == "/logout" {
                 return dispatch_logout(self, request, self.database_url.as_deref());
+            }
+            if auth_route
+                .admin_path
+                .as_deref()
+                .is_some_and(|path| path == request.path)
+            {
+                return dispatch_auth_admin(
+                    self,
+                    auth_route,
+                    request,
+                    self.database_url.as_deref(),
+                );
             }
         }
         for api in &self.apis {
@@ -992,6 +1007,305 @@ fn render_login(auth: &AuthRoute) -> String {
          <button type=\"submit\">Login</button></form></main>",
         html_escape(auth.csrf.token())
     )
+}
+
+fn dispatch_auth_admin(
+    app: &WebApp,
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    if app.database_capability_granted == Some(false) {
+        return database_capability_denied();
+    }
+    let Some(admin_permission) = auth.admin_permission.as_deref() else {
+        return Response::html(404, "<h1>404 Not Found</h1>");
+    };
+    if let Some(response) = authorize(
+        true,
+        &[admin_permission.to_owned()],
+        request,
+        app,
+        database_url,
+    ) {
+        return response;
+    }
+    let Some(database_url) = database_url else {
+        return Response::html(
+            503,
+            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for role administration.</p>",
+        );
+    };
+    match request.method.as_str() {
+        "GET" => match load_auth_admin_data(auth, database_url) {
+            Ok(data) => Response::html(
+                200,
+                render_auth_admin(auth, &data.assignments, &data.permissions),
+            ),
+            Err(error) => {
+                eprintln!("zelyra web: auth administration query failed: {error}");
+                Response::html(500, "<h1>500 Internal Server Error</h1>")
+            }
+        },
+        "POST" => dispatch_auth_admin_post(auth, request, database_url),
+        _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
+    }
+}
+
+struct AuthAdminData {
+    assignments: Vec<Vec<String>>,
+    permissions: Vec<Vec<String>>,
+}
+
+fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdminData, String> {
+    let Some(roles_table) = auth.roles_table.as_deref() else {
+        return Err("role administration has no roles table".into());
+    };
+    let Some(role_permissions_table) = auth.role_permissions_table.as_deref() else {
+        return Err("role administration has no role permissions table".into());
+    };
+    let assignments = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT ur.user_id, u.email, ur.role FROM {} AS ur INNER JOIN {} AS u ON u.id = ur.user_id ORDER BY u.email, ur.role",
+            quote_identifier(roles_table),
+            quote_identifier(&auth.table),
+        ),
+        Vec::new(),
+    )
+    .map_err(|error| error.to_string())?
+    .rows;
+    let permissions = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT role, permission FROM {} ORDER BY role, permission",
+            quote_identifier(role_permissions_table)
+        ),
+        Vec::new(),
+    )
+    .map_err(|error| error.to_string())?
+    .rows;
+    Ok(AuthAdminData {
+        assignments,
+        permissions,
+    })
+}
+
+fn dispatch_auth_admin_post(auth: &AuthRoute, request: &Request, database_url: &str) -> Response {
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !auth
+        .csrf
+        .verify(input.get("_zelyra_csrf").map(String::as_str))
+    {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    let operation = input
+        .get("operation")
+        .map(String::as_str)
+        .unwrap_or_default();
+    let role = input.get("role").cloned().unwrap_or_default();
+    let permission = input.get("permission").cloned().unwrap_or_default();
+    let user_id = input
+        .get("user_id")
+        .and_then(|value| value.parse::<i64>().ok());
+    let Some(roles_table) = auth.roles_table.as_deref() else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    let Some(role_permissions_table) = auth.role_permissions_table.as_deref() else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    let result = match operation {
+        "grant_role" => {
+            let Some(user_id) = user_id else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            if role.is_empty() {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A role is required.</p>",
+                );
+            }
+            let sql = format!(
+                "INSERT INTO {} (user_id, role) SELECT :user_id, :role FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE user_id = :user_id AND role = :role)",
+                quote_identifier(roles_table),
+                quote_identifier(roles_table),
+            );
+            zelyra_database::execute_mariadb_query(
+                database_url,
+                &sql,
+                vec![
+                    ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                    ("role".into(), zelyra_database::QueryValue::String(role)),
+                ],
+            )
+        }
+        "revoke_role" => {
+            let Some(user_id) = user_id else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            if role.is_empty() {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A role is required.</p>",
+                );
+            }
+            if auth.admin_role.as_deref() == Some(role.as_str()) {
+                let count_query = format!(
+                    "SELECT COUNT(*) FROM {} WHERE role = :role",
+                    quote_identifier(roles_table)
+                );
+                let count = match zelyra_database::execute_mariadb_query(
+                    database_url,
+                    &count_query,
+                    vec![(
+                        "role".into(),
+                        zelyra_database::QueryValue::String(role.clone()),
+                    )],
+                ) {
+                    Ok(result) => result
+                        .rows
+                        .first()
+                        .and_then(|row| row.first())
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .unwrap_or(0),
+                    Err(error) => {
+                        eprintln!("zelyra web: admin role count failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
+                };
+                if count <= 1 {
+                    return Response::html(
+                        409,
+                        "<h1>409 Conflict</h1><p>The last administrator role assignment cannot be removed.</p>",
+                    );
+                }
+            }
+            let sql = format!(
+                "DELETE FROM {} WHERE user_id = :user_id AND role = :role",
+                quote_identifier(roles_table)
+            );
+            zelyra_database::execute_mariadb_query(
+                database_url,
+                &sql,
+                vec![
+                    ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                    ("role".into(), zelyra_database::QueryValue::String(role)),
+                ],
+            )
+        }
+        "grant_permission" | "revoke_permission" => {
+            if role.is_empty() || permission.is_empty() {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>Role and permission are required.</p>",
+                );
+            }
+            if operation == "grant_permission" {
+                let sql = format!(
+                    "INSERT INTO {} (role, permission) SELECT :role, :permission FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE role = :role AND permission = :permission)",
+                    quote_identifier(role_permissions_table),
+                    quote_identifier(role_permissions_table),
+                );
+                zelyra_database::execute_mariadb_query(
+                    database_url,
+                    &sql,
+                    vec![
+                        ("role".into(), zelyra_database::QueryValue::String(role)),
+                        (
+                            "permission".into(),
+                            zelyra_database::QueryValue::String(permission),
+                        ),
+                    ],
+                )
+            } else {
+                let sql = format!(
+                    "DELETE FROM {} WHERE role = :role AND permission = :permission",
+                    quote_identifier(role_permissions_table)
+                );
+                zelyra_database::execute_mariadb_query(
+                    database_url,
+                    &sql,
+                    vec![
+                        ("role".into(), zelyra_database::QueryValue::String(role)),
+                        (
+                            "permission".into(),
+                            zelyra_database::QueryValue::String(permission),
+                        ),
+                    ],
+                )
+            }
+        }
+        _ => {
+            return Response::html(
+                400,
+                "<h1>400 Bad Request</h1><p>Unknown administration operation.</p>",
+            )
+        }
+    };
+    if let Err(error) = result {
+        eprintln!("zelyra web: auth administration write failed: {error}");
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    }
+    Response::redirect(auth.admin_path.as_deref().unwrap_or("/"))
+}
+
+fn render_auth_admin(
+    auth: &AuthRoute,
+    assignments: &[Vec<String>],
+    permissions: &[Vec<String>],
+) -> String {
+    let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<main><h1>Role administration</h1><h2>Assign role</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>User ID</label><input name=\"user_id\" type=\"number\" required><label>Role</label><input name=\"role\" required><button type=\"submit\">Grant role</button></form>"
+    );
+    html.push_str(
+        "<h2>Role assignments</h2><table><tr><th>User</th><th>Role</th><th>Action</th></tr>",
+    );
+    for row in assignments {
+        if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button type=\"submit\">Revoke</button></form></td></tr>",
+                html_escape(email),
+                html_escape(role),
+                path,
+                csrf,
+                html_escape(user_id),
+                html_escape(role),
+            ));
+        }
+    }
+    html.push_str("</table><h2>Role permissions</h2><form method=\"post\" action=\"");
+    html.push_str(&path);
+    html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+    html.push_str(&csrf);
+    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>Role</label><input name=\"role\" required><label>Permission</label><input name=\"permission\" required><button type=\"submit\">Grant permission</button></form><table><tr><th>Role</th><th>Permission</th><th>Action</th></tr>");
+    for row in permissions {
+        if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">Revoke</button></form></td></tr>",
+                html_escape(role),
+                html_escape(permission),
+                path,
+                csrf,
+                html_escape(role),
+                html_escape(permission),
+            ));
+        }
+    }
+    html.push_str("</table></main>");
+    html
 }
 
 fn cookie_value(request: &Request, name: &str) -> Option<String> {
@@ -3327,6 +3641,9 @@ mod tests {
             permissions_table: None,
             roles_table: None,
             role_permissions_table: None,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -3648,6 +3965,9 @@ mod tests {
             permissions_table: None,
             roles_table: None,
             role_permissions_table: None,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),

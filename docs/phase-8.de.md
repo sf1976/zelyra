@@ -12,6 +12,9 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
 }
 ~~~
 
@@ -75,9 +78,15 @@ DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
 Die Grant-Befehle sind idempotent. Revoke-Befehle entfernen die passende
 Zuweisung oder Rollenberechtigung. Die Befehle verwenden die erste
 `auth`-Definition, verlangen MariaDB, prüfen zuerst das Projektschema und
-binden Benutzer-IDs und Werte als SQL-Parameter. Eine browserbasierte
-Rollenverwaltung und der Schutz des letzten Administrators sind noch nicht
-vorhanden.
+binden Benutzer-IDs und Werte als SQL-Parameter.
+
+Eine optionale Browser-Rollenverwaltung wird gemeinsam mit `admin_path`,
+`admin_permission` und `admin_role` aktiviert. Sie listet Zuweisungen und
+Rollenberechtigungen auf und bietet CSRF-geschützte Grant-/Revoke-Formulare.
+Die konfigurierte Administrationsrolle kann ihrem letzten zugewiesenen
+Benutzer nicht entzogen werden. Das Entfernen der letzten Berechtigung dieser
+Rolle, das Löschen von Benutzern und eine vollständige nebenläufigkeitssichere
+Policy-Verwaltung sind durch diese Sperre noch nicht abgedeckt.
 
 Für Deployments, die Benutzer in einem Reverse Proxy authentifizieren,
 akzeptiert der Server zusätzlich ein Bearer-Token, wenn ZELYRA_AUTH_TOKEN

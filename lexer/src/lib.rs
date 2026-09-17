@@ -44,6 +44,9 @@ pub enum TokenKind {
     Permissions,
     Roles,
     RolePermissions,
+    AdminPath,
+    AdminPermission,
+    AdminRole,
     Title,
     List,
     Search,
@@ -197,6 +200,9 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "permissions" => TokenKind::Permissions,
                 "roles" => TokenKind::Roles,
                 "role_permissions" => TokenKind::RolePermissions,
+                "admin_path" => TokenKind::AdminPath,
+                "admin_permission" => TokenKind::AdminPermission,
+                "admin_role" => TokenKind::AdminRole,
                 "title" => TokenKind::Title,
                 "list" => TokenKind::List,
                 "search" => TokenKind::Search,
@@ -547,12 +553,20 @@ mod tests {
 
     #[test]
     fn lexes_auth_role_keywords() {
-        let tokens =
-            lex("auth users { roles: user_roles role_permissions: role_permissions }").unwrap();
+        let tokens = lex("auth users { roles: user_roles role_permissions: role_permissions admin_path: \"/admin\" admin_permission: \"auth.manage\" admin_role: admin }").unwrap();
         assert!(tokens.iter().any(|token| token.kind == TokenKind::Roles));
         assert!(tokens
             .iter()
             .any(|token| token.kind == TokenKind::RolePermissions));
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::AdminPath));
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::AdminPermission));
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::AdminRole));
     }
 
     #[test]

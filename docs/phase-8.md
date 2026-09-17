@@ -12,6 +12,9 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
 }
 ~~~
 
@@ -72,8 +75,14 @@ DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
 The grant operations are idempotent. Revoke operations remove the matching
 assignment or role permission. The commands use the first `auth` definition,
 require MariaDB, validate the project schema first, and bind user IDs and
-values as SQL parameters. They do not yet provide a browser-based role
-administration screen or last-administrator protection.
+values as SQL parameters.
+
+An optional browser administration screen is enabled by `admin_path`,
+`admin_permission`, and `admin_role` together. It lists assignments and role
+permissions and provides CSRF-protected grant/revoke forms. The configured
+administrator role cannot be removed from its last assigned user. Removing
+the last permission from that role, deleting users, and concurrent policy
+administration are not yet covered by this guard.
 
 For deployments that authenticate users in a reverse proxy, the server also
 accepts a Bearer token when ZELYRA_AUTH_TOKEN is explicitly configured. The

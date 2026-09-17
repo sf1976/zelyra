@@ -72,9 +72,9 @@ Self-Hosting entstehen: Zuerst bleibt der Bootstrap-Compiler stabil, danach
 werden geeignete Compilerschichten schrittweise in Zelyra umgesetzt und mit
 einem bestehenden vertrauenswürdigen Bootstrap-Compiler gebaut.
 
-Rollenverwaltungsseiten, umfangreichere Verifikation, Produktionspaketierung
-und der selbsthostende Compiler sind noch nicht vollständig. Diese Ziele
-müssen sichtbar von der implementierten Basis getrennt bleiben.
+Benutzerverwaltung, umfangreichere Verifikation, Produktionspaketierung und
+der selbsthostende Compiler sind noch nicht vollständig. Diese Ziele müssen
+sichtbar von der implementierten Basis getrennt bleiben.
 
 ## Praxistest des Produkts
 

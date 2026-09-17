@@ -61,6 +61,8 @@ Heute implementiert:
 - CLI-Befehle zum Gewähren und Entziehen von Rollen und
   Rollenberechtigungen mit Schemavalidierung und idempotenten MariaDB-
   Schreibvorgängen.
+- optionale browserbasierte Rollenverwaltung mit CSRF-Schutz,
+  Berechtigungssperren und Schutz der letzten Administrationszuordnung.
 - typisierte API-Deklarationen mit Routen-/Typprüfung, optionalen ausführbaren
   Handlern, OpenAPI-3.0.3-Ausgabe über `zelyra doc`, Authentifizierungs- und
   Berechtigungssperren, strukturierten JSON-Fehlern und deklarierter
@@ -122,7 +124,7 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, browserbasierte Rollenverwaltung, umfangreichere fachliche
+Vollständige CRUD-Erzeugung, Benutzerverwaltung, umfangreichere fachliche
 Fehlerwerte, allgemeine formale Verifikation, Betriebssystem-Integration der
 Capabilities und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
@@ -429,8 +431,8 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
    Pagination, konfigurierbare Spalten, Beziehungslabels und -Selects sowie
    CSRF-geschütztes Löschen und getrennte Aktionsberechtigungen vorhanden.
 8. Authentifizierung und Autorisierung — Argon2-Login, persistente MariaDB-
-   Sessions, Logout, Routensperren sowie direkte und rollenbasierte
-   Berechtigungsabfragen vorhanden.
+   Sessions, Logout, Routensperren, direkte und rollenbasierte
+   Berechtigungsabfragen sowie optionale Rollenverwaltung vorhanden.
 9. Capabilities und Contracts — erste Deklarationen, statische Prüfungen,
    Runtime-Contracts, begrenzte symbolische Verifikation,
    Runtime-Capability-Grenzen sowie ein erster `parallel`/`await`-Baustein für

@@ -1807,6 +1807,59 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        let admin_options = [
+            auth.admin_path.is_some(),
+            auth.admin_permission.is_some(),
+            auth.admin_role.is_some(),
+        ];
+        if admin_options.iter().any(|configured| *configured)
+            && !admin_options.iter().all(|configured| *configured)
+        {
+            diagnostic(
+                path,
+                "E-AUTH-021",
+                "authentication administration requires admin_path, admin_permission, and admin_role",
+                auth.span.line,
+                auth.span.column,
+            );
+            valid = false;
+        }
+        if let Some(admin_path) = &auth.admin_path {
+            if !admin_path.starts_with('/') || admin_path == "/login" || admin_path == "/logout" {
+                diagnostic(
+                    path,
+                    "E-AUTH-022",
+                    "authentication admin_path must be an application path other than /login or /logout",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+        }
+        if let Some(admin_permission) = &auth.admin_permission {
+            if admin_permission.is_empty() {
+                diagnostic(
+                    path,
+                    "E-AUTH-023",
+                    "authentication admin_permission must not be empty",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+        }
+        if let Some(admin_role) = &auth.admin_role {
+            if admin_role.is_empty() {
+                diagnostic(
+                    path,
+                    "E-AUTH-024",
+                    "authentication admin_role must not be empty",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+        }
     }
     let protected = program
         .pages
@@ -2253,6 +2306,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions_table: auth.permissions_table.clone(),
             roles_table: auth.roles_table.clone(),
             role_permissions_table: auth.role_permissions_table.clone(),
+            admin_path: auth.admin_path.clone(),
+            admin_permission: auth.admin_permission.clone(),
+            admin_role: auth.admin_role.clone(),
             schema: schema.clone(),
             csrf,
         })

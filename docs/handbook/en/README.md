@@ -528,6 +528,9 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
 }
 
 page "/admin" {
@@ -545,6 +548,11 @@ direct grants. Role groups are enabled with `roles` and `role_permissions`:
 the first table contains `user_id` and `role`, and the second contains `role`
 and `permission`. Effective permissions are the union of direct grants and
 all permissions inherited from the user's roles.
+
+When all three `admin_*` options are present, Zelyra also provides an opt-in
+browser administration screen at the configured path. It is protected by the
+declared permission and CSRF tokens. The last assignment of the configured
+administrator role cannot be revoked.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

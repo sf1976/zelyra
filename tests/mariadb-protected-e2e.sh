@@ -15,6 +15,7 @@ viewer_email="zelyra-protected-viewer-${suffix}@example.test"
 primary_role="zelyra-protected-manager-${suffix}"
 viewer_role="zelyra-protected-viewer-${suffix}"
 temporary_role="zelyra-protected-temporary-${suffix}"
+admin_role="admin"
 test_password="ZelyraProtected-${suffix}-Password"
 customer_name="Zelyra Protected Customer-${suffix}"
 created_customer_name="Zelyra Created Customer-${suffix}"
@@ -62,7 +63,7 @@ WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${se
 DELETE FROM user_roles
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM role_permissions
-WHERE role IN ('${primary_role}', '${viewer_role}', '${temporary_role}');
+WHERE role IN ('${primary_role}', '${viewer_role}', '${temporary_role}', '${admin_role}');
 DELETE FROM auth_sessions
 WHERE user_id IN (SELECT id FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}'));
 DELETE FROM users WHERE email IN ('${primary_email}', '${secondary_email}', '${viewer_email}');
@@ -111,8 +112,9 @@ viewer_user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WH
 [[ -n "${primary_user_id}" ]]
 [[ -n "${viewer_user_id}" ]]
 DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant "${project_file}" "${primary_user_id}" "${primary_role}"
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant "${project_file}" "${primary_user_id}" "${admin_role}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant "${project_file}" "${viewer_user_id}" "${viewer_role}"
-for permission in customers.view customers.create customers.edit customers.delete; do
+for permission in customers.view customers.create customers.edit customers.delete auth.manage; do
     DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
         "${project_file}" "${primary_role}" "${permission}"
 done
@@ -122,6 +124,8 @@ DATABASE_URL="${database_url}" "${zelyra_bin}" auth role grant \
     "${project_file}" "${primary_user_id}" "${primary_role}"
 DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
     "${project_file}" "${primary_role}" customers.view
+DATABASE_URL="${database_url}" "${zelyra_bin}" auth role-permission grant \
+    "${project_file}" "${admin_role}" auth.manage
 primary_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${primary_user_id}' AND role = '${primary_role}'")"
 primary_permission_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM role_permissions WHERE role = '${primary_role}' AND permission = 'customers.view'")"
 [[ "${primary_role_count}" == "1" ]]
@@ -186,6 +190,33 @@ primary_api_status="$(request_status "${temp_dir}/primary-api.json" \
     "${base_url}/api/customers/${customer_id}")"
 [[ "${primary_api_status}" == "200" ]]
 grep -Fq "\"name\":\"${customer_name}\"" "${temp_dir}/primary-api.json"
+
+primary_admin_status="$(request_status "${temp_dir}/primary-admin.html" \
+    --cookie "${primary_cookie}" \
+    "${base_url}/admin/access")"
+[[ "${primary_admin_status}" == "200" ]]
+grep -Fq "Role administration" "${temp_dir}/primary-admin.html"
+admin_csrf="$(extract_csrf "${temp_dir}/primary-admin.html")"
+[[ -n "${admin_csrf}" ]]
+admin_grant_status="$(request_status "${temp_dir}/primary-admin-grant.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=grant_role" \
+    --data-urlencode "user_id=${viewer_user_id}" \
+    --data-urlencode "role=${temporary_role}" \
+    "${base_url}/admin/access")"
+[[ "${admin_grant_status}" == "303" ]]
+admin_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${viewer_user_id}' AND role = '${temporary_role}'")"
+[[ "${admin_role_count}" == "1" ]]
+admin_last_role_status="$(request_status "${temp_dir}/primary-admin-last-role.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=revoke_role" \
+    --data-urlencode "user_id=${primary_user_id}" \
+    --data-urlencode "role=${admin_role}" \
+    "${base_url}/admin/access")"
+[[ "${admin_last_role_status}" == "409" ]]
+grep -Fq "last administrator role assignment" "${temp_dir}/primary-admin-last-role.html"
 
 custom_form_status="$(request_status "${temp_dir}/primary-custom-form.html" \
     --cookie "${primary_cookie}" \
@@ -270,6 +301,11 @@ viewer_login_status="$(request_status "${temp_dir}/viewer-login.html" \
     --data-urlencode "password=${test_password}" \
     "${base_url}/login")"
 [[ "${viewer_login_status}" == "303" ]]
+viewer_admin_status="$(request_status "${temp_dir}/viewer-admin.html" \
+    --cookie "${viewer_cookie}" \
+    "${base_url}/admin/access")"
+[[ "${viewer_admin_status}" == "403" ]]
+grep -Fq "Missing permission: auth.manage" "${temp_dir}/viewer-admin.html"
 viewer_crud_status="$(request_status "${temp_dir}/viewer-crud.html" \
     --cookie "${viewer_cookie}" \
     "${base_url}/customers")"

@@ -57,6 +57,8 @@ Implemented today:
   HttpOnly sessions, logout, direct and role-based permission checks.
 - CLI role and role-permission grant/revoke commands with schema validation and
   idempotent MariaDB writes.
+- opt-in browser role administration with CSRF protection, permission guards,
+  and last-administrator assignment protection.
 - typed API declarations with route/type validation, optional executable
   handlers, OpenAPI 3.0.3 output through `zelyra doc`, authentication and
   permission guards, structured JSON errors, and declared `Result` error
@@ -116,7 +118,7 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, browser-based role administration, richer language-level domain-error values,
+Full CRUD generation, user administration and richer language-level domain-error values,
 general formal verification, operating-system capability integration, and
 production deployment tooling are still being developed. See
 the
@@ -420,7 +422,8 @@ The long-term specification is organized into these phases:
    configurable columns, relationship labels and selects, and CSRF-protected
    delete, and separate action permissions implemented.
 8. Authentication and authorization — Argon2 login, persistent MariaDB
-   sessions, logout, route guards, direct and role-based permission lookup.
+   sessions, logout, route guards, direct and role-based permission lookup,
+   and opt-in role administration.
 9. Capabilities and contracts — initial declarations, static checks, runtime
    contracts, limited symbolic verification, runtime capability boundaries,
    and an initial `parallel`/`await` structured-concurrency slice are

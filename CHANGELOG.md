@@ -13,6 +13,8 @@ compiler and repository release.
   inherited role permissions are combined for protected requests.
 - Added MariaDB CLI administration for idempotent role assignments and role
   permissions with `zelyra auth role` and `zelyra auth role-permission`.
+- Added opt-in browser role administration with CSRF-protected grant/revoke
+  forms and protection for the last assignment of the configured admin role.
 
 ## 0.1.37 — 2026-09-17
 

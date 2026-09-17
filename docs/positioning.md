@@ -67,9 +67,9 @@ applications. The long-term goal is a self-hosting path: first keep the
 bootstrap compiler stable, then move suitable compiler layers into Zelyra and
 compile them with an existing trusted bootstrap.
 
-Role administration screens, broader verification, production packaging, and
-the self-hosting compiler are not yet complete. The project must keep these
-items visibly separate from the implemented core.
+User administration, broader verification, production packaging, and the
+self-hosting compiler are not yet complete. The project must keep these items
+visibly separate from the implemented core.
 
 ## Product test
 

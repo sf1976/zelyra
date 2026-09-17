@@ -6,6 +6,9 @@ auth users {
     permissions: user_permissions
     roles: user_roles
     role_permissions: role_permissions
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
 }
 
 table users {
