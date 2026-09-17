@@ -178,6 +178,7 @@ pub struct ApiField {
 pub struct ApiError {
     pub status: u16,
     pub name: String,
+    pub payload: Option<Type>,
     pub span: Span,
 }
 

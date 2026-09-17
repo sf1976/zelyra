@@ -199,6 +199,34 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     span: error.span,
                 });
             }
+            if let Some(payload) = &error.payload {
+                if !api_type_known(payload, &known_types) {
+                    errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API error `{}` refers to unknown payload type `{payload}`",
+                            error.name
+                        ),
+                        span: error.span,
+                    });
+                }
+                match &api.output {
+                    Type::Result(_, error_type) if compatible(error_type, payload) => {}
+                    Type::Result(_, error_type) => errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API error `{}` payload type `{payload}` does not match handler error type `{error_type}`",
+                            error.name
+                        ),
+                        span: error.span,
+                    }),
+                    _ => errors.push(ApiDiagnostic {
+                        message: format!(
+                            "API error `{}` declares a payload but API output is not a Result",
+                            error.name
+                        ),
+                        span: error.span,
+                    }),
+                }
+            }
         }
     }
     if errors.is_empty() {

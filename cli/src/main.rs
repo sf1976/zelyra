@@ -51,9 +51,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.25\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.31\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.25\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.31\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -73,7 +73,7 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.30\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.31\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
             ),
             (
                 ".dockerignore",
@@ -574,11 +574,16 @@ fn format_openapi(program: &zelyra_ast::Program) -> String {
                 openapi_schema(&api.output)
             ))
             .chain(api.errors.iter().map(|error| {
-                format!(
-                    "\"{}\":{{\"description\":\"{}\"}}",
-                    error.status,
-                    json_escape(&error.name)
-                )
+                let response = if let Some(payload) = &error.payload {
+                    format!(
+                        "{{\"description\":\"{}\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
+                        json_escape(&error.name),
+                        openapi_error_schema(payload)
+                    )
+                } else {
+                    format!("{{\"description\":\"{}\"}}", json_escape(&error.name))
+                };
+                format!("\"{}\":{}", error.status, response)
             }))
             .collect::<Vec<_>>()
             .join(",");
@@ -763,6 +768,30 @@ fn format_typescript_client(program: &zelyra_ast::Program) -> String {
         }
     }
 
+    let payload_types = program
+        .apis
+        .iter()
+        .flat_map(|api| {
+            api.errors.iter().filter_map(|error| {
+                error
+                    .payload
+                    .as_ref()
+                    .map(|payload| (error.name.clone(), typescript_type(payload)))
+            })
+        })
+        .collect::<HashMap<_, _>>();
+    if payload_types.is_empty() {
+        output.push_str("export type ZelyraApiErrorPayload = JsonValue;\n\n");
+    } else {
+        output.push_str("export interface ZelyraApiErrorPayloads {\n");
+        let mut payload_types = payload_types.into_iter().collect::<Vec<_>>();
+        payload_types.sort_by(|left, right| left.0.cmp(&right.0));
+        for (name, ty) in payload_types {
+            writeln!(output, "  \"{name}\": {ty};").expect("writing to a String cannot fail");
+        }
+        output.push_str("}\n\nexport type ZelyraApiErrorPayload = ZelyraApiErrorPayloads[keyof ZelyraApiErrorPayloads];\n\n");
+    }
+
     output.push_str(
         "export interface ZelyraClientOptions {\n  baseUrl: string;\n  fetch?: typeof fetch;\n  token?: string;\n}\n\n",
     );
@@ -777,6 +806,35 @@ fn format_typescript_client(program: &zelyra_ast::Program) -> String {
     for api in &program.apis {
         format_typescript_operation(&mut output, api);
     }
+    output = output
+        .replace(
+            "export class ZelyraApiError extends Error {",
+            "export class ZelyraApiError<Details = ZelyraApiErrorPayload> extends Error {",
+        )
+        .replace(
+            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,",
+            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly details: Details | undefined,\n    public readonly body: string,",
+        )
+        .replace(
+            "static async fromResponse(response: Response): Promise<ZelyraApiError> {",
+            "static async fromResponse<Details = ZelyraApiErrorPayload>(response: Response): Promise<ZelyraApiError<Details>> {",
+        )
+        .replace(
+            "let code: ZelyraApiErrorCode | undefined;\n    let message",
+            "let code: ZelyraApiErrorCode | undefined;\n    let details: Details | undefined;\n    let message",
+        )
+        .replace(
+            "{ error?: { code?: unknown; message?: unknown } }",
+            "{ error?: { code?: unknown; message?: unknown; details?: unknown } }",
+        )
+        .replace(
+            "if (typeof payload.error.message === \"string\") message = payload.error.message;",
+            "if (typeof payload.error.message === \"string\") message = payload.error.message;\n        details = payload.error.details as Details | undefined;",
+        )
+        .replace(
+            "new ZelyraApiError(response.status, code, body, message)",
+            "new ZelyraApiError(response.status, code, details, body, message)",
+        );
     output.push_str("}\n");
     output
 }
@@ -977,6 +1035,27 @@ fn openapi_schema(ty: &Type) -> String {
         },
         _ => "{\"type\":\"string\"}".into(),
     }
+}
+
+fn openapi_error_schema(payload: &Type) -> String {
+    let details = serde_json::from_str(&openapi_schema(payload))
+        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
+    serde_json::json!({
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+            "error": {
+                "type": "object",
+                "required": ["code", "message", "details"],
+                "properties": {
+                    "code": {"type": "string"},
+                    "message": {"type": "string"},
+                    "details": details,
+                }
+            }
+        }
+    })
+    .to_string()
 }
 
 fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
@@ -2337,16 +2416,22 @@ fn dispatch_api_with_capabilities(
 
 fn api_result_response(api: &zelyra_ast::ApiDef, value: &Value) -> Response {
     if let Value::Result(Err(error)) = value {
-        let error_name = error.output();
-        if let Some(declaration) = api
-            .errors
-            .iter()
-            .find(|declaration| declaration.name == error_name)
-        {
-            return api_error_response(
+        let error_name = match &**error {
+            Value::Object { type_name, .. } => type_name.clone(),
+            _ => error.output(),
+        };
+        if let Some(declaration) = api.errors.iter().find(|declaration| {
+            declaration.name == error_name
+                || declaration.payload.as_ref().is_some_and(|payload| {
+                    payload == &error.ty()
+                        || matches!(payload, Type::Named(name) if name == &error_name)
+                })
+        }) {
+            return api_error_response_with_details(
                 declaration.status,
                 &declaration.name,
                 &format!("API handler returned {}", declaration.name),
+                declaration.payload.as_ref().map(|_| &**error),
             );
         }
         return api_error_response(
@@ -2529,14 +2614,24 @@ fn api_json_value_node(value: &Value) -> serde_json::Value {
 }
 
 fn api_error_response(status: u16, code: &str, message: &str) -> Response {
-    Response::json(
-        status,
-        format!(
-            "{{\"error\":{{\"code\":\"{}\",\"message\":\"{}\"}}}}",
-            json_escape(code),
-            json_escape(message)
-        ),
-    )
+    api_error_response_with_details(status, code, message, None)
+}
+
+fn api_error_response_with_details(
+    status: u16,
+    code: &str,
+    message: &str,
+    details: Option<&Value>,
+) -> Response {
+    let mut error = serde_json::Map::new();
+    error.insert("code".into(), serde_json::Value::String(code.into()));
+    error.insert("message".into(), serde_json::Value::String(message.into()));
+    if let Some(details) = details {
+        error.insert("details".into(), api_json_value_node(details));
+    }
+    let mut response = serde_json::Map::new();
+    response.insert("error".into(), serde_json::Value::Object(error));
+    Response::json(status, serde_json::Value::Object(response).to_string())
 }
 
 fn parse_api_json_object(source: &str) -> Result<HashMap<String, serde_json::Value>, String> {
@@ -2985,6 +3080,24 @@ mod tests {
     }
 
     #[test]
+    fn formats_typed_api_error_payloads_for_openapi_and_typescript() {
+        let program = parse(
+            &lex(
+                "struct Problem { message: String } api GET \"/fail\" { output Result<String, Problem> errors { 422 Validation: Problem } } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let openapi = format_openapi(&program);
+        assert!(openapi.contains("\"details\""));
+        assert!(openapi.contains("#/components/schemas/Problem"));
+        let client = format_typescript_client(&program);
+        assert!(client.contains("ZelyraApiErrorPayloads"));
+        assert!(client.contains("\"Validation\": Problem"));
+        assert!(client.contains("details: Details | undefined"));
+    }
+
+    #[test]
     fn dispatches_json_api_input_to_a_typed_handler() {
         let program = parse(
             &lex(
@@ -3164,6 +3277,40 @@ mod tests {
         assert_eq!(response.status, 500);
         assert!(response.body.contains("InternalServerError"));
         assert!(response.body.contains("unmapped API error"));
+    }
+
+    #[test]
+    fn returns_typed_details_for_declared_api_errors() {
+        let program = parse(
+            &lex(
+                "struct Problem { message: String } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Problem } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid customer\" }) } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request("GET /fail HTTP/1.1\r\n\r\n").unwrap();
+        let response = dispatch_api(&program, api, "fail", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 422);
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(body["error"]["code"], "Validation");
+        assert_eq!(body["error"]["details"]["message"], "invalid customer");
+    }
+
+    #[test]
+    fn rejects_api_error_payload_that_does_not_match_result_error_type() {
+        let program = parse(
+            &lex(
+                "struct Problem { message: String } struct Other { code: Int } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Other } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid\" }) } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let errors = check_apis(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("does not match handler error type")));
     }
 
     #[test]

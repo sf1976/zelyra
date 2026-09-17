@@ -52,6 +52,8 @@ The current repository contains:
   authentication and permission guards, structured JSON errors, and declared
   `Result` error mapping, including typed API arrays and nested JSON objects
   declared with `struct` records;
+- typed API error payloads with `error.details`, OpenAPI schemas, and
+  TypeScript payload types;
 - a dependency-free TypeScript client generator with declared API error codes
   and structured HTTP-error parsing;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
@@ -274,7 +276,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]

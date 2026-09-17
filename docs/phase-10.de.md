@@ -190,5 +190,35 @@ api POST "/customers" {
 
 Record-Werte werden sowohl an der JSON-API-Grenze als auch im Sprachkern
 unterstützt. Record-Literale und Feldzugriff werden gegen die deklarierte
-Record-Definition geprüft. Erweiterte Client-Funktionen sowie umfangreichere
-fachliche Fehlerwerte folgen in späteren Web-/API-Schritten.
+Record-Definition geprüft.
+
+API-Fehler können nach einem Doppelpunkt optional einen Payload-Typ angeben.
+Dieser Typ muss zum Fehlertyp im `Result`-Ausgabetyp des Handlers passen:
+
+~~~zelyra
+struct ValidationProblem {
+    field: String
+    message: String
+}
+
+fn validate_customer() -> Result<String, ValidationProblem> {
+    return Err(ValidationProblem {
+        field: "email"
+        message: "invalid address"
+    })
+}
+
+api POST "/customers/validate" {
+    handler validate_customer
+    output Result<String, ValidationProblem>
+    errors {
+        422 ValidationError: ValidationProblem
+    }
+}
+~~~
+
+Die Laufzeit behält die stabilen Felder `code` und `message` und ergänzt den
+typisierten Wert unter `error.details`. Ungetypte Deklarationen bleiben
+unverändert. OpenAPI beschreibt das Details-Schema; generierte TypeScript-
+Clients stellen den Payload über `ZelyraApiErrorPayloads` und
+`ZelyraApiError.details` bereit.

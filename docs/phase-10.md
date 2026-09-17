@@ -185,5 +185,34 @@ api POST "/customers" {
 
 Record values are supported both at the JSON API boundary and in the language
 core. Record literals and field access are checked against the declared record
-definition. More advanced client features and richer domain-error values remain
-later Web/API work.
+definition.
+
+API errors may optionally declare a payload type after a colon. The payload
+type must match the error type of the handler's `Result` output:
+
+~~~zelyra
+struct ValidationProblem {
+    field: String
+    message: String
+}
+
+fn validate_customer() -> Result<String, ValidationProblem> {
+    return Err(ValidationProblem {
+        field: "email"
+        message: "invalid address"
+    })
+}
+
+api POST "/customers/validate" {
+    handler validate_customer
+    output Result<String, ValidationProblem>
+    errors {
+        422 ValidationError: ValidationProblem
+    }
+}
+~~~
+
+The runtime keeps the stable `code` and `message` fields and adds the typed
+value under `error.details`. Untyped declarations remain unchanged. OpenAPI
+describes the details schema, and generated TypeScript clients expose the
+payload through `ZelyraApiErrorPayloads` and `ZelyraApiError.details`.

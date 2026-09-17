@@ -61,6 +61,8 @@ Implemented today:
 - a dependency-free TypeScript client generator via
   `zelyra doc <file.zyl> --typescript`, including typed declared API error
   codes and structured HTTP-error parsing;
+- typed API error payloads through `errors { 422 ValidationError: Problem }`,
+  including `error.details`, OpenAPI schemas, and TypeScript payload types;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
 - structured `for ... in` array iteration with `break` and `continue`;

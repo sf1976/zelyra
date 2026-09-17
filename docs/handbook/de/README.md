@@ -184,7 +184,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]
@@ -644,6 +644,29 @@ HTTP-Fehler. Deklarierte API-Fehlernamen sind über `ZelyraApiErrorCode`
 verfügbar; `ZelyraApiError.fromResponse` liest Status, Code und Servermeldung
 aus und bewahrt den unveränderten Response-Body auf.
 
+API-Fehler können zusätzlich einen geprüften Payload enthalten. Der Payload-
+Typ wird nach einem Doppelpunkt angegeben und muss dem Fehlertyp im `Result`
+des Handlers entsprechen:
+
+~~~zelyra
+struct ValidationProblem {
+    field: String
+    message: String
+}
+
+api POST "/customers/validate" {
+    handler validate_customer
+    output Result<String, ValidationProblem>
+    errors { 422 ValidationError: ValidationProblem }
+}
+~~~
+
+Die Antwort behält `error.code` und `error.message` und ergänzt den
+serialisierten Payload als `error.details`. OpenAPI enthält das Details-Schema;
+der erzeugte Client stellt es über `ZelyraApiErrorPayloads` und das generische
+Feld `ZelyraApiError.details` bereit. Bestehende ungetypte API-Fehler bleiben
+kompatibel.
+
 Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen müssen
 serverseitig an der Aktion geprüft werden. Der Browser ist kreativ, besonders
 wenn man ihm vertraut.
@@ -976,7 +999,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]
@@ -1061,7 +1084,8 @@ Die wichtigsten geplanten Bereiche:
 - Activity-, Audit- und technische Logs;
 - typisierte Connections und Secret Provider;
 - ODBC und externe Read-only-Datenbanken;
-- umfangreichere fachliche Fehlerwerte und weitergehende Request-/Response-Verarbeitung zur Laufzeit;
+- umfangreichere fachliche Fehlerwerte über typisierte API-Payloads hinaus und
+  weitergehende Request-/Response-Verarbeitung zur Laufzeit;
 - Abbruch und Datenbank-Pool-Integration für strukturierte Nebenläufigkeit;
 - weitergehende formale Verifikation;
 - Optimierungsmodelle für reale Planungsprobleme.

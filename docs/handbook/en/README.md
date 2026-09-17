@@ -155,7 +155,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]
@@ -587,6 +587,27 @@ bearer tokens, response types, and HTTP errors. Declared API error names are
 available through `ZelyraApiErrorCode`; `ZelyraApiError.fromResponse` extracts
 the status, code, and server message while preserving the raw response body.
 
+API errors may also carry a checked payload. Add the payload type after a
+colon and use the same type as the error side of the handler's `Result`:
+
+~~~zelyra
+struct ValidationProblem {
+    field: String
+    message: String
+}
+
+api POST "/customers/validate" {
+    handler validate_customer
+    output Result<String, ValidationProblem>
+    errors { 422 ValidationError: ValidationProblem }
+}
+~~~
+
+The response retains `error.code` and `error.message` and adds the serialized
+payload as `error.details`. OpenAPI includes the details schema, while the
+generated client exposes it through `ZelyraApiErrorPayloads` and the generic
+`ZelyraApiError.details` field. Existing untyped API errors remain compatible.
+
 A hidden button is not a security boundary. Authorization must be enforced on
 the server-side action. Browsers become remarkably creative when trusted.
 
@@ -907,7 +928,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]
@@ -976,7 +997,8 @@ Major planned areas include:
 - activity, audit, and technical logs;
 - typed connections and secret providers;
 - ODBC and external read-only databases;
-- richer domain-error values and runtime request/response processing;
+- richer domain-error values beyond typed API payloads and advanced runtime
+  request/response processing;
 - cancellation and database-pool integration for structured concurrency;
 - broader formal verification;
 - optimization models for real planning problems.

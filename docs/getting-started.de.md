@@ -55,6 +55,8 @@ Das aktuelle Repository enthält:
   strukturierten JSON-Fehlern und deklarierter `Result`-Fehlerzuordnung
   einschließlich typisierter API-Arrays und verschachtelter JSON-Objekte über
   `struct`-Records;
+- typisierte API-Fehler-Payloads mit `error.details`, OpenAPI-Schemas und
+  TypeScript-Payload-Typen;
 - einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten mit
   deklarierten API-Fehlercodes und strukturierter HTTP-Fehlerauswertung;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
@@ -284,7 +286,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.30"
+version = "0.1.31"
 zelyra = "0.1"
 
 [capabilities]

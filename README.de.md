@@ -61,6 +61,8 @@ Heute implementiert:
 - einen TypeScript-Client-Generator ohne zusätzliche Abhängigkeiten über
   `zelyra doc <file.zyl> --typescript`, einschließlich typisierter API-
   Fehlercodes und strukturierter HTTP-Fehlerauswertung;
+- typisierte API-Fehler-Payloads über `errors { 422 ValidationError: Problem }`,
+  einschließlich `error.details`, OpenAPI-Schemas und TypeScript-Payload-Typen;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;

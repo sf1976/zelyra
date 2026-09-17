@@ -4,6 +4,22 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language line remains `0.1`; the patch version identifies the compatible
 compiler and repository release.
 
+## 0.1.31 — 2026-09-17
+
+### Added
+
+- API error declarations can now attach a checked payload type, for example
+  `errors { 422 Validation: ValidationProblem }`.
+- Typed API error payloads are returned under `error.details`, described in
+  OpenAPI, and exposed through the generated TypeScript client.
+- Added `examples/api_errors.zyl` and synchronized German and English API
+  documentation.
+
+### Compatibility
+
+- Existing untyped declarations such as `errors { 404 NotFound }` keep their
+  previous response shape.
+
 ## 0.1.30 — 2026-09-17
 
 ### Added

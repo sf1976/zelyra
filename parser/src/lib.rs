@@ -173,7 +173,18 @@ impl<'a> Parser<'a> {
                         _ => return self.error("expected HTTP status code in API errors"),
                     };
                     let (name, span) = self.ident("API error name")?;
-                    errors.push(ApiError { status, name, span });
+                    let payload = if self.at(&TokenKind::Colon) {
+                        self.advance();
+                        Some(self.type_name()?)
+                    } else {
+                        None
+                    };
+                    errors.push(ApiError {
+                        status,
+                        name,
+                        payload,
+                        span,
+                    });
                     self.skip_newlines();
                 }
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
@@ -1799,5 +1810,21 @@ mod tests {
         .unwrap();
         assert_eq!(program.functions[0].requires.len(), 1);
         assert_eq!(program.functions[0].ensures.len(), 1);
+    }
+
+    #[test]
+    fn parses_typed_api_error_payloads() {
+        let program = parse(
+            &lex(
+                r#"struct Problem { message: String } api GET "/fail" { output Result<String, Problem> errors { 422 Validation: Problem } } fn main() { }"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.apis[0].errors[0].name, "Validation");
+        assert_eq!(
+            program.apis[0].errors[0].payload,
+            Some(Type::Named("Problem".into()))
+        );
     }
 }
