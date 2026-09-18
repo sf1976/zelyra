@@ -121,3 +121,17 @@ The runtime accepts only declared result fields for `sort` and only `asc` or
 `desc` for `order`. Identifiers are quoted after compiler validation; URL
 values are never concatenated into SQL as unchecked identifiers. Sorting and
 pagination may be combined.
+
+Collection pages may declare searchable result fields as well:
+
+~~~zelyra
+page "/customers" {
+    search { name email }
+    load customers = sql<Customer[]> { SELECT id, name, email FROM customers }
+    html { <p>{search}</p> }
+}
+~~~
+
+The `search` URL value is bound as a parameter and applied to the declared
+fields with server-side `LIKE` conditions. Empty search values do not add a
+condition; unknown search fields are compiler errors.

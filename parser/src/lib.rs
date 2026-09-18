@@ -775,6 +775,7 @@ impl<'a> Parser<'a> {
         let mut inputs = Vec::new();
         let mut page_size = None;
         let mut sort = Vec::new();
+        let mut search = Vec::new();
         let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
@@ -824,6 +825,19 @@ impl<'a> Parser<'a> {
                     }
                 }
                 self.expect(TokenKind::RBrace, "`}` after page sort")?;
+            } else if self.at(&TokenKind::Search) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after page search")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    search.push(self.ident("page search field")?.0);
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after page search")?;
             } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "load") {
                 let load_start = self.advance().span;
                 let (name, _) = self.ident("page data name")?;
@@ -859,7 +873,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `requires auth`, or `permits` in page definition");
+                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `search`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -874,6 +888,7 @@ impl<'a> Parser<'a> {
             inputs,
             page_size,
             sort,
+            search,
             data,
             requires_auth,
             permissions,
@@ -2398,6 +2413,18 @@ mod tests {
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert_eq!(program.pages[0].sort, ["name", "created_at"]);
+    }
+
+    #[test]
+    fn parses_page_search_fields() {
+        let source = r#"
+            page "/customers" {
+                search { name, email }
+                html { <p>Customers</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].search, ["name", "email"]);
     }
 
     #[test]

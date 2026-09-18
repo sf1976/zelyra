@@ -8,8 +8,8 @@ table customers {
 }
 
 page "/customers" {
-    input {
-        search: String?
+    search {
+        name
     }
 
     sort {
@@ -21,7 +21,6 @@ page "/customers" {
     load customers = sql<Customer[]> {
         SELECT id, name
         FROM customers
-        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
         ORDER BY name
     }
 

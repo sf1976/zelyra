@@ -127,3 +127,17 @@ Die Laufzeit akzeptiert für `sort` nur deklarierte Ergebnisfelder und für
 `order` nur `asc` oder `desc`. Identifier werden nach der Compilerprüfung
 quotiert; URL-Werte werden niemals als ungeprüfte SQL-Identifier in SQL
 konkateniert. Sortierung und Pagination können kombiniert werden.
+
+Collection-Seiten können außerdem durchsuchbare Ergebnisfelder deklarieren:
+
+~~~zelyra
+page "/customers" {
+    search { name email }
+    load customers = sql<Customer[]> { SELECT id, name, email FROM customers }
+    html { <p>{search}</p> }
+}
+~~~
+
+Der URL-Wert `search` wird als Parameter gebunden und mit serverseitigen
+`LIKE`-Bedingungen auf die deklarierten Felder angewendet. Ein leerer
+Suchwert fügt keine Bedingung hinzu; unbekannte Suchfelder sind Compilerfehler.
