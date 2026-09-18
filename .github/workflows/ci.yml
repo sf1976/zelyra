@@ -64,6 +64,14 @@ jobs:
             target/debug/zelyra fmt "$formatted_file" --check
             rm "$formatted_file"
           done
+      - name: Run generated-project MariaDB end-to-end test
+        env:
+          ZELYRA_GENERATED_E2E_ROOT_PASSWORD: root
+          ZELYRA_GENERATED_E2E_DB_PORT: 3306
+          ZELYRA_GENERATED_E2E_HOST_PORT: 18081
+          ZELYRA_GENERATED_E2E_ADDRESS: 127.0.0.1:38520
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/generated-project-mariadb-e2e.sh
       - name: Run MariaDB CRUD integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

@@ -812,6 +812,21 @@ DATABASE_URL='mariadb://root:<test-password>@127.0.0.1:3308/zelyra_test' \
 The test instance is named `zelyra-mariadb-tests`; it does not reuse or
 reconfigure another MariaDB installation.
 
+To verify the complete first-run path against a fresh database, build the CLI
+and provide the root password of that isolated MariaDB instance:
+
+~~~bash
+cargo build -p zelyra-cli
+export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-password>'
+./tests/generated-project-mariadb-e2e.sh
+~~~
+
+This creates a temporary project with `zelyra new`, runs `zelyra setup`, checks
+the generated Compose and `doctor` configuration, creates a temporary database
+on the isolated MariaDB server, and executes the full CRUD HTTP test. The
+temporary project and database are removed automatically. The password is
+never printed or stored by the test.
+
 ## Contributing
 
 The repository is intentionally developed in small, testable phases. Before
@@ -823,8 +838,9 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
 
-GitHub Actions additionally runs the credential-free MariaDB CRUD integration
-test from `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
+GitHub Actions additionally runs the generated-project MariaDB end-to-end test
+and the credential-free MariaDB CRUD integration test from
+`tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
 The tableview integration test from `tests/mariadb-tableview-e2e.sh` additionally
 executes a struct-backed join and aggregate view through the running web server,
 including search, sorting, pagination, and HTML escaping.

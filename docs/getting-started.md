@@ -758,6 +758,18 @@ The script creates and removes its own test records, checks schema setup and
 inspection, starts the Zelyra server, and exercises related CRUD create, read,
 edit, and delete flows. It never prints or stores the database password.
 
+To test the complete generated-project path with a fresh database, use the
+isolated MariaDB stack and provide its root password:
+
+~~~bash
+export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-password>'
+./tests/generated-project-mariadb-e2e.sh
+~~~
+
+The test creates a temporary project, runs `zelyra setup`, validates the
+generated Compose and `doctor` configuration, and removes its temporary
+database and project after the CRUD HTTP test.
+
 ## 12. Common problems
 
 ### zelyra: command not found
