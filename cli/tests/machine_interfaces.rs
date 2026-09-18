@@ -734,6 +734,19 @@ fn context_exposes_safe_structural_project_information() {
 }
 
 #[test]
+fn reports_the_full_compiler_version() {
+    for arguments in [["--version"], ["-V"], ["version"]] {
+        let output = run(&arguments);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!("zelyra {}\n", env!("CARGO_PKG_VERSION"))
+        );
+    }
+}
+
+#[test]
 fn context_exposes_view_slot_structure_without_rendered_content() {
     let path = example("view_composition.zyl");
     let output = run(&["context", path.to_str().unwrap(), "--format=json"]);
