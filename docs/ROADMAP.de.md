@@ -91,9 +91,10 @@ Feature eines bestimmten Anbieters.
 - [~] Quellcode-Installer mit Prüfung, Update, Deinstallation, Dry-Run und
   sicheren Diagnosen sind verfügbar; der Rust-freie Release-Modus deckt
   veröffentlichte x86_64-Assets ab.
-- [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding und
-  einen validierten wählbaren Webport über `zelyra new` und `zelyra init`;
-  interaktive MariaDB-Verbindung und Secret-Einrichtung bleiben offen.
+- [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding,
+  sichere lokale `.env`-Erzeugung und validierte wählbare Ports über
+  `zelyra new`, `zelyra init` und `zelyra setup`; eine interaktive
+  Verbindungs-Konfiguration bleibt offen.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
   Webserver mit unabhängig konfigurierbaren Host- und Container-Ports;
   Produktionshärtung bleibt offen.

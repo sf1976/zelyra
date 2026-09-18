@@ -176,6 +176,9 @@ For a local MariaDB and web-server template, use `zelyra new machine-management
 `Dockerfile`, and `docker-compose.mariadb.yml`. The options choose the internal
 Zelyra server port and its local published port independently. You can change
 `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT` later in `.env`; both default to 3000.
+Run `zelyra setup machine-management` after scaffolding to create `.env` with
+random local MariaDB credentials. Existing `.env` files are never overwritten
+and credentials are never printed.
 
 For repository integration tests, an isolated MariaDB instance is available:
 

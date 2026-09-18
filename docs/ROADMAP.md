@@ -83,9 +83,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Source install/check/update/uninstall scripts with dry-run and safe
   diagnostics are available; Rust-free release mode covers published x86_64
   assets.
-- [~] A deterministic first-run project flow supports MariaDB scaffolding and
-  a validated selectable web port through `zelyra new` and `zelyra init`;
-  interactive MariaDB connection and secret setup remain open.
+- [~] A deterministic first-run project flow supports MariaDB scaffolding,
+  secure local `.env` creation, and validated selectable ports through
+  `zelyra new`, `zelyra init`, and `zelyra setup`; interactive connection
+  configuration remains open.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable host and container ports;
   production hardening remains open.

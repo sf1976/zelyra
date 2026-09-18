@@ -297,8 +297,7 @@ For a ready local MariaDB and web-server template, use:
 ~~~bash
 zelyra new my-app --mariadb --web-port 8080 --host-port 18080
 cd my-app
-cp .env.example .env
-# Replace every change-me value in .env before using this outside local development.
+zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 set -a; . ./.env; set +a
 zelyra db setup main.zyl
@@ -310,6 +309,11 @@ server port; `--host-port 18080` chooses the local published port. You can
 change `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT` independently later in `.env`.
 Open `http://127.0.0.1:18080` after the example above. The template is for
 local development; use a secret manager and TLS for production.
+
+`zelyra setup .` creates `.env` from the generated template with random local
+MariaDB passwords and protects the file on Unix systems. It never overwrites
+an existing `.env` and never prints the credentials. Do not use generated
+local-development credentials as production secrets.
 
 The current project file is intentionally small:
 
@@ -710,6 +714,7 @@ zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
                                          create a project and choose its ports
 zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
                                          initialize a project and choose its ports
+zelyra setup [directory]                  create a protected local .env
 zelyra check <file.zyl> [--format human|json]
                                          check source; JSON is versioned and machine-readable
 zelyra context <file.zyl> [--format human|json]
