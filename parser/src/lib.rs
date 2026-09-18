@@ -776,6 +776,7 @@ impl<'a> Parser<'a> {
         let mut page_size = None;
         let mut sort = Vec::new();
         let mut search = Vec::new();
+        let mut filters = Vec::new();
         let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
@@ -838,6 +839,19 @@ impl<'a> Parser<'a> {
                     }
                 }
                 self.expect(TokenKind::RBrace, "`}` after page search")?;
+            } else if self.at(&TokenKind::Filter) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after page filter")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    filters.push(self.ident("page filter field")?.0);
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after page filter")?;
             } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "load") {
                 let load_start = self.advance().span;
                 let (name, _) = self.ident("page data name")?;
@@ -873,7 +887,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `search`, `requires auth`, or `permits` in page definition");
+                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `search`, `filter`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -889,6 +903,7 @@ impl<'a> Parser<'a> {
             page_size,
             sort,
             search,
+            filters,
             data,
             requires_auth,
             permissions,
@@ -2425,6 +2440,18 @@ mod tests {
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert_eq!(program.pages[0].search, ["name", "email"]);
+    }
+
+    #[test]
+    fn parses_page_filter_fields() {
+        let source = r#"
+            page "/customers" {
+                filter { active, quantity }
+                html { <p>Customers</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].filters, ["active", "quantity"]);
     }
 
     #[test]

@@ -699,6 +699,25 @@ den URL-Wert `search` bereit. Suchbegriffe werden als Parameter gebunden und
 mit serverseitigen `LIKE`-Bedingungen angewendet; ungeprüfte SQL-Fragmente
 werden niemals erzeugt.
 
+Collection-Seiten können außerdem typisierte Filter deklarieren:
+
+~~~zelyra
+page "/customers" {
+    filter { name quantity }
+    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
+    html { <p>{filter_name}</p> }
+}
+~~~
+
+Der Compiler prüft Filterfelder gegen den Ergebnistyp der Collection.
+Textfelder unterstützen `eq`, `contains`, `starts_with`, `ends_with` und
+Nullprüfungen; numerische Felder zusätzlich `gt`, `gte`, `lt` und `lte`;
+Boolean- und andere Werte unterstützen Gleichheit und Nullprüfungen. Werte
+bleiben parametrisiert, Felder und Operatoren werden als Whitelist geprüft.
+Beispiele sind `/customers?filter_name__contains=Acme` und
+`/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und
+unbekannte Felder erzeugen kontrolliertes HTTP 400.
+
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 
 ~~~zelyra

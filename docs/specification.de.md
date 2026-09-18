@@ -141,3 +141,23 @@ page "/customers" {
 Der URL-Wert `search` wird als Parameter gebunden und mit serverseitigen
 `LIKE`-Bedingungen auf die deklarierten Felder angewendet. Ein leerer
 Suchwert fügt keine Bedingung hinzu; unbekannte Suchfelder sind Compilerfehler.
+
+Collection-Seiten können außerdem typisierte Filter deklarieren:
+
+~~~zelyra
+page "/customers" {
+    filter { name quantity }
+    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
+    html { <p>{filter_name}</p> }
+}
+~~~
+
+Der Compiler prüft jedes Filterfeld gegen den Ergebnistyp der Collection. Für
+Textfelder gelten `eq`, `contains`, `starts_with`, `ends_with` und
+Nullprüfungen; numerische Felder unterstützen zusätzlich `gt`, `gte`, `lt`
+und `lte`; Boolean- und andere Werte unterstützen Gleichheit und
+Nullprüfungen. Werte werden als Parameter gebunden, Feldnamen und Operatoren
+gegen die Deklaration geprüft. Beispiele sind
+`/customers?filter_name__contains=Acme` und
+`/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und nicht
+deklarierte Felder erzeugen eine kontrollierte HTTP-400-Antwort.

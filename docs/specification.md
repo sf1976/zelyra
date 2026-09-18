@@ -135,3 +135,23 @@ page "/customers" {
 The `search` URL value is bound as a parameter and applied to the declared
 fields with server-side `LIKE` conditions. Empty search values do not add a
 condition; unknown search fields are compiler errors.
+
+Collection pages may also declare typed filters:
+
+~~~zelyra
+page "/customers" {
+    filter { name quantity }
+    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
+    html { <p>{filter_name}</p> }
+}
+~~~
+
+The compiler checks every filter field against the collection result type. The
+runtime accepts only the operators supported by that type: text fields support
+`eq`, `contains`, `starts_with`, `ends_with`, and null checks; numeric fields
+also support `gt`, `gte`, `lt`, and `lte`; booleans and other values support
+equality and null checks. Values are bound parameters, while field names and
+operators are validated against the declaration. URL examples are
+`/customers?filter_name__contains=Acme` and
+`/customers?filter_quantity__gte=10`. Unsupported operators and undeclared
+fields produce a controlled HTTP 400 response.
