@@ -623,6 +623,12 @@ page "/dashboard" {
 }
 ~~~
 
+View-Interpolationen werden geprüft, bevor der Server startet. Eine Seite darf
+ihre Routenparameter verwenden, eine Komponente ihre deklarierten Properties
+und eine dynamische Component-Property muss typkompatibel sein. Unbekannte
+Werte und nicht unterstützte Ausdrücke erhalten stabile `E-VIEW-*`-Diagnosen.
+Feldzugriff, Option-Ausdrücke und datenbankgestützte View-Daten bleiben geplant.
+
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 
 ~~~zelyra

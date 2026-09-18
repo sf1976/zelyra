@@ -808,3 +808,31 @@ fn typed_map_api_contract_drives_check_openapi_and_typescript() {
     let client = String::from_utf8(typescript.stdout).unwrap();
     assert!(client.contains("Record<string, number>"));
 }
+
+#[test]
+fn typed_view_bindings_are_checked_as_machine_diagnostics() {
+    let valid = run(&[
+        "check",
+        example("typed_views.zyl").to_str().unwrap(),
+        "--format=json",
+    ]);
+    assert!(valid.status.success());
+    let valid_document: serde_json::Value = serde_json::from_slice(&valid.stdout).unwrap();
+    assert_eq!(valid_document["success"], true);
+
+    let invalid = run(&[
+        "check",
+        example("invalid_typed_views.zyl").to_str().unwrap(),
+        "--format=json",
+    ]);
+    assert_eq!(invalid.status.code(), Some(1));
+    let invalid_document: serde_json::Value = serde_json::from_slice(&invalid.stdout).unwrap();
+    let codes = invalid_document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|diagnostic| diagnostic["code"].as_str())
+        .collect::<Vec<_>>();
+    assert!(codes.contains(&"E-VIEW-010"));
+    assert!(codes.contains(&"E-VIEW-015"));
+}

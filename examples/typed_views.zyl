@@ -1,0 +1,24 @@
+component Greeting {
+    props {
+        text: String
+    }
+    html {
+        <strong class="greeting">{text}</strong>
+    }
+}
+view SiteShell {
+    html {
+        <html lang="en">
+            <body><main><slot /></main></body>
+        </html>
+    }
+}
+page "/hello/{name}" {
+    view: SiteShell
+    html {
+        <h1><Greeting text="{name}" /></h1>
+    }
+}
+fn main() {
+    print("Run: zelyra serve examples/typed_views.zyl")
+}

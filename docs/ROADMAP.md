@@ -169,8 +169,9 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment and a
   validated `<slot />` content insertion point.
-- [ ] Typed view expressions with compile-time checking of variables, fields,
-  optional values, and output escaping.
+- [~] Typed view expressions now check identifier interpolations, page route
+  bindings, component properties, and dynamic component-property types; field
+  access, option-aware expressions, and richer view data remain open.
 - [~] Named components with typed properties are available; typed events remain
   planned.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,

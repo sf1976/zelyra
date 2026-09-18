@@ -172,8 +172,9 @@ Feature eines bestimmten Anbieters.
 
 - [~] Benannte Views/Layout mit `view: Name` an Seiten und validiertem
   `<slot />`-Inhaltsslot.
-- [ ] Typisierte View-Ausdrücke mit Prüfung von Variablen, Feldern, Option-Werten
-  und sicherem Escaping.
+- [~] Typisierte View-Ausdrücke prüfen jetzt Identifier-Interpolationen,
+  Seiten-Routenbindungen, Component-Properties und dynamische Property-Typen;
+  Feldzugriff, Option-Ausdrücke und reichere View-Daten bleiben offen.
 - [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
   Events bleiben geplant.
 - [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,

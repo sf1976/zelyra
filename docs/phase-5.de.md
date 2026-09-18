@@ -79,4 +79,22 @@ page "/status" {
 ~~~
 
 Mehrere Slots, verschachtelte Komponenten, Styling und CRUD-spezifische
-Überschreibungen sind als nächste Ausbaustufen geplant.
+Überschreibungen sind in der aktuellen View-Pipeline verfügbar. Interpolierte
+Werte werden geprüft, bevor der Server startet: Seiten dürfen ihre
+Routenparameter verwenden, Komponenten ihre deklarierten Properties und eine
+dynamische Component-Property muss typkompatibel sein. Zum Beispiel:
+
+~~~zelyra
+component Greeting {
+    props { text: String }
+    html { <strong>{text}</strong> }
+}
+
+page "/hello/{name}" {
+    html { <Greeting text="{name}" /> }
+}
+~~~
+
+Unbekannte Werte und inkompatible dynamische Properties werden mit stabilen
+Diagnosen `E-VIEW-015` bzw. `E-VIEW-010` abgelehnt. Feldzugriff,
+Option-Ausdrücke und datenbankgestützte View-Daten bleiben geplant.

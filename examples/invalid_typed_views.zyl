@@ -1,0 +1,16 @@
+component Counter {
+    props {
+        count: Int
+    }
+    html {
+        <strong>{count}</strong>
+    }
+}
+page "/hello/{name}" {
+    html {
+        <Counter count="{name}" />
+        <p>{missing}</p>
+    }
+}
+fn main() {
+}

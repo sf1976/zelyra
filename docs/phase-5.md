@@ -72,6 +72,24 @@ page "/status" {
 ~~~
 
 Multiple slots, nested component composition, styling, and CRUD view overrides
-are planned next.
+are available in the current view pipeline. Interpolated values are checked
+before the server starts: pages may use their route parameters, components may
+use their declared properties, and a dynamic component property must have a
+compatible type. For example:
+
+~~~zelyra
+component Greeting {
+    props { text: String }
+    html { <strong>{text}</strong> }
+}
+
+page "/hello/{name}" {
+    html { <Greeting text="{name}" /> }
+}
+~~~
+
+Unknown values and incompatible dynamic properties are rejected with stable
+`E-VIEW-015` and `E-VIEW-010` diagnostics. Field access, option-aware
+expressions, and view-local database data remain planned.
 
 Apache is not required for local development or this standalone server.
