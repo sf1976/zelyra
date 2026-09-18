@@ -6,6 +6,19 @@ compiler and repository release.
 
 ## Unreleased
 
+No unreleased changes.
+
+Keine unveröffentlichten Änderungen.
+
+## 0.1.40 — 2026-09-18
+
+This release completes the declarative page web-query path for the current
+alpha line. It is suitable for evaluation and development, not production.
+
+Diese Version vervollständigt den deklarativen Web-Query-Pfad für Page-
+Collections innerhalb der aktuellen Alpha-Linie. Sie ist für Erprobung und
+Entwicklung, nicht für den Produktiveinsatz bestimmt.
+
 ### Added
 
 - Page collections with declared search, typed filters, sorting, or pagination
