@@ -617,6 +617,25 @@ safe to use in URLs such as `/customers?sort=name&order=desc`. See
 `search` URL value. Search terms are bound as parameters and applied with
 server-side `LIKE` conditions; unchecked SQL fragments are never created.
 
+Page collections can also declare typed filters:
+
+~~~zelyra
+page "/customers" {
+    filter { name quantity }
+    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
+    html { <p>{filter_name}</p> }
+}
+~~~
+
+The compiler checks filter fields against the collection result type. Text
+fields support `eq`, `contains`, `starts_with`, `ends_with`, and null checks;
+numeric fields also support `gt`, `gte`, `lt`, and `lte`; booleans and other
+values support equality and null checks. Values remain parameterized and
+fields/operators are whitelisted. Examples include
+`/customers?filter_name__contains=Acme` and
+`/customers?filter_quantity__gte=10`. Unsupported operators and unknown fields
+return a controlled HTTP 400 response.
+
 Components may accept child HTML through a default slot or named slots:
 
 ~~~zelyra

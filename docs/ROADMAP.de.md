@@ -201,9 +201,9 @@ Feature eines bestimmten Anbieters.
   Barrierefreiheitsverbesserungen bleiben offen.
 - [~] Die einheitliche typisierte View-Pipeline umfasst deklarative
   `tableview`-Steuerungen, explizites seitenlokales Laden einzelner Datensätze
-  und typisierte Collection-Schleifen; Filter und Suche bleiben zunächst auf
-  Tableviews konzentriert, seitenlokale Collection-Sortierung und Pagination
-  sind verfügbar, reichere Daten für beliebige Views bleiben geplant.
+  und typisierte Collection-Schleifen; Filter, Sortierung, Suche und Pagination
+  sind für deklarierte Seiten-Collections verfügbar, reichere Daten für
+  beliebige Views bleiben geplant.
 - [~] Seitenlokale typisierte Query-Eingaben (`input { search: String? }`) werden
   geprüft, sicher an natives SQL gebunden, für HTML-Interpolationen verfügbar
   gemacht und bei fehlenden Pflichtwerten oder ungültigen skalaren Werten mit
@@ -220,6 +220,10 @@ Feature eines bestimmten Anbieters.
   Suchbegriffe werden parametrisiert und mit serverseitigen `LIKE`-Bedingungen
   auf compiler-geprüfte Felder angewendet; eine automatische Erzeugung von
   Suchsteuerungen bleibt geplant.
+- [~] Seitenlokale typisierte Filter über `filter { field ... }` sind verfügbar.
+  Operatoren werden aus den deklarierten Ergebnistypen abgeleitet, Werte als
+  Parameter gebunden und unbekannte Felder oder nicht unterstützte Operatoren
+  abgelehnt; eine automatische Erzeugung von Filtersteuerungen bleibt geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

@@ -24,6 +24,7 @@ pub struct Route {
     pub page_size: Option<u32>,
     pub sort_columns: Vec<String>,
     pub search_columns: Vec<String>,
+    pub filters: Vec<TableViewFilter>,
     pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -4160,6 +4161,14 @@ enum FilterOperator {
     IsNotNull,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PageFilterSelection {
+    name: String,
+    value: String,
+    operator: FilterOperator,
+    kind: TableViewFilterKind,
+}
+
 impl FilterOperator {
     fn parse(value: &str) -> Option<Self> {
         match value {
@@ -5604,6 +5613,16 @@ fn load_route_data(
     if let Some(search) = &search {
         loaded.values.insert("search".into(), search.clone());
     }
+    let filters = page_filter_state(route, query_values).map_err(RouteDataError::InvalidQuery)?;
+    for filter in &filters {
+        loaded
+            .values
+            .insert(format!("filter_{}", filter.name), filter.value.clone());
+        loaded.values.insert(
+            format!("filter_{}__operator", filter.name),
+            filter.operator.key().into(),
+        );
+    }
     if route.data.is_empty() {
         return Ok(loaded);
     }
@@ -5617,16 +5636,25 @@ fn load_route_data(
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
             .collect::<Vec<_>>();
         query_params.extend(bound_query_values.iter().cloned());
-        if data.collection && (search.is_some() || sort.is_some() || route.page_size.is_some()) {
+        if data.collection
+            && (search.is_some()
+                || sort.is_some()
+                || !filters.is_empty()
+                || route.page_size.is_some())
+        {
             let (wrapped_query, generated_params) = page_collection_query(
                 &query,
-                search.as_deref(),
-                &route.search_columns,
-                sort.as_deref(),
-                order,
-                route.page_size,
-                page,
-            );
+                PageCollectionQueryOptions {
+                    search: search.as_deref(),
+                    search_columns: &route.search_columns,
+                    filters: &filters,
+                    sort: sort.as_deref(),
+                    order,
+                    page_size: route.page_size,
+                    page,
+                },
+            )
+            .map_err(RouteDataError::InvalidQuery)?;
             query = wrapped_query;
             query_params.extend(generated_params);
         }
@@ -5724,56 +5752,186 @@ fn page_search_state(
     ))
 }
 
-fn page_collection_query(
-    source: &str,
-    search: Option<&str>,
-    search_columns: &[String],
-    sort: Option<&str>,
-    order: &str,
+fn page_filter_state(
+    route: &Route,
+    query_values: &HashMap<String, String>,
+) -> Result<Vec<PageFilterSelection>, String> {
+    let mut filters = Vec::new();
+    let mut seen_filter_columns = HashSet::new();
+    for (name, value) in sorted_filter_query_values(query_values) {
+        let Some(filter_name) = name.strip_prefix("filter_") else {
+            continue;
+        };
+        if route.query.iter().any(|input| input.name == name) {
+            continue;
+        }
+        if filter_name.ends_with("__operator") {
+            let column = filter_name.trim_end_matches("__operator");
+            let Some(filter) = route.filters.iter().find(|filter| filter.name == column) else {
+                return Err(format!("unknown filter field `{column}`"));
+            };
+            let Some(operator) = FilterOperator::parse(value) else {
+                return Err(format!("unknown filter operator for `{column}`"));
+            };
+            if !tableview_filter_operator_supported(filter.kind, operator) {
+                return Err(format!(
+                    "operator `{}` is not supported for filter `{column}`",
+                    operator.key()
+                ));
+            }
+            continue;
+        }
+        let (column, direct_operator) = filter_name
+            .split_once("__")
+            .map_or((filter_name, None), |(column, operator)| {
+                (column, FilterOperator::parse(operator))
+            });
+        let Some(filter) = route.filters.iter().find(|filter| filter.name == column) else {
+            return Err(format!("unknown filter field `{column}`"));
+        };
+        if filter_name.contains("__") && direct_operator.is_none() {
+            return Err(format!("unknown filter operator for `{column}`"));
+        }
+        let operator =
+            direct_operator.unwrap_or_else(|| selected_filter_operator(query_values, column));
+        if !tableview_filter_operator_supported(filter.kind, operator) {
+            return Err(format!(
+                "operator `{}` is not supported for filter `{column}`",
+                operator.key()
+            ));
+        }
+        if !operator.needs_value() || !value.is_empty() {
+            if !seen_filter_columns.insert(column) {
+                return Err(format!("filter `{column}` was specified more than once"));
+            }
+            filters.push(PageFilterSelection {
+                name: column.to_string(),
+                value: value.to_string(),
+                operator,
+                kind: filter.kind,
+            });
+        }
+    }
+    if route.filters.is_empty()
+        && sorted_filter_query_values(query_values)
+            .iter()
+            .any(|(name, _)| {
+                name.starts_with("filter_") && !route.query.iter().any(|input| input.name == *name)
+            })
+    {
+        return Err("this page does not declare filter fields".into());
+    }
+    Ok(filters)
+}
+
+struct PageCollectionQueryOptions<'a> {
+    search: Option<&'a str>,
+    search_columns: &'a [String],
+    filters: &'a [PageFilterSelection],
+    sort: Option<&'a str>,
+    order: &'a str,
     page_size: Option<u32>,
     page: u64,
-) -> (String, Vec<(String, QueryValue)>) {
+}
+
+fn page_collection_query(
+    source: &str,
+    options: PageCollectionQueryOptions<'_>,
+) -> Result<(String, Vec<(String, QueryValue)>), String> {
     let source = source.trim().trim_end_matches(';').trim();
     let mut query = format!("SELECT zelyra_page.* FROM ({source}) AS zelyra_page");
     let mut parameters = Vec::new();
-    if let Some(search) = search.filter(|search| !search.is_empty()) {
-        if !search_columns.is_empty() {
-            query.push_str(" WHERE ");
-            query.push('(');
-            for (index, column) in search_columns.iter().enumerate() {
-                if index > 0 {
-                    query.push_str(" OR ");
-                }
-                query.push_str("CAST(zelyra_page.");
-                query.push_str(&quote_identifier(column));
-                query.push_str(" AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%')");
-            }
-            query.push(')');
+    let mut conditions = Vec::new();
+    if let Some(search) = options.search.filter(|search| !search.is_empty()) {
+        if !options.search_columns.is_empty() {
+            conditions.push(format!(
+                "({})",
+                options
+                    .search_columns
+                    .iter()
+                    .map(|column| {
+                        format!(
+                            "CAST(zelyra_page.{} AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%')",
+                            quote_identifier(column)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            ));
             parameters.push((
                 "zelyra_page_search".into(),
                 QueryValue::String(search.into()),
             ));
         }
     }
-    if let Some(sort) = sort {
+    for filter in options.filters {
+        conditions.push(page_filter_condition(&filter.name, filter.operator));
+        if filter.operator.needs_value() {
+            let value = page_filter_query_value(filter)?;
+            parameters.push((format!("zelyra_page_filter_{}", filter.name), value));
+        }
+    }
+    if !conditions.is_empty() {
+        query.push_str(" WHERE ");
+        query.push_str(&conditions.join(" AND "));
+    }
+    if let Some(sort) = options.sort {
         query.push_str(" ORDER BY zelyra_page.");
         query.push_str(&quote_identifier(sort));
         query.push(' ');
-        query.push_str(order);
+        query.push_str(options.order);
     }
-    if let Some(page_size) = page_size {
+    if let Some(page_size) = options.page_size {
         query.push_str(" LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset");
         parameters.push((
             "zelyra_page_limit".into(),
             QueryValue::Int(i64::from(page_size)),
         ));
-        let offset = page.saturating_sub(1).saturating_mul(u64::from(page_size));
+        let offset = options
+            .page
+            .saturating_sub(1)
+            .saturating_mul(u64::from(page_size));
         parameters.push((
             "zelyra_page_offset".into(),
             QueryValue::Int(offset.min(i64::MAX as u64) as i64),
         ));
     }
-    (query, parameters)
+    Ok((query, parameters))
+}
+
+fn page_filter_condition(column: &str, operator: FilterOperator) -> String {
+    let expression = format!("zelyra_page.{}", quote_identifier(column));
+    let parameter = format!(":zelyra_page_filter_{column}");
+    match operator {
+        FilterOperator::Equal => format!("{expression} = {parameter}"),
+        FilterOperator::Contains => format!("{expression} LIKE CONCAT('%', {parameter}, '%')"),
+        FilterOperator::StartsWith => format!("{expression} LIKE CONCAT({parameter}, '%')"),
+        FilterOperator::EndsWith => format!("{expression} LIKE CONCAT('%', {parameter})"),
+        FilterOperator::GreaterThan => format!("{expression} > {parameter}"),
+        FilterOperator::GreaterThanOrEqual => format!("{expression} >= {parameter}"),
+        FilterOperator::LessThan => format!("{expression} < {parameter}"),
+        FilterOperator::LessThanOrEqual => format!("{expression} <= {parameter}"),
+        FilterOperator::IsNull => format!("{expression} IS NULL"),
+        FilterOperator::IsNotNull => format!("{expression} IS NOT NULL"),
+    }
+}
+
+fn page_filter_query_value(filter: &PageFilterSelection) -> Result<QueryValue, String> {
+    match filter.kind {
+        TableViewFilterKind::Bool => match filter.value.as_str() {
+            "true" | "1" => Ok(QueryValue::Bool(true)),
+            "false" | "0" => Ok(QueryValue::Bool(false)),
+            _ => Err(format!("filter_{} must be true or false", filter.name)),
+        },
+        TableViewFilterKind::Numeric => filter
+            .value
+            .parse::<f64>()
+            .map(QueryValue::Float)
+            .map_err(|_| format!("filter_{} must be a number", filter.name)),
+        TableViewFilterKind::Text | TableViewFilterKind::Other => {
+            Ok(QueryValue::String(filter.value.clone()))
+        }
+    }
 }
 
 fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
@@ -6084,6 +6242,7 @@ mod tests {
             page_size: None,
             sort_columns: Vec::new(),
             search_columns: Vec::new(),
+            filters: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6370,13 +6529,17 @@ mod tests {
         assert!(page_number(&HashMap::from([("page".into(), "nope".into())])).is_err());
         let (query, parameters) = page_collection_query(
             " SELECT id FROM customers; ",
-            None,
-            &[],
-            None,
-            "ASC",
-            Some(25),
-            1,
-        );
+            PageCollectionQueryOptions {
+                search: None,
+                search_columns: &[],
+                filters: &[],
+                sort: None,
+                order: "ASC",
+                page_size: Some(25),
+                page: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(
             query,
             "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
@@ -6384,26 +6547,34 @@ mod tests {
         assert_eq!(parameters.len(), 2);
         let (sorted_query, _) = page_collection_query(
             "SELECT id FROM customers",
-            None,
-            &[],
-            Some("name"),
-            "DESC",
-            None,
-            1,
-        );
+            PageCollectionQueryOptions {
+                search: None,
+                search_columns: &[],
+                filters: &[],
+                sort: Some("name"),
+                order: "DESC",
+                page_size: None,
+                page: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(
             sorted_query,
             "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page ORDER BY zelyra_page.`name` DESC"
         );
         let (searched_query, search_parameters) = page_collection_query(
             "SELECT id, name, email FROM customers",
-            Some("Ada"),
-            &["name".into(), "email".into()],
-            Some("name"),
-            "ASC",
-            Some(25),
-            1,
-        );
+            PageCollectionQueryOptions {
+                search: Some("Ada"),
+                search_columns: &["name".into(), "email".into()],
+                filters: &[],
+                sort: Some("name"),
+                order: "ASC",
+                page_size: Some(25),
+                page: 1,
+            },
+        )
+        .unwrap();
         assert!(searched_query.contains(
             "WHERE (CAST(zelyra_page.`name` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%') OR CAST(zelyra_page.`email` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%'))"
         ));
@@ -6416,6 +6587,7 @@ mod tests {
             page_size: None,
             sort_columns: vec!["name".into(), "created_at".into()],
             search_columns: Vec::new(),
+            filters: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6448,6 +6620,52 @@ mod tests {
         assert!(
             page_search_state(&route, &HashMap::from([("search".into(), "Ada".into())])).is_err()
         );
+        let mut filter_route = route;
+        filter_route.filters = vec![
+            TableViewFilter {
+                name: "name".into(),
+                kind: TableViewFilterKind::Text,
+            },
+            TableViewFilter {
+                name: "quantity".into(),
+                kind: TableViewFilterKind::Numeric,
+            },
+        ];
+        let filter_values = HashMap::from([
+            ("filter_name".into(), "Ada".into()),
+            ("filter_name__operator".into(), "contains".into()),
+            ("filter_quantity".into(), "10".into()),
+            ("filter_quantity__operator".into(), "gte".into()),
+        ]);
+        let page_filters = page_filter_state(&filter_route, &filter_values).unwrap();
+        assert_eq!(page_filters.len(), 2);
+        let (filtered_query, filter_parameters) = page_collection_query(
+            "SELECT id, name, quantity FROM customers",
+            PageCollectionQueryOptions {
+                search: None,
+                search_columns: &[],
+                filters: &page_filters,
+                sort: None,
+                order: "ASC",
+                page_size: None,
+                page: 1,
+            },
+        )
+        .unwrap();
+        assert!(filtered_query.contains(
+            "WHERE zelyra_page.`name` LIKE CONCAT('%', :zelyra_page_filter_name, '%') AND zelyra_page.`quantity` >= :zelyra_page_filter_quantity"
+        ));
+        assert_eq!(filter_parameters.len(), 2);
+        assert!(page_filter_state(
+            &filter_route,
+            &HashMap::from([("filter_name__operator".into(), "gte".into())])
+        )
+        .is_err());
+        assert!(page_filter_state(
+            &filter_route,
+            &HashMap::from([("filter_missing".into(), "value".into())])
+        )
+        .is_err());
     }
 
     #[test]
@@ -7254,6 +7472,7 @@ mod tests {
             page_size: None,
             sort_columns: Vec::new(),
             search_columns: Vec::new(),
+            filters: Vec::new(),
             data: vec![RouteData {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
@@ -7308,6 +7527,7 @@ mod tests {
             page_size: None,
             sort_columns: Vec::new(),
             search_columns: Vec::new(),
+            filters: Vec::new(),
             data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
@@ -7331,6 +7551,7 @@ mod tests {
                 page_size: None,
                 sort_columns: Vec::new(),
                 search_columns: Vec::new(),
+                filters: Vec::new(),
                 data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],

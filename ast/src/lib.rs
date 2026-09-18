@@ -106,6 +106,7 @@ pub struct PageDef {
     pub page_size: Option<u32>,
     pub sort: Vec<String>,
     pub search: Vec<String>,
+    pub filters: Vec<String>,
     pub data: Vec<PageDataDef>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
