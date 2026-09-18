@@ -8,6 +8,12 @@ compiler and repository release.
 
 ### Added
 
+- Added the AI-native development foundation: stable versioned JSON
+  diagnostics, deterministic source spans, and a read-only structured project
+  context interface for vendor-neutral tooling.
+- Added bilingual AI-native architecture, specification, roadmap, handbook,
+  and reproducible benchmark documentation. No benchmark results are claimed
+  until they are produced by actual repeatable experiments.
 - Added named web views with page-level `view: Name` composition and a
   compiler-validated `<slot />` content boundary.
 - Added typed self-closing view components with declared properties and safe

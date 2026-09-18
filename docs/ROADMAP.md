@@ -30,6 +30,35 @@ under evaluation.
   confirmed pruning are available. Tamper-evident chaining is available as an
   explicit opt-in; archival and retention remain.
 
+## Cross-cutting: AI-native development
+
+The strategic product goal is: **AI writes. Zelyra verifies.** People and AI
+systems are equal code authors, but the compiler, tests, capabilities, and
+security rules remain authoritative. This is an AI-native and AI-independent
+architecture requirement for every phase, not a provider-specific feature.
+
+- [~] **Stage A — machine foundation:** versioned JSON diagnostics for
+  `check --format=json`, stable codes, source spans, deterministic output, a
+  read-only `context --format=json` project summary, and machine-format tests
+  are implemented. Other commands and complete secret-redaction coverage
+  remain.
+- [ ] **Stage B — canonical source:** define and implement deterministic
+  `zelyra fmt`, including idempotence and semantic-preservation tests.
+- [ ] **Stage C — typed gaps:** add typed holes with expected type, visible
+  values/functions, capabilities, contract obligations, and source spans;
+  incomplete code must never build or publish.
+- [ ] **Stage D — impact analysis:** add deterministic `zelyra impact
+  --format=json` for tables, SQL, forms, CRUD, views, APIs, emails, jobs,
+  permissions, contracts, tests, and schema changes.
+- [ ] **Stage E — semantic edits:** add validated, atomic, previewable,
+  versioned `zelyra edit --format=json` operations alongside text patches.
+- [~] **Stage F — contracts and effects:** contracts and capability checks
+  exist; granular effects such as `Database(read)`, `Database(write)`,
+  `Email`, and `Jobs` remain planned. AI must never add an effect silently.
+- [ ] **Stage G — benchmark:** establish a reproducible AI-authoring
+  benchmark before making comparative suitability claims. Results are empty
+  until real controlled experiments exist.
+
 ## 1. Beginner experience and distribution
 
 - [ ] One-command installation for Linux, Windows, and macOS.

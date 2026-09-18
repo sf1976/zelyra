@@ -24,8 +24,33 @@ kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
 Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
 
 Die gepflegte [Roadmap](docs/ROADMAP.de.md) enthält alle geplanten Pflicht- und
-optionalen Arbeiten, einschließlich Views-System und kryptografischer
-Audit-Verkettung.
+optionalen Arbeiten, einschließlich Views-System, KI-nativer
+Compiler-Schnittstellen und kryptografischer Audit-Verkettung.
+
+## KI-native Entwicklung
+
+Zelyras strategische Richtung lautet: **Die KI schreibt. Zelyra prüft.** Ein
+Mensch oder ein KI-System darf Zelyra-Code schreiben; der Compiler bleibt aber
+maßgeblich für Syntax, Namen, Typen, SQL, Schema, Formulare, Views,
+Berechtigungen, Contracts, Capabilities, Tests und die Freigabe destruktiver
+Änderungen. Zelyra bleibt vollständig ohne KI-Anbieter oder Cloud-Dienst
+nutzbar.
+
+Die ersten maschinenorientierten Schnittstellen sind verfügbar:
+
+~~~bash
+zelyra check examples/fibonacci.zyl --format=json
+zelyra context examples/auth_crud_api.zyl --format=json
+~~~
+
+Beide verwenden Schema-Version `1`. JSON wird ausschließlich auf stdout
+ausgegeben; Diagnosen besitzen stabile Codes und UTF-8-Byte-Offsets, technische
+Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
+Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
+Typed Holes, semantische Änderungen, Wirkungsanalyse und vergleichende
+KI-Benchmarks sind geplant, aber noch nicht implementiert. Siehe die
+[KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
+[Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 
 ## Lizenz und Implementierung
 
@@ -671,7 +696,8 @@ Aktuell verfügbar:
 ~~~text
 zelyra new <directory> [--mariadb]
 zelyra init [directory]
-zelyra check <file.zyl>
+zelyra check <file.zyl> [--format human|json]
+zelyra context <file.zyl> [--format human|json]
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]

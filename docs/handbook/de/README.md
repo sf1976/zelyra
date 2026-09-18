@@ -43,6 +43,7 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 17. [Diagnosen und Fehlersuche](#17-diagnosen-und-fehlersuche)
 18. [Testen und Mitentwickeln](#18-testen-und-mitentwickeln)
 19. [Was als Nächstes kommt](#19-was-als-nächstes-kommt)
+20. [KI-native Entwicklung mit Zelyra](#20-ki-native-entwicklung-mit-zelyra)
 
 ## 1. Was Zelyra anders macht
 
@@ -1488,3 +1489,86 @@ die Tür abschließen:
 > **Automatisch, wenn möglich. Anpassbar, wenn nötig. Überall geprüft.**
 
 Und jetzt: eine Tabelle bauen, SQL lesen, Backup prüfen. In dieser Reihenfolge.
+
+## 20. KI-native Entwicklung mit Zelyra
+
+Zelyra ist KI-nativ, aber nicht KI-abhängig. Menschen und KI-Systeme können
+denselben verständlichen `.zyl`-Quellcode schreiben. Maßgeblich bleibt der
+Compiler:
+
+> **Die KI schreibt. Zelyra prüft.**
+
+Kein KI-Anbieter ist Bestandteil des Kompilierens. Der Compiler sendet keinen
+Quellcode an externe Dienste. Die Maschinenschnittstellen sind versioniert und
+anbieterneutral, sodass auch lokale Werkzeuge sie verwenden können.
+
+### Was jetzt verfügbar ist
+
+- ✅ **Implementiert:** deterministische, versionierte JSON-Diagnosen;
+- ✅ **Implementiert:** stabile Fehlercodes und Source-Spans;
+- ✅ **Implementiert:** schreibgeschützter strukturierter Projektkontext;
+- ✅ **Implementiert:** menschenlesbare Ausgabe bleibt Standard;
+- 🧪 **Experimentell:** die aktuelle JSON-Schnittstelle hat Schema-Version `1`
+  und unterstützt `check` und `context`;
+- 🗺️ **Geplant:** typisierte Lücken, semantische Änderungen,
+  Wirkungsanalyse und der reproduzierbare KI-Benchmark;
+- ❌ **Nicht verfügbar:** automatische Änderungen an Produktionssystemen,
+  automatische Berechtigungserweiterungen oder an einen KI-Dienst delegierte
+  Compilerentscheidungen.
+
+Prüfe ein Programm weiterhin standardmäßig menschenlesbar:
+
+~~~bash
+zelyra check examples/fibonacci.zyl
+~~~
+
+Für Werkzeuge kann JSON ausdrücklich angefordert werden:
+
+~~~bash
+zelyra check examples/fibonacci.zyl --format=json
+~~~
+
+Eine erfolgreiche Ausgabe hat aktuell diese Form:
+
+~~~json
+{
+  "schema_version": "1",
+  "command": "check",
+  "success": true,
+  "diagnostics": []
+}
+~~~
+
+Fehler verwenden stabile Codes wie `E-LEX-001`, `E-PARSE-001` und
+`E-SQL-004`. JSON wird ausschließlich auf `stdout` ausgegeben; technische
+Logs gehören auf `stderr`. Eine fehlgeschlagene Prüfung liefert einen Exit-Code
+ungleich null. Offsets sind UTF-8-Byte-Offsets, Zeilen und Spalten beginnen bei
+eins, und wiederholte Prüfungen erzeugen byte-identische Ausgaben.
+
+Den vom Compiler verstandenen, schreibgeschützten Projektaufbau kann man so
+inspizieren:
+
+~~~bash
+zelyra context examples/auth_crud_api.zyl --format=json
+~~~
+
+Die Kontextantwort enthält Projekteinstieg und nur Deklarationen, die der
+aktuelle Compiler tatsächlich versteht, darunter Tabellen, Felder, CRUD-
+Ressourcen, Formulare, APIs und Source-Spans. Sie verbindet sich nicht mit
+MariaDB, führt keine E-Mail aus, gibt keine Zugangsdaten aus und enthält keine
+gerenderten vertraulichen Inhalte.
+
+### Sichere Automatisierungsgrenze
+
+Generierter Code muss Compiler und Tests bestehen. Einer KI darf nicht vertraut
+werden, nur weil ihr Ergebnis plausibel aussieht. Sie darf nicht unbemerkt
+Capabilities hinzufügen, Diagnosen abschwächen, Tests deaktivieren, Geheimnisse
+offenlegen oder destruktive Schemaänderungen freigeben. Für riskante Datenbank-
+und Sicherheitsoperationen bleibt eine menschliche Freigabe erforderlich.
+
+Als nächste Maschinenschnittstellen sind typisierte Lücken,
+`zelyra impact --format=json` und ein validiertes semantisches
+Änderungsprotokoll geplant. Sie erweitern das gemeinsame versionierte
+JSON-Format, ersetzen es aber nicht. Benchmark-Ergebnisse werden erst nach
+reproduzierbaren Versuchen veröffentlicht; dieses Handbuch enthält keinen
+erfundenen Vergleich.

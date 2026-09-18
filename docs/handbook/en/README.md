@@ -43,6 +43,7 @@ program and ending with a database-backed web application.
 17. [Diagnostics and troubleshooting](#17-diagnostics-and-troubleshooting)
 18. [Testing and contributing](#18-testing-and-contributing)
 19. [What comes next](#19-what-comes-next)
+20. [AI-native development with Zelyra](#20-ai-native-development-with-zelyra)
 
 ## 1. What makes Zelyra different
 
@@ -1382,3 +1383,80 @@ case arrives:
 > **Generated when possible. Custom where needed. Verified everywhere.**
 
 Now build a table, read the SQL, and check the backup. In that order.
+
+## 20. AI-native development with Zelyra
+
+Zelyra is AI-native but AI-independent. A human or an AI system may author
+the same readable `.zyl` source. The compiler remains the authority:
+
+> **AI writes. Zelyra verifies.**
+
+An AI provider is never part of compilation, and source code is not sent to an
+external service by the compiler. The machine interfaces are versioned and
+vendor-neutral so local tools can use them as well.
+
+### What is available now
+
+- ✅ **Implemented:** deterministic, versioned JSON diagnostics;
+- ✅ **Implemented:** stable diagnostic codes and source spans;
+- ✅ **Implemented:** read-only structured project context;
+- ✅ **Implemented:** human-readable output remains the default;
+- 🧪 **Experimental:** the current JSON interface is schema version `1` and
+  covers the `check` and `context` commands;
+- 🗺️ **Planned:** typed gaps, semantic edits, impact analysis, and the
+  reproducible AI authoring benchmark;
+- ❌ **Not available:** automatic production changes, automatic permission
+  escalation, or compiler decisions delegated to an AI service.
+
+Check a program in the human-oriented default format:
+
+~~~bash
+zelyra check examples/fibonacci.zyl
+~~~
+
+For tools, request JSON explicitly:
+
+~~~bash
+zelyra check examples/fibonacci.zyl --format=json
+~~~
+
+The current successful response has this shape:
+
+~~~json
+{
+  "schema_version": "1",
+  "command": "check",
+  "success": true,
+  "diagnostics": []
+}
+~~~
+
+Errors use stable codes such as `E-LEX-001`, `E-PARSE-001`, and
+`E-SQL-004`. JSON is written only to `stdout`; technical logs belong on
+`stderr`. A failed check returns a non-zero exit code. Offsets are UTF-8 byte
+offsets, lines and columns are one-based, and repeated checks produce the same
+bytes.
+
+Inspect the understood, read-only project structure:
+
+~~~bash
+zelyra context examples/auth_crud_api.zyl --format=json
+~~~
+
+The context response contains the project entry and only declarations the
+current compiler can actually understand, including tables, fields, CRUD
+resources, forms, APIs, and source spans. It does not connect to MariaDB,
+execute email, expose credentials, or include rendered confidential content.
+
+### Safe automation boundary
+
+Generated code must pass the compiler and tests. An AI must not be trusted
+because its output looks plausible. It may not silently add capabilities,
+weaken diagnostics, disable tests, reveal secrets, or approve destructive
+schema changes. Human approval remains required for risky database and
+security operations.
+
+The next planned machine interfaces are typed gaps, `zelyra impact --format=json`,
+and a validated semantic edit protocol. They will extend the versioned common
+JSON envelope rather than replace it. Benchmark results will be published only
+after reproducible experiments; this handbook contains no invented comparison.

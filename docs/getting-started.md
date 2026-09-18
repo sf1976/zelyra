@@ -678,7 +678,10 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ~~~text
 zelyra new <directory>                  create a project
 zelyra init [directory]                 initialize a project
-zelyra check <file.zyl>                 check source
+zelyra check <file.zyl> [--format human|json]
+                                         check source; JSON is versioned and machine-readable
+zelyra context <file.zyl> [--format human|json]
+                                         inspect read-only project context
 zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server

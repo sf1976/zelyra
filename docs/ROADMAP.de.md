@@ -32,6 +32,37 @@ noch in Prüfung.
   bestätigtes Bereinigen sind verfügbar. Manipulationssichere Verkettung ist
   optional verfügbar; Archivierung und Aufbewahrung bleiben offen.
 
+## Querschnitt: KI-native Entwicklung
+
+Das strategische Produktziel lautet: **Die KI schreibt. Zelyra prüft.**
+Menschen und KI-Systeme sind gleichwertige Codeautoren; Compiler, Tests,
+Capabilities und Sicherheitsregeln bleiben jedoch maßgeblich. Dies ist eine
+KI-native und KI-unabhängige Architekturanforderung für jede Phase, kein
+Feature eines bestimmten Anbieters.
+
+- [~] **Stufe A — Maschinenbasis:** Versionierte JSON-Diagnosen für
+  `check --format=json`, stabile Codes, Source-Spans, deterministische
+  Ausgabe, eine schreibgeschützte Projektübersicht mit
+  `context --format=json` und Format-Tests sind implementiert. Weitere
+  Befehle und eine vollständige Secret-Redaction bleiben offen.
+- [ ] **Stufe B — kanonischer Quellcode:** Deterministisches `zelyra fmt` mit
+  Idempotenz- und Semantiktests definieren und implementieren.
+- [ ] **Stufe C — typisierte Lücken:** Typed Holes mit erwartetem Typ,
+  sichtbaren Werten/Funktionen, Capabilities, Contract-Pflichten und
+  Source-Spans; unvollständiger Code darf nie gebaut oder veröffentlicht werden.
+- [ ] **Stufe D — Wirkungsanalyse:** Deterministisches
+  `zelyra impact --format=json` für Tabellen, SQL, Formulare, CRUD, Views,
+  APIs, E-Mails, Jobs, Berechtigungen, Contracts, Tests und Schemaänderungen.
+- [ ] **Stufe E — semantische Änderungen:** Validierte, atomare,
+  vorschau-fähige und versionierte `zelyra edit --format=json`-Operationen
+  zusätzlich zu Textpatches.
+- [~] **Stufe F — Contracts und Effekte:** Contracts und Capability-Prüfung
+  existieren; feinere Effekte wie `Database(read)`, `Database(write)`,
+  `Email` und `Jobs` sind geplant. KI darf Effekte niemals unbemerkt ergänzen.
+- [ ] **Stufe G — Benchmark:** Reproduzierbaren KI-Autorenschaftsbenchmark
+  etablieren, bevor vergleichende Eignungsbehauptungen veröffentlicht werden.
+  Ergebnisse bleiben bis zu echten kontrollierten Versuchen leer.
+
 ## 1. Einstieg und Distribution
 
 - [ ] Ein-Befehl-Installation für Linux, Windows und macOS.

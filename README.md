@@ -23,7 +23,31 @@ buildable, tested Rust code, but the complete long-term language specification
 is not implemented yet.
 
 See the maintained [roadmap](docs/ROADMAP.md) for required and optional future
-work, including the Views System and cryptographic audit chaining.
+work, including the Views System, AI-native compiler interfaces, and
+cryptographic audit chaining.
+
+## AI-native development
+
+Zelyra's strategic direction is **AI writes. Zelyra verifies.** A person or an
+AI system may write Zelyra code, but the compiler remains the authority for
+syntax, names, types, SQL, schema, forms, views, permissions, contracts,
+capabilities, tests, and destructive-change approval. Zelyra remains fully
+usable without an AI provider or cloud service.
+
+The first machine-oriented interfaces are available now:
+
+~~~bash
+zelyra check examples/fibonacci.zyl --format=json
+zelyra context examples/auth_crud_api.zyl --format=json
+~~~
+
+Both use schema version `1`. JSON is written only to stdout; diagnostics have
+stable codes and UTF-8 byte offsets, while operational messages remain on
+stderr. The context command is read-only and reports declarations without
+connecting to a database or exposing secrets. Typed holes, semantic edits,
+impact analysis, and comparative AI benchmarks are planned and are not yet
+implemented. See the [AI-native architecture](docs/architecture/ai-native-development.md)
+and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
 ## License and implementation
 
@@ -650,7 +674,8 @@ Currently available:
 ~~~text
 zelyra new <directory> [--mariadb]
 zelyra init [directory]
-zelyra check <file.zyl>
+zelyra check <file.zyl> [--format human|json]
+zelyra context <file.zyl> [--format human|json]
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]

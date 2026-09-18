@@ -702,7 +702,10 @@ Sortierung verwendet `sort=<spalte>&order=asc|desc`.
 ~~~text
 zelyra new <directory>                  Projekt erstellen
 zelyra init [directory]                 Projekt initialisieren
-zelyra check <file.zyl>                 Quellcode prüfen
+zelyra check <file.zyl> [--format human|json]
+                                         Quellcode prüfen; JSON ist versioniert und maschinenlesbar
+zelyra context <file.zyl> [--format human|json]
+                                         schreibgeschützten Projektkontext inspizieren
 zelyra build <file.zyl>                 Quellcode prüfen/bauen
 zelyra run <file.zyl>                   Programm ausführen
 zelyra serve <file.zyl> [address]       eingebauten HTTP-Server starten
