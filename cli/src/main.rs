@@ -812,7 +812,22 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[], &page.inputs);
+        if page.page_size.is_some()
+            && !page
+                .data
+                .iter()
+                .any(|data| matches!(data.result_type, Type::Array(_)))
+        {
+            diagnostic(
+                path,
+                "E-VIEW-021",
+                "`paginated` requires at least one page collection loaded with an array result type",
+                page.span.line,
+                page.span.column,
+            );
+            valid = false;
+        }
+        let route_names = page_template_bindings(&page.path, &[], &page.inputs, page.page_size);
         let mut names = HashSet::new();
         for data in &page.data {
             if !names.insert(data.name.as_str()) {
@@ -859,7 +874,7 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[], &[]);
+        let route_names = page_template_bindings(&page.path, &[], &[], None);
         let mut names = HashSet::new();
         for input in &page.inputs {
             if !names.insert(input.name.as_str()) {
@@ -878,6 +893,34 @@ fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
                     "E-VIEW-019",
                     &format!(
                         "page input `{}` conflicts with a route parameter",
+                        input.name
+                    ),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if page.page_size.is_some() && input.name == "page" {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    "page input `page` is reserved by `paginated`",
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if page.page_size.is_some()
+                && matches!(
+                    input.name.as_str(),
+                    "zelyra_page_limit" | "zelyra_page_offset"
+                )
+            {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    &format!(
+                        "page input `{}` is reserved for pagination internals",
                         input.name
                     ),
                     input.span.line,
@@ -1522,6 +1565,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "path": page.path,
                 "view": page.view,
                 "inputs": inputs,
+                "page_size": page.page_size,
                 "data": data,
                 "span": context_span(source, page.span)
             })
@@ -2531,7 +2575,7 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         );
     }
     for page in &program.pages {
-        let bindings = page_template_bindings(&page.path, &page.data, &page.inputs);
+        let bindings = page_template_bindings(&page.path, &page.data, &page.inputs, page.page_size);
         valid &= validate_component_template(
             path,
             program,
@@ -2560,6 +2604,7 @@ fn page_template_bindings(
     path: &str,
     data: &[zelyra_ast::PageDataDef],
     inputs: &[zelyra_ast::PageInputDef],
+    page_size: Option<u32>,
 ) -> HashMap<String, Type> {
     let mut bindings = path
         .split('/')
@@ -2573,6 +2618,9 @@ fn page_template_bindings(
         .collect::<HashMap<_, _>>();
     for input in inputs {
         bindings.insert(input.name.clone(), input.ty.clone());
+    }
+    if page_size.is_some() {
+        bindings.insert("page".into(), Type::UInt);
     }
     for data in data {
         bindings.insert(data.name.clone(), data.result_type.clone());
@@ -5288,6 +5336,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     ty: input.ty.clone(),
                 })
                 .collect(),
+            page_size: page.page_size,
             data: page
                 .data
                 .iter()

@@ -194,13 +194,17 @@ architecture requirement for every phase, not a provider-specific feature.
   labels are available; broader accessibility improvements remain open.
 - [~] The unified typed view pipeline covers declarative `tableview` controls,
   explicit page-local record loading, and typed collection loops; filters,
-  search, sorting, and pagination remain tableview-focused while richer
-  arbitrary-view data remains planned.
+  search and sorting remain tableview-focused, while page-local collection
+  pagination is now available and richer arbitrary-view data remains planned.
 - [~] Page-local typed query inputs (`input { search: String? }`) are checked,
   safely bound to native SQL, exposed to HTML interpolation, and rejected with
   controlled HTTP 400 responses when required values are missing or scalar
   values are invalid. Automatic search, filter, sort, and pagination controls
   for arbitrary pages remain planned.
+- [~] Page-local collection pagination via `paginated <size>` is available.
+  It validates a positive `page` URL value, exposes it as `UInt`, and applies a
+  parameterized `LIMIT`/`OFFSET` wrapper; generated query controls and total
+  page counts remain planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

@@ -103,6 +103,7 @@ pub struct PageDef {
     pub html: String,
     pub view: Option<String>,
     pub inputs: Vec<PageInputDef>,
+    pub page_size: Option<u32>,
     pub data: Vec<PageDataDef>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,

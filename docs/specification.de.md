@@ -96,3 +96,19 @@ werden als SQL `NULL` gebunden; fehlende Pflichtwerte und ungültige skalare
 Werte erzeugen HTTP 400. Automatische Steuerungen für Suche, Filter,
 Sortierung und Pagination beliebiger Seiten gehören noch nicht zu diesem
 Feature.
+
+Collection-Seiten können serverseitige Pagination aktivieren:
+
+~~~zelyra
+page "/customers" {
+    paginated 25
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>{page}</p> }
+}
+~~~
+
+Die Größe nach `paginated` muss zwischen 1 und 100 liegen. Der optionale
+URL-Wert `page` ist eine positive Ganzzahl mit dem Standardwert `1` und steht
+im Seiten-HTML als `UInt` zur Verfügung. Die Laufzeit wendet einen
+parametrisierten `LIMIT`-/`OFFSET`-Wrapper auf Collection-Abfragen an.
+Pagination für beliebige Einzelabfragen weist der Compiler zurück.

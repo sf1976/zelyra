@@ -595,7 +595,20 @@ Query values are checked against their Zelyra type and safely bound as
 database parameters. A missing optional input becomes SQL `NULL`; a missing
 required input or invalid value produces a controlled HTTP 400 response.
 Automatic search, filter, sorting, and pagination controls for arbitrary pages
-remain planned. See `examples/view_query_input.zyl`.
+remain planned. Page collections can already opt into safe server-side
+pagination:
+
+~~~zelyra
+page "/customers" {
+    paginated 25
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>Page: {page}</p> }
+}
+~~~
+
+`page` is validated as a positive integer, defaults to `1`, and is applied as
+a parameterized `LIMIT`/`OFFSET` wrapper around the collection SQL. See
+`examples/view_query_input.zyl`.
 
 Components may accept child HTML through a default slot or named slots:
 

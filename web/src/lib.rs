@@ -21,6 +21,7 @@ pub struct Route {
     pub path: String,
     pub html: String,
     pub query: Vec<RouteQuery>,
+    pub page_size: Option<u32>,
     pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -5582,6 +5583,13 @@ fn load_route_data(
             query_values.get(&input.name).cloned().unwrap_or_default(),
         );
     }
+    let page = if route.page_size.is_some() {
+        let page = page_number(query_values).map_err(RouteDataError::InvalidQuery)?;
+        loaded.values.insert("page".into(), page.to_string());
+        page
+    } else {
+        1
+    };
     if route.data.is_empty() {
         return Ok(loaded);
     }
@@ -5589,13 +5597,26 @@ fn load_route_data(
         return Err(RouteDataError::DatabaseUnavailable);
     };
     for data in &route.data {
+        let mut query = data.query.clone();
         let mut query_params = params
             .iter()
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
             .collect::<Vec<_>>();
         query_params.extend(bound_query_values.iter().cloned());
+        if let Some(page_size) = route.page_size.filter(|_| data.collection) {
+            query = paginated_page_query(&query);
+            query_params.push((
+                "zelyra_page_limit".into(),
+                QueryValue::Int(i64::from(page_size)),
+            ));
+            let offset = page.saturating_sub(1).saturating_mul(u64::from(page_size));
+            query_params.push((
+                "zelyra_page_offset".into(),
+                QueryValue::Int(offset.min(i64::MAX as u64) as i64),
+            ));
+        }
         let result =
-            match zelyra_database::execute_mariadb_query(database_url, &data.query, query_params) {
+            match zelyra_database::execute_mariadb_query(database_url, &query, query_params) {
                 Ok(result) => result,
                 Err(error) => {
                     eprintln!("zelyra web: page data query failed: {error}");
@@ -5626,6 +5647,24 @@ fn load_route_data(
         }
     }
     Ok(loaded)
+}
+
+fn page_number(query_values: &HashMap<String, String>) -> Result<u64, String> {
+    match query_values.get("page") {
+        None => Ok(1),
+        Some(value) => value
+            .parse::<u64>()
+            .ok()
+            .filter(|page| *page > 0)
+            .ok_or_else(|| "page must be a positive integer".into()),
+    }
+}
+
+fn paginated_page_query(source: &str) -> String {
+    let source = source.trim().trim_end_matches(';').trim();
+    format!(
+        "SELECT zelyra_page.* FROM ({source}) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
+    )
 }
 
 fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
@@ -5933,6 +5972,7 @@ mod tests {
             path: "/hello/{name}".into(),
             html: "<h1>Hello, {name}!</h1>".into(),
             query: Vec::new(),
+            page_size: None,
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6206,6 +6246,21 @@ mod tests {
         ));
         assert!(page_query_value(&Type::Int, "not-a-number").is_err());
         assert!(page_query_value(&Type::Bool, "yes").is_err());
+    }
+
+    #[test]
+    fn validates_page_pagination_state_and_wraps_sql_safely() {
+        assert_eq!(page_number(&HashMap::new()), Ok(1));
+        assert_eq!(
+            page_number(&HashMap::from([("page".into(), "3".into())])),
+            Ok(3)
+        );
+        assert!(page_number(&HashMap::from([("page".into(), "0".into())])).is_err());
+        assert!(page_number(&HashMap::from([("page".into(), "nope".into())])).is_err());
+        assert_eq!(
+            paginated_page_query(" SELECT id FROM customers; "),
+            "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
+        );
     }
 
     #[test]
@@ -7009,6 +7064,7 @@ mod tests {
             path: "/customers/{name}".into(),
             html: "<h1>{customer.name}</h1>".into(),
             query: Vec::new(),
+            page_size: None,
             data: vec![RouteData {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
@@ -7060,6 +7116,7 @@ mod tests {
             path: "/admin".into(),
             html: "<h1>Admin</h1>".into(),
             query: Vec::new(),
+            page_size: None,
             data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
@@ -7080,6 +7137,7 @@ mod tests {
                 path: "/admin".into(),
                 html: "<h1>Admin</h1>".into(),
                 query: Vec::new(),
+                page_size: None,
                 data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],

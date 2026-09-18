@@ -91,3 +91,18 @@ database parameters. Missing optional inputs are bound as SQL `NULL`; missing
 required inputs and invalid scalar values produce HTTP 400. Automatic controls
 for search, filtering, sorting, and pagination on arbitrary pages are not yet
 part of this feature.
+
+Collection pages may opt into server-side pagination:
+
+~~~zelyra
+page "/customers" {
+    paginated 25
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>{page}</p> }
+}
+~~~
+
+The `paginated` size must be between 1 and 100. The optional `page` URL value
+is a positive integer with default `1` and is exposed to page HTML as `UInt`.
+The runtime applies a parameterized `LIMIT`/`OFFSET` wrapper to collection
+queries. Pagination of arbitrary record loads is rejected by the compiler.

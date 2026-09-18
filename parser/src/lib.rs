@@ -773,6 +773,7 @@ impl<'a> Parser<'a> {
         let mut html = None;
         let mut view = None;
         let mut inputs = Vec::new();
+        let mut page_size = None;
         let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
@@ -798,6 +799,17 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after `view`")?;
                 view = Some(self.ident("view name")?.0);
+            } else if self.at(&TokenKind::Paginated) {
+                self.advance();
+                let value = match self.current().kind.clone() {
+                    TokenKind::Int(value) => value,
+                    _ => return self.error("expected page size after `paginated`"),
+                };
+                self.advance();
+                if !(1..=100).contains(&value) {
+                    return self.error("page size must be between 1 and 100");
+                }
+                page_size = Some(value as u32);
             } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "load") {
                 let load_start = self.advance().span;
                 let (name, _) = self.ident("page data name")?;
@@ -833,7 +845,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `load`, `html`, `view`, `requires auth`, or `permits` in page definition");
+                return self.error("expected `load`, `html`, `view`, `paginated`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -846,6 +858,7 @@ impl<'a> Parser<'a> {
             html,
             view,
             inputs,
+            page_size,
             data,
             requires_auth,
             permissions,
@@ -2346,6 +2359,18 @@ mod tests {
             Type::Option(Box::new(Type::String))
         );
         assert_eq!(program.pages[0].inputs[1].ty, Type::UInt);
+    }
+
+    #[test]
+    fn parses_page_pagination() {
+        let source = r#"
+            page "/customers" {
+                paginated 25
+                html { <p>Customers</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].page_size, Some(25));
     }
 
     #[test]
