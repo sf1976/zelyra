@@ -295,6 +295,7 @@ pub struct CrudRoute {
 pub struct CrudActionRoute {
     pub name: String,
     pub label: String,
+    pub icon: Option<String>,
     pub confirm: Option<String>,
     pub form: FormRoute,
 }
@@ -2383,7 +2384,11 @@ fn dispatch_form(
             eprintln!("zelyra web: form action failed: {error}");
             return Response::html(500, "<h1>500 Internal Server Error</h1>");
         }
-        return Response::redirect(action.redirect.as_deref().unwrap_or("/"));
+        let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
+        if let Some(success) = action.success.as_deref() {
+            redirect = append_query_parameter(&redirect, "zelyra_success", success);
+        }
+        return Response::redirect(redirect);
     }
     Response::html(
         202,
@@ -2573,6 +2578,7 @@ struct CrudUiActions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CrudUiActionLink {
     label: String,
+    icon: Option<String>,
     path: String,
     csrf: String,
     confirm: Option<String>,
@@ -2613,6 +2619,7 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                 };
                 Some(CrudUiActionLink {
                     label: action.label.clone(),
+                    icon: action.icon.clone(),
                     path: action.form.path.clone(),
                     csrf: action.form.csrf.token().into(),
                     confirm: action.confirm.clone(),
@@ -3007,6 +3014,7 @@ fn dispatch_crud(
                 order,
                 page,
                 per_page,
+                success: query_values.get("zelyra_success").map(String::as_str),
             },
             ui_actions,
         ),
@@ -3909,6 +3917,7 @@ struct CrudListView<'a> {
     order: &'a str,
     page: u64,
     per_page: u64,
+    success: Option<&'a str>,
 }
 
 #[cfg(test)]
@@ -3942,12 +3951,18 @@ fn render_crud_list_with_actions(
         order,
         page,
         per_page,
+        success,
     } = view;
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
     html.push_str("><h1>");
     html.push_str(&html_escape(&crud.title));
     html.push_str("</h1>");
+    if let Some(success) = success {
+        html.push_str("<p class=\"zelyra-success\" role=\"status\">");
+        html.push_str(&html_escape(success));
+        html.push_str("</p>");
+    }
     if ui_actions.create {
         html.push_str("<p><a href=\"");
         html.push_str(&html_escape(&format!("{}/new", crud.path)));
@@ -4296,6 +4311,13 @@ fn render_crud_detail_with_actions(
             }
         }
         html.push_str("<button type=\"submit\">");
+        if let Some(icon) = &action.icon {
+            html.push_str("<span class=\"zelyra-action-icon zelyra-action-icon-");
+            html.push_str(&html_escape(icon));
+            html.push_str("\" data-icon=\"");
+            html.push_str(&html_escape(icon));
+            html.push_str("\" aria-hidden=\"true\"></span>");
+        }
         html.push_str(&html_escape(&action.label));
         html.push_str("</button></form>");
     }
@@ -4372,6 +4394,15 @@ fn url_encode(value: &str) -> String {
         }
     }
     encoded
+}
+
+fn append_query_parameter(path: &str, name: &str, value: &str) -> String {
+    let separator = if path.contains('?') { '&' } else { '?' };
+    format!(
+        "{path}{separator}{}={}",
+        url_encode(name),
+        url_encode(value)
+    )
 }
 
 fn relation_options_error(database_url: Option<&str>, error: String) -> Response {
@@ -5683,9 +5714,11 @@ mod tests {
                 order: "ASC",
                 page: 2,
                 per_page: 1,
+                success: Some("Saved <unsafe>"),
             },
         );
         assert!(html.contains("&lt;unsafe&gt;"));
+        assert!(html.contains("class=\"zelyra-success\" role=\"status\">Saved &lt;unsafe&gt;</p>"));
         assert!(html.contains("value=\"CNC machine\""));
         assert!(html
             .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
@@ -5706,6 +5739,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                success: None,
             },
             CrudUiActions {
                 create: false,
@@ -5734,6 +5768,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                success: None,
             },
         );
         assert!(cards_html.contains("zelyra-crud-cards"));
@@ -5756,6 +5791,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                success: None,
             },
         );
         assert!(empty_html.contains("Nothing &lt;yet&gt;."));
@@ -5863,6 +5899,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                success: None,
             },
         );
         assert!(html.contains("<th>Department</th>"));
@@ -6202,6 +6239,7 @@ mod tests {
                 delete: false,
                 custom: vec![CrudUiActionLink {
                     label: "Deactivate".into(),
+                    icon: Some("pause".into()),
                     path: "/machines/{id}/deactivate".into(),
                     csrf: "crud-csrf".into(),
                     confirm: Some("Deactivate <unsafe> customer?".into()),
@@ -6235,6 +6273,8 @@ mod tests {
         assert!(action_html.contains(">Deactivate</button>"));
         assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
         assert!(action_html.contains("name=\"active\" type=\"checkbox\" value=\"true\""));
+        assert!(action_html
+            .contains("class=\"zelyra-action-icon zelyra-action-icon-pause\" data-icon=\"pause\""));
         assert!(action_html.contains("<select id=\"department\" name=\"department\" required>"));
         assert!(action_html.contains("<option value=\"2\">Production &lt;unsafe&gt;</option>"));
         assert!(action_html.contains(
@@ -6306,6 +6346,7 @@ mod tests {
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
             label: None,
+            icon: None,
             confirm: None,
             fields: Vec::new(),
             requires_auth: true,
@@ -6329,6 +6370,7 @@ mod tests {
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
             label: None,
+            icon: None,
             confirm: None,
             fields: Vec::new(),
             requires_auth: true,
@@ -6351,6 +6393,7 @@ mod tests {
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
             label: None,
+            icon: None,
             confirm: None,
             fields: Vec::new(),
             requires_auth: false,

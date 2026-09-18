@@ -600,12 +600,17 @@ and are bound as SQL parameters:
 
 ~~~zelyra
 action set_active {
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+`icon` adds an escaped `data-icon` hook to the generated action button.
+`success` is carried to the redirect and rendered as an escaped status notice
+on CRUD lists.
 
 Relationship fields such as `department: Department` are rendered as checked
 select fields. Zelyra loads their labels from the referenced MariaDB table,

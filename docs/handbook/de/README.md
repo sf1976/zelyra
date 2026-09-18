@@ -661,12 +661,17 @@ Formularvalidierung und werden als SQL-Parameter gebunden:
 
 ~~~zelyra
 action set_active {
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+`icon` ergänzt einen escaped `data-icon`-Hook am erzeugten Aktionsbutton.
+`success` wird an den Redirect übergeben und auf CRUD-Listen als escaped
+Statusmeldung dargestellt.
 
 Beziehungsfelder wie `department: Department` werden als geprüfte
 Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der

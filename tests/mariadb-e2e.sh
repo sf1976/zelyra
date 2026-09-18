@@ -223,8 +223,10 @@ filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter
 echo "[9/11] executing a typed custom CRUD action"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-action-detail.html"
 grep -Fq "Set active status" "${temp_dir}/machine-action-detail.html"
+grep -Fq 'data-icon="check"' "${temp_dir}/machine-action-detail.html"
 grep -Fq "name=\"active\"" "${temp_dir}/machine-action-detail.html"
 grep -Fq "Move department" "${temp_dir}/machine-action-detail.html"
+grep -Fq 'data-icon="swap"' "${temp_dir}/machine-action-detail.html"
 grep -Fq "name=\"department\"" "${temp_dir}/machine-action-detail.html"
 grep -Fq "value=\"${secondary_department_id}\">${secondary_department_name}" "${temp_dir}/machine-action-detail.html"
 action_csrf="$(extract_csrf "${temp_dir}/machine-action-detail.html")"
@@ -233,11 +235,12 @@ invalid_action_status="$(curl --silent --show-error --output "${temp_dir}/invali
     --data-urlencode "active=not-a-boolean" \
     "${base_url}/machines/${machine_id}/set_active")"
 [[ "${invalid_action_status}" == "422" ]]
-action_status="$(post_form "${temp_dir}/machine-action-response.html" \
+action_status="$(curl --silent --show-error --fail --output "${temp_dir}/machine-action-response.html" --dump-header "${temp_dir}/machine-action-headers.html" --write-out '%{http_code}' \
     --data-urlencode "_zelyra_csrf=${action_csrf}" \
     --data-urlencode "active=false" \
     "${base_url}/machines/${machine_id}/set_active")"
 [[ "${action_status}" == "303" ]]
+grep -Fq "Location: /machines?zelyra_success=Machine%20status%20updated." "${temp_dir}/machine-action-headers.html"
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${suffix}" \
     --data-urlencode "filter_active=false" \

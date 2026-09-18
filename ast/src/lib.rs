@@ -168,6 +168,7 @@ pub struct FormField {
 pub struct FormAction {
     pub name: String,
     pub label: Option<String>,
+    pub icon: Option<String>,
     pub confirm: Option<String>,
     pub fields: Vec<FormField>,
     pub requires_auth: bool,

@@ -164,9 +164,9 @@ under evaluation.
 - [~] Custom action labels and browser confirmations are available.
 - [x] Typed custom action inputs use normal form validation and parameter
   binding; relationship fields render checked MariaDB-backed select widgets.
-- [ ] Richer action-specific presentation, custom action icons,
-  server-rendered confirmation views, and action-specific success/error
-  presentation.
+- [x] Custom action icons and escaped success notices are available.
+- [ ] Server-rendered confirmation views and richer action-specific
+  success/error presentation.
 - [ ] Soft delete, restore, archive, and retention policies.
 - [ ] Audit-aware CRUD history and field-level change diffs.
 - [ ] Background jobs, scheduled tasks, retries, and transactional outbox.

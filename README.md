@@ -386,12 +386,18 @@ parameter binding as normal forms:
 ~~~zelyra
 action set_active {
     label: "Set active status"
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+`icon` adds an accessible, escaped action-icon hook (`data-icon`) for the
+generated button. After a successful action, `success` is carried to the
+configured redirect as an escaped status notice, so CRUD lists can display a
+safe confirmation without custom JavaScript.
 
 Relationship fields use a checked select automatically. For example,
 `field department: Department { required }` loads the display values from the

@@ -397,12 +397,18 @@ dieselbe Validierung und Parameterbindung wie normale Formulare:
 ~~~zelyra
 action set_active {
     label: "Aktivstatus setzen"
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+`icon` ergänzt einen zugänglichen, escaped Hook (`data-icon`) für das erzeugte
+Aktionsfeld. Nach erfolgreicher Ausführung wird `success` als escaped
+Statusmeldung an den konfigurierten Redirect angehängt, sodass CRUD-Listen
+eine sichere Bestätigung ohne eigenes JavaScript anzeigen können.
 
 Beziehungsfelder erhalten automatisch ein geprüftes Auswahlfeld. Zum Beispiel
 lädt `field department: Department { required }` die Anzeigewerte aus der

@@ -146,12 +146,17 @@ normale Formularvalidierung und werden als SQL-Parameter gebunden:
 
 ~~~zelyra
 action set_active {
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+Ein Aktions-`icon` wird als escaped `data-icon`-Hook am erzeugten Button
+bereitgestellt. Die `success`-Meldung wird als Status-Query-Wert an den Redirect
+übergeben und auf CRUD-Listen escaped mit `role="status"` dargestellt.
 
 Beziehungsfelder wie `department: Department` werden in der Detailansicht als
 geprüfte Auswahlfelder dargestellt. Die Optionen stammen aus der referenzierten

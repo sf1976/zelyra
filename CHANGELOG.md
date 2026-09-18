@@ -38,7 +38,8 @@ compiler and repository release.
   detail-view buttons, route-ID binding, CSRF, database-capability,
   authentication, and permission checks. Actions may now define escaped
   labels, browser confirmation messages, typed validated input fields, and
-  MariaDB-backed relationship select fields.
+  MariaDB-backed relationship select fields. Action icons and escaped success
+  notices are now available as well.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

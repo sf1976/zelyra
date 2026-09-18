@@ -1064,6 +1064,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after form action")?;
         let mut statements = Vec::new();
         let mut label = None;
+        let mut icon = None;
         let mut confirm = None;
         let mut fields = Vec::new();
         let mut success = None;
@@ -1085,6 +1086,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after label")?;
                 label = Some(self.string_value("action label")?);
+            } else if self.at(&TokenKind::Icon) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after icon")?;
+                icon = Some(self.string_value("action icon")?);
             } else if self.at(&TokenKind::Confirm) {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after confirm")?;
@@ -1104,6 +1109,7 @@ impl<'a> Parser<'a> {
         Ok(FormAction {
             name,
             label,
+            icon,
             confirm,
             fields,
             requires_auth,
@@ -2247,6 +2253,7 @@ mod tests {
                     }
                     action deactivate {
                         label: "Deactivate customer"
+                        icon: "pause"
                         confirm: "Deactivate this customer?"
                         field active: Bool { required }
                         permits "customers.edit"
@@ -2309,6 +2316,7 @@ mod tests {
             program.cruds[0].actions[0].label.as_deref(),
             Some("Deactivate customer")
         );
+        assert_eq!(program.cruds[0].actions[0].icon.as_deref(), Some("pause"));
         assert_eq!(
             program.cruds[0].actions[0].confirm.as_deref(),
             Some("Deactivate this customer?")

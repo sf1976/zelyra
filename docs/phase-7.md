@@ -141,12 +141,17 @@ validation and are bound as SQL parameters:
 
 ~~~zelyra
 action set_active {
+    icon: "check"
     field active: Bool { required }
     sql {
         UPDATE customers SET active = :active WHERE id = :id
     }
 }
 ~~~
+
+An action `icon` is exposed as an escaped `data-icon` hook on its generated
+button. Its `success` message is carried to the redirect as a status query
+value and rendered escaped with `role="status"` on CRUD lists.
 
 Relationship fields such as `department: Department` are rendered as checked
 select fields on the detail view. Options come from the referenced MariaDB
