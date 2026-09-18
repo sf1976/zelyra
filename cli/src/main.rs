@@ -132,12 +132,12 @@ fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) 
 # MariaDB Compose project and for `zelyra db setup` after exporting this file.
 # The database host port is active so the CLI and Compose always use the
 # selected port together.
+ZELYRA_DB_HOST_PORT={database_host_port}
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me
 MARIADB_ROOT_PASSWORD=change-me-root
-ZELYRA_DB_HOST_PORT={database_host_port}
 
 # Optional web port overrides. The generated Compose file already contains
 # the selected defaults below, so these lines can remain commented out.
@@ -3323,7 +3323,7 @@ fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String>
     };
     for _attempt in 0..20 {
         let status = compose_command(directory, command)
-            .args(["exec", "-T", "web", "zelyra", "db", "setup", "main.zyl"])
+            .args(["exec", "-T", "web", "zelyra", "db", "apply", "main.zyl"])
             .status()
             .map_err(|error| {
                 format!("could not run schema setup in the application container: {error}")
@@ -5960,8 +5960,11 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 return ExitCode::from(1);
             };
             let result = match schema.backend() {
-                Backend::MariaDb => create_mariadb_database(&url)
-                    .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
+                Backend::MariaDb => match inspect_mariadb(&url) {
+                    Ok(_) => apply_mariadb(&url, &schema.create_sql()),
+                    Err(_) => create_mariadb_database(&url)
+                        .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
+                },
                 Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
                 Backend::Postgres => Err(zelyra_database::DatabaseError {
                     message: format!(

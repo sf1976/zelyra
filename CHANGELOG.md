@@ -23,6 +23,10 @@ compiler and repository release.
 - Added shared setup actions for `zelyra setup --database`, `--schema`, and
   `--all`, plus a loopback-only `zelyra setup --web` assistant with a
   tokenized configuration URL.
+- Fixed generated MariaDB environments so the selected host port is available
+  before `DATABASE_URL` is evaluated, and made Compose schema setup apply the
+  schema inside the application container without requiring the application
+  user to create databases in the MariaDB system schema.
 
 - CRUD-Ressourcen können geprüfte benannte Seiten-Views mit
   `layout: ViewName` wiederverwenden; erzeugte Listen, Details und Formulare
@@ -41,6 +45,10 @@ compiler and repository release.
 - Gemeinsame Setup-Aktionen für `zelyra setup --database`, `--schema` und
   `--all` sowie ein nur lokal gebundener `zelyra setup --web`-Assistent mit
   tokenisierter Konfigurations-URL sind hinzugekommen.
+- Erzeugte MariaDB-Umgebungen setzen den gewählten Host-Port jetzt vor der
+  Auswertung von `DATABASE_URL`; der Compose-Schemaablauf wendet das Schema im
+  Anwendungskontainer an und benötigt keine Datenbank-Erstellrechte des
+  Anwendungsbenutzers im MariaDB-Systemschema.
 
 
 ## 0.1.42 — 2026-09-19

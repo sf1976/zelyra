@@ -167,6 +167,10 @@ fn init_creates_a_ready_commented_mariadb_env() {
     assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
     assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
     assert!(env_file.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(
+        env_file.find("ZELYRA_DB_HOST_PORT=3308").unwrap()
+            < env_file.find("DATABASE_URL=mariadb://").unwrap()
+    );
     assert!(!env_file
         .lines()
         .any(|line| line == "ZELYRA_FEATURE_API=true"));
