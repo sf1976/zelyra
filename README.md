@@ -289,6 +289,22 @@ crud Customer -> customers {
 The generated `table` (default) and `cards` modes keep search, typed filters,
 allowlisted sorting, pagination, URL state, escaping, and permission checks.
 
+Detail presentation can be customized independently:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        detail {
+            mode: cards
+            title: "Customer details"
+        }
+    }
+}
+~~~
+
+The default detail mode is standard. Both modes retain generated edit, create,
+delete, CSRF, escaping, and authorization safeguards.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

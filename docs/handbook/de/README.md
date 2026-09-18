@@ -548,6 +548,21 @@ Sortierung, Pagination, URL-Zustand, HTML-Escaping und Berechtigungsprüfungen
 bleiben in beiden Modi aktiv. Detail-, Formular-, Lade- und Fehleransichten
 folgen in weiteren View-Phasen.
 
+Detailansichten unterstützen dieselbe kontrollierte Darstellungsauswahl und
+eine eigene Überschrift:
+
+~~~zelyra
+view {
+    detail {
+        mode: cards
+        title: "Kundendetails"
+    }
+}
+~~~
+
+Der Standard ist `standard`. Generierte Edit-, Create- und Delete-Aktionen,
+CSRF, Escaping und Berechtigungsprüfungen bleiben aktiv.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

@@ -41,6 +41,23 @@ erlaubte Sortierung, Pagination, URL-Zustand, HTML-Escaping und
 Autorisierungsprüfungen bleiben aktiv. Detail- und Formularüberschreibungen
 folgen in weiteren Phasen.
 
+Detailansichten unterstützen jetzt eine kontrollierte Kartenansicht und eine
+eigene Überschrift:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        detail {
+            mode: cards
+            title: "Kundendetails"
+        }
+    }
+}
+~~~
+
+Der Standard ist `standard`. Generierte Edit-, Create- und Delete-Aktionen,
+CSRF, Escaping und Berechtigungsprüfungen bleiben aktiv.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

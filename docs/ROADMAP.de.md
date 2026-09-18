@@ -121,8 +121,11 @@ noch in Prüfung.
 - [~] CRUD-View-Überschreibungen für Listen unterstützen sicher die Modi
   `table`/`cards` und eine eigene Leerzustandsmeldung bei Erhalt der
   generierten Abfrage-, Auth- und Aktionsprüfungen.
-- [ ] CRUD-View-Überschreibungen für Detail, Create, Edit, Delete, Laden und
-  Fehler bei Erhalt der generierten Sicherheitsprüfungen.
+- [~] CRUD-View-Überschreibungen für Details unterstützen sicher die Modi
+  `standard`/`cards` und eine eigene Überschrift bei Erhalt der generierten
+  Aktions-, CSRF-, Auth- und Escaping-Prüfungen.
+- [ ] CRUD-View-Überschreibungen für Create, Edit, Delete, Laden und Fehler bei
+  Erhalt der generierten Sicherheitsprüfungen.
 - [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und
   Dichte.
 - [ ] View- und globale Themes, Dark Mode und benutzerwählbare Darstellung.

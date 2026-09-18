@@ -197,6 +197,7 @@ pub struct CrudDef {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CrudViewDef {
     pub list: CrudListViewDef,
+    pub detail: CrudDetailViewDef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,6 +218,27 @@ impl Default for CrudListViewDef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CrudListViewMode {
     Table,
+    Cards,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudDetailViewDef {
+    pub mode: CrudDetailViewMode,
+    pub title: Option<String>,
+}
+
+impl Default for CrudDetailViewDef {
+    fn default() -> Self {
+        Self {
+            mode: CrudDetailViewMode::Standard,
+            title: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CrudDetailViewMode {
+    Standard,
     Cards,
 }
 

@@ -22,5 +22,10 @@ crud Customer -> customers {
             mode: cards
             empty: "No customers found."
         }
+
+        detail {
+            mode: cards
+            title: "Customer details"
+        }
     }
 }

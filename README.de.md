@@ -297,6 +297,23 @@ Die generierten Modi `table` (Standard) und `cards` behalten Suche, typisierte
 Filter, erlaubte Sortierung, Pagination, URL-Zustand, Escaping und
 Berechtigungsprüfungen bei.
 
+Auch die Detaildarstellung kann unabhängig angepasst werden:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        detail {
+            mode: cards
+            title: "Kundendetails"
+        }
+    }
+}
+~~~
+
+Der Standardmodus für Details ist `standard`. Beide Modi behalten generierte
+Edit-, Create- und Delete-Aktionen, CSRF, Escaping und Berechtigungsprüfungen
+bei.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

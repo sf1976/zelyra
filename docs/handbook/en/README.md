@@ -491,6 +491,21 @@ crud Customer -> customers {
 pagination, URL state, HTML escaping, and permission checks remain generated
 in both modes. Detail, form, loading, and error view overrides are planned.
 
+Detail views support the same controlled presentation choice and an explicit
+heading:
+
+~~~zelyra
+view {
+    detail {
+        mode: cards
+        title: "Customer details"
+    }
+}
+~~~
+
+The default is `standard`. Generated edit, create, delete, CSRF, escaping, and
+authorization safeguards remain active.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

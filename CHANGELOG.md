@@ -22,6 +22,9 @@ compiler and repository release.
 - Added safe CRUD list view overrides with table/cards presentation modes
   and configurable empty-state messages. Generated query, authorization, and
   escaping safeguards remain active in both modes.
+- Added safe CRUD detail view overrides with standard/cards presentation modes
+  and configurable headings while retaining generated action, CSRF,
+  authorization, and escaping safeguards.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

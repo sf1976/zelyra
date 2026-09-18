@@ -79,6 +79,10 @@ impl<'a> Parser<'a> {
                 let span = self.advance().span;
                 Ok(("label".into(), span))
             }
+            TokenKind::Title => {
+                let span = self.advance().span;
+                Ok(("title".into(), span))
+            }
             _ => self.error(format!("expected {label}")),
         }
     }
@@ -454,37 +458,76 @@ impl<'a> Parser<'a> {
         let mut view = CrudViewDef::default();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if !self.at(&TokenKind::List) {
-                return self.error("expected `list` in CRUD view definition");
-            }
-            self.advance();
-            self.expect(TokenKind::LBrace, "`{` after CRUD view list")?;
-            self.skip_newlines();
-            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-                let (property, _) = self.ident("CRUD list view property")?;
-                self.expect(TokenKind::Colon, "colon after CRUD list view property")?;
-                match property.as_str() {
-                    "mode" => {
-                        let (mode, _) = self.ident("CRUD list view mode")?;
-                        view.list.mode = match mode.as_str() {
-                            "table" => CrudListViewMode::Table,
-                            "cards" => CrudListViewMode::Cards,
-                            _ => {
-                                return self.error("CRUD list view mode must be `table` or `cards`")
+            match self.current().kind.clone() {
+                TokenKind::List => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view list")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD list view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD list view property")?;
+                        match property.as_str() {
+                            "mode" => {
+                                let (mode, _) = self.ident("CRUD list view mode")?;
+                                view.list.mode = match mode.as_str() {
+                                    "table" => CrudListViewMode::Table,
+                                    "cards" => CrudListViewMode::Cards,
+                                    _ => {
+                                        return self.error(
+                                            "CRUD list view mode must be `table` or `cards`",
+                                        )
+                                    }
+                                };
                             }
-                        };
+                            "empty" => {
+                                view.list.empty =
+                                    Some(self.string_value("CRUD list empty message")?);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `mode` or `empty` in CRUD list view definition",
+                                )
+                            }
+                        }
+                        self.skip_newlines();
                     }
-                    "empty" => {
-                        view.list.empty = Some(self.string_value("CRUD list empty message")?);
-                    }
-                    _ => {
-                        return self
-                            .error("expected `mode` or `empty` in CRUD list view definition")
-                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view list")?;
                 }
-                self.skip_newlines();
+                TokenKind::Detail => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view detail")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD detail view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD detail view property")?;
+                        match property.as_str() {
+                            "mode" => {
+                                let (mode, _) = self.ident("CRUD detail view mode")?;
+                                view.detail.mode =
+                                    match mode.as_str() {
+                                        "standard" => CrudDetailViewMode::Standard,
+                                        "cards" => CrudDetailViewMode::Cards,
+                                        _ => return self.error(
+                                            "CRUD detail view mode must be `standard` or `cards`",
+                                        ),
+                                    };
+                            }
+                            "title" => {
+                                view.detail.title =
+                                    Some(self.string_value("CRUD detail view title")?);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `mode` or `title` in CRUD detail view definition",
+                                )
+                            }
+                        }
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view detail")?;
+                }
+                _ => return self.error("expected `list` or `detail` in CRUD view definition"),
             }
-            self.expect(TokenKind::RBrace, "`}` after CRUD view list")?;
             self.skip_newlines();
         }
         self.expect(TokenKind::RBrace, "`}` after CRUD view definition")?;
@@ -2043,6 +2086,10 @@ mod tests {
                             mode: cards
                             empty: "No customers yet."
                         }
+                        detail {
+                            mode: cards
+                            title: "Customer details"
+                        }
                     }
                 }"#)
             .unwrap(),
@@ -2051,6 +2098,11 @@ mod tests {
         let view = &program.cruds[0].view.list;
         assert_eq!(view.mode, CrudListViewMode::Cards);
         assert_eq!(view.empty.as_deref(), Some("No customers yet."));
+        assert_eq!(program.cruds[0].view.detail.mode, CrudDetailViewMode::Cards);
+        assert_eq!(
+            program.cruds[0].view.detail.title.as_deref(),
+            Some("Customer details")
+        );
     }
 
     #[test]
@@ -2058,6 +2110,17 @@ mod tests {
         let result = parse(
             &lex(r#"crud Customer -> customers {
                     view { list { mode: carousel } }
+                }"#)
+            .unwrap(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_crud_detail_view_mode() {
+        let result = parse(
+            &lex(r#"crud Customer -> customers {
+                    view { detail { mode: full } }
                 }"#)
             .unwrap(),
         );

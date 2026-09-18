@@ -39,6 +39,22 @@ presentation. The same checked MariaDB query, search, typed filters,
 allowlisted sorting, pagination, URL state, HTML escaping, and authorization
 guards remain active. Detail and form overrides remain future work.
 
+Detail views now support a controlled card layout and an explicit heading:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        detail {
+            mode: cards
+            title: "Customer details"
+        }
+    }
+}
+~~~
+
+The default is `standard`. Generated edit, create, delete, CSRF, escaping, and
+authorization safeguards remain active.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before
