@@ -5,7 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
 root_password="${ZELYRA_GENERATED_E2E_ROOT_PASSWORD:-}"
-source_fixture="${ZELYRA_GENERATED_E2E_SOURCE:-${repo_dir}/examples/machine_form.zyl}"
+template="${ZELYRA_GENERATED_E2E_TEMPLATE:-mariadb-crud}"
 host_port="${ZELYRA_GENERATED_E2E_HOST_PORT:-18081}"
 generated_database_host_port="${ZELYRA_GENERATED_E2E_GENERATED_DB_HOST_PORT:-3309}"
 address="${ZELYRA_GENERATED_E2E_ADDRESS:-127.0.0.1:38520}"
@@ -18,10 +18,6 @@ if [[ -z "${root_password}" ]]; then
 fi
 if [[ ! -x "${zelyra_bin}" ]]; then
     echo "error: Zelyra binary not found at ${zelyra_bin}; run cargo build -p zelyra-cli first" >&2
-    exit 1
-fi
-if [[ ! -f "${source_fixture}" ]]; then
-    echo "error: source fixture not found at ${source_fixture}" >&2
     exit 1
 fi
 for command in docker mariadb curl python3; do
@@ -51,10 +47,10 @@ MYSQL_PWD="${root_password}" mariadb \
     -e "CREATE DATABASE \`${database_name}\`;"
 
 echo "[1/4] generating a fresh MariaDB project"
-"${zelyra_bin}" new "${project_dir}" --mariadb --web-port 8080 \
-    --host-port "${host_port}" --db-host-port "${generated_database_host_port}"
+"${zelyra_bin}" new "${project_dir}" --template "${template}" \
+    --web-port 8080 --host-port "${host_port}" \
+    --db-host-port "${generated_database_host_port}"
 "${zelyra_bin}" setup "${project_dir}"
-cp "${source_fixture}" "${project_dir}/main.zyl"
 
 echo "[2/4] validating generated Compose and doctor configuration"
 docker compose --env-file "${project_dir}/.env" \

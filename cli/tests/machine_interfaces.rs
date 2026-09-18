@@ -115,6 +115,37 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
 }
 
 #[test]
+fn new_mariadb_crud_template_is_self_contained() {
+    let directory = temporary_directory("new-mariadb-crud-template");
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--template",
+        "mariadb-crud",
+        "--web-port",
+        "8080",
+        "--host-port",
+        "18080",
+        "--db-host-port",
+        "3308",
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+    assert!(source.contains("table departments"));
+    assert!(source.contains("form MachineCreate -> machines"));
+    assert!(source.contains("crud Machine -> machines"));
+    assert!(config.contains("engine = \"mariadb\""));
+    assert!(directory.join("docker-compose.mariadb.yml").is_file());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_rejects_an_invalid_web_port_before_creating_a_project() {
     let directory = temporary_directory("invalid-web-port");
     let output = run(&[

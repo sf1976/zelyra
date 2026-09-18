@@ -185,6 +185,21 @@ After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
 18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
 published port without changing the database.
 
+For a complete CRUD starter instead of the minimal welcome page:
+
+~~~bash
+zelyra new machine-management --template mariadb-crud \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+cd machine-management
+zelyra setup .
+docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
+set -a; . ./.env; set +a
+zelyra db setup main.zyl
+~~~
+
+The starter includes related departments and machines, forms, CRUD pages,
+search, filtering, pagination, and custom actions.
+
 For repository integration tests, an isolated MariaDB instance is available:
 
 ~~~bash

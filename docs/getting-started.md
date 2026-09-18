@@ -318,6 +318,22 @@ MariaDB passwords and protects the file on Unix systems. It never overwrites
 an existing `.env` and never prints the credentials. Do not use generated
 local-development credentials as production secrets.
 
+For a ready CRUD application instead of the minimal welcome page, use the
+MariaDB CRUD template:
+
+~~~bash
+zelyra new machine-management --template mariadb-crud \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+cd machine-management
+zelyra setup .
+docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
+set -a; . ./.env; set +a
+zelyra db setup main.zyl
+~~~
+
+It includes departments, machines, a relationship, schema-mapped forms, CRUD
+pages, search, filters, pagination, and custom actions.
+
 The current project file is intentionally small:
 
 ~~~toml
@@ -713,9 +729,9 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ## 11. Useful commands
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          create a project and choose its ports
-zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          initialize a project and choose its ports
 zelyra setup [directory]                  create a protected local .env
 zelyra check <file.zyl> [--format human|json]
