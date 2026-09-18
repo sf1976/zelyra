@@ -42,19 +42,19 @@ if [[ ! -x "${zelyra_bin}" ]]; then
     exit 1
 fi
 
-echo "[1/10] setting up MariaDB schema"
+echo "[1/11] setting up MariaDB schema"
 "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/10] inspecting MariaDB schema"
+echo "[2/11] inspecting MariaDB schema"
 inspect_output="$("${zelyra_bin}" db inspect "${project_file}")"
 grep -Fq "2 tables" <<<"${inspect_output}"
 grep -Fq "1 foreign keys" <<<"${inspect_output}"
 
-echo "[3/10] checking schema plan"
+echo "[3/11] checking schema plan"
 plan_output="$("${zelyra_bin}" db plan "${project_file}")"
 grep -Fq "No schema changes." <<<"${plan_output}"
 
-echo "[4/10] starting Zelyra web server"
+echo "[4/11] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
@@ -127,7 +127,7 @@ delete_machine() {
     [[ "${status}" == "303" ]]
 }
 
-echo "[5/10] creating related departments through CRUD"
+echo "[5/11] creating related departments through CRUD"
 curl --silent --show-error --fail "${base_url}/departments/new" -o "${temp_dir}/department-form.html"
 department_csrf="$(extract_csrf "${temp_dir}/department-form.html")"
 [[ -n "${department_csrf}" ]]
@@ -146,7 +146,7 @@ secondary_department_status="$(post_form "${temp_dir}/secondary-department-respo
     "${base_url}/departments/new")"
 [[ "${secondary_department_status}" == "303" ]]
 
-echo "[6/10] creating and reading related machines"
+echo "[6/11] creating and reading related machines"
 curl --silent --show-error --fail "${base_url}/machines/new" -o "${temp_dir}/machine-form.html"
 department_id="$(extract_option_id "${temp_dir}/machine-form.html" "${department_name}")"
 secondary_department_id="$(extract_option_id "${temp_dir}/machine-form.html" "${secondary_department_name}")"
@@ -164,7 +164,7 @@ grep -Fq "<td>${machine_number}</td>" "${temp_dir}/machine-list.html"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-detail.html"
 grep -Fq "<dt>Department</dt><dd>${department_name}</dd>" "${temp_dir}/machine-detail.html"
 
-echo "[7/10] searching, filtering, sorting, and paginating"
+echo "[7/11] searching, filtering, sorting, and paginating"
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${suffix}" \
     "${base_url}/machines" -o "${temp_dir}/search.html"
@@ -214,7 +214,7 @@ grep -Fq "${machine_two_name}" "${temp_dir}/page-2.html"
 grep -Fq "${machine_three_name}" "${temp_dir}/page-3.html"
 grep -Fq "page=2" "${temp_dir}/page-1.html"
 
-echo "[8/10] rejecting unknown CRUD query fields"
+echo "[8/11] rejecting unknown CRUD query fields"
 sort_status="$(curl --silent --show-error --output "${temp_dir}/invalid-sort.html" --write-out '%{http_code}' "${base_url}/machines?sort=not_allowed")"
 [[ "${sort_status}" == "400" ]]
 filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}/machines?filter_not_allowed=value")"

@@ -688,6 +688,21 @@ Die langfristige Spezifikation ist in folgende Phasen gegliedert:
 Jedes Feature soll Syntax, AST/HIR-Unterstützung, Diagnosen, positive und
 negative Tests, Dokumentation und Beispiele enthalten.
 
+Für eine vollständig getrennte lokale MariaDB-Testinstanz steht die Compose-
+Datei im Repository bereit. Sie veröffentlicht ausschließlich Port `3308` auf
+dem Host und verwendet einen eigenen Container sowie ein eigenes Volume:
+
+~~~bash
+export ZELYRA_MARIADB_ROOT_PASSWORD='<test-passwort>'
+export ZELYRA_MARIADB_PASSWORD='<test-passwort>'
+docker compose -f tests/docker-compose.mariadb.yml up -d
+DATABASE_URL='mariadb://root:<test-passwort>@127.0.0.1:3308/zelyra_test' \
+    ./tests/mariadb-e2e.sh
+~~~
+
+Die Testinstanz heißt `zelyra-mariadb-tests`; sie verwendet keine andere
+MariaDB-Installation und verändert deren Konfiguration nicht.
+
 ## Mitwirken
 
 Das Repository wird bewusst in kleinen, testbaren Phasen entwickelt. Vor

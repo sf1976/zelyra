@@ -150,6 +150,19 @@ For a local MariaDB and web-server template, use `zelyra new machine-management
 `docker-compose.mariadb.yml`. Set `ZELYRA_WEB_PORT` in `.env` to choose the
 port used by the internal Zelyra server and its local published port.
 
+For repository integration tests, an isolated MariaDB instance is available:
+
+~~~bash
+export ZELYRA_MARIADB_ROOT_PASSWORD='<test-password>'
+export ZELYRA_MARIADB_PASSWORD='<test-password>'
+docker compose -f tests/docker-compose.mariadb.yml up -d
+DATABASE_URL='mariadb://root:<test-password>@127.0.0.1:3308/zelyra_test' \
+    ./tests/mariadb-e2e.sh
+~~~
+
+It uses the `zelyra-mariadb-tests` container and a dedicated volume, publishing
+MariaDB on host port `3308` without changing any other database installation.
+
 Users who do not want to install Rust can download the prebuilt Linux or
 Windows archive from the [GitHub Releases page](https://github.com/sf1976/zelyra/releases).
 Each archive includes a SHA-256 checksum, the CLI, both README languages, and

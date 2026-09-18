@@ -1,0 +1,23 @@
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: zelyra-mariadb-tests
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: zelyra_test
+      MARIADB_ROOT_PASSWORD: ${ZELYRA_MARIADB_ROOT_PASSWORD:?Set ZELYRA_MARIADB_ROOT_PASSWORD before starting}
+      MARIADB_USER: zelyra_test
+      MARIADB_PASSWORD: ${ZELYRA_MARIADB_PASSWORD:?Set ZELYRA_MARIADB_PASSWORD before starting}
+    ports:
+      - "3308:3306"
+    volumes:
+      - zelyra_mariadb_tests_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  zelyra_mariadb_tests_data:

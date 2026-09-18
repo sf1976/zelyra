@@ -179,6 +179,20 @@ maschinenverwaltung --mariadb` verwenden. Dadurch entstehen `.env.example`,
 wird der Port des internen Zelyra-Servers und seines lokalen veröffentlichten
 Ports gewählt.
 
+Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:
+
+~~~bash
+export ZELYRA_MARIADB_ROOT_PASSWORD='<test-passwort>'
+export ZELYRA_MARIADB_PASSWORD='<test-passwort>'
+docker compose -f tests/docker-compose.mariadb.yml up -d
+DATABASE_URL='mariadb://root:<test-passwort>@127.0.0.1:3308/zelyra_test' \
+    ./tests/mariadb-e2e.sh
+~~~
+
+Sie verwendet den Container `zelyra-mariadb-tests` und ein eigenes Volume.
+MariaDB wird auf Host-Port `3308` veröffentlicht, ohne eine andere
+Datenbankinstallation zu verändern.
+
 Nutzer, die Rust nicht installieren möchten, können das vorgefertigte Linux-
 oder Windows-Archiv von der [GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases)
 herunterladen. Jedes Archiv enthält eine SHA-256-Prüfsumme, die CLI, beide
