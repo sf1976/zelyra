@@ -8,6 +8,17 @@ compiler and repository release.
 
 ### Added
 
+- Page collections with declared search, typed filters, sorting, or pagination
+  now render safe semantic query controls automatically. Pagination performs a
+  parameterized count query and exposes `total` and `pages` as `UInt` page
+  bindings; URL state remains preserved across controls and pagination links.
+
+- Page-Collections mit deklarierter Suche, typisierten Filtern, Sortierung oder
+  Pagination erzeugen jetzt automatisch sichere semantische Query-Steuerungen.
+  Pagination führt eine parametrisierte Zählabfrage aus und stellt `total` und
+  `pages` als `UInt`-Bindings bereit; der URL-Zustand bleibt in Steuerungen und
+  Pagination-Links erhalten.
+
 - Added compile-time view interpolation checks for route bindings, component
   properties, and dynamic component-property types, with stable `E-VIEW-010`,
   `E-VIEW-013`, `E-VIEW-014`, and `E-VIEW-015` diagnostics.

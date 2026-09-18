@@ -89,8 +89,8 @@ Query inputs are available to page SQL and HTML interpolation. The compiler
 checks their declared scalar type, and the runtime binds decoded URL values as
 database parameters. Missing optional inputs are bound as SQL `NULL`; missing
 required inputs and invalid scalar values produce HTTP 400. Automatic controls
-for search, filtering, sorting, and pagination on arbitrary pages are not yet
-part of this feature.
+for declared page collections are described below; arbitrary input-only pages
+remain manual.
 
 Collection pages may opt into server-side pagination:
 
@@ -155,3 +155,9 @@ operators are validated against the declaration. URL examples are
 `/customers?filter_name__contains=Acme` and
 `/customers?filter_quantity__gte=10`. Unsupported operators and undeclared
 fields produce a controlled HTTP 400 response.
+
+When a page collection declares search, filters, sorting, or pagination,
+Zelyra automatically renders a semantic query-control form before the page
+content and preserves the current URL state. Pagination also performs a safe
+count query and exposes `total` and `pages` as `UInt` page bindings. Pages that
+use only explicit `input` declarations remain manual by design.

@@ -93,9 +93,8 @@ Query-Eingaben stehen dem SQL der Seite und HTML-Interpolationen zur
 Verfügung. Der Compiler prüft ihren deklarierten skalaren Typ; die Laufzeit
 bindet dekodierte URL-Werte als Datenbankparameter. Fehlende optionale Werte
 werden als SQL `NULL` gebunden; fehlende Pflichtwerte und ungültige skalare
-Werte erzeugen HTTP 400. Automatische Steuerungen für Suche, Filter,
-Sortierung und Pagination beliebiger Seiten gehören noch nicht zu diesem
-Feature.
+Werte erzeugen HTTP 400. Automatische Steuerungen für deklarierte
+Page-Collections werden unten beschrieben; reine input-Seiten bleiben manuell.
 
 Collection-Seiten können serverseitige Pagination aktivieren:
 
@@ -161,3 +160,10 @@ gegen die Deklaration geprüft. Beispiele sind
 `/customers?filter_name__contains=Acme` und
 `/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und nicht
 deklarierte Felder erzeugen eine kontrollierte HTTP-400-Antwort.
+
+Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination
+deklariert, erzeugt Zelyra automatisch vor dem Seiteninhalt ein semantisches
+Query-Steuerungsformular und bewahrt den aktuellen URL-Zustand. Pagination
+führt zusätzlich eine sichere Zählabfrage aus und stellt `total` und `pages`
+als `UInt`-Seitenbindungen bereit. Seiten, die ausschließlich explizite
+`input`-Deklarationen verwenden, bleiben bewusst manuell.

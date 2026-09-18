@@ -207,23 +207,23 @@ Feature eines bestimmten Anbieters.
 - [~] Seitenlokale typisierte Query-Eingaben (`input { search: String? }`) werden
   geprüft, sicher an natives SQL gebunden, für HTML-Interpolationen verfügbar
   gemacht und bei fehlenden Pflichtwerten oder ungültigen skalaren Werten mit
-  kontrolliertem HTTP 400 abgelehnt. Automatische Steuerungen für Suche,
-  Filter, Sortierung und Pagination beliebiger Seiten bleiben geplant.
+  kontrolliertem HTTP 400 abgelehnt. Automatisch erzeugte Steuerungen decken
+  deklarierte Seiten-Collections ab; reine input-Seiten bleiben bewusst manuell.
 - [~] Seitenlokale Collection-Pagination über `paginated <size>` ist verfügbar.
   Ein positiver URL-Wert `page` wird geprüft, als `UInt` bereitgestellt und als
-  parametrisierter `LIMIT`-/`OFFSET`-Wrapper angewendet; erzeugte
-  Query-Steuerungen und Gesamtseitenzahlen bleiben geplant.
+  parametrisierter `LIMIT`-/`OFFSET`-Wrapper angewendet; erzeugte Steuerungen
+  und sichere Gesamt-/Seitenzahlen sind für deklarierte Collections verfügbar.
 - [~] Seitenlokale Collection-Sortierung über `sort { field ... }` ist verfügbar.
   Nur vom Compiler geprüfte Ergebnisfelder sowie `asc`/`desc` werden akzeptiert;
-  eine automatische Erzeugung von Sortiersteuerungen bleibt geplant.
+  erzeugte Sortiersteuerungen bewahren den URL-Zustand.
 - [~] Seitenlokale Collection-Suche über `search { field ... }` ist verfügbar.
   Suchbegriffe werden parametrisiert und mit serverseitigen `LIKE`-Bedingungen
-  auf compiler-geprüfte Felder angewendet; eine automatische Erzeugung von
-  Suchsteuerungen bleibt geplant.
+  auf compiler-geprüfte Felder angewendet; erzeugte Suchsteuerungen bewahren
+  den URL-Zustand.
 - [~] Seitenlokale typisierte Filter über `filter { field ... }` sind verfügbar.
   Operatoren werden aus den deklarierten Ergebnistypen abgeleitet, Werte als
   Parameter gebunden und unbekannte Felder oder nicht unterstützte Operatoren
-  abgelehnt; eine automatische Erzeugung von Filtersteuerungen bleibt geplant.
+  abgelehnt; erzeugte Filtersteuerungen bewahren den URL-Zustand.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

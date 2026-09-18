@@ -394,8 +394,10 @@ page "/customers" {
 Query values are validated against their declared Zelyra type and bound as
 database parameters. A missing optional input becomes SQL `NULL`; missing
 required inputs and invalid values return a controlled HTTP 400 response.
-Automatic query-control rendering for arbitrary pages remains planned. Page
-collections can already opt into safe server-side sorting and pagination:
+For page collections that declare search, filters, sorting, or pagination,
+Zelyra automatically renders a semantic query-control form and preserves URL
+state. Page collections can already opt into safe server-side sorting and
+pagination:
 
 ~~~zelyra
 page "/customers" {
@@ -436,6 +438,10 @@ operators are whitelisted. For example:
 `/customers?filter_quantity__gte=10`. Unsupported operators and unknown fields
 return a controlled HTTP 400 response. See
 `examples/view_query_input.zyl` and `examples/invalid_page_filter.zyl`.
+
+Paginated page collections also expose `total` and `pages` as `UInt` bindings
+after a safe count query. Pages using only explicit `input` declarations remain
+manual and do not receive generated controls.
 
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components
