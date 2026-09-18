@@ -309,7 +309,7 @@ zelyra init
 Für eine fertige lokale MariaDB- und Webserver-Vorlage verwenden:
 
 ~~~bash
-zelyra new meine-app --mariadb --web-port 8080 --host-port 18080
+zelyra new meine-app --mariadb --web-port 8080 --host-port 18080 --db-host-port 3307
 cd meine-app
 zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
@@ -320,11 +320,12 @@ zelyra db setup main.zyl
 
 Die erzeugte Compose-Datei startet MariaDB und den Zelyra-Webserver. Die mit
 `--mariadb` verwendete Option `--web-port 8080` wählt beim Erstellen den
-internen Serverport; `--host-port 18080` wählt den lokal veröffentlichten Port.
-Später können `ZELYRA_WEB_PORT` und `ZELYRA_HOST_PORT` in `.env` unabhängig
-geändert werden. Nach dem obigen Beispiel ist `http://127.0.0.1:18080`
-erreichbar. Die Vorlage ist für lokale Entwicklung gedacht; für Produktion
-Secret-Manager und TLS verwenden.
+internen Serverport; `--host-port 18080` wählt den lokal veröffentlichten
+Web-Port und `--db-host-port 3307` den lokal veröffentlichten MariaDB-Port.
+Später können `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT` und
+`ZELYRA_DB_HOST_PORT` in `.env` unabhängig geändert werden. Nach dem obigen
+Beispiel ist `http://127.0.0.1:18080` erreichbar. Die Vorlage ist für lokale
+Entwicklung gedacht; für Produktion Secret-Manager und TLS verwenden.
 
 `zelyra setup .` erzeugt aus der Vorlage eine geschützte `.env` mit zufälligen
 lokalen MariaDB-Passwörtern und schützt die Datei unter Unix. Eine vorhandene
@@ -739,9 +740,9 @@ Sortierung verwendet `sort=<spalte>&order=asc|desc`.
 ## 11. Nützliche Befehle
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          Projekt erstellen und Ports wählen
-zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          Projekt initialisieren und Ports wählen
 zelyra setup [directory]                 geschützte lokale .env erzeugen
 zelyra check <file.zyl> [--format human|json]
@@ -798,6 +799,16 @@ export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-passwort>'
 Der Test erzeugt ein temporäres Projekt, führt `zelyra setup` aus, prüft die
 erzeugte Compose- und `doctor`-Konfiguration und entfernt temporäre Datenbank
 und Projekt nach dem CRUD-HTTP-Test wieder.
+
+Zusätzlich kann die erzeugte Docker-Laufzeit geprüft werden:
+
+~~~bash
+./tests/generated-project-docker-e2e.sh
+~~~
+
+Der Test baut das erzeugte Image, startet MariaDB und Webserver standardmäßig
+auf den Host-Ports 3309 und 18082, prüft Willkommensseite und Port-Zuordnung
+und entfernt alle temporären Docker-Ressourcen anschließend wieder.
 
 ## 12. Häufige Probleme
 

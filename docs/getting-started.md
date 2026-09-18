@@ -295,7 +295,7 @@ zelyra init
 For a ready local MariaDB and web-server template, use:
 
 ~~~bash
-zelyra new my-app --mariadb --web-port 8080 --host-port 18080
+zelyra new my-app --mariadb --web-port 8080 --host-port 18080 --db-host-port 3307
 cd my-app
 zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
@@ -306,8 +306,10 @@ zelyra db setup main.zyl
 
 The generated Compose file starts MariaDB and the Zelyra web server. The
 `--web-port 8080` option (used together with `--mariadb`) chooses the internal
-server port; `--host-port 18080` chooses the local published port. You can
-change `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT` independently later in `.env`.
+server port; `--host-port 18080` chooses the local published web port; and
+`--db-host-port 3307` chooses the local MariaDB port. You can change
+`ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and `ZELYRA_DB_HOST_PORT` independently
+later in `.env`.
 Open `http://127.0.0.1:18080` after the example above. The template is for
 local development; use a secret manager and TLS for production.
 
@@ -711,9 +713,9 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ## 11. Useful commands
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          create a project and choose its ports
-zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          initialize a project and choose its ports
 zelyra setup [directory]                  create a protected local .env
 zelyra check <file.zyl> [--format human|json]
@@ -769,6 +771,16 @@ export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-password>'
 The test creates a temporary project, runs `zelyra setup`, validates the
 generated Compose and `doctor` configuration, and removes its temporary
 database and project after the CRUD HTTP test.
+
+To also verify the generated Docker runtime, run:
+
+~~~bash
+./tests/generated-project-docker-e2e.sh
+~~~
+
+It builds the generated image, starts MariaDB and the web server on host ports
+3309 and 18082 by default, checks the welcome page and published mappings, and
+removes all temporary Docker resources afterwards.
 
 ## 12. Common problems
 

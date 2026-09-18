@@ -96,7 +96,8 @@ Feature eines bestimmten Anbieters.
   `zelyra new`, `zelyra init` und `zelyra setup`; eine interaktive
   Verbindungs-Konfiguration bleibt offen.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
-  Webserver mit unabhängig konfigurierbaren Host- und Container-Ports;
+  Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
+  die Docker-Laufzeitprüfung für erzeugte Projekte ist vorhanden,
   Produktionshärtung bleibt offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
