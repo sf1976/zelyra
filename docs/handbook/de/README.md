@@ -125,10 +125,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.42
+./install.sh --release v0.1.43
 ~~~
 
-Unter Windows in PowerShell `-Release v0.1.42` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.1.43` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
@@ -320,7 +320,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.42"
+version = "0.1.43"
 zelyra = "0.1"
 
 [capabilities]
@@ -1725,7 +1725,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.42"
+version = "0.1.43"
 zelyra = "0.1"
 
 [capabilities]
