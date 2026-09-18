@@ -303,8 +303,6 @@ page "/dashboard" {
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components
 are expanded from the inside out, and unknown or unused content is rejected.
-Named slots may provide escaped, deterministic fallback content. Callers can
-override the named slot explicitly; otherwise the fallback is used.
 See `examples/component_slots.zyl`.
 
 Search, filtering, sorting, and pagination are already available on generated

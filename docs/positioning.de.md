@@ -55,16 +55,6 @@ Vorlage, die explizite Portwahl und einfache Quellcode-/Release-Installation
 sollen den ersten lauffähigen Einstieg erleichtern. Produktionsdeployment
 wird weiterhin ausgebaut.
 
-### 8. Sichere anpassbare Views statt einer generierten Sackgasse
-
-Zelyra-Views sollen mit sinnvollen Defaults beginnen und lokal anpassbar
-bleiben. Benannte Layouts und Komponenten können Fallback-Inhalte anbieten,
-während der Compiler die Komposition explizit hält und generierte Datenpfade,
-Escaping, Authentifizierung und Autorisierung unverändert absichert. Das ist
-eine Produkt-Richtung und keine Behauptung, dass ein einzelnes View-Feature
-allein einzigartig ist; der Wert entsteht aus der Kombination von Einfachheit
-mit demselben Datenbank- und Sicherheitsmodell.
-
 ## Was heute implementiert ist
 
 Das Repository demonstriert bereits schemaabhängiges SQL, MariaDB-CRUD,
