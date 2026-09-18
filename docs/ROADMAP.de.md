@@ -172,9 +172,10 @@ Feature eines bestimmten Anbieters.
 
 - [~] Benannte Views/Layout mit `view: Name` an Seiten und validiertem
   `<slot />`-Inhaltsslot.
-- [~] Typisierte View-Ausdrücke prüfen jetzt Identifier-Interpolationen,
-  Seiten-Routenbindungen, Component-Properties und dynamische Property-Typen;
-  Feldzugriff, Option-Ausdrücke und reichere View-Daten bleiben offen.
+- [~] Typisierte View-Ausdrücke prüfen Identifier- und
+  Record-Feldinterpolationen, Seiten-Routenbindungen, Component-Properties
+  und dynamische Property-Typen. Option-aware Feld-Ausdrücke und reichere
+  View-Daten bleiben offen.
 - [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
   Events bleiben geplant.
 - [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,
@@ -185,16 +186,21 @@ Feature eines bestimmten Anbieters.
   sowie verschachtelte Komposition; Fallback-Inhalte für komplexere
   verschachtelte View-Szenarien bleiben geplant.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
-- [ ] View-lokales Laden von Daten mit expliziten Query- und Berechtigungsgrenzen.
+- [~] View-lokales Laden ist für eine explizite, schema-geprüfte
+  Datensatzabfrage pro Binding mit `load name = sql<Type> { ... }` verfügbar.
+  Routenautorisierung, `Database`-Capability, Parameterbindung, generische
+  Fehlergrenzen und HTML-Escaping werden erzwungen; Collections, Option-aware
+  Feldzugriff und reichere View-Komposition bleiben geplant.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
   NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
 - [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
   URLs; deterministische Filterreihenfolge, semantische Fieldsets sowie
   getrennte Operator-/Wertbeschriftungen sind verfügbar, weitergehende
   Barrierefreiheitsverbesserungen bleiben offen.
-- [~] Der erste Teil einer einheitlichen typisierten View-Pipeline ist für
-  `tableview`-Routen mit deklarativen Filtern, Suche, Sortierung und Pagination
-  verfügbar; dieselbe Pipeline für beliebige Views bleibt geplant.
+- [~] Die einheitliche typisierte View-Pipeline umfasst deklarative
+  `tableview`-Steuerungen und explizites seitenlokales Laden einzelner
+  Datensätze; Filter, Suche, Sortierung und Pagination bleiben zunächst auf
+  Tableviews konzentriert, reichere Daten für beliebige Views bleiben geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

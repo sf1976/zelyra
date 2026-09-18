@@ -169,9 +169,9 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment and a
   validated `<slot />` content insertion point.
-- [~] Typed view expressions now check identifier interpolations, page route
-  bindings, component properties, and dynamic component-property types; field
-  access, option-aware expressions, and richer view data remain open.
+- [~] Typed view expressions check identifier and record-field interpolations,
+  page route bindings, component properties, and dynamic component-property
+  types. Optional field-aware expressions and richer view data remain open.
 - [~] Named components with typed properties are available; typed events remain
   planned.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
@@ -181,15 +181,20 @@ architecture requirement for every phase, not a provider-specific feature.
   composition; fallback content for more advanced nested-view scenarios remains
   planned.
 - [ ] View inheritance/composition without hidden global state.
-- [ ] View-local data loading with explicit query boundaries and authorization.
+- [~] View-local data loading is available for one explicit, schema-checked
+  record query per binding using `load name = sql<Type> { ... }`. Route
+  authorization, the `Database` capability, parameter binding, generic error
+  boundaries, and HTML escaping are enforced; collections, optional field
+  handling, and richer view composition remain planned.
 - [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,
   and null checks) are compiled to safe server-side SQL.
 - [~] Generated CRUD filter controls preserve operator and value state in URLs;
   deterministic filter ordering, semantic fieldsets, and separate operator/value
   labels are available; broader accessibility improvements remain open.
-- [~] The first unified typed view pipeline slice is available on `tableview`
-  routes through declarative filters, search, sorting, and pagination; the
-  same pipeline for arbitrary views remains planned.
+- [~] The unified typed view pipeline covers declarative `tableview` controls
+  and explicit page-local record loading; filters, search, sorting, and
+  pagination remain tableview-focused while richer arbitrary-view data remains
+  planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

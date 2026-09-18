@@ -625,9 +625,24 @@ page "/dashboard" {
 
 View-Interpolationen werden geprüft, bevor der Server startet. Eine Seite darf
 ihre Routenparameter verwenden, eine Komponente ihre deklarierten Properties
-und eine dynamische Component-Property muss typkompatibel sein. Unbekannte
-Werte und nicht unterstützte Ausdrücke erhalten stabile `E-VIEW-*`-Diagnosen.
-Feldzugriff, Option-Ausdrücke und datenbankgestützte View-Daten bleiben geplant.
+und eine dynamische Component-Property muss typkompatibel sein. Eine Seite
+kann außerdem ausdrücklich einen typisierten Datensatz laden und geprüften
+Feldzugriff verwenden:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+SQL wird gegen das Schema geprüft, Routenparameter werden sicher gebunden und
+Authentifizierung, Berechtigungen sowie die `Database`-Capability werden vor
+der Abfrage erzwungen. Geladene Werte werden im HTML escaped. Option-aware
+Feld-Ausdrücke und reichere View-Daten bleiben geplant. Siehe
+`examples/view_data.zyl`.
 
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 
@@ -1762,8 +1777,9 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 Die Kontextantwort enthält Projekteinstieg und nur Deklarationen, die der
-aktuelle Compiler tatsächlich versteht, darunter Tabellen, Felder, CRUD-
-Ressourcen, Formulare, APIs und Source-Spans. Sie verbindet sich nicht mit
+aktuelle Compiler tatsächlich versteht, darunter Tabellen, Felder, Seiten mit
+typisierten Datenbindungen, CRUD-Ressourcen, Formulare, APIs und Source-Spans.
+Sie verbindet sich nicht mit
 MariaDB, führt keine E-Mail aus, gibt keine Zugangsdaten aus und enthält keine
 gerenderten vertraulichen Inhalte.
 

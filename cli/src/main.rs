@@ -30,7 +30,7 @@ use zelyra_runtime::{
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
-    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route,
+    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
     TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
 };
 
@@ -661,6 +661,9 @@ fn validate_program(
     if !validate_views(path, &program) {
         return Err(());
     }
+    if !validate_page_data(path, &program) {
+        return Err(());
+    }
     if !validate_components(path, &program) {
         return Err(());
     }
@@ -801,6 +804,60 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
         }
     }
     valid
+}
+
+fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for page in &program.pages {
+        let route_names = page_template_bindings(&page.path, &[]);
+        let mut names = HashSet::new();
+        for data in &page.data {
+            if !names.insert(data.name.as_str()) {
+                diagnostic(
+                    path,
+                    "E-VIEW-016",
+                    &format!("page data `{}` is declared more than once", data.name),
+                    data.span.line,
+                    data.span.column,
+                );
+                valid = false;
+            }
+            if route_names.contains_key(&data.name) {
+                diagnostic(
+                    path,
+                    "E-VIEW-016",
+                    &format!("page data `{}` conflicts with a route parameter", data.name),
+                    data.span.line,
+                    data.span.column,
+                );
+                valid = false;
+            }
+            if !page_data_type_supported(program, &data.result_type) {
+                diagnostic(
+                    path,
+                    "E-VIEW-017",
+                    &format!(
+                        "page data `{}` must load a named record or table value, found `{}`",
+                        data.name, data.result_type
+                    ),
+                    data.span.line,
+                    data.span.column,
+                );
+                valid = false;
+            }
+        }
+    }
+    valid
+}
+
+fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
+    let Type::Named(name) = ty else {
+        return false;
+    };
+    program.records.iter().any(|record| record.name == *name)
+        || program.tables.iter().any(|table| {
+            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
+        })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1354,6 +1411,30 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
             })
         })
         .collect::<Vec<_>>();
+    let pages = program
+        .pages
+        .iter()
+        .map(|page| {
+            let data = page
+                .data
+                .iter()
+                .map(|binding| {
+                    json!({
+                        "name": binding.name,
+                        "type": binding.result_type.to_string(),
+                        "fields": page_data_fields(program, &binding.result_type),
+                        "span": context_span(source, binding.span)
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "path": page.path,
+                "view": page.view,
+                "data": data,
+                "span": context_span(source, page.span)
+            })
+        })
+        .collect::<Vec<_>>();
     let tableviews = program
         .tableviews
         .iter()
@@ -1408,6 +1489,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
         "databases": databases,
         "tables": tables,
         "cruds": cruds,
+        "pages": pages,
         "views": views,
         "tableviews": tableviews,
         "forms": forms,
@@ -1421,6 +1503,7 @@ fn empty_context_declarations() -> Value {
         "databases": [],
         "tables": [],
         "cruds": [],
+        "pages": [],
         "views": [],
         "tableviews": [],
         "forms": [],
@@ -1887,13 +1970,80 @@ fn template_expressions(html: &str) -> Result<Vec<String>, String> {
 }
 
 fn is_template_identifier(expression: &str) -> bool {
-    expression.chars().enumerate().all(|(index, character)| {
-        if index == 0 {
-            character.is_ascii_alphabetic() || character == '_'
-        } else {
-            character.is_ascii_alphanumeric() || character == '_'
+    !expression.is_empty()
+        && expression.chars().enumerate().all(|(index, character)| {
+            if index == 0 {
+                character.is_ascii_alphabetic() || character == '_'
+            } else {
+                character.is_ascii_alphanumeric() || character == '_'
+            }
+        })
+}
+
+fn is_template_expression(expression: &str) -> bool {
+    expression.split('.').all(is_template_identifier)
+}
+
+fn resolve_template_type(
+    expression: &str,
+    bindings: &HashMap<String, Type>,
+    program: &zelyra_ast::Program,
+) -> Result<Type, String> {
+    let mut parts = expression.split('.');
+    let root = parts.next().unwrap_or_default();
+    let Some(mut ty) = bindings.get(root).cloned() else {
+        return Err(format!("unknown view value `{root}`"));
+    };
+    for field in parts {
+        ty = template_field_type(program, &ty, field)?;
+    }
+    Ok(ty)
+}
+
+fn template_field_type(
+    program: &zelyra_ast::Program,
+    ty: &Type,
+    field: &str,
+) -> Result<Type, String> {
+    let ty = match ty {
+        Type::Option(_) => {
+            return Err(format!(
+                "field `{field}` requires explicit handling of an optional value"
+            ));
         }
-    })
+        Type::Named(name) => {
+            if let Some(definition) = program
+                .types
+                .iter()
+                .find(|definition| definition.name == *name)
+            {
+                return template_field_type(program, &definition.target, field);
+            }
+            ty
+        }
+        _ => ty,
+    };
+    if let Type::Named(name) = ty {
+        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+            return record
+                .fields
+                .iter()
+                .find(|candidate| candidate.name == field)
+                .map(|candidate| candidate.ty.clone())
+                .ok_or_else(|| format!("field `{field}` does not exist on `{name}`"));
+        }
+        if let Some(table) = program.tables.iter().find(|table| {
+            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
+        }) {
+            return table
+                .columns
+                .iter()
+                .find(|candidate| candidate.name == field)
+                .map(|candidate| candidate.ty.clone())
+                .ok_or_else(|| format!("field `{field}` does not exist on `{name}`"));
+        }
+    }
+    Err(format!("type `{ty}` has no field `{field}`"))
 }
 
 fn template_type_compatible(expected: &Type, actual: &Type) -> bool {
@@ -1904,6 +2054,7 @@ fn template_type_compatible(expected: &Type, actual: &Type) -> bool {
 fn validate_template_expressions(
     path: &str,
     html: &str,
+    program: &zelyra_ast::Program,
     bindings: &HashMap<String, Type>,
     line: usize,
     column: usize,
@@ -1917,25 +2068,24 @@ fn validate_template_expressions(
     };
     let mut valid = true;
     for expression in expressions {
-        if !is_template_identifier(&expression) {
+        if !is_template_expression(&expression) {
             diagnostic(
                 path,
                 "E-VIEW-014",
                 &format!(
-                    "view expressions currently support identifiers only; found `{{{expression}}}`"
+                    "view expression must contain identifiers separated by `.`, found `{{{expression}}}`"
                 ),
                 line,
                 column,
             );
             valid = false;
-        } else if !bindings.contains_key(&expression) {
-            diagnostic(
-                path,
-                "E-VIEW-015",
-                &format!("unknown view value `{expression}`"),
-                line,
-                column,
-            );
+        } else if let Err(message) = resolve_template_type(&expression, bindings, program) {
+            let code = if expression.contains('.') {
+                "E-VIEW-016"
+            } else {
+                "E-VIEW-015"
+            };
+            diagnostic(path, code, &message, line, column);
             valid = false;
         }
     }
@@ -1950,7 +2100,7 @@ fn validate_component_template(
     column: usize,
     bindings: &HashMap<String, Type>,
 ) -> bool {
-    let mut valid = validate_template_expressions(path, html, bindings, line, column);
+    let mut valid = validate_template_expressions(path, html, program, bindings, line, column);
     let invocations = match component_invocations(html) {
         Ok(invocations) => invocations,
         Err(message) => {
@@ -2062,7 +2212,7 @@ fn validate_component_template(
                 .strip_prefix('{')
                 .and_then(|value| value.strip_suffix('}'))
                 .map(str::trim)
-                .and_then(|expression| bindings.get(expression))
+                .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
                 .filter(|actual| !template_type_compatible(&prop.ty, actual));
             if dynamic_type_error.is_some() || !component_prop_accepts(prop, value) {
                 diagnostic(
@@ -2154,7 +2304,7 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         );
     }
     for page in &program.pages {
-        let bindings = page_template_bindings(&page.path);
+        let bindings = page_template_bindings(&page.path, &page.data);
         valid &= validate_component_template(
             path,
             program,
@@ -2179,8 +2329,9 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
     valid
 }
 
-fn page_template_bindings(path: &str) -> HashMap<String, Type> {
-    path.split('/')
+fn page_template_bindings(path: &str, data: &[zelyra_ast::PageDataDef]) -> HashMap<String, Type> {
+    let mut bindings = path
+        .split('/')
         .filter_map(|segment| {
             segment
                 .strip_prefix('{')
@@ -2188,7 +2339,11 @@ fn page_template_bindings(path: &str) -> HashMap<String, Type> {
                 .filter(|name| is_template_identifier(name))
                 .map(|name| (name.to_owned(), Type::String))
         })
-        .collect()
+        .collect::<HashMap<_, _>>();
+    for data in data {
+        bindings.insert(data.name.clone(), data.result_type.clone());
+    }
+    bindings
 }
 
 fn verify_command(path: &str, json: bool) -> ExitCode {
@@ -3253,6 +3408,22 @@ fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<()
                 &error.message,
                 error.span.line,
                 error.span.column,
+            );
+        }
+        return Err(());
+    }
+    if grants
+        .as_ref()
+        .is_some_and(|grants| !grants.contains("Database"))
+        && program.pages.iter().any(|page| !page.data.is_empty())
+    {
+        if let Some(data) = program.pages.iter().flat_map(|page| &page.data).next() {
+            diagnostic(
+                path,
+                "E-CAP-001",
+                "page data loading requires the `Database` capability",
+                data.span.line,
+                data.span.column,
             );
         }
         return Err(());
@@ -4875,6 +5046,16 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .map(|page| Route {
             path: page.path.clone(),
             html: compose_page_view(&program, page),
+            data: page
+                .data
+                .iter()
+                .map(|data| RouteData {
+                    name: data.name.clone(),
+                    query: data.query.clone(),
+                    fields: page_data_fields(&program, &data.result_type),
+                    optional: matches!(data.result_type, Type::Option(_)),
+                })
+                .collect(),
             requires_auth: page.requires_auth,
             permissions: page.permissions.clone(),
         })
@@ -5774,6 +5955,37 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
         page.html.clone()
     };
     expand_view_components(program, html)
+}
+
+fn page_data_fields(program: &zelyra_ast::Program, ty: &Type) -> Vec<String> {
+    let ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    let Type::Named(name) = ty else {
+        return Vec::new();
+    };
+    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+        return record
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+    }
+    program
+        .tables
+        .iter()
+        .find(|table| {
+            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
+        })
+        .map(|table| {
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn render_view_component(
@@ -7186,6 +7398,38 @@ mod tests {
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert!(validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn validates_typed_page_data_field_bindings() {
+        let source = r#"
+            table customers { id: Id primary auto name: String(100) }
+            page "/customers/{name}" {
+                load customer = sql<Customer> {
+                    SELECT id, name FROM customers WHERE name = :name
+                }
+                html { <h1>{customer.name}</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_page_data("views.zyl", &program));
+        assert!(validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn rejects_unknown_typed_page_data_field() {
+        let source = r#"
+            table customers { id: Id primary auto name: String(100) }
+            page "/customers/{name}" {
+                load customer = sql<Customer> {
+                    SELECT id, name FROM customers WHERE name = :name
+                }
+                html { <h1>{customer.email}</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_page_data("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
     }
 
     #[test]

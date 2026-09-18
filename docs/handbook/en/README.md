@@ -548,9 +548,23 @@ page "/status" {
 
 View interpolations are checked before the server starts. A page may use its
 route parameters, a component may use its declared properties, and a dynamic
-component property must have a compatible type. Unknown values and unsupported
-expressions receive stable `E-VIEW-*` diagnostics. Field access, option-aware
-expressions, and view-local database data remain planned.
+component property must have a compatible type. A page may also load one
+typed record explicitly and use checked field access:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+The SQL is checked against the schema, route parameters are safely bound, and
+authentication, permissions, and the `Database` capability are enforced
+before the query runs. Loaded values are HTML-escaped. Option-aware field
+expressions and richer view data remain planned. See
+`examples/view_data.zyl`.
 
 Components may accept child HTML through a default slot or named slots:
 
@@ -1642,8 +1656,8 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 The context response contains the project entry and only declarations the
-current compiler can actually understand, including tables, fields, CRUD
-resources, forms, APIs, and source spans. It does not connect to MariaDB,
+current compiler can actually understand, including tables, fields, pages with
+typed data bindings, CRUD resources, forms, APIs, and source spans. It does not connect to MariaDB,
 execute email, expose credentials, or include rendered confidential content.
 
 Inspect deterministic source dependencies for a program:

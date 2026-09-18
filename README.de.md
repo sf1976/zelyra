@@ -357,9 +357,24 @@ page "/dashboard" {
 
 View-Interpolationen werden geprüft, bevor der Server startet. Eine Seite darf
 ihre Routenparameter verwenden, eine Komponente ihre deklarierten Properties
-und eine dynamische Component-Property muss typkompatibel sein. Unbekannte
-Werte und nicht unterstützte Ausdrücke erhalten stabile `E-VIEW-*`-Diagnosen.
-Feldzugriff, Option-Ausdrücke und datenbankgestützte View-Daten bleiben geplant.
+und eine dynamische Component-Property muss typkompatibel sein. Eine Seite
+kann außerdem ausdrücklich einen typisierten Datensatz laden und geprüften
+Feldzugriff verwenden:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+SQL wird gegen das Schema geprüft, Routenparameter werden sicher gebunden und
+Authentifizierung, Berechtigungen sowie die `Database`-Capability werden vor
+der Abfrage erzwungen. Geladene Werte werden im HTML escaped. Option-aware
+Feld-Ausdrücke und reichere View-Daten bleiben geplant. Siehe
+`examples/view_data.zyl`.
 
 Komponenten können mit `<slot name="header" />` auch benannte Slots deklarieren;
 Aufrufer übergeben sie mit Blöcken wie
@@ -605,8 +620,9 @@ wird bei verketteten Protokollen abgelehnt, weil das Löschen die Kette brechen
 würde.
 
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
-`tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
-Views bleibt geplant.
+`tableview`-Routen und explizite seitenlokale Datensatzabfragen verfügbar.
+Collection-Operationen und reichere Datenkomposition für beliebige Views
+bleiben geplant.
 
 Eigenständige typisierte Tabellenansichten können bereits eine geprüfte
 MariaDB-Abfrage bereitstellen. Das Ergebnis darf ein deklarierter Tabellentyp

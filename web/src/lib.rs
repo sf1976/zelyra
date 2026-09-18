@@ -13,15 +13,24 @@ use zelyra_ast::{
     CrudFormViewMode, CrudListViewDef, CrudListViewMode, CrudLoadingViewDef, FormDef, TableDef,
     Type,
 };
-use zelyra_database::Schema;
+use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
     pub path: String,
     pub html: String,
+    pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteData {
+    pub name: String,
+    pub query: String,
+    pub fields: Vec<String>,
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -679,6 +688,9 @@ impl WebApp {
         }
         for route in &self.routes {
             if match_path(&route.path, &request.path).is_some() {
+                if self.database_capability_granted == Some(false) && !route.data.is_empty() {
+                    return database_capability_denied();
+                }
                 if let Some(response) = authorize(
                     route.requires_auth,
                     &route.permissions,
@@ -691,7 +703,11 @@ impl WebApp {
                 break;
             }
         }
-        Router::new(self.routes.clone()).dispatch(&request.method, &request.target)
+        Router::new(self.routes.clone()).dispatch_with_database(
+            &request.method,
+            &request.target,
+            self.database_url.as_deref(),
+        )
     }
 
     fn api_allowed_methods(&self, path: &str) -> String {
@@ -2218,13 +2234,40 @@ impl Router {
     }
 
     pub fn dispatch(&self, method: &str, path: &str) -> Response {
+        self.dispatch_with_database(method, path, None)
+    }
+
+    pub fn dispatch_with_database(
+        &self,
+        method: &str,
+        path: &str,
+        database_url: Option<&str>,
+    ) -> Response {
         if method != "GET" {
             return Response::html(405, "<h1>405 Method Not Allowed</h1>");
         }
         let path = path.split_once('?').map_or(path, |(path, _)| path);
         for route in &self.routes {
             if let Some(params) = match_path(&route.path, path) {
-                return Response::html(200, render_template(&route.html, &params));
+                let data = match load_route_data(route, &params, database_url) {
+                    Ok(data) => data,
+                    Err(RouteDataError::NotFound) => {
+                        return Response::html(404, "<h1>404 Not Found</h1>");
+                    }
+                    Err(RouteDataError::DatabaseUnavailable) => {
+                        return Response::html(
+                            503,
+                            "<h1>503 Service Unavailable</h1><p>Database is unavailable.</p>",
+                        );
+                    }
+                    Err(RouteDataError::Query) => {
+                        return Response::html(
+                            500,
+                            "<h1>500 Internal Server Error</h1><p>Page data could not be loaded.</p>",
+                        );
+                    }
+                };
+                return Response::html(200, render_template(&route.html, &params, &data));
             }
         }
         Response::html(404, "<h1>404 Not Found</h1>")
@@ -5468,7 +5511,64 @@ fn path_parts(path: &str) -> Vec<&str> {
         .collect()
 }
 
-fn render_template(template: &str, params: &HashMap<String, String>) -> String {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RouteDataError {
+    NotFound,
+    DatabaseUnavailable,
+    Query,
+}
+
+fn load_route_data(
+    route: &Route,
+    params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Result<HashMap<String, String>, RouteDataError> {
+    if route.data.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let Some(database_url) = database_url else {
+        return Err(RouteDataError::DatabaseUnavailable);
+    };
+    let mut values = HashMap::new();
+    for data in &route.data {
+        let query_params = params
+            .iter()
+            .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
+            .collect();
+        let result =
+            match zelyra_database::execute_mariadb_query(database_url, &data.query, query_params) {
+                Ok(result) => result,
+                Err(error) => {
+                    eprintln!("zelyra web: page data query failed: {error}");
+                    return Err(RouteDataError::Query);
+                }
+            };
+        let row = result.rows.first();
+        if row.is_none() && !data.optional {
+            return Err(RouteDataError::NotFound);
+        }
+        for field in &data.fields {
+            let value = row
+                .and_then(|row| {
+                    result
+                        .columns
+                        .iter()
+                        .position(|column| column.eq_ignore_ascii_case(field))
+                        .and_then(|index| row.get(index))
+                })
+                .cloned()
+                .unwrap_or_default();
+            values.insert(format!("{}.{}", data.name, field), value);
+        }
+    }
+    Ok(values)
+}
+
+fn render_template(
+    template: &str,
+    params: &HashMap<String, String>,
+    data: &HashMap<String, String>,
+) -> String {
     let mut rendered = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(open) = rest.find('{') {
@@ -5479,7 +5579,7 @@ fn render_template(template: &str, params: &HashMap<String, String>) -> String {
             return rendered;
         };
         let name = &after_open[..close];
-        if let Some(value) = params.get(name) {
+        if let Some(value) = params.get(name).or_else(|| data.get(name)) {
             rendered.push_str(&html_escape(value));
         } else {
             rendered.push('{');
@@ -5609,6 +5709,7 @@ mod tests {
         Router::new(vec![Route {
             path: "/hello/{name}".into(),
             html: "<h1>Hello, {name}!</h1>".into(),
+            data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
         }])
@@ -5850,6 +5951,16 @@ mod tests {
     fn escapes_route_parameters() {
         let response = router().dispatch("GET", "/hello/<script>");
         assert_eq!(response.body, "<h1>Hello, &lt;script&gt;!</h1>");
+    }
+
+    #[test]
+    fn escapes_loaded_page_data_fields() {
+        let params = HashMap::new();
+        let data = HashMap::from([("customer.name".into(), "<script>".into())]);
+        assert_eq!(
+            render_template("<h1>{customer.name}</h1>", &params, &data),
+            "<h1>&lt;script&gt;</h1>"
+        );
     }
 
     #[test]
@@ -6625,6 +6736,27 @@ mod tests {
     }
 
     #[test]
+    fn database_capability_denies_page_data_before_database_access() {
+        let route = Route {
+            path: "/customers/{name}".into(),
+            html: "<h1>{customer.name}</h1>".into(),
+            data: vec![RouteData {
+                name: "customer".into(),
+                query: "SELECT name FROM customers WHERE name = :name".into(),
+                fields: vec!["name".into()],
+                optional: false,
+            }],
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(vec![route], Vec::new()).with_database_capability(false);
+        let request = parse_request("GET /customers/Ada HTTP/1.1\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 403);
+        assert!(response.body.contains("Database capability is not granted"));
+    }
+
+    #[test]
     fn database_capability_denies_persistent_login() {
         let auth = AuthRoute {
             table: "users".into(),
@@ -6657,6 +6789,7 @@ mod tests {
         let route = Route {
             path: "/admin".into(),
             html: "<h1>Admin</h1>".into(),
+            data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
         };
@@ -6675,6 +6808,7 @@ mod tests {
             vec![Route {
                 path: "/admin".into(),
                 html: "<h1>Admin</h1>".into(),
+                data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],
             }],

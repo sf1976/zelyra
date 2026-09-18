@@ -40,3 +40,25 @@ queries, and versioned semantic rename previews are implemented slices;
 declaration-context holes, complete
 runtime/schema impact, richer edit operations, granular effects, and
 benchmarks remain roadmap work.
+
+## Typed page data loading
+
+Pages may declare one or more explicit record loads using the native SQL
+boundary:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+The compiler checks the query against the declared schema, exposes route
+parameters as typed SQL parameters, and validates record-field interpolations.
+At runtime authorization and the `Database` capability are checked before the
+query. Results are rendered with HTML escaping; missing required records and
+database failures produce generic HTTP boundaries without exposing database
+details. Collection loading, optional-aware field expressions, and richer
+view-local data remain planned.

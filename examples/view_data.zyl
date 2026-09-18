@@ -1,0 +1,22 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name
+        FROM customers
+        WHERE name = :name
+    }
+
+    html {
+        <main>
+            <h1>{customer.name}</h1>
+        </main>
+    }
+}

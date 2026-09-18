@@ -95,6 +95,49 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             check_block(&block, schema, &mut environment, &mut errors);
         }
     }
+    for page in &program.pages {
+        let environment = page
+            .path
+            .split('/')
+            .filter_map(|segment| {
+                segment
+                    .strip_prefix('{')
+                    .and_then(|segment| segment.strip_suffix('}'))
+                    .map(|name| (name.to_owned(), Type::String))
+            })
+            .collect::<HashMap<_, _>>();
+        for data in &page.data {
+            if let Some(record_name) = result_record_name(&data.result_type) {
+                if let Some(record) = program
+                    .records
+                    .iter()
+                    .find(|record| record.name == record_name)
+                {
+                    errors.extend(check_tableview_query(
+                        &data.query,
+                        &data.result_type,
+                        schema,
+                        &environment,
+                        &program.records,
+                        &record
+                            .fields
+                            .iter()
+                            .map(|field| field.name.clone())
+                            .collect::<Vec<_>>(),
+                        data.span,
+                    ));
+                    continue;
+                }
+            }
+            errors.extend(check_query(
+                &data.query,
+                &data.result_type,
+                schema,
+                &environment,
+                data.span,
+            ));
+        }
+    }
     for tableview in &program.tableviews {
         errors.extend(check_tableview_query(
             &tableview.source,
@@ -1066,6 +1109,29 @@ mod tests {
         .unwrap())
         .unwrap();
         assert!(check_program(&program, &source_schema()).is_ok());
+    }
+
+    #[test]
+    fn checks_page_data_sql_against_schema_and_route_parameters() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } page \"/customers/{name}\" { load customer = sql<Customer> { SELECT id, name FROM customers WHERE name = :name } html { <h1>{customer.name}</h1> } }",
+        )
+        .unwrap())
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_page_data_column() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } page \"/customers/{name}\" { load customer = sql<Customer> { SELECT username FROM customers WHERE name = :name } html { <h1>{customer.name}</h1> } }",
+        )
+        .unwrap())
+        .unwrap();
+        let errors = check_program(&program, &source_schema()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("username")));
     }
 
     #[test]
