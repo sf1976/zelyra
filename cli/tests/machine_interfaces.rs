@@ -49,6 +49,18 @@ fn temporary_project_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
     (directory, source_path)
 }
 
+fn temporary_directory(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "zelyra-machine-interface-{}-{}-{}",
+        std::process::id(),
+        name,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ))
+}
+
 #[test]
 fn valid_check_json_is_a_stable_machine_document() {
     let path = example("fibonacci.zyl");
@@ -69,6 +81,54 @@ fn valid_check_json_is_a_stable_machine_document() {
     assert_eq!(document["command"], "check");
     assert_eq!(document["success"], true);
     assert_eq!(document["diagnostics"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn new_mariadb_project_propagates_the_selected_web_port() {
+    let directory = temporary_directory("new-web-port");
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--web-port",
+        "8080",
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
+    let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
+    assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
+    assert!(compose.contains("${ZELYRA_WEB_PORT:-8080}"));
+    assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn new_rejects_an_invalid_web_port_before_creating_a_project() {
+    let directory = temporary_directory("invalid-web-port");
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--web-port",
+        "65536",
+    ]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("E-CLI-001"));
+    assert!(!directory.exists());
+}
+
+#[test]
+fn web_port_requires_the_mariadb_web_template() {
+    let directory = temporary_directory("web-port-without-mariadb");
+    let output = run(&["new", directory.to_str().unwrap(), "--web-port", "8080"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("requires --mariadb"));
+    assert!(!directory.exists());
 }
 
 #[test]

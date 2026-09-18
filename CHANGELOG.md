@@ -8,6 +8,11 @@ compiler and repository release.
 
 ### Added
 
+- Added a beginner-friendly `--web-port <port>` option to `zelyra new` and
+  `zelyra init`. MariaDB Compose projects now propagate the validated port to
+  `.env.example`, the web container command, published ports, and Dockerfile.
+- Added stable `E-CLI-001` validation for invalid project web ports while
+  keeping the existing default port `3000` and later `.env` overrides.
 - Made function, type, and record renames AST-aware: declarations and known
   references are changed while shadowing local bindings remain untouched.
 - Made multi-operation edits position-stable by sorting replacements before

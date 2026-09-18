@@ -83,10 +83,12 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Source install/check/update/uninstall scripts with dry-run and safe
   diagnostics are available; Rust-free release mode covers published x86_64
   assets.
-- [ ] First-run wizard for project creation, MariaDB connection, secrets, and
-  selectable web port.
-- [ ] Clear Docker Compose templates for MariaDB and the internal web server,
-  including configurable host and container ports.
+- [~] A deterministic first-run project flow supports MariaDB scaffolding and
+  a validated selectable web port through `zelyra new` and `zelyra init`;
+  interactive MariaDB connection and secret setup remain open.
+- [~] The generated Docker Compose template starts MariaDB and the internal
+  web server with a configurable port; production hardening and independent
+  host/container port selection remain open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
 - [ ] `zelyra doctor` checks for database, port, TLS, permissions, and required

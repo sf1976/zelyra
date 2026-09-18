@@ -43,7 +43,7 @@ use impact::{build_impact, focus_impact};
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -64,7 +64,24 @@ fn database_usage() {
     );
 }
 
-fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool) -> ExitCode {
+const DEFAULT_WEB_PORT: u16 = 3000;
+
+fn parse_web_port(value: &str) -> Result<u16, String> {
+    let port = value
+        .parse::<u16>()
+        .map_err(|_| format!("web port `{value}` must be an integer between 1 and 65535"))?;
+    if port == 0 {
+        return Err("web port must be between 1 and 65535".into());
+    }
+    Ok(port)
+}
+
+fn create_project(
+    path: &str,
+    allow_current_directory: bool,
+    with_mariadb: bool,
+    web_port: u16,
+) -> ExitCode {
     let directory = std::path::Path::new(path);
     if directory.exists() && !allow_current_directory {
         eprintln!("error[E-INIT-001]: directory `{path}` already exists");
@@ -75,34 +92,136 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        r#"[project]
+name = "zelyra-app"
+version = "0.1.38"
+zelyra = "0.1"
+
+[database.main]
+engine = "mariadb"
+
+[capabilities]
+database = true
+network = false
+"#
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        r#"[project]
+name = "zelyra-app"
+version = "0.1.38"
+zelyra = "0.1"
+
+[capabilities]
+database = true
+network = false
+"#
     };
     let main_source = if with_mariadb {
-        "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
+        r#"database main {
+    engine: mariadb
+}
+
+page "/" {
+    html {
+        <h1>Welcome to Zelyra</h1>
+        <p>Your MariaDB-ready application is running.</p>
+    }
+}
+
+fn main() {
+    print("Hello from Zelyra")
+}
+"#
     } else {
-        "fn main() {\n    print(\"Hello from Zelyra\")\n}\n"
+        r#"fn main() {
+    print("Hello from Zelyra")
+}
+"#
     };
-    let mut files = vec![("zelyra.toml", project_config), ("main.zyl", main_source)];
+    let mut files = vec![
+        ("zelyra.toml", project_config.to_owned()),
+        ("main.zyl", main_source.to_owned()),
+    ];
     if with_mariadb {
+        let env_value = |name: &str| format!("{}{{{name}}}", '$');
+        let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{web_port}}}", '$');
         files.extend([
             (
                 ".env.example",
-                "# Copy this file to .env. Never commit .env or real credentials.\n# ZELYRA_WEB_PORT is the internal and host port of the web server.\nZELYRA_WEB_PORT=3000\nDATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:3306/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n",
+                r#"# Copy this file to .env. Never commit .env or real credentials.
+# ZELYRA_WEB_PORT is the internal and host port of the web server.
+ZELYRA_WEB_PORT=__WEB_PORT__
+DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:3306/zelyra_app
+MARIADB_DATABASE=zelyra_app
+MARIADB_USER=zelyra
+MARIADB_PASSWORD=change-me
+MARIADB_ROOT_PASSWORD=change-me-root
+"#
+                .replace("__WEB_PORT__", &web_port.to_string()),
             ),
             (
                 "docker-compose.mariadb.yml",
-                "services:\n  mariadb:\n    image: mariadb:11\n    restart: unless-stopped\n    environment:\n      MARIADB_DATABASE: ${MARIADB_DATABASE}\n      MARIADB_USER: ${MARIADB_USER}\n      MARIADB_PASSWORD: ${MARIADB_PASSWORD}\n      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}\n    ports:\n      - \"127.0.0.1:3306:3306\"\n    volumes:\n      - zelyra_mariadb_data:/var/lib/mysql\n    healthcheck:\n      test: [\"CMD\", \"healthcheck.sh\", \"--connect\", \"--innodb_initialized\"]\n      interval: 5s\n      timeout: 5s\n      retries: 20\n\n  web:\n    build: .\n    command: [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:${ZELYRA_WEB_PORT:-3000}\"]\n    environment:\n      DATABASE_URL: mariadb://${MARIADB_USER}:${MARIADB_PASSWORD}@mariadb:3306/${MARIADB_DATABASE}\n    depends_on:\n      mariadb:\n        condition: service_healthy\n    ports:\n      - \"127.0.0.1:${ZELYRA_WEB_PORT:-3000}:${ZELYRA_WEB_PORT:-3000}\"\n\nvolumes:\n  zelyra_mariadb_data:\n",
+                r#"services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: __MARIADB_DATABASE__
+      MARIADB_USER: __MARIADB_USER__
+      MARIADB_PASSWORD: __MARIADB_PASSWORD__
+      MARIADB_ROOT_PASSWORD: __MARIADB_ROOT_PASSWORD__
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - zelyra_mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
+    environment:
+      DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:__WEB_PORT__:__WEB_PORT__"
+
+volumes:
+  zelyra_mariadb_data:
+"#
+                .replace("__MARIADB_DATABASE__", &env_value("MARIADB_DATABASE"))
+                .replace("__MARIADB_USER__", &env_value("MARIADB_USER"))
+                .replace("__MARIADB_PASSWORD__", &env_value("MARIADB_PASSWORD"))
+                .replace("__MARIADB_ROOT_PASSWORD__", &env_value("MARIADB_ROOT_PASSWORD"))
+                .replace("__WEB_PORT__", &web_port_value),
             ),
             (
                 "Dockerfile",
-                "FROM rust:1-bookworm AS build\nARG ZELYRA_REF=v0.1.37-alpha.1\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates git \\\n    && rm -rf /var/lib/apt/lists/*\nRUN git clone --depth 1 --branch ${ZELYRA_REF} https://github.com/sf1976/zelyra.git /zelyra\nRUN cargo install --path /zelyra/cli --root /out\n\nFROM debian:bookworm-slim\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \\\n    && rm -rf /var/lib/apt/lists/*\nCOPY --from=build /out/bin/zelyra /usr/local/bin/zelyra\nCOPY main.zyl zelyra.toml ./\nEXPOSE 3000\nCMD [\"zelyra\", \"serve\", \"main.zyl\", \"0.0.0.0:3000\"]\n",
+                r#"FROM rust:1-bookworm AS build
+ARG ZELYRA_REF=v0.1.37-alpha.1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
+RUN cargo install --path /zelyra/cli --root /out
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
+COPY main.zyl zelyra.toml ./
+EXPOSE __WEB_PORT__
+CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
+"#
+                .replace("__ZELYRA_REF__", &env_value("ZELYRA_REF"))
+                .replace("__WEB_PORT__", &web_port.to_string()),
             ),
-            (
-                ".dockerignore",
-                ".git\ntarget\n.env\n*.sqlite3\n",
-            ),
+            (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
         ]);
     }
     for (name, contents) in files {
@@ -5764,23 +5883,59 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         };
         let mut with_mariadb = false;
-        for argument in args {
+        let mut web_port = DEFAULT_WEB_PORT;
+        let mut web_port_given = false;
+        let mut arguments = args;
+        while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
                 with_mariadb = true;
+            } else if argument == "--web-port" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --web-port requires a value");
+                    return ExitCode::from(2);
+                };
+                web_port_given = true;
+                web_port = match parse_web_port(&value) {
+                    Ok(port) => port,
+                    Err(error) => {
+                        eprintln!("error[E-CLI-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
             } else {
                 usage();
                 return ExitCode::from(2);
             }
         }
-        return create_project(&path, false, with_mariadb);
+        if web_port_given && !with_mariadb {
+            eprintln!("error[E-CLI-001]: --web-port requires --mariadb");
+            return ExitCode::from(2);
+        }
+        return create_project(&path, false, with_mariadb, web_port);
     }
     if command == "init" {
         let mut path = ".".to_owned();
         let mut path_given = false;
         let mut with_mariadb = false;
-        for argument in args {
+        let mut web_port = DEFAULT_WEB_PORT;
+        let mut web_port_given = false;
+        let mut arguments = args;
+        while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
                 with_mariadb = true;
+            } else if argument == "--web-port" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --web-port requires a value");
+                    return ExitCode::from(2);
+                };
+                web_port_given = true;
+                web_port = match parse_web_port(&value) {
+                    Ok(port) => port,
+                    Err(error) => {
+                        eprintln!("error[E-CLI-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
             } else if !argument.starts_with('-') && !path_given {
                 path = argument;
                 path_given = true;
@@ -5789,7 +5944,11 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         }
-        return create_project(&path, true, with_mariadb);
+        if web_port_given && !with_mariadb {
+            eprintln!("error[E-CLI-001]: --web-port requires --mariadb");
+            return ExitCode::from(2);
+        }
+        return create_project(&path, true, with_mariadb, web_port);
     }
     if command == "serve" {
         return serve_command(args);
@@ -6694,12 +6853,48 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let status = create_project(path.to_str().unwrap(), false, true);
+        let status = create_project(path.to_str().unwrap(), false, true, DEFAULT_WEB_PORT);
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
         assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.38-alpha.1"));
 
         fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn generated_mariadb_template_uses_selected_web_port() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-port-template-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let status = create_project(path.to_str().unwrap(), false, true, 8080);
+        assert_eq!(status, ExitCode::SUCCESS);
+
+        let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
+        let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
+        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
+        let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
+        assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
+        assert!(compose.contains("${ZELYRA_WEB_PORT:-8080}"));
+        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
+        assert!(dockerfile.contains("EXPOSE 8080"));
+        assert!(dockerfile.contains("0.0.0.0:8080"));
+        assert!(dockerignore.contains(".env"));
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn web_port_validation_rejects_zero_and_non_numeric_values() {
+        assert_eq!(parse_web_port("1"), Ok(1));
+        assert_eq!(parse_web_port("65535"), Ok(65535));
+        assert!(parse_web_port("0").is_err());
+        assert!(parse_web_port("65536").is_err());
+        assert!(parse_web_port("web").is_err());
     }
 }
