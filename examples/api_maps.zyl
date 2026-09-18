@@ -1,0 +1,15 @@
+fn echo_settings(settings: Map<String, Int>) -> Map<String, Int> {
+    return settings
+}
+
+api POST "/settings" {
+    handler echo_settings
+
+    input {
+        settings: Map<String, Int>
+    }
+
+    output Map<String, Int>
+}
+
+fn main() {}

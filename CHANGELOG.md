@@ -11,11 +11,15 @@ compiler and repository release.
 - Added deterministic typed maps with `Map<Key, Value>` types, `Map { ... }`
   literals, null-safe `get`, functional `put`, `keys`, `values`, scalar-key
   validation, and JSON conversion for string-keyed maps.
+- Added API-boundary validation for map JSON compatibility, plus a verified
+  string-keyed map path from request/response JSON to OpenAPI and TypeScript.
 
 - Deterministische typisierte Maps mit `Map<Schlüssel, Wert>`-Typen,
   `Map { ... }`-Literalen, nullsicherem `get`, funktionalem `put`, `keys`,
   `values`, Validierung skalarer Schlüssel und JSON-Konvertierung für Maps mit
   String-Schlüsseln ergänzt.
+- API-Grenzen prüfen jetzt die JSON-Kompatibilität von Maps; ein geprüfter Pfad
+  für String-Schlüssel verbindet Request/Response-JSON, OpenAPI und TypeScript.
 
 - Added bilingual source-authority guides that map the binding specification,
   parser, tests, standard-library status, validated examples, documentation,

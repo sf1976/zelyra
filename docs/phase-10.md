@@ -151,6 +151,28 @@ last = last(numbers)
 `first` and `last` return `Option<T>`, so empty arrays are handled without a
 runtime null value.
 
+String-keyed maps cross the API boundary as JSON objects. The same declared
+type drives request validation, response serialization, OpenAPI, and the
+generated TypeScript client:
+
+~~~zelyra
+fn echo_settings(settings: Map<String, Int>) -> Map<String, Int> {
+    return settings
+}
+
+api POST "/settings" {
+    handler echo_settings
+    input { settings: Map<String, Int> }
+    output Map<String, Int>
+}
+~~~
+
+`zelyra check examples/api_maps.zyl` validates the declaration. The OpenAPI
+schema describes an object with integer `additionalProperties`, and the
+TypeScript client uses `Record<string, number>`. `Map<Int, String>` is valid in
+the language core, but the compiler rejects it at an API boundary because JSON
+object keys are strings.
+
 Arrays can be iterated with structured `for ... in` loops. The loop variable is
 immutable and scoped to the loop body:
 

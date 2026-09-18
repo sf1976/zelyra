@@ -1,0 +1,9 @@
+api POST "/settings" {
+    input {
+        settings: Map<Int, String>
+    }
+
+    output Map<Int, String>
+}
+
+fn main() {}

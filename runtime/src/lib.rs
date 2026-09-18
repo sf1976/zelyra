@@ -130,6 +130,13 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                     message: format!("unknown API input type `{}`", field.ty),
                     span: field.span,
                 });
+            } else if let Some(message) =
+                api_json_type_error(&field.ty, program, &mut HashSet::new())
+            {
+                errors.push(ApiDiagnostic {
+                    message: format!("API input field `{}`: {message}", field.name),
+                    span: field.span,
+                });
             }
         }
         for parameter in parameters {
@@ -145,6 +152,12 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
         if !api_type_known(&api.output, &known_types) {
             errors.push(ApiDiagnostic {
                 message: format!("unknown API output type `{}`", api.output),
+                span: api.span,
+            });
+        } else if let Some(message) = api_json_type_error(&api.output, program, &mut HashSet::new())
+        {
+            errors.push(ApiDiagnostic {
+                message: format!("API output: {message}"),
                 span: api.span,
             });
         }
@@ -208,6 +221,13 @@ pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
                         ),
                         span: error.span,
                     });
+                } else if let Some(message) =
+                    api_json_type_error(payload, program, &mut HashSet::new())
+                {
+                    errors.push(ApiDiagnostic {
+                        message: format!("API error `{}`: {message}", error.name),
+                        span: error.span,
+                    });
                 }
                 match &api.output {
                     Type::Result(_, error_type) if compatible(error_type, payload) => {}
@@ -249,6 +269,73 @@ fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
             api_type_known(ok, known_types) && api_type_known(error, known_types)
         }
         _ => true,
+    }
+}
+
+/// Returns an error for values that cannot cross the JSON API boundary without
+/// losing their declared shape. JSON objects have string keys, so a Zelyra map
+/// exposed through an API must use `String` keys. The traversal also checks
+/// aliases and nested records so the guarantee is enforced at the boundary,
+/// rather than only for the top-level API type.
+fn api_json_type_error(
+    ty: &Type,
+    program: &Program,
+    visiting: &mut HashSet<String>,
+) -> Option<String> {
+    match ty {
+        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            api_json_type_error(inner, program, visiting)
+        }
+        Type::Map(key, value) => {
+            if **key != Type::String {
+                return Some(format!(
+                    "JSON API maps require `String` keys, found `{}`",
+                    key
+                ));
+            }
+            api_json_type_error(value, program, visiting)
+        }
+        Type::Result(ok, error) => api_json_type_error(ok, program, visiting)
+            .or_else(|| api_json_type_error(error, program, visiting)),
+        Type::Named(name) => {
+            if !visiting.insert(name.clone()) {
+                return None;
+            }
+            let result = program
+                .types
+                .iter()
+                .find(|definition| definition.name == *name)
+                .and_then(|definition| api_json_type_error(&definition.target, program, visiting))
+                .or_else(|| {
+                    program
+                        .records
+                        .iter()
+                        .find(|record| record.name == *name)
+                        .and_then(|record| {
+                            record
+                                .fields
+                                .iter()
+                                .find_map(|field| api_json_type_error(&field.ty, program, visiting))
+                        })
+                })
+                .or_else(|| {
+                    program
+                        .tables
+                        .iter()
+                        .find(|table| {
+                            table.name == *name
+                                || singular_table_type(&table.name).as_deref() == Some(name)
+                        })
+                        .and_then(|table| {
+                            table.columns.iter().find_map(|column| {
+                                api_json_type_error(&column.ty, program, visiting)
+                            })
+                        })
+                });
+            visiting.remove(name);
+            result
+        }
+        _ => None,
     }
 }
 
@@ -8537,6 +8624,19 @@ mod tests {
         )
         .unwrap();
         assert!(check_apis(&program).is_ok());
+    }
+
+    #[test]
+    fn rejects_non_string_map_keys_at_the_api_boundary() {
+        let program = parse(
+            &lex("api POST \"/settings\" { input { settings: Map<Int, String> } output Map<Int, String> } fn main() { }").unwrap(),
+        )
+        .unwrap();
+        let errors = check_apis(&program).unwrap_err();
+        assert_eq!(errors.len(), 2);
+        assert!(errors
+            .iter()
+            .all(|error| error.message.contains("JSON API maps require")));
     }
 
     #[test]
