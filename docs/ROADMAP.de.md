@@ -24,8 +24,8 @@ noch in Prüfung.
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
-  Properties sind verfügbar. Mehrere Slots, Themes und CRUD-View-
-  Überschreibungen folgen.
+  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt und CRUD-
+  View-Überschreibungen sind verfügbar; Themes bleiben offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -164,8 +164,9 @@ Feature eines bestimmten Anbieters.
   deklarierten Spalten, typisierten Filtern, Suche, Sortierung, Pagination,
   URL-Zustand und Escaping sind für tabellen- und struct-basierte Ergebnistypen
   verfügbar.
-- [~] Komponenten unterstützen Default- und benannte Slots sowie verschachtelte
-  Komposition; Fallback-Inhalte und verschachtelte Views bleiben geplant.
+- [~] Komponenten unterstützen Default- und benannte Slots, Fallback-Inhalte
+  sowie verschachtelte Komposition; Fallback-Inhalte für komplexere
+  verschachtelte View-Szenarien bleiben geplant.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
 - [ ] View-lokales Laden von Daten mit expliziten Query- und Berechtigungsgrenzen.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und

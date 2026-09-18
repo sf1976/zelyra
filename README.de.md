@@ -313,7 +313,9 @@ page "/dashboard" {
 Komponenten können mit `<slot name="header" />` auch benannte Slots deklarieren;
 Aufrufer übergeben sie mit Blöcken wie
 `<slot name="header">...</slot>`. Verschachtelte Komponenten werden von innen
-nach außen erweitert, unbekannter oder ungenutzter Inhalt wird abgelehnt. Siehe
+nach außen erweitert, unbekannter oder ungenutzter Inhalt wird abgelehnt.
+Benannte Slots dürfen sicher escapte, deterministische Fallback-Inhalte besitzen;
+Aufrufer können sie explizit überschreiben. Siehe
 `examples/component_slots.zyl`.
 
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits

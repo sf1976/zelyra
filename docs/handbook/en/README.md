@@ -577,7 +577,8 @@ page "/dashboard" {
 
 Nested components are expanded from the inside out. Passing child content to a
 component without a matching default or named `<slot />` is a compile-time
-error. Fallback slot content remains planned.
+error. Named slots may provide escaped, deterministic fallback content; a
+caller can override that slot explicitly.
 
 CRUD list views can be adjusted without replacing the generated query or
 authorization pipeline. The default is an HTML table; a card layout and a

@@ -52,6 +52,15 @@ port selection, and source/release installation are designed to make the first
 working application approachable. Production deployment remains an evolving
 part of the project.
 
+### 8. Safe adaptive views instead of a generated dead end
+
+Zelyra views are intended to start with useful defaults and remain locally
+customizable. Named layouts and components can provide fallback content, while
+the compiler keeps composition explicit and the generated data, escaping,
+authentication, and authorization paths intact. This is a product direction,
+not a claim that any single view feature is unique by itself; its value comes
+from combining simplicity with the same database and safety model.
+
 ## What is implemented today
 
 The current repository already demonstrates schema-aware SQL, MariaDB CRUD,
