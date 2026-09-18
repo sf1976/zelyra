@@ -66,9 +66,9 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         return ExitCode::from(1);
     }
     let project_config = if with_mariadb {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.37\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[database.main]\nengine = \"mariadb\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     } else {
-        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.37\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
+        "[project]\nname = \"zelyra-app\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\nnetwork = false\n"
     };
     let main_source = if with_mariadb {
         "database main {\n    engine: mariadb\n}\n\npage \"/\" {\n    html {\n        <h1>Welcome to Zelyra</h1>\n        <p>Your MariaDB-ready application is running.</p>\n    }\n}\n\nfn main() {\n    print(\"Hello from Zelyra\")\n}\n"
@@ -101,6 +101,11 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
         if file.exists() && allow_current_directory {
             continue;
         }
+        let contents = if name == "Dockerfile" {
+            contents.replace("v0.1.37-alpha.1", "v0.1.38-alpha.1")
+        } else {
+            contents.to_owned()
+        };
         if let Err(error) = fs::write(&file, contents) {
             eprintln!(
                 "error[E-INIT-003]: cannot write `{}`: {error}",
@@ -6237,7 +6242,7 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.37-alpha.1"));
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.38-alpha.1"));
 
         fs::remove_dir_all(path).unwrap();
     }

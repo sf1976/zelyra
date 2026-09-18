@@ -87,6 +87,19 @@ compiler and repository release.
 - Added a MariaDB tableview end-to-end test covering struct-backed joins,
   aggregates, escaping, search, sorting, pagination, and rejected sort fields.
 
+## 0.1.38-alpha.1 — 2026-09-18
+
+This release establishes the AI-native compiler foundation. It adds stable,
+versioned JSON diagnostics, deterministic source spans, a read-only structured
+project context command, bilingual architecture and handbook documentation,
+and a benchmark specification without invented results.
+
+Diese Version schafft die KI-native Compilergrundlage. Sie ergänzt stabile,
+versionierte JSON-Diagnosen, deterministische Source-Spans, einen
+schreibgeschützten strukturierten Projektkontext, zweisprachige Architektur-
+und Handbuchdokumentation sowie eine Benchmark-Spezifikation ohne erfundene
+Ergebnisse.
+
 ## 0.1.37-alpha.8 — 2026-09-17
 
 This release contains the changes listed under `Unreleased` above.
