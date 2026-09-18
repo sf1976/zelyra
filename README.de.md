@@ -165,6 +165,9 @@ Heute implementiert:
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
+- deterministische typisierte Maps mit `Map<Schlüssel, Wert>`-Deklarationen,
+  `Map { ... }`-Literalen, nullsicherem `get`, funktionalem `put`, `keys`,
+  `values` und JSON-Konvertierung für Maps mit String-Schlüsseln;
 - strukturierte `for ... in`-Iteration über Arrays mit `break` und `continue`;
 - Record-Literale und geprüfter Feldzugriff für verschachtelte Fachobjekte;
 - erste Capability-Deklarationen und statische Weitergabe über

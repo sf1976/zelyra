@@ -167,6 +167,7 @@ pub enum HirExprKind {
     String(String),
     Char(char),
     Array(Vec<HirExpr>),
+    Map(Vec<(HirExpr, HirExpr)>),
     Record {
         type_name: String,
         fields: Vec<(String, HirExpr)>,
@@ -524,6 +525,12 @@ impl<'a> Resolver<'a> {
             ExprKind::Array(values) => {
                 HirExprKind::Array(values.iter().map(|value| self.expr(value)).collect())
             }
+            ExprKind::Map(entries) => HirExprKind::Map(
+                entries
+                    .iter()
+                    .map(|(key, value)| (self.expr(key), self.expr(value)))
+                    .collect(),
+            ),
             ExprKind::Record { type_name, fields } => HirExprKind::Record {
                 type_name: type_name.clone(),
                 fields: fields
@@ -557,6 +564,10 @@ impl<'a> Resolver<'a> {
                             | "len"
                             | "append"
                             | "contains"
+                            | "get"
+                            | "put"
+                            | "keys"
+                            | "values"
                             | "first"
                             | "last"
                             | "Some"
@@ -685,6 +696,35 @@ mod tests {
         assert!(matches!(
             hir.functions[0].body.statements[6],
             HirStmt::For { ref name, .. } if name == "item"
+        ));
+    }
+
+    #[test]
+    fn lowers_map_literals_and_builtins() {
+        let program = parse(
+            &lex("fn main() { values: Map<String, Int> = Map { \"one\": 1 } result = get(values, \"one\") updated = put(values, \"two\", 2) } ").unwrap(),
+        )
+        .unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Map(_),
+                    ..
+                },
+                ..
+            }
+        ));
+        assert!(matches!(
+            hir.functions[0].body.statements[1],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { ref name, .. },
+                    ..
+                },
+                ..
+            } if name == "get"
         ));
     }
 

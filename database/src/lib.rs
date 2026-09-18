@@ -338,6 +338,7 @@ fn column_mapping(
         | Type::Option(_)
         | Type::Result(_, _)
         | Type::Array(_)
+        | Type::Map(_, _)
         | Type::HttpResult(_)
         | Type::Unit
         | Type::Unknown => "TEXT",

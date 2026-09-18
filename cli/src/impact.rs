@@ -521,6 +521,12 @@ fn collect_expression_calls(
                 collect_expression_calls(value, function_names, calls);
             }
         }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                collect_expression_calls(key, function_names, calls);
+                collect_expression_calls(value, function_names, calls);
+            }
+        }
         ExprKind::Record { fields, .. } => {
             for (_, value) in fields {
                 collect_expression_calls(value, function_names, calls);
@@ -823,6 +829,10 @@ fn collect_expr_sql(
         ExprKind::Array(values) => values
             .iter()
             .for_each(|value| collect_expr_sql(value, owner, kind, table_names, source, entries)),
+        ExprKind::Map(map_entries) => map_entries.iter().for_each(|(key, value)| {
+            collect_expr_sql(key, owner, kind, table_names, source, entries);
+            collect_expr_sql(value, owner, kind, table_names, source, entries);
+        }),
         ExprKind::Record { fields, .. } => fields.iter().for_each(|(_, value)| {
             collect_expr_sql(value, owner, kind, table_names, source, entries)
         }),

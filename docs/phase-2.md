@@ -44,6 +44,44 @@ fn load(ok: Bool) -> Result<Int, String> {
 }
 ```
 
+## Typed maps
+
+Zelyra 0.1 provides deterministic typed maps for scalar keys. The key and
+value types are explicit in `Map<Key, Value>`; map literals use `Map { ... }`.
+The supported key types are `Int`, `UInt`, `String`, `Bool`, `Char`, and
+`Timestamp`.
+
+```zelyra
+fn main() {
+    prices: Map<String, Int> = Map {
+        "standard": 10
+        "premium": 20
+    }
+
+    mutable current = put(prices, "standard", 12)
+
+    match get(current, "standard") {
+        Some(price) => {
+            print(price)
+        }
+        None => {
+            print(0)
+        }
+    }
+
+    print(keys(current))
+    print(values(current))
+}
+```
+
+`get` returns an `Option<Value>`, so a missing key is handled explicitly.
+`put` returns a new map and replaces an existing key without changing its
+position. Duplicate keys in a literal use the last value while retaining the
+first insertion position. `keys`, `values`, `contains`, and `len` are
+deterministic. JSON
+conversion supports `Map<String, Value>` as a JSON object; maps with other key
+types are language values but are rejected by JSON conversion.
+
 ## Pattern matching
 
 Match arms bind inner values and must be exhaustive for `Option`, `Result`, and

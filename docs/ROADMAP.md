@@ -19,8 +19,8 @@ remain machine-searchable for now.
 ## Current milestones
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
-  immutable-by-default bindings, arrays, records, Option, Result, and pattern
-  matching.
+  immutable-by-default bindings, arrays, deterministic typed maps, records,
+  Option, Result, and pattern matching.
 - [x] Static checking, nominal domain types, capabilities, contracts, runtime
   checks, and an initial verifier.
 - [x] MariaDB-first schema definitions, inspection, DDL planning, schema

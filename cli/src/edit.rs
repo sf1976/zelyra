@@ -851,6 +851,12 @@ fn collect_function_expression(
                 collect_function_expression(value, name, spans);
             }
         }
+        zelyra_ast::ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                collect_function_expression(key, name, spans);
+                collect_function_expression(value, name, spans);
+            }
+        }
         zelyra_ast::ExprKind::Record { fields, .. } => {
             for (_, value) in fields {
                 collect_function_expression(value, name, spans);

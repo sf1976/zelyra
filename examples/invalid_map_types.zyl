@@ -1,0 +1,6 @@
+fn main() {
+    invalid = Map {
+        "one": 1
+        "two": "not an Int"
+    }
+}

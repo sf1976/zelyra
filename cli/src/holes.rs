@@ -298,6 +298,22 @@ impl Collector {
                     );
                 }
             }
+            ExprKind::Map(entries) => {
+                let (key_type, value_type) = match expected_type {
+                    Some(Type::Map(key, value)) => (Some(*key), Some(*value)),
+                    _ => (None, None),
+                };
+                for (key, value) in entries {
+                    self.expression(key, key_type.clone(), scope, capabilities, contract_spans);
+                    self.expression(
+                        value,
+                        value_type.clone(),
+                        scope,
+                        capabilities,
+                        contract_spans,
+                    );
+                }
+            }
             ExprKind::Record { type_name, fields } => {
                 for (name, value) in fields {
                     let field_type = self
@@ -383,6 +399,10 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "len",
         "append",
         "contains",
+        "get",
+        "put",
+        "keys",
+        "values",
         "first",
         "last",
         "Some",
