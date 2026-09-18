@@ -80,6 +80,20 @@ cd zelyra
 zelyra --help
 ~~~
 
+The installer is repeatable and user-local. Inspect or control it with:
+
+~~~bash
+./install.sh --help
+./install.sh --dry-run --root "$HOME/.local"
+./install.sh --check
+./install.sh --uninstall
+~~~
+
+Use `--no-rustup` to disable automatic Rust installation, `--no-path` to
+silence PATH guidance, or `--root PATH` / `ZELYRA_INSTALL_ROOT` to choose a
+different user-owned target. Stale `cargo` PATH entries are detected instead
+of being executed blindly.
+
 If the shell cannot find Zelyra:
 
 ~~~bash

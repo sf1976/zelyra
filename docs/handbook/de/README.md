@@ -102,6 +102,20 @@ Programm benutzerlokal. Danach:
 zelyra --help
 ~~~
 
+Der Installer ist wiederholbar und benutzerlokal. Optionen zur Kontrolle:
+
+~~~bash
+./install.sh --help
+./install.sh --dry-run --root "$HOME/.local"
+./install.sh --check
+./install.sh --uninstall
+~~~
+
+Mit `--no-rustup` wird die automatische Rust-Installation deaktiviert,
+`--no-path` unterdrückt PATH-Hinweise. Mit `--root PATH` oder
+`ZELYRA_INSTALL_ROOT` lässt sich ein anderes benutzerbezogenes Ziel wählen.
+Veraltete `cargo`-PATH-Einträge werden erkannt und nicht blind ausgeführt.
+
 Wenn die Shell `zelyra` nicht findet:
 
 ~~~bash

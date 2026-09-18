@@ -110,8 +110,8 @@ For the easiest source installation you need:
 The installers build Zelyra for the current user and do not use sudo or
 administrator privileges. They install Rust automatically when it is missing.
 The source installers still need an internet connection for the first toolchain
-installation; a standalone release installer for users who do not want Rust is
-planned.
+installation. A standalone release installer for users who do not want Rust is
+still planned.
 
 Apache is not required. A database server is not required for the language
 core, web, and local form examples. MariaDB is needed only when you want to
@@ -132,6 +132,23 @@ Install the command:
 ./install.sh
 ~~~
 
+The installer is repeatable and user-local. Useful safety and maintenance
+options are:
+
+~~~bash
+./install.sh --help
+./install.sh --dry-run --root "$HOME/.local"
+./install.sh --check
+./install.sh --uninstall
+~~~
+
+Use `--no-rustup` to fail clearly instead of installing Rust automatically,
+`--no-path` to suppress PATH guidance, or `--root PATH` / the
+`ZELYRA_INSTALL_ROOT` environment variable to choose another user-owned
+installation directory. Use `--offline` when the required Rust dependencies
+are already cached. A broken or stale `cargo` PATH entry is detected and never
+executed as if it were a real compiler.
+
 On Windows, use PowerShell from the repository directory:
 
 ~~~powershell
@@ -149,7 +166,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 The Windows installer uses the current user's `%LOCALAPPDATA%\Zelyra\bin`
 directory and updates the user PATH. No administrator password is required.
 
-The script builds the CLI in release mode and installs it at:
+The script builds the CLI in locked release mode and installs it at:
 
 ~~~text
 ~/.local/bin/zelyra

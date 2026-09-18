@@ -29,6 +29,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Validate Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\install.ps1 -DryRun -NoRustup -NoPath
       - name: Build release binary
         run: cargo build --release --package zelyra-cli --target ${{ matrix.target }}
       - name: Package Linux release

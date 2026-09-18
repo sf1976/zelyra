@@ -72,9 +72,13 @@ Feature eines bestimmten Anbieters.
 
 ## 1. Einstieg und Distribution
 
-- [ ] Ein-Befehl-Installation für Linux, Windows und macOS.
+- [~] Eine Ein-Befehl-Quellcodeinstallation für Linux, Windows und macOS ist
+  mit benutzerlokalen, wiederholbaren Bash-/PowerShell-Installern verfügbar;
+  eine eigenständige Release-Installation bleibt offen.
 - [ ] Signierte Release-Binaries und Checksums für jede unterstützte Plattform.
-- [ ] Installations-, Update- und Deinstallationsskripte ohne Rust oder Cargo.
+- [~] Quellcode-Installer mit Prüfung, Update, Deinstallation, Dry-Run und
+  sicheren Diagnosen sind verfügbar; Installer ohne Rust oder Cargo bleiben
+  offen.
 - [ ] First-Run-Assistent für Projekt, MariaDB, Secrets und Webserver-Port.
 - [ ] Verständliche Docker-Compose-Vorlagen für MariaDB und internen Webserver
   mit konfigurierbaren Host- und Container-Ports.

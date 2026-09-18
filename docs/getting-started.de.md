@@ -118,7 +118,8 @@ Für die einfachste Installation aus dem Quellcode werden benötigt:
 Die Installer bauen Zelyra für den aktuellen Benutzer und verwenden weder sudo
 noch Administratorrechte. Falls Rust fehlt, wird es automatisch installiert.
 Die Quellcode-Installer benötigen für die erste Toolchain-Installation eine
-Internetverbindung; ein eigenständiger Release-Installer ohne Rust ist geplant.
+Internetverbindung. Ein eigenständiger Release-Installer ohne Rust bleibt
+geplant.
 
 Apache ist nicht erforderlich. Für Sprachkern-, Web- und lokale
 Formularbeispiele wird kein Datenbankserver benötigt. MariaDB wird nur
@@ -139,6 +140,23 @@ Befehl installieren:
 ./install.sh
 ~~~
 
+Der Installer ist wiederholbar und benutzerlokal. Nützliche Optionen sind:
+
+~~~bash
+./install.sh --help
+./install.sh --dry-run --root "$HOME/.local"
+./install.sh --check
+./install.sh --uninstall
+~~~
+
+Mit `--no-rustup` wird bei fehlendem Rust nur eine klare Fehlermeldung
+ausgegeben, `--no-path` unterdrückt PATH-Hinweise. Mit `--root PATH` oder der
+Umgebungsvariable `ZELYRA_INSTALL_ROOT` lässt sich ein anderes
+benutzerbezogenes Installationsverzeichnis wählen. Mit `--offline` werden nur
+bereits gecachte Rust-Abhängigkeiten verwendet. Ein veralteter oder defekter
+`cargo`-PATH-Eintrag wird erkannt und niemals als ausführbarer Compiler
+verwendet.
+
 Unter Windows PowerShell aus dem Repository-Verzeichnis verwenden:
 
 ~~~powershell
@@ -158,7 +176,8 @@ Der Windows-Installer verwendet das benutzerbezogene Verzeichnis
 `%LOCALAPPDATA%\Zelyra\bin` und ergänzt den Benutzer-PATH. Ein
 Administratorpasswort ist nicht erforderlich.
 
-Das Script baut die CLI im Release-Modus und installiert sie unter:
+Das Script baut die CLI reproduzierbar mit gesperrten Abhängigkeiten im
+Release-Modus und installiert sie unter:
 
 ~~~text
 ~/.local/bin/zelyra

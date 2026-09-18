@@ -198,11 +198,14 @@ zelyra doctor examples/machine_management.zyl
 Für CI oder IDE-Werkzeuge liefert `zelyra doctor ... --json` maschinenlesbare
 Prüfungen, ohne Datenbankzugangsdaten offenzulegen.
 
-Der Installer baut Zelyra für den aktuellen Benutzer und installiert das
-Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt weder sudo,
-eine globale Rust-Installation, Apache noch einen Datenbankserver für die
-Sprachkern-Beispiele. Unter Windows `install.ps1` in PowerShell oder
-`install.cmd` verwenden; der Installer nutzt das lokale Benutzerverzeichnis
+Der Installer baut Zelyra reproduzierbar für den aktuellen Benutzer und
+installiert das Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt
+weder sudo, eine globale Rust-Installation, Apache noch einen Datenbankserver
+für die Sprachkern-Beispiele. `./install.sh --help` zeigt Dry-Run-, Prüf-,
+Zielordner-, No-Rustup- und Deinstallationsoptionen; veraltete `cargo`-PATH-
+Einträge werden abgelehnt statt blind ausgeführt. Unter Windows `install.ps1` in
+PowerShell oder `install.cmd` verwenden; der Installer nutzt das lokale
+Benutzerverzeichnis
 und aktualisiert den Benutzer-PATH ohne Administratorrechte.
 
 Eine Quelldatei direkt aus dem Repository ausführen:
