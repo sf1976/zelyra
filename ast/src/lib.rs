@@ -169,6 +169,7 @@ pub struct FormAction {
     pub name: String,
     pub label: Option<String>,
     pub confirm: Option<String>,
+    pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub statements: Vec<Stmt>,

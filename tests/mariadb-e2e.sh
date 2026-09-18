@@ -220,7 +220,29 @@ sort_status="$(curl --silent --show-error --output "${temp_dir}/invalid-sort.htm
 filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}/machines?filter_not_allowed=value")"
 [[ "${filter_status}" == "400" ]]
 
-echo "[9/10] editing and deleting through CSRF-protected CRUD"
+echo "[9/11] executing a typed custom CRUD action"
+curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-action-detail.html"
+grep -Fq "Set active status" "${temp_dir}/machine-action-detail.html"
+grep -Fq "name=\"active\"" "${temp_dir}/machine-action-detail.html"
+action_csrf="$(extract_csrf "${temp_dir}/machine-action-detail.html")"
+invalid_action_status="$(curl --silent --show-error --output "${temp_dir}/invalid-action.html" --write-out '%{http_code}' \
+    --data-urlencode "_zelyra_csrf=${action_csrf}" \
+    --data-urlencode "active=not-a-boolean" \
+    "${base_url}/machines/${machine_id}/set_active")"
+[[ "${invalid_action_status}" == "422" ]]
+action_status="$(post_form "${temp_dir}/machine-action-response.html" \
+    --data-urlencode "_zelyra_csrf=${action_csrf}" \
+    --data-urlencode "active=false" \
+    "${base_url}/machines/${machine_id}/set_active")"
+[[ "${action_status}" == "303" ]]
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    --data-urlencode "filter_active=false" \
+    "${base_url}/machines" -o "${temp_dir}/custom-action-result.html"
+grep -Fq "${machine_name}" "${temp_dir}/custom-action-result.html"
+grep -Fq "${machine_two_name}" "${temp_dir}/custom-action-result.html"
+
+echo "[10/11] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"
 edit_csrf="$(extract_csrf "${temp_dir}/machine-edit.html")"
 edit_status="$(post_form "${temp_dir}/machine-edit-response.html" \
@@ -249,7 +271,7 @@ curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine
 ! grep -Fq "${machine_two_number}" "${temp_dir}/machine-list-after-cleanup.html"
 ! grep -Fq "${machine_three_number}" "${temp_dir}/machine-list-after-cleanup.html"
 
-echo "[10/10] cleaning the related departments"
+echo "[11/11] cleaning the related departments"
 for department_pair in "${department_id}:department" "${secondary_department_id}:secondary-department"; do
     department_to_delete="${department_pair%%:*}"
     department_file_prefix="${department_pair##*:}"

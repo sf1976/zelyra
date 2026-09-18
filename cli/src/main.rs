@@ -3370,6 +3370,7 @@ fn generated_crud_form(
                 name: "save".into(),
                 label: None,
                 confirm: None,
+                fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
@@ -3417,7 +3418,7 @@ fn generated_crud_action(
             form: zelyra_ast::FormDef {
                 name: format!("{}{}", crud.name, action.name),
                 table: Some(table.name.clone()),
-                fields: Vec::new(),
+                fields: action.fields.clone(),
                 actions: vec![action.clone()],
                 span: action.span,
             },
@@ -3426,7 +3427,10 @@ fn generated_crud_action(
             requires_auth: crud.requires_auth || action.requires_auth,
             permissions,
             csrf,
-            form_view: zelyra_ast::CrudFormViewDef::default(),
+            form_view: zelyra_ast::CrudFormViewDef {
+                submit: action.label.clone(),
+                ..zelyra_ast::CrudFormViewDef::default()
+            },
             post_only: true,
         },
     }

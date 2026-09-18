@@ -67,6 +67,34 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             check_block(&block, schema, &mut environment, &mut errors);
         }
     }
+    for crud in &program.cruds {
+        let source_table = program.tables.iter().find(|table| table.name == crud.table);
+        for action in &crud.actions {
+            let mut environment = HashMap::new();
+            if let Some(id_column) = source_table
+                .and_then(|table| table.columns.iter().find(|column| column.name == "id"))
+            {
+                environment.insert("id".into(), id_column.ty.clone());
+            }
+            for field in &action.fields {
+                let field_type = field.ty.clone().or_else(|| {
+                    source_table.and_then(|table| {
+                        table
+                            .columns
+                            .iter()
+                            .find(|column| column.name == field.name)
+                            .map(|column| column.ty.clone())
+                    })
+                });
+                environment.insert(field.name.clone(), field_type.unwrap_or(Type::Unknown));
+            }
+            let block = Block {
+                statements: action.statements.clone(),
+                span: action.span,
+            };
+            check_block(&block, schema, &mut environment, &mut errors);
+        }
+    }
     for tableview in &program.tableviews {
         errors.extend(check_tableview_query(
             &tableview.source,
@@ -988,6 +1016,26 @@ mod tests {
         assert!(errors
             .iter()
             .any(|error| error.message.contains("not available in this scope")));
+    }
+
+    #[test]
+    fn checks_crud_action_sql_against_typed_fields_and_route_id() {
+        let program = parse(
+            &lex("table customers { id: Id primary auto name: String(100) } crud Customer -> customers { action rename { field name: String { required } sql { UPDATE customers SET name = :name WHERE id = :id } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
+
+        let invalid_program = parse(
+            &lex("table customers { id: Id primary auto name: String(100) } crud Customer -> customers { action rename { field name: String { required } sql { UPDATE customers SET name = :unknown WHERE id = :id } } }")
+                .unwrap(),
+        )
+        .unwrap();
+        let errors = check_program(&invalid_program, &source_schema()).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains(":unknown")));
     }
 
     #[test]

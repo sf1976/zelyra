@@ -391,6 +391,19 @@ Schaltflächenbeschriftung verwendet. `label` steuert die escaped Beschriftung;
 `confirm` ergänzt eine escaped Browser-Bestätigung vor dem Absenden. Ohne
 `label` bleibt der Aktionsname die Beschriftung.
 
+Aktionen können außerdem typisierte Eingabefelder deklarieren. Sie verwenden
+dieselbe Validierung und Parameterbindung wie normale Formulare:
+
+~~~zelyra
+action set_active {
+    label: "Aktivstatus setzen"
+    field active: Bool { required }
+    sql {
+        UPDATE customers SET active = :active WHERE id = :id
+    }
+}
+~~~
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

@@ -86,6 +86,52 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
             }
         }
     }
+    for crud in &program.cruds {
+        let table = schema.tables.iter().find(|table| table.name == crud.table);
+        let mut action_names = HashSet::new();
+        for action in &crud.actions {
+            if !action_names.insert(action.name.clone()) {
+                errors.push(FormError {
+                    message: format!(
+                        "duplicate action `{}` in CRUD resource `{}`",
+                        action.name, crud.name
+                    ),
+                    span: action.span,
+                });
+            }
+            let mut field_names = HashSet::new();
+            for field in &action.fields {
+                if !field_names.insert(field.name.clone()) {
+                    errors.push(FormError {
+                        message: format!(
+                            "duplicate field `{}` in CRUD action `{}`",
+                            field.name, action.name
+                        ),
+                        span: field.span,
+                    });
+                }
+                let schema_column = table.and_then(|table| find_column(table, &field.name));
+                if field.ty.is_none() && schema_column.is_none() {
+                    errors.push(FormError {
+                        message: format!(
+                            "CRUD action field `{}` requires an explicit type or a source-table column",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+                if field.max == Some(0) {
+                    errors.push(FormError {
+                        message: format!(
+                            "maximum length for CRUD action field `{}` must be positive",
+                            field.name
+                        ),
+                        span: field.span,
+                    });
+                }
+            }
+        }
+    }
     if errors.is_empty() {
         Ok(())
     } else {

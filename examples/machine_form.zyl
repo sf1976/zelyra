@@ -56,4 +56,25 @@ crud Machine -> machines {
         department
         active
     }
+
+    action set_active {
+        label: "Set active status"
+        confirm: "Change the machine status?"
+
+        field active: Bool {
+            label: "Active"
+            required
+        }
+
+        permits "machines.edit"
+
+        sql {
+            UPDATE machines
+            SET active = :active
+            WHERE id = :id
+        }
+
+        success "Machine status updated."
+        redirect "/machines"
+    }
 }

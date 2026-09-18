@@ -2341,6 +2341,13 @@ fn dispatch_form(
     }
     let mut values = input;
     values.remove("_zelyra_csrf");
+    for field in &rendered_form.form.fields {
+        if input_type(&rendered_form, field) == "checkbox" {
+            values
+                .entry(field.name.clone())
+                .or_insert_with(|| "false".into());
+        }
+    }
     let relation_options = match load_relation_options(&rendered_form, database_url) {
         Ok(options) => options,
         Err(error) => return relation_options_error(database_url, error),
@@ -2569,6 +2576,16 @@ struct CrudUiActionLink {
     path: String,
     csrf: String,
     confirm: Option<String>,
+    fields: Vec<CrudUiActionField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CrudUiActionField {
+    name: String,
+    label: String,
+    input_type: String,
+    required: bool,
+    max: Option<u32>,
 }
 
 fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
@@ -2586,6 +2603,19 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                     path: action.form.path.clone(),
                     csrf: action.form.csrf.token().into(),
                     confirm: action.confirm.clone(),
+                    fields: action
+                        .form
+                        .form
+                        .fields
+                        .iter()
+                        .map(|field| CrudUiActionField {
+                            name: field.name.clone(),
+                            label: field.label.clone().unwrap_or_else(|| humanize(&field.name)),
+                            input_type: input_type(&action.form, field).into(),
+                            required: is_required(&action.form, field),
+                            max: field_max(&action.form, field),
+                        })
+                        .collect(),
                 })
             })
             .collect(),
@@ -4197,7 +4227,33 @@ fn render_crud_detail_with_actions(
         }
         html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(&action.csrf));
-        html.push_str("\"><button type=\"submit\">");
+        html.push_str("\">");
+        for field in &action.fields {
+            html.push_str("<label for=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\">");
+            html.push_str(&html_escape(&field.label));
+            html.push_str("</label><input id=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" name=\"");
+            html.push_str(&html_escape(&field.name));
+            html.push_str("\" type=\"");
+            html.push_str(&html_escape(&field.input_type));
+            html.push('"');
+            if field.input_type == "checkbox" {
+                html.push_str(" value=\"true\"");
+            }
+            if field.required && field.input_type != "checkbox" {
+                html.push_str(" required");
+            }
+            if let Some(max) = field.max {
+                html.push_str(" maxlength=\"");
+                html.push_str(&max.to_string());
+                html.push('"');
+            }
+            html.push('>');
+        }
+        html.push_str("<button type=\"submit\">");
         html.push_str(&html_escape(&action.label));
         html.push_str("</button></form>");
     }
@@ -6107,12 +6163,20 @@ mod tests {
                     path: "/machines/{id}/deactivate".into(),
                     csrf: "crud-csrf".into(),
                     confirm: Some("Deactivate <unsafe> customer?".into()),
+                    fields: vec![CrudUiActionField {
+                        name: "active".into(),
+                        label: "Active".into(),
+                        input_type: "checkbox".into(),
+                        required: true,
+                        max: None,
+                    }],
                 }],
             },
         );
         assert!(action_html.contains("action=\"/machines/1/deactivate\""));
         assert!(action_html.contains(">Deactivate</button>"));
         assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
+        assert!(action_html.contains("name=\"active\" type=\"checkbox\" value=\"true\""));
         assert!(action_html.contains(
             "onsubmit=\"return confirm(&#39;Deactivate &lt;unsafe&gt; customer?&#39;)\""
         ));
@@ -6183,6 +6247,7 @@ mod tests {
             name: "save".into(),
             label: None,
             confirm: None,
+            fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
             statements: Vec::new(),
@@ -6205,6 +6270,7 @@ mod tests {
             name: "save".into(),
             label: None,
             confirm: None,
+            fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
             statements: Vec::new(),
@@ -6226,6 +6292,7 @@ mod tests {
             name: "save".into(),
             label: None,
             confirm: None,
+            fields: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {

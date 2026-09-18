@@ -582,6 +582,18 @@ parameterized. Action names are currently used as button labels.
 browser confirmation before submission. Without `label`, the action name is
 used as the label.
 
+Actions may also declare typed fields. They use the regular form validation
+and are bound as SQL parameters:
+
+~~~zelyra
+action set_active {
+    field active: Bool { required }
+    sql {
+        UPDATE customers SET active = :active WHERE id = :id
+    }
+}
+~~~
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

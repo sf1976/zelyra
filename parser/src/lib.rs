@@ -1065,13 +1065,16 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
         let mut label = None;
         let mut confirm = None;
+        let mut fields = Vec::new();
         let mut success = None;
         let mut redirect = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Requires) {
+            if self.at(&TokenKind::Field) {
+                fields.push(self.form_field()?);
+            } else if self.at(&TokenKind::Requires) {
                 self.advance();
                 self.expect(TokenKind::Auth, "auth after requires")?;
                 requires_auth = true;
@@ -1102,6 +1105,7 @@ impl<'a> Parser<'a> {
             name,
             label,
             confirm,
+            fields,
             requires_auth,
             permissions,
             statements,
@@ -2244,6 +2248,7 @@ mod tests {
                     action deactivate {
                         label: "Deactivate customer"
                         confirm: "Deactivate this customer?"
+                        field active: Bool { required }
                         permits "customers.edit"
                         sql {
                             UPDATE customers
@@ -2308,6 +2313,8 @@ mod tests {
             program.cruds[0].actions[0].confirm.as_deref(),
             Some("Deactivate this customer?")
         );
+        assert_eq!(program.cruds[0].actions[0].fields.len(), 1);
+        assert_eq!(program.cruds[0].actions[0].fields[0].name, "active");
         assert_eq!(program.cruds[0].actions[0].permissions, ["customers.edit"]);
         assert_eq!(
             program.cruds[0].actions[0].success.as_deref(),

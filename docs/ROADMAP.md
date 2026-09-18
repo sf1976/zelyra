@@ -162,8 +162,10 @@ under evaluation.
 - [ ] Bulk actions, import/export, saved searches, column preferences, and
   server-side reporting.
 - [~] Custom action labels and browser confirmations are available.
-- [ ] Custom action icons, server-rendered confirmation views, typed action
-  inputs, and action-specific success/error presentation.
+- [~] Typed custom action inputs use normal form validation and parameter
+  binding; relation widgets and richer action-specific presentation remain.
+- [ ] Custom action icons, server-rendered confirmation views, and
+  action-specific success/error presentation.
 - [ ] Soft delete, restore, archive, and retention policies.
 - [ ] Audit-aware CRUD history and field-level change diffs.
 - [ ] Background jobs, scheduled tasks, retries, and transactional outbox.

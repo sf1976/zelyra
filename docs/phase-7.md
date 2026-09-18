@@ -136,6 +136,18 @@ CSRF, authentication, and declared permissions. The route `id` is bound to
 browser confirmation before submission. Without `label`, the action name is
 used as the label.
 
+Actions may declare typed fields as well. These fields use the normal form
+validation and are bound as SQL parameters:
+
+~~~zelyra
+action set_active {
+    field active: Bool { required }
+    sql {
+        UPDATE customers SET active = :active WHERE id = :id
+    }
+}
+~~~
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

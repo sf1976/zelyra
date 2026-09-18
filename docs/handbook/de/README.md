@@ -642,6 +642,18 @@ derzeit als Schaltflächenbeschriftung verwendet.
 eine escaped Browser-Bestätigung vor dem Absenden. Ohne `label` wird der
 Aktionsname als Beschriftung verwendet.
 
+Aktionen können auch typisierte Felder deklarieren. Sie verwenden die normale
+Formularvalidierung und werden als SQL-Parameter gebunden:
+
+~~~zelyra
+action set_active {
+    field active: Bool { required }
+    sql {
+        UPDATE customers SET active = :active WHERE id = :id
+    }
+}
+~~~
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

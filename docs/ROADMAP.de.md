@@ -161,8 +161,11 @@ noch in Prüfung.
 - [ ] Bulk-Aktionen, Im-/Export, gespeicherte Suchen, Spaltenpräferenzen und
   serverseitige Reports.
 - [~] Eigene Aktionsbeschriftungen und Browser-Bestätigungen sind verfügbar.
-- [ ] Eigene Aktions-Icons, serverseitige Bestätigungsansichten, typisierte
-  Aktionsparameter sowie aktionsspezifische Erfolgs-/Fehlerdarstellung.
+- [~] Typisierte Eingaben eigener Aktionen verwenden normale
+  Formularvalidierung und Parameterbindung; Beziehungs-Widgets und eine
+  umfangreichere aktionsspezifische Darstellung bleiben offen.
+- [ ] Eigene Aktions-Icons, serverseitige Bestätigungsansichten sowie
+  aktionsspezifische Erfolgs-/Fehlerdarstellung.
 - [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.

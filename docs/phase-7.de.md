@@ -141,6 +141,18 @@ Aktionsnamen werden derzeit als Beschriftung verwendet.
 eine escaped Browser-Bestätigung vor dem Absenden. Ohne `label` wird der
 Aktionsname als Beschriftung verwendet.
 
+Aktionen können ebenfalls typisierte Felder deklarieren. Diese verwenden die
+normale Formularvalidierung und werden als SQL-Parameter gebunden:
+
+~~~zelyra
+action set_active {
+    field active: Bool { required }
+    sql {
+        UPDATE customers SET active = :active WHERE id = :id
+    }
+}
+~~~
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem
