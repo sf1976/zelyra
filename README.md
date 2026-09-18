@@ -690,8 +690,8 @@ method chain.
 Currently available:
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
-zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
@@ -722,12 +722,13 @@ The commands are intentionally small and explicit. Apache, PHP, an ORM, and a
 frontend framework are not prerequisites for the examples above.
 
 For the easiest local start with MariaDB and the built-in web server, create a
-project with `zelyra new my-app --mariadb --web-port 8080 --host-port 18080`.
-The generated Compose file runs the server on port 8080 inside the container
-and publishes it as `http://127.0.0.1:18080`. Run `zelyra setup my-app` to
-create a protected `.env` with local random MariaDB credentials. Existing
-`.env` files are never overwritten; `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT`
-can be changed independently in `.env`.
+project with `zelyra new my-app --mariadb --web-port 8080 --host-port 18080
+--db-host-port 3307`. The generated Compose file runs the server on port 8080
+inside the container, publishes it as `http://127.0.0.1:18080`, and publishes
+MariaDB on host port 3307. Run `zelyra setup my-app` to create a protected
+`.env` with local random MariaDB credentials. Existing
+`.env` files are never overwritten; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and
+`ZELYRA_DB_HOST_PORT` can be changed independently in `.env`.
 
 After starting the generated Compose stack, run
 `zelyra doctor main.zyl --env-file .env --port 18080 --json` for a read-only
@@ -827,6 +828,17 @@ on the isolated MariaDB server, and executes the full CRUD HTTP test. The
 temporary project and database are removed automatically. The password is
 never printed or stored by the test.
 
+The generated Docker runtime can be tested separately:
+
+~~~bash
+./tests/generated-project-docker-e2e.sh
+~~~
+
+This builds the generated Dockerfile from the published Zelyra tag, starts the
+generated MariaDB and web containers on temporary ports (`3309` and `18082` by
+default), checks the welcome page, verifies the published mappings, and removes
+the containers, network, and volume automatically.
+
 ## Contributing
 
 The repository is intentionally developed in small, testable phases. Before
@@ -838,8 +850,8 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
 
-GitHub Actions additionally runs the generated-project MariaDB end-to-end test
-and the credential-free MariaDB CRUD integration test from
+GitHub Actions additionally runs the generated-project MariaDB and Docker
+end-to-end tests, plus the credential-free MariaDB CRUD integration test from
 `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
 The tableview integration test from `tests/mariadb-tableview-e2e.sh` additionally
 executes a struct-backed join and aggregate view through the running web server,

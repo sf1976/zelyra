@@ -94,6 +94,8 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "8080",
         "--host-port",
         "18080",
+        "--db-host-port",
+        "3308",
     ]);
     assert!(
         output.status.success(),
@@ -106,7 +108,9 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(env_example.contains("ZELYRA_DB_HOST_PORT=3308"));
     assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
+    assert!(compose.contains("127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}:3306"));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -171,6 +175,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let contents = fs::read_to_string(&env_file).unwrap();
     assert!(contents.contains("ZELYRA_WEB_PORT=8080"));
     assert!(contents.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(contents.contains("ZELYRA_DB_HOST_PORT=3306"));
     assert!(!contents.contains("change-me"));
     assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(contents.contains("MARIADB_PASSWORD="));

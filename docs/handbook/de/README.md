@@ -200,12 +200,14 @@ zelyra init
 ~~~
 
 Für eine lokale MariaDB- und Webserver-Vorlage `zelyra new
-maschinenverwaltung --mariadb --web-port 8080 --host-port 18080` verwenden.
+maschinenverwaltung --mariadb --web-port 8080 --host-port 18080
+--db-host-port 3307` verwenden.
 Dadurch entstehen `.env.example`, `Dockerfile` und
 `docker-compose.mariadb.yml`. Die Optionen wählen den internen Zelyra-Port und
 den lokal veröffentlichten Port unabhängig. `ZELYRA_WEB_PORT` und
-`ZELYRA_HOST_PORT` können später in `.env` geändert werden; Standard ist jeweils
-3000.
+`ZELYRA_HOST_PORT` und `ZELYRA_DB_HOST_PORT` können später in `.env` geändert
+werden; die Web-Ports verwenden standardmäßig 3000, der MariaDB-Host-Port
+3306.
 Nach dem Scaffolding erzeugt `zelyra setup maschinenverwaltung` eine `.env` mit
 zufälligen lokalen MariaDB-Zugangsdaten. Vorhandene `.env`-Dateien werden nie
 überschrieben und Zugangsdaten nie ausgegeben.
@@ -240,6 +242,17 @@ Der Test erzeugt mit `zelyra new` ein temporäres Projekt, führt `zelyra setup`
 aus, prüft die erzeugte Compose- und `doctor`-Konfiguration und entfernt
 temporäres Projekt und Datenbank nach dem CRUD-HTTP-Test wieder. Das Passwort
 wird weder ausgegeben noch gespeichert.
+
+Auch die erzeugte Docker-Laufzeit kann geprüft werden:
+
+~~~bash
+./tests/generated-project-docker-e2e.sh
+~~~
+
+Dabei wird das erzeugte Image aus dem veröffentlichten Zelyra-Tag gebaut,
+MariaDB und Webserver werden standardmäßig auf Host-Port 3309 und 18082
+gestartet, Willkommensseite und Port-Zuordnungen werden geprüft und alle
+temporären Docker-Ressourcen anschließend entfernt.
 
 Nutzer, die Rust nicht installieren möchten, können das vorgefertigte Linux-
 oder Windows-Archiv von der [GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases)

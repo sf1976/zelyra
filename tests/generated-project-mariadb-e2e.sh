@@ -7,6 +7,7 @@ zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
 root_password="${ZELYRA_GENERATED_E2E_ROOT_PASSWORD:-}"
 source_fixture="${ZELYRA_GENERATED_E2E_SOURCE:-${repo_dir}/examples/machine_form.zyl}"
 host_port="${ZELYRA_GENERATED_E2E_HOST_PORT:-18081}"
+generated_database_host_port="${ZELYRA_GENERATED_E2E_GENERATED_DB_HOST_PORT:-3309}"
 address="${ZELYRA_GENERATED_E2E_ADDRESS:-127.0.0.1:38520}"
 database_host="${ZELYRA_GENERATED_E2E_DB_HOST:-127.0.0.1}"
 database_port="${ZELYRA_GENERATED_E2E_DB_PORT:-3308}"
@@ -50,7 +51,8 @@ MYSQL_PWD="${root_password}" mariadb \
     -e "CREATE DATABASE \`${database_name}\`;"
 
 echo "[1/4] generating a fresh MariaDB project"
-"${zelyra_bin}" new "${project_dir}" --mariadb --web-port 8080 --host-port "${host_port}"
+"${zelyra_bin}" new "${project_dir}" --mariadb --web-port 8080 \
+    --host-port "${host_port}" --db-host-port "${generated_database_host_port}"
 "${zelyra_bin}" setup "${project_dir}"
 cp "${source_fixture}" "${project_dir}/main.zyl"
 
