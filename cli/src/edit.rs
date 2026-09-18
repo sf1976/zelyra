@@ -172,6 +172,9 @@ pub fn preview(
             "function" => Some(function_rename_spans(program, tokens, source_name)),
             "type" => Some(type_rename_spans(tokens, source_name)),
             "record" => Some(record_rename_spans(tokens, source_name)),
+            "table" | "view" | "form" | "crud" | "tableview" => {
+                Some(resource_rename_spans(tokens, symbol, source_name))
+            }
             _ => None,
         };
         for token in tokens {
@@ -187,6 +190,23 @@ pub fn preview(
                 || semantic_spans.is_none()
             {
                 replacements.push((token.span, replacement.clone(), name.clone()));
+            }
+        }
+        if symbol == "table" {
+            for token in tokens {
+                let TokenKind::SqlBody(query) = &token.kind else {
+                    continue;
+                };
+                for (start, end) in sql_table_reference_spans(query, source_name) {
+                    let absolute_start = token.span.start + start;
+                    let absolute_end = token.span.start + end;
+                    let (line, column) = source_position(source, absolute_start);
+                    replacements.push((
+                        Span::new(absolute_start, absolute_end, line, column),
+                        replacement.clone(),
+                        source_name.clone(),
+                    ));
+                }
             }
         }
     }
@@ -254,6 +274,176 @@ fn record_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> 
     }
     spans.extend(record_literal_spans(tokens, name));
     spans
+}
+
+fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<(usize, usize)> {
+    let keyword = match symbol {
+        "table" => TokenKind::Table,
+        "view" => TokenKind::View,
+        "form" => TokenKind::Form,
+        "crud" => TokenKind::Crud,
+        "tableview" => TokenKind::TableView,
+        _ => return HashSet::new(),
+    };
+    let mut spans = HashSet::new();
+    if let Some(span) = any_declaration_name_span(tokens, keyword, name) {
+        spans.insert((span.start, span.end));
+    }
+    match symbol {
+        "table" => {
+            spans.extend(header_arrow_reference_spans(
+                tokens,
+                &[TokenKind::Form, TokenKind::Crud],
+                name,
+            ));
+            spans.extend(property_reference_spans(tokens, TokenKind::Table, name));
+        }
+        "view" => {
+            spans.extend(property_reference_spans(tokens, TokenKind::View, name));
+        }
+        _ => {}
+    }
+    spans
+}
+
+fn header_arrow_reference_spans(
+    tokens: &[Token],
+    headers: &[TokenKind],
+    name: &str,
+) -> HashSet<(usize, usize)> {
+    let mut spans = HashSet::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let TokenKind::Ident(candidate) = &token.kind else {
+            continue;
+        };
+        if candidate != name {
+            continue;
+        }
+        let Some(arrow_index) = previous_token_index(tokens, index) else {
+            continue;
+        };
+        if tokens[arrow_index].kind != TokenKind::Arrow {
+            continue;
+        }
+        let Some(owner_index) = previous_token_index(tokens, arrow_index) else {
+            continue;
+        };
+        let Some(header_index) = previous_token_index(tokens, owner_index) else {
+            continue;
+        };
+        if headers
+            .iter()
+            .any(|header| tokens[header_index].kind == *header)
+        {
+            spans.insert((token.span.start, token.span.end));
+        }
+    }
+    spans
+}
+
+fn property_reference_spans(
+    tokens: &[Token],
+    property: TokenKind,
+    name: &str,
+) -> HashSet<(usize, usize)> {
+    let mut spans = HashSet::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let TokenKind::Ident(candidate) = &token.kind else {
+            continue;
+        };
+        if candidate != name {
+            continue;
+        }
+        let Some(colon_index) = previous_token_index(tokens, index) else {
+            continue;
+        };
+        if tokens[colon_index].kind != TokenKind::Colon {
+            continue;
+        }
+        let Some(property_index) = previous_token_index(tokens, colon_index) else {
+            continue;
+        };
+        if tokens[property_index].kind == property {
+            spans.insert((token.span.start, token.span.end));
+        }
+    }
+    spans
+}
+
+fn sql_table_reference_spans(query: &str, table_name: &str) -> Vec<(usize, usize)> {
+    let bytes = query.as_bytes();
+    let mut index = 0;
+    let mut expects_table = false;
+    let mut spans = Vec::new();
+    while index < bytes.len() {
+        if bytes[index].is_ascii_whitespace() {
+            index += 1;
+            continue;
+        }
+        if bytes[index] == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') {
+                index += 1;
+            }
+            index = (index + 2).min(bytes.len());
+            continue;
+        }
+        if bytes[index] == b'\'' || bytes[index] == b'"' {
+            let quote = bytes[index];
+            index += 1;
+            while index < bytes.len() {
+                if bytes[index] == quote {
+                    if bytes.get(index + 1) == Some(&quote) {
+                        index += 2;
+                    } else {
+                        index += 1;
+                        break;
+                    }
+                } else {
+                    index += 1;
+                }
+            }
+            continue;
+        }
+        if is_sql_identifier_start(bytes[index]) {
+            let start = index;
+            index += 1;
+            while index < bytes.len() && is_sql_identifier_continue(bytes[index]) {
+                index += 1;
+            }
+            let word = &query[start..index];
+            if expects_table && word.eq_ignore_ascii_case(table_name) {
+                spans.push((start, index));
+                expects_table = false;
+            } else {
+                expects_table = matches!(
+                    word.to_ascii_uppercase().as_str(),
+                    "FROM" | "JOIN" | "INTO" | "UPDATE"
+                );
+            }
+            continue;
+        }
+        if !matches!(bytes[index], b'.' | b'(' | b')') {
+            expects_table = false;
+        }
+        index += 1;
+    }
+    spans
+}
+
+fn is_sql_identifier_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+fn is_sql_identifier_continue(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 fn any_declaration_name_span(tokens: &[Token], keyword: TokenKind, name: &str) -> Option<Span> {
@@ -757,6 +947,50 @@ mod tests {
             .source
             .contains("fn make() -> Client { return Client { id: 1 } }"));
         assert_eq!(preview.changed_tokens, 7);
+    }
+
+    #[test]
+    fn resource_renames_follow_structured_references() {
+        let source = r#"
+            table customers { id: Id }
+            view Shell {
+                html { <slot /> }
+            }
+            page "/customers" {
+                view: Shell
+                html { <h1>Customers</h1> }
+            }
+            form CustomerForm -> customers {
+                fields { id }
+            }
+            crud Customer -> customers
+            fn load() {
+                sql { SELECT id FROM customers WHERE note = 'customers' }
+            }
+            fn main() {}
+        "#;
+        let tokens = lex(source).expect("source should lex");
+        let program = parse(&tokens).expect("source should parse");
+        let request = json!({
+            "schema_version": "1",
+            "entry": "main.zyl",
+            "operations": [
+                {"kind": "rename", "symbol": "table", "from": "customers", "to": "clients"},
+                {"kind": "rename", "symbol": "view", "from": "Shell", "to": "AppShell"},
+                {"kind": "rename", "symbol": "form", "from": "CustomerForm", "to": "CustomerEditor"},
+                {"kind": "rename", "symbol": "crud", "from": "Customer", "to": "CustomerAdmin"}
+            ]
+        });
+        let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
+        assert!(preview.source.contains("table clients"));
+        assert!(preview.source.contains("view AppShell"));
+        assert!(preview.source.contains("view: AppShell"));
+        assert!(preview.source.contains("form CustomerEditor -> clients"));
+        assert!(preview.source.contains("crud CustomerAdmin -> clients"));
+        assert!(preview
+            .source
+            .contains("SELECT id FROM clients WHERE note = 'customers'"));
+        assert_eq!(preview.changed_tokens, 8);
     }
 
     #[test]

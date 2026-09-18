@@ -323,6 +323,58 @@ fn edit_renames_type_and_record_references_through_the_cli() {
 }
 
 #[test]
+fn edit_renames_tables_views_forms_and_cruds_through_the_cli() {
+    let machine_source = fs::read_to_string(example("machine_form.zyl"))
+        .expect("machine form example should be readable");
+    let (machine_directory, machine_path) =
+        temporary_project_source("edit-resources", &machine_source);
+    let machine_request_path = machine_directory.join("change.json");
+    let machine_request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"table\",\"from\":\"machines\",\"to\":\"equipment\"}},{{\"kind\":\"rename\",\"symbol\":\"form\",\"from\":\"MachineCreate\",\"to\":\"MachineEditor\"}},{{\"kind\":\"rename\",\"symbol\":\"crud\",\"from\":\"Machine\",\"to\":\"MachineAdmin\"}}]}}",
+        serde_json::to_string(machine_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&machine_request_path, machine_request)
+        .expect("resource edit request should be written");
+    let machine_output = run(&[
+        "edit",
+        "--format=json",
+        machine_request_path.to_str().unwrap(),
+    ]);
+    assert!(
+        machine_output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&machine_output.stdout),
+        String::from_utf8_lossy(&machine_output.stderr)
+    );
+    let machine_document: serde_json::Value =
+        serde_json::from_slice(&machine_output.stdout).unwrap();
+    assert_eq!(machine_document["preview"]["changed_tokens"], 8);
+    assert_eq!(fs::read_to_string(&machine_path).unwrap(), machine_source);
+    fs::remove_dir_all(machine_directory).expect("machine project should be removed");
+
+    let view_source =
+        fs::read_to_string(example("views.zyl")).expect("view example should be readable");
+    let (view_directory, view_path) = temporary_project_source("edit-view", &view_source);
+    let view_request_path = view_directory.join("change.json");
+    let view_request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"view\",\"from\":\"SiteShell\",\"to\":\"AppShell\"}}]}}",
+        serde_json::to_string(view_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&view_request_path, view_request).expect("view edit request should be written");
+    let view_output = run(&["edit", "--format=json", view_request_path.to_str().unwrap()]);
+    assert!(
+        view_output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&view_output.stdout),
+        String::from_utf8_lossy(&view_output.stderr)
+    );
+    let view_document: serde_json::Value = serde_json::from_slice(&view_output.stdout).unwrap();
+    assert_eq!(view_document["preview"]["changed_tokens"], 2);
+    assert_eq!(fs::read_to_string(&view_path).unwrap(), view_source);
+    fs::remove_dir_all(view_directory).expect("view project should be removed");
+}
+
+#[test]
 fn context_exposes_safe_structural_project_information() {
     let auth_example = example("auth_crud_api.zyl");
     let output = run(&["context", auth_example.to_str().unwrap(), "--format=json"]);

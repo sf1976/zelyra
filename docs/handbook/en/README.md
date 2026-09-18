@@ -1531,8 +1531,9 @@ invalid or semantically unsafe proposal cannot be written.
 
 Function, type, and record renames are AST-aware: declarations and known
 references are renamed, while local bindings that shadow the symbol remain
-unchanged. Other resource rename kinds currently retain their broader token
-coverage.
+unchanged. Table, view, form, and CRUD declarations plus their structured
+references are also supported. Table renames update checked SQL table
+positions but leave literals, comments, parameters, and HTML unchanged.
 
 ### Safe automation boundary
 

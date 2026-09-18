@@ -104,10 +104,11 @@ the compiler checks before an edit is considered available. The request must
 echo the fingerprint when the explicit `--apply` flag atomically writes the
 validated result, preventing stale overwrites. Function, type, and record
 renames use the AST and typed syntax contexts to change declarations and known
-references without changing shadowing local bindings. The remaining resource
-rename kinds still use the existing token coverage until their reference model
-is extended. Richer operations remain additional semantic change features; text
-patches remain supported.
+references without changing shadowing local bindings. Table renames also update
+table positions in checked SQL (`FROM`, `JOIN`, `INTO`, and `UPDATE`) while
+leaving SQL literals, comments, parameters, and HTML untouched. Richer
+operations remain additional semantic change features; text patches remain
+supported.
 
 ## Security, privacy, and providers
 

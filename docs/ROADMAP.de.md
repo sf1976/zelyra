@@ -67,8 +67,9 @@ Feature eines bestimmten Anbieters.
   namensauflösungsbasierte Operationen bleiben offen. Umbenennungen von
   Funktionen, Typen und Records lösen Deklarationen und bekannte Referenzen
   jetzt über den AST auf, ohne überschattete lokale Bindungen zu verändern;
-  andere Ressourcenarten nutzen vorerst weiterhin ihre bestehende
-  Token-Abdeckung.
+  Tabellenumbenennungen aktualisieren außerdem geprüfte SQL-Tabellenpositionen
+  und bewahren Literale, Kommentare, Parameter und HTML; eine umfassendere
+  ressourcenübergreifende Referenzauflösung bleibt offen.
 - [~] **Stufe F — Contracts und Effekte:** Contracts und Capability-Prüfung
   existieren; feinere Effekte wie `Database(read)`, `Database(write)`,
   `Email` und `Jobs` sind geplant. KI darf Effekte niemals unbemerkt ergänzen.

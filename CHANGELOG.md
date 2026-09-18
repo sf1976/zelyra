@@ -12,6 +12,9 @@ compiler and repository release.
   references are changed while shadowing local bindings remain untouched.
 - Made multi-operation edits position-stable by sorting replacements before
   applying them from the end of the source.
+- Extended AST-aware resource renames to tables, named views, forms, CRUDs,
+  and structured table references; table renames update checked SQL table
+  positions without changing literals, comments, parameters, or HTML.
 - Hardened semantic edit requests with required schema version `1`, project-
   local `.zyl` entry checks, full compiler validation before and after a
   proposed rename, and explicit diagnostics for rejected boundaries.

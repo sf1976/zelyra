@@ -1643,8 +1643,10 @@ geschrieben werden.
 
 Umbenennungen von Funktionen, Typen und Records sind AST-basiert:
 Deklarationen und bekannte Referenzen werden umbenannt, während lokale
-Bindungen mit demselben Namen unverändert bleiben. Andere Ressourcenarten
-verwenden derzeit weiterhin ihre breitere Token-Abdeckung.
+Bindungen mit demselben Namen unverändert bleiben. Tabellen-, View-, Form- und
+CRUD-Deklarationen sowie ihre strukturierten Referenzen werden ebenfalls
+unterstützt. Tabellenumbenennungen aktualisieren geprüfte SQL-Tabellenpositionen,
+lassen aber Literale, Kommentare, Parameter und HTML unverändert.
 
 ### Sichere Automatisierungsgrenze
 
