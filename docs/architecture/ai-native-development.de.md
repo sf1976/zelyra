@@ -74,8 +74,10 @@ Deklarationskontexte bleiben geplante Schnittstellen.
 
 `zelyra impact --format=json` ist als deterministische, quelltextbasierte
 erste Stufe verfügbar und meldet betroffene Tabellen, SQL, Formulare, CRUD,
-Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
-Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
+Views, APIs, Berechtigungen, Contracts sowie eine strukturierte
+`references`-Kantenliste. Jede bekannte Kante enthält Quelle, Ziel, Art und
+Quelltextspanne. E-Mails, Jobs, Tests, Live-Schemaänderungen und tiefere
+Laufzeitabhängigkeiten bleiben geplant.
 `zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen in
 Funktionen, Typen, Records, Tabellen, Tableviews, Formularen, CRUDs, Views und
 Komponenten eine versionierte, validierte, atomare Vorschau sowie einen

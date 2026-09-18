@@ -53,7 +53,8 @@ Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
 `zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
 formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
 Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
-quelltextbasierte Wirkungsanalyse und validierte semantische Umbenennungen mit
+quelltextbasierte Wirkungsanalyse mit deterministischen semantischen
+Referenzkanten und validierte semantische Umbenennungen mit
 ausdrücklichen Vorschau-/Anwende-Modi sind verfügbar, einschließlich
 AST-basierter Umbenennungen von Funktionen, Typen, Records, Tabellen, Views,
 Forms, CRUDs und Komponenten; Tabellenumbenennungen aktualisieren außerdem

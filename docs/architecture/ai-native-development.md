@@ -93,8 +93,10 @@ holes in declaration contexts remain planned interfaces.
 
 `zelyra impact --format=json` now provides a deterministic, source-only first
 slice for affected tables, SQL, forms, CRUD resources, views, APIs,
-permissions, and contracts. Emails, jobs, tests, live schema changes, and
-deeper runtime dependency analysis remain planned. `zelyra edit --format=json
+permissions, contracts, and a structured `references` edge list. Each known
+edge identifies its source, target, kind, and source span. Emails, jobs, tests,
+live schema changes, and deeper runtime dependency analysis remain planned.
+`zelyra edit --format=json
 change.json` provides a versioned, validated, atomic preview for symbol renames
 across functions, types, records, tables, tableviews, forms, CRUDs, views, and
 components, plus a deterministic source fingerprint. Requests must contain

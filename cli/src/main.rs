@@ -727,6 +727,7 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     for category in [
         "tables",
         "sql",
+        "references",
         "forms",
         "crud",
         "views",

@@ -1601,9 +1601,10 @@ zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
 Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
-Ressourcen, Views, APIs, Berechtigungen und Contracts. E-Mail-, Job-, Test-
-und Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar;
-der Befehl verbindet sich nie mit MariaDB.
+Ressourcen, Views, APIs, Berechtigungen, Contracts und eine deterministische
+`references`-Kantenliste für bekannte Beziehungen. E-Mail-, Job-, Test- und
+Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar; der
+Befehl verbindet sich nie mit MariaDB.
 
 Eine validierte Symbol-Umbenennung kann ohne Änderung des Quelltexts
 vorschaut werden:

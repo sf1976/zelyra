@@ -56,7 +56,8 @@ Feature eines bestimmten Anbieters.
   umfassendere Edit-Integration bleiben offen.
 - [~] **Stufe D — Wirkungsanalyse:** Eine deterministische, quelltextbasierte
   erste Stufe von `zelyra impact --format=json` meldet Tabellen, SQL,
-  Formulare, CRUD, Views, APIs, Berechtigungen und Contracts; E-Mails, Jobs,
+  Formulare, CRUD, Views, APIs, Berechtigungen, Contracts und eine
+  strukturierte, deterministische `references`-Kantenliste; E-Mails, Jobs,
   Tests und Live-Schemaänderungen bleiben anzubinden.
 - [~] **Stufe E — semantische Änderungen:** Eine validierte, atomare
   `zelyra edit --format=json`-Umbenennung für deklarierte Funktionen, Typen,

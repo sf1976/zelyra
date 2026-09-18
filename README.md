@@ -49,7 +49,8 @@ stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical
 source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
-by buildable commands. Source-only impact analysis and validated semantic
+by buildable commands. Source-only impact analysis, including deterministic
+semantic reference edges, and validated semantic
 rename requests with explicit preview/apply modes are available, including
 AST-aware function, type, record, table, view, form, CRUD, and component
 renames; table renames also update checked SQL table positions without changing

@@ -17,6 +17,8 @@ compiler and repository release.
   positions without changing literals, comments, parameters, or HTML.
 - Component renames now update declarations and known opening/closing component
   tags in HTML bodies without treating ordinary HTML markup as symbol references.
+- Extended source-only impact JSON with a deterministic `references` edge list
+  for known table, view, component, handler, SQL, and function-call relations.
 - Hardened semantic edit requests with required schema version `1`, project-
   local `.zyl` entry checks, full compiler validation before and after a
   proposed rename, and explicit diagnostics for rejected boundaries.

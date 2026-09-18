@@ -1492,9 +1492,9 @@ zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
 The impact response lists source-level tables, SQL, forms, CRUD resources,
-views, APIs, permissions, and contracts. Email, job, test, and live schema
-impact are explicitly empty or marked unavailable; the command never connects
-to MariaDB.
+views, APIs, permissions, contracts, and a deterministic `references` edge
+list for known relationships. Email, job, test, and live schema impact are
+explicitly empty or marked unavailable; the command never connects to MariaDB.
 
 Preview a validated symbol rename without modifying the source:
 
