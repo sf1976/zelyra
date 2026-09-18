@@ -334,6 +334,16 @@ zelyra db setup main.zyl
 It includes departments, machines, a relationship, schema-mapped forms, CRUD
 pages, search, filters, pagination, and custom actions.
 
+For an authentication starter with persistent sessions and permissions:
+
+~~~bash
+zelyra new secure-app --template mariadb-auth \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+It includes users, sessions, permissions, the automatic login and logout flow,
+and a protected `/admin` page.
+
 The current project file is intentionally small:
 
 ~~~toml
@@ -729,9 +739,9 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ## 11. Useful commands
 
 ~~~text
-zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          create a project and choose its ports
-zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          initialize a project and choose its ports
 zelyra setup [directory]                  create a protected local .env
 zelyra check <file.zyl> [--format human|json]

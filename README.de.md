@@ -715,8 +715,8 @@ ORM-Methodenkette.
 Aktuell verfügbar:
 
 ~~~text
-zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
@@ -778,6 +778,17 @@ Das Starterprojekt enthält Abteilungen und Maschinen, eine Foreign-Key-
 Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,
 Pagination und eigene Aktionen. Das Standardprojekt bleibt das kleinere
 Willkommensseiten-Scaffolding.
+
+Für Authentifizierung, Sessions und Berechtigungsprüfungen verwenden:
+
+~~~bash
+zelyra new sichere-app --template mariadb-auth \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+Das Authentifizierungs-Starterprojekt enthält Benutzer, persistente Sessions,
+datenbankbasierte Berechtigungen, den automatischen `/login`- und `/logout`-
+Ablauf sowie eine geschützte `/admin`-Seite.
 
 ## Repository-Struktur
 
@@ -894,8 +905,9 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
 
-GitHub Actions führt zusätzlich die MariaDB- und Docker-End-to-End-Tests für
-erzeugte Projekte sowie den zugangsdatenfreien MariaDB-CRUD-Integrationstest aus
+GitHub Actions führt zusätzlich die MariaDB-, Docker- und Authentifizierungs-
+End-to-End-Tests für erzeugte Projekte sowie den zugangsdatenfreien MariaDB-
+CRUD-Integrationstest aus
 `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-11-Service aus.
 Der Tableview-Integrationstest aus `tests/mariadb-tableview-e2e.sh` führt
 zusätzlich eine struct-basierte Join- und Aggregatansicht über den laufenden

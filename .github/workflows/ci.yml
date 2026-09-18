@@ -80,6 +80,14 @@ jobs:
           ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-docker-e2e.sh
+      - name: Run generated authentication project end-to-end test
+        env:
+          ZELYRA_GENERATED_AUTH_ROOT_PASSWORD: root
+          ZELYRA_GENERATED_AUTH_DB_PORT: 3306
+          ZELYRA_GENERATED_AUTH_GENERATED_DB_HOST_PORT: 3309
+          ZELYRA_GENERATED_AUTH_ADDRESS: 127.0.0.1:38525
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/generated-project-auth-e2e.sh
       - name: Run MariaDB CRUD integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

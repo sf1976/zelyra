@@ -230,6 +230,17 @@ zelyra db setup main.zyl
 Das Starterprojekt enthält verbundene Abteilungen und Maschinen, Formulare,
 CRUD-Seiten, Suche, Filterung, Pagination und eigene Aktionen.
 
+Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und
+Berechtigungen:
+
+~~~bash
+zelyra new sichere-app --template mariadb-auth \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+Es enthält Benutzer, Sessions und Berechtigungen, den automatischen Login- und
+Logout-Ablauf sowie eine geschützte `/admin`-Seite.
+
 Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:
 
 ~~~bash

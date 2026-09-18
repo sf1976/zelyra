@@ -43,11 +43,12 @@ use holes::collect_typed_holes;
 use impact::{build_impact, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
+const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -70,6 +71,16 @@ fn database_usage() {
 
 const DEFAULT_WEB_PORT: u16 = 3000;
 const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
+
+struct ProjectOptions {
+    allow_current_directory: bool,
+    with_mariadb: bool,
+    crud_template: bool,
+    auth_template: bool,
+    web_port: u16,
+    host_port: u16,
+    database_host_port: u16,
+}
 
 fn parse_web_port(value: &str) -> Result<u16, String> {
     parse_port(value, "web")
@@ -203,17 +214,9 @@ fn setup_project(path: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn create_project(
-    path: &str,
-    allow_current_directory: bool,
-    with_mariadb: bool,
-    crud_template: bool,
-    web_port: u16,
-    host_port: u16,
-    database_host_port: u16,
-) -> ExitCode {
+fn create_project(path: &str, options: ProjectOptions) -> ExitCode {
     let directory = std::path::Path::new(path);
-    if directory.exists() && !allow_current_directory {
+    if directory.exists() && !options.allow_current_directory {
         eprintln!("error[E-INIT-001]: directory `{path}` already exists");
         return ExitCode::from(1);
     }
@@ -221,7 +224,7 @@ fn create_project(
         eprintln!("error[E-INIT-002]: cannot create `{path}`: {error}");
         return ExitCode::from(1);
     }
-    let project_config = if with_mariadb {
+    let project_config = if options.with_mariadb {
         r#"[project]
 name = "zelyra-app"
 version = "0.1.38"
@@ -245,9 +248,11 @@ database = true
 network = false
 "#
     };
-    let main_source = if crud_template {
+    let main_source = if options.crud_template {
         MARIADB_CRUD_TEMPLATE
-    } else if with_mariadb {
+    } else if options.auth_template {
+        MARIADB_AUTH_TEMPLATE
+    } else if options.with_mariadb {
         r#"database main {
     engine: mariadb
 }
@@ -273,10 +278,10 @@ fn main() {
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source.to_owned()),
     ];
-    if with_mariadb {
+    if options.with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
-        let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{web_port}}}", '$');
-        let host_port_value = format!("{}{{ZELYRA_HOST_PORT:-{host_port}}}", '$');
+        let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{}}}", '$', options.web_port);
+        let host_port_value = format!("{}{{ZELYRA_HOST_PORT:-{}}}", '$', options.host_port);
         files.extend([
             (
                 ".env.example",
@@ -293,9 +298,9 @@ MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me
 MARIADB_ROOT_PASSWORD=change-me-root
 "#
-                .replace("__WEB_PORT__", &web_port.to_string())
-                .replace("__HOST_PORT__", &host_port.to_string())
-                .replace("__DB_HOST_PORT__", &database_host_port.to_string()),
+                .replace("__WEB_PORT__", &options.web_port.to_string())
+                .replace("__HOST_PORT__", &options.host_port.to_string())
+                .replace("__DB_HOST_PORT__", &options.database_host_port.to_string()),
             ),
             (
                 "docker-compose.mariadb.yml",
@@ -359,7 +364,7 @@ EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
                 .replace("__ZELYRA_REF__", &env_value("ZELYRA_REF"))
-                .replace("__WEB_PORT__", &web_port.to_string()),
+                .replace("__WEB_PORT__", &options.web_port.to_string()),
             ),
             (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
             (".gitignore", ".env\ntarget/\n".to_owned()),
@@ -367,7 +372,7 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     }
     for (name, contents) in files {
         let file = directory.join(name);
-        if file.exists() && allow_current_directory {
+        if file.exists() && options.allow_current_directory {
             continue;
         }
         let contents = contents.to_owned();
@@ -380,7 +385,7 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
         }
     }
     println!("created Zelyra project in {}", directory.display());
-    if with_mariadb {
+    if options.with_mariadb {
         if cfg!(windows) {
             println!("next: cd {} && copy .env.example .env", path);
         } else {
@@ -6115,6 +6120,7 @@ fn main() -> ExitCode {
         };
         let mut with_mariadb = false;
         let mut crud_template = false;
+        let mut auth_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6131,10 +6137,19 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 };
                 match value.as_str() {
-                    "minimal" => crud_template = false,
+                    "minimal" => {
+                        crud_template = false;
+                        auth_template = false;
+                    }
                     "mariadb-crud" => {
                         with_mariadb = true;
                         crud_template = true;
+                        auth_template = false;
+                    }
+                    "mariadb-auth" => {
+                        with_mariadb = true;
+                        crud_template = false;
+                        auth_template = true;
                     }
                     _ => {
                         eprintln!(
@@ -6195,12 +6210,15 @@ fn main() -> ExitCode {
         }
         return create_project(
             &path,
-            false,
-            with_mariadb,
-            crud_template,
-            web_port,
-            host_port,
-            database_host_port,
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb,
+                crud_template,
+                auth_template,
+                web_port,
+                host_port,
+                database_host_port,
+            },
         );
     }
     if command == "init" {
@@ -6208,6 +6226,7 @@ fn main() -> ExitCode {
         let mut path_given = false;
         let mut with_mariadb = false;
         let mut crud_template = false;
+        let mut auth_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6224,10 +6243,19 @@ fn main() -> ExitCode {
                     return ExitCode::from(2);
                 };
                 match value.as_str() {
-                    "minimal" => crud_template = false,
+                    "minimal" => {
+                        crud_template = false;
+                        auth_template = false;
+                    }
                     "mariadb-crud" => {
                         with_mariadb = true;
                         crud_template = true;
+                        auth_template = false;
+                    }
+                    "mariadb-auth" => {
+                        with_mariadb = true;
+                        crud_template = false;
+                        auth_template = true;
                     }
                     _ => {
                         eprintln!(
@@ -6291,12 +6319,15 @@ fn main() -> ExitCode {
         }
         return create_project(
             &path,
-            true,
-            with_mariadb,
-            crud_template,
-            web_port,
-            host_port,
-            database_host_port,
+            ProjectOptions {
+                allow_current_directory: true,
+                with_mariadb,
+                crud_template,
+                auth_template,
+                web_port,
+                host_port,
+                database_host_port,
+            },
         );
     }
     if command == "serve" {
@@ -7228,12 +7259,15 @@ mod tests {
         ));
         let status = create_project(
             path.to_str().unwrap(),
-            false,
-            true,
-            false,
-            DEFAULT_WEB_PORT,
-            DEFAULT_WEB_PORT,
-            DEFAULT_DATABASE_HOST_PORT,
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb: true,
+                crud_template: false,
+                auth_template: false,
+                web_port: DEFAULT_WEB_PORT,
+                host_port: DEFAULT_WEB_PORT,
+                database_host_port: DEFAULT_DATABASE_HOST_PORT,
+            },
         );
         assert_eq!(status, ExitCode::SUCCESS);
 
@@ -7255,12 +7289,15 @@ mod tests {
         ));
         let status = create_project(
             path.to_str().unwrap(),
-            false,
-            true,
-            false,
-            8080,
-            18080,
-            3308,
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb: true,
+                crud_template: false,
+                auth_template: false,
+                web_port: 8080,
+                host_port: 18080,
+                database_host_port: 3308,
+            },
         );
         assert_eq!(status, ExitCode::SUCCESS);
 

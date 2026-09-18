@@ -146,6 +146,38 @@ fn new_mariadb_crud_template_is_self_contained() {
 }
 
 #[test]
+fn new_mariadb_auth_template_is_self_contained() {
+    let directory = temporary_directory("new-mariadb-auth-template");
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--template",
+        "mariadb-auth",
+        "--web-port",
+        "8080",
+        "--host-port",
+        "18080",
+        "--db-host-port",
+        "3308",
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+    assert!(source.contains("auth users"));
+    assert!(source.contains("table auth_sessions"));
+    assert!(source.contains("requires auth"));
+    assert!(source.contains("permits \"admin.view\""));
+    assert!(config.contains("engine = \"mariadb\""));
+    assert!(directory.join(".env.example").is_file());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_rejects_an_invalid_web_port_before_creating_a_project() {
     let directory = temporary_directory("invalid-web-port");
     let output = run(&[
