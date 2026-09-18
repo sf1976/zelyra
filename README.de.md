@@ -330,6 +330,21 @@ view {
 Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
 bleiben aktiv.
 
+Auch die Löschbestätigung kann angepasst werden:
+
+~~~zelyra
+view {
+    delete {
+        title: "Kunden löschen"
+        message: "Dieser Vorgang kann nicht rückgängig gemacht werden."
+        submit: "Jetzt löschen"
+    }
+}
+~~~
+
+Die generierte Route bleibt POST-only und verlangt weiterhin CSRF- sowie
+Löschberechtigungsprüfungen.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

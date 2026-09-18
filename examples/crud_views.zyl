@@ -33,5 +33,11 @@ crud Customer -> customers {
             title: "Customer form"
             submit: "Save customer"
         }
+
+        delete {
+            title: "Delete customer"
+            message: "This cannot be undone."
+            submit: "Delete now"
+        }
     }
 }

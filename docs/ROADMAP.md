@@ -127,8 +127,10 @@ under evaluation.
 - [~] CRUD form view overrides support a safe `standard`/`cards` mode and
   custom heading/submit labels while preserving validation, CSRF, parameter,
   and permission guards.
-- [ ] CRUD view overrides for create, edit, delete, loading, and error states
-  while preserving generated security guards.
+- [~] CRUD delete confirmation overrides support custom headings, warning
+  messages, and submit labels while preserving POST-only, CSRF, and auth guards.
+- [ ] CRUD view overrides for loading and error states while preserving
+  generated security guards.
 - [ ] A design-token system for colors, spacing, typography, breakpoints, and
   density.
 - [ ] Per-view themes, application themes, dark mode, and user-selectable

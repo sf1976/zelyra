@@ -320,6 +320,21 @@ view {
 The title and submit label are escaped, and the form keeps schema validation,
 readonly checks, CSRF protection, parameter binding, and action permissions.
 
+The delete confirmation can also be customized:
+
+~~~zelyra
+view {
+    delete {
+        title: "Delete customer"
+        message: "This cannot be undone."
+        submit: "Delete now"
+    }
+}
+~~~
+
+The generated endpoint remains POST-only and continues to require CSRF and
+delete authorization checks.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

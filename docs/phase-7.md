@@ -72,6 +72,23 @@ crud Customer -> customers {
 The title and submit label are escaped. Schema validation, readonly checks,
 CSRF protection, parameter binding, and action permissions remain active.
 
+The delete confirmation can also be configured:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        delete {
+            title: "Delete customer"
+            message: "This cannot be undone."
+            submit: "Delete now"
+        }
+    }
+}
+~~~
+
+The generated endpoint remains POST-only and continues to enforce CSRF and
+delete authorization checks.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

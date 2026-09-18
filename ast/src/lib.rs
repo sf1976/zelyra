@@ -199,6 +199,7 @@ pub struct CrudViewDef {
     pub list: CrudListViewDef,
     pub detail: CrudDetailViewDef,
     pub form: CrudFormViewDef,
+    pub delete: CrudDeleteViewDef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -264,6 +265,13 @@ impl Default for CrudFormViewDef {
 pub enum CrudFormViewMode {
     Standard,
     Cards,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudDeleteViewDef {
+    pub title: Option<String>,
+    pub message: Option<String>,
+    pub submit: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

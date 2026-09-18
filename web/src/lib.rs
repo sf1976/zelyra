@@ -9,8 +9,8 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
-    CrudDetailViewDef, CrudDetailViewMode, CrudFormViewDef, CrudFormViewMode, CrudListViewDef,
-    CrudListViewMode, FormDef, TableDef, Type,
+    CrudDeleteViewDef, CrudDetailViewDef, CrudDetailViewMode, CrudFormViewDef, CrudFormViewMode,
+    CrudListViewDef, CrudListViewMode, FormDef, TableDef, Type,
 };
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
@@ -276,6 +276,7 @@ pub struct CrudRoute {
     pub filter_columns: Vec<String>,
     pub list_view: CrudListViewDef,
     pub detail_view: CrudDetailViewDef,
+    pub delete_view: CrudDeleteViewDef,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub create_permissions: Vec<String>,
@@ -4034,11 +4035,25 @@ fn render_crud_detail_with_actions(
         html.push_str("</dl>");
     }
     if ui_actions.delete {
+        if let Some(title) = &crud.delete_view.title {
+            html.push_str("<h2>");
+            html.push_str(&html_escape(title));
+            html.push_str("</h2>");
+        }
+        if let Some(message) = &crud.delete_view.message {
+            html.push_str("<p class=\"zelyra-delete-message\">");
+            html.push_str(&html_escape(message));
+            html.push_str("</p>");
+        }
         html.push_str("<form method=\"post\" action=\"");
         html.push_str(&html_escape(&format!("{}/{}/delete", crud.path, id)));
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
-        html.push_str("\"><button type=\"submit\">Delete</button></form>");
+        html.push_str("\"><button type=\"submit\">");
+        html.push_str(&html_escape(
+            crud.delete_view.submit.as_deref().unwrap_or("Delete"),
+        ));
+        html.push_str("</button></form>");
     }
     if cards {
         html.push_str("</article>");
@@ -5338,6 +5353,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5528,6 +5544,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5570,6 +5587,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5602,6 +5620,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5730,6 +5749,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: true,
             permissions: vec!["customers.view".into()],
             create_permissions: vec!["customers.create".into()],
@@ -5799,6 +5819,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5828,6 +5849,7 @@ mod tests {
             filter_columns: Vec::new(),
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5858,6 +5880,21 @@ mod tests {
         assert!(!restricted_html.contains("/machines/1/edit"));
         assert!(!restricted_html.contains("/machines/new"));
         assert!(!restricted_html.contains(">Delete</button>"));
+
+        let mut custom_route = route.clone();
+        custom_route.delete_view.title = Some("Delete machine".into());
+        custom_route.delete_view.message = Some("Delete <unsafe>?".into());
+        custom_route.delete_view.submit = Some("Delete now".into());
+        let custom_html = render_crud_detail(
+            &custom_route,
+            &["id", "name"],
+            &["1".into(), "CNC".into()],
+            "1",
+        );
+        assert!(custom_html.contains(">Delete machine</h2>"));
+        assert!(custom_html.contains("Delete &lt;unsafe&gt;?"));
+        assert!(custom_html.contains(">Delete now</button>"));
+        assert!(custom_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
 
         let mut cards_route = route.clone();
         cards_route.detail_view.mode = CrudDetailViewMode::Cards;

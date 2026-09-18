@@ -580,6 +580,22 @@ view {
 Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
 bleiben aktiv.
 
+Die Löschbestätigung kann eine eigene Überschrift, Warnung und Beschriftung
+für die Absende-Schaltfläche festlegen:
+
+~~~zelyra
+view {
+    delete {
+        title: "Kunden löschen"
+        message: "Dieser Vorgang kann nicht rückgängig gemacht werden."
+        submit: "Jetzt löschen"
+    }
+}
+~~~
+
+Die generierte Route bleibt POST-only und erzwingt weiterhin CSRF- und
+Löschberechtigungsprüfungen.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

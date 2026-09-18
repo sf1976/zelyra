@@ -521,6 +521,21 @@ view {
 The title and submit label are escaped. Schema validation, readonly checks,
 CSRF protection, parameter binding, and action permissions remain active.
 
+The delete confirmation can define its own heading, warning, and submit label:
+
+~~~zelyra
+view {
+    delete {
+        title: "Delete customer"
+        message: "This cannot be undone."
+        submit: "Delete now"
+    }
+}
+~~~
+
+The generated endpoint remains POST-only and continues to enforce CSRF and
+delete authorization checks.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

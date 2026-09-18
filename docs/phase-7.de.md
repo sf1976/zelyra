@@ -77,6 +77,23 @@ crud Customer -> customers {
 Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
 bleiben aktiv.
 
+Die Löschbestätigung kann ebenfalls konfiguriert werden:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        delete {
+            title: "Kunden löschen"
+            message: "Dieser Vorgang kann nicht rückgängig gemacht werden."
+            submit: "Jetzt löschen"
+        }
+    }
+}
+~~~
+
+Die generierte Route bleibt POST-only und erzwingt weiterhin CSRF- und
+Löschberechtigungsprüfungen.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

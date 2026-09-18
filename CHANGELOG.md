@@ -28,6 +28,9 @@ compiler and repository release.
 - Added safe CRUD form view overrides with standard/cards layouts, configurable
   headings, and submit labels while retaining validation, CSRF, parameter, and
   permission safeguards.
+- Added safe CRUD delete confirmation overrides with configurable headings,
+  warning messages, and submit labels while retaining POST-only, CSRF, and
+  delete-authorization safeguards.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

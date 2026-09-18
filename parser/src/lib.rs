@@ -563,9 +563,40 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(TokenKind::RBrace, "`}` after CRUD view form")?;
                 }
+                TokenKind::Ident(name) if name == "delete" => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view delete")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD delete view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD delete view property")?;
+                        match property.as_str() {
+                            "title" => {
+                                view.delete.title =
+                                    Some(self.string_value("CRUD delete view title")?);
+                            }
+                            "message" => {
+                                view.delete.message =
+                                    Some(self.string_value("CRUD delete view message")?);
+                            }
+                            "submit" => {
+                                view.delete.submit =
+                                    Some(self.string_value("CRUD delete submit label")?);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `title`, `message`, or `submit` in CRUD delete view definition",
+                                )
+                            }
+                        }
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view delete")?;
+                }
                 _ => {
-                    return self
-                        .error("expected `list`, `detail`, or `form` in CRUD view definition")
+                    return self.error(
+                        "expected `list`, `detail`, `form`, or `delete` in CRUD view definition",
+                    )
                 }
             }
             self.skip_newlines();
@@ -2135,6 +2166,11 @@ mod tests {
                             title: "Edit customer"
                             submit: "Save customer"
                         }
+                        delete {
+                            title: "Delete customer"
+                            message: "This cannot be undone."
+                            submit: "Delete now"
+                        }
                     }
                 }"#)
             .unwrap(),
@@ -2156,6 +2192,18 @@ mod tests {
         assert_eq!(
             program.cruds[0].view.form.submit.as_deref(),
             Some("Save customer")
+        );
+        assert_eq!(
+            program.cruds[0].view.delete.title.as_deref(),
+            Some("Delete customer")
+        );
+        assert_eq!(
+            program.cruds[0].view.delete.message.as_deref(),
+            Some("This cannot be undone.")
+        );
+        assert_eq!(
+            program.cruds[0].view.delete.submit.as_deref(),
+            Some("Delete now")
         );
     }
 
@@ -2186,6 +2234,17 @@ mod tests {
         let result = parse(
             &lex(r#"crud Customer -> customers {
                     view { form { mode: wizard } }
+                }"#)
+            .unwrap(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_crud_delete_view_property() {
+        let result = parse(
+            &lex(r#"crud Customer -> customers {
+                    view { delete { confirm: "yes" } }
                 }"#)
             .unwrap(),
         );
