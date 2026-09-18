@@ -5,8 +5,16 @@ optional ideas. An item is not considered complete until it has syntax or API
 documentation, implementation, positive and negative tests, diagnostics, and a
 working example where applicable.
 
-Status: `[x]` implemented, `[~]` in progress, `[ ]` planned, `[?]` optional or
-under evaluation.
+Status legend:
+
+- ✅ implemented (`[x]`)
+- 🧪 partially implemented or experimental (`[~]`)
+- 🗺️ planned (`[ ]`)
+- ◻️ optional or under evaluation (`[?]`)
+- ⛔ blocked or deliberately deferred (document the reason beside the item)
+
+The visible emoji makes the status unambiguous on GitHub; the bracket markers
+remain machine-searchable for now.
 
 ## Current milestones
 
@@ -75,6 +83,11 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 1. Beginner experience and distribution
 
+- [~] Simple defaults with optional, documented project feature switches are
+  available through `zelyra.toml`, `.env`, and process overrides; broader
+  profile management and interactive configuration remain open. The complete
+  setting reference is maintained in `docs/env.en.md` and `docs/env.md`.
+
 - [~] One-command source installation for Linux, Windows, and macOS is
   available with user-local, repeatable Bash/PowerShell installers; Rust-free
   release installation is available for published Linux/Windows x86_64 assets.
@@ -114,12 +127,14 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Better type inference with precise source spans and fix suggestions.
 - [ ] Typed literals and conversions for Decimal, Money, Date, Time, UUID,
   URL, Email, Bytes, and Duration.
-- [ ] Explicit resource/effect model for Database, Network, FileSystem,
-  Environment, Process, Clock, and Random.
+- [~] An initial capability/effect model for Database, Network, FileSystem,
+  Environment, Process, Clock, and Random exists; granular effects such as
+  `Database(read)` and `Database(write)` remain planned.
 - [ ] Structured error propagation and user-defined error types.
 - [ ] Deterministic build graph, incremental compilation, caching, and parallel
   compilation.
-- [ ] Language server, editor extensions, formatter, linter, and debugger.
+- [~] The deterministic formatter is implemented; language server, editor
+  extensions, linter, and debugger remain planned.
 - [ ] Stable intermediate representation and backend-independent runtime ABI.
 - [ ] Long-term self-hosting path: progressively move compiler tooling from the
   Rust bootstrap implementation into Zelyra while retaining a small trusted
@@ -250,8 +265,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] Cryptographically chained audit entries using a documented SHA-256 hash
   format, explicit canonical serialization, and a transaction-locked append
   strategy.
-- [x] `audit verify` detects broken hash links and invalid entry hashes. The
-  first-invalid-entry location and source-independent diagnostics remain open.
+- [~] `audit verify` detects broken hash links and invalid entry hashes; precise
+  first-invalid-entry locations and source-independent diagnostics remain open.
 - [ ] Immutable or append-only database privileges for audit tables.
 - [ ] Configurable retention policies, scheduled pruning, and archive export.
 - [ ] Encrypted archives, key rotation, restore verification, and offline
@@ -282,8 +297,8 @@ architecture requirement for every phase, not a provider-specific feature.
   database-independent business rules.
 - [ ] Proof-result caching and explicit trusted assumptions.
 - [ ] SMT/SMT-LIB integration and solver timeout/resource diagnostics.
-- [ ] Clear separation of `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN`, and `FAILED`
-  in CLI, IDE, and documentation.
+- [~] Clear separation of `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN`, and `FAILED`
+  exists in the CLI and documentation; IDE integration remains planned.
 - [ ] Structured concurrency cancellation, timeouts, supervision, and database
   pool integration.
 - [ ] Shared-state rules, channels, actors, and data-race testing.
@@ -311,13 +326,16 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## Real-world acceptance applications
 
-- [ ] Machine management with departments, machines, CRUD, search, filters,
-  permissions, audit, and MariaDB deployment.
+- [~] The machine-management application is available as a MariaDB template
+  and covered by generated-project integration tests; production hardening
+  remains open.
 - [ ] Customer/order application with complex joins, aggregates, forms, API,
   and custom views.
 - [ ] Multi-user inventory application with transactions and concurrent edits.
-- [ ] A production deployment using Docker Compose and a configurable web port.
-- [ ] A self-hosted deployment without Rust or Cargo installed on the target.
+- [~] A generated Docker Compose deployment with an independently configurable
+  web port is tested; production hardening remains open.
+- [~] Rust-free self-hosted installation is available for published Linux and
+  Windows x86_64 assets; more platforms remain open.
 
 This file must be updated whenever a milestone changes status or a design
 decision creates a new required or optional work item.

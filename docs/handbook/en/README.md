@@ -1433,6 +1433,33 @@ Rules worth keeping:
 - separate development, test, and production databases;
 - never run destructive tests against production.
 
+### Simple defaults, optional power
+
+The beginner path does not require a feature configuration. Advanced project
+surfaces can be selected in `zelyra.toml`, while environment-specific,
+non-secret overrides can be placed in `.env` or the process environment:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Supported switches are `web`, `api`, `crud`, `auth`, and `audit`. Precedence is
+the process environment, `.env`, `zelyra.toml`, and then the safe defaults.
+Inspect the effective values without displaying secrets:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+When a source file uses a disabled surface, the compiler reports a stable
+feature diagnostic. Capabilities, type checking, SQL checks, and security
+rules cannot be disabled here. This is an optional convenience layer, not a
+new requirement for simple projects. The complete [environment and
+configuration reference](../env.en.md) lists every supported setting and must
+be updated before a new setting is committed.
+
 🗺️ Typed connections, encrypted secret stores, an SMTP assistant, and ODBC
 discovery are planned.
 

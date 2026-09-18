@@ -43,6 +43,17 @@ Risky database operations, capability changes, secret handling, and external
 side effects require explicit human-visible boundaries and must never be
 silently approved by tooling.
 
+Every new environment variable or project configuration switch must be added
+to `docs/env.md` and `docs/env.en.md` before commit, including its default,
+precedence, security classification, affected commands, and tests.
+
+After every completed and tested development step, review both
+`docs/ROADMAP.md` and `docs/ROADMAP.de.md`. Update affected statuses and text
+in the same change. The roadmap legend maps the existing machine-searchable
+markers to `✅` (complete and tested), `🧪` (partial or experimental), `🗺️`
+(planned), `◻️` (optional), and `⛔` (documented blocker or deliberate
+deferral). Keep the English and German roadmaps semantically synchronized.
+
 ## Git workflow
 
 - Create a commit after each completed and tested subfeature.

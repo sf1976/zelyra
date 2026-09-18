@@ -56,6 +56,26 @@ Compiler verstandenen Deklarationen. Der Befehl verbindet sich nicht mit einer
 Datenbank, nutzt kein Netzwerk, führt keine E-Mail oder Jobs aus und gibt keine
 Secrets aus. Nicht unterstützte Details werden nicht erfunden.
 
+## Einfacher Standard und optionale Möglichkeiten
+
+Zelyra verwendet ein zweistufiges Konfigurationsmodell. `zelyra.toml`
+enthält dauerhafte, nicht geheime Projektentscheidungen; `.env` und die
+Prozessumgebung enthalten umgebungsabhängige Werte und dürfen nur ausdrücklich
+unterstützte, nicht geheime Feature-Schalter überschreiben. Bestehende
+Projekte benötigen keinen `[features]`-Abschnitt. Die Priorität lautet:
+Prozessumgebung, `.env`, `zelyra.toml`, dann sichere Standardwerte.
+
+Die ersten unterstützten Schalter sind `web`, `api`, `crud`, `auth` und
+`audit`. `zelyra config <file.zyl> --format=json` ist eine schreibgeschützte,
+versionierte Inspektionsschnittstelle und gibt keine Secret-Werte aus. Wenn
+eine Quelldeklaration einen deaktivierten Bereich verwendet, schlägt die
+Kompilierung mit einer stabilen Diagnose fehl. Capabilities, Typprüfung,
+SQL-Prüfung, Contracts und Sicherheitsregeln können damit nicht deaktiviert
+werden. Künftige optionale Funktionen können dasselbe Modell verwenden; eine
+Funktion gilt aber nicht als implementiert, nur weil sie in einer
+Konfigurationsdatei erwähnt wird. Siehe die gepflegte
+[Umgebungsreferenz](../env.md).
+
 ## Kanonische Quellformatierung
 
 `zelyra fmt <file.zyl>` erzeugt nach erfolgreichem Lexen und Parsen eine

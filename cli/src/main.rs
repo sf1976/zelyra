@@ -2,7 +2,7 @@ use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     env,
     fmt::Write as _,
     fs,
@@ -49,7 +49,7 @@ const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_a
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -600,6 +600,7 @@ fn validate_program(
     if !reject_typed_holes(source, path, &program) {
         return Err(());
     }
+    validate_project_features(path, &program)?;
     if let Err(errors) = lower(&program) {
         for error in errors {
             diagnostic(
@@ -1483,6 +1484,130 @@ fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         ("declarations".into(), declarations),
     ];
     print_machine_document(&machine_document("context", success, diagnostics, fields));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn feature_settings_json(features: &ProjectFeatures) -> Value {
+    Value::Object(
+        features
+            .iter()
+            .map(|(name, setting)| {
+                (
+                    name.clone(),
+                    json!({
+                        "enabled": setting.enabled,
+                        "source": setting.source
+                    }),
+                )
+            })
+            .collect(),
+    )
+}
+
+fn config_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = arguments.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument.starts_with("--format=") {
+            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+            return ExitCode::from(2);
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown config option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+
+    let config_path = project_config_path(&path).ok().flatten();
+    let env_file = config_path
+        .as_ref()
+        .and_then(|path| path.parent())
+        .map(|path| path.join(".env"))
+        .filter(|path| path.is_file())
+        .is_some();
+    let result = project_features(&path);
+    if format == OutputFormat::Human {
+        let features = match result {
+            Ok(features) => features,
+            Err(error) => {
+                eprintln!("error[E-FEATURE-002]: {error}");
+                return ExitCode::from(1);
+            }
+        };
+        println!(
+            "configuration: {}",
+            if config_path.is_some() {
+                "zelyra.toml"
+            } else {
+                "defaults"
+            }
+        );
+        println!(
+            "environment file: {}",
+            if env_file {
+                "loaded (feature flags only)"
+            } else {
+                "not present"
+            }
+        );
+        for (name, setting) in features {
+            println!(
+                "  {name}: {} ({})",
+                if setting.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+                setting.source
+            );
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    begin_json_diagnostics(&path, "");
+    let (success, features) = match result {
+        Ok(features) => (true, feature_settings_json(&features)),
+        Err(error) => {
+            diagnostic(&path, "E-FEATURE-002", &error, 1, 1);
+            (false, Value::Object(Map::new()))
+        }
+    };
+    let diagnostics = finish_json_diagnostics();
+    print_machine_document(&machine_document(
+        "config",
+        success,
+        diagnostics,
+        [
+            (
+                "project".into(),
+                json!({
+                    "name": project_name(&path),
+                    "config_file": config_path.as_ref().map(|_| "zelyra.toml"),
+                    "env_file_present": env_file,
+                    "secrets": "not displayed"
+                }),
+            ),
+            ("features".into(), features),
+        ],
+    ));
     if success {
         ExitCode::SUCCESS
     } else {
@@ -3046,6 +3171,241 @@ fn project_config_path(path: &str) -> Result<Option<PathBuf>, String> {
         }
         directory = parent;
     })
+}
+
+const PROJECT_FEATURES: [&str; 5] = ["web", "api", "crud", "auth", "audit"];
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FeatureSetting {
+    enabled: bool,
+    source: String,
+}
+
+type ProjectFeatures = BTreeMap<String, FeatureSetting>;
+
+fn parse_bool_setting(value: &str, setting: &str) -> Result<bool, String> {
+    match value.trim().trim_matches('"') {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "feature setting `{setting}` must be true or false, found `{value}`"
+        )),
+    }
+}
+
+fn parse_feature_section(contents: &str) -> Result<BTreeMap<String, bool>, String> {
+    let mut values = BTreeMap::new();
+    let mut in_features = false;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_features = line == "[features]";
+            continue;
+        }
+        if !in_features {
+            continue;
+        }
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            return Err(format!(
+                "invalid feature setting on line {}",
+                line_index + 1
+            ));
+        };
+        let key = raw_key.trim().to_ascii_lowercase();
+        if !PROJECT_FEATURES.contains(&key.as_str()) {
+            return Err(format!("unknown feature setting `{key}`"));
+        }
+        if values.contains_key(&key) {
+            return Err(format!(
+                "feature setting `{key}` is configured more than once"
+            ));
+        }
+        values.insert(key.clone(), parse_bool_setting(raw_value, &key)?);
+    }
+    Ok(values)
+}
+
+fn parse_env_feature_overrides(contents: &str) -> Result<BTreeMap<String, bool>, String> {
+    let mut values = BTreeMap::new();
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").unwrap_or(line);
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = raw_key.trim();
+        let Some(feature) = key.strip_prefix("ZELYRA_FEATURE_") else {
+            continue;
+        };
+        let feature = feature.to_ascii_lowercase();
+        if !PROJECT_FEATURES.contains(&feature.as_str()) {
+            return Err(format!(
+                "unknown ZELYRA_FEATURE_ setting `{}` on line {}",
+                feature,
+                line_index + 1
+            ));
+        }
+        if values.contains_key(&feature) {
+            return Err(format!(
+                "environment feature `{feature}` is configured more than once"
+            ));
+        }
+        values.insert(
+            feature.clone(),
+            parse_bool_setting(
+                raw_value.split('#').next().unwrap_or(raw_value),
+                &format!("ZELYRA_FEATURE_{}", feature.to_ascii_uppercase()),
+            )?,
+        );
+    }
+    Ok(values)
+}
+
+fn feature_defaults() -> ProjectFeatures {
+    PROJECT_FEATURES
+        .into_iter()
+        .map(|feature| {
+            (
+                feature.to_owned(),
+                FeatureSetting {
+                    enabled: true,
+                    source: "default".into(),
+                },
+            )
+        })
+        .collect()
+}
+
+fn apply_feature_values(
+    features: &mut ProjectFeatures,
+    values: BTreeMap<String, bool>,
+    source: &str,
+) {
+    for (feature, enabled) in values {
+        if let Some(setting) = features.get_mut(&feature) {
+            setting.enabled = enabled;
+            setting.source = source.to_owned();
+        }
+    }
+}
+
+fn project_features(path: &str) -> Result<ProjectFeatures, String> {
+    let mut features = feature_defaults();
+    let config_path = project_config_path(path)?;
+    if let Some(config_path) = &config_path {
+        let contents = fs::read_to_string(config_path)
+            .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+        apply_feature_values(
+            &mut features,
+            parse_feature_section(&contents)?,
+            "zelyra.toml",
+        );
+
+        let env_path = config_path
+            .parent()
+            .ok_or_else(|| "project configuration has no parent directory".to_owned())?
+            .join(".env");
+        if env_path.is_file() {
+            let env_contents = fs::read_to_string(&env_path)
+                .map_err(|error| format!("cannot read {}: {error}", env_path.display()))?;
+            apply_feature_values(
+                &mut features,
+                parse_env_feature_overrides(&env_contents)?,
+                ".env",
+            );
+        }
+    }
+    for feature in PROJECT_FEATURES {
+        let variable = format!("ZELYRA_FEATURE_{}", feature.to_ascii_uppercase());
+        if let Ok(value) = env::var(&variable) {
+            let mut override_value = BTreeMap::new();
+            override_value.insert(feature.to_owned(), parse_bool_setting(&value, &variable)?);
+            apply_feature_values(&mut features, override_value, "environment");
+        }
+    }
+    Ok(features)
+}
+
+fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
+    features.get(feature).is_none_or(|setting| setting.enabled)
+}
+
+fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    let features = match project_features(path) {
+        Ok(features) => features,
+        Err(error) => {
+            diagnostic(path, "E-FEATURE-002", &error, 1, 1);
+            return Err(());
+        }
+    };
+    let web_used = !program.pages.is_empty()
+        || !program.forms.is_empty()
+        || !program.tableviews.is_empty()
+        || !program.cruds.is_empty()
+        || !program.apis.is_empty()
+        || !program.auth.is_empty();
+    if !feature_enabled(&features, "web") && web_used {
+        diagnostic(
+            path,
+            "E-FEATURE-001",
+            "the `web` feature is disabled, but this program declares web resources",
+            1,
+            1,
+        );
+        return Err(());
+    }
+    if !feature_enabled(&features, "api") && !program.apis.is_empty() {
+        diagnostic(
+            path,
+            "E-FEATURE-001",
+            "the `api` feature is disabled, but this program declares an API",
+            1,
+            1,
+        );
+        return Err(());
+    }
+    if !feature_enabled(&features, "crud") && !program.cruds.is_empty() {
+        diagnostic(
+            path,
+            "E-FEATURE-001",
+            "the `crud` feature is disabled, but this program declares CRUD resources",
+            1,
+            1,
+        );
+        return Err(());
+    }
+    if !feature_enabled(&features, "auth") && !program.auth.is_empty() {
+        diagnostic(
+            path,
+            "E-FEATURE-001",
+            "the `auth` feature is disabled, but this program declares authentication",
+            1,
+            1,
+        );
+        return Err(());
+    }
+    if !feature_enabled(&features, "audit")
+        && program
+            .auth
+            .iter()
+            .any(|auth| auth.audit_table.is_some() || auth.audit_chain)
+    {
+        diagnostic(
+            path,
+            "E-FEATURE-001",
+            "the `audit` feature is disabled, but audit logging is configured",
+            1,
+            1,
+        );
+        return Err(());
+    }
+    Ok(())
 }
 
 fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
@@ -6390,6 +6750,9 @@ fn main() -> ExitCode {
     if command == "context" {
         return context_command(args);
     }
+    if command == "config" {
+        return config_command(args);
+    }
     if command == "verify" {
         let Some(path) = args.next() else {
             usage();
@@ -6482,6 +6845,45 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feature_defaults_are_simple_and_enabled() {
+        let features = feature_defaults();
+        assert_eq!(features.len(), PROJECT_FEATURES.len());
+        assert!(features.values().all(|setting| setting.enabled));
+        assert!(features.values().all(|setting| setting.source == "default"));
+    }
+
+    #[test]
+    fn feature_settings_accept_known_manifest_values() {
+        let values = parse_feature_section(
+            "[project]\nname = \"demo\"\n\n[features]\napi = false\ncrud = true\n",
+        )
+        .expect("feature settings should parse");
+        assert_eq!(values.get("api"), Some(&false));
+        assert_eq!(values.get("crud"), Some(&true));
+        assert!(!values.contains_key("web"));
+    }
+
+    #[test]
+    fn feature_settings_accept_only_known_env_overrides() {
+        let values = parse_env_feature_overrides(
+            "# optional\nZELYRA_FEATURE_API=false\nZELYRA_WEB_PORT=3000\n",
+        )
+        .expect("feature environment settings should parse");
+        assert_eq!(values.get("api"), Some(&false));
+        assert_eq!(values.len(), 1);
+    }
+
+    #[test]
+    fn feature_settings_reject_unknown_values() {
+        let error = parse_feature_section("[features]\nmagic = true\n")
+            .expect_err("unknown features must not be silently accepted");
+        assert!(error.contains("unknown feature setting"));
+        let error = parse_env_feature_overrides("ZELYRA_FEATURE_MAGIC=true\n")
+            .expect_err("unknown environment features must not be silently accepted");
+        assert!(error.contains("unknown ZELYRA_FEATURE_"));
+    }
 
     #[test]
     fn formats_verification_results_with_source_location() {

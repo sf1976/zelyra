@@ -74,6 +74,23 @@ arrays rather than invented.
 The context is intentionally a bounded snapshot, not a replacement for type
 checking. An invalid source produces diagnostics and a non-zero exit status.
 
+## Simple defaults and optional power
+
+Zelyra uses a two-layer configuration model. `zelyra.toml` holds durable,
+non-secret project choices; `.env` and process variables hold environment-
+specific values and may override only explicitly supported non-secret feature
+flags. Existing projects do not need a `[features]` section. The effective
+precedence is process environment, `.env`, `zelyra.toml`, then safe defaults.
+
+The first supported switches are `web`, `api`, `crud`, `auth`, and `audit`.
+`zelyra config <file.zyl> --format=json` is a read-only, versioned inspection
+surface and never prints secret values. If a source declaration uses a
+disabled surface, compilation fails with a stable diagnostic; this mechanism
+cannot disable capabilities, type checking, SQL validation, contracts, or
+security rules. Future optional facilities may use the same model, but a
+feature is not considered available merely because it is listed in a config
+file. See the maintained [environment reference](../env.en.md).
+
 ## Canonical source formatting
 
 `zelyra fmt <file.zyl>` produces deterministic source formatting after a

@@ -1528,6 +1528,34 @@ Regeln:
 - getrennte Datenbanken für Entwicklung, Tests und Produktion verwenden;
 - destruktive Tests niemals gegen Produktion ausführen.
 
+### Einfacher Einstieg, optionale Möglichkeiten
+
+Für den Einstieg ist keine Feature-Konfiguration erforderlich. Erweiterte
+Projektbereiche können in `zelyra.toml` ausgewählt werden; umgebungsabhängige,
+nicht geheime Überschreibungen gehören in `.env` oder die Prozessumgebung:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Unterstützt werden `web`, `api`, `crud`, `auth` und `audit`. Die Priorität ist
+Prozessumgebung, `.env`, `zelyra.toml` und danach sichere Standardwerte. Die
+wirksamen Werte können ohne Anzeige von Secrets geprüft werden:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Wenn der Quellcode einen deaktivierten Bereich verwendet, meldet der Compiler
+eine stabile Feature-Diagnose. Capabilities, Typprüfung, SQL-Prüfung und
+Sicherheitsregeln können damit nicht abgeschaltet werden. Diese optionale
+Komfortschicht ist keine zusätzliche Pflicht für einfache Projekte. Die
+vollständige [Referenz für Umgebung und Konfiguration](../env.md) führt alle
+unterstützten Einstellungen auf und muss vor dem Commit einer neuen
+Einstellung aktualisiert werden.
+
 🗺️ Typisierte Connections, verschlüsselte Secret Stores, SMTP-Assistent und
 ODBC-Erkennung sind geplant.
 

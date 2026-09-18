@@ -67,6 +67,40 @@ geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 
+## Einfacher Einstieg, optionale Möglichkeiten
+
+Zelyra hält das erste Projekt klein. Erweiterte Projektbereiche sind optional:
+Dauerhafte Feature-Entscheidungen gehören in `zelyra.toml`,
+umgebungsabhängige Überschreibungen in `.env` oder in die Prozessumgebung.
+Bestehende Projekte benötigen keinen zusätzlichen Abschnitt; die sicheren
+Standards lassen Web, API, CRUD, Authentifizierung und Audit-Deklarationen zu.
+
+Beispiel:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Die entsprechenden nicht geheimen Umgebungsüberschreibungen heißen
+`ZELYRA_FEATURE_WEB`, `ZELYRA_FEATURE_API`, `ZELYRA_FEATURE_CRUD`,
+`ZELYRA_FEATURE_AUTH` und `ZELYRA_FEATURE_AUDIT`. Die Reihenfolge lautet:
+Prozessumgebung, `.env`, `zelyra.toml`, dann Standardwerte. Die wirksame
+Konfiguration kann ohne Ausgabe von Secrets angezeigt werden:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Deaktivierte Bereiche werden vom Compiler abgelehnt, wenn der Quellcode sie
+verwendet; Sicherheitsprüfungen und Capabilities können damit nicht abgeschaltet
+werden. Diese optionale Komfortschicht ist keine Voraussetzung für Einsteiger.
+Die vollständige Referenz für Umgebung und Konfiguration steht in
+[docs/env.md](docs/env.md) (zusätzlich auf
+[Englisch](docs/env.en.md)). Neue Einstellungen müssen dort vor dem Commit
+ergänzt werden.
+
 ## Lizenz und Implementierung
 
 Zelyra ist in Rust implementiert. Rust ist die Implementierungssprache;

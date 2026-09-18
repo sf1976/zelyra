@@ -61,6 +61,39 @@ remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
+## Simple defaults, optional power
+
+Zelyra keeps the first project small. Advanced project surfaces are optional:
+durable feature choices belong in `zelyra.toml`, while environment-specific
+overrides belong in `.env` or in the process environment. Existing projects
+need no additional section; the current safe defaults keep web, API, CRUD,
+authentication, and audit declarations enabled.
+
+For example:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+The corresponding non-secret environment overrides are
+`ZELYRA_FEATURE_WEB`, `ZELYRA_FEATURE_API`, `ZELYRA_FEATURE_CRUD`,
+`ZELYRA_FEATURE_AUTH`, and `ZELYRA_FEATURE_AUDIT`. Precedence is process
+environment, `.env`, `zelyra.toml`, then defaults. Inspect the effective
+configuration without printing secrets:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Disabled surfaces are rejected by the compiler when the source declares them;
+security checks and capabilities cannot be disabled through this mechanism.
+This is an optional convenience layer, not a requirement for beginners.
+The complete environment and configuration reference is in
+[docs/env.md](docs/env.md) (also available in
+[English](docs/env.en.md)). New settings must be added there before commit.
+
 ## License and implementation
 
 Zelyra is implemented in Rust. Rust is used as the implementation language;
