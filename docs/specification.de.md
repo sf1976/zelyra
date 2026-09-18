@@ -76,6 +76,36 @@ erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben.
 Collection-Schleifen für Arrays von Records sind verfügbar. Option-aware
 Feld-Ausdrücke und reichere lokale View-Daten bleiben geplant.
 
+### Wiederverwendbare View-Layouts
+
+Benannte Views sind deterministische Seitenlayouts. Jeder View muss genau einen
+Default-`<slot />` deklarieren; zusätzlich darf jeder benannte Slot höchstens
+einmal vorkommen. Benannte Slots können sicheren Fallback-HTML enthalten:
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Seiteninhalt</p>
+    }
+}
+~~~
+
+Die benannten Slot-Blöcke einer Seite müssen zu Slots des ausgewählten Views
+gehören; doppelte oder unbekannte Slots sind Compilerfehler. Nicht gelieferte
+benannte Slots verwenden ihren deklarierten Fallback. Die Komposition erfolgt
+vor Component-Erweiterung und Routing ohne globalen View-Zustand;
+Authentifizierung, Capability-Prüfungen, SQL-Prüfung und HTML-Escaping bleiben
+aktiv.
+
 Seiten können typisierte Query-Eingaben deklarieren:
 
 ~~~zelyra

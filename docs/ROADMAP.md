@@ -167,8 +167,9 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 4. Views and web presentation
 
-- [~] Named views/layouts with a page-level `view: Name` assignment and a
-  validated `<slot />` content insertion point.
+- [~] Named views/layouts with a page-level `view: Name` assignment, a
+  validated default `<slot />` content insertion point, and validated named
+  slots with fallback content.
 - [~] Typed view expressions check identifier and record-field interpolations,
   page route bindings, component properties, and dynamic component-property
   types. Optional field-aware expressions and richer view data remain open.
@@ -177,10 +178,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
   declared columns, typed filters, search, sorting, pagination, URL state, and
   escaping are available for table- and struct-backed result types.
-- [~] Components support default and named slots, fallback content, and nested
-  composition; fallback content for more advanced nested-view scenarios remains
-  planned.
-- [ ] View inheritance/composition without hidden global state.
+- [~] Components and named views support default and named slots, safe fallback
+  content, and nested composition. View layouts validate declared slot names
+  and replace them deterministically without global state; view inheritance and
+  richer nested scenarios remain open.
 - [~] View-local data loading supports explicit, schema-checked record and
   record-collection queries using `load name = sql<Type> { ... }`. Array
   results can be rendered with typed `for item in collection { ... }` blocks.

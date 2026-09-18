@@ -734,6 +734,30 @@ fn context_exposes_safe_structural_project_information() {
 }
 
 #[test]
+fn context_exposes_view_slot_structure_without_rendered_content() {
+    let path = example("view_composition.zyl");
+    let output = run(&["context", path.to_str().unwrap(), "--format=json"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let shell = document["declarations"]["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|view| view["name"] == "AppShell")
+        .expect("AppShell should be present");
+    assert_eq!(
+        shell["slots"],
+        serde_json::json!([
+            { "name": "header", "fallback": true },
+            { "name": "default", "fallback": false },
+            { "name": "footer", "fallback": true }
+        ])
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Describe intent"));
+}
+
+#[test]
 fn impact_can_focus_on_a_known_node_with_versioned_json() {
     let path = example("auth_crud_api.zyl");
     let first = run(&[

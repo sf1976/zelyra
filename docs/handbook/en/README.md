@@ -530,10 +530,31 @@ page "/customers" {
 }
 ~~~
 
-The compiler requires exactly one `<slot />` in a named view. The page content
-is inserted before routing, while existing authentication, authorization, and
-escaping remain active. Typed self-closing components with declared properties
-are available as well:
+The compiler requires exactly one default `<slot />` in a named view. Layouts
+may also declare named slots with fallback content:
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Page content</p>
+    }
+}
+~~~
+
+A page may provide only slots declared by its selected view; duplicate or
+unknown slots are rejected during checking. Unprovided named slots use their
+fallback. Page content is composed before routing, while existing
+authentication, authorization, and escaping remain active. Typed self-closing
+components with declared properties are available as well:
 
 ~~~zelyra
 component Badge {

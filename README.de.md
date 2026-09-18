@@ -325,10 +325,31 @@ page "/customers" {
 }
 ~~~
 
-Der Compiler verlangt in jedem benannten View genau einen `<slot />`-Slot. Der
-Seiteninhalt wird vor dem Routing in diesen Slot eingesetzt; Authentifizierung
-und Escaping bleiben dadurch in der bestehenden sicheren Web-Pipeline. Ein
-vollständiges Beispiel steht in `examples/views.zyl`.
+Der Compiler verlangt in jedem benannten View genau einen Default-`<slot />`-
+Slot. Zusätzlich dürfen Layouts benannte Slots mit sicherem Fallback-Inhalt
+deklarieren. Eine Seite liefert solche Inhalte mit
+`<slot name="header">...</slot>`; nicht überschriebene Slots verwenden ihren
+Fallback. Der Seiteninhalt wird vor dem Routing eingesetzt;
+Authentifizierung und Escaping bleiben dadurch in der bestehenden sicheren
+Web-Pipeline. Ein vollständiges Beispiel steht in
+`examples/view_composition.zyl`.
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Inhalt der Seite</p>
+    }
+}
+~~~
 
 Views können außerdem typisierte, wiederverwendbare Komponenten deklarieren:
 

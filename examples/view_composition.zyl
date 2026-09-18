@@ -1,0 +1,34 @@
+view AppShell {
+    html {
+        <html lang="en">
+            <body>
+                <header>
+                    <slot name="header"><h1>Zelyra</h1></slot>
+                </header>
+                <main><slot /></main>
+                <footer>
+                    <slot name="footer">Describe intent. Prove correctness.</slot>
+                </footer>
+            </body>
+        </html>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Page content is composed into a reusable layout.</p>
+    }
+}
+
+page "/fallback" {
+    view: AppShell
+    html {
+        <p>The layout supplies the header and footer fallbacks.</p>
+    }
+}
+
+fn main() {
+    print("Run: zelyra serve examples/view_composition.zyl")
+}
