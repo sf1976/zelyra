@@ -104,8 +104,9 @@ architecture requirement for every phase, not a provider-specific feature.
   configuration remains open.
 - [~] A shared console/browser setup assistant is available through
   `zelyra setup --database|--schema|--all` and `zelyra setup --web`; it starts
-  generated MariaDB Compose projects and applies the initial schema. Docker
-  installation, remote administration, and production deployment remain
+  generated MariaDB Compose projects and applies the initial schema; the
+  generated-project MariaDB flow is integration-tested on isolated ports.
+  Docker installation, remote administration, and production deployment remain
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable web and MariaDB host ports plus
