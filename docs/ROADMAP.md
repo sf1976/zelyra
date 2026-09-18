@@ -97,8 +97,9 @@ architecture requirement for every phase, not a provider-specific feature.
   Compose availability, an optional `.env` without exposing credentials, and
   host-port readiness; TLS, permissions, and broader external-tool guidance
   remain open.
-- [~] Project templates: minimal, MariaDB CRUD, and MariaDB authentication
-  starters are available; API and production-deployment templates remain.
+- [~] Project templates: minimal, MariaDB CRUD, MariaDB authentication, and
+  MariaDB business starters are available; API and production-deployment
+  templates remain.
 - [ ] Offline installation bundle and reproducible toolchain metadata.
 - [?] Package-manager distribution where practical (Homebrew, winget,
   Debian packages, and container images).

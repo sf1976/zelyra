@@ -178,6 +178,39 @@ fn new_mariadb_auth_template_is_self_contained() {
 }
 
 #[test]
+fn new_mariadb_business_template_is_self_contained() {
+    let directory = temporary_directory("new-mariadb-business-template");
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--template",
+        "mariadb-business",
+        "--web-port",
+        "8080",
+        "--host-port",
+        "18080",
+        "--db-host-port",
+        "3308",
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
+    assert!(source.contains("auth users"));
+    assert!(source.contains("auth_audit_log"));
+    assert!(source.contains("crud Customer -> customers"));
+    assert!(source.contains("api GET \"/api/customers/{id}\""));
+    assert!(source.contains("form CustomerQuickCreate -> customers"));
+    assert!(config.contains("engine = \"mariadb\""));
+    assert!(directory.join("docker-compose.mariadb.yml").is_file());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_rejects_an_invalid_web_port_before_creating_a_project() {
     let directory = temporary_directory("invalid-web-port");
     let output = run(&[

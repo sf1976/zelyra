@@ -690,8 +690,8 @@ method chain.
 Currently available:
 
 ~~~text
-zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
@@ -762,6 +762,17 @@ zelyra new secure-app --template mariadb-auth \
 The authentication starter includes users, persistent sessions, database-backed
 permissions, the automatic `/login` and `/logout` flow, and a protected
 `/admin` page.
+
+For a complete business starter combining these features with protected CRUD,
+an audit log, a schema-mapped form, and a typed API, use:
+
+~~~bash
+zelyra new business-app --template mariadb-business \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+The business starter is the shortest path from a fresh project to a
+database-backed application that can be extended with ordinary Zelyra code.
 
 ## Project layout
 
@@ -878,8 +889,8 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
 
-GitHub Actions additionally runs the generated-project MariaDB, Docker, and
-authentication end-to-end tests, plus the credential-free MariaDB CRUD integration test from
+GitHub Actions additionally runs the generated-project MariaDB, Docker,
+authentication, and business end-to-end tests, plus the credential-free MariaDB CRUD integration test from
 `tests/mariadb-e2e.sh` against an isolated MariaDB 11 service.
 The tableview integration test from `tests/mariadb-tableview-e2e.sh` additionally
 executes a struct-backed join and aggregate view through the running web server,

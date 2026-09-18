@@ -344,6 +344,17 @@ zelyra new secure-app --template mariadb-auth \
 It includes users, sessions, permissions, the automatic login and logout flow,
 and a protected `/admin` page.
 
+For a complete business starter with authentication, protected CRUD, an audit
+log, a schema-mapped form, and a typed API:
+
+~~~bash
+zelyra new business-app --template mariadb-business \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+This is the recommended starting point for a database-backed business
+application that will be extended with ordinary Zelyra code.
+
 The current project file is intentionally small:
 
 ~~~toml
@@ -739,9 +750,9 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ## 11. Useful commands
 
 ~~~text
-zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          create a project and choose its ports
-zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          initialize a project and choose its ports
 zelyra setup [directory]                  create a protected local .env
 zelyra check <file.zyl> [--format human|json]

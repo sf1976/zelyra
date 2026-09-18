@@ -44,11 +44,12 @@ use impact::{build_impact, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
+const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -77,6 +78,7 @@ struct ProjectOptions {
     with_mariadb: bool,
     crud_template: bool,
     auth_template: bool,
+    business_template: bool,
     web_port: u16,
     host_port: u16,
     database_host_port: u16,
@@ -248,7 +250,9 @@ database = true
 network = false
 "#
     };
-    let main_source = if options.crud_template {
+    let main_source = if options.business_template {
+        MARIADB_BUSINESS_TEMPLATE
+    } else if options.crud_template {
         MARIADB_CRUD_TEMPLATE
     } else if options.auth_template {
         MARIADB_AUTH_TEMPLATE
@@ -6121,6 +6125,7 @@ fn main() -> ExitCode {
         let mut with_mariadb = false;
         let mut crud_template = false;
         let mut auth_template = false;
+        let mut business_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6140,20 +6145,29 @@ fn main() -> ExitCode {
                     "minimal" => {
                         crud_template = false;
                         auth_template = false;
+                        business_template = false;
                     }
                     "mariadb-crud" => {
                         with_mariadb = true;
                         crud_template = true;
                         auth_template = false;
+                        business_template = false;
                     }
                     "mariadb-auth" => {
                         with_mariadb = true;
                         crud_template = false;
                         auth_template = true;
+                        business_template = false;
+                    }
+                    "mariadb-business" => {
+                        with_mariadb = true;
+                        crud_template = false;
+                        auth_template = false;
+                        business_template = true;
                     }
                     _ => {
                         eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal` or `mariadb-crud`"
+                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
                         );
                         return ExitCode::from(2);
                     }
@@ -6215,6 +6229,7 @@ fn main() -> ExitCode {
                 with_mariadb,
                 crud_template,
                 auth_template,
+                business_template,
                 web_port,
                 host_port,
                 database_host_port,
@@ -6227,6 +6242,7 @@ fn main() -> ExitCode {
         let mut with_mariadb = false;
         let mut crud_template = false;
         let mut auth_template = false;
+        let mut business_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6246,20 +6262,29 @@ fn main() -> ExitCode {
                     "minimal" => {
                         crud_template = false;
                         auth_template = false;
+                        business_template = false;
                     }
                     "mariadb-crud" => {
                         with_mariadb = true;
                         crud_template = true;
                         auth_template = false;
+                        business_template = false;
                     }
                     "mariadb-auth" => {
                         with_mariadb = true;
                         crud_template = false;
                         auth_template = true;
+                        business_template = false;
+                    }
+                    "mariadb-business" => {
+                        with_mariadb = true;
+                        crud_template = false;
+                        auth_template = false;
+                        business_template = true;
                     }
                     _ => {
                         eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal` or `mariadb-crud`"
+                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
                         );
                         return ExitCode::from(2);
                     }
@@ -6324,6 +6349,7 @@ fn main() -> ExitCode {
                 with_mariadb,
                 crud_template,
                 auth_template,
+                business_template,
                 web_port,
                 host_port,
                 database_host_port,
@@ -7264,6 +7290,7 @@ mod tests {
                 with_mariadb: true,
                 crud_template: false,
                 auth_template: false,
+                business_template: false,
                 web_port: DEFAULT_WEB_PORT,
                 host_port: DEFAULT_WEB_PORT,
                 database_host_port: DEFAULT_DATABASE_HOST_PORT,
@@ -7294,6 +7321,7 @@ mod tests {
                 with_mariadb: true,
                 crud_template: false,
                 auth_template: false,
+                business_template: false,
                 web_port: 8080,
                 host_port: 18080,
                 database_host_port: 3308,

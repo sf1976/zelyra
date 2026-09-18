@@ -715,8 +715,8 @@ ORM-Methodenkette.
 Aktuell verfügbar:
 
 ~~~text
-zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
@@ -789,6 +789,17 @@ zelyra new sichere-app --template mariadb-auth \
 Das Authentifizierungs-Starterprojekt enthält Benutzer, persistente Sessions,
 datenbankbasierte Berechtigungen, den automatischen `/login`- und `/logout`-
 Ablauf sowie eine geschützte `/admin`-Seite.
+
+Für einen vollständigen Business-Starter mit diesen Funktionen sowie
+geschütztem CRUD, Audit-Protokoll, schema-basiertem Formular und typisierter API:
+
+~~~bash
+zelyra new business-app --template mariadb-business \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+Der Business-Starter ist der kürzeste Weg von einem neuen Projekt zu einer
+datenbankgestützten Anwendung, die mit normalem Zelyra-Code erweitert werden kann.
 
 ## Repository-Struktur
 
@@ -905,7 +916,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 ~~~
 
-GitHub Actions führt zusätzlich die MariaDB-, Docker- und Authentifizierungs-
+GitHub Actions führt zusätzlich die MariaDB-, Docker-, Authentifizierungs- und Business-
 End-to-End-Tests für erzeugte Projekte sowie den zugangsdatenfreien MariaDB-
 CRUD-Integrationstest aus
 `tests/mariadb-e2e.sh` gegen einen isolierten MariaDB-11-Service aus.
