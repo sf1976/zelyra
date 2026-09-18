@@ -42,8 +42,9 @@ architecture requirement for every phase, not a provider-specific feature.
   read-only `context --format=json` project summary, and machine-format tests
   are implemented. Other commands and complete secret-redaction coverage
   remain.
-- [ ] **Stage B — canonical source:** define and implement deterministic
-  `zelyra fmt`, including idempotence and semantic-preservation tests.
+- [x] **Stage B — canonical source:** deterministic `zelyra fmt` formats
+  parseable source, supports `--check` for CI, preserves comments and raw
+  SQL/HTML bodies, and has idempotence and semantic-preservation coverage.
 - [ ] **Stage C — typed gaps:** add typed holes with expected type, visible
   values/functions, capabilities, contract obligations, and source spans;
   incomplete code must never build or publish.

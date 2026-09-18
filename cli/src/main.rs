@@ -33,8 +33,11 @@ use zelyra_web::{
     TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
 };
 
+mod formatter;
+use formatter::format_source;
+
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -523,6 +526,73 @@ fn check_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)
+    }
+}
+
+fn fmt_command(arguments: impl Iterator<Item = String>) -> ExitCode {
+    let mut path = None;
+    let mut check_only = false;
+    for argument in arguments {
+        if argument == "--check" && !check_only {
+            check_only = true;
+        } else if !argument.starts_with('-') && path.is_none() {
+            path = Some(argument);
+        } else {
+            usage();
+            return ExitCode::from(2);
+        }
+    }
+    let Some(path) = path else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let source = match fs::read_to_string(&path) {
+        Ok(source) => source,
+        Err(error) => {
+            diagnostic(
+                &path,
+                "E-IO-001",
+                &format!("cannot read `{path}`: {error}"),
+                1,
+                1,
+            );
+            return ExitCode::from(1);
+        }
+    };
+    let tokens = match lex(&source) {
+        Ok(tokens) => tokens,
+        Err(error) => {
+            diagnostic_with_span(&path, "E-LEX-001", &error.message, error.span);
+            return ExitCode::from(1);
+        }
+    };
+    if let Err(error) = parse(&tokens) {
+        diagnostic_with_span(&path, "E-PARSE-001", &error.message, error.span);
+        return ExitCode::from(1);
+    }
+    let formatted = format_source(&source, &tokens);
+    if check_only {
+        if source == formatted {
+            println!("ok: {path}");
+            ExitCode::SUCCESS
+        } else {
+            eprintln!("would reformat: {path}");
+            ExitCode::from(1)
+        }
+    } else if source == formatted {
+        println!("already formatted: {path}");
+        ExitCode::SUCCESS
+    } else {
+        match fs::write(&path, formatted) {
+            Ok(()) => {
+                println!("formatted: {path}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error[E-FMT-001]: cannot write `{path}`: {error}");
+                ExitCode::from(1)
+            }
+        }
     }
 }
 
@@ -5355,6 +5425,9 @@ fn main() -> ExitCode {
     }
     if command == "check" {
         return check_command(args);
+    }
+    if command == "fmt" {
+        return fmt_command(args);
     }
     if command == "context" {
         return context_command(args);

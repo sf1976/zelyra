@@ -56,6 +56,16 @@ Compiler verstandenen Deklarationen. Der Befehl verbindet sich nicht mit einer
 Datenbank, nutzt kein Netzwerk, führt keine E-Mail oder Jobs aus und gibt keine
 Secrets aus. Nicht unterstützte Details werden nicht erfunden.
 
+## Kanonische Quellformatierung
+
+`zelyra fmt <file.zyl>` erzeugt nach erfolgreichem Lexen und Parsen eine
+deterministische Quellformatierung. `zelyra fmt <file.zyl> --check` schreibt
+keine Dateien und liefert einen Fehlercode, wenn eine Änderung nötig wäre;
+damit kann CI kanonischen Quellcode erzwingen. Der Formatter bewahrt
+Zeilenkommentare und behandelt SQL- und HTML-Blöcke als opaken Quelltext. Er
+ist idempotent: Ein bereits formatiertes Dokument erzeugt byte-identisch
+dieselbe Ausgabe.
+
 Typed Holes, `zelyra impact --format=json` und
 `zelyra edit --format=json` sind geplante, versionierte Schnittstellen. Eine
 Typed Hole muss erwarteten Typ, sichtbare Werte/Funktionen, benötigte

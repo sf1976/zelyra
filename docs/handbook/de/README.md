@@ -1507,6 +1507,8 @@ anbieterneutral, sodass auch lokale Werkzeuge sie verwenden können.
 - ✅ **Implementiert:** deterministische, versionierte JSON-Diagnosen;
 - ✅ **Implementiert:** stabile Fehlercodes und Source-Spans;
 - ✅ **Implementiert:** schreibgeschützter strukturierter Projektkontext;
+- ✅ **Implementiert:** deterministische Formatierung mit `zelyra fmt` und
+  `--check` für CI; Kommentare und opake SQL-/HTML-Blöcke bleiben erhalten;
 - ✅ **Implementiert:** menschenlesbare Ausgabe bleibt Standard;
 - 🧪 **Experimentell:** die aktuelle JSON-Schnittstelle hat Schema-Version `1`
   und unterstützt `check` und `context`;
@@ -1520,6 +1522,13 @@ Prüfe ein Programm weiterhin standardmäßig menschenlesbar:
 
 ~~~bash
 zelyra check examples/fibonacci.zyl
+~~~
+
+Quellcode kanonisch formatieren oder die Formatierung ohne Schreiben prüfen:
+
+~~~bash
+zelyra fmt examples/fibonacci.zyl
+zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
 Für Werkzeuge kann JSON ausdrücklich angefordert werden:

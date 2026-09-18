@@ -41,13 +41,16 @@ Die ersten maschinenorientierten Schnittstellen sind verfügbar:
 ~~~bash
 zelyra check examples/fibonacci.zyl --format=json
 zelyra context examples/auth_crud_api.zyl --format=json
+zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
 Beide verwenden Schema-Version `1`. JSON wird ausschließlich auf stdout
 ausgegeben; Diagnosen besitzen stabile Codes und UTF-8-Byte-Offsets, technische
 Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
 Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
-Typed Holes, semantische Änderungen, Wirkungsanalyse und vergleichende
+`zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
+formatierte Dateien, ohne sie zu verändern. Typed Holes, semantische
+Änderungen, Wirkungsanalyse und vergleichende
 KI-Benchmarks sind geplant, aber noch nicht implementiert. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
@@ -697,6 +700,7 @@ Aktuell verfügbar:
 zelyra new <directory> [--mariadb]
 zelyra init [directory]
 zelyra check <file.zyl> [--format human|json]
+zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
 zelyra build <file.zyl>
 zelyra run <file.zyl>

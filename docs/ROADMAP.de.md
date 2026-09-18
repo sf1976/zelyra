@@ -45,8 +45,10 @@ Feature eines bestimmten Anbieters.
   Ausgabe, eine schreibgeschützte Projektübersicht mit
   `context --format=json` und Format-Tests sind implementiert. Weitere
   Befehle und eine vollständige Secret-Redaction bleiben offen.
-- [ ] **Stufe B — kanonischer Quellcode:** Deterministisches `zelyra fmt` mit
-  Idempotenz- und Semantiktests definieren und implementieren.
+- [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
+  formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
+  Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und
+  Semantiktests.
 - [ ] **Stufe C — typisierte Lücken:** Typed Holes mit erwartetem Typ,
   sichtbaren Werten/Funktionen, Capabilities, Contract-Pflichten und
   Source-Spans; unvollständiger Code darf nie gebaut oder veröffentlicht werden.

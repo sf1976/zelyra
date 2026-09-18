@@ -1400,6 +1400,8 @@ vendor-neutral so local tools can use them as well.
 - ✅ **Implemented:** deterministic, versioned JSON diagnostics;
 - ✅ **Implemented:** stable diagnostic codes and source spans;
 - ✅ **Implemented:** read-only structured project context;
+- ✅ **Implemented:** deterministic `zelyra fmt` formatting with `--check` for
+  CI, preserving comments and opaque SQL/HTML bodies;
 - ✅ **Implemented:** human-readable output remains the default;
 - 🧪 **Experimental:** the current JSON interface is schema version `1` and
   covers the `check` and `context` commands;
@@ -1412,6 +1414,13 @@ Check a program in the human-oriented default format:
 
 ~~~bash
 zelyra check examples/fibonacci.zyl
+~~~
+
+Format source canonically, or check formatting without writing:
+
+~~~bash
+zelyra fmt examples/fibonacci.zyl
+zelyra fmt examples/fibonacci.zyl --check
 ~~~
 
 For tools, request JSON explicitly:

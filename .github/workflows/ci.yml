@@ -40,6 +40,15 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build CLI for integration test
         run: cargo build -p zelyra-cli
+      - name: Check Zelyra example formatting
+        run: |
+          for source_file in examples/*.zyl; do
+            formatted_file="$(mktemp --suffix=.zyl)"
+            cp "$source_file" "$formatted_file"
+            target/debug/zelyra fmt "$formatted_file"
+            target/debug/zelyra fmt "$formatted_file" --check
+            rm "$formatted_file"
+          done
       - name: Run MariaDB CRUD integration test
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

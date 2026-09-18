@@ -8,6 +8,9 @@ compiler and repository release.
 
 ### Added
 
+- Added deterministic `zelyra fmt` source formatting with a non-writing
+  `--check` mode for CI. Formatting preserves comments and opaque SQL/HTML
+  bodies and is covered by idempotence and example-source checks.
 - Added the AI-native development foundation: stable versioned JSON
   diagnostics, deterministic source spans, and a read-only structured project
   context interface for vendor-neutral tooling.

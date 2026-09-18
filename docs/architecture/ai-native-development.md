@@ -74,6 +74,15 @@ arrays rather than invented.
 The context is intentionally a bounded snapshot, not a replacement for type
 checking. An invalid source produces diagnostics and a non-zero exit status.
 
+## Canonical source formatting
+
+`zelyra fmt <file.zyl>` produces deterministic source formatting after a
+successful lexical and syntactic parse. `zelyra fmt <file.zyl> --check` does
+not write files and exits non-zero when formatting would change the source, so
+repositories can enforce canonical source in CI. The formatter preserves line
+comments and treats SQL and HTML bodies as opaque source content. Formatting is
+idempotent: formatting an already formatted file produces the same bytes.
+
 ## Typed gaps, semantic edits, and impact
 
 Typed holes, semantic edit requests, and dependency impact analysis are planned
