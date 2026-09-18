@@ -1641,6 +1641,11 @@ Vor dem atomaren Ersetzen wird der Quelltext erneut geparst und vollständig
 geprüft; ein ungültiger oder semantisch unsicherer Vorschlag kann daher nicht
 geschrieben werden.
 
+Funktionsumbenennungen sind AST-basiert: Die Deklaration und aufgelöste
+Aufrufstellen werden umbenannt, während lokale Bindungen mit demselben Namen
+unverändert bleiben. Andere Ressourcenarten verwenden derzeit weiterhin ihre
+breitere Token-Abdeckung.
+
 ### Sichere Automatisierungsgrenze
 
 Generierter Code muss Compiler und Tests bestehen. Einer KI darf nicht vertraut

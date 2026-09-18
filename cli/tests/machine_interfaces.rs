@@ -266,6 +266,35 @@ fn edit_rejects_a_semantically_invalid_baseline_or_result() {
 }
 
 #[test]
+fn edit_does_not_rename_a_shadowing_local_binding() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-scope",
+        "fn greet() { greet = 1\n print(greet) }\nfn main() { greet() }\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("scoped edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 2);
+    assert_eq!(document["preview"]["changes"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn greet() { greet = 1\n print(greet) }\nfn main() { greet() }\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
 fn context_exposes_safe_structural_project_information() {
     let auth_example = example("auth_crud_api.zyl");
     let output = run(&["context", auth_example.to_str().unwrap(), "--format=json"]);

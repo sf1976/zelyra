@@ -1529,6 +1529,10 @@ zelyra edit --format=json --apply change.json
 The source is reparsed and fully checked before the atomic replacement, so an
 invalid or semantically unsafe proposal cannot be written.
 
+Function renames are AST-aware: the declaration and resolved call sites are
+renamed, while local bindings that shadow the function name remain unchanged.
+Other resource rename kinds currently retain their broader token coverage.
+
 ### Safe automation boundary
 
 Generated code must pass the compiler and tests. An AI must not be trusted

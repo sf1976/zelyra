@@ -163,19 +163,31 @@ pub fn preview(
         if !declares_symbol(program, symbol, from) {
             return Err(format!("no declared {symbol} named `{from}` exists"));
         }
-        renames.push((from.to_owned(), to.to_owned()));
+        renames.push((symbol.to_owned(), from.to_owned(), to.to_owned()));
     }
 
     let mut replacements = Vec::new();
-    for token in tokens {
-        let TokenKind::Ident(name) = &token.kind else {
-            continue;
+    for (symbol, source_name, replacement) in &renames {
+        let semantic_spans = if symbol == "function" {
+            Some(function_rename_spans(program, tokens, source_name))
+        } else {
+            None
         };
-        let Some((_, replacement)) = renames.iter().find(|(source_name, _)| source_name == name)
-        else {
-            continue;
-        };
-        replacements.push((token.span, replacement.clone(), name.clone()));
+        for token in tokens {
+            let TokenKind::Ident(name) = &token.kind else {
+                continue;
+            };
+            if name != source_name {
+                continue;
+            }
+            if semantic_spans
+                .as_ref()
+                .is_some_and(|spans| spans.contains(&(token.span.start, token.span.end)))
+                || semantic_spans.is_none()
+            {
+                replacements.push((token.span, replacement.clone(), name.clone()));
+            }
+        }
     }
 
     let mut updated_source = source.to_owned();
@@ -200,6 +212,173 @@ pub fn preview(
         changes: Value::Array(changes),
         changed_tokens: replacements.len(),
     })
+}
+
+fn function_rename_spans(
+    program: &Program,
+    tokens: &[Token],
+    name: &str,
+) -> HashSet<(usize, usize)> {
+    let mut spans = HashSet::new();
+    for function in &program.functions {
+        if function.name == name {
+            if let Some(span) = declaration_name_span(tokens, function.span, TokenKind::Fn, name) {
+                spans.insert((span.start, span.end));
+            }
+        }
+        collect_function_block(&function.body, name, &mut spans);
+        for expression in &function.requires {
+            collect_function_expression(expression, name, &mut spans);
+        }
+        for expression in &function.ensures {
+            collect_function_expression(expression, name, &mut spans);
+        }
+    }
+    spans
+}
+
+fn declaration_name_span(
+    tokens: &[Token],
+    owner: Span,
+    keyword: TokenKind,
+    name: &str,
+) -> Option<Span> {
+    let mut keyword_found = false;
+    for token in tokens
+        .iter()
+        .filter(|token| token.span.start >= owner.start && token.span.end <= owner.end)
+    {
+        if !keyword_found {
+            if token.kind == keyword {
+                keyword_found = true;
+            }
+            continue;
+        }
+        if let TokenKind::Ident(candidate) = &token.kind {
+            return (candidate == name).then_some(token.span);
+        }
+    }
+    None
+}
+
+fn collect_function_block(
+    block: &zelyra_ast::Block,
+    name: &str,
+    spans: &mut HashSet<(usize, usize)>,
+) {
+    for statement in &block.statements {
+        match statement {
+            zelyra_ast::Stmt::Let { value, .. } | zelyra_ast::Stmt::BindOrAssign { value, .. } => {
+                collect_function_expression(value, name, spans);
+            }
+            zelyra_ast::Stmt::Expr(expression) => {
+                collect_function_expression(expression, name, spans);
+            }
+            zelyra_ast::Stmt::Return { value, .. } => {
+                if let Some(value) = value {
+                    collect_function_expression(value, name, spans);
+                }
+            }
+            zelyra_ast::Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_function_expression(condition, name, spans);
+                collect_function_block(then_block, name, spans);
+                if let Some(else_block) = else_block {
+                    collect_function_block(else_block, name, spans);
+                }
+            }
+            zelyra_ast::Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                collect_function_expression(condition, name, spans);
+                for invariant in invariants {
+                    collect_function_expression(invariant, name, spans);
+                }
+                collect_function_block(body, name, spans);
+            }
+            zelyra_ast::Stmt::For { iterable, body, .. } => {
+                collect_function_expression(iterable, name, spans);
+                collect_function_block(body, name, spans);
+            }
+            zelyra_ast::Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    collect_function_expression(invariant, name, spans);
+                }
+                collect_function_block(body, name, spans);
+            }
+            zelyra_ast::Stmt::Match { value, arms, .. } => {
+                collect_function_expression(value, name, spans);
+                for arm in arms {
+                    collect_function_block(&arm.body, name, spans);
+                }
+            }
+            zelyra_ast::Stmt::Transaction { body, .. }
+            | zelyra_ast::Stmt::Parallel { body, .. } => {
+                collect_function_block(body, name, spans);
+            }
+            zelyra_ast::Stmt::Break { .. } | zelyra_ast::Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn collect_function_expression(
+    expression: &zelyra_ast::Expr,
+    name: &str,
+    spans: &mut HashSet<(usize, usize)>,
+) {
+    match &expression.kind {
+        zelyra_ast::ExprKind::Array(values) => {
+            for value in values {
+                collect_function_expression(value, name, spans);
+            }
+        }
+        zelyra_ast::ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                collect_function_expression(value, name, spans);
+            }
+        }
+        zelyra_ast::ExprKind::Index { target, index } => {
+            collect_function_expression(target, name, spans);
+            collect_function_expression(index, name, spans);
+        }
+        zelyra_ast::ExprKind::Field { target, .. } => {
+            collect_function_expression(target, name, spans);
+        }
+        zelyra_ast::ExprKind::Call {
+            name: called, args, ..
+        } => {
+            if called == name {
+                spans.insert((expression.span.start, expression.span.start + name.len()));
+            }
+            for argument in args {
+                collect_function_expression(argument, name, spans);
+            }
+        }
+        zelyra_ast::ExprKind::Unary { expr, .. } | zelyra_ast::ExprKind::Await(expr) => {
+            collect_function_expression(expr, name, spans);
+        }
+        zelyra_ast::ExprKind::Binary { left, right, .. } => {
+            collect_function_expression(left, name, spans);
+            collect_function_expression(right, name, spans);
+        }
+        zelyra_ast::ExprKind::Int(_)
+        | zelyra_ast::ExprKind::UInt(_)
+        | zelyra_ast::ExprKind::Float(_)
+        | zelyra_ast::ExprKind::Bool(_)
+        | zelyra_ast::ExprKind::String(_)
+        | zelyra_ast::ExprKind::Char(_)
+        | zelyra_ast::ExprKind::Variable(_)
+        | zelyra_ast::ExprKind::Sql { .. } => {}
+    }
 }
 
 fn declares_symbol(program: &Program, symbol: &str, name: &str) -> bool {
@@ -274,6 +453,29 @@ mod tests {
         assert_eq!(preview.source, "fn welcome() { welcome() }\n");
         assert_eq!(preview.changed_tokens, 2);
         assert_eq!(preview.changes.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn function_rename_does_not_change_shadowing_locals() {
+        let source = "fn greet() { greet = 1\n print(greet) }\nfn main() { greet() }\n";
+        let tokens = lex(source).expect("source should lex");
+        let program = parse(&tokens).expect("source should parse");
+        let request = json!({
+            "schema_version": "1",
+            "entry": "main.zyl",
+            "operations": [{
+                "kind": "rename",
+                "symbol": "function",
+                "from": "greet",
+                "to": "welcome"
+            }]
+        });
+        let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
+        assert_eq!(
+            preview.source,
+            "fn welcome() { greet = 1\n print(greet) }\nfn main() { welcome() }\n"
+        );
+        assert_eq!(preview.changed_tokens, 2);
     }
 
     #[test]

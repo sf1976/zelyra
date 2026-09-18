@@ -102,8 +102,11 @@ components, plus a deterministic source fingerprint. Requests must contain
 the resolved Zelyra project root. The original and proposed source both pass
 the compiler checks before an edit is considered available. The request must
 echo the fingerprint when the explicit `--apply` flag atomically writes the
-validated result, preventing stale overwrites. Richer operations remain
-additional semantic change features; text patches remain supported.
+validated result, preventing stale overwrites. Function renames use the AST to
+change declarations and call sites without changing shadowing local bindings;
+the remaining resource rename kinds still use the existing token coverage until
+their reference model is extended. Richer operations remain additional semantic
+change features; text patches remain supported.
 
 ## Security, privacy, and providers
 

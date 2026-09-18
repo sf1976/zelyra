@@ -8,6 +8,8 @@ compiler and repository release.
 
 ### Added
 
+- Made function renames scope-aware: declarations and resolved call sites are
+  changed while shadowing local bindings remain untouched.
 - Hardened semantic edit requests with required schema version `1`, project-
   local `.zyl` entry checks, full compiler validation before and after a
   proposed rename, and explicit diagnostics for rejected boundaries.
