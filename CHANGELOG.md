@@ -6,6 +6,12 @@ compiler and repository release.
 
 ## Unreleased
 
+No unreleased changes.
+
+Keine unveröffentlichten Änderungen.
+
+## 0.1.41 — 2026-09-19
+
 ### Added
 
 - Named page views can now declare named slots with deterministic fallback

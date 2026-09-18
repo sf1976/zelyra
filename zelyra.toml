@@ -1,6 +1,6 @@
 [project]
 name = "zelyra"
-version = "0.1.40"
+version = "0.1.41"
 zelyra = "0.1"
 
 [database.main]

@@ -189,13 +189,13 @@ passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
 ausgetauscht:
 
 ~~~bash
-./install.sh --release v0.1.40
+./install.sh --release v0.1.41
 ~~~
 
 Unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.40
+.\install.ps1 -Release v0.1.41
 ~~~
 
 Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS
@@ -375,7 +375,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.40"
+version = "0.1.41"
 zelyra = "0.1"
 
 [capabilities]
