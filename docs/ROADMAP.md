@@ -87,8 +87,8 @@ architecture requirement for every phase, not a provider-specific feature.
   a validated selectable web port through `zelyra new` and `zelyra init`;
   interactive MariaDB connection and secret setup remain open.
 - [~] The generated Docker Compose template starts MariaDB and the internal
-  web server with a configurable port; production hardening and independent
-  host/container port selection remain open.
+  web server with independently configurable host and container ports;
+  production hardening remains open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
 - [ ] `zelyra doctor` checks for database, port, TLS, permissions, and required

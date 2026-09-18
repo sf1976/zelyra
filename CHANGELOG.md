@@ -8,9 +8,10 @@ compiler and repository release.
 
 ### Added
 
-- Added a beginner-friendly `--web-port <port>` option to `zelyra new` and
-  `zelyra init`. MariaDB Compose projects now propagate the validated port to
-  `.env.example`, the web container command, published ports, and Dockerfile.
+- Added beginner-friendly `--web-port <port>` and `--host-port <port>` options
+  to `zelyra new` and `zelyra init`. MariaDB Compose projects now propagate
+  both validated ports to `.env.example`, the web container command, published
+  ports, and Dockerfile.
 - Added stable `E-CLI-001` validation for invalid project web ports while
   keeping the existing default port `3000` and later `.env` overrides.
 - Made function, type, and record renames AST-aware: declarations and known
@@ -608,8 +609,8 @@ Diese Version enthält die oben unter `Unreleased` aufgeführten Änderungen.
 - `zelyra new <directory> --mariadb` generates a local MariaDB project template
   with `.env.example`, Dockerfile, and Docker Compose services for MariaDB and
   the Zelyra web server.
-- `ZELYRA_WEB_PORT` selects the internal web-server port and the local port
-  published by Docker Compose.
+- `ZELYRA_WEB_PORT` selects the internal web-server port and `ZELYRA_HOST_PORT`
+  selects the local port published by Docker Compose; they may differ.
 
 ### Documentation
 

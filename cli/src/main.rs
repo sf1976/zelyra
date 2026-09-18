@@ -43,7 +43,7 @@ use impact::{build_impact, focus_impact};
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -81,6 +81,7 @@ fn create_project(
     allow_current_directory: bool,
     with_mariadb: bool,
     web_port: u16,
+    host_port: u16,
 ) -> ExitCode {
     let directory = std::path::Path::new(path);
     if directory.exists() && !allow_current_directory {
@@ -144,19 +145,23 @@ fn main() {
     if with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
         let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{web_port}}}", '$');
+        let host_port_value = format!("{}{{ZELYRA_HOST_PORT:-{host_port}}}", '$');
         files.extend([
             (
                 ".env.example",
                 r#"# Copy this file to .env. Never commit .env or real credentials.
-# ZELYRA_WEB_PORT is the internal and host port of the web server.
+# ZELYRA_WEB_PORT is the port inside the web container.
+# ZELYRA_HOST_PORT is the port published on the local host.
 ZELYRA_WEB_PORT=__WEB_PORT__
+ZELYRA_HOST_PORT=__HOST_PORT__
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:3306/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me
 MARIADB_ROOT_PASSWORD=change-me-root
 "#
-                .replace("__WEB_PORT__", &web_port.to_string()),
+                .replace("__WEB_PORT__", &web_port.to_string())
+                .replace("__HOST_PORT__", &host_port.to_string()),
             ),
             (
                 "docker-compose.mariadb.yml",
@@ -188,7 +193,7 @@ MARIADB_ROOT_PASSWORD=change-me-root
       mariadb:
         condition: service_healthy
     ports:
-      - "127.0.0.1:__WEB_PORT__:__WEB_PORT__"
+      - "127.0.0.1:__HOST_PORT__:__WEB_PORT__"
 
 volumes:
   zelyra_mariadb_data:
@@ -197,7 +202,8 @@ volumes:
                 .replace("__MARIADB_USER__", &env_value("MARIADB_USER"))
                 .replace("__MARIADB_PASSWORD__", &env_value("MARIADB_PASSWORD"))
                 .replace("__MARIADB_ROOT_PASSWORD__", &env_value("MARIADB_ROOT_PASSWORD"))
-                .replace("__WEB_PORT__", &web_port_value),
+                .replace("__WEB_PORT__", &web_port_value)
+                .replace("__HOST_PORT__", &host_port_value),
             ),
             (
                 "Dockerfile",
@@ -5885,6 +5891,8 @@ fn main() -> ExitCode {
         let mut with_mariadb = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
+        let mut host_port = DEFAULT_WEB_PORT;
+        let mut host_port_given = false;
         let mut arguments = args;
         while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
@@ -5902,16 +5910,29 @@ fn main() -> ExitCode {
                         return ExitCode::from(2);
                     }
                 };
+            } else if argument == "--host-port" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --host-port requires a value");
+                    return ExitCode::from(2);
+                };
+                host_port_given = true;
+                host_port = match parse_web_port(&value) {
+                    Ok(port) => port,
+                    Err(error) => {
+                        eprintln!("error[E-CLI-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
             } else {
                 usage();
                 return ExitCode::from(2);
             }
         }
-        if web_port_given && !with_mariadb {
-            eprintln!("error[E-CLI-001]: --web-port requires --mariadb");
+        if (web_port_given || host_port_given) && !with_mariadb {
+            eprintln!("error[E-CLI-001]: --web-port and --host-port require --mariadb");
             return ExitCode::from(2);
         }
-        return create_project(&path, false, with_mariadb, web_port);
+        return create_project(&path, false, with_mariadb, web_port, host_port);
     }
     if command == "init" {
         let mut path = ".".to_owned();
@@ -5919,6 +5940,8 @@ fn main() -> ExitCode {
         let mut with_mariadb = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
+        let mut host_port = DEFAULT_WEB_PORT;
+        let mut host_port_given = false;
         let mut arguments = args;
         while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
@@ -5930,6 +5953,19 @@ fn main() -> ExitCode {
                 };
                 web_port_given = true;
                 web_port = match parse_web_port(&value) {
+                    Ok(port) => port,
+                    Err(error) => {
+                        eprintln!("error[E-CLI-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
+            } else if argument == "--host-port" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --host-port requires a value");
+                    return ExitCode::from(2);
+                };
+                host_port_given = true;
+                host_port = match parse_web_port(&value) {
                     Ok(port) => port,
                     Err(error) => {
                         eprintln!("error[E-CLI-001]: {error}");
@@ -5944,11 +5980,11 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         }
-        if web_port_given && !with_mariadb {
-            eprintln!("error[E-CLI-001]: --web-port requires --mariadb");
+        if (web_port_given || host_port_given) && !with_mariadb {
+            eprintln!("error[E-CLI-001]: --web-port and --host-port require --mariadb");
             return ExitCode::from(2);
         }
-        return create_project(&path, true, with_mariadb, web_port);
+        return create_project(&path, true, with_mariadb, web_port, host_port);
     }
     if command == "serve" {
         return serve_command(args);
@@ -6853,7 +6889,13 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let status = create_project(path.to_str().unwrap(), false, true, DEFAULT_WEB_PORT);
+        let status = create_project(
+            path.to_str().unwrap(),
+            false,
+            true,
+            DEFAULT_WEB_PORT,
+            DEFAULT_WEB_PORT,
+        );
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
@@ -6872,7 +6914,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let status = create_project(path.to_str().unwrap(), false, true, 8080);
+        let status = create_project(path.to_str().unwrap(), false, true, 8080, 18080);
         assert_eq!(status, ExitCode::SUCCESS);
 
         let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
@@ -6880,7 +6922,9 @@ mod tests {
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
         let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
         assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
-        assert!(compose.contains("${ZELYRA_WEB_PORT:-8080}"));
+        assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
+        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
+        assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
         assert!(dockerfile.contains("EXPOSE 8080"));
         assert!(dockerfile.contains("0.0.0.0:8080"));

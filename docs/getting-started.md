@@ -295,7 +295,7 @@ zelyra init
 For a ready local MariaDB and web-server template, use:
 
 ~~~bash
-zelyra new my-app --mariadb --web-port 8080
+zelyra new my-app --mariadb --web-port 8080 --host-port 18080
 cd my-app
 cp .env.example .env
 # Replace every change-me value in .env before using this outside local development.
@@ -306,10 +306,10 @@ zelyra db setup main.zyl
 
 The generated Compose file starts MariaDB and the Zelyra web server. The
 `--web-port 8080` option (used together with `--mariadb`) chooses the internal
-server port and its local published port while creating the project. You can
-change the value later in `.env` through `ZELYRA_WEB_PORT`; the default is 3000. Open
-`http://127.0.0.1:8080` after the example above. The template is for local
-development; use a secret manager and TLS for production.
+server port; `--host-port 18080` chooses the local published port. You can
+change `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT` independently later in `.env`.
+Open `http://127.0.0.1:18080` after the example above. The template is for
+local development; use a secret manager and TLS for production.
 
 The current project file is intentionally small:
 
@@ -706,10 +706,10 @@ forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 ## 11. Useful commands
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>]
-                                         create a project and choose its web port
-zelyra init [directory] [--mariadb] [--web-port <port>]
-                                         initialize a project and choose its web port
+zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
+                                         create a project and choose its ports
+zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
+                                         initialize a project and choose its ports
 zelyra check <file.zyl> [--format human|json]
                                          check source; JSON is versioned and machine-readable
 zelyra context <file.zyl> [--format human|json]
