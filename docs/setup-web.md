@@ -49,7 +49,16 @@ MariaDB is therefore installed as a container when it is not already running.
 Zelyra does not install Docker itself, modify operating-system packages, or
 request root privileges. If Docker is missing, the assistant reports that
 fact and the user must install Docker Desktop or Docker Engine with Compose
-before retrying.
+before retrying. The console, `zelyra doctor`, and the browser status page show
+the platform-specific official Docker installation page and the verification
+command `docker compose version`.
+
+On Linux, install Docker Engine and the Compose plugin from the [official
+Linux instructions](https://docs.docker.com/engine/install/). On Windows use
+[Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/);
+on macOS use [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
+After installation, run `docker compose version` and repeat `zelyra setup
+--all` or the browser action.
 
 Credentials are generated locally, never printed, and never returned in setup
 status messages. Destructive database changes remain outside this first-run
