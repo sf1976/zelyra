@@ -183,6 +183,7 @@ pub struct CrudDef {
     pub list: Vec<String>,
     pub search: Vec<String>,
     pub filters: Vec<String>,
+    pub view: CrudViewDef,
     pub requires_auth: bool,
     /// Legacy/default permission(s), used for list/detail and as the fallback
     /// for actions without an explicit permission scope.
@@ -191,6 +192,32 @@ pub struct CrudDef {
     pub edit_permissions: Vec<String>,
     pub delete_permissions: Vec<String>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudViewDef {
+    pub list: CrudListViewDef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudListViewDef {
+    pub mode: CrudListViewMode,
+    pub empty: Option<String>,
+}
+
+impl Default for CrudListViewDef {
+    fn default() -> Self {
+        Self {
+            mode: CrudListViewMode::Table,
+            empty: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CrudListViewMode {
+    Table,
+    Cards,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -472,7 +472,24 @@ Nested components are expanded from the inside out. Passing child content to a
 component without a matching default or named `<slot />` is a compile-time
 error. Fallback slot content remains planned.
 
-Themes and CRUD view overrides are planned extensions.
+CRUD list views can be adjusted without replacing the generated query or
+authorization pipeline. The default is an HTML table; a card layout and a
+custom empty-state message are available:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+    }
+}
+~~~
+
+`mode` accepts `table` or `cards`. Search, typed filters, allowlisted sorting,
+pagination, URL state, HTML escaping, and permission checks remain generated
+in both modes. Detail, form, loading, and error view overrides are planned.
 
 ## 11. Forms
 

@@ -119,8 +119,10 @@ under evaluation.
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and
   validation-error components.
-- [ ] CRUD view overrides for list, detail, create, edit, delete, empty, loading,
-  and error states while preserving generated security guards.
++ [~] CRUD list view overrides support a safe `table`/`cards` mode and a custom
+  empty-state message while preserving generated query, auth, and action guards.
+- [ ] CRUD view overrides for detail, create, edit, delete, loading, and error
+  states while preserving generated security guards.
 - [ ] A design-token system for colors, spacing, typography, breakpoints, and
   density.
 - [ ] Per-view themes, application themes, dark mode, and user-selectable

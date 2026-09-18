@@ -21,6 +21,26 @@ crud Machine -> machines {
 }
 ~~~
 
+Die generierte Liste kann außerdem sicher als Kartenansicht und mit einer
+eigenen Leerzustandsmeldung dargestellt werden:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "Keine Kunden gefunden."
+        }
+    }
+}
+~~~
+
+`mode` akzeptiert `table` (Standard) oder `cards`. Das ändert nur die
+Darstellung. Dieselbe geprüfte MariaDB-Abfrage, Suche, typisierten Filter,
+erlaubte Sortierung, Pagination, URL-Zustand, HTML-Escaping und
+Autorisierungsprüfungen bleiben aktiv. Detail- und Formularüberschreibungen
+folgen in weiteren Phasen.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

@@ -279,6 +279,24 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 /customers?filter_quantity__gte=10
 ~~~
 
+Die Darstellung einer CRUD-Liste kann deklarativ angepasst werden, ohne die
+geprüfte Daten- oder Autorisierungspipeline zu ersetzen:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "Keine Kunden gefunden."
+        }
+    }
+}
+~~~
+
+Die generierten Modi `table` (Standard) und `cards` behalten Suche, typisierte
+Filter, erlaubte Sortierung, Pagination, URL-Zustand, Escaping und
+Berechtigungsprüfungen bei.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

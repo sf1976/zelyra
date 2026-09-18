@@ -19,6 +19,9 @@ compiler and repository release.
   checks for struct-backed tableview results.
 - Added schema-aware CRUD filter operators for text matching, numeric
   comparisons, and null checks, with operator controls and URL state.
+- Added safe CRUD list view overrides with table/cards presentation modes
+  and configurable empty-state messages. Generated query, authorization, and
+  escaping safeguards remain active in both modes.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

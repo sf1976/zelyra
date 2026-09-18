@@ -21,6 +21,24 @@ crud Machine -> machines {
 }
 ~~~
 
+The generated list can also use a safe card layout and a custom empty state:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+    }
+}
+~~~
+
+`mode` accepts `table` (the default) or `cards`. This changes only the
+presentation. The same checked MariaDB query, search, typed filters,
+allowlisted sorting, pagination, URL state, HTML escaping, and authorization
+guards remain active. Detail and form overrides remain future work.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

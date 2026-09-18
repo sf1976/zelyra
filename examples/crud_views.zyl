@@ -1,0 +1,26 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    active: Bool default true
+}
+
+crud Customer -> customers {
+    title: "Customers"
+
+    list {
+        id
+        name
+        active
+    }
+
+    view {
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+    }
+}

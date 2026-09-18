@@ -8,7 +8,7 @@ use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use zelyra_ast::{FormDef, TableDef, Type};
+use zelyra_ast::{CrudListViewDef, CrudListViewMode, FormDef, TableDef, Type};
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
 
@@ -270,6 +270,7 @@ pub struct CrudRoute {
     pub list_columns: Vec<String>,
     pub search_columns: Vec<String>,
     pub filter_columns: Vec<String>,
+    pub list_view: CrudListViewDef,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub create_permissions: Vec<String>,
@@ -3849,7 +3850,46 @@ fn render_crud_list_with_actions(
     }
     html.push_str("<button type=\"submit\">Apply</button></form>");
     if rows.is_empty() {
-        html.push_str("<p>No records found.</p>");
+        html.push_str("<p>");
+        html.push_str(&html_escape(
+            crud.list_view
+                .empty
+                .as_deref()
+                .unwrap_or("No records found."),
+        ));
+        html.push_str("</p>");
+    } else if crud.list_view.mode == CrudListViewMode::Cards {
+        html.push_str("<section class=\"zelyra-crud-cards\">");
+        for row in rows {
+            html.push_str("<article class=\"zelyra-crud-card\">");
+            for column in display_columns {
+                let value = query_columns
+                    .iter()
+                    .position(|query_column| query_column == column)
+                    .and_then(|index| row.get(index))
+                    .map(String::as_str)
+                    .unwrap_or("");
+                html.push_str("<dl><dt>");
+                html.push_str(&html_escape(&crud_column_label(
+                    &crud.schema,
+                    &crud.table,
+                    column,
+                )));
+                html.push_str("</dt><dd>");
+                if *column == "id" {
+                    html.push_str("<a href=\"");
+                    html.push_str(&html_escape(&format!("{}/{}", crud.path, value)));
+                    html.push_str("\">");
+                    html.push_str(&html_escape(value));
+                    html.push_str("</a>");
+                } else {
+                    html.push_str(&html_escape(value));
+                }
+                html.push_str("</dd></dl>");
+            }
+            html.push_str("</article>");
+        }
+        html.push_str("</section>");
     } else {
         html.push_str("<table><thead><tr>");
         for column in display_columns {
@@ -5250,6 +5290,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5335,6 +5376,48 @@ mod tests {
             },
         );
         assert!(!restricted_html.contains("href=\"/machines/new\""));
+
+        let mut cards_route = route.clone();
+        cards_route.list_view.mode = CrudListViewMode::Cards;
+        cards_route.list_view.empty = Some("Nothing <yet>.".into());
+        let cards_html = render_crud_list(
+            &cards_route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &columns,
+                filter_columns: &[],
+                sort_columns: &columns,
+                rows: &rows,
+                search: "",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+            },
+        );
+        assert!(cards_html.contains("zelyra-crud-cards"));
+        assert!(cards_html.contains("zelyra-crud-card"));
+        assert!(!cards_html.contains("<table>"));
+
+        let empty_rows: Vec<Vec<String>> = Vec::new();
+        let empty_html = render_crud_list(
+            &cards_route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &columns,
+                filter_columns: &[],
+                sort_columns: &columns,
+                rows: &empty_rows,
+                search: "",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+            },
+        );
+        assert!(empty_html.contains("Nothing &lt;yet&gt;."));
     }
 
     #[test]
@@ -5396,6 +5479,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5436,6 +5520,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5466,6 +5551,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5592,6 +5678,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: true,
             permissions: vec!["customers.view".into()],
             create_permissions: vec!["customers.create".into()],
@@ -5659,6 +5746,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5686,6 +5774,7 @@ mod tests {
             list_columns: Vec::new(),
             search_columns: Vec::new(),
             filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),

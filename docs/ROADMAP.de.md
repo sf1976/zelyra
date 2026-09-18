@@ -118,8 +118,11 @@ noch in Prüfung.
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,
   Pagination und Validierungsfehler-Komponenten.
-- [ ] CRUD-View-Überschreibungen für Liste, Detail, Create, Edit, Delete, leer,
-  Laden und Fehler bei Erhalt der generierten Sicherheitsprüfungen.
+- [~] CRUD-View-Überschreibungen für Listen unterstützen sicher die Modi
+  `table`/`cards` und eine eigene Leerzustandsmeldung bei Erhalt der
+  generierten Abfrage-, Auth- und Aktionsprüfungen.
+- [ ] CRUD-View-Überschreibungen für Detail, Create, Edit, Delete, Laden und
+  Fehler bei Erhalt der generierten Sicherheitsprüfungen.
 - [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und
   Dichte.
 - [ ] View- und globale Themes, Dark Mode und benutzerwählbare Darstellung.

@@ -322,6 +322,7 @@ impl<'a> Parser<'a> {
         let mut list = Vec::new();
         let mut search = Vec::new();
         let mut filters = Vec::new();
+        let mut view = CrudViewDef::default();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         let mut create_permissions = Vec::new();
@@ -349,6 +350,10 @@ impl<'a> Parser<'a> {
                     TokenKind::Filter => {
                         self.advance();
                         filters = self.crud_column_block("filter")?;
+                    }
+                    TokenKind::View => {
+                        self.advance();
+                        view = self.crud_view_block()?;
                     }
                     TokenKind::Requires => {
                         self.advance();
@@ -382,7 +387,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         return self.error(
-                            "expected title, list, search, filter, requires auth, or permits in CRUD definition",
+                            "expected title, list, search, filter, view, requires auth, or permits in CRUD definition",
                         )
                     }
                 }
@@ -396,6 +401,7 @@ impl<'a> Parser<'a> {
                 list,
                 search,
                 filters,
+                view,
                 requires_auth,
                 permissions,
                 create_permissions,
@@ -412,6 +418,7 @@ impl<'a> Parser<'a> {
             list,
             search,
             filters,
+            view,
             requires_auth,
             permissions,
             create_permissions,
@@ -440,6 +447,48 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RBrace, close_label)?;
         Ok(columns)
+    }
+
+    fn crud_view_block(&mut self) -> Result<CrudViewDef, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after CRUD view")?;
+        let mut view = CrudViewDef::default();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            if !self.at(&TokenKind::List) {
+                return self.error("expected `list` in CRUD view definition");
+            }
+            self.advance();
+            self.expect(TokenKind::LBrace, "`{` after CRUD view list")?;
+            self.skip_newlines();
+            while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                let (property, _) = self.ident("CRUD list view property")?;
+                self.expect(TokenKind::Colon, "colon after CRUD list view property")?;
+                match property.as_str() {
+                    "mode" => {
+                        let (mode, _) = self.ident("CRUD list view mode")?;
+                        view.list.mode = match mode.as_str() {
+                            "table" => CrudListViewMode::Table,
+                            "cards" => CrudListViewMode::Cards,
+                            _ => {
+                                return self.error("CRUD list view mode must be `table` or `cards`")
+                            }
+                        };
+                    }
+                    "empty" => {
+                        view.list.empty = Some(self.string_value("CRUD list empty message")?);
+                    }
+                    _ => {
+                        return self
+                            .error("expected `mode` or `empty` in CRUD list view definition")
+                    }
+                }
+                self.skip_newlines();
+            }
+            self.expect(TokenKind::RBrace, "`}` after CRUD view list")?;
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after CRUD view definition")?;
+        Ok(view)
     }
     fn database_definition(&mut self) -> Result<DatabaseDef, ParseError> {
         let start = self.expect(TokenKind::Database, "`database`")?;
@@ -1983,6 +2032,36 @@ mod tests {
         assert_eq!(crud.list, ["customer_number", "name"]);
         assert_eq!(crud.search, ["name"]);
         assert_eq!(crud.filters, ["active"]);
+    }
+
+    #[test]
+    fn parses_crud_list_view_override() {
+        let program = parse(
+            &lex(r#"crud Customer -> customers {
+                    view {
+                        list {
+                            mode: cards
+                            empty: "No customers yet."
+                        }
+                    }
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let view = &program.cruds[0].view.list;
+        assert_eq!(view.mode, CrudListViewMode::Cards);
+        assert_eq!(view.empty.as_deref(), Some("No customers yet."));
+    }
+
+    #[test]
+    fn rejects_unknown_crud_list_view_mode() {
+        let result = parse(
+            &lex(r#"crud Customer -> customers {
+                    view { list { mode: carousel } }
+                }"#)
+            .unwrap(),
+        );
+        assert!(result.is_err());
     }
 
     #[test]

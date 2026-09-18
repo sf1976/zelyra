@@ -3191,6 +3191,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             list_columns,
             search_columns,
             filter_columns,
+            list_view: crud.view.list.clone(),
             requires_auth: crud.requires_auth,
             permissions: crud.permissions.clone(),
             create_permissions: effective_crud_permissions(

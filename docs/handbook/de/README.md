@@ -528,7 +528,25 @@ Verschachtelte Komponenten werden von innen nach außen erweitert. Inhalt an
 eine Komponente ohne passenden Default- oder benannten `<slot />` ist ein
 Fehler zur Compile-Zeit. Fallback-Inhalte bleiben geplant.
 
-Themes und CRUD-View-Überschreibungen sind geplante Erweiterungen.
+CRUD-Listenansichten können angepasst werden, ohne die generierte Abfrage- oder
+Autorisierungspipeline zu ersetzen. Standardmäßig wird eine HTML-Tabelle
+verwendet; zusätzlich gibt es Karten und eine eigene Leerzustandsmeldung:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "Keine Kunden gefunden."
+        }
+    }
+}
+~~~
+
+`mode` akzeptiert `table` oder `cards`. Suche, typisierte Filter, erlaubte
+Sortierung, Pagination, URL-Zustand, HTML-Escaping und Berechtigungsprüfungen
+bleiben in beiden Modi aktiv. Detail-, Formular-, Lade- und Fehleransichten
+folgen in weiteren View-Phasen.
 
 ## 11. Formulare
 

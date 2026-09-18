@@ -272,6 +272,23 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 /customers?filter_quantity__gte=10
 ~~~
 
+CRUD list presentation can be changed declaratively without replacing the
+checked data or authorization pipeline:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+    }
+}
+~~~
+
+The generated `table` (default) and `cards` modes keep search, typed filters,
+allowlisted sorting, pagination, URL state, escaping, and permission checks.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.
