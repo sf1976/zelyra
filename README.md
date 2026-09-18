@@ -899,7 +899,8 @@ Currently available:
 ~~~text
 zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra setup [directory]
+zelyra setup [directory] [--database|--schema|--all]
+zelyra setup --web [directory] [--port <port>]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
@@ -942,6 +943,14 @@ protected `.env`; `zelyra setup` remains available for existing projects. Only
 the required database values are active. Ports, feature switches, authentication
 and other options are provided as detailed commented examples, while
 `.env.example` remains the safe reference template.
+
+For a console-driven first run, use `zelyra setup --all`. This prepares the
+local environment, starts the generated MariaDB container and application, and
+applies `main.zyl`. The same actions are available in a local browser with
+`zelyra setup --web`; Zelyra prints a tokenized `127.0.0.1` address to open.
+Docker itself is not installed or modified by Zelyra. See
+[`docs/setup-web.md`](docs/setup-web.md) for the security boundary and all
+options.
 
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, `zelyra setup` uses the same safe built-in defaults. A project

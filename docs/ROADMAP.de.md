@@ -110,6 +110,11 @@ Feature eines bestimmten Anbieters.
   ausführlich kommentierte optionale Einstellungen und validierte wählbare
   Ports; `zelyra setup` bleibt als idempotenter Nachholpfad verfügbar. Eine
   interaktive Verbindungs-Konfiguration bleibt offen.
+- [~] Ein gemeinsamer Setup-Assistent für Konsole und Browser ist über
+  `zelyra setup --database|--schema|--all` und `zelyra setup --web` verfügbar;
+  erzeugte MariaDB-Compose-Projekte werden gestartet und das Anfangsschema
+  angewendet. Docker-Installation, Fernadministration und produktives
+  Deployment bleiben bewusst außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
   Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
   die Docker-Laufzeitprüfung für erzeugte Projekte ist vorhanden,

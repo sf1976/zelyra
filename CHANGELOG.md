@@ -20,6 +20,9 @@ compiler and repository release.
 - The database CLI contract is documented and covered by a direct `db create`
   test; generated setup instructions include both Compose command variants
   and explicitly load `.env` before `db setup`.
+- Added shared setup actions for `zelyra setup --database`, `--schema`, and
+  `--all`, plus a loopback-only `zelyra setup --web` assistant with a
+  tokenized configuration URL.
 
 - CRUD-Ressourcen können geprüfte benannte Seiten-Views mit
   `layout: ViewName` wiederverwenden; erzeugte Listen, Details und Formulare
@@ -35,6 +38,9 @@ compiler and repository release.
 - Der Vertrag der Datenbank-CLI ist dokumentiert und durch einen direkten
   `db create`-Test abgedeckt; erzeugte Setup-Hinweise enthalten beide Compose-
   Varianten und laden `.env` vor `db setup` ausdrücklich.
+- Gemeinsame Setup-Aktionen für `zelyra setup --database`, `--schema` und
+  `--all` sowie ein nur lokal gebundener `zelyra setup --web`-Assistent mit
+  tokenisierter Konfigurations-URL sind hinzugekommen.
 
 
 ## 0.1.42 — 2026-09-19

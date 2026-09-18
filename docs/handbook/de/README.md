@@ -223,6 +223,10 @@ Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet der Setup-Befehl dieselben sicheren
 eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
 konkreten Weg über `zelyra new --mariadb`.
+Für ein konsolenbasiertes Setup ohne Rückfragen `zelyra setup --all` verwenden.
+Dieselben Aktionen stehen lokal im Browser mit `zelyra setup --web` bereit; die
+CLI gibt eine URL mit Token auf `127.0.0.1` aus. Siehe
+[`docs/setup-web.de.md`](../../setup-web.de.md).
 Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
 --port 18080` Quellcode, Schema, MariaDB-Verbindung, Docker Compose und den
 veröffentlichten Port ohne Datenbankänderung prüfen.
@@ -335,6 +339,8 @@ Die wichtigsten Befehle:
 | `zelyra run app.zyl` | Programm ausführen |
 | `zelyra serve app.zyl` | HTTP-Server starten |
 | `zelyra doctor app.zyl [--json]` | Projekt-, DB- und Web-Bereitschaft prüfen |
+| `zelyra setup --all` | `.env`, MariaDB und Schema vorbereiten |
+| `zelyra setup --web` | lokalen Browser-Setup-Assistenten öffnen |
 | `zelyra verify app.zyl` | Contracts klassifizieren |
 | `zelyra doc app.zyl --openapi` | OpenAPI-Dokument erzeugen |
 | `zelyra db create app.zyl` | geprüftes CREATE-SQL ohne Verbindung ausgeben |

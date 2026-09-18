@@ -786,7 +786,10 @@ zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth
                                          Projekt erstellen und Ports wählen
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          Projekt initialisieren und Ports wählen
-zelyra setup [directory]                 geschützte lokale .env erzeugen
+zelyra setup [directory] [--database|--schema|--all]
+                                         .env, MariaDB oder Schema vorbereiten
+zelyra setup --web [directory] [--port <port>]
+                                         lokalen Browser-Setup-Assistenten öffnen
 zelyra check <file.zyl> [--format human|json]
                                          Quellcode prüfen; JSON ist versioniert und maschinenlesbar
 zelyra context <file.zyl> [--format human|json]

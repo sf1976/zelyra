@@ -10,6 +10,8 @@ use std::{
     path::PathBuf,
     process::Command,
     process::ExitCode,
+    process::Stdio,
+    sync::{Arc, Mutex},
 };
 use zelyra_ast::Type;
 use zelyra_database::{
@@ -49,6 +51,7 @@ const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_a
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
+    eprintln!("  setup supports `--database`, `--schema`, `--all`, and `--web [--port <port>]`");
     eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
@@ -77,6 +80,7 @@ fn database_usage() {
 
 const DEFAULT_WEB_PORT: u16 = 3000;
 const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
+const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
 
 struct ProjectOptions {
     allow_current_directory: bool,
@@ -203,51 +207,57 @@ fn write_local_env_file(path: &std::path::Path, template: &str) -> Result<bool, 
     Ok(true)
 }
 
+fn local_mariadb_template(directory: &std::path::Path) -> Result<String, String> {
+    let example_file = directory.join(".env.example");
+    if example_file.is_file() {
+        return fs::read_to_string(&example_file)
+            .map_err(|error| format!("cannot read `{}`: {error}", example_file.display()));
+    }
+    let config_file = directory.join("zelyra.toml");
+    let is_mariadb_project = fs::read_to_string(&config_file)
+        .ok()
+        .is_some_and(|config| config.contains("engine = \"mariadb\""));
+    if !is_mariadb_project {
+        return Err(format!(
+            "`{}` has no `.env.example` and no MariaDB project configuration; run `zelyra new <directory> --mariadb` first",
+            directory.display()
+        ));
+    }
+    Ok(mariadb_env_template(
+        DEFAULT_WEB_PORT,
+        DEFAULT_WEB_PORT,
+        DEFAULT_DATABASE_HOST_PORT,
+    ))
+}
+
+fn ensure_local_env_file(directory: &std::path::Path) -> Result<bool, String> {
+    let env_file = directory.join(".env");
+    if env_file.exists() {
+        return Ok(false);
+    }
+    let template = local_mariadb_template(directory)?;
+    write_local_env_file(&env_file, &template)
+}
+
 fn setup_project(path: &str) -> ExitCode {
     let directory = std::path::Path::new(path);
-    let example_file = directory.join(".env.example");
-    let env_file = directory.join(".env");
     if !directory.is_dir() {
         eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
         return ExitCode::from(1);
     }
-    if env_file.exists() {
+    let env_file = directory.join(".env");
+    let existed = env_file.exists();
+    if !existed && !directory.join(".env.example").is_file() {
+        println!("`.env.example` not found; using the safe built-in MariaDB defaults for `{path}`");
+    }
+    if let Err(error) = ensure_local_env_file(directory) {
+        eprintln!("error[E-SETUP-001]: {error}");
+        return ExitCode::from(1);
+    }
+    if existed {
         println!("kept existing {}", env_file.display());
         println!("no credentials were changed or printed");
         return ExitCode::SUCCESS;
-    }
-    let template = if example_file.is_file() {
-        match fs::read_to_string(&example_file) {
-            Ok(template) => template,
-            Err(error) => {
-                eprintln!(
-                    "error[E-SETUP-002]: cannot read `{}`: {error}",
-                    example_file.display()
-                );
-                return ExitCode::from(1);
-            }
-        }
-    } else {
-        let config_file = directory.join("zelyra.toml");
-        let is_mariadb_project = fs::read_to_string(&config_file)
-            .ok()
-            .is_some_and(|config| config.contains("engine = \"mariadb\""));
-        if !is_mariadb_project {
-            eprintln!(
-                "error[E-SETUP-001]: `{path}` has no `.env.example` and no MariaDB project configuration; run `zelyra new <directory> --mariadb` first"
-            );
-            return ExitCode::from(1);
-        }
-        println!("`.env.example` not found; using the safe built-in MariaDB defaults for `{path}`");
-        mariadb_env_template(
-            DEFAULT_WEB_PORT,
-            DEFAULT_WEB_PORT,
-            DEFAULT_DATABASE_HOST_PORT,
-        )
-    };
-    if let Err(error) = write_local_env_file(&env_file, &template) {
-        eprintln!("error[E-SETUP-003]: {error}");
-        return ExitCode::from(1);
     }
     println!(
         "created {} with local MariaDB credentials",
@@ -3185,26 +3195,315 @@ fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
 }
 
 fn docker_compose_check() -> DoctorCheck {
-    let commands = [
-        ("docker", vec!["compose", "version"]),
-        ("docker-compose", vec!["version"]),
-    ];
-    for (command, arguments) in commands {
-        if let Ok(output) = Command::new(command).args(arguments).output() {
-            if output.status.success() {
-                return DoctorCheck {
-                    name: "docker_compose",
-                    status: "pass",
-                    message: format!("{command} is available"),
-                };
-            }
-        }
+    if let Some(command) = detect_docker_compose() {
+        return DoctorCheck {
+            name: "docker_compose",
+            status: "pass",
+            message: format!("{} is available", command.label()),
+        };
     }
     DoctorCheck {
         name: "docker_compose",
         status: "warn",
         message: "Docker Compose is unavailable; the generated MariaDB stack cannot be started"
             .into(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DockerComposeCommand {
+    Plugin,
+    Legacy,
+}
+
+impl DockerComposeCommand {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Plugin => "docker compose",
+            Self::Legacy => "docker-compose",
+        }
+    }
+}
+
+fn detect_docker_compose() -> Option<DockerComposeCommand> {
+    let plugin = Command::new("docker")
+        .args(["compose", "version"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()
+        .is_some_and(|status| status.success());
+    if plugin {
+        return Some(DockerComposeCommand::Plugin);
+    }
+    let legacy = Command::new("docker-compose")
+        .arg("version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()
+        .is_some_and(|status| status.success());
+    legacy.then_some(DockerComposeCommand::Legacy)
+}
+
+fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -> Command {
+    let mut process = match command {
+        DockerComposeCommand::Plugin => {
+            let mut process = Command::new("docker");
+            process.arg("compose");
+            process
+        }
+        DockerComposeCommand::Legacy => Command::new("docker-compose"),
+    };
+    process
+        .current_dir(directory)
+        .args(["--env-file", ".env", "-f", "docker-compose.mariadb.yml"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    process
+}
+
+fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> {
+    if !directory.join("docker-compose.mariadb.yml").is_file() {
+        return Err(
+            "docker-compose.mariadb.yml is missing; use `zelyra init --mariadb` first".into(),
+        );
+    }
+    let Some(command) = detect_docker_compose() else {
+        return Err("Docker Compose is not installed. Install Docker Desktop or Docker Engine with the Compose plugin, then run this step again".into());
+    };
+    let status = compose_command(directory, command)
+        .args(["up", "-d", "--build"])
+        .status()
+        .map_err(|error| format!("could not start {}: {error}", command.label()))?;
+    if status.success() {
+        Ok(format!(
+            "MariaDB and the application were started with {}",
+            command.label()
+        ))
+    } else {
+        Err(format!(
+            "{} could not start the generated MariaDB application",
+            command.label()
+        ))
+    }
+}
+
+fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
+    let env_path = directory.join(".env");
+    let url = read_env_value(env_path.to_str().unwrap_or(".env"), "DATABASE_URL")?
+        .ok_or_else(|| "`.env` does not define DATABASE_URL".to_owned())?;
+    let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
+        .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
+    Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
+}
+
+fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
+    let database_url = expanded_database_url(directory)?;
+    let executable =
+        env::current_exe().map_err(|error| format!("cannot locate zelyra: {error}"))?;
+    let status = Command::new(executable)
+        .current_dir(directory)
+        .args(["db", "setup", "main.zyl"])
+        .env("DATABASE_URL", database_url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| format!("could not run schema setup: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("schema setup failed; verify that MariaDB is reachable and the configured credentials are correct".into())
+    }
+}
+
+fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
+    let Some(command) = detect_docker_compose() else {
+        return Err("Docker Compose is not installed".into());
+    };
+    for _attempt in 0..20 {
+        let status = compose_command(directory, command)
+            .args(["exec", "-T", "web", "zelyra", "db", "setup", "main.zyl"])
+            .status()
+            .map_err(|error| {
+                format!("could not run schema setup in the application container: {error}")
+            })?;
+        if status.success() {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    Err("schema setup did not succeed after waiting for MariaDB; inspect the Compose logs and retry".into())
+}
+
+fn setup_action(path: &str, action: &str) -> Result<String, String> {
+    let directory = std::path::Path::new(path);
+    if !directory.is_dir() {
+        return Err(format!("project directory `{path}` does not exist"));
+    }
+    let created = ensure_local_env_file(directory)?;
+    let mut messages = vec![if created {
+        "created protected .env".to_owned()
+    } else {
+        "kept existing .env; credentials were not changed".to_owned()
+    }];
+    if matches!(action, "database" | "schema" | "all") {
+        messages.push(start_mariadb_compose(directory)?);
+    }
+    if matches!(action, "schema" | "all") {
+        let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
+            run_container_schema_setup(directory)
+        } else {
+            run_local_schema_setup(directory)
+        };
+        schema_result?;
+        messages.push("database schema setup completed".into());
+    }
+    Ok(messages.join("\n"))
+}
+
+struct SetupWebState {
+    directory: PathBuf,
+    token: String,
+    message: String,
+}
+
+fn setup_web_token(
+    request: &zelyra_web::Request,
+    input: Option<&HashMap<String, String>>,
+) -> Option<String> {
+    if let Some(input) = input.and_then(|values| values.get("token")) {
+        return Some(input.clone());
+    }
+    request
+        .target
+        .split_once('?')
+        .and_then(|(_, query)| parse_urlencoded(query).ok())
+        .and_then(|values| values.get("token").cloned())
+}
+
+fn setup_web_html(state: &SetupWebState) -> String {
+    let directory = &state.directory;
+    let env_status = if directory.join(".env").is_file() {
+        "bereit"
+    } else {
+        "nicht angelegt"
+    };
+    let compose_status = if directory.join("docker-compose.mariadb.yml").is_file() {
+        match detect_docker_compose() {
+            Some(command) => format!("{} available", command.label()),
+            None => "Docker Compose nicht verfügbar".into(),
+        }
+    } else {
+        "kein MariaDB-Compose-Projekt erkannt".into()
+    };
+    let project_status = if directory.join("main.zyl").is_file() {
+        "main.zyl gefunden"
+    } else {
+        "main.zyl fehlt"
+    };
+    let message = if state.message.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<section><strong>Status</strong><pre>{}</pre></section>",
+            html_escape(&state.message)
+        )
+    };
+    format!(
+        "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Zelyra Setup</title><style>body{{font-family:system-ui,sans-serif;max-width:800px;margin:3rem auto;padding:0 1rem;color:#17202a;background:#f6f8fa}}main{{background:white;padding:2rem;border-radius:12px;box-shadow:0 4px 24px #0001}}button{{margin:.4rem .4rem .4rem 0;padding:.7rem 1rem;border:0;border-radius:7px;background:#1769aa;color:white;cursor:pointer}}section{{margin:1rem 0;padding:1rem;background:#eef6ff;border-left:4px solid #2675d8}}pre{{white-space:pre-wrap}}</style></head><body><main><h1>Zelyra Setup</h1><p>Lokaler Installationsassistent für <code>{directory}</code>.</p><p><small>Der Server bindet nur an 127.0.0.1. Docker selbst wird nicht mit Root-Rechten installiert.</small></p>{message}<h2>Prüfung</h2><ul><li>{project_status}</li><li>.env: {env_status}</li><li>Compose: {compose_status}</li></ul><h2>Aktionen</h2><form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"token\" value=\"{token}\"><button name=\"action\" value=\"prepare\">Konfiguration vorbereiten</button><button name=\"action\" value=\"database\">MariaDB und Anwendung starten</button><button name=\"action\" value=\"schema\">Datenbankschema einrichten</button><button name=\"action\" value=\"all\">Alles ausführen</button></form><p><small>Fehlendes Docker wird mit einem Installationshinweis gemeldet. Zugangsdaten werden niemals angezeigt.</small></p></main></body></html>",
+        directory = html_escape(&directory.display().to_string()),
+        project_status = html_escape(project_status),
+        env_status = html_escape(env_status),
+        compose_status = html_escape(&compose_status),
+        message = message,
+        token = html_escape(&state.token),
+    )
+}
+
+fn setup_web_response(
+    state: &Arc<Mutex<SetupWebState>>,
+    request: &zelyra_web::Request,
+) -> Response {
+    let input = if request.method == "POST" {
+        match parse_urlencoded(&request.body) {
+            Ok(values) => Some(values),
+            Err(error) => {
+                return Response::html(
+                    400,
+                    format!(
+                        "<h1>400 Bad Request</h1><p>{}</p>",
+                        html_escape(&error.message)
+                    ),
+                )
+            }
+        }
+    } else {
+        None
+    };
+    let Ok(mut state) = state.lock() else {
+        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+    };
+    if setup_web_token(request, input.as_ref()) != Some(state.token.clone()) {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid setup token.</p>");
+    }
+    if request.method == "POST" {
+        let action = input
+            .as_ref()
+            .and_then(|values| values.get("action"))
+            .map(String::as_str)
+            .unwrap_or("prepare");
+        state.message = match action {
+            "prepare" | "database" | "schema" | "all" => {
+                setup_action(state.directory.to_str().unwrap_or("."), action)
+                    .unwrap_or_else(|error| format!("Fehler: {error}"))
+            }
+            _ => "Fehler: unbekannte Setup-Aktion".into(),
+        };
+    }
+    Response::html(200, setup_web_html(&state))
+}
+
+fn setup_web_command(path: &str, port: u16) -> ExitCode {
+    let directory = std::path::Path::new(path);
+    if !directory.is_dir() {
+        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
+        return ExitCode::from(1);
+    }
+    let Ok(token) = generate_local_secret() else {
+        eprintln!("error[E-SETUP-WEB-001]: cannot create a secure setup token");
+        return ExitCode::from(1);
+    };
+    let address = format!("127.0.0.1:{port}");
+    let state = Arc::new(Mutex::new(SetupWebState {
+        directory: directory.to_path_buf(),
+        token: token.clone(),
+        message: String::new(),
+    }));
+    let get_state = Arc::clone(&state);
+    let post_state = Arc::clone(&state);
+    let routes = vec![
+        ApiRoute::new("GET", "/", move |request, _| {
+            setup_web_response(&get_state, request)
+        }),
+        ApiRoute::new("POST", "/", move |request, _| {
+            setup_web_response(&post_state, request)
+        }),
+    ];
+    println!("Zelyra setup web is running on http://{address}/");
+    println!("open: http://{address}/?token={token}");
+    println!("stop with Ctrl+C");
+    match serve_app(
+        WebApp::new(Vec::new(), Vec::new()).with_apis(routes),
+        &address,
+    ) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!(
+                "error[E-SETUP-WEB-002]: cannot start setup web server on {address}: {error}"
+            );
+            ExitCode::from(1)
+        }
     }
 }
 
@@ -7679,12 +7978,57 @@ fn main() -> ExitCode {
         return audit_command(args);
     }
     if command == "setup" {
-        let path = args.next().unwrap_or_else(|| ".".to_owned());
-        if args.next().is_some() {
-            usage();
-            return ExitCode::from(2);
+        let mut path = ".".to_owned();
+        let mut path_given = false;
+        let mut web = false;
+        let mut action = "prepare";
+        let mut web_port = DEFAULT_SETUP_WEB_PORT;
+        let mut arguments = args;
+        while let Some(argument) = arguments.next() {
+            if argument == "--web" {
+                web = true;
+            } else if argument == "--database" {
+                action = "database";
+            } else if argument == "--schema" {
+                action = "schema";
+            } else if argument == "--all" {
+                action = "all";
+            } else if argument == "--port" {
+                let Some(value) = arguments.next() else {
+                    usage();
+                    return ExitCode::from(2);
+                };
+                web_port = match parse_web_port(&value) {
+                    Ok(port) => port,
+                    Err(error) => {
+                        eprintln!("error[E-SETUP-WEB-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
+            } else if !argument.starts_with('-') && !path_given {
+                path = argument;
+                path_given = true;
+            } else {
+                usage();
+                return ExitCode::from(2);
+            }
         }
-        return setup_project(&path);
+        if web {
+            return setup_web_command(&path, web_port);
+        }
+        if action == "prepare" {
+            return setup_project(&path);
+        }
+        return match setup_action(&path, action) {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error[E-SETUP-006]: {error}");
+                ExitCode::from(1)
+            }
+        };
     }
     if command == "new" {
         let Some(path) = args.next() else {
@@ -9344,6 +9688,67 @@ mod tests {
         let env_file = fs::read_to_string(path.join(".env")).unwrap();
         assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
         assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-setup-action-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        fs::write(
+            path.join("zelyra.toml"),
+            "[database.main]\nengine = \"mariadb\"\n",
+        )
+        .unwrap();
+
+        let first = setup_action(path.to_str().unwrap(), "prepare").unwrap();
+        let contents = fs::read_to_string(path.join(".env")).unwrap();
+        let second = setup_action(path.to_str().unwrap(), "prepare").unwrap();
+        assert!(first.contains("created protected .env"));
+        assert!(second.contains("kept existing .env"));
+        assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn setup_web_requires_the_token_and_renders_the_local_actions() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-setup-web-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        let state = Arc::new(Mutex::new(SetupWebState {
+            directory: path.clone(),
+            token: "test-token".into(),
+            message: String::new(),
+        }));
+        let request = |target: &str| zelyra_web::Request {
+            method: "GET".into(),
+            target: target.into(),
+            path: "/".into(),
+            headers: HashMap::new(),
+            body: String::new(),
+        };
+
+        let forbidden = setup_web_response(&state, &request("/?token=wrong"));
+        assert_eq!(forbidden.status, 403);
+        let page = setup_web_response(&state, &request("/?token=test-token"));
+        assert_eq!(page.status, 200);
+        assert!(page.body.contains("Konfiguration vorbereiten"));
+        assert!(page.body.contains("MariaDB und Anwendung starten"));
 
         fs::remove_dir_all(path).unwrap();
     }
