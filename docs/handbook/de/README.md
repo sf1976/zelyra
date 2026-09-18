@@ -241,6 +241,17 @@ zelyra new sichere-app --template mariadb-auth \
 Es enthält Benutzer, Sessions und Berechtigungen, den automatischen Login- und
 Logout-Ablauf sowie eine geschützte `/admin`-Seite.
 
+Für einen vollständigen Business-Starter mit Authentifizierung, geschütztem
+CRUD, Audit-Protokoll, schema-basiertem Formular und typisierter API:
+
+~~~bash
+zelyra new business-app --template mariadb-business \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+~~~
+
+Dies ist der empfohlene Einstieg für eine datenbankgestützte
+Businessanwendung, die mit normalem Zelyra-Code erweitert wird.
+
 Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:
 
 ~~~bash

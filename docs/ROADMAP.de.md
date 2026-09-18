@@ -105,9 +105,9 @@ Feature eines bestimmten Anbieters.
   Compose, eine optionale `.env` ohne Zugangsdaten auszugeben, und die
   Host-Port-Bereitschaft; TLS, Dateirechte und umfassendere Werkzeug-Hinweise
   bleiben offen.
-- [~] Projektvorlagen: minimales Skript sowie MariaDB-CRUD- und
-  MariaDB-Authentifizierungs-Starter sind vorhanden; API- und
-  Produktionsdeployment-Vorlagen folgen.
+- [~] Projektvorlagen: minimales Skript sowie MariaDB-CRUD-,
+  MariaDB-Authentifizierungs- und MariaDB-Business-Starter sind vorhanden;
+  API- und Produktionsdeployment-Vorlagen folgen.
 - [ ] Offline-Installationspaket und reproduzierbare Toolchain-Metadaten.
 - [?] Paketmanager-Distribution, soweit sinnvoll (Homebrew, winget,
   Debian-Pakete und Container-Images).
