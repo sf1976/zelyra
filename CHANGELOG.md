@@ -6,6 +6,23 @@ compiler and repository release.
 
 ## Unreleased
 
+No unreleased changes.
+
+## 0.1.39-alpha.1 — 2026-09-18
+
+This alpha release contains the accumulated AI-native compiler, database,
+web, CRUD, configuration, and view-system work listed below. It is not
+intended for production use. The release includes reproducible MariaDB and
+SQLite schema checks, but the broader runtime/database support remains
+explicitly documented as experimental where noted.
+
+Diese Alpha-Version enthält die unten aufgeführten kumulierten Arbeiten an
+KI-nativem Compiler, Datenbank, Web, CRUD, Konfiguration und View-System. Sie
+ist nicht für den Produktiveinsatz bestimmt. Der Release enthält
+reproduzierbare MariaDB- und SQLite-Schema-Prüfungen; die weitergehende
+Runtime- und Datenbankunterstützung bleibt an den entsprechenden Stellen
+ausdrücklich experimentell.
+
 ### Added
 
 - Extended `zelyra doctor` with read-only Docker Compose availability checks

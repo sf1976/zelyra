@@ -41,7 +41,7 @@ fn temporary_project_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
     fs::create_dir_all(&directory).expect("temporary project should be created");
     fs::write(
         directory.join("zelyra.toml"),
-        "[project]\nname = \"edit-test\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = false\nnetwork = false\n",
+        "[project]\nname = \"edit-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = false\nnetwork = false\n",
     )
     .expect("temporary project config should be written");
     let source_path = directory.join("main.zyl");
@@ -393,7 +393,7 @@ fn config_reports_effective_optional_features_without_secret_values() {
     let (project_directory, source_path) = temporary_project_source("config", "fn main() {}\n");
     fs::write(
         project_directory.join("zelyra.toml"),
-        "[project]\nname = \"config-test\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[features]\napi = false\ncrud = false\n",
+        "[project]\nname = \"config-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[features]\napi = false\ncrud = false\n",
     )
     .unwrap();
     fs::write(
@@ -425,7 +425,7 @@ fn disabled_api_feature_rejects_api_source() {
     );
     fs::write(
         project_directory.join("zelyra.toml"),
-        "[project]\nname = \"feature-test\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[features]\napi = false\n",
+        "[project]\nname = \"feature-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[features]\napi = false\n",
     )
     .unwrap();
     let output = run(&["check", source_path.to_str().unwrap(), "--format=json"]);

@@ -3,7 +3,7 @@ members = ["ast", "lexer", "parser", "hir", "database", "runtime", "web", "forms
 resolver = "2"
 
 [workspace.package]
-version = "0.1.38"
+version = "0.1.39-alpha.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
