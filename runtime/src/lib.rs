@@ -242,6 +242,9 @@ fn api_type_known(ty: &Type, known_types: &HashSet<String>) -> bool {
         Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
             api_type_known(inner, known_types)
         }
+        Type::Map(key, value) => {
+            api_type_known(key, known_types) && api_type_known(value, known_types)
+        }
         Type::Result(ok, error) => {
             api_type_known(ok, known_types) && api_type_known(error, known_types)
         }
@@ -1465,6 +1468,9 @@ fn expression_contains_variable(expression: &Expr, name: &str) -> bool {
         ExprKind::Array(values) => values
             .iter()
             .any(|value| expression_contains_variable(value, name)),
+        ExprKind::Map(entries) => entries.iter().any(|(key, value)| {
+            expression_contains_variable(key, name) || expression_contains_variable(value, name)
+        }),
         ExprKind::Record { fields, .. } => fields
             .iter()
             .any(|(_, value)| expression_contains_variable(value, name)),
@@ -2837,6 +2843,7 @@ fn constant_value(expression: &Expr) -> Option<ConstantValue> {
             constant_binary(left, *op, right)
         }
         ExprKind::Array(_)
+        | ExprKind::Map(_)
         | ExprKind::Record { .. }
         | ExprKind::Index { .. }
         | ExprKind::Field { .. }
@@ -3178,6 +3185,12 @@ fn check_capability_expr(
                 check_capability_expr(value, function, functions, declared, errors);
             }
         }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                check_capability_expr(key, function, functions, declared, errors);
+                check_capability_expr(value, function, functions, declared, errors);
+            }
+        }
         ExprKind::Record { fields, .. } => {
             for (_, value) in fields {
                 check_capability_expr(value, function, functions, declared, errors);
@@ -3446,6 +3459,7 @@ impl<'a> Checker<'a> {
             } => {
                 let actual = self.check_expr(value, scopes);
                 if let Some(declared) = ty {
+                    self.check_type(declared, *span);
                     self.expect_type(declared, &actual, value.span);
                 }
                 let final_ty = ty.clone().unwrap_or(actual);
@@ -3654,6 +3668,18 @@ impl<'a> Checker<'a> {
                 self.check_type(error, span);
             }
             Type::Array(inner) => self.check_type(inner, span),
+            Type::Map(key, value) => {
+                self.check_type(key, span);
+                self.check_type(value, span);
+                if !matches!(key.as_ref(), Type::Unknown) && !is_map_key_type(key) {
+                    self.error(
+                        span,
+                        format!(
+                            "Map keys must be Int, UInt, String, Bool, Char, or Timestamp; found `{key}`"
+                        ),
+                    );
+                }
+            }
             Type::HttpResult(inner) => self.check_type(inner, span),
             _ => {}
         }
@@ -3815,6 +3841,33 @@ impl<'a> Checker<'a> {
                 }
                 Type::Array(Box::new(element))
             }
+            ExprKind::Map(entries) => {
+                let mut key_type = Type::Unknown;
+                let mut value_type = Type::Unknown;
+                for (key, value) in entries {
+                    let actual_key = self.check_expr(key, scopes);
+                    let actual_value = self.check_expr(value, scopes);
+                    if key_type == Type::Unknown {
+                        key_type = actual_key;
+                    } else {
+                        self.expect_type(&key_type, &actual_key, key.span);
+                    }
+                    if value_type == Type::Unknown {
+                        value_type = actual_value;
+                    } else {
+                        self.expect_type(&value_type, &actual_value, value.span);
+                    }
+                }
+                if key_type != Type::Unknown && !is_map_key_type(&key_type) {
+                    self.error(
+                        expr.span,
+                        format!(
+                            "Map keys must be Int, UInt, String, Bool, Char, or Timestamp; found `{key_type}`"
+                        ),
+                    );
+                }
+                Type::Map(Box::new(key_type), Box::new(value_type))
+            }
             ExprKind::Record { type_name, fields } => {
                 let Some(record) = self
                     ._program
@@ -3892,8 +3945,10 @@ impl<'a> Checker<'a> {
                         return Type::Unknown;
                     }
                     let argument = self.check_expr(&args[0], scopes);
-                    if !matches!(argument, Type::Array(_)) && argument != Type::Unknown {
-                        self.error(args[0].span, "`len` expects an array");
+                    if !matches!(argument, Type::Array(_) | Type::Map(_, _))
+                        && argument != Type::Unknown
+                    {
+                        self.error(args[0].span, "`len` expects an array or Map");
                     }
                     Type::Int
                 } else if name == "append" {
@@ -3919,7 +3974,10 @@ impl<'a> Checker<'a> {
                     }
                 } else if name == "contains" {
                     if args.len() != 2 {
-                        self.error(expr.span, "`contains` expects an array and one value");
+                        self.error(
+                            expr.span,
+                            "`contains` expects an array or Map and one value",
+                        );
                         return Type::Unknown;
                     }
                     let array_type = self.check_expr(&args[0], scopes);
@@ -3929,11 +3987,77 @@ impl<'a> Checker<'a> {
                             self.expect_type(&inner, &value_type, args[1].span);
                             Type::Bool
                         }
+                        Type::Map(key, _) => {
+                            self.expect_type(&key, &value_type, args[1].span);
+                            Type::Bool
+                        }
                         Type::Unknown => Type::Bool,
                         other => {
                             self.error(
                                 args[0].span,
-                                format!("`contains` expects an array, found `{other}`"),
+                                format!("`contains` expects an array or Map, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "get" {
+                    if args.len() != 2 {
+                        self.error(expr.span, "`get` expects a Map and one key");
+                        return Type::Unknown;
+                    }
+                    let map_type = self.check_expr(&args[0], scopes);
+                    let key_type = self.check_expr(&args[1], scopes);
+                    match map_type {
+                        Type::Map(expected_key, value) => {
+                            self.expect_type(&expected_key, &key_type, args[1].span);
+                            Type::Option(value)
+                        }
+                        Type::Unknown => Type::Option(Box::new(Type::Unknown)),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`get` expects a Map, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "put" {
+                    if args.len() != 3 {
+                        self.error(expr.span, "`put` expects a Map, a key, and a value");
+                        return Type::Unknown;
+                    }
+                    let map_type = self.check_expr(&args[0], scopes);
+                    let key_type = self.check_expr(&args[1], scopes);
+                    let value_type = self.check_expr(&args[2], scopes);
+                    match map_type {
+                        Type::Map(expected_key, expected_value) => {
+                            self.expect_type(&expected_key, &key_type, args[1].span);
+                            self.expect_type(&expected_value, &value_type, args[2].span);
+                            Type::Map(expected_key, expected_value)
+                        }
+                        Type::Unknown => Type::Unknown,
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`put` expects a Map, found `{other}`"),
+                            );
+                            Type::Unknown
+                        }
+                    }
+                } else if name == "keys" || name == "values" {
+                    if args.len() != 1 {
+                        self.error(expr.span, format!("`{name}` expects exactly one Map"));
+                        return Type::Unknown;
+                    }
+                    let map_type = self.check_expr(&args[0], scopes);
+                    match map_type {
+                        Type::Map(key, _) if name == "keys" => Type::Array(key),
+                        Type::Map(_, value) => Type::Array(value),
+                        Type::Unknown => Type::Array(Box::new(Type::Unknown)),
+                        other => {
+                            self.error(
+                                args[0].span,
+                                format!("`{name}` expects a Map, found `{other}`"),
                             );
                             Type::Unknown
                         }
@@ -4377,6 +4501,13 @@ fn is_numeric(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::UInt | Type::Float | Type::Decimal)
 }
 
+fn is_map_key_type(ty: &Type) -> bool {
+    matches!(
+        ty,
+        Type::Int | Type::UInt | Type::String | Type::Bool | Type::Char | Type::Timestamp
+    )
+}
+
 fn validate_type(
     ty: &Type,
     known_types: &std::collections::HashSet<String>,
@@ -4394,6 +4525,18 @@ fn validate_type(
             validate_type(error, known_types, errors, span);
         }
         Type::Array(inner) => validate_type(inner, known_types, errors, span),
+        Type::Map(key, value) => {
+            validate_type(key, known_types, errors, span);
+            validate_type(value, known_types, errors, span);
+            if !matches!(key.as_ref(), Type::Unknown) && !is_map_key_type(key) {
+                errors.push(TypeError {
+                    message: format!(
+                        "Map keys must be Int, UInt, String, Bool, Char, or Timestamp; found `{key}`"
+                    ),
+                    span,
+                });
+            }
+        }
         Type::HttpResult(inner) => validate_type(inner, known_types, errors, span),
         _ => {}
     }
@@ -4422,6 +4565,7 @@ pub enum Value {
     Char(char),
     Timestamp(i64),
     Array(Vec<Value>),
+    Map(Vec<(Value, Value)>),
     Object {
         type_name: String,
         fields: HashMap<String, Value>,
@@ -4448,6 +4592,20 @@ impl Value {
             Value::Array(values) => Type::Array(Box::new(
                 values.first().map(Value::ty).unwrap_or(Type::Unknown),
             )),
+            Value::Map(entries) => Type::Map(
+                Box::new(
+                    entries
+                        .first()
+                        .map(|(key, _)| key.ty())
+                        .unwrap_or(Type::Unknown),
+                ),
+                Box::new(
+                    entries
+                        .first()
+                        .map(|(_, value)| value.ty())
+                        .unwrap_or(Type::Unknown),
+                ),
+            ),
             Value::Object { type_name, .. } => Type::Named(type_name.clone()),
             Value::Option(Some(value)) => Type::Option(Box::new(value.ty())),
             Value::Option(None) => Type::Option(Box::new(Type::Unknown)),
@@ -4473,6 +4631,14 @@ impl Value {
                 values
                     .iter()
                     .map(Value::output)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Map(entries) => format!(
+                "Map{{{}}}",
+                entries
+                    .iter()
+                    .map(|(key, value)| format!("{}={}", key.output(), value.output()))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -5234,6 +5400,19 @@ impl Interpreter {
                 .map(|value| self.json_value(value, span))
                 .collect::<Result<Vec<_>, _>>()
                 .map(serde_json::Value::Array),
+            Value::Map(entries) => {
+                let mut object = serde_json::Map::new();
+                for (key, value) in entries {
+                    let Value::String(key) = key else {
+                        return Err(self.runtime_error(
+                            span,
+                            "json_encode supports only Map<String, Value> objects",
+                        ));
+                    };
+                    object.insert(key.clone(), self.json_value(value, span)?);
+                }
+                Ok(serde_json::Value::Object(object))
+            }
             Value::Object { fields, .. } => fields
                 .iter()
                 .map(|(name, value)| {
@@ -5343,6 +5522,25 @@ impl Interpreter {
                     .map(|value| self.json_decode_value(value, inner, span))
                     .collect::<Result<Vec<_>, _>>()
                     .map(Value::Array)
+            }
+            Type::Map(key, value_type) => {
+                if key.as_ref() != &Type::String {
+                    return Err(self.runtime_error(
+                        span,
+                        "json_decode supports only Map<String, Value> objects",
+                    ));
+                }
+                let Some(object) = value.as_object() else {
+                    return Err(self.json_type_error("object", value, span));
+                };
+                object
+                    .iter()
+                    .map(|(key, value)| {
+                        self.json_decode_value(value, value_type, span)
+                            .map(|value| (Value::String(key.clone()), value))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Map)
             }
             Type::Unit if value.is_null() => Ok(Value::Unit),
             Type::Unit => Err(self.json_type_error("null", value, span)),
@@ -5948,6 +6146,21 @@ impl Interpreter {
                 .map(|value| self.eval(value, env))
                 .collect::<Result<Vec<_>, _>>()
                 .map(Value::Array),
+            ExprKind::Map(entries) => {
+                let mut values = Vec::with_capacity(entries.len());
+                for (key, value) in entries {
+                    let key = self.eval(key, env)?;
+                    let value = self.eval(value, env)?;
+                    if let Some((_, existing_value)) =
+                        values.iter_mut().find(|(existing, _)| existing == &key)
+                    {
+                        *existing_value = value;
+                    } else {
+                        values.push((key, value));
+                    }
+                }
+                Ok(Value::Map(values))
+            }
             ExprKind::Record { type_name, fields } => {
                 let mut values = HashMap::new();
                 for (field, value) in fields {
@@ -5990,9 +6203,10 @@ impl Interpreter {
                     }
                     match self.eval(&args[0], env)? {
                         Value::Array(values) => Ok(Value::Int(values.len() as i64)),
+                        Value::Map(entries) => Ok(Value::Int(entries.len() as i64)),
                         value => Err(self.runtime_error(
                             expr.span,
-                            format!("`len` expects an array, found {}", value.ty()),
+                            format!("`len` expects an array or Map, found {}", value.ty()),
                         )),
                     }
                 } else if name == "append" {
@@ -6016,18 +6230,84 @@ impl Interpreter {
                     if args.len() != 2 {
                         return Err(self.runtime_error(
                             expr.span,
-                            "`contains` expects an array and one value",
+                            "`contains` expects an array or Map and one value",
                         ));
                     }
-                    let array = self.eval(&args[0], env)?;
+                    let collection = self.eval(&args[0], env)?;
                     let value = self.eval(&args[1], env)?;
-                    match array {
+                    match collection {
                         Value::Array(values) => {
                             Ok(Value::Bool(values.iter().any(|item| item == &value)))
                         }
+                        Value::Map(entries) => {
+                            Ok(Value::Bool(entries.iter().any(|(key, _)| key == &value)))
+                        }
                         value => Err(self.runtime_error(
                             expr.span,
-                            format!("`contains` expects an array, found {}", value.ty()),
+                            format!("`contains` expects an array or Map, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "get" {
+                    if args.len() != 2 {
+                        return Err(
+                            self.runtime_error(expr.span, "`get` expects a Map and one key")
+                        );
+                    }
+                    let map = self.eval(&args[0], env)?;
+                    let key = self.eval(&args[1], env)?;
+                    match map {
+                        Value::Map(entries) => Ok(Value::Option(
+                            entries
+                                .iter()
+                                .find(|(existing, _)| existing == &key)
+                                .map(|(_, value)| Box::new(value.clone())),
+                        )),
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`get` expects a Map, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "put" {
+                    if args.len() != 3 {
+                        return Err(self
+                            .runtime_error(expr.span, "`put` expects a Map, a key, and a value"));
+                    }
+                    let map = self.eval(&args[0], env)?;
+                    let key = self.eval(&args[1], env)?;
+                    let value = self.eval(&args[2], env)?;
+                    match map {
+                        Value::Map(mut entries) => {
+                            if let Some((_, existing_value)) =
+                                entries.iter_mut().find(|(existing, _)| existing == &key)
+                            {
+                                *existing_value = value;
+                            } else {
+                                entries.push((key, value));
+                            }
+                            Ok(Value::Map(entries))
+                        }
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`put` expects a Map, found {}", value.ty()),
+                        )),
+                    }
+                } else if name == "keys" || name == "values" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            format!("`{name}` expects exactly one Map"),
+                        ));
+                    }
+                    match self.eval(&args[0], env)? {
+                        Value::Map(entries) if name == "keys" => Ok(Value::Array(
+                            entries.into_iter().map(|(key, _)| key).collect(),
+                        )),
+                        Value::Map(entries) => Ok(Value::Array(
+                            entries.into_iter().map(|(_, value)| value).collect(),
+                        )),
+                        value => Err(self.runtime_error(
+                            expr.span,
+                            format!("`{name}` expects a Map, found {}", value.ty()),
                         )),
                     }
                 } else if name == "first" || name == "last" {
@@ -6768,12 +7048,14 @@ fn value_to_query_value(
         Value::Timestamp(value) => Ok(QueryValue::Int(*value)),
         Value::Option(None) | Value::Unit => Ok(QueryValue::Null),
         Value::Option(Some(value)) => value_to_query_value(value, span),
-        Value::Array(_) | Value::Object { .. } | Value::Rows { .. } | Value::Result(_) => {
-            Err(RuntimeError {
-                message: "SQL parameters must be scalar values".into(),
-                span,
-            })
-        }
+        Value::Array(_)
+        | Value::Map(_)
+        | Value::Object { .. }
+        | Value::Rows { .. }
+        | Value::Result(_) => Err(RuntimeError {
+            message: "SQL parameters must be scalar values".into(),
+            span,
+        }),
     }
 }
 
@@ -6945,6 +7227,65 @@ mod tests {
             "struct Address { city: String } struct Customer { name: String address: Address } fn main() { customer = Customer { name: \"Anna\", address: Address { city: \"Berlin\" } } print(customer.address.city) print(contains([1, 2, 3], 2)) print(first([4, 5])) print(last([4, 5])) }",
         );
         assert_eq!(output, ["Berlin", "true", "Some(4)", "Some(5)"]);
+    }
+
+    #[test]
+    fn supports_typed_maps_get_put_keys_values_and_json() {
+        let output = run(r#"fn main() {
+                values: Map<String, Int> = Map { "one": 1, "two": 2 }
+                mutable updated = put(values, "two", 20)
+                updated = put(updated, "three", 3)
+                print(get(updated, "two"))
+                print(get(updated, "missing"))
+                print(contains(updated, "three"))
+                print(len(updated))
+                print(keys(updated))
+                print(values(updated))
+                encoded = json_encode(updated)
+                decoded = json_decode<Map<String, Int>>(encoded)
+                print(decoded)
+            }"#);
+        assert_eq!(
+            output,
+            [
+                "Some(20)",
+                "None",
+                "true",
+                "3",
+                "[one, two, three]",
+                "[1, 20, 3]",
+                "Map{one=1, three=3, two=20}",
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_incompatible_map_entries_and_keys() {
+        let program = parse(
+            &lex("fn main() { values = Map { \"one\": 1, \"two\": \"not an Int\" } }").unwrap(),
+        )
+        .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("type mismatch")));
+
+        let program = parse(
+            &lex("struct Key { value: Int } fn main() { values: Map<Key, Int> = Map {} }").unwrap(),
+        )
+        .unwrap();
+        let errors = check(&program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message.contains("Map keys")));
+    }
+
+    #[test]
+    fn map_literals_keep_the_last_value_for_duplicate_keys() {
+        let output = run(
+            "fn main() { values: Map<String, Int> = Map { \"same\": 1, \"same\": 2 } print(get(values, \"same\")) print(keys(values)) }",
+        );
+        assert_eq!(output, ["Some(2)", "[same]"]);
     }
 
     #[test]

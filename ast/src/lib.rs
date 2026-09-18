@@ -46,6 +46,7 @@ pub enum Type {
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
     Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
     HttpResult(Box<Type>),
     Named(String),
     Unknown,
@@ -70,6 +71,7 @@ impl fmt::Display for Type {
             Type::Option(inner) => return write!(f, "Option<{inner}>"),
             Type::Result(ok, err) => return write!(f, "Result<{ok}, {err}>"),
             Type::Array(inner) => return write!(f, "{inner}[]"),
+            Type::Map(key, value) => return write!(f, "Map<{key}, {value}>"),
             Type::HttpResult(inner) => return write!(f, "HttpResult<{inner}>"),
             Type::Named(name) => name,
             Type::Unknown => "unknown",
@@ -556,6 +558,7 @@ pub enum ExprKind {
     String(String),
     Char(char),
     Array(Vec<Expr>),
+    Map(Vec<(Expr, Expr)>),
     Record {
         type_name: String,
         fields: Vec<(String, Expr)>,

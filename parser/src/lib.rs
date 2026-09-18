@@ -1550,6 +1550,14 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::Greater, "`>` after Result types")?;
                 Type::Result(Box::new(ok), Box::new(error))
             }
+            "Map" => {
+                self.expect(TokenKind::Less, "`<` after `Map`")?;
+                let key = self.type_name()?;
+                self.expect(TokenKind::Comma, "`,` between Map key and value types")?;
+                let value = self.type_name()?;
+                self.expect(TokenKind::Greater, "`>` after Map value type")?;
+                Type::Map(Box::new(key), Box::new(value))
+            }
             "HttpResult" => {
                 self.expect(TokenKind::Less, "`<` after `HttpResult`")?;
                 let response = self.type_name()?;
@@ -2021,6 +2029,8 @@ impl<'a> Parser<'a> {
                     })
                 } else if !type_args.is_empty() {
                     self.error("type arguments require a function call")
+                } else if name == "Map" && self.at(&TokenKind::LBrace) {
+                    self.map_literal(token.span)
                 } else if self.at(&TokenKind::LBrace) && self.looks_like_record_literal() {
                     self.record_literal(name, token.span)
                 } else {
@@ -2057,6 +2067,28 @@ impl<'a> Parser<'a> {
         let end = self.expect(TokenKind::RBrace, "`}` after record literal")?;
         Ok(Expr {
             kind: ExprKind::Record { type_name, fields },
+            span: start.join(end),
+        })
+    }
+
+    fn map_literal(&mut self, start: Span) -> Result<Expr, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after `Map`")?;
+        let mut entries = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let key = self.expression()?;
+            self.expect(TokenKind::Colon, "`:` after Map key")?;
+            let value = self.expression()?;
+            entries.push((key, value));
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        let end = self.expect(TokenKind::RBrace, "`}` after Map literal")?;
+        Ok(Expr {
+            kind: ExprKind::Map(entries),
             span: start.join(end),
         })
     }
@@ -2784,6 +2816,26 @@ mod tests {
             program.functions[0].body.statements[0],
             Stmt::For { ref name, .. } if name == "value"
         ));
+    }
+
+    #[test]
+    fn parses_map_literals_and_types() {
+        let program = parse(
+            &lex("fn lookup(values: Map<String, Int>) -> Map<String, Int> { return values } fn main() { values: Map<String, Int> = Map { \"one\": 1, \"two\": 2 } print(get(values, \"one\")) }").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.functions[0].params[0].ty,
+            Type::Map(Box::new(Type::String), Box::new(Type::Int))
+        );
+        let Stmt::Let { value, ty, .. } = &program.functions[1].body.statements[0] else {
+            panic!("expected typed Map binding");
+        };
+        assert_eq!(
+            ty,
+            &Some(Type::Map(Box::new(Type::String), Box::new(Type::Int)))
+        );
+        assert!(matches!(value.kind, ExprKind::Map(_)));
     }
 
     #[test]

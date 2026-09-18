@@ -2873,6 +2873,7 @@ fn typescript_type(ty: &Type) -> String {
         Type::Option(inner) => format!("{} | null", typescript_type(inner)),
         Type::Result(ok, _) => typescript_type(ok),
         Type::Array(inner) => format!("Array<{}>", typescript_type(inner)),
+        Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
         Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
         Type::Named(name) => match name.as_str() {
             "Id" => "number".into(),
@@ -2955,6 +2956,10 @@ fn openapi_schema(ty: &Type) -> String {
         Type::Float | Type::Decimal => "{\"type\":\"number\"}".into(),
         Type::Bool => "{\"type\":\"boolean\"}".into(),
         Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
+        Type::Map(_, value) => format!(
+            "{{\"type\":\"object\",\"additionalProperties\":{}}}",
+            openapi_schema(value)
+        ),
         Type::Option(inner) => openapi_schema(inner),
         Type::Result(ok, _) => openapi_schema(ok),
         Type::HttpResult(_) => "{\"type\":\"object\"}".into(),
@@ -5441,6 +5446,22 @@ fn api_value_json(
                 .collect::<Result<Vec<_>, _>>()
                 .map(RuntimeValue::Array)
         }
+        Type::Map(key, value_type) => {
+            if **key != Type::String {
+                return Err("API JSON maps require String keys".into());
+            }
+            let Some(object) = value.as_object() else {
+                return Err("expected a JSON object for Map<String, Value>".into());
+            };
+            object
+                .iter()
+                .map(|(key, value)| {
+                    api_value_json(value, value_type, program)
+                        .map(|value| (RuntimeValue::String(key.clone()), value))
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(RuntimeValue::Map)
+        }
         Type::Int => value
             .as_i64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
@@ -5541,6 +5562,13 @@ fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
         RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
         RuntimeValue::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
+        }
+        RuntimeValue::Map(entries) => {
+            let object = entries
+                .iter()
+                .map(|(key, value)| (key.output(), api_json_value_node(value)))
+                .collect();
+            serde_json::Value::Object(object)
         }
         RuntimeValue::Object { fields, .. } => {
             let object = fields

@@ -154,6 +154,9 @@ Implemented today:
   preflight handling, disabled by default;
 - array literals, indexing, `len`, `append`, `contains`, `first`, `last`, and
   array concatenation with `+`, with `Option` results for empty-safe queries;
+- deterministic typed maps with `Map<Key, Value>` declarations, `Map { ... }`
+  literals, null-safe `get`, functional `put`, `keys`, `values`, and JSON
+  conversion for string-keyed maps;
 - structured `for ... in` array iteration with `break` and `continue`;
 - record literals and checked field access for nested business values;
 - initial capability declarations and static propagation through function calls;

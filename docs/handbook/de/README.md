@@ -1129,6 +1129,28 @@ Die Array-Iteration verwendet `for ... in`; die Schleifenvariable ist
 unveränderlich und nur im Schleifenkörper sichtbar. `break` und `continue`
 werden unterstützt.
 
+Typisierte Maps sind für skalare Schlüssel verfügbar. Der Typ wird mit
+`Map<Schlüssel, Wert>` angegeben, ein Literal mit `Map { ... }`:
+
+~~~zelyra
+prices: Map<String, Int> = Map { "standard": 10 "premium": 20 }
+current = put(prices, "standard", 12)
+
+match get(current, "standard") {
+    Some(price) => {
+        print(price)
+    }
+    None => {
+        print(0)
+    }
+}
+~~~
+
+`get` liefert ein `Option`, `put` eine neue Map; `keys`, `values`, `contains`
+und `len` arbeiten deterministisch. Bei der JSON-Konvertierung werden
+`Map<String, Wert>` als JSON-Objekte behandelt; Maps mit anderen
+Schlüsseltypen sind keine JSON-Maps.
+
 Einen mit Browsern und Node kompatiblen TypeScript-Client aus denselben
 API-Deklarationen erzeugen:
 

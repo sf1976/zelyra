@@ -8,6 +8,15 @@ compiler and repository release.
 
 ### Added
 
+- Added deterministic typed maps with `Map<Key, Value>` types, `Map { ... }`
+  literals, null-safe `get`, functional `put`, `keys`, `values`, scalar-key
+  validation, and JSON conversion for string-keyed maps.
+
+- Deterministische typisierte Maps mit `Map<Schlüssel, Wert>`-Typen,
+  `Map { ... }`-Literalen, nullsicherem `get`, funktionalem `put`, `keys`,
+  `values`, Validierung skalarer Schlüssel und JSON-Konvertierung für Maps mit
+  String-Schlüsseln ergänzt.
+
 - Added bilingual source-authority guides that map the binding specification,
   parser, tests, standard-library status, validated examples, documentation,
   and the required uncertainty and verification workflow. This is a

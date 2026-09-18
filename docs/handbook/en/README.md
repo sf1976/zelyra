@@ -1046,6 +1046,27 @@ print(customer.address.city)
 Array iteration uses `for ... in`; the loop variable is immutable and scoped to
 the loop body. `break` and `continue` are supported.
 
+Typed maps are available for scalar keys. Use `Map<Key, Value>` for the type
+and `Map { ... }` for a literal:
+
+~~~zelyra
+prices: Map<String, Int> = Map { "standard": 10 "premium": 20 }
+current = put(prices, "standard", 12)
+
+match get(current, "standard") {
+    Some(price) => {
+        print(price)
+    }
+    None => {
+        print(0)
+    }
+}
+~~~
+
+`get` returns an `Option`, `put` returns a new map, and `keys`, `values`,
+`contains`, and `len` preserve deterministic behavior. JSON conversion uses
+JSON objects for `Map<String, Value>`; non-string map keys are not JSON maps.
+
 Generate a browser or Node-compatible TypeScript client from the same API
 declarations:
 

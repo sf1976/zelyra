@@ -221,6 +221,12 @@ fn check_expr(
                 check_expr(value, schema, environment, errors);
             }
         }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                check_expr(key, schema, environment, errors);
+                check_expr(value, schema, environment, errors);
+            }
+        }
         ExprKind::Record { fields, .. } => {
             for (_, value) in fields {
                 check_expr(value, schema, environment, errors);
@@ -253,6 +259,20 @@ fn expr_type(expression: &Expr) -> Type {
         ExprKind::Array(values) => Type::Array(Box::new(
             values.first().map(expr_type).unwrap_or(Type::Unknown),
         )),
+        ExprKind::Map(entries) => Type::Map(
+            Box::new(
+                entries
+                    .first()
+                    .map(|(key, _)| expr_type(key))
+                    .unwrap_or(Type::Unknown),
+            ),
+            Box::new(
+                entries
+                    .first()
+                    .map(|(_, value)| expr_type(value))
+                    .unwrap_or(Type::Unknown),
+            ),
+        ),
         ExprKind::Index { .. } => Type::Unknown,
         ExprKind::Record { type_name, .. } => Type::Named(type_name.clone()),
         ExprKind::Field { .. } => Type::Unknown,

@@ -45,6 +45,45 @@ fn load(ok: Bool) -> Result<Int, String> {
 }
 ```
 
+## Typisierte Maps
+
+Zelyra 0.1 bietet deterministische typisierte Maps für skalare Schlüssel. Die
+Schlüssel- und Werttypen stehen explizit in `Map<Schlüssel, Wert>`;
+Map-Literale verwenden `Map { ... }`. Unterstützte Schlüsseltypen sind `Int`,
+`UInt`, `String`, `Bool`, `Char` und `Timestamp`.
+
+```zelyra
+fn main() {
+    prices: Map<String, Int> = Map {
+        "standard": 10
+        "premium": 20
+    }
+
+    mutable current = put(prices, "standard", 12)
+
+    match get(current, "standard") {
+        Some(price) => {
+            print(price)
+        }
+        None => {
+            print(0)
+        }
+    }
+
+    print(keys(current))
+    print(values(current))
+}
+```
+
+`get` liefert ein `Option<Wert>`, sodass ein fehlender Schlüssel ausdrücklich
+behandelt wird. `put` liefert eine neue Map und ersetzt einen vorhandenen
+Schlüssel, ohne dessen Position zu verändern. Bei doppelten Schlüsseln in
+einem Literal gewinnt der letzte Wert, die erste Einfügeposition bleibt
+erhalten. `keys`, `values`, `contains` und `len` sind deterministisch. Die
+JSON-Konvertierung unterstützt
+`Map<String, Wert>` als JSON-Objekt; Maps mit anderen Schlüsseltypen sind
+Sprachwerte, werden aber bei der JSON-Konvertierung abgelehnt.
+
 ## Pattern Matching
 
 Match-Arme binden innere Werte und müssen für `Option`, `Result` und `Bool`
