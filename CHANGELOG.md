@@ -131,6 +131,17 @@ compiler and repository release.
   and NULL operators, generated controls, URL state, and validation.
 - Added a MariaDB tableview end-to-end test covering struct-backed joins,
   aggregates, escaping, search, sorting, pagination, and rejected sort fields.
+- Added a combined `examples/view_showcase.zyl` example covering named views,
+  typed components, default and named slots, and independently configurable
+  CRUD list, detail, form, and loading views.
+- Added a reproducible SQLite schema end-to-end test covering bootstrap,
+  inspection, idempotent planning, and foreign-key metadata.
+
+- Ein zusammengefasstes Beispiel `examples/view_showcase.zyl` deckt benannte
+  Views, typisierte Komponenten, Default- und benannte Slots sowie unabhängig
+  konfigurierbare CRUD-Listen-, Detail-, Formular- und Ladeansichten ab.
+- Ein reproduzierbarer SQLite-Schema-End-to-End-Test prüft Bootstrap,
+  Inspektion, idempotente Planung und Foreign-Key-Metadaten.
 
 ## 0.1.38-alpha.1 — 2026-09-18
 

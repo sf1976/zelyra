@@ -30,8 +30,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Install MariaDB client and curl
-        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
+      - name: Install database clients and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client sqlite3 curl
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer
@@ -45,6 +45,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build CLI for integration test
         run: cargo build -p zelyra-cli
+      - name: Validate combined view showcase
+        run: |
+          target/debug/zelyra check examples/view_showcase.zyl --format=json > /tmp/zelyra-view-showcase.json
+          python3 -c 'import json; data = json.load(open("/tmp/zelyra-view-showcase.json")); assert data["success"] is True'
       - name: Check deterministic impact output
         run: |
           target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact.json
@@ -102,6 +106,10 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
+      - name: Run SQLite schema integration test
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/sqlite-e2e.sh
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root

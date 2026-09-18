@@ -352,6 +352,16 @@ Benannte Slots dürfen sicher escapte, deterministische Fallback-Inhalte besitze
 Aufrufer können sie explizit überschreiben. Siehe
 `examples/component_slots.zyl`.
 
+Das zusammengefasste Beispiel `examples/view_showcase.zyl` zeigt den
+vorgesehenen Release-Pfad in einem kleinen Programm: einen benannten
+Seitenrahmen, typisierte Komponenten, Default- und benannte Slots sowie eine
+schemabasierte CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-,
+Formular- und Ladeansichten. Prüfung:
+
+~~~bash
+zelyra check examples/view_showcase.zyl --format=json
+~~~
+
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
 verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 `is_null`; die Bedienelemente erhalten ihren Zustand über die URL. Beispiele:
@@ -720,6 +730,11 @@ Für SQLite:
 export DATABASE_URL='sqlite:///tmp/meine-app.sqlite3'
 zelyra db bootstrap examples/machine_management_sqlite.zyl
 ~~~
+
+Derselbe SQLite-Pfad wird durch `tests/sqlite-e2e.sh` geprüft: Das Skript
+erstellt eine temporäre Datenbank, inspiziert das Schema, prüft einen
+idempotenten Plan und kontrolliert die erzeugten Foreign Keys. Es verwendet
+keine Anwendungsdaten oder Zugangsdaten aus der Host-Umgebung.
 
 Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
 Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies

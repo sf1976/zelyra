@@ -340,6 +340,15 @@ Named slots may provide escaped, deterministic fallback content. Callers can
 override the named slot explicitly; otherwise the fallback is used.
 See `examples/component_slots.zyl`.
 
+The combined `examples/view_showcase.zyl` example demonstrates the intended
+release path in one small program: a named page shell, typed components,
+default and named slots, and a schema-backed CRUD resource with independently
+customizable list, detail, form, and loading views. Validate it with:
+
+~~~bash
+zelyra check examples/view_showcase.zyl --format=json
+~~~
+
 Search, filtering, sorting, and pagination are already available on generated
 CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 `is_null`; the same controls preserve their state in the URL. For example:
@@ -697,6 +706,11 @@ For SQLite:
 export DATABASE_URL='sqlite:///tmp/my-app.sqlite3'
 zelyra db bootstrap examples/machine_management_sqlite.zyl
 ~~~
+
+The same SQLite path is exercised by `tests/sqlite-e2e.sh`: it bootstraps a
+temporary database, inspects the schema, verifies an idempotent plan, and
+checks the generated foreign-key metadata. It never uses application data or
+credentials from the host environment.
 
 Do not commit real credentials. Use environment variables or a secret manager.
 The examples use MariaDB first because it is the default project backend.
