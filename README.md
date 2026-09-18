@@ -690,8 +690,8 @@ method chain.
 Currently available:
 
 ~~~text
-zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
+zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
@@ -734,6 +734,23 @@ After starting the generated Compose stack, run
 `zelyra doctor main.zyl --env-file .env --port 18080 --json` for a read-only
 check of the source, schema, MariaDB connection, Docker Compose, and published
 host port. The loaded database credentials are never printed.
+
+For a ready-to-explore MariaDB business application, use the optional CRUD
+starter:
+
+~~~bash
+zelyra new machine-management --template mariadb-crud \
+    --web-port 8080 --host-port 18080 --db-host-port 3307
+cd machine-management
+zelyra setup .
+docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
+set -a; . ./.env; set +a
+zelyra db setup main.zyl
+~~~
+
+The starter contains departments and machines, a foreign-key relationship,
+schema-mapped forms, CRUD pages, search, filtering, pagination, and custom
+actions. The default project remains the smaller welcome-page scaffold.
 
 ## Project layout
 

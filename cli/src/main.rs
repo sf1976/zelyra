@@ -42,10 +42,12 @@ use formatter::format_source;
 use holes::collect_typed_holes;
 use impact::{build_impact, focus_impact};
 
+const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
+
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -205,6 +207,7 @@ fn create_project(
     path: &str,
     allow_current_directory: bool,
     with_mariadb: bool,
+    crud_template: bool,
     web_port: u16,
     host_port: u16,
     database_host_port: u16,
@@ -242,7 +245,9 @@ database = true
 network = false
 "#
     };
-    let main_source = if with_mariadb {
+    let main_source = if crud_template {
+        MARIADB_CRUD_TEMPLATE
+    } else if with_mariadb {
         r#"database main {
     engine: mariadb
 }
@@ -6109,6 +6114,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         };
         let mut with_mariadb = false;
+        let mut crud_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6119,6 +6125,24 @@ fn main() -> ExitCode {
         while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
                 with_mariadb = true;
+            } else if argument == "--template" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --template requires a value");
+                    return ExitCode::from(2);
+                };
+                match value.as_str() {
+                    "minimal" => crud_template = false,
+                    "mariadb-crud" => {
+                        with_mariadb = true;
+                        crud_template = true;
+                    }
+                    _ => {
+                        eprintln!(
+                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal` or `mariadb-crud`"
+                        );
+                        return ExitCode::from(2);
+                    }
+                }
             } else if argument == "--web-port" {
                 let Some(value) = arguments.next() else {
                     eprintln!("error[E-CLI-001]: --web-port requires a value");
@@ -6173,6 +6197,7 @@ fn main() -> ExitCode {
             &path,
             false,
             with_mariadb,
+            crud_template,
             web_port,
             host_port,
             database_host_port,
@@ -6182,6 +6207,7 @@ fn main() -> ExitCode {
         let mut path = ".".to_owned();
         let mut path_given = false;
         let mut with_mariadb = false;
+        let mut crud_template = false;
         let mut web_port = DEFAULT_WEB_PORT;
         let mut web_port_given = false;
         let mut host_port = DEFAULT_WEB_PORT;
@@ -6192,6 +6218,24 @@ fn main() -> ExitCode {
         while let Some(argument) = arguments.next() {
             if argument == "--mariadb" && !with_mariadb {
                 with_mariadb = true;
+            } else if argument == "--template" {
+                let Some(value) = arguments.next() else {
+                    eprintln!("error[E-CLI-001]: --template requires a value");
+                    return ExitCode::from(2);
+                };
+                match value.as_str() {
+                    "minimal" => crud_template = false,
+                    "mariadb-crud" => {
+                        with_mariadb = true;
+                        crud_template = true;
+                    }
+                    _ => {
+                        eprintln!(
+                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal` or `mariadb-crud`"
+                        );
+                        return ExitCode::from(2);
+                    }
+                }
             } else if argument == "--web-port" {
                 let Some(value) = arguments.next() else {
                     eprintln!("error[E-CLI-001]: --web-port requires a value");
@@ -6249,6 +6293,7 @@ fn main() -> ExitCode {
             &path,
             true,
             with_mariadb,
+            crud_template,
             web_port,
             host_port,
             database_host_port,
@@ -7185,6 +7230,7 @@ mod tests {
             path.to_str().unwrap(),
             false,
             true,
+            false,
             DEFAULT_WEB_PORT,
             DEFAULT_WEB_PORT,
             DEFAULT_DATABASE_HOST_PORT,
@@ -7207,7 +7253,15 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let status = create_project(path.to_str().unwrap(), false, true, 8080, 18080, 3308);
+        let status = create_project(
+            path.to_str().unwrap(),
+            false,
+            true,
+            false,
+            8080,
+            18080,
+            3308,
+        );
         assert_eq!(status, ExitCode::SUCCESS);
 
         let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
