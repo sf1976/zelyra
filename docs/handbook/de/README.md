@@ -1151,6 +1151,26 @@ und `len` arbeiten deterministisch. Bei der JSON-Konvertierung werden
 `Map<String, Wert>` als JSON-Objekte behandelt; Maps mit anderen
 Schlüsseltypen sind keine JSON-Maps.
 
+Dieselbe Map mit String-Schlüsseln kann direkt über eine typisierte API
+veröffentlicht werden:
+
+~~~zelyra
+fn echo_settings(settings: Map<String, Int>) -> Map<String, Int> {
+    return settings
+}
+
+api POST "/settings" {
+    handler echo_settings
+    input { settings: Map<String, Int> }
+    output Map<String, Int>
+}
+~~~
+
+Der Compiler prüft die JSON-Grenze, OpenAPI beschreibt die Map als Objekt mit
+Ganzzahlwerten und der erzeugte TypeScript-Client verwendet
+`Record<string, number>`. Ein nicht-String-Schlüssel wird für API-Eingaben oder
+-Ausgaben abgelehnt, bevor der Server starten kann.
+
 Einen mit Browsern und Node kompatiblen TypeScript-Client aus denselben
 API-Deklarationen erzeugen:
 

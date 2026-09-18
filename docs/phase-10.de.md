@@ -155,6 +155,28 @@ last = last(numbers)
 `first` und `last` liefern `Option<T`; leere Arrays werden dadurch ohne einen
 Laufzeit-Nullwert sicher behandelt.
 
+Maps mit String-Schlüsseln überqueren die API-Grenze als JSON-Objekte. Dieselbe
+Typdeklaration steuert Request-Validierung, Response-Serialisierung, OpenAPI
+und den erzeugten TypeScript-Client:
+
+~~~zelyra
+fn echo_settings(settings: Map<String, Int>) -> Map<String, Int> {
+    return settings
+}
+
+api POST "/settings" {
+    handler echo_settings
+    input { settings: Map<String, Int> }
+    output Map<String, Int>
+}
+~~~
+
+`zelyra check examples/api_maps.zyl` prüft die Deklaration. Das OpenAPI-Schema
+beschreibt ein Objekt mit ganzzahligen `additionalProperties`, und der
+TypeScript-Client verwendet `Record<string, number>`. `Map<Int, String>` ist im
+Sprachkern gültig, wird an einer API-Grenze jedoch vom Compiler abgelehnt, weil
+JSON-Objektschlüssel Zeichenketten sind.
+
 Arrays können mit strukturierten `for ... in`-Schleifen durchlaufen werden. Die
 Schleifenvariable ist unveränderlich und nur im Schleifenkörper sichtbar:
 

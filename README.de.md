@@ -168,6 +168,9 @@ Heute implementiert:
 - deterministische typisierte Maps mit `Map<Schlüssel, Wert>`-Deklarationen,
   `Map { ... }`-Literalen, nullsicherem `get`, funktionalem `put`, `keys`,
   `values` und JSON-Konvertierung für Maps mit String-Schlüsseln;
+- Maps mit String-Schlüsseln werden an typisierten API-Grenzen einmal geprüft
+  und konsistent in JSON, OpenAPI-`additionalProperties` und erzeugte
+  TypeScript-Clients als `Record<string, Wert>` übernommen;
 - strukturierte `for ... in`-Iteration über Arrays mit `break` und `continue`;
 - Record-Literale und geprüfter Feldzugriff für verschachtelte Fachobjekte;
 - erste Capability-Deklarationen und statische Weitergabe über

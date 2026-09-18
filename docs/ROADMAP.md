@@ -284,6 +284,8 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [x] Typed API routes, request validation, JSON serialization, OpenAPI, and
   TypeScript client generation.
+- [x] String-keyed typed maps are checked at the API boundary and represented
+  consistently in JSON, OpenAPI, and generated TypeScript clients.
 - [ ] API versioning, deprecation metadata, rate limits, quotas, and request
   correlation IDs.
 - [ ] Authentication schemes for API keys, OAuth2/OIDC, and service accounts.

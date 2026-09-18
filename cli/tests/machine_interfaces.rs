@@ -785,3 +785,26 @@ fn invalid_format_is_rejected_without_machine_output_claims() {
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("human` or `json"));
 }
+
+#[test]
+fn typed_map_api_contract_drives_check_openapi_and_typescript() {
+    let path = example("api_maps.zyl");
+    let check = run(&["check", path.to_str().unwrap(), "--format=json"]);
+    assert!(check.status.success());
+    let check_document: serde_json::Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(check_document["success"], true);
+
+    let openapi = run(&["doc", path.to_str().unwrap(), "--openapi"]);
+    assert!(openapi.status.success());
+    let openapi_document: serde_json::Value = serde_json::from_slice(&openapi.stdout).unwrap();
+    assert_eq!(
+        openapi_document["paths"]["/settings"]["post"]["responses"]["200"]["content"]
+            ["application/json"]["schema"]["additionalProperties"]["type"],
+        "integer"
+    );
+
+    let typescript = run(&["doc", path.to_str().unwrap(), "--typescript"]);
+    assert!(typescript.status.success());
+    let client = String::from_utf8(typescript.stdout).unwrap();
+    assert!(client.contains("Record<string, number>"));
+}

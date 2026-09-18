@@ -292,6 +292,8 @@ Feature eines bestimmten Anbieters.
 
 - [x] Typisierte API-Routen, Request-Validierung, JSON, OpenAPI und TypeScript-
   Clientgenerierung.
+- [x] Typisierte Maps mit String-Schlüsseln werden an der API-Grenze geprüft
+  und konsistent in JSON, OpenAPI und erzeugten TypeScript-Clients dargestellt.
 - [ ] API-Versionierung, Deprecation-Metadaten, Rate Limits, Quotas und
   Request-Correlation-IDs.
 - [ ] API Keys, OAuth2/OIDC und Service Accounts.

@@ -1067,6 +1067,25 @@ match get(current, "standard") {
 `contains`, and `len` preserve deterministic behavior. JSON conversion uses
 JSON objects for `Map<String, Value>`; non-string map keys are not JSON maps.
 
+The same string-keyed map type can be exposed directly through a typed API:
+
+~~~zelyra
+fn echo_settings(settings: Map<String, Int>) -> Map<String, Int> {
+    return settings
+}
+
+api POST "/settings" {
+    handler echo_settings
+    input { settings: Map<String, Int> }
+    output Map<String, Int>
+}
+~~~
+
+The compiler validates the JSON boundary, OpenAPI describes the map as an
+object with integer values, and the generated TypeScript client uses
+`Record<string, number>`. A non-string map key is rejected for API input or
+output before the server can start.
+
 Generate a browser or Node-compatible TypeScript client from the same API
 declarations:
 

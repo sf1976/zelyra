@@ -7261,6 +7261,27 @@ mod tests {
     }
 
     #[test]
+    fn dispatches_string_keyed_map_api_input_and_output() {
+        let program = parse(
+            &lex(
+                "api POST \"/settings\" { handler echo input { settings: Map<String, Int> } output Map<String, Int> } fn echo(settings: Map<String, Int>) -> Map<String, Int> { return settings } fn main() { }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(check_apis(&program).is_ok());
+        let api = &program.apis[0];
+        let request = zelyra_web::parse_request(
+            "POST /settings HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"settings\":{\"standard\":10,\"premium\":20}}",
+        )
+        .unwrap();
+        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
+        assert_eq!(response.status, 200);
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(body, serde_json::json!({"premium": 20, "standard": 10}));
+    }
+
+    #[test]
     fn returns_structured_json_for_invalid_api_input() {
         let program = parse(
             &lex(

@@ -157,6 +157,9 @@ Implemented today:
 - deterministic typed maps with `Map<Key, Value>` declarations, `Map { ... }`
   literals, null-safe `get`, functional `put`, `keys`, `values`, and JSON
   conversion for string-keyed maps;
+- string-keyed maps at typed API boundaries are checked once and carried
+  consistently into JSON, OpenAPI `additionalProperties`, and generated
+  TypeScript `Record<string, Value>` clients;
 - structured `for ... in` array iteration with `break` and `continue`;
 - record literals and checked field access for nested business values;
 - initial capability declarations and static propagation through function calls;
