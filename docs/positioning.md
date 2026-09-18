@@ -61,6 +61,10 @@ authentication, and authorization paths intact. This is a product direction,
 not a claim that any single view feature is unique by itself; its value comes
 from combining simplicity with the same database and safety model.
 
+The shared CRUD view profile is a concrete example: one `view.fields` list can
+shape the generated list, detail, and forms, while explicit local overrides
+remain available.
+
 ## What is implemented today
 
 The current repository already demonstrates schema-aware SQL, MariaDB CRUD,

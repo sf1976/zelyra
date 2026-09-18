@@ -379,6 +379,21 @@ view {
 The generated endpoint remains POST-only and continues to require CSRF and
 delete authorization checks.
 
+For the common case, one shared field profile can drive the generated list,
+detail, and create/edit forms:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { name email active }
+    }
+}
+~~~
+
+An explicit `list { ... }` remains an override for the list and detail view.
+Primary-key and auto-generated fields remain excluded from forms automatically;
+unknown profile fields are rejected by the compiler.
+
 CRUD loading and error states can be configured as well:
 
 ~~~zelyra

@@ -65,6 +65,10 @@ eine Produkt-Richtung und keine Behauptung, dass ein einzelnes View-Feature
 allein einzigartig ist; der Wert entsteht aus der Kombination von Einfachheit
 mit demselben Datenbank- und Sicherheitsmodell.
 
+Das gemeinsame CRUD-View-Profil ist ein konkretes Beispiel: Eine Liste in
+`view.fields` kann erzeugte Liste, Detailansicht und Formulare prägen, während
+explizite lokale Überschreibungen möglich bleiben.
+
 ## Was heute implementiert ist
 
 Das Repository demonstriert bereits schemaabhängiges SQL, MariaDB-CRUD,

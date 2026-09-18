@@ -184,6 +184,9 @@ Feature eines bestimmten Anbieters.
 - [~] CRUD-View-Überschreibungen für Listen unterstützen sicher die Modi
   `table`/`cards` und eine eigene Leerzustandsmeldung bei Erhalt der
   generierten Abfrage-, Auth- und Aktionsprüfungen.
+- [~] Gemeinsame schema-basierte CRUD-View-Felder können erzeugte Liste,
+  Detailansicht und Create-/Edit-Formulare steuern; explizite Listenauswahl
+  bleibt eine lokale Überschreibung.
 - [~] CRUD-View-Überschreibungen für Details unterstützen sicher die Modi
   `standard`/`cards` und eine eigene Überschrift bei Erhalt der generierten
   Aktions-, CSRF-, Auth- und Escaping-Prüfungen.

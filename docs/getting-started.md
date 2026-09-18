@@ -747,6 +747,10 @@ allowlisted sorting, pagination, linked detail pages, and generated Create/Edit
 forms at `/machines/new` and `/machines/<id>/edit`. Filters use
 `filter_<column>`; sorting uses `sort=<column>&order=asc|desc`.
 
+For a compact shared view profile, use `view { fields { ... } }` inside a CRUD.
+It drives the generated list, detail, and forms; an explicit `list { ... }`
+overrides only the list/detail selection.
+
 ## 11. Useful commands
 
 ~~~text

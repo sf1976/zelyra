@@ -179,6 +179,8 @@ architecture requirement for every phase, not a provider-specific feature.
   validation-error components.
 - [~] CRUD list view overrides support a safe `table`/`cards` mode and a custom
   empty-state message while preserving generated query, auth, and action guards.
+- [~] Shared schema-based CRUD view fields can drive generated list, detail, and
+  create/edit forms; explicit list selections remain local overrides.
 - [~] CRUD detail view overrides support a safe `standard`/`cards` mode and a
   custom heading while preserving generated action, CSRF, auth, and escaping
   guards.

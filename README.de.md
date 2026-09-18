@@ -393,6 +393,21 @@ view {
 Die generierte Route bleibt POST-only und verlangt weiterhin CSRF- sowie
 Löschberechtigungsprüfungen.
 
+Für den häufigen Fall kann ein gemeinsames Feldprofil die erzeugte Liste,
+Detailansicht sowie Create-/Edit-Formulare steuern:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { name email active }
+    }
+}
+~~~
+
+Ein explizites `list { ... }` bleibt eine Überschreibung für Liste und Detail.
+Primärschlüssel und automatisch erzeugte Felder bleiben in Formularen
+automatisch ausgeschlossen; unbekannte Profilfelder weist der Compiler zurück.
+
 Auch Lade- und Fehlerzustände von CRUD können konfiguriert werden:
 
 ~~~zelyra

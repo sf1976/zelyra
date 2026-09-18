@@ -775,6 +775,10 @@ erzeugten Create-/Edit-Formularen unter `/machines/new` und
 `/machines/<id>/edit` bereitgestellt. Filter verwenden `filter_<spalte>`;
 Sortierung verwendet `sort=<spalte>&order=asc|desc`.
 
+Für ein kompaktes gemeinsames View-Profil genügt `view { fields { ... } }`
+innerhalb eines CRUDs. Es steuert erzeugte Liste, Detailansicht und Formulare;
+ein explizites `list { ... }` überschreibt nur die Auswahl für Liste/Detail.
+
 ## 11. Nützliche Befehle
 
 ~~~text
