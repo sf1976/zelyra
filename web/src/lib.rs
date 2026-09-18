@@ -2586,9 +2586,13 @@ struct CrudUiActionField {
     input_type: String,
     required: bool,
     max: Option<u32>,
+    relation: bool,
+    options: Vec<SelectOption>,
 }
 
 fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
+    let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
+    let include_relation_options = match_path(&detail_path, &request.path).is_some();
     CrudUiActions {
         create: can_authorize(crud.requires_auth, &crud.create_permissions, request, app),
         edit: can_authorize(crud.requires_auth, &crud.edit_permissions, request, app),
@@ -2598,7 +2602,16 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
             .iter()
             .filter_map(|action| {
                 let (requires_auth, permissions) = form_authorization(&action.form);
-                can_authorize(requires_auth, &permissions, request, app).then(|| CrudUiActionLink {
+                if !can_authorize(requires_auth, &permissions, request, app) {
+                    return None;
+                }
+                let relation_options = if include_relation_options {
+                    load_relation_options(&action.form, app.database_url.as_deref())
+                        .unwrap_or_default()
+                } else {
+                    HashMap::new()
+                };
+                Some(CrudUiActionLink {
                     label: action.label.clone(),
                     path: action.form.path.clone(),
                     csrf: action.form.csrf.token().into(),
@@ -2614,6 +2627,11 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                             input_type: input_type(&action.form, field).into(),
                             required: is_required(&action.form, field),
                             max: field_max(&action.form, field),
+                            relation: relation_target_for_field(&action.form, field).is_some(),
+                            options: relation_options
+                                .get(&field.name)
+                                .cloned()
+                                .unwrap_or_default(),
                         })
                         .collect(),
                 })
@@ -4233,25 +4251,49 @@ fn render_crud_detail_with_actions(
             html.push_str(&html_escape(&field.name));
             html.push_str("\">");
             html.push_str(&html_escape(&field.label));
-            html.push_str("</label><input id=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push_str("\" name=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push_str("\" type=\"");
-            html.push_str(&html_escape(&field.input_type));
-            html.push('"');
-            if field.input_type == "checkbox" {
-                html.push_str(" value=\"true\"");
-            }
-            if field.required && field.input_type != "checkbox" {
-                html.push_str(" required");
-            }
-            if let Some(max) = field.max {
-                html.push_str(" maxlength=\"");
-                html.push_str(&max.to_string());
+            html.push_str("</label>");
+            if field.relation {
+                html.push_str("<select id=\"");
+                html.push_str(&html_escape(&field.name));
+                html.push_str("\" name=\"");
+                html.push_str(&html_escape(&field.name));
                 html.push('"');
+                if field.required {
+                    html.push_str(" required");
+                }
+                html.push('>');
+                if !field.required {
+                    html.push_str("<option value=\"\">-- Select --</option>");
+                }
+                for option in &field.options {
+                    html.push_str("<option value=\"");
+                    html.push_str(&html_escape(&option.value));
+                    html.push_str("\">");
+                    html.push_str(&html_escape(&option.label));
+                    html.push_str("</option>");
+                }
+                html.push_str("</select>");
+            } else {
+                html.push_str("<input id=\"");
+                html.push_str(&html_escape(&field.name));
+                html.push_str("\" name=\"");
+                html.push_str(&html_escape(&field.name));
+                html.push_str("\" type=\"");
+                html.push_str(&html_escape(&field.input_type));
+                html.push('"');
+                if field.input_type == "checkbox" {
+                    html.push_str(" value=\"true\"");
+                }
+                if field.required && field.input_type != "checkbox" {
+                    html.push_str(" required");
+                }
+                if let Some(max) = field.max {
+                    html.push_str(" maxlength=\"");
+                    html.push_str(&max.to_string());
+                    html.push('"');
+                }
+                html.push('>');
             }
-            html.push('>');
         }
         html.push_str("<button type=\"submit\">");
         html.push_str(&html_escape(&action.label));
@@ -6163,13 +6205,29 @@ mod tests {
                     path: "/machines/{id}/deactivate".into(),
                     csrf: "crud-csrf".into(),
                     confirm: Some("Deactivate <unsafe> customer?".into()),
-                    fields: vec![CrudUiActionField {
-                        name: "active".into(),
-                        label: "Active".into(),
-                        input_type: "checkbox".into(),
-                        required: true,
-                        max: None,
-                    }],
+                    fields: vec![
+                        CrudUiActionField {
+                            name: "active".into(),
+                            label: "Active".into(),
+                            input_type: "checkbox".into(),
+                            required: true,
+                            max: None,
+                            relation: false,
+                            options: Vec::new(),
+                        },
+                        CrudUiActionField {
+                            name: "department".into(),
+                            label: "Department".into(),
+                            input_type: "text".into(),
+                            required: true,
+                            max: None,
+                            relation: true,
+                            options: vec![SelectOption {
+                                value: "2".into(),
+                                label: "Production <unsafe>".into(),
+                            }],
+                        },
+                    ],
                 }],
             },
         );
@@ -6177,6 +6235,8 @@ mod tests {
         assert!(action_html.contains(">Deactivate</button>"));
         assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
         assert!(action_html.contains("name=\"active\" type=\"checkbox\" value=\"true\""));
+        assert!(action_html.contains("<select id=\"department\" name=\"department\" required>"));
+        assert!(action_html.contains("<option value=\"2\">Production &lt;unsafe&gt;</option>"));
         assert!(action_html.contains(
             "onsubmit=\"return confirm(&#39;Deactivate &lt;unsafe&gt; customer?&#39;)\""
         ));

@@ -404,6 +404,11 @@ action set_active {
 }
 ~~~
 
+Beziehungsfelder erhalten automatisch ein geprüftes Auswahlfeld. Zum Beispiel
+lädt `field department: Department { required }` die Anzeigewerte aus der
+referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt nicht
+mehr vorhandene IDs ab, bevor das SQL der Aktion ausgeführt wird.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

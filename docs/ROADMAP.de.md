@@ -161,11 +161,12 @@ noch in Prüfung.
 - [ ] Bulk-Aktionen, Im-/Export, gespeicherte Suchen, Spaltenpräferenzen und
   serverseitige Reports.
 - [~] Eigene Aktionsbeschriftungen und Browser-Bestätigungen sind verfügbar.
-- [~] Typisierte Eingaben eigener Aktionen verwenden normale
-  Formularvalidierung und Parameterbindung; Beziehungs-Widgets und eine
-  umfangreichere aktionsspezifische Darstellung bleiben offen.
-- [ ] Eigene Aktions-Icons, serverseitige Bestätigungsansichten sowie
-  aktionsspezifische Erfolgs-/Fehlerdarstellung.
+- [x] Typisierte Eingaben eigener Aktionen verwenden normale
+  Formularvalidierung und Parameterbindung; Beziehungsfelder werden als
+  geprüfte, MariaDB-gestützte Auswahlfelder dargestellt.
+- [ ] Umfangreichere aktionsspezifische Darstellung, eigene Aktions-Icons,
+  serverseitige Bestätigungsansichten sowie aktionsspezifische
+  Erfolgs-/Fehlerdarstellung.
 - [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.

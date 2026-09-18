@@ -224,6 +224,9 @@ echo "[9/11] executing a typed custom CRUD action"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-action-detail.html"
 grep -Fq "Set active status" "${temp_dir}/machine-action-detail.html"
 grep -Fq "name=\"active\"" "${temp_dir}/machine-action-detail.html"
+grep -Fq "Move department" "${temp_dir}/machine-action-detail.html"
+grep -Fq "name=\"department\"" "${temp_dir}/machine-action-detail.html"
+grep -Fq "value=\"${secondary_department_id}\">${secondary_department_name}" "${temp_dir}/machine-action-detail.html"
 action_csrf="$(extract_csrf "${temp_dir}/machine-action-detail.html")"
 invalid_action_status="$(curl --silent --show-error --output "${temp_dir}/invalid-action.html" --write-out '%{http_code}' \
     --data-urlencode "_zelyra_csrf=${action_csrf}" \
@@ -241,6 +244,22 @@ curl --silent --show-error --fail --get \
     "${base_url}/machines" -o "${temp_dir}/custom-action-result.html"
 grep -Fq "${machine_name}" "${temp_dir}/custom-action-result.html"
 grep -Fq "${machine_two_name}" "${temp_dir}/custom-action-result.html"
+invalid_department_status="$(curl --silent --show-error --output "${temp_dir}/invalid-department-action.html" --write-out '%{http_code}' \
+    --data-urlencode "_zelyra_csrf=${action_csrf}" \
+    --data-urlencode "department=999999" \
+    "${base_url}/machines/${machine_id}/move_department")"
+[[ "${invalid_department_status}" == "422" ]]
+department_action_status="$(post_form "${temp_dir}/department-action-response.html" \
+    --data-urlencode "_zelyra_csrf=${action_csrf}" \
+    --data-urlencode "department=${secondary_department_id}" \
+    "${base_url}/machines/${machine_id}/move_department")"
+[[ "${department_action_status}" == "303" ]]
+curl --silent --show-error --fail --get \
+    --data-urlencode "search=${suffix}" \
+    --data-urlencode "filter_department=${secondary_department_id}" \
+    "${base_url}/machines" -o "${temp_dir}/relationship-action-result.html"
+grep -Fq "${machine_name}" "${temp_dir}/relationship-action-result.html"
+! grep -Fq "${machine_two_name}" "${temp_dir}/relationship-action-result.html"
 
 echo "[10/11] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"

@@ -148,6 +148,11 @@ action set_active {
 }
 ~~~
 
+Relationship fields such as `department: Department` are rendered as checked
+select fields on the detail view. Options come from the referenced MariaDB
+table, and submitted IDs are validated against the current option set before
+the action SQL executes.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

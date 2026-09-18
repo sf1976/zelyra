@@ -607,6 +607,11 @@ action set_active {
 }
 ~~~
 
+Relationship fields such as `department: Department` are rendered as checked
+select fields. Zelyra loads their labels from the referenced MariaDB table,
+submits the stored ID, and rejects stale or unknown IDs before executing the
+action SQL.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

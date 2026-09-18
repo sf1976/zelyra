@@ -668,6 +668,11 @@ action set_active {
 }
 ~~~
 
+Beziehungsfelder wie `department: Department` werden als geprüfte
+Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der
+referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt veraltete
+oder unbekannte IDs vor der Ausführung des Aktions-SQLs ab.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

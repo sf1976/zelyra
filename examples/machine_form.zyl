@@ -75,4 +75,23 @@ crud Machine -> machines {
         success "Machine status updated."
         redirect "/machines"
     }
+
+    action move_department {
+        label: "Move department"
+        confirm: "Move this machine to another department?"
+
+        field department: Department {
+            label: "Department"
+            required
+        }
+
+        sql {
+            UPDATE machines
+            SET department_id = :department
+            WHERE id = :id
+        }
+
+        success "Machine department updated."
+        redirect "/machines"
+    }
 }

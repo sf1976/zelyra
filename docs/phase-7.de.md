@@ -153,6 +153,11 @@ action set_active {
 }
 ~~~
 
+Beziehungsfelder wie `department: Department` werden in der Detailansicht als
+geprüfte Auswahlfelder dargestellt. Die Optionen stammen aus der referenzierten
+MariaDB-Tabelle; gesendete IDs werden vor der Ausführung des Aktions-SQLs gegen
+die aktuelle Optionsmenge validiert.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

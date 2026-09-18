@@ -393,6 +393,11 @@ action set_active {
 }
 ~~~
 
+Relationship fields use a checked select automatically. For example,
+`field department: Department { required }` loads the display values from the
+referenced MariaDB table, submits the stored ID, and rejects IDs that are no
+longer available before the action SQL runs.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.
