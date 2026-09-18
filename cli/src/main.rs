@@ -3372,6 +3372,8 @@ fn generated_crud_form(
                 icon: None,
                 confirm: None,
                 confirm_page: None,
+                success_page: None,
+                error_page: None,
                 fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),

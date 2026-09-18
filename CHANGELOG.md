@@ -40,7 +40,8 @@ compiler and repository release.
   labels, browser confirmation messages, typed validated input fields, and
   MariaDB-backed relationship select fields. Action icons and escaped success
   notices are now available as well. Riskier actions can use server-rendered
-  `confirm_page` views with CSRF-protected POST confirmation.
+  `confirm_page` views with CSRF-protected POST confirmation. Structured
+  `success_page` notices and safe `error_page` responses are also available.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

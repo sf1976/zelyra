@@ -2394,18 +2394,32 @@ fn dispatch_form(
     }
     if let Some(action) = form.form.actions.first() {
         let Some(database_url) = database_url else {
-            return Response::html(
+            return action_error_response(
+                action,
                 503,
-                "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for this form action.</p>",
+                "Service Unavailable",
+                "DATABASE_URL is required for this form action.",
             );
         };
         if let Err(error) = execute_form_action(form, action, &values, path_params, database_url) {
             eprintln!("zelyra web: form action failed: {error}");
-            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            return action_error_response(
+                action,
+                500,
+                "Internal Server Error",
+                "The action could not be completed.",
+            );
         }
         let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
-        if let Some(success) = action.success.as_deref() {
+        if let Some(success) = action_success_message(action) {
             redirect = append_query_parameter(&redirect, "zelyra_success", success);
+        }
+        if let Some(title) = action
+            .success_page
+            .as_ref()
+            .and_then(|page| page.title.as_deref())
+        {
+            redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
         }
         return Response::redirect(redirect);
     }
@@ -2454,6 +2468,42 @@ fn render_action_confirmation(
             None,
             relation_options
         )
+    )
+}
+
+fn action_success_message(action: &zelyra_ast::FormAction) -> Option<&str> {
+    action.success.as_deref().or_else(|| {
+        action.success_page.as_ref().map(|page| {
+            page.message
+                .as_deref()
+                .unwrap_or("Action completed successfully.")
+        })
+    })
+}
+
+fn action_error_response(
+    action: &zelyra_ast::FormAction,
+    status: u16,
+    default_title: &str,
+    default_message: &str,
+) -> Response {
+    let title = action
+        .error_page
+        .as_ref()
+        .and_then(|page| page.title.as_deref())
+        .unwrap_or(default_title);
+    let message = action
+        .error_page
+        .as_ref()
+        .and_then(|page| page.message.as_deref())
+        .unwrap_or(default_message);
+    Response::html(
+        status,
+        format!(
+            "<main class=\"zelyra-action-error\"><h1>{}</h1><p>{}</p></main>",
+            html_escape(title),
+            html_escape(message)
+        ),
     )
 }
 
@@ -3064,6 +3114,7 @@ fn dispatch_crud(
                 page,
                 per_page,
                 success: query_values.get("zelyra_success").map(String::as_str),
+                success_title: query_values.get("zelyra_success_title").map(String::as_str),
             },
             ui_actions,
         ),
@@ -3967,6 +4018,7 @@ struct CrudListView<'a> {
     page: u64,
     per_page: u64,
     success: Option<&'a str>,
+    success_title: Option<&'a str>,
 }
 
 #[cfg(test)]
@@ -4001,6 +4053,7 @@ fn render_crud_list_with_actions(
         page,
         per_page,
         success,
+        success_title,
     } = view;
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
@@ -4008,9 +4061,15 @@ fn render_crud_list_with_actions(
     html.push_str(&html_escape(&crud.title));
     html.push_str("</h1>");
     if let Some(success) = success {
-        html.push_str("<p class=\"zelyra-success\" role=\"status\">");
+        html.push_str("<section class=\"zelyra-success\" role=\"status\">");
+        if let Some(title) = success_title {
+            html.push_str("<h2>");
+            html.push_str(&html_escape(title));
+            html.push_str("</h2>");
+        }
+        html.push_str("<p>");
         html.push_str(&html_escape(success));
-        html.push_str("</p>");
+        html.push_str("</p></section>");
     }
     if ui_actions.create {
         html.push_str("<p><a href=\"");
@@ -5779,10 +5838,13 @@ mod tests {
                 page: 2,
                 per_page: 1,
                 success: Some("Saved <unsafe>"),
+                success_title: Some("Completed"),
             },
         );
         assert!(html.contains("&lt;unsafe&gt;"));
-        assert!(html.contains("class=\"zelyra-success\" role=\"status\">Saved &lt;unsafe&gt;</p>"));
+        assert!(html.contains(
+            "class=\"zelyra-success\" role=\"status\"><h2>Completed</h2><p>Saved &lt;unsafe&gt;</p>"
+        ));
         assert!(html.contains("value=\"CNC machine\""));
         assert!(html
             .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
@@ -5804,6 +5866,7 @@ mod tests {
                 page: 1,
                 per_page: 50,
                 success: None,
+                success_title: None,
             },
             CrudUiActions {
                 create: false,
@@ -5833,6 +5896,7 @@ mod tests {
                 page: 1,
                 per_page: 50,
                 success: None,
+                success_title: None,
             },
         );
         assert!(cards_html.contains("zelyra-crud-cards"));
@@ -5856,6 +5920,7 @@ mod tests {
                 page: 1,
                 per_page: 50,
                 success: None,
+                success_title: None,
             },
         );
         assert!(empty_html.contains("Nothing &lt;yet&gt;."));
@@ -5964,6 +6029,7 @@ mod tests {
                 page: 1,
                 per_page: 50,
                 success: None,
+                success_title: None,
             },
         );
         assert!(html.contains("<th>Department</th>"));
@@ -6377,6 +6443,39 @@ mod tests {
     }
 
     #[test]
+    fn renders_action_error_without_database_details() {
+        let action = zelyra_ast::FormAction {
+            name: "save".into(),
+            label: None,
+            icon: None,
+            confirm: None,
+            confirm_page: None,
+            success_page: None,
+            error_page: Some(zelyra_ast::CrudActionNoticeDef {
+                title: Some("Action failed <unsafe>".into()),
+                message: Some("Please try again <later>.".into()),
+            }),
+            fields: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+            statements: Vec::new(),
+            success: None,
+            redirect: None,
+            span: zelyra_ast::Span::default(),
+        };
+        let response = action_error_response(
+            &action,
+            500,
+            "Internal Server Error",
+            "database password must not leak",
+        );
+        assert_eq!(response.status, 500);
+        assert!(response.body.contains("Action failed &lt;unsafe&gt;"));
+        assert!(response.body.contains("Please try again &lt;later&gt;."));
+        assert!(!response.body.contains("database password"));
+    }
+
+    #[test]
     fn form_post_requires_csrf_and_reports_validation_errors() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let invalid_csrf = parse_request(
@@ -6414,6 +6513,8 @@ mod tests {
             icon: None,
             confirm: None,
             confirm_page: None,
+            success_page: None,
+            error_page: None,
             fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
@@ -6439,6 +6540,8 @@ mod tests {
             icon: None,
             confirm: None,
             confirm_page: None,
+            success_page: None,
+            error_page: None,
             fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
@@ -6463,6 +6566,8 @@ mod tests {
             icon: None,
             confirm: None,
             confirm_page: None,
+            success_page: None,
+            error_page: None,
             fields: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),

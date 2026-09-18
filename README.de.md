@@ -421,6 +421,11 @@ Meldung, typisierte Aktionsfelder, frischen CSRF-Schutz und einen ausdrückliche
 POST-Submit-Button. Die bisherige Kurzform `confirm: "..."` bleibt als leichte
 Browser-Bestätigung erhalten.
 
+Für ausführlichere Rückmeldungen ergänzt `success_page { title: "..."
+message: "..." }` eine strukturierte escaped Erfolgsmeldung.
+`error_page { title: "..." message: "..." }` ersetzt die generische
+Aktionsfehlerseite, ohne Datenbankdetails an die Antwort weiterzugeben.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

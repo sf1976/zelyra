@@ -74,6 +74,14 @@ crud Machine -> machines {
         }
 
         success "Machine status updated."
+        success_page {
+            title: "Machine updated"
+            message: "The machine status was updated successfully."
+        }
+        error_page {
+            title: "Machine update failed"
+            message: "The machine status could not be updated."
+        }
         redirect "/machines"
     }
 

@@ -679,6 +679,10 @@ einem GET-Link; die Bestätigungsseite rendert die Felder mit einem frischen,
 CSRF-geschützten POST-Formular. Die Autorisierung wird bei beiden Requests
 geprüft.
 
+`success_page` konfiguriert eine strukturierte escaped Erfolgsmeldung;
+`error_page` stellt eine sichere aktionsspezifische Fehlerseite bereit, ohne
+Datenbankdetails offenzulegen.
+
 Beziehungsfelder wie `department: Department` werden als geprüfte
 Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der
 referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt veraltete

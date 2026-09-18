@@ -1067,6 +1067,8 @@ impl<'a> Parser<'a> {
         let mut icon = None;
         let mut confirm = None;
         let mut confirm_page = None;
+        let mut success_page = None;
+        let mut error_page = None;
         let mut fields = Vec::new();
         let mut success = None;
         let mut redirect = None;
@@ -1098,6 +1100,12 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::ConfirmPage) {
                 self.advance();
                 confirm_page = Some(self.crud_confirm_view_block()?);
+            } else if self.at(&TokenKind::SuccessPage) {
+                self.advance();
+                success_page = Some(self.crud_action_notice_block()?);
+            } else if self.at(&TokenKind::ErrorPage) {
+                self.advance();
+                error_page = Some(self.crud_action_notice_block()?);
             } else if self.at(&TokenKind::Success) {
                 self.advance();
                 success = Some(self.string_value("success message")?);
@@ -1116,6 +1124,8 @@ impl<'a> Parser<'a> {
             icon,
             confirm,
             confirm_page,
+            success_page,
+            error_page,
             fields,
             requires_auth,
             permissions,
@@ -1146,6 +1156,26 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
         }
         self.expect(TokenKind::RBrace, "`}` after confirm_page")?;
+        Ok(view)
+    }
+
+    fn crud_action_notice_block(&mut self) -> Result<CrudActionNoticeDef, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after action notice")?;
+        let mut view = CrudActionNoticeDef::default();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (property, _) = self.ident("action notice property")?;
+            self.expect(TokenKind::Colon, "colon after action notice property")?;
+            match property.as_str() {
+                "title" => view.title = Some(self.string_value("action notice title")?),
+                "message" => view.message = Some(self.string_value("action notice message")?),
+                _ => {
+                    return self.error("expected `title` or `message` in action notice definition")
+                }
+            }
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after action notice")?;
         Ok(view)
     }
     fn positive_integer(&mut self, label: &str) -> Result<u32, ParseError> {
@@ -2296,6 +2326,14 @@ mod tests {
                             WHERE id = :id
                         }
                         success "Customer deactivated."
+                        success_page {
+                            title: "Customer updated"
+                            message: "The customer was updated."
+                        }
+                        error_page {
+                            title: "Customer action failed"
+                            message: "The customer could not be updated."
+                        }
                         redirect "/customers"
                     }
                 }"#)
@@ -2381,6 +2419,20 @@ mod tests {
         assert_eq!(
             program.cruds[0].actions[0].success.as_deref(),
             Some("Customer deactivated.")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0]
+                .success_page
+                .as_ref()
+                .and_then(|page| page.title.as_deref()),
+            Some("Customer updated")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0]
+                .error_page
+                .as_ref()
+                .and_then(|page| page.message.as_deref()),
+            Some("The customer could not be updated.")
         );
     }
 

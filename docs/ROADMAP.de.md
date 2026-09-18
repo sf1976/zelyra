@@ -167,7 +167,8 @@ noch in Prüfung.
 - [x] Eigene Aktions-Icons und escaped Erfolgsmeldungen sind verfügbar.
 - [x] Serverseitige `confirm_page`-Ansichten mit frischer
   CSRF-geschützter POST-Bestätigung sind verfügbar.
-- [ ] Umfangreichere aktionsspezifische Erfolgs-/Fehlerdarstellung.
+- [x] Strukturierte `success_page`-Meldungen und sichere
+  aktionsspezifische `error_page`-Antworten sind verfügbar.
 - [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.

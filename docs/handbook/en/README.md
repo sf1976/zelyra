@@ -617,6 +617,10 @@ server-rendered confirmation step. The detail action becomes a GET link, and
 the confirmation page renders the fields with a fresh CSRF-protected POST
 form. Authorization is checked for both requests.
 
+`success_page` configures a structured escaped success notice, while
+`error_page` provides a safe action-specific failure page without exposing
+database details.
+
 Relationship fields such as `department: Department` are rendered as checked
 select fields. Zelyra loads their labels from the referenced MariaDB table,
 submits the stored ID, and rejects stale or unknown IDs before executing the

@@ -167,7 +167,8 @@ under evaluation.
 - [x] Custom action icons and escaped success notices are available.
 - [x] Server-rendered `confirm_page` views with fresh CSRF-protected POST
   confirmation are available.
-- [ ] Richer action-specific success/error presentation.
+- [x] Structured `success_page` notices and safe action-specific `error_page`
+  responses are available.
 - [ ] Soft delete, restore, archive, and retention policies.
 - [ ] Audit-aware CRUD history and field-level change diffs.
 - [ ] Background jobs, scheduled tasks, retries, and transactional outbox.

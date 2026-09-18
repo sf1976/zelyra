@@ -182,6 +182,11 @@ Bestätigungsseite rendert die typisierten Felder und ein frisches,
 CSRF-geschütztes POST-Formular; die Autorisierung wird bei beiden Requests
 geprüft.
 
+Mit `success_page` lassen sich Titel und Meldung einer escaped
+Erfolgsmeldung konfigurieren; `error_page` definiert eine sichere
+aktionsspezifische Fehlerseite. Datenbankdetails bleiben serverseitig und
+werden niemals in die Antwort gerendert.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

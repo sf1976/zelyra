@@ -410,6 +410,11 @@ fields, fresh CSRF protection, and an explicit POST submit button. The
 existing `confirm: "..."` syntax remains the lightweight browser-confirmation
 form.
 
+For richer feedback, `success_page { title: "..." message: "..." }` adds a
+structured escaped success notice. `error_page { title: "..." message: "..." }`
+replaces the generic action-failure page while keeping database details out of
+the response.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

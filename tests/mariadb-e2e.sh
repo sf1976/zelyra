@@ -239,7 +239,9 @@ action_status="$(curl --silent --show-error --fail --output "${temp_dir}/machine
     --data-urlencode "active=false" \
     "${base_url}/machines/${machine_id}/set_active")"
 [[ "${action_status}" == "303" ]]
-grep -Fq "Location: /machines?zelyra_success=Machine%20status%20updated." "${temp_dir}/machine-action-headers.html"
+grep -Fq "Location: /machines?zelyra_success=Machine%20status%20updated.&zelyra_success_title=Machine%20updated" "${temp_dir}/machine-action-headers.html"
+curl --silent --show-error --fail "${base_url}/machines?zelyra_success=Machine%20status%20updated.&zelyra_success_title=Machine%20updated" -o "${temp_dir}/success-notice.html"
+grep -Fq '<section class="zelyra-success" role="status"><h2>Machine updated</h2><p>Machine status updated.</p></section>' "${temp_dir}/success-notice.html"
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${suffix}" \
     --data-urlencode "filter_active=false" \

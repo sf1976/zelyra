@@ -176,6 +176,10 @@ The detail button becomes a GET link. The confirmation page renders the typed
 fields and a fresh CSRF-protected POST form; authorization is checked on both
 requests.
 
+Use `success_page` for a structured escaped success title and message, and
+`error_page` for a safe action-specific failure page. Database error details
+remain server-side and are never rendered into the response.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before
