@@ -1,3 +1,4 @@
+use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use std::{
     cell::RefCell,
@@ -43,7 +44,7 @@ use impact::{build_impact, focus_impact};
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -74,6 +75,119 @@ fn parse_web_port(value: &str) -> Result<u16, String> {
         return Err("web port must be between 1 and 65535".into());
     }
     Ok(port)
+}
+
+fn generate_local_secret() -> Result<String, String> {
+    let mut bytes = [0_u8; 24];
+    OsRng
+        .try_fill_bytes(&mut bytes)
+        .map_err(|error| format!("cannot generate a local secret: {error}"))?;
+    let mut secret = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut secret, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    Ok(secret)
+}
+
+fn setup_project(path: &str) -> ExitCode {
+    let directory = std::path::Path::new(path);
+    let example_file = directory.join(".env.example");
+    let env_file = directory.join(".env");
+    if !directory.is_dir() {
+        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
+        return ExitCode::from(1);
+    }
+    if !example_file.is_file() {
+        eprintln!(
+            "error[E-SETUP-001]: `{path}` is not a MariaDB project scaffold; `.env.example` is missing"
+        );
+        return ExitCode::from(1);
+    }
+    if env_file.exists() {
+        println!("kept existing {}", env_file.display());
+        println!("no credentials were changed or printed");
+        return ExitCode::SUCCESS;
+    }
+    let template = match fs::read_to_string(&example_file) {
+        Ok(template) => template,
+        Err(error) => {
+            eprintln!(
+                "error[E-SETUP-002]: cannot read `{}`: {error}",
+                example_file.display()
+            );
+            return ExitCode::from(1);
+        }
+    };
+    let database_password = match generate_local_secret() {
+        Ok(secret) => secret,
+        Err(error) => {
+            eprintln!("error[E-SETUP-003]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let root_password = match generate_local_secret() {
+        Ok(secret) => secret,
+        Err(error) => {
+            eprintln!("error[E-SETUP-003]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let database_url =
+        format!("DATABASE_URL=mariadb://zelyra:{database_password}@127.0.0.1:3306/zelyra_app");
+    let contents = template
+        .replace(
+            "DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:3306/zelyra_app",
+            &database_url,
+        )
+        .replace(
+            "MARIADB_PASSWORD=change-me",
+            &format!("MARIADB_PASSWORD={database_password}"),
+        )
+        .replace(
+            "MARIADB_ROOT_PASSWORD=change-me-root",
+            &format!("MARIADB_ROOT_PASSWORD={root_password}"),
+        );
+    if let Err(error) = fs::write(&env_file, contents) {
+        eprintln!(
+            "error[E-SETUP-004]: cannot write `{}`: {error}",
+            env_file.display()
+        );
+        return ExitCode::from(1);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = match fs::metadata(&env_file) {
+            Ok(metadata) => metadata.permissions(),
+            Err(error) => {
+                eprintln!(
+                    "error[E-SETUP-005]: cannot inspect `{}`: {error}",
+                    env_file.display()
+                );
+                return ExitCode::from(1);
+            }
+        };
+        permissions.set_mode(0o600);
+        if let Err(error) = fs::set_permissions(&env_file, permissions) {
+            eprintln!(
+                "error[E-SETUP-005]: cannot protect `{}`: {error}",
+                env_file.display()
+            );
+            return ExitCode::from(1);
+        }
+    }
+    println!(
+        "created {} with local MariaDB credentials",
+        env_file.display()
+    );
+    println!("credentials were generated locally and are not shown");
+    println!("next: docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build");
+    if cfg!(windows) {
+        println!("then load .env in your shell and run: zelyra db setup main.zyl");
+    } else {
+        println!("then run: set -a; . ./.env; set +a; zelyra db setup main.zyl");
+    }
+    ExitCode::SUCCESS
 }
 
 fn create_project(
@@ -228,6 +342,7 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
                 .replace("__WEB_PORT__", &web_port.to_string()),
             ),
             (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
+            (".gitignore", ".env\ntarget/\n".to_owned()),
         ]);
     }
     for (name, contents) in files {
@@ -5883,6 +5998,14 @@ fn main() -> ExitCode {
     if command == "audit" {
         return audit_command(args);
     }
+    if command == "setup" {
+        let path = args.next().unwrap_or_else(|| ".".to_owned());
+        if args.next().is_some() {
+            usage();
+            return ExitCode::from(2);
+        }
+        return setup_project(&path);
+    }
     if command == "new" {
         let Some(path) = args.next() else {
             usage();
@@ -6921,6 +7044,7 @@ mod tests {
         let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
         let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
+        let gitignore = fs::read_to_string(path.join(".gitignore")).unwrap();
         assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
         assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
@@ -6929,6 +7053,7 @@ mod tests {
         assert!(dockerfile.contains("EXPOSE 8080"));
         assert!(dockerfile.contains("0.0.0.0:8080"));
         assert!(dockerignore.contains(".env"));
+        assert!(gitignore.contains(".env"));
 
         fs::remove_dir_all(path).unwrap();
     }

@@ -560,6 +560,7 @@ version = "0.1.38"
 name = "zelyra-cli"
 version = "0.1.38"
 dependencies = [
+ "rand_core",
  "rpassword",
  "serde_json",
  "zelyra-ast",

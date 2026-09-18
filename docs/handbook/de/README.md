@@ -206,6 +206,9 @@ Dadurch entstehen `.env.example`, `Dockerfile` und
 den lokal veröffentlichten Port unabhängig. `ZELYRA_WEB_PORT` und
 `ZELYRA_HOST_PORT` können später in `.env` geändert werden; Standard ist jeweils
 3000.
+Nach dem Scaffolding erzeugt `zelyra setup maschinenverwaltung` eine `.env` mit
+zufälligen lokalen MariaDB-Zugangsdaten. Vorhandene `.env`-Dateien werden nie
+überschrieben und Zugangsdaten nie ausgegeben.
 
 Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:
 

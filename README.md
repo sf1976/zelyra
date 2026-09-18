@@ -692,6 +692,7 @@ Currently available:
 ~~~text
 zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]
 zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]
+zelyra setup [directory]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
@@ -723,8 +724,10 @@ frontend framework are not prerequisites for the examples above.
 For the easiest local start with MariaDB and the built-in web server, create a
 project with `zelyra new my-app --mariadb --web-port 8080 --host-port 18080`.
 The generated Compose file runs the server on port 8080 inside the container
-and publishes it as `http://127.0.0.1:18080`. Copy `.env.example` to `.env`;
-`ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT` can be changed independently later.
+and publishes it as `http://127.0.0.1:18080`. Run `zelyra setup my-app` to
+create a protected `.env` with local random MariaDB credentials. Existing
+`.env` files are never overwritten; `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT`
+can be changed independently in `.env`.
 
 ## Project layout
 

@@ -144,6 +144,66 @@ fn host_port_requires_the_mariadb_web_template() {
 }
 
 #[test]
+fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
+    let directory = temporary_directory("setup-env");
+    let scaffold = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--web-port",
+        "8080",
+        "--host-port",
+        "18080",
+    ]);
+    assert!(scaffold.status.success());
+
+    let setup = run(&["setup", directory.to_str().unwrap()]);
+    assert!(
+        setup.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&setup.stdout),
+        String::from_utf8_lossy(&setup.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&setup.stdout);
+    assert!(!stdout.contains("MARIADB_PASSWORD"));
+    assert!(!stdout.contains("change-me"));
+    let env_file = directory.join(".env");
+    let contents = fs::read_to_string(&env_file).unwrap();
+    assert!(contents.contains("ZELYRA_WEB_PORT=8080"));
+    assert!(contents.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(!contents.contains("change-me"));
+    assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(contents.contains("MARIADB_PASSWORD="));
+    assert!(contents.contains("MARIADB_ROOT_PASSWORD="));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&env_file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    let original = contents;
+    let second_setup = run(&["setup", directory.to_str().unwrap()]);
+    assert!(second_setup.status.success());
+    assert!(String::from_utf8_lossy(&second_setup.stdout).contains("kept existing"));
+    assert_eq!(fs::read_to_string(env_file).unwrap(), original);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn setup_rejects_a_directory_without_a_mariadb_scaffold() {
+    let directory = temporary_directory("setup-missing-scaffold");
+    fs::create_dir_all(&directory).unwrap();
+    let output = run(&["setup", directory.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("E-SETUP-001"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn invalid_check_json_keeps_human_logs_off_stdout() {
     let invalid_sql = example("invalid_sql.zyl");
     let output = run(&["check", invalid_sql.to_str().unwrap(), "--format", "json"]);

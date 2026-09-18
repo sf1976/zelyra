@@ -8,6 +8,9 @@ compiler and repository release.
 
 ### Added
 
+- Added `zelyra setup [directory]` for safe local MariaDB first-run setup. It
+  creates `.env` with OS-random credentials, never prints secrets, protects
+  the file on Unix, and never overwrites an existing `.env`.
 - Added beginner-friendly `--web-port <port>` and `--host-port <port>` options
   to `zelyra new` and `zelyra init`. MariaDB Compose projects now propagate
   both validated ports to `.env.example`, the web container command, published
