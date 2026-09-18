@@ -619,6 +619,8 @@ Autorisierungs- und Parameterbindungspipeline:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Kunden deaktivieren"
+        confirm: "Diesen Kunden wirklich deaktivieren?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -636,6 +638,9 @@ Schaltfläche in der Detailansicht. CSRF-Schutz, Datenbank-Capability,
 Authentifizierung und deklarierte Berechtigungen werden geprüft. Die Routen-ID
 wird an `:id` gebunden, daher bleibt SQL parametrisiert. Aktionsnamen werden
 derzeit als Schaltflächenbeschriftung verwendet.
+`label` überschreibt die escaped Schaltflächenbeschriftung; `confirm` ergänzt
+eine escaped Browser-Bestätigung vor dem Absenden. Ohne `label` wird der
+Aktionsname als Beschriftung verwendet.
 
 ## 11. Formulare
 

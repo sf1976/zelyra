@@ -1063,6 +1063,8 @@ impl<'a> Parser<'a> {
         let (name, _) = self.ident("form action name")?;
         self.expect(TokenKind::LBrace, "`{` after form action")?;
         let mut statements = Vec::new();
+        let mut label = None;
+        let mut confirm = None;
         let mut success = None;
         let mut redirect = None;
         let mut requires_auth = false;
@@ -1076,6 +1078,14 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
+            } else if self.at(&TokenKind::Label) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after label")?;
+                label = Some(self.string_value("action label")?);
+            } else if self.at(&TokenKind::Confirm) {
+                self.advance();
+                self.expect(TokenKind::Colon, "`:` after confirm")?;
+                confirm = Some(self.string_value("confirmation message")?);
             } else if self.at(&TokenKind::Success) {
                 self.advance();
                 success = Some(self.string_value("success message")?);
@@ -1090,6 +1100,8 @@ impl<'a> Parser<'a> {
         let end = self.expect(TokenKind::RBrace, "`}` after form action")?;
         Ok(FormAction {
             name,
+            label,
+            confirm,
             requires_auth,
             permissions,
             statements,
@@ -2230,6 +2242,8 @@ mod tests {
                         }
                     }
                     action deactivate {
+                        label: "Deactivate customer"
+                        confirm: "Deactivate this customer?"
                         permits "customers.edit"
                         sql {
                             UPDATE customers
@@ -2286,6 +2300,14 @@ mod tests {
         );
         assert_eq!(program.cruds[0].actions.len(), 1);
         assert_eq!(program.cruds[0].actions[0].name, "deactivate");
+        assert_eq!(
+            program.cruds[0].actions[0].label.as_deref(),
+            Some("Deactivate customer")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0].confirm.as_deref(),
+            Some("Deactivate this customer?")
+        );
         assert_eq!(program.cruds[0].actions[0].permissions, ["customers.edit"]);
         assert_eq!(
             program.cruds[0].actions[0].success.as_deref(),

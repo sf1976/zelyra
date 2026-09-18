@@ -133,7 +133,8 @@ under evaluation.
   generic database-error boundaries; client-side loading UI remains open.
 - [~] Custom CRUD actions can execute parameterized, POST-only business SQL
   with CSRF, database-capability, authentication, and permission checks;
-  custom labels and action-specific view configuration remain open.
+  custom labels and browser confirmations are available; action-specific view
+  configuration remains open.
 - [ ] A design-token system for colors, spacing, typography, breakpoints, and
   density.
 - [ ] Per-view themes, application themes, dark mode, and user-selectable
@@ -160,8 +161,9 @@ under evaluation.
 - [ ] Optimistic locking and conflict-aware editing.
 - [ ] Bulk actions, import/export, saved searches, column preferences, and
   server-side reporting.
-- [ ] Custom action labels, icons, confirmation views, typed action inputs, and
-  action-specific success/error presentation.
+- [~] Custom action labels and browser confirmations are available.
+- [ ] Custom action icons, server-rendered confirmation views, typed action
+  inputs, and action-specific success/error presentation.
 - [ ] Soft delete, restore, archive, and retention policies.
 - [ ] Audit-aware CRUD history and field-level change diffs.
 - [ ] Background jobs, scheduled tasks, retries, and transactional outbox.

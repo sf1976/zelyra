@@ -118,6 +118,8 @@ Eigene CRUD-Aktionen ergänzen fachliche Operationen innerhalb einer Ressource:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Kunden deaktivieren"
+        confirm: "Diesen Kunden wirklich deaktivieren?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -135,6 +137,9 @@ und eine Schaltfläche in der Detailansicht. Die Route erzwingt die
 Datenbank-Capability, CSRF-Schutz, Authentifizierung und die deklarierten
 Berechtigungen. Die Routen-ID wird an `:id` gebunden; SQL bleibt parametrisiert.
 Aktionsnamen werden derzeit als Beschriftung verwendet.
+`label` überschreibt die escaped Schaltflächenbeschriftung; `confirm` ergänzt
+eine escaped Browser-Bestätigung vor dem Absenden. Ohne `label` wird der
+Aktionsname als Beschriftung verwendet.
 
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle

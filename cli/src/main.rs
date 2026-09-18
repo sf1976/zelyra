@@ -3368,6 +3368,8 @@ fn generated_crud_form(
             fields,
             actions: vec![zelyra_ast::FormAction {
                 name: "save".into(),
+                label: None,
+                confirm: None,
                 requires_auth: false,
                 permissions: Vec::new(),
                 statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
@@ -3407,7 +3409,8 @@ fn generated_crud_action(
     let path = format!("/{}/{{id}}/{}", crud.table, action.name);
     CrudActionRoute {
         name: action.name.clone(),
-        label: action.name.clone(),
+        label: action.label.clone().unwrap_or_else(|| action.name.clone()),
+        confirm: action.confirm.clone(),
         form: FormRoute {
             path: path.clone(),
             action: path,

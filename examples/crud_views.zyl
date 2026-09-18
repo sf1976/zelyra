@@ -51,6 +51,8 @@ crud Customer -> customers {
     }
 
     action deactivate {
+        label: "Deactivate customer"
+        confirm: "Deactivate this customer?"
         permits "customers.edit"
 
         sql {

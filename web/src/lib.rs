@@ -295,6 +295,7 @@ pub struct CrudRoute {
 pub struct CrudActionRoute {
     pub name: String,
     pub label: String,
+    pub confirm: Option<String>,
     pub form: FormRoute,
 }
 
@@ -2261,6 +2262,27 @@ pub fn html_escape(value: &str) -> String {
     escaped
 }
 
+fn javascript_string_literal(value: &str) -> String {
+    let mut literal = String::from("'");
+    for character in value.chars() {
+        match character {
+            '\\' => literal.push_str("\\\\"),
+            '\'' => literal.push_str("\\'"),
+            '\n' => literal.push_str("\\n"),
+            '\r' => literal.push_str("\\r"),
+            '\t' => literal.push_str("\\t"),
+            '\u{2028}' => literal.push_str("\\u2028"),
+            '\u{2029}' => literal.push_str("\\u2029"),
+            character if character.is_control() => {
+                literal.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => literal.push(character),
+        }
+    }
+    literal.push('\'');
+    literal
+}
+
 fn form_authorization(form: &FormRoute) -> (bool, Vec<String>) {
     let mut permissions = form.permissions.clone();
     let (action_requires_auth, action_permissions) = form
@@ -2546,6 +2568,7 @@ struct CrudUiActionLink {
     label: String,
     path: String,
     csrf: String,
+    confirm: Option<String>,
 }
 
 fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
@@ -2562,6 +2585,7 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                     label: action.label.clone(),
                     path: action.form.path.clone(),
                     csrf: action.form.csrf.token().into(),
+                    confirm: action.confirm.clone(),
                 })
             })
             .collect(),
@@ -4162,7 +4186,16 @@ fn render_crud_detail_with_actions(
         let action_path = action.path.replace("{id}", id);
         html.push_str("<form method=\"post\" action=\"");
         html.push_str(&html_escape(&action_path));
-        html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+        html.push('"');
+        if let Some(confirm) = &action.confirm {
+            html.push_str(" onsubmit=\"");
+            html.push_str(&html_escape(&format!(
+                "return confirm({})",
+                javascript_string_literal(confirm)
+            )));
+            html.push('"');
+        }
+        html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(&action.csrf));
         html.push_str("\"><button type=\"submit\">");
         html.push_str(&html_escape(&action.label));
@@ -6073,12 +6106,16 @@ mod tests {
                     label: "Deactivate".into(),
                     path: "/machines/{id}/deactivate".into(),
                     csrf: "crud-csrf".into(),
+                    confirm: Some("Deactivate <unsafe> customer?".into()),
                 }],
             },
         );
         assert!(action_html.contains("action=\"/machines/1/deactivate\""));
         assert!(action_html.contains(">Deactivate</button>"));
         assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
+        assert!(action_html.contains(
+            "onsubmit=\"return confirm(&#39;Deactivate &lt;unsafe&gt; customer?&#39;)\""
+        ));
 
         let mut custom_route = route.clone();
         custom_route.delete_view.title = Some("Delete machine".into());
@@ -6144,6 +6181,8 @@ mod tests {
         let mut route = form_route();
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
+            label: None,
+            confirm: None,
             requires_auth: true,
             permissions: vec!["customers.save".into()],
             statements: Vec::new(),
@@ -6164,6 +6203,8 @@ mod tests {
         let mut route = form_route();
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
+            label: None,
+            confirm: None,
             requires_auth: true,
             permissions: vec!["customers.save".into()],
             statements: Vec::new(),
@@ -6183,6 +6224,8 @@ mod tests {
         let mut route = form_route();
         route.form.actions.push(zelyra_ast::FormAction {
             name: "save".into(),
+            label: None,
+            confirm: None,
             requires_auth: false,
             permissions: Vec::new(),
             statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {

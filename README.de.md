@@ -368,6 +368,8 @@ Sicherheitspipeline zu ersetzen:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Kunden deaktivieren"
+        confirm: "Diesen Kunden wirklich deaktivieren?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -385,7 +387,9 @@ Zelyra erzeugt dafür den POST-only-Endpunkt
 Die Anfrage verlangt die CRUD-Datenbank-Capability, CSRF-Schutz,
 Authentifizierung und die deklarierte Berechtigung. `:id` wird aus der Route
 gebunden; SQL bleibt parametrisiert. Aktionsnamen werden derzeit auch als
-Schaltflächenbeschriftung verwendet.
+Schaltflächenbeschriftung verwendet. `label` steuert die escaped Beschriftung;
+`confirm` ergänzt eine escaped Browser-Bestätigung vor dem Absenden. Ohne
+`label` bleibt der Aktionsname die Beschriftung.
 
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige

@@ -560,6 +560,8 @@ authorization and parameter-binding pipeline:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Deactivate customer"
+        confirm: "Deactivate this customer?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -576,6 +578,9 @@ This generates a POST-only `/customers/{id}/deactivate` route and a detail
 view button. CSRF, the database capability, authentication, and declared
 permissions are checked. The route ID is bound to `:id`, so the SQL remains
 parameterized. Action names are currently used as button labels.
+`label` overrides the escaped button text, and `confirm` adds an escaped
+browser confirmation before submission. Without `label`, the action name is
+used as the label.
 
 ## 11. Forms
 

@@ -114,6 +114,8 @@ Custom CRUD actions add focused business operations to a resource:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Deactivate customer"
+        confirm: "Deactivate this customer?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -130,6 +132,9 @@ The compiler generates a POST-only route at `/customers/{id}/deactivate` and
 adds a button to the detail view. The route enforces the database capability,
 CSRF, authentication, and declared permissions. The route `id` is bound to
 `:id`; SQL remains parameterized. Action names are currently used as labels.
+`label` overrides the escaped button text, while `confirm` adds an escaped
+browser confirmation before submission. Without `label`, the action name is
+used as the label.
 
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID

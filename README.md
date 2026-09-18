@@ -358,6 +358,8 @@ generated safety pipeline:
 ~~~zelyra
 crud Customer -> customers {
     action deactivate {
+        label: "Deactivate customer"
+        confirm: "Deactivate this customer?"
         permits "customers.edit"
         sql {
             UPDATE customers
@@ -374,7 +376,9 @@ Zelyra generates a POST-only endpoint at
 `/customers/{id}/deactivate` and renders its button on the detail view. The
 request requires the CRUD database capability, CSRF protection, authentication
 and the declared permission. `:id` is bound from the route; SQL remains
-parameterized. Action names are currently also used as button labels.
+parameterized. `label` controls the escaped button text and `confirm` adds an
+escaped browser confirmation before submission. Without `label`, the action
+name remains the button label.
 
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
