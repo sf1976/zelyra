@@ -827,7 +827,13 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
-        let route_names = page_template_bindings(&page.path, &[], &page.inputs, page.page_size);
+        let route_names = page_template_bindings(
+            &page.path,
+            &[],
+            &page.inputs,
+            page.page_size,
+            !page.sort.is_empty(),
+        );
         let mut names = HashSet::new();
         for data in &page.data {
             if !names.insert(data.name.as_str()) {
@@ -867,6 +873,52 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
                 valid = false;
             }
         }
+        if !page.sort.is_empty() {
+            let collection_data = page
+                .data
+                .iter()
+                .filter(|data| matches!(data.result_type, Type::Array(_)))
+                .collect::<Vec<_>>();
+            if collection_data.is_empty() {
+                diagnostic(
+                    path,
+                    "E-VIEW-022",
+                    "page `sort` requires at least one collection loaded with an array result type",
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            } else {
+                let mut sort_fields = HashSet::new();
+                for field in &page.sort {
+                    if !sort_fields.insert(field.as_str()) {
+                        diagnostic(
+                            path,
+                            "E-VIEW-022",
+                            &format!("page sort field `{field}` is declared more than once"),
+                            page.span.line,
+                            page.span.column,
+                        );
+                        valid = false;
+                    }
+                    if !collection_data.iter().all(|data| {
+                        page_collection_fields(program, &data.result_type)
+                            .is_some_and(|fields| fields.iter().any(|candidate| candidate == field))
+                    }) {
+                        diagnostic(
+                            path,
+                            "E-VIEW-023",
+                            &format!(
+                                "page sort field `{field}` does not exist in every collection result type"
+                            ),
+                            page.span.line,
+                            page.span.column,
+                        );
+                        valid = false;
+                    }
+                }
+            }
+        }
     }
     valid
 }
@@ -874,7 +926,7 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[], &[], None);
+        let route_names = page_template_bindings(&page.path, &[], &[], None, false);
         let mut names = HashSet::new();
         for input in &page.inputs {
             if !names.insert(input.name.as_str()) {
@@ -923,6 +975,16 @@ fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
                         "page input `{}` is reserved for pagination internals",
                         input.name
                     ),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if !page.sort.is_empty() && matches!(input.name.as_str(), "sort" | "order") {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    &format!("page input `{}` is reserved by `sort`", input.name),
                     input.span.line,
                     input.span.column,
                 );
@@ -980,6 +1042,37 @@ fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
     program.records.iter().any(|record| record.name == *name)
         || program.tables.iter().any(|table| {
             table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
+        })
+}
+
+fn page_collection_fields(program: &zelyra_ast::Program, ty: &Type) -> Option<Vec<String>> {
+    let Type::Array(inner) = ty else {
+        return None;
+    };
+    let Type::Named(name) = inner.as_ref() else {
+        return None;
+    };
+    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
+        return Some(
+            record
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect(),
+        );
+    }
+    program
+        .tables
+        .iter()
+        .find(|table| {
+            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
+        })
+        .map(|table| {
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect()
         })
 }
 
@@ -1566,6 +1659,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "view": page.view,
                 "inputs": inputs,
                 "page_size": page.page_size,
+                "sort": page.sort,
                 "data": data,
                 "span": context_span(source, page.span)
             })
@@ -2575,7 +2669,13 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         );
     }
     for page in &program.pages {
-        let bindings = page_template_bindings(&page.path, &page.data, &page.inputs, page.page_size);
+        let bindings = page_template_bindings(
+            &page.path,
+            &page.data,
+            &page.inputs,
+            page.page_size,
+            !page.sort.is_empty(),
+        );
         valid &= validate_component_template(
             path,
             program,
@@ -2605,6 +2705,7 @@ fn page_template_bindings(
     data: &[zelyra_ast::PageDataDef],
     inputs: &[zelyra_ast::PageInputDef],
     page_size: Option<u32>,
+    sort_enabled: bool,
 ) -> HashMap<String, Type> {
     let mut bindings = path
         .split('/')
@@ -2621,6 +2722,10 @@ fn page_template_bindings(
     }
     if page_size.is_some() {
         bindings.insert("page".into(), Type::UInt);
+    }
+    if sort_enabled {
+        bindings.insert("sort".into(), Type::String);
+        bindings.insert("order".into(), Type::String);
     }
     for data in data {
         bindings.insert(data.name.clone(), data.result_type.clone());
@@ -5337,6 +5442,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 })
                 .collect(),
             page_size: page.page_size,
+            sort_columns: page.sort.clone(),
             data: page
                 .data
                 .iter()

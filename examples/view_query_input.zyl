@@ -12,6 +12,10 @@ page "/customers" {
         search: String?
     }
 
+    sort {
+        name
+    }
+
     paginated 25
 
     load customers = sql<Customer[]> {
@@ -25,6 +29,8 @@ page "/customers" {
         <form method="get">
             <input name="search" value="{search}" />
             <input name="page" value="{page}" />
+            <input name="sort" value="{sort}" />
+            <input name="order" value="{order}" />
             <button type="submit">Suchen</button>
         </form>
         <ul>

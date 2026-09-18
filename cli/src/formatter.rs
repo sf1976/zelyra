@@ -429,6 +429,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::List => "list",
         TokenKind::Detail => "detail",
         TokenKind::Search => "search",
+        TokenKind::Sort => "sort",
         TokenKind::Sortable => "sortable",
         TokenKind::Searchable => "searchable",
         TokenKind::Paginated => "paginated",

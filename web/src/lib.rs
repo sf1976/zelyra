@@ -22,6 +22,7 @@ pub struct Route {
     pub html: String,
     pub query: Vec<RouteQuery>,
     pub page_size: Option<u32>,
+    pub sort_columns: Vec<String>,
     pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -5590,6 +5591,14 @@ fn load_route_data(
     } else {
         1
     };
+    let (sort, order) =
+        page_sort_state(route, query_values).map_err(RouteDataError::InvalidQuery)?;
+    if let Some(sort) = &sort {
+        loaded.values.insert("sort".into(), sort.clone());
+        loaded
+            .values
+            .insert("order".into(), order.to_ascii_lowercase());
+    }
     if route.data.is_empty() {
         return Ok(loaded);
     }
@@ -5603,17 +5612,11 @@ fn load_route_data(
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
             .collect::<Vec<_>>();
         query_params.extend(bound_query_values.iter().cloned());
-        if let Some(page_size) = route.page_size.filter(|_| data.collection) {
-            query = paginated_page_query(&query);
-            query_params.push((
-                "zelyra_page_limit".into(),
-                QueryValue::Int(i64::from(page_size)),
-            ));
-            let offset = page.saturating_sub(1).saturating_mul(u64::from(page_size));
-            query_params.push((
-                "zelyra_page_offset".into(),
-                QueryValue::Int(offset.min(i64::MAX as u64) as i64),
-            ));
+        if data.collection && (sort.is_some() || route.page_size.is_some()) {
+            let (wrapped_query, generated_params) =
+                page_collection_query(&query, sort.as_deref(), order, route.page_size, page);
+            query = wrapped_query;
+            query_params.extend(generated_params);
         }
         let result =
             match zelyra_database::execute_mariadb_query(database_url, &query, query_params) {
@@ -5660,11 +5663,68 @@ fn page_number(query_values: &HashMap<String, String>) -> Result<u64, String> {
     }
 }
 
-fn paginated_page_query(source: &str) -> String {
+fn page_sort_state(
+    route: &Route,
+    query_values: &HashMap<String, String>,
+) -> Result<(Option<String>, &'static str), String> {
+    let explicit_sort_input = route.query.iter().any(|input| input.name == "sort");
+    let explicit_order_input = route.query.iter().any(|input| input.name == "order");
+    if route.sort_columns.is_empty() {
+        if (query_values.contains_key("sort") && !explicit_sort_input)
+            || (query_values.contains_key("order") && !explicit_order_input)
+        {
+            return Err("this page does not declare sortable fields".into());
+        }
+        return Ok((None, "ASC"));
+    }
+    let sort = query_values
+        .get("sort")
+        .cloned()
+        .unwrap_or_else(|| route.sort_columns[0].clone());
+    if !route.sort_columns.iter().any(|column| column == &sort) {
+        return Err(format!("unknown sort field `{sort}`"));
+    }
+    let order = match query_values
+        .get("order")
+        .map(String::as_str)
+        .unwrap_or("asc")
+    {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ => return Err("order must be `asc` or `desc`".into()),
+    };
+    Ok((Some(sort), order))
+}
+
+fn page_collection_query(
+    source: &str,
+    sort: Option<&str>,
+    order: &str,
+    page_size: Option<u32>,
+    page: u64,
+) -> (String, Vec<(String, QueryValue)>) {
     let source = source.trim().trim_end_matches(';').trim();
-    format!(
-        "SELECT zelyra_page.* FROM ({source}) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
-    )
+    let mut query = format!("SELECT zelyra_page.* FROM ({source}) AS zelyra_page");
+    if let Some(sort) = sort {
+        query.push_str(" ORDER BY zelyra_page.");
+        query.push_str(&quote_identifier(sort));
+        query.push(' ');
+        query.push_str(order);
+    }
+    let mut parameters = Vec::new();
+    if let Some(page_size) = page_size {
+        query.push_str(" LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset");
+        parameters.push((
+            "zelyra_page_limit".into(),
+            QueryValue::Int(i64::from(page_size)),
+        ));
+        let offset = page.saturating_sub(1).saturating_mul(u64::from(page_size));
+        parameters.push((
+            "zelyra_page_offset".into(),
+            QueryValue::Int(offset.min(i64::MAX as u64) as i64),
+        ));
+    }
+    (query, parameters)
 }
 
 fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
@@ -5973,6 +6033,7 @@ mod tests {
             html: "<h1>Hello, {name}!</h1>".into(),
             query: Vec::new(),
             page_size: None,
+            sort_columns: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6257,10 +6318,45 @@ mod tests {
         );
         assert!(page_number(&HashMap::from([("page".into(), "0".into())])).is_err());
         assert!(page_number(&HashMap::from([("page".into(), "nope".into())])).is_err());
+        let (query, parameters) =
+            page_collection_query(" SELECT id FROM customers; ", None, "ASC", Some(25), 1);
         assert_eq!(
-            paginated_page_query(" SELECT id FROM customers; "),
+            query,
             "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
         );
+        assert_eq!(parameters.len(), 2);
+        let (sorted_query, _) =
+            page_collection_query("SELECT id FROM customers", Some("name"), "DESC", None, 1);
+        assert_eq!(
+            sorted_query,
+            "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page ORDER BY zelyra_page.`name` DESC"
+        );
+        let route = Route {
+            path: "/customers".into(),
+            html: String::new(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: vec!["name".into(), "created_at".into()],
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        assert_eq!(
+            page_sort_state(
+                &route,
+                &HashMap::from([
+                    ("sort".into(), "name".into()),
+                    ("order".into(), "desc".into())
+                ])
+            ),
+            Ok((Some("name".into()), "DESC"))
+        );
+        assert!(page_sort_state(&route, &HashMap::from([("sort".into(), "id".into())])).is_err());
+        assert!(page_sort_state(
+            &route,
+            &HashMap::from([("order".into(), "sideways".into())])
+        )
+        .is_err());
     }
 
     #[test]
@@ -7065,6 +7161,7 @@ mod tests {
             html: "<h1>{customer.name}</h1>".into(),
             query: Vec::new(),
             page_size: None,
+            sort_columns: Vec::new(),
             data: vec![RouteData {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
@@ -7117,6 +7214,7 @@ mod tests {
             html: "<h1>Admin</h1>".into(),
             query: Vec::new(),
             page_size: None,
+            sort_columns: Vec::new(),
             data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
@@ -7138,6 +7236,7 @@ mod tests {
                 html: "<h1>Admin</h1>".into(),
                 query: Vec::new(),
                 page_size: None,
+                sort_columns: Vec::new(),
                 data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],
