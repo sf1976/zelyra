@@ -61,6 +61,11 @@ remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
+Before writing or changing `.zyl` source, consult the [source authority and
+verification guide](docs/source-authority.md). It maps the binding
+specification, parser, tests, standard-library status, validated examples,
+and documentation, and defines how uncertainty is reported.
+
 ## Simple defaults, optional power
 
 Zelyra keeps the first project small. Advanced project surfaces are optional:

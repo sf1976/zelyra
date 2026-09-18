@@ -67,6 +67,11 @@ geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 
+Vor dem Schreiben oder Ändern von `.zyl`-Quellcode ist die
+[Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) zu verwenden.
+Sie ordnet Spezifikation, Parser, Tests, den Status der Standardbibliothek,
+geprüfte Beispiele und Dokumentation und beschreibt den Umgang mit Unsicherheit.
+
 ## Einfacher Einstieg, optionale Möglichkeiten
 
 Zelyra hält das erste Projekt klein. Erweiterte Projektbereiche sind optional:

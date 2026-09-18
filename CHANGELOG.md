@@ -8,6 +8,17 @@ compiler and repository release.
 
 ### Added
 
+- Added bilingual source-authority guides that map the binding specification,
+  parser, tests, standard-library status, validated examples, documentation,
+  and the required uncertainty and verification workflow. This is a
+  documentation-only change; compiler behavior is unchanged.
+
+- Zweisprachige Quellenlandkarten ergänzt, die Spezifikation, Parser, Tests,
+  Status der Standardbibliothek, geprüfte Beispiele, Dokumentation sowie den
+  verbindlichen Umgang mit Unsicherheit und Prüfung zuordnen. Diese Änderung
+  betrifft ausschließlich die Dokumentation; das Compilerverhalten bleibt
+  unverändert.
+
 - Generated CRUD and tableview filter controls now use semantic fieldsets and
   separate operator/value labels; filter processing and preserved query URLs
   use deterministic ordering.

@@ -16,6 +16,10 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 > **Projektstatus:** Zelyra 0.1 ist experimentell. Viele beschriebene Grundlagen
 > sind implementiert, aber noch nicht für den Produktionseinsatz freigegeben.
 
+Die verbindliche Reihenfolge der Sprachquellen und der Prüfablauf stehen in der
+[Quellenlandkarte](../../source-authority.de.md) und der
+[englischen Quellenübersicht](../../source-authority.md).
+
 ## Statuszeichen
 
 - ✅ **Implementiert:** im aktuellen Repository vorhanden.
@@ -1556,7 +1560,7 @@ Wenn der Quellcode einen deaktivierten Bereich verwendet, meldet der Compiler
 eine stabile Feature-Diagnose. Capabilities, Typprüfung, SQL-Prüfung und
 Sicherheitsregeln können damit nicht abgeschaltet werden. Diese optionale
 Komfortschicht ist keine zusätzliche Pflicht für einfache Projekte. Die
-vollständige [Referenz für Umgebung und Konfiguration](../env.md) führt alle
+vollständige [Referenz für Umgebung und Konfiguration](../../env.md) führt alle
 unterstützten Einstellungen auf und muss vor dem Commit einer neuen
 Einstellung aktualisiert werden.
 
