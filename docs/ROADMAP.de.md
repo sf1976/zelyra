@@ -114,9 +114,10 @@ Feature eines bestimmten Anbieters.
   `zelyra setup --database|--schema|--all` und `zelyra setup --web` verfügbar;
   erzeugte MariaDB-Compose-Projekte werden gestartet und das Anfangsschema
   angewendet; Konsolen- und Browser-Aktionen sind jetzt durch HTTP- und
-  Integrationstests auf isolierten Ports abgedeckt. Docker-Installation,
-  Fernadministration und produktives Deployment bleiben bewusst außerhalb des
-  Assistenten.
+  Integrationstests auf isolierten Ports abgedeckt und zeigen bei fehlendem
+  Compose plattformspezifische Docker-Installationshinweise. Docker-
+  Installation, Fernadministration und produktives Deployment bleiben bewusst
+  außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
   Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
   die Docker-Laufzeitprüfung für erzeugte Projekte ist vorhanden,

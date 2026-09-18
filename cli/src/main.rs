@@ -3205,8 +3205,10 @@ fn docker_compose_check() -> DoctorCheck {
     DoctorCheck {
         name: "docker_compose",
         status: "warn",
-        message: "Docker Compose is unavailable; the generated MariaDB stack cannot be started"
-            .into(),
+        message: format!(
+            "{} The generated MariaDB stack cannot be started until Docker Compose is available.",
+            docker_compose_install_hint()
+        ),
     }
 }
 
@@ -3246,6 +3248,30 @@ fn detect_docker_compose() -> Option<DockerComposeCommand> {
     legacy.then_some(DockerComposeCommand::Legacy)
 }
 
+fn docker_compose_install_hint() -> String {
+    let (platform, url) = if cfg!(target_os = "linux") {
+        ("Linux", "https://docs.docker.com/engine/install/")
+    } else if cfg!(target_os = "windows") {
+        (
+            "Windows",
+            "https://docs.docker.com/desktop/setup/install/windows-install/",
+        )
+    } else if cfg!(target_os = "macos") {
+        (
+            "macOS",
+            "https://docs.docker.com/desktop/setup/install/mac-install/",
+        )
+    } else {
+        (
+            "your operating system",
+            "https://docs.docker.com/engine/install/",
+        )
+    };
+    format!(
+        "Docker Compose is unavailable. Install Docker for {platform} from:\n{url}\nAfter installation, verify with `docker compose version`, then run this step again."
+    )
+}
+
 fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -> Command {
     let mut process = match command {
         DockerComposeCommand::Plugin => {
@@ -3270,7 +3296,7 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
         );
     }
     let Some(command) = detect_docker_compose() else {
-        return Err("Docker Compose is not installed. Install Docker Desktop or Docker Engine with the Compose plugin, then run this step again".into());
+        return Err(docker_compose_install_hint());
     };
     let status = compose_command(directory, command)
         .args(["up", "-d", "--build"])
@@ -3319,7 +3345,7 @@ fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
 
 fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let Some(command) = detect_docker_compose() else {
-        return Err("Docker Compose is not installed".into());
+        return Err(docker_compose_install_hint());
     };
     for _attempt in 0..20 {
         let status = compose_command(directory, command)
@@ -3392,7 +3418,7 @@ fn setup_web_html(state: &SetupWebState) -> String {
     let compose_status = if directory.join("docker-compose.mariadb.yml").is_file() {
         match detect_docker_compose() {
             Some(command) => format!("{} available", command.label()),
-            None => "Docker Compose nicht verfügbar".into(),
+            None => docker_compose_install_hint(),
         }
     } else {
         "kein MariaDB-Compose-Projekt erkannt".into()
@@ -9766,5 +9792,13 @@ mod tests {
         assert_eq!(parse_database_host_port("3308"), Ok(3308));
         assert!(parse_database_host_port("0").is_err());
         assert!(parse_database_host_port("database").is_err());
+    }
+
+    #[test]
+    fn docker_compose_hint_is_actionable_and_platform_specific() {
+        let hint = docker_compose_install_hint();
+        assert!(hint.contains("Docker Compose is unavailable"));
+        assert!(hint.contains("https://docs.docker.com/"));
+        assert!(hint.contains("docker compose version"));
     }
 }

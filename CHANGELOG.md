@@ -6,7 +6,11 @@ compiler and repository release.
 
 ## Unreleased
 
-No unreleased changes.
+- Missing Docker/Compose now produces platform-specific official installation
+  guidance in the console, `doctor`, and the local browser setup page.
+- Fehlt Docker/Compose, geben Konsole, `doctor` und die lokale Browser-Setup-
+  Seite jetzt plattformspezifische Hinweise auf die offiziellen
+  Installationsanleitungen aus.
 
 ## 0.1.43 — 2026-09-19
 

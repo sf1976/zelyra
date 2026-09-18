@@ -52,7 +52,16 @@ Container und die Anwendung mit `docker compose` oder dem Legacy-Befehl
 noch nicht läuft. Zelyra installiert Docker selbst nicht, verändert keine
 Betriebssystempakete und fordert keine Root-Rechte an. Fehlt Docker, meldet
 der Assistent dies; anschließend muss Docker Desktop oder Docker Engine mit
-Compose installiert und der Vorgang wiederholt werden.
+Compose installiert und der Vorgang wiederholt werden. Die Konsole,
+`zelyra doctor` und die Statusseite im Browser zeigen jetzt die passende
+offizielle Docker-Installationsseite für das erkannte Betriebssystem sowie den
+Prüfbefehl `docker compose version`.
+
+Unter Linux verwendet man die [offizielle Linux-Anleitung](https://docs.docker.com/engine/install/),
+unter Windows [Docker Desktop für Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+und unter macOS [Docker Desktop für Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
+Nach der Installation `docker compose version` prüfen und anschließend
+`zelyra setup --all` oder die Browser-Aktion erneut ausführen.
 
 Zugangsdaten werden lokal erzeugt, niemals ausgegeben und nicht in
 Statusmeldungen zurückgegeben. Destruktive Datenbankänderungen gehören nicht
