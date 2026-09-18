@@ -1569,6 +1569,17 @@ Ressourcen, Formulare, APIs und Source-Spans. Sie verbindet sich nicht mit
 MariaDB, führt keine E-Mail aus, gibt keine Zugangsdaten aus und enthält keine
 gerenderten vertraulichen Inhalte.
 
+Quelltextabhängigkeiten eines Programms lassen sich deterministisch prüfen:
+
+~~~bash
+zelyra impact examples/auth_crud_api.zyl --format=json
+~~~
+
+Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
+Ressourcen, Views, APIs, Berechtigungen und Contracts. E-Mail-, Job-, Test-
+und Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar;
+der Befehl verbindet sich nie mit MariaDB.
+
 ### Sichere Automatisierungsgrenze
 
 Generierter Code muss Compiler und Tests bestehen. Einer KI darf nicht vertraut
@@ -1577,9 +1588,9 @@ Capabilities hinzufügen, Diagnosen abschwächen, Tests deaktivieren, Geheimniss
 offenlegen oder destruktive Schemaänderungen freigeben. Für riskante Datenbank-
 und Sicherheitsoperationen bleibt eine menschliche Freigabe erforderlich.
 
-Als nächste Maschinenschnittstellen sind typisierte Lücken,
-`zelyra impact --format=json` und ein validiertes semantisches
-Änderungsprotokoll geplant. Sie erweitern das gemeinsame versionierte
-JSON-Format, ersetzen es aber nicht. Benchmark-Ergebnisse werden erst nach
+Die nächste geplante Ausbaustufe umfasst reichhaltigere typisierte Lücken,
+eine vollständige Wirkungsanalyse und ein validiertes semantisches
+Änderungsprotokoll. Sie erweitern das gemeinsame versionierte JSON-Format,
+ersetzen es aber nicht. Benchmark-Ergebnisse werden erst nach
 reproduzierbaren Versuchen veröffentlicht; dieses Handbuch enthält keinen
 erfundenen Vergleich.

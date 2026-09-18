@@ -8,6 +8,10 @@ compiler and repository release.
 
 ### Added
 
+- Added deterministic, source-only `zelyra impact --format=json` output for
+  tables, SQL, forms, CRUD resources, views, APIs, permissions, and contracts.
+  Email, job, test, and live schema impact are explicit empty or unavailable
+  categories until their source and runtime integrations exist.
 - Added contextual typed-hole diagnostics for `_`. Buildable commands report
   the expected type, visible values and functions, active capabilities,
   contract obligations, and source location; incomplete code is rejected

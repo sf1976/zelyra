@@ -89,14 +89,15 @@ Expression typed holes written as `_` are available as a first safe slice. The
 compiler reports their contextual expected type, available values and
 functions, active capabilities, contract obligations, and source span.
 Buildable commands reject incomplete code before lowering or execution. Typed
-holes in declaration contexts, semantic edit requests, and dependency impact
-analysis remain planned interfaces.
+holes in declaration contexts and semantic edit requests remain planned
+interfaces.
 
-`zelyra impact --format=json` will eventually report affected tables, SQL,
-forms, CRUD resources, views, APIs, emails, jobs, permissions, contracts,
-tests, and schema changes. `zelyra edit --format=json change.json` will be an
-additional validated and previewable semantic change protocol; text patches
-remain supported.
+`zelyra impact --format=json` now provides a deterministic, source-only first
+slice for affected tables, SQL, forms, CRUD resources, views, APIs,
+permissions, and contracts. Emails, jobs, tests, live schema changes, and
+deeper runtime dependency analysis remain planned. `zelyra edit --format=json
+change.json` will be an additional validated and previewable semantic change
+protocol; text patches remain supported.
 
 ## Security, privacy, and providers
 

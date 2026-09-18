@@ -42,6 +42,7 @@ Die ersten maschinenorientierten Schnittstellen sind verfügbar:
 zelyra check examples/fibonacci.zyl --format=json
 zelyra context examples/auth_crud_api.zyl --format=json
 zelyra fmt examples/fibonacci.zyl --check
+zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
 Beide verwenden Schema-Version `1`. JSON wird ausschließlich auf stdout
@@ -50,9 +51,10 @@ Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
 Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
 `zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
 formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
-Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Semantische
-Änderungen, Wirkungsanalyse und vergleichende
-KI-Benchmarks sind geplant, aber noch nicht implementiert. Siehe die
+Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
+quelltextbasierte Stufe der Wirkungsanalyse ist verfügbar; semantische
+Änderungen, eine vollständige Laufzeit-/Schemaanalyse und vergleichende
+KI-Benchmarks bleiben geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 

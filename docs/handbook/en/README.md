@@ -1404,11 +1404,11 @@ vendor-neutral so local tools can use them as well.
   CI, preserving comments and opaque SQL/HTML bodies;
 - ✅ **Implemented:** human-readable output remains the default;
 - 🧪 **Experimental:** the current JSON interface is schema version `1` and
-  covers the `check` and `context` commands;
+  covers the `check`, `context`, and source-only `impact` commands;
 - ✅ **Implemented:** expression typed holes written as `_` with contextual
   diagnostics; buildable commands reject incomplete code;
-- 🗺️ **Planned:** richer typed gaps, semantic edits, impact analysis, and the
-  reproducible AI authoring benchmark;
+- 🗺️ **Planned:** richer typed gaps, semantic edits, complete runtime/schema
+  impact analysis, and the reproducible AI authoring benchmark;
 - ❌ **Not available:** automatic production changes, automatic permission
   escalation, or compiler decisions delegated to an AI service.
 
@@ -1459,6 +1459,17 @@ current compiler can actually understand, including tables, fields, CRUD
 resources, forms, APIs, and source spans. It does not connect to MariaDB,
 execute email, expose credentials, or include rendered confidential content.
 
+Inspect deterministic source dependencies for a program:
+
+~~~bash
+zelyra impact examples/auth_crud_api.zyl --format=json
+~~~
+
+The impact response lists source-level tables, SQL, forms, CRUD resources,
+views, APIs, permissions, and contracts. Email, job, test, and live schema
+impact are explicitly empty or marked unavailable; the command never connects
+to MariaDB.
+
 ### Safe automation boundary
 
 Generated code must pass the compiler and tests. An AI must not be trusted
@@ -1467,7 +1478,8 @@ weaken diagnostics, disable tests, reveal secrets, or approve destructive
 schema changes. Human approval remains required for risky database and
 security operations.
 
-The next planned machine interfaces are typed gaps, `zelyra impact --format=json`,
-and a validated semantic edit protocol. They will extend the versioned common
-JSON envelope rather than replace it. Benchmark results will be published only
-after reproducible experiments; this handbook contains no invented comparison.
+The next planned machine interfaces are richer typed gaps, complete impact
+analysis, and a validated semantic edit protocol. They will extend the
+versioned common JSON envelope rather than replace it. Benchmark results will
+be published only after reproducible experiments; this handbook contains no
+invented comparison.

@@ -35,11 +35,13 @@ use zelyra_web::{
 
 mod formatter;
 mod holes;
+mod impact;
 use formatter::format_source;
 use holes::collect_typed_holes;
+use impact::build_impact;
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -640,6 +642,81 @@ fn fmt_command(arguments: impl Iterator<Item = String>) -> ExitCode {
             }
         }
     }
+}
+
+fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = arguments.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown impact option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+    if format == OutputFormat::Json {
+        let source = fs::read_to_string(&path).unwrap_or_default();
+        begin_json_diagnostics(&path, &source);
+        let program = load(&path);
+        let diagnostics = finish_json_diagnostics();
+        let success = program.is_ok();
+        let impact = program
+            .as_ref()
+            .map(|program| build_impact(program, &source))
+            .unwrap_or_else(|_| json!({}));
+        print_machine_document(&machine_document(
+            "impact",
+            success,
+            diagnostics,
+            [("entry".to_owned(), Value::String(path))]
+                .into_iter()
+                .chain([("impact".to_owned(), impact)]),
+        ));
+        return if success {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
+    let program = match load(&path) {
+        Ok(program) => program,
+        Err(()) => return ExitCode::from(1),
+    };
+    let source = fs::read_to_string(&path).unwrap_or_default();
+    let impact = build_impact(&program, &source);
+    println!("impact: {path}");
+    for category in [
+        "tables",
+        "sql",
+        "forms",
+        "crud",
+        "views",
+        "apis",
+        "permissions",
+        "contracts",
+        "emails",
+        "jobs",
+        "tests",
+    ] {
+        let count = impact[category].as_array().map_or(0, Vec::len);
+        println!("  {category}: {count}");
+    }
+    println!("  schema_changes: source-only");
+    ExitCode::SUCCESS
 }
 
 fn context_span(source: &str, span: zelyra_ast::Span) -> Value {
@@ -5477,6 +5554,9 @@ fn main() -> ExitCode {
     }
     if command == "fmt" {
         return fmt_command(args);
+    }
+    if command == "impact" {
+        return impact_command(args);
     }
     if command == "context" {
         return context_command(args);

@@ -54,9 +54,10 @@ Feature eines bestimmten Anbieters.
   Contract-Pflichten und Source-Spans; unvollständiger Code darf nicht gebaut
   oder ausgeführt werden. Lücken in weiteren Deklarationskontexten und eine
   umfassendere Edit-Integration bleiben offen.
-- [ ] **Stufe D — Wirkungsanalyse:** Deterministisches
-  `zelyra impact --format=json` für Tabellen, SQL, Formulare, CRUD, Views,
-  APIs, E-Mails, Jobs, Berechtigungen, Contracts, Tests und Schemaänderungen.
+- [~] **Stufe D — Wirkungsanalyse:** Eine deterministische, quelltextbasierte
+  erste Stufe von `zelyra impact --format=json` meldet Tabellen, SQL,
+  Formulare, CRUD, Views, APIs, Berechtigungen und Contracts; E-Mails, Jobs,
+  Tests und Live-Schemaänderungen bleiben anzubinden.
 - [ ] **Stufe E — semantische Änderungen:** Validierte, atomare,
   vorschau-fähige und versionierte `zelyra edit --format=json`-Operationen
   zusätzlich zu Textpatches.

@@ -40,6 +40,7 @@ The first machine-oriented interfaces are available now:
 zelyra check examples/fibonacci.zyl --format=json
 zelyra context examples/auth_crud_api.zyl --format=json
 zelyra fmt examples/fibonacci.zyl --check
+zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
 Both use schema version `1`. JSON is written only to stdout; diagnostics have
@@ -48,9 +49,9 @@ stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical
 source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
-by buildable commands. Semantic edits,
-impact analysis, and comparative AI benchmarks are planned and are not yet
-implemented. See the [AI-native architecture](docs/architecture/ai-native-development.md)
+by buildable commands. The first source-only impact analysis slice is available;
+semantic edits, complete runtime/schema impact analysis, and comparative AI
+benchmarks remain planned. See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
 ## License and implementation

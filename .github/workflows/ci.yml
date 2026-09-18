@@ -40,6 +40,11 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build CLI for integration test
         run: cargo build -p zelyra-cli
+      - name: Check deterministic impact output
+        run: |
+          target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact.json
+          target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact-second.json
+          diff -u /tmp/zelyra-impact.json /tmp/zelyra-impact-second.json
       - name: Check Zelyra example formatting
         run: |
           for source_file in examples/*.zyl; do
