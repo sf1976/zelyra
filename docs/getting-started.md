@@ -300,6 +300,7 @@ cd my-app
 zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 set -a; . ./.env; set +a
+zelyra doctor main.zyl --env-file .env --port 18080
 zelyra db setup main.zyl
 ~~~
 
@@ -722,7 +723,8 @@ zelyra context <file.zyl> [--format human|json]
 zelyra build <file.zyl>                 build/check source
 zelyra run <file.zyl>                   execute a program
 zelyra serve <file.zyl> [address]       start the built-in HTTP server
-zelyra doctor [file.zyl] [--port <port>] [--json] check project, database, and web readiness
+zelyra doctor [file.zyl] [--env-file <path>] [--port <port>] [--json]
+                                         check project, database, Docker, and web readiness
 zelyra verify <file.zyl>                classify contract checks
 zelyra doc <file.zyl> [--openapi]       generate an OpenAPI document
 zelyra doc <file.zyl> --typescript     generate a TypeScript client

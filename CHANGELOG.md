@@ -8,6 +8,10 @@ compiler and repository release.
 
 ### Added
 
+- Extended `zelyra doctor` with read-only Docker Compose availability checks
+  and `--env-file <path>` support for generated projects. Database URLs are
+  loaded without exposing credentials, and the selected host port is checked
+  with the shared port validation rules.
 - Added `zelyra setup [directory]` for safe local MariaDB first-run setup. It
   creates `.env` with OS-random credentials, never prints secrets, protects
   the file on Unix, and never overwrites an existing `.env`.

@@ -44,6 +44,7 @@ use impact::{build_impact, focus_impact};
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
+    eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra init [directory] [--mariadb] [--web-port <port>] [--host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
@@ -1976,6 +1977,51 @@ struct DoctorCheck {
     message: String,
 }
 
+fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
+    let source =
+        fs::read_to_string(path).map_err(|error| format!("cannot read `{path}`: {error}"))?;
+    for line in source.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").unwrap_or(line);
+        let Some((name, value)) = line.split_once('=') else {
+            continue;
+        };
+        if name.trim() == key {
+            return Ok(Some(
+                value.trim().trim_matches('"').trim_matches('\'').to_owned(),
+            ));
+        }
+    }
+    Ok(None)
+}
+
+fn docker_compose_check() -> DoctorCheck {
+    let commands = [
+        ("docker", vec!["compose", "version"]),
+        ("docker-compose", vec!["version"]),
+    ];
+    for (command, arguments) in commands {
+        if let Ok(output) = Command::new(command).args(arguments).output() {
+            if output.status.success() {
+                return DoctorCheck {
+                    name: "docker_compose",
+                    status: "pass",
+                    message: format!("{command} is available"),
+                };
+            }
+        }
+    }
+    DoctorCheck {
+        name: "docker_compose",
+        status: "warn",
+        message: "Docker Compose is unavailable; the generated MariaDB stack cannot be started"
+            .into(),
+    }
+}
+
 fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
     let failed = checks.iter().any(|check| check.status == "fail");
     let warnings = checks.iter().filter(|check| check.status == "warn").count();
@@ -2002,7 +2048,8 @@ fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
 fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let mut path = "main.zyl".to_owned();
     let mut path_given = false;
-    let mut port = 3000u16;
+    let mut port = DEFAULT_WEB_PORT;
+    let mut env_file = None;
     let mut json = false;
     while let Some(argument) = args.next() {
         if argument == "--json" {
@@ -2012,13 +2059,19 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 usage();
                 return ExitCode::from(2);
             };
-            port = match value.parse() {
+            port = match parse_web_port(&value) {
                 Ok(port) => port,
-                Err(_) => {
-                    eprintln!("error[E-DOCTOR-001]: invalid TCP port `{value}`");
+                Err(error) => {
+                    eprintln!("error[E-DOCTOR-001]: {error}");
                     return ExitCode::from(2);
                 }
             };
+        } else if argument == "--env-file" {
+            let Some(value) = args.next() else {
+                usage();
+                return ExitCode::from(2);
+            };
+            env_file = Some(value);
         } else if argument.starts_with('-') || path_given {
             usage();
             return ExitCode::from(2);
@@ -2029,6 +2082,38 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 
     let mut checks = Vec::new();
+    let file_database_url = if let Some(env_file) = env_file.as_deref() {
+        match read_env_value(env_file, "DATABASE_URL") {
+            Ok(Some(url)) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    status: "pass",
+                    message: format!(
+                        "loaded DATABASE_URL from {env_file} without exposing credentials"
+                    ),
+                });
+                Some(url)
+            }
+            Ok(None) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    status: "warn",
+                    message: format!("{env_file} does not define DATABASE_URL"),
+                });
+                None
+            }
+            Err(error) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    status: "fail",
+                    message: error,
+                });
+                None
+            }
+        }
+    } else {
+        None
+    };
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
             name: "project_file",
@@ -2079,8 +2164,8 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         match build_schema(program) {
             Ok(schema) => {
                 let backend = schema.backend();
-                match env::var("DATABASE_URL") {
-                    Ok(url) => match inspect_for_backend(backend, &url) {
+                match file_database_url.or_else(|| env::var("DATABASE_URL").ok()) {
+                    Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
                             status: "pass",
@@ -2096,7 +2181,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                             message: format!("{}: {error}", backend.name()),
                         }),
                     },
-                    Err(_) => checks.push(DoctorCheck {
+                    None => checks.push(DoctorCheck {
                         name: "database",
                         status: "warn",
                         message: format!("{}: DATABASE_URL is not set", backend.name()),
@@ -2114,6 +2199,8 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }),
         }
     }
+
+    checks.push(docker_compose_check());
 
     match TcpListener::bind(("127.0.0.1", port)) {
         Ok(listener) => {
@@ -6247,6 +6334,30 @@ mod tests {
     fn doctor_rejects_invalid_port() {
         let arguments = ["--port".to_owned(), "not-a-port".to_owned()];
         assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
+        let arguments = ["--port".to_owned(), "0".to_owned()];
+        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
+    }
+
+    #[test]
+    fn reads_database_url_from_an_env_file_without_normalizing_secrets() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-doctor-env-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(
+            &path,
+            "# local\nexport DATABASE_URL='mariadb://user:secret@127.0.0.1:3306/app'\n",
+        )
+        .unwrap();
+        assert_eq!(
+            read_env_value(path.to_str().unwrap(), "DATABASE_URL").unwrap(),
+            Some("mariadb://user:secret@127.0.0.1:3306/app".into())
+        );
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

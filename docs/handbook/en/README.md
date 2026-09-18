@@ -179,6 +179,9 @@ Zelyra server port and its local published port independently. You can change
 Run `zelyra setup machine-management` after scaffolding to create `.env` with
 random local MariaDB credentials. Existing `.env` files are never overwritten
 and credentials are never printed.
+After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
+18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
+published port without changing the database.
 
 For repository integration tests, an isolated MariaDB instance is available:
 
