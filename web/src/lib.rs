@@ -2299,7 +2299,10 @@ impl Router {
                         );
                     }
                 };
-                return Response::html(200, render_template(&route.html, &params, &data));
+                return Response::html(
+                    200,
+                    render_page(route, path, &params, &query_values, &data),
+                );
             }
         }
         Response::html(404, "<h1>404 Not Found</h1>")
@@ -3762,12 +3765,11 @@ fn render_tableview(
         html.push_str(&html_escape(&filter.name));
         html.push_str("\" value=\"");
         let value_name = format!("filter_{}", filter.name);
-        html.push_str(&html_escape(
-            query_values
-                .get(&value_name)
-                .map(String::as_str)
-                .unwrap_or(""),
-        ));
+        html.push_str(&html_escape(selected_filter_value(
+            query_values,
+            &value_name,
+            &filter.name,
+        )));
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
@@ -4394,6 +4396,21 @@ fn selected_filter_operator(
         .filter_map(|name| name.strip_prefix(&prefix))
         .find_map(FilterOperator::parse)
         .unwrap_or(FilterOperator::Equal)
+}
+
+fn selected_filter_value<'a>(
+    query_values: &'a HashMap<String, String>,
+    value_name: &str,
+    column: &str,
+) -> &'a str {
+    if let Some(value) = query_values.get(value_name) {
+        return value;
+    }
+    let prefix = format!("filter_{column}__");
+    sorted_query_values(query_values)
+        .into_iter()
+        .find(|(name, _)| name.starts_with(&prefix) && !name.ends_with("__operator"))
+        .map_or("", |(_, value)| value)
 }
 
 fn sorted_query_values(query_values: &HashMap<String, String>) -> Vec<(&str, &str)> {
@@ -5636,6 +5653,50 @@ fn load_route_data(
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
             .collect::<Vec<_>>();
         query_params.extend(bound_query_values.iter().cloned());
+        if data.collection && route.page_size.is_some() && !loaded.values.contains_key("total") {
+            let (count_source, count_parameters) = page_collection_query(
+                &query,
+                PageCollectionQueryOptions {
+                    search: search.as_deref(),
+                    search_columns: &route.search_columns,
+                    filters: &filters,
+                    sort: None,
+                    order: "ASC",
+                    page_size: None,
+                    page: 1,
+                },
+            )
+            .map_err(RouteDataError::InvalidQuery)?;
+            let count_query = format!("SELECT COUNT(*) FROM ({count_source}) AS zelyra_page_count");
+            let mut count_query_params = query_params.clone();
+            count_query_params.extend(count_parameters);
+            let count_result = match zelyra_database::execute_mariadb_query(
+                database_url,
+                &count_query,
+                count_query_params,
+            ) {
+                Ok(result) => result,
+                Err(error) => {
+                    eprintln!("zelyra web: page count query failed: {error}");
+                    return Err(RouteDataError::Query);
+                }
+            };
+            let Some(total) = count_result
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .and_then(|value| value.parse::<u64>().ok())
+            else {
+                eprintln!("zelyra web: page count query returned an invalid result");
+                return Err(RouteDataError::Query);
+            };
+            loaded.values.insert("total".into(), total.to_string());
+            let page_count = route
+                .page_size
+                .map(|size| total.div_ceil(u64::from(size)))
+                .unwrap_or(0);
+            loaded.values.insert("pages".into(), page_count.to_string());
+        }
         if data.collection
             && (search.is_some()
                 || sort.is_some()
@@ -6055,6 +6116,189 @@ fn render_template(
     data: &LoadedRouteData,
 ) -> String {
     render_template_fragment(template, params, &data.values, &data.collections)
+}
+
+fn render_page(
+    route: &Route,
+    path: &str,
+    params: &HashMap<String, String>,
+    query_values: &HashMap<String, String>,
+    data: &LoadedRouteData,
+) -> String {
+    let page = render_template(&route.html, params, data);
+    let controls = render_page_query_controls(route, path, query_values, data);
+    if controls.is_empty() {
+        return page;
+    }
+    if let Some(body_start) = page.find("<body") {
+        if let Some(relative_end) = page[body_start..].find('>') {
+            let insert_at = body_start + relative_end + 1;
+            let mut rendered = String::with_capacity(page.len() + controls.len());
+            rendered.push_str(&page[..insert_at]);
+            rendered.push_str(&controls);
+            rendered.push_str(&page[insert_at..]);
+            return rendered;
+        }
+    }
+    format!("{controls}{page}")
+}
+
+fn render_page_query_controls(
+    route: &Route,
+    path: &str,
+    query_values: &HashMap<String, String>,
+    data: &LoadedRouteData,
+) -> String {
+    let has_collection = route.data.iter().any(|data| data.collection);
+    let has_controls = has_collection
+        && (!route.search_columns.is_empty()
+            || !route.sort_columns.is_empty()
+            || !route.filters.is_empty()
+            || route.page_size.is_some());
+    if !has_controls {
+        return String::new();
+    }
+    let search = query_values.get("search").map(String::as_str).unwrap_or("");
+    let sort = query_values
+        .get("sort")
+        .map(String::as_str)
+        .or_else(|| route.sort_columns.first().map(String::as_str))
+        .unwrap_or("");
+    let order = query_values
+        .get("order")
+        .map(String::as_str)
+        .unwrap_or("asc");
+    let page = data
+        .values
+        .get("page")
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(1);
+    let mut html = String::from(
+        "<form method=\"get\"><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>",
+    );
+    if !route.search_columns.is_empty() {
+        html.push_str(
+            "<label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
+        );
+        html.push_str(&html_escape(search));
+        html.push_str("\">");
+    }
+    if !route.sort_columns.is_empty() {
+        html.push_str("<label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+        for column in &route.sort_columns {
+            html.push_str("<option value=\"");
+            html.push_str(&html_escape(column));
+            html.push('"');
+            if column == sort {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(&html_escape(&humanize(column)));
+            html.push_str("</option>");
+        }
+        html.push_str(
+            "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
+        );
+        for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+            html.push_str("<option value=\"");
+            html.push_str(value);
+            html.push('"');
+            if value.eq_ignore_ascii_case(order) {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(label);
+            html.push_str("</option>");
+        }
+        html.push_str("</select>");
+    }
+    for filter in &route.filters {
+        let selected_operator = selected_filter_operator(query_values, &filter.name);
+        html.push_str("<label for=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\">");
+        html.push_str(&html_escape(&format!(
+            "{} operator",
+            humanize(&filter.name)
+        )));
+        html.push_str("</label><select id=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\" name=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\">");
+        for operator in tableview_filter_operator_options(filter.kind) {
+            html.push_str("<option value=\"");
+            html.push_str(operator.key());
+            html.push('"');
+            if *operator == selected_operator {
+                html.push_str(" selected");
+            }
+            html.push('>');
+            html.push_str(operator.label());
+            html.push_str("</option>");
+        }
+        html.push_str("</select><label for=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\">");
+        html.push_str(&html_escape(&format!(
+            "Filter {} value",
+            humanize(&filter.name)
+        )));
+        html.push_str("</label><input id=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\" name=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\" value=\"");
+        let value_name = format!("filter_{}", filter.name);
+        html.push_str(&html_escape(selected_filter_value(
+            query_values,
+            &value_name,
+            &filter.name,
+        )));
+        html.push_str("\">");
+    }
+    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
+    if route.page_size.is_some() {
+        let page_count = data
+            .values
+            .get("pages")
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(0);
+        html.push_str("<nav class=\"zelyra-pagination\">");
+        if page > 1 {
+            html.push_str("<a href=\"");
+            html.push_str(&html_escape(&page_query_url(path, query_values, page - 1)));
+            html.push_str("\">Previous</a> ");
+        }
+        html.push_str("<span>Page ");
+        html.push_str(&page.to_string());
+        if page_count > 0 {
+            html.push_str(" of ");
+            html.push_str(&page_count.to_string());
+        }
+        html.push_str("</span>");
+        if page_count > page {
+            html.push_str(" <a href=\"");
+            html.push_str(&html_escape(&page_query_url(path, query_values, page + 1)));
+            html.push_str("\">Next</a>");
+        }
+        html.push_str("</nav>");
+    }
+    html
+}
+
+fn page_query_url(path: &str, query_values: &HashMap<String, String>, page: u64) -> String {
+    let mut url = format!("{path}?page={page}");
+    for (name, value) in sorted_query_values(query_values) {
+        if name == "page" || value.is_empty() {
+            continue;
+        }
+        url.push('&');
+        url.push_str(&url_encode(name));
+        url.push('=');
+        url.push_str(&url_encode(value));
+    }
+    url
 }
 
 fn render_template_fragment(
@@ -6689,6 +6933,55 @@ mod tests {
             ),
             "<ul>\n<li>Ada</li><li>&lt;Grace&gt;</li>\n</ul>"
         );
+    }
+
+    #[test]
+    fn renders_page_query_controls_and_preserves_state() {
+        let route = Route {
+            path: "/customers".into(),
+            html: "<html><body><h1>Customers</h1><p>{total}/{pages}</p></body></html>".into(),
+            query: Vec::new(),
+            page_size: Some(2),
+            sort_columns: vec!["name".into()],
+            search_columns: vec!["name".into()],
+            filters: vec![TableViewFilter {
+                name: "name".into(),
+                kind: TableViewFilterKind::Text,
+            }],
+            data: vec![RouteData {
+                name: "customers".into(),
+                query: "SELECT id, name FROM customers".into(),
+                fields: vec!["id".into(), "name".into()],
+                collection: true,
+                optional: false,
+            }],
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let query_values = HashMap::from([
+            ("filter_name".into(), "Ada".into()),
+            ("filter_name__operator".into(), "contains".into()),
+            ("order".into(), "desc".into()),
+            ("page".into(), "2".into()),
+            ("search".into(), "A".into()),
+            ("sort".into(), "name".into()),
+        ]);
+        let data = LoadedRouteData {
+            values: HashMap::from([
+                ("page".into(), "2".into()),
+                ("pages".into(), "3".into()),
+                ("total".into(), "5".into()),
+            ]),
+            collections: HashMap::new(),
+        };
+        let html = render_page(&route, "/customers", &HashMap::new(), &query_values, &data);
+        assert!(html.contains("<body><form method=\"get\">"));
+        assert!(html.contains("name=\"filter_name\" value=\"Ada\""));
+        assert!(html.contains("Page 2 of 3"));
+        assert!(html.contains(
+            "/customers?page=1&amp;filter_name=Ada&amp;filter_name__operator=contains&amp;order=desc&amp;search=A&amp;sort=name"
+        ));
+        assert!(html.contains("<p>5/3</p>"));
     }
 
     #[test]

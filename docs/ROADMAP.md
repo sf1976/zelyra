@@ -199,23 +199,22 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Page-local typed query inputs (`input { search: String? }`) are checked,
   safely bound to native SQL, exposed to HTML interpolation, and rejected with
   controlled HTTP 400 responses when required values are missing or scalar
-  values are invalid. Automatic search, filter, sort, and pagination controls
-  for arbitrary pages remain planned.
+  values are invalid. Automatically generated controls now cover declared page
+  collections; arbitrary input-only pages remain manual by design.
 - [~] Page-local collection pagination via `paginated <size>` is available.
   It validates a positive `page` URL value, exposes it as `UInt`, and applies a
-  parameterized `LIMIT`/`OFFSET` wrapper; generated query controls and total
-  page counts remain planned.
+  parameterized `LIMIT`/`OFFSET` wrapper; generated controls and safe total/page
+  counts are available for declared page collections.
 - [~] Page-local collection sorting via `sort { field ... }` is available.
   Only compiler-validated result fields and `asc`/`desc` order values are
-  accepted; automatic sort-control rendering remains planned.
+  accepted; generated sort controls preserve URL state.
 - [~] Page-local collection search via `search { field ... }` is available.
   Search terms are parameterized and applied to compiler-validated fields with
-  server-side `LIKE` conditions; automatic search-control rendering remains
-  planned.
+  server-side `LIKE` conditions; generated search controls preserve URL state.
 - [~] Page-local typed filters via `filter { field ... }` are available.
   Operators are derived from the declared result types, values are bound as
   parameters, and undeclared fields or unsupported operators are rejected;
-  automatic filter-control rendering remains planned.
+  generated filter controls preserve URL state.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

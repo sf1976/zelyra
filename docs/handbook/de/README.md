@@ -674,8 +674,9 @@ Query-Werte werden gegen ihren Zelyra-Typ geprüft und sicher als
 Datenbankparameter gebunden. Eine fehlende optionale Eingabe wird zu SQL
 `NULL`; ein fehlender Pflichtwert oder ein ungültiger Wert erzeugt eine
 kontrollierte HTTP-400-Antwort. Eine automatische Erzeugung von
-Query-Steuerungen für beliebige Seiten bleibt geplant. Page-Collections können
-bereits sicher serverseitig sortiert und paginiert werden:
+Query-Steuerungen für deklarierte Page-Collections ist integriert; Suche,
+Filter, Sortierung und Pagination bewahren dabei den URL-Zustand.
+Page-Collections können bereits sicher serverseitig sortiert und paginiert werden:
 
 ~~~zelyra
 page "/customers" {
@@ -717,6 +718,11 @@ bleiben parametrisiert, Felder und Operatoren werden als Whitelist geprüft.
 Beispiele sind `/customers?filter_name__contains=Acme` und
 `/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und
 unbekannte Felder erzeugen kontrolliertes HTTP 400.
+
+Paginierte Page-Collections stellen nach einer sicheren Zählabfrage außerdem
+`total` und `pages` als `UInt`-Bindings bereit. Seiten mit ausschließlich
+expliziten `input`-Deklarationen bleiben manuell und erhalten keine erzeugten
+Steuerungen.
 
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 

@@ -594,8 +594,10 @@ page "/customers" {
 Query values are checked against their Zelyra type and safely bound as
 database parameters. A missing optional input becomes SQL `NULL`; a missing
 required input or invalid value produces a controlled HTTP 400 response.
-Automatic query-control rendering for arbitrary pages remains planned. Page
-collections can already opt into safe server-side sorting and pagination:
+For page collections that declare search, filters, sorting, or pagination,
+Zelyra automatically renders a semantic query-control form and preserves URL
+state. Page collections can already opt into safe server-side sorting and
+pagination:
 
 ~~~zelyra
 page "/customers" {
@@ -616,6 +618,10 @@ safe to use in URLs such as `/customers?sort=name&order=desc`. See
 `search { name email }` provides the same compiler-checked whitelist for the
 `search` URL value. Search terms are bound as parameters and applied with
 server-side `LIKE` conditions; unchecked SQL fragments are never created.
+
+Paginated page collections also expose `total` and `pages` as `UInt` bindings
+after a safe count query. Pages using only explicit `input` declarations remain
+manual and do not receive generated controls.
 
 Page collections can also declare typed filters:
 

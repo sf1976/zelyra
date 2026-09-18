@@ -29,15 +29,8 @@ page "/customers" {
     }
 
     html {
-        <form method="get">
-            <input name="search" value="{search}" />
-            <input name="page" value="{page}" />
-            <input name="sort" value="{sort}" />
-            <input name="order" value="{order}" />
-            <input name="filter_name" value="{filter_name}" />
-            <input name="filter_name__operator" value="{filter_name__operator}" />
-            <button type="submit">Suchen</button>
-        </form>
+        <h1>Kunden</h1>
+        <p>Seite {page} von {pages}, Datensätze: {total}</p>
         <ul>
             for customer in customers {
                 <li>{customer.name}</li>

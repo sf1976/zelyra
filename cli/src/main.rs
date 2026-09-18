@@ -1020,7 +1020,8 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[], &[], None, false, false, &[]);
+        let route_names =
+            page_template_bindings(&page.path, &[], &[], page.page_size, false, false, &[]);
         let mut names = HashSet::new();
         for input in &page.inputs {
             if !names.insert(input.name.as_str()) {
@@ -1069,6 +1070,16 @@ fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
                         "page input `{}` is reserved for pagination internals",
                         input.name
                     ),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if page.page_size.is_some() && matches!(input.name.as_str(), "total" | "pages") {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    &format!("page input `{}` is reserved by `paginated`", input.name),
                     input.span.line,
                     input.span.column,
                 );
@@ -2900,6 +2911,8 @@ fn page_template_bindings(
     }
     if page_size.is_some() {
         bindings.insert("page".into(), Type::UInt);
+        bindings.insert("total".into(), Type::UInt);
+        bindings.insert("pages".into(), Type::UInt);
     }
     if sort_enabled {
         bindings.insert("sort".into(), Type::String);
