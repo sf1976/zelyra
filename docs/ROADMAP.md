@@ -58,9 +58,10 @@ architecture requirement for every phase, not a provider-specific feature.
   and components is available as a versioned preview and explicit `--apply`.
   Project-local `.zyl` boundaries, stale-source fingerprints, and full
   compiler validation before and after the edit are enforced; richer
-  scope-aware operations remain. Function renames now resolve declarations and
-  call sites through the AST without changing shadowing local bindings; other
-  resource rename kinds retain their existing token coverage for now.
+  scope-aware operations remain. Function, type, and record renames now
+  resolve declarations and known references through the AST without changing
+  shadowing local bindings; other resource rename kinds retain their existing
+  token coverage for now.
 - [~] **Stage F — contracts and effects:** contracts and capability checks
   exist; granular effects such as `Database(read)`, `Database(write)`,
   `Email`, and `Jobs` remain planned. AI must never add an effect silently.

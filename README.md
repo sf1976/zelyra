@@ -51,7 +51,7 @@ source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
 by buildable commands. Source-only impact analysis and validated semantic
 rename requests with explicit preview/apply modes are available, including
-scope-aware function renames; complete runtime/schema impact analysis and
+AST-aware function, type, and record renames; complete runtime/schema impact analysis and
 comparative AI benchmarks remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).

@@ -64,10 +64,11 @@ Feature eines bestimmten Anbieters.
   als versionierte Vorschau und mit ausdrücklichem `--apply` verfügbar.
   Projektlokale `.zyl`-Grenzen, Stale-Source-Fingerprints sowie vollständige
   Compilerprüfungen vor und nach der Änderung sind aktiv; umfangreichere,
-  namensauflösungsbasierte Operationen bleiben offen. Funktionsumbenennungen
-  lösen Deklarationen und Aufrufstellen jetzt über den AST auf, ohne
-  überschattete lokale Bindungen zu verändern; andere Ressourcenarten nutzen
-  vorerst weiterhin ihre bestehende Token-Abdeckung.
+  namensauflösungsbasierte Operationen bleiben offen. Umbenennungen von
+  Funktionen, Typen und Records lösen Deklarationen und bekannte Referenzen
+  jetzt über den AST auf, ohne überschattete lokale Bindungen zu verändern;
+  andere Ressourcenarten nutzen vorerst weiterhin ihre bestehende
+  Token-Abdeckung.
 - [~] **Stufe F — Contracts und Effekte:** Contracts und Capability-Prüfung
   existieren; feinere Effekte wie `Database(read)`, `Database(write)`,
   `Email` und `Jobs` sind geplant. KI darf Effekte niemals unbemerkt ergänzen.

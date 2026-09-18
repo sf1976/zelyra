@@ -85,11 +85,11 @@ deterministischen Quelltext-Fingerprint. Die Anfrage muss
 und nach der Änderung wird vollständig mit den Compilerprüfungen validiert.
 Die Anfrage muss diesen Fingerprint bei ausdrücklichem `--apply` zurücksenden;
 so wird das validierte Ergebnis atomar geschrieben, ohne zwischenzeitliche
-Änderungen zu überschreiben. Funktionsumbenennungen verwenden den AST und
-ändern Deklarationen sowie Aufrufstellen, ohne überschattete lokale Bindungen
-zu verändern; die übrigen Ressourcenarten verwenden weiterhin die bestehende
-Token-Abdeckung, bis ihr Referenzmodell erweitert ist. Weitere Operationen
-folgen später.
+Änderungen zu überschreiben. Umbenennungen von Funktionen, Typen und Records
+verwenden den AST und typisierte Syntaxkontexte, um Deklarationen und bekannte
+Referenzen zu ändern, ohne überschattete lokale Bindungen zu verändern; die
+übrigen Ressourcenarten verwenden weiterhin die bestehende Token-Abdeckung,
+bis ihr Referenzmodell erweitert ist. Weitere Operationen folgen später.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

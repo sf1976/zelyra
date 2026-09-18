@@ -295,6 +295,34 @@ fn edit_does_not_rename_a_shadowing_local_binding() {
 }
 
 #[test]
+fn edit_renames_type_and_record_references_through_the_cli() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-types",
+        "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make(id: CustomerId) -> Customer { return Customer { id: id } }\nfn main() {}\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"type\",\"from\":\"CustomerId\",\"to\":\"ClientId\"}},{{\"kind\":\"rename\",\"symbol\":\"record\",\"from\":\"Customer\",\"to\":\"Client\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("type edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 8);
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make(id: CustomerId) -> Customer { return Customer { id: id } }\nfn main() {}\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
 fn context_exposes_safe_structural_project_information() {
     let auth_example = example("auth_crud_api.zyl");
     let output = run(&["context", auth_example.to_str().unwrap(), "--format=json"]);

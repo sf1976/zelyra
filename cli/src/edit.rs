@@ -168,10 +168,11 @@ pub fn preview(
 
     let mut replacements = Vec::new();
     for (symbol, source_name, replacement) in &renames {
-        let semantic_spans = if symbol == "function" {
-            Some(function_rename_spans(program, tokens, source_name))
-        } else {
-            None
+        let semantic_spans = match symbol.as_str() {
+            "function" => Some(function_rename_spans(program, tokens, source_name)),
+            "type" => Some(type_rename_spans(tokens, source_name)),
+            "record" => Some(record_rename_spans(tokens, source_name)),
+            _ => None,
         };
         for token in tokens {
             let TokenKind::Ident(name) = &token.kind else {
@@ -190,6 +191,7 @@ pub fn preview(
         }
     }
 
+    replacements.sort_by_key(|(span, _, _)| span.start);
     let mut updated_source = source.to_owned();
     for (span, replacement, _) in replacements.iter().rev() {
         updated_source.replace_range(span.start..span.end, replacement);
@@ -235,6 +237,258 @@ fn function_rename_spans(
         }
     }
     spans
+}
+
+fn type_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+    let mut spans = type_reference_spans(tokens, name);
+    if let Some(span) = any_declaration_name_span(tokens, TokenKind::Type, name) {
+        spans.insert((span.start, span.end));
+    }
+    spans
+}
+
+fn record_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+    let mut spans = type_reference_spans(tokens, name);
+    if let Some(span) = any_declaration_name_span(tokens, TokenKind::Struct, name) {
+        spans.insert((span.start, span.end));
+    }
+    spans.extend(record_literal_spans(tokens, name));
+    spans
+}
+
+fn any_declaration_name_span(tokens: &[Token], keyword: TokenKind, name: &str) -> Option<Span> {
+    for (index, token) in tokens.iter().enumerate() {
+        if token.kind != keyword {
+            continue;
+        }
+        if let Some(Token {
+            kind: TokenKind::Ident(candidate),
+            span,
+        }) = tokens.get(index + 1)
+        {
+            if candidate == name {
+                return Some(*span);
+            }
+        }
+    }
+    None
+}
+
+fn type_reference_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+    let record_literal_ranges = record_literal_ranges(tokens);
+    let mut spans = HashSet::new();
+    let mut in_type = false;
+    let mut generic_depth = 0_usize;
+
+    for (index, token) in tokens.iter().enumerate() {
+        if matches!(token.kind, TokenKind::Eof) {
+            break;
+        }
+        if in_type {
+            match &token.kind {
+                TokenKind::Ident(candidate) if candidate == name => {
+                    spans.insert((token.span.start, token.span.end));
+                }
+                TokenKind::Less => generic_depth += 1,
+                TokenKind::Greater if generic_depth > 0 => generic_depth -= 1,
+                TokenKind::Greater | TokenKind::Comma if generic_depth == 0 => in_type = false,
+                TokenKind::Newline | TokenKind::RParen | TokenKind::RBrace | TokenKind::Equal => {
+                    in_type = false
+                }
+                TokenKind::Colon if generic_depth == 0 => in_type = false,
+                _ if is_type_terminator(&token.kind) => in_type = false,
+                _ => {}
+            }
+            if in_type {
+                continue;
+            }
+        }
+
+        let previous = previous_token(tokens, index);
+        let starts_after_colon =
+            matches!(previous.map(|token| &token.kind), Some(TokenKind::Colon))
+                && !record_literal_ranges
+                    .iter()
+                    .any(|(start, end)| *start <= index && index <= *end);
+        let starts_after_arrow =
+            matches!(previous.map(|token| &token.kind), Some(TokenKind::Arrow));
+        let starts_after_output =
+            matches!(previous.map(|token| &token.kind), Some(TokenKind::Output));
+        let starts_after_type_alias = matches!(
+            (
+                previous_token(tokens, index),
+                previous_token_before(tokens, index)
+            ),
+            (
+                Some(Token {
+                    kind: TokenKind::Ident(_),
+                    ..
+                }),
+                Some(Token {
+                    kind: TokenKind::Type,
+                    ..
+                })
+            )
+        ) && token.kind == TokenKind::Equal;
+        let starts_after_generic_header =
+            matches!(token.kind, TokenKind::Less) && is_generic_type_header(previous);
+
+        if starts_after_colon
+            || starts_after_arrow
+            || starts_after_output
+            || starts_after_type_alias
+        {
+            in_type = true;
+            if let TokenKind::Ident(candidate) = &token.kind {
+                if candidate == name {
+                    spans.insert((token.span.start, token.span.end));
+                }
+            }
+            continue;
+        } else if starts_after_generic_header {
+            in_type = true;
+            generic_depth = 1;
+            continue;
+        }
+    }
+    spans
+}
+
+fn is_type_terminator(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Required
+            | TokenKind::Primary
+            | TokenKind::Auto
+            | TokenKind::Unique
+            | TokenKind::Default
+            | TokenKind::LBrace
+            | TokenKind::LParen
+            | TokenKind::RBracket
+    )
+}
+
+fn is_generic_type_header(token: Option<&Token>) -> bool {
+    match token.map(|token| &token.kind) {
+        Some(TokenKind::Sql) => true,
+        Some(TokenKind::Ident(name)) => matches!(
+            name.as_str(),
+            "Option" | "Result" | "HttpResult" | "json_decode" | "http_json" | "http_result"
+        ),
+        _ => false,
+    }
+}
+
+fn record_literal_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+    let mut spans = HashSet::new();
+    for index in 0..tokens.len() {
+        let Some(Token {
+            kind: TokenKind::Ident(candidate),
+            span,
+        }) = tokens.get(index)
+        else {
+            continue;
+        };
+        if candidate != name
+            || !matches!(
+                tokens.get(index + 1).map(|token| &token.kind),
+                Some(TokenKind::LBrace)
+            )
+        {
+            continue;
+        }
+        if matches!(
+            previous_token(tokens, index).map(|token| &token.kind),
+            Some(
+                TokenKind::Struct
+                    | TokenKind::Table
+                    | TokenKind::Form
+                    | TokenKind::Crud
+                    | TokenKind::View
+                    | TokenKind::Component
+                    | TokenKind::TableView
+            )
+        ) {
+            continue;
+        }
+        if matches!(
+            (
+                tokens.get(index + 2).map(|token| &token.kind),
+                tokens.get(index + 3).map(|token| &token.kind)
+            ),
+            (Some(TokenKind::Ident(_)), Some(TokenKind::Colon))
+        ) {
+            spans.insert((span.start, span.end));
+        }
+    }
+    spans
+}
+
+fn record_literal_ranges(tokens: &[Token]) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    for index in 0..tokens.len() {
+        let is_literal = matches!(
+            (
+                tokens.get(index).map(|token| &token.kind),
+                tokens.get(index + 1).map(|token| &token.kind),
+                tokens.get(index + 2).map(|token| &token.kind),
+                tokens.get(index + 3).map(|token| &token.kind)
+            ),
+            (
+                Some(TokenKind::Ident(_)),
+                Some(TokenKind::LBrace),
+                Some(TokenKind::Ident(_)),
+                Some(TokenKind::Colon)
+            )
+        ) && !matches!(
+            previous_token(tokens, index).map(|token| &token.kind),
+            Some(
+                TokenKind::Struct
+                    | TokenKind::Table
+                    | TokenKind::Form
+                    | TokenKind::Crud
+                    | TokenKind::View
+                    | TokenKind::Component
+                    | TokenKind::TableView
+            )
+        );
+        if !is_literal {
+            continue;
+        }
+        let mut depth = 0_usize;
+        for (end, token) in tokens.iter().enumerate().skip(index + 1) {
+            match token.kind {
+                TokenKind::LBrace => depth += 1,
+                TokenKind::RBrace => {
+                    depth -= 1;
+                    if depth == 0 {
+                        ranges.push((index + 1, end));
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    ranges
+}
+
+fn previous_token(tokens: &[Token], index: usize) -> Option<&Token> {
+    previous_token_index(tokens, index).and_then(|index| tokens.get(index))
+}
+
+fn previous_token_before(tokens: &[Token], index: usize) -> Option<&Token> {
+    let previous_index = previous_token_index(tokens, index)?;
+    previous_token(tokens, previous_index)
+}
+
+fn previous_token_index(tokens: &[Token], index: usize) -> Option<usize> {
+    tokens[..index]
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, token)| !matches!(token.kind, TokenKind::Newline))
+        .map(|(index, _)| index)
 }
 
 fn declaration_name_span(
@@ -476,6 +730,33 @@ mod tests {
             "fn welcome() { greet = 1\n print(greet) }\nfn main() { welcome() }\n"
         );
         assert_eq!(preview.changed_tokens, 2);
+    }
+
+    #[test]
+    fn type_and_record_renames_follow_type_references_and_literals() {
+        let source = "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make() -> Customer { return Customer { id: 1 } }\nfn main() { load(1) }\n";
+        let tokens = lex(source).expect("source should lex");
+        let program = parse(&tokens).expect("source should parse");
+        let request = json!({
+            "schema_version": "1",
+            "entry": "main.zyl",
+            "operations": [
+                {"kind": "rename", "symbol": "type", "from": "CustomerId", "to": "ClientId"},
+                {"kind": "rename", "symbol": "record", "from": "Customer", "to": "Client"}
+            ]
+        });
+        let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
+        assert!(preview.source.contains("type ClientId = Id"));
+        assert!(
+            preview.source.contains("struct Client { id: ClientId }"),
+            "{}",
+            preview.source
+        );
+        assert!(preview.source.contains("fn load(id: ClientId) -> ClientId"));
+        assert!(preview
+            .source
+            .contains("fn make() -> Client { return Client { id: 1 } }"));
+        assert_eq!(preview.changed_tokens, 7);
     }
 
     #[test]

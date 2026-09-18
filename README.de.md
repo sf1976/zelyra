@@ -55,7 +55,7 @@ formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
 Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
 quelltextbasierte Wirkungsanalyse und validierte semantische Umbenennungen mit
 ausdrücklichen Vorschau-/Anwende-Modi sind verfügbar, einschließlich
-namensauflösungsbasierter Funktionsumbenennungen; eine vollständige
+AST-basierter Umbenennungen von Funktionen, Typen und Records; eine vollständige
 Laufzeit-/Schemaanalyse und vergleichende KI-Benchmarks bleiben geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
