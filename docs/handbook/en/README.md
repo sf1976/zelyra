@@ -187,6 +187,9 @@ examples. `zelyra setup` remains an idempotent recovery command.
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, setup uses the same safe built-in defaults. A project without
 MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
+For a non-interactive console setup use `zelyra setup --all`. To use the same
+actions in a local browser, run `zelyra setup --web`; the CLI prints a
+tokenized `127.0.0.1` URL. See [`docs/setup-web.md`](../../setup-web.md).
 After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
 18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
 published port without changing the database.
@@ -294,6 +297,8 @@ Important commands:
 | `zelyra run app.zyl` | run a program |
 | `zelyra serve app.zyl` | start the HTTP server |
 | `zelyra doctor app.zyl [--json]` | check project, database, and web readiness |
+| `zelyra setup --all` | prepare `.env`, start MariaDB, and apply the schema |
+| `zelyra setup --web` | open the local browser setup assistant |
 | `zelyra verify app.zyl` | classify contracts |
 | `zelyra doc app.zyl --openapi` | generate an OpenAPI document |
 | `zelyra db create app.zyl` | emit checked CREATE SQL without connecting |
