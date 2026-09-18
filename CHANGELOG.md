@@ -10,6 +10,15 @@ No unreleased changes.
 
 Keine unveröffentlichten Änderungen.
 
+## 0.1.42 — 2026-09-19
+
+### Fixed
+
+- `zelyra --version`, `zelyra -V`, and `zelyra version` now report the full
+  compiler version instead of only the language line `0.1`.
+- `zelyra --version`, `zelyra -V` und `zelyra version` geben jetzt die volle
+  Compilerversion statt nur der Sprachlinie `0.1` aus.
+
 ## 0.1.41 — 2026-09-19
 
 ### Added
