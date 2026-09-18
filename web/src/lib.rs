@@ -281,6 +281,7 @@ pub struct CrudRoute {
     pub delete_view: CrudDeleteViewDef,
     pub loading_view: CrudLoadingViewDef,
     pub error_view: CrudErrorViewDef,
+    pub soft_delete: Option<zelyra_ast::CrudSoftDeleteDef>,
     pub actions: Vec<CrudActionRoute>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -564,6 +565,27 @@ impl WebApp {
                         self.database_url.as_deref(),
                     );
                 }
+            }
+            let restore_path = format!("{}/{{id}}/restore", crud.path.trim_end_matches('/'));
+            if let Some(path_params) = match_path(&restore_path, &request.path) {
+                if self.database_capability_granted == Some(false) {
+                    return database_capability_denied();
+                }
+                if let Some(response) = authorize(
+                    crud.requires_auth,
+                    &crud.delete_permissions,
+                    request,
+                    self,
+                    self.database_url.as_deref(),
+                ) {
+                    return response;
+                }
+                return dispatch_crud_restore(
+                    crud,
+                    request,
+                    &path_params,
+                    self.database_url.as_deref(),
+                );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
@@ -2669,6 +2691,7 @@ struct CrudUiActions {
     create: bool,
     edit: bool,
     delete: bool,
+    restore: bool,
     custom: Vec<CrudUiActionLink>,
 }
 
@@ -2697,10 +2720,19 @@ struct CrudUiActionField {
 fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
     let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
     let include_relation_options = match_path(&detail_path, &request.path).is_some();
+    let archived = request
+        .target
+        .split_once('?')
+        .and_then(|(_, query)| parse_urlencoded(query).ok())
+        .and_then(|values| values.get("archived").cloned())
+        .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
+    let delete_authorized =
+        can_authorize(crud.requires_auth, &crud.delete_permissions, request, app);
     CrudUiActions {
         create: can_authorize(crud.requires_auth, &crud.create_permissions, request, app),
-        edit: can_authorize(crud.requires_auth, &crud.edit_permissions, request, app),
-        delete: can_authorize(crud.requires_auth, &crud.delete_permissions, request, app),
+        edit: !archived && can_authorize(crud.requires_auth, &crud.edit_permissions, request, app),
+        delete: delete_authorized && !archived,
+        restore: archived && crud.soft_delete.is_some() && delete_authorized,
         custom: crud
             .actions
             .iter()
@@ -2824,6 +2856,9 @@ fn dispatch_crud(
         }
     };
     let search = query_values.get("search").cloned().unwrap_or_default();
+    let archived = query_values
+        .get("archived")
+        .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
     let page = positive_query_value(&query_values, "page").unwrap_or(1);
     let per_page = positive_query_value(&query_values, "per_page")
         .unwrap_or(50)
@@ -3040,6 +3075,13 @@ fn dispatch_crud(
     for (column, _, operator) in &filters {
         conditions.push(filter_condition(table, column, *operator));
     }
+    if let Some(soft_delete) = &crud.soft_delete {
+        conditions.push(format!(
+            "{} IS {}",
+            crud_storage_expression(table, &soft_delete.column),
+            if archived { "NOT NULL" } else { "NULL" }
+        ));
+    }
     if !conditions.is_empty() {
         query.push_str(" WHERE ");
         query.push_str(&conditions.join(" AND "));
@@ -3113,6 +3155,7 @@ fn dispatch_crud(
                 order,
                 page,
                 per_page,
+                archived,
                 success: query_values.get("zelyra_success").map(String::as_str),
                 success_title: query_values.get("zelyra_success_title").map(String::as_str),
             },
@@ -3587,6 +3630,12 @@ fn dispatch_crud_detail(
     let Ok(id) = id.parse::<i64>() else {
         return Response::html(400, "<h1>400 Bad Request</h1><p>id must be an integer.</p>");
     };
+    let archived = request
+        .target
+        .split_once('?')
+        .and_then(|(_, query)| parse_urlencoded(query).ok())
+        .and_then(|values| values.get("archived").cloned())
+        .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
     let Some(table) = crud
         .schema
         .tables
@@ -3600,8 +3649,19 @@ fn dispatch_crud_detail(
         .iter()
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
+    let soft_delete_condition = crud
+        .soft_delete
+        .as_ref()
+        .map(|soft_delete| {
+            format!(
+                " AND {} IS {}",
+                crud_storage_expression(table, &soft_delete.column),
+                if archived { "NOT NULL" } else { "NULL" }
+            )
+        })
+        .unwrap_or_default();
     let query = format!(
-        "SELECT {} FROM {} WHERE {} = :id",
+        "SELECT {} FROM {} WHERE {} = :id{}",
         columns
             .iter()
             .map(|column| {
@@ -3619,7 +3679,8 @@ fn dispatch_crud_detail(
             quote_identifier("base"),
             crud_relation_joins(&crud.schema, table)
         ),
-        format_args!("{}.{}", quote_identifier("base"), quote_identifier("id"))
+        format_args!("{}.{}", quote_identifier("base"), quote_identifier("id")),
+        soft_delete_condition
     );
     let result = match zelyra_database::execute_mariadb_query(
         database_url,
@@ -3681,11 +3742,27 @@ fn dispatch_crud_delete(
     {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
-    let query = format!(
-        "DELETE FROM {} WHERE {} = :id",
-        quote_identifier(&crud.table),
-        quote_identifier("id")
-    );
+    let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
+        (
+            format!(
+                "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {} IS NULL",
+                quote_identifier(&crud.table),
+                quote_identifier(&soft_delete.column),
+                quote_identifier("id"),
+                quote_identifier(&soft_delete.column)
+            ),
+            "Record archived.",
+        )
+    } else {
+        (
+            format!(
+                "DELETE FROM {} WHERE {} = :id",
+                quote_identifier(&crud.table),
+                quote_identifier("id")
+            ),
+            "Record deleted.",
+        )
+    };
     if let Err(error) = zelyra_database::execute_mariadb_queries(
         database_url,
         &[zelyra_database::Query {
@@ -3702,7 +3779,79 @@ fn dispatch_crud_delete(
             "The record could not be deleted.",
         );
     }
-    Response::redirect(&crud.path)
+    Response::redirect(append_query_parameter(
+        &crud.path,
+        "zelyra_success",
+        success_message,
+    ))
+}
+
+fn dispatch_crud_restore(
+    crud: &CrudRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+) -> Response {
+    if request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
+    let Some(soft_delete) = &crud.soft_delete else {
+        return Response::html(404, "<h1>404 Not Found</h1>");
+    };
+    let Some(database_url) = database_url else {
+        return crud_error_response(
+            crud,
+            503,
+            "Service Unavailable",
+            "DATABASE_URL is required for CRUD actions.",
+        );
+    };
+    let Some(id) = path_params.get("id") else {
+        return Response::html(400, "<h1>400 Bad Request</h1>");
+    };
+    let Ok(id) = id.parse::<i64>() else {
+        return Response::html(400, "<h1>400 Bad Request</h1><p>id must be an integer.</p>");
+    };
+    let input = match parse_urlencoded(&request.body) {
+        Ok(input) => input,
+        Err(error) => {
+            return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+        }
+    };
+    if !crud
+        .csrf
+        .verify(input.get("_zelyra_csrf").map(String::as_str))
+    {
+        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+    }
+    let query = format!(
+        "UPDATE {} SET {} = NULL WHERE {} = :id AND {} IS NOT NULL",
+        quote_identifier(&crud.table),
+        quote_identifier(&soft_delete.column),
+        quote_identifier("id"),
+        quote_identifier(&soft_delete.column)
+    );
+    if let Err(error) = zelyra_database::execute_mariadb_queries(
+        database_url,
+        &[zelyra_database::Query {
+            sql: query,
+            params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+        }],
+        true,
+    ) {
+        eprintln!("zelyra web: CRUD restore failed: {error}");
+        return crud_error_response(
+            crud,
+            500,
+            "Internal Server Error",
+            "The record could not be restored.",
+        );
+    }
+    Response::redirect(append_query_parameter(
+        &crud.path,
+        "zelyra_success",
+        "Record restored.",
+    ))
 }
 
 fn positive_query_value(values: &HashMap<String, String>, name: &str) -> Option<u64> {
@@ -4017,6 +4166,7 @@ struct CrudListView<'a> {
     order: &'a str,
     page: u64,
     per_page: u64,
+    archived: bool,
     success: Option<&'a str>,
     success_title: Option<&'a str>,
 }
@@ -4030,6 +4180,7 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
             create: true,
             edit: true,
             delete: true,
+            restore: false,
             custom: Vec::new(),
         },
     )
@@ -4052,6 +4203,7 @@ fn render_crud_list_with_actions(
         order,
         page,
         per_page,
+        archived,
         success,
         success_title,
     } = view;
@@ -4060,6 +4212,18 @@ fn render_crud_list_with_actions(
     html.push_str("><h1>");
     html.push_str(&html_escape(&crud.title));
     html.push_str("</h1>");
+    if crud.soft_delete.is_some() {
+        html.push_str("<p class=\"zelyra-archive-toggle\"><a href=\"");
+        if archived {
+            html.push_str(&html_escape(&crud.path));
+            html.push_str("\">Show active records</a></p>");
+        } else {
+            html.push_str(&html_escape(&append_query_parameter(
+                &crud.path, "archived", "true",
+            )));
+            html.push_str("\">Show archived records</a></p>");
+        }
+    }
     if let Some(success) = success {
         html.push_str("<section class=\"zelyra-success\" role=\"status\">");
         if let Some(title) = success_title {
@@ -4294,6 +4458,7 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
             create: true,
             edit: true,
             delete: true,
+            restore: false,
             custom: Vec::new(),
         },
     )
@@ -4444,7 +4609,13 @@ fn render_crud_detail_with_actions(
             html.push_str("</button></form>");
         }
     }
-    if ui_actions.delete {
+    if ui_actions.restore {
+        html.push_str("<form method=\"post\" action=\"");
+        html.push_str(&html_escape(&format!("{}/{}/restore", crud.path, id)));
+        html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+        html.push_str(&html_escape(crud.csrf.token()));
+        html.push_str("\"><button type=\"submit\">Restore</button></form>");
+    } else if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
             html.push_str("<h2>");
             html.push_str(&html_escape(title));
@@ -5782,6 +5953,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -5837,6 +6009,7 @@ mod tests {
                 order: "ASC",
                 page: 2,
                 per_page: 1,
+                archived: false,
                 success: Some("Saved <unsafe>"),
                 success_title: Some("Completed"),
             },
@@ -5865,6 +6038,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                archived: false,
                 success: None,
                 success_title: None,
             },
@@ -5872,6 +6046,7 @@ mod tests {
                 create: false,
                 edit: false,
                 delete: false,
+                restore: false,
                 custom: Vec::new(),
             },
         );
@@ -5895,6 +6070,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                archived: false,
                 success: None,
                 success_title: None,
             },
@@ -5919,6 +6095,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                archived: false,
                 success: None,
                 success_title: None,
             },
@@ -6003,6 +6180,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6028,6 +6206,7 @@ mod tests {
                 order: "ASC",
                 page: 1,
                 per_page: 50,
+                archived: false,
                 success: None,
                 success_title: None,
             },
@@ -6051,6 +6230,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6087,6 +6267,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6219,6 +6400,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.view".into()],
@@ -6292,6 +6474,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6325,6 +6508,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6351,6 +6535,7 @@ mod tests {
                 create: false,
                 edit: false,
                 delete: false,
+                restore: false,
                 custom: Vec::new(),
             },
         );
@@ -6367,6 +6552,7 @@ mod tests {
                 create: false,
                 edit: false,
                 delete: false,
+                restore: false,
                 custom: vec![CrudUiActionLink {
                     label: "Deactivate".into(),
                     icon: Some("pause".into()),

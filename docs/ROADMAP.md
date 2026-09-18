@@ -169,7 +169,10 @@ under evaluation.
   confirmation are available.
 - [x] Structured `success_page` notices and safe action-specific `error_page`
   responses are available.
-- [ ] Soft delete, restore, archive, and retention policies.
+- [x] Reversible CRUD soft delete with archived lists and CSRF-protected
+  restore actions.
+- [ ] Permanent purge, retention policies, archive export, and bulk archive
+  workflows.
 - [ ] Audit-aware CRUD history and field-level change diffs.
 - [ ] Background jobs, scheduled tasks, retries, and transactional outbox.
 - [ ] Notifications, email templates, SMTP, and provider abstraction.

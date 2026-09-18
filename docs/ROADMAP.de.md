@@ -169,7 +169,10 @@ noch in Prüfung.
   CSRF-geschützter POST-Bestätigung sind verfügbar.
 - [x] Strukturierte `success_page`-Meldungen und sichere
   aktionsspezifische `error_page`-Antworten sind verfügbar.
-- [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
+- [x] Reversibles CRUD-Soft-Delete mit Archivlisten und CSRF-geschützten
+  Wiederherstellungsaktionen.
+- [ ] Endgültiges Bereinigen, Aufbewahrungsregeln, Archivexport und
+  Massenarchivierungs-Workflows.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.
 - [ ] Benachrichtigungen, E-Mail-Vorlagen, SMTP und Provider-Abstraktion.

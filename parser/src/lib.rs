@@ -327,6 +327,7 @@ impl<'a> Parser<'a> {
         let mut search = Vec::new();
         let mut filters = Vec::new();
         let mut view = CrudViewDef::default();
+        let mut soft_delete = None;
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         let mut create_permissions = Vec::new();
@@ -359,6 +360,10 @@ impl<'a> Parser<'a> {
                     TokenKind::View => {
                         self.advance();
                         view = self.crud_view_block()?;
+                    }
+                    TokenKind::SoftDelete => {
+                        self.advance();
+                        soft_delete = Some(self.crud_soft_delete_block()?);
                     }
                     TokenKind::Requires => {
                         self.advance();
@@ -410,6 +415,7 @@ impl<'a> Parser<'a> {
                 search,
                 filters,
                 view,
+                soft_delete,
                 requires_auth,
                 permissions,
                 create_permissions,
@@ -428,6 +434,7 @@ impl<'a> Parser<'a> {
             search,
             filters,
             view,
+            soft_delete,
             requires_auth,
             permissions,
             create_permissions,
@@ -457,6 +464,26 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RBrace, close_label)?;
         Ok(columns)
+    }
+
+    fn crud_soft_delete_block(&mut self) -> Result<CrudSoftDeleteDef, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after soft_delete")?;
+        let mut column = None;
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (property, _) = self.ident("soft_delete property")?;
+            self.expect(TokenKind::Colon, "colon after soft_delete property")?;
+            match property.as_str() {
+                "column" => column = Some(self.ident("soft_delete column")?.0),
+                _ => return self.error("expected `column` in soft_delete definition"),
+            }
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after soft_delete")?;
+        let Some(column) = column else {
+            return self.error("soft_delete definition requires a column");
+        };
+        Ok(CrudSoftDeleteDef { column })
     }
 
     fn crud_view_block(&mut self) -> Result<CrudViewDef, ParseError> {
@@ -2264,6 +2291,7 @@ mod tests {
         let program = parse(
             &lex(r#"crud Customer -> customers {
                     title: "Customers"
+                    soft_delete { column: deleted_at }
                     list { customer_number name }
                     search { name }
                     filter { active }
@@ -2273,6 +2301,12 @@ mod tests {
         .unwrap();
         let crud = &program.cruds[0];
         assert_eq!(crud.title.as_deref(), Some("Customers"));
+        assert_eq!(
+            crud.soft_delete
+                .as_ref()
+                .map(|config| config.column.as_str()),
+            Some("deleted_at")
+        );
         assert_eq!(crud.list, ["customer_number", "name"]);
         assert_eq!(crud.search, ["name"]);
         assert_eq!(crud.filters, ["active"]);

@@ -31,6 +31,9 @@ compiler and repository release.
 - Added safe CRUD delete confirmation overrides with configurable headings,
   warning messages, and submit labels while retaining POST-only, CSRF, and
   delete-authorization safeguards.
+- Added reversible CRUD soft deletion with schema-validated timestamp columns,
+  archived list/detail views, and CSRF-protected restore actions. Soft-delete
+  markers are excluded from generated forms and default list/filter columns.
 - Added CRUD loading metadata and safe configurable error views. Error messages
   remain escaped and generic database details are not exposed; loading metadata
   is suitable for progressive enhancement.

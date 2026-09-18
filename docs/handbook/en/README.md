@@ -621,6 +621,26 @@ form. Authorization is checked for both requests.
 `error_page` provides a safe action-specific failure page without exposing
 database details.
 
+CRUD resources can opt into reversible soft deletion with a nullable timestamp:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Delete sets the timestamp instead of removing the row. Normal lists exclude
+archived records; `/customers?archived=true` shows them, and the archived
+detail view provides a CSRF-protected restore action. The marker is omitted
+from generated forms and default list/filter columns. Permanent purge and
+retention policies are still planned.
+
 Relationship fields such as `department: Department` are rendered as checked
 select fields. Zelyra loads their labels from the referenced MariaDB table,
 submits the stored ID, and rejects stale or unknown IDs before executing the

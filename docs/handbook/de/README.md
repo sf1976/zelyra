@@ -683,6 +683,27 @@ geprüft.
 `error_page` stellt eine sichere aktionsspezifische Fehlerseite bereit, ohne
 Datenbankdetails offenzulegen.
 
+CRUD-Ressourcen können ein reversibles Soft Delete mit einem nullable
+Zeitstempel aktivieren:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Die Löschaktion setzt den Zeitstempel, statt die Zeile zu entfernen. Normale
+Listen schließen archivierte Datensätze aus; `/customers?archived=true` zeigt
+sie, und die Detailansicht bietet eine CSRF-geschützte Wiederherstellung. Die
+Markierung wird aus erzeugten Formularen sowie Standardlisten und -filtern
+entfernt. Endgültiges Bereinigen und Aufbewahrungsregeln bleiben geplant.
+
 Beziehungsfelder wie `department: Department` werden als geprüfte
 Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der
 referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt veraltete

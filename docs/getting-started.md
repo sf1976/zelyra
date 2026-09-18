@@ -17,7 +17,7 @@ data. The language is intended to bring together:
 - web pages and HTTP routing;
 - forms and validation;
 - initial CRUD lists, details, Create/Edit forms, configurable columns, and
-  delete actions;
+  delete and reversible restore actions;
 - initial CRUD, authentication, authorization, contract verification, typed API
   declarations, OpenAPI generation, and optional executable API handlers are
   available; richer versions of these systems are still planned.
@@ -44,8 +44,8 @@ The current repository contains:
 - checked SQL blocks with named parameters;
 - an initial built-in HTTP server and GET router;
 - an initial schema-aware form parser and validator;
-- initial CRUD lists with MariaDB search, filters, sorting, pagination, and
-  CSRF-protected delete actions.
+- initial CRUD lists with MariaDB search, filters, sorting, pagination,
+  reversible soft delete, restore, and CSRF protection.
 - a database-backed login with Argon2 password verification, persistent
   HttpOnly sessions, logout, database-backed permissions, and protected routes.
 - typed API declarations with optional executable handlers, OpenAPI generation,
@@ -93,9 +93,9 @@ The current repository contains:
   `break`/`continue`, and explicit `while` loop invariants. Only `PROVEN` is
   a proof; unsupported cases remain `RUNTIME_CHECK` or `UNPROVEN`.
 
-The following are not complete yet: full CRUD generation, role administration,
-login throttling, password-management commands, richer domain-error values, broader
-formal verification, operating-system capability integration, cancellation, database
+The following are not complete yet: role administration, login throttling,
+password-management commands, richer domain-error values, broader formal
+verification, operating-system capability integration, cancellation, database
 pool integration for parallel work, and production packaging.
 
 ## 1. Requirements

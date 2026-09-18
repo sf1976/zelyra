@@ -132,7 +132,7 @@ Heute implementiert:
   Schleifeninvarianten. `zelyra verify <file.zyl> --json` liefert
   strukturierte Daten mit `message` und `counterexample` für IDEs und CI.
 
-Vollständige CRUD-Erzeugung, Benutzerverwaltung, umfangreichere fachliche
+Weitergehende CRUD-Erzeugung, Benutzerverwaltung, umfangreichere fachliche
 Fehlerwerte, allgemeine formale Verifikation, Betriebssystem-Integration der
 Capabilities und Produktionswerkzeuge werden noch entwickelt. Siehe die
 [Roadmap](#roadmap) und den ausführlichen
@@ -425,6 +425,27 @@ Für ausführlichere Rückmeldungen ergänzt `success_page { title: "..."
 message: "..." }` eine strukturierte escaped Erfolgsmeldung.
 `error_page { title: "..." message: "..." }` ersetzt die generische
 Aktionsfehlerseite, ohne Datenbankdetails an die Antwort weiterzugeben.
+
+CRUD-Ressourcen können außerdem ein reversibles Soft Delete verwenden. Die
+konfigurierte Zeitstempelspalte wird in erzeugten Formularen und Standardlisten
+ausgeblendet:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Die Löschaktion setzt dann den Zeitstempel, statt die Zeile zu entfernen.
+`/customers?archived=true` zeigt archivierte Datensätze; deren Detailseite
+bietet eine CSRF-geschützte `restore`-Aktion. Endgültiges Löschen,
+Aufbewahrungsregeln und Massenarchivierung bleiben geplant.
 
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige

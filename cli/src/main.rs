@@ -2527,6 +2527,46 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
                 valid = false;
             }
         }
+        if let Some(soft_delete) = &crud.soft_delete {
+            let Some(column) = schema
+                .tables
+                .iter()
+                .find(|table| table.name == crud.table)
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == soft_delete.column)
+                })
+            else {
+                diagnostic(
+                    path,
+                    "E-CRUD-005",
+                    &format!(
+                        "soft_delete column `{}` does not exist in table {}",
+                        soft_delete.column, crud.table
+                    ),
+                    crud.span.line,
+                    crud.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            let sql_type = column.sql_type.to_ascii_uppercase();
+            if !sql_type.contains("TIMESTAMP") && !sql_type.contains("DATETIME") {
+                diagnostic(
+                    path,
+                    "E-CRUD-006",
+                    &format!(
+                        "soft_delete column `{}` must use a timestamp-compatible type",
+                        soft_delete.column
+                    ),
+                    crud.span.line,
+                    crud.span.column,
+                );
+                valid = false;
+            }
+        }
     }
     valid
 }
@@ -3161,10 +3201,15 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
             return ExitCode::from(1);
         };
+        let soft_delete_column = crud
+            .soft_delete
+            .as_ref()
+            .map(|definition| definition.column.as_str());
         let list_columns = configured_crud_columns(&program, &schema, crud, &crud.list, |table| {
             table
                 .columns
                 .iter()
+                .filter(|column| Some(column.name.as_str()) != soft_delete_column)
                 .map(|column| column.name.clone())
                 .collect()
         });
@@ -3186,6 +3231,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     .columns
                     .iter()
                     .filter(|column| column.name != "id")
+                    .filter(|column| Some(column.name.as_str()) != soft_delete_column)
                     .map(|column| column.name.clone())
                     .collect()
             });
@@ -3206,6 +3252,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             delete_view: crud.view.delete.clone(),
             loading_view: crud.view.loading.clone(),
             error_view: crud.view.error.clone(),
+            soft_delete: crud.soft_delete.clone(),
             actions,
             requires_auth: crud.requires_auth,
             permissions: crud.permissions.clone(),
@@ -3309,6 +3356,11 @@ fn generated_crud_form(
         .columns
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
+        .filter(|column| {
+            crud.soft_delete
+                .as_ref()
+                .is_none_or(|definition| definition.column != column.name)
+        })
         .map(|column| zelyra_ast::FormField {
             name: column.name.clone(),
             ty: None,
@@ -5362,6 +5414,46 @@ mod tests {
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(!validate_cruds("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_invalid_soft_delete_columns() {
+        let missing_source = r#"
+            table machines {
+                id: Id primary auto
+                name: String(100) required
+            }
+
+            crud Machine -> machines {
+                soft_delete { column: deleted_at }
+            }
+        "#;
+        let missing_program = parse(&lex(missing_source).unwrap()).unwrap();
+        let missing_schema = build_schema(&missing_program).unwrap();
+        assert!(!validate_cruds(
+            "test.zyl",
+            &missing_program,
+            &missing_schema
+        ));
+
+        let wrong_type_source = r#"
+            table machines {
+                id: Id primary auto
+                name: String(100) required
+                deleted_at: String?
+            }
+
+            crud Machine -> machines {
+                soft_delete { column: deleted_at }
+            }
+        "#;
+        let wrong_type_program = parse(&lex(wrong_type_source).unwrap()).unwrap();
+        let wrong_type_schema = build_schema(&wrong_type_program).unwrap();
+        assert!(!validate_cruds(
+            "test.zyl",
+            &wrong_type_program,
+            &wrong_type_schema
+        ));
     }
 
     #[test]

@@ -187,14 +187,38 @@ Erfolgsmeldung konfigurieren; `error_page` definiert eine sichere
 aktionsspezifische Fehlerseite. Datenbankdetails bleiben serverseitig und
 werden niemals in die Antwort gerendert.
 
+CRUD-Ressourcen können ein reversibles Soft Delete über eine nullable
+Zeitstempelspalte aktivieren:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Erzeugte Löschanfragen setzen die konfigurierte Spalte auf
+`CURRENT_TIMESTAMP`. Normale Listen und Details enthalten nur Zeilen mit
+`NULL`; der Archiv-Link verwendet `?archived=true`. Archivierte Details bieten
+eine CSRF-geschützte POST-Route zur Wiederherstellung. Die Markierung wird aus
+erzeugten Create/Edit-Formularen sowie Standardlisten und -filtern entfernt.
+Endgültiges Bereinigen und Aufbewahrungsregeln bleiben geplant.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
-erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
-Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem
+erhalten: alle anwendbaren Schema-Spalten in der Liste, Textspalten für die
+Suche und alle Spalten außer der ID für Filter. Eine konfigurierte Soft-
+Delete-Markierung wird aus den erzeugten Defaults entfernt. Konfigurierte Namen werden vor dem
 Serverstart gegen das Schema geprüft; Beziehungsfelder wie department
 werden automatisch auf ihre gespeicherte Foreign-Key-Spalte abgebildet.
 
 Mit einer auf MariaDB zeigenden `DATABASE_URL` wird `GET /machines`
-bereitgestellt. Die generierte Liste umfasst aktuell alle Schema-Spalten in
+bereitgestellt. Die generierte Liste umfasst aktuell alle anwendbaren
+Schema-Spalten in
 einer escaped HTML-Tabelle, Suche über Textspalten mit gebundenen Parametern
 und begrenzte Pagination über die Query-Parameter `page` und `per_page`.
 Zusätzlich gibt es exakte Filter über `filter_<spalte>` sowie eine Allowlist-

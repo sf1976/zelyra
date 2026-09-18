@@ -204,6 +204,7 @@ pub struct CrudDef {
     pub search: Vec<String>,
     pub filters: Vec<String>,
     pub view: CrudViewDef,
+    pub soft_delete: Option<CrudSoftDeleteDef>,
     pub requires_auth: bool,
     /// Legacy/default permission(s), used for list/detail and as the fallback
     /// for actions without an explicit permission scope.
@@ -213,6 +214,11 @@ pub struct CrudDef {
     pub delete_permissions: Vec<String>,
     pub actions: Vec<FormAction>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudSoftDeleteDef {
+    pub column: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

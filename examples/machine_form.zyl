@@ -13,6 +13,7 @@ table machines {
     name: String(100) required
     department: Department required
     active: Bool default true
+    deleted_at: Timestamp?
 }
 
 crud Department -> departments
@@ -38,6 +39,10 @@ form MachineCreate -> machines {
 
 crud Machine -> machines {
     title: "Machines"
+
+    soft_delete {
+        column: deleted_at
+    }
 
     list {
         id

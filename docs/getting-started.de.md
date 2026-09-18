@@ -17,8 +17,8 @@ Geschäftsdaten arbeiten. Die Sprache soll zusammenführen:
 - geprüftes natives SQL;
 - Web-Seiten und HTTP-Routing;
 - Formulare und Validierung;
-- erste CRUD-Listen, Details, Create-/Edit-Formulare, konfigurierbare Spalten
-  und Löschaktionen;
+- erste CRUD-Listen, Details, Create-/Edit-Formulare, konfigurierbare Spalten,
+  Löschaktionen und reversible Wiederherstellung;
 - erste Versionen von CRUD, Authentifizierung, Autorisierung, Contract-
   Verifikation, typisierten API-Deklarationen und OpenAPI-Erzeugung sind
   vorhanden; weitergehende Ausbaustufen sind weiterhin geplant.
@@ -45,8 +45,8 @@ Das aktuelle Repository enthält:
 - geprüfte SQL-Blöcke mit benannten Parametern;
 - einen ersten eingebauten HTTP-Server und GET-Router;
 - einen ersten schemaabhängigen Formular-Parser und Validator;
-- erste CRUD-Listen mit MariaDB-Suche, Filtern, Sortierung, Pagination und
-  CSRF-geschützten Löschaktionen.
+- erste CRUD-Listen mit MariaDB-Suche, Filtern, Sortierung, Pagination,
+  reversibler Archivierung, Wiederherstellung und CSRF-Schutz.
 - ein datenbankgestützter Login mit Argon2-Passwortprüfung, persistenten
   HttpOnly-Sessions, Logout, datenbankgestützten Berechtigungen und
   geschützten Routen.
@@ -100,8 +100,8 @@ Das aktuelle Repository enthält:
   Nur `PROVEN` ist ein Beweis; nicht unterstützte Fälle bleiben
   `RUNTIME_CHECK` oder `UNPROVEN`.
 
-Noch nicht vollständig sind: vollständige CRUD-Erzeugung, Rollenverwaltung,
-Login-Drosselung, Passwortverwaltungs-Kommandos, umfangreichere fachliche
+Noch nicht vollständig sind: Rollenverwaltung, Login-Drosselung,
+Passwortverwaltungs-Kommandos, umfangreichere fachliche
 Fehlerwerte, weitergehende formale Verifikation,
 Betriebssystem-Integration für Capabilities, Abbruch laufender Branches,
 Datenbank-Pool-Integration für parallele Arbeit und Produktionspaketierung.

@@ -125,9 +125,9 @@ Implemented today:
   `zelyra verify <file.zyl> --json` provides structured output with `message`
   and `counterexample` for IDEs and CI.
 
-Full CRUD generation, user administration and richer language-level domain-error values,
-general formal verification, operating-system capability integration, and
-production deployment tooling are still being developed. See
+Richer CRUD generation, user administration and richer language-level
+domain-error values, general formal verification, operating-system capability
+integration, and production deployment tooling are still being developed. See
 the
 [roadmap](#roadmap) and the detailed
 [Getting Started guide](docs/getting-started.md).
@@ -414,6 +414,26 @@ For richer feedback, `success_page { title: "..." message: "..." }` adds a
 structured escaped success notice. `error_page { title: "..." message: "..." }`
 replaces the generic action-failure page while keeping database details out of
 the response.
+
+CRUD resources can also use reversible soft deletion. The configured timestamp
+column is hidden from generated forms and default lists:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Delete then sets the timestamp instead of removing the row. The generated
+`/customers?archived=true` view shows archived records, and their detail page
+offers a CSRF-protected `restore` action. Permanent deletion, retention rules,
+and bulk archive operations remain planned.
 
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains

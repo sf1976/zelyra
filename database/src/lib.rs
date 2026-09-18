@@ -252,7 +252,10 @@ fn column_mapping(
             );
         }
     }
-    let resolved = resolve_type(&definition.ty, type_definitions);
+    let resolved = match resolve_type(&definition.ty, type_definitions) {
+        Type::Option(inner) => *inner,
+        resolved => resolved,
+    };
     let sql_type = match resolved {
         Type::Int => {
             if definition.auto {
@@ -1695,6 +1698,19 @@ mod tests {
         let sqlite_sql = sqlite.create_sql();
         assert!(sqlite_sql.contains("\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"));
         assert!(sqlite_sql.contains("\"active\" INTEGER DEFAULT TRUE"));
+    }
+
+    #[test]
+    fn maps_optional_timestamp_columns_to_timestamp_storage() {
+        let schema = schema(
+            r#"
+            table users {
+                id: Id primary auto
+                deleted_at: Timestamp?
+            }
+            "#,
+        );
+        assert!(schema.create_sql().contains("`deleted_at` TIMESTAMP"));
     }
 
     #[test]

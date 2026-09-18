@@ -7,6 +7,28 @@ project_file="${ZELYRA_E2E_PROJECT:-${repo_dir}/examples/machine_form.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
 address="${ZELYRA_E2E_ADDRESS:-127.0.0.1:38500}"
 base_url="http://${address}"
+database_url="${DATABASE_URL:-}"
+if [[ "${database_url}" == mariadb://* ]]; then
+    database_parts="${database_url#mariadb://}"
+elif [[ "${database_url}" == mysql://* ]]; then
+    database_parts="${database_url#mysql://}"
+else
+    echo "error: DATABASE_URL must point to a MariaDB test database" >&2
+    exit 1
+fi
+database_credentials="${database_parts%@*}"
+database_location="${database_parts#*@}"
+db_user="${database_credentials%%:*}"
+db_password_from_url="${database_credentials#*:}"
+db_host_port="${database_location%%/*}"
+db_name="${database_location#*/}"
+db_host="${db_host_port%%:*}"
+if [[ "${db_host_port}" == *:* ]]; then
+    db_port="${db_host_port##*:}"
+else
+    db_port="3306"
+fi
+db_password="${ZELYRA_E2E_DB_PASSWORD:-${db_password_from_url}}"
 suffix="$(date +%s)"
 department_name="Zelyra E2E Department-${suffix}"
 secondary_department_name="Zelyra E2E Department Secondary-${suffix}"
@@ -25,6 +47,14 @@ cleanup() {
         kill "${server_pid}" 2>/dev/null || true
         wait "${server_pid}" 2>/dev/null || true
     fi
+    if command -v mariadb >/dev/null 2>&1; then
+        MYSQL_PWD="${db_password}" mariadb \
+            --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" \
+            "${db_name}" --batch --skip-column-names >/dev/null 2>&1 <<SQL || true
+DELETE FROM machines WHERE number IN ('${machine_number}', '${machine_two_number}', '${machine_three_number}');
+DELETE FROM departments WHERE name IN ('${department_name}', '${secondary_department_name}');
+SQL
+    fi
     rm -rf "${temp_dir}"
 }
 trap cleanup EXIT
@@ -35,6 +65,10 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
 fi
 if ! command -v curl >/dev/null 2>&1; then
     echo "error: curl is required for the MariaDB web integration test" >&2
+    exit 1
+fi
+if ! command -v mariadb >/dev/null 2>&1; then
+    echo "error: mariadb client is required for the MariaDB CRUD integration test" >&2
     exit 1
 fi
 if [[ ! -x "${zelyra_bin}" ]]; then
@@ -291,6 +325,21 @@ delete_status="$(post_form "${temp_dir}/machine-delete-response.html" \
 [[ "${delete_status}" == "303" ]]
 curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list-after-delete.html"
 ! grep -Fq "${machine_number}" "${temp_dir}/machine-list-after-delete.html"
+curl --silent --show-error --fail "${base_url}/machines?archived=true" -o "${temp_dir}/machine-list-archived.html"
+grep -Fq "${machine_number}" "${temp_dir}/machine-list-archived.html"
+grep -Fq "Show active records" "${temp_dir}/machine-list-archived.html"
+curl --silent --show-error --fail "${base_url}/machines/${machine_id}?archived=true" -o "${temp_dir}/machine-archived-detail.html"
+grep -Fq "Restore" "${temp_dir}/machine-archived-detail.html"
+archived_restore_csrf="$(extract_csrf "${temp_dir}/machine-archived-detail.html")"
+restore_status="$(post_form "${temp_dir}/machine-restore-response.html" \
+    --data-urlencode "_zelyra_csrf=${archived_restore_csrf}" \
+    "${base_url}/machines/${machine_id}/restore")"
+[[ "${restore_status}" == "303" ]]
+curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list-after-restore.html"
+grep -Fq "${machine_number}" "${temp_dir}/machine-list-after-restore.html"
+delete_machine "${machine_id}" machine-one-restored
+curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine-list-after-final-delete.html"
+! grep -Fq "${machine_number}" "${temp_dir}/machine-list-after-final-delete.html"
 
 delete_machine "${machine_two_id}" machine-two
 delete_machine "${machine_three_id}" machine-three
@@ -301,6 +350,11 @@ curl --silent --show-error --fail "${base_url}/machines" -o "${temp_dir}/machine
 ! grep -Fq "${machine_three_number}" "${temp_dir}/machine-list-after-cleanup.html"
 
 echo "[11/11] cleaning the related departments"
+MYSQL_PWD="${db_password}" mariadb \
+    --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" \
+    "${db_name}" --batch --skip-column-names <<SQL >/dev/null
+DELETE FROM machines WHERE number IN ('${machine_number}', '${machine_two_number}', '${machine_three_number}');
+SQL
 for department_pair in "${department_id}:department" "${secondary_department_id}:secondary-department"; do
     department_to_delete="${department_pair%%:*}"
     department_file_prefix="${department_pair##*:}"

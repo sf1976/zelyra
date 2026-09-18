@@ -180,14 +180,37 @@ Use `success_page` for a structured escaped success title and message, and
 `error_page` for a safe action-specific failure page. Database error details
 remain server-side and are never rendered into the response.
 
+CRUD resources may opt into reversible soft deletion with a nullable timestamp
+column:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    deleted_at: Timestamp?
+}
+
+crud Customer -> customers {
+    soft_delete { column: deleted_at }
+}
+~~~
+
+Generated delete requests set the configured column to `CURRENT_TIMESTAMP`.
+Normal lists and details include only rows where it is `NULL`; the generated
+archive link uses `?archived=true`. Archived details expose a CSRF-protected
+POST restore route. The marker is excluded from generated Create/Edit forms and
+default list/filter columns. Permanent purge and retention policies remain
+planned.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
-all schema columns in the list, text columns for search, and all non-ID
-columns for filters. Configured names are checked against the schema before
+all applicable schema columns in the list, text columns for search, and all
+non-ID columns for filters. A configured soft-delete marker is excluded from
+the generated defaults. Configured names are checked against the schema before
 the server starts; relationship fields such as department resolve to their
 stored foreign-key column automatically.
 
 With a MariaDB `DATABASE_URL`, this exposes `GET /machines`. The generated
-list currently includes all schema columns in an escaped HTML table, search
+list currently includes all applicable schema columns in an escaped HTML table, search
 across text columns with bound parameters, exact filters through
 `filter_<column>`, allowlisted sorting through `sort` and `order`, and bounded
 pagination through the `page` and `per_page` query parameters. Unknown sort or
