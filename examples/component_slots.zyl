@@ -1,7 +1,7 @@
 component DashboardPanel {
     html {
         <section class="panel">
-            <header><slot name="header" /></header>
+            <header><slot name="header"><h1>Dashboard</h1></slot></header>
             <main><slot /></main>
         </section>
     }
@@ -12,6 +12,14 @@ page "/dashboard" {
         <DashboardPanel>
             <slot name="header"><h1>Dashboard</h1></slot>
             <p>Reusable view content.</p>
+        </DashboardPanel>
+    }
+}
+
+page "/default-dashboard" {
+    html {
+        <DashboardPanel>
+            <p>The named header uses its fallback.</p>
         </DashboardPanel>
     }
 }

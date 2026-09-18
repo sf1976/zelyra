@@ -1690,9 +1690,6 @@ fn declared_component_slots(
     let mut has_default = false;
     let mut named = HashSet::new();
     for slot in slot_invocations(&component.html)? {
-        if slot.body.is_some() {
-            return Err("component declarations must use self-closing slots".into());
-        }
         if let Some(name) = slot.name {
             if !named.insert(name) {
                 return Err("component declares the same named slot more than once".into());
@@ -5306,12 +5303,9 @@ fn render_view_component(
             .as_deref()
             .and_then(|name| named_slots.get(name))
             .map_or_else(
-                || {
-                    if slot.name.is_none() {
-                        default_body.as_str()
-                    } else {
-                        ""
-                    }
+                || match slot.name {
+                    Some(_) => slot.body.as_deref().unwrap_or(""),
+                    None => default_body.as_str(),
                 },
                 String::as_str,
             );
@@ -6669,6 +6663,48 @@ mod tests {
         assert!(html.contains("<main>"));
         assert!(html.contains("<p>Content</p>"));
         assert!(!html.contains("<slot"));
+    }
+
+    #[test]
+    fn uses_named_component_slot_fallbacks_when_not_overridden() {
+        let source = r#"
+            component Layout {
+                html {
+                    <header><slot name="header"><h1>Default heading</h1></slot></header>
+                    <main><slot /></main>
+                }
+            }
+            page "/dashboard" {
+                html {
+                    <Layout><p>Content</p></Layout>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_components("components.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<header><h1>Default heading</h1></header>"));
+        assert!(html.contains("<main><p>Content</p></main>"));
+        assert!(!html.contains("<slot"));
+    }
+
+    #[test]
+    fn supplied_named_component_slot_replaces_its_fallback() {
+        let source = r#"
+            component Layout {
+                html { <header><slot name="header"><h1>Default heading</h1></slot></header> }
+            }
+            page "/dashboard" {
+                html {
+                    <Layout><slot name="header"><h1>Custom heading</h1></slot></Layout>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_components("components.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
+        assert!(!html.contains("Default heading"));
     }
 
     #[test]
