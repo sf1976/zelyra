@@ -2268,6 +2268,30 @@ mod tests {
     }
 
     #[test]
+    fn parses_typed_page_collection_and_view_loop() {
+        let source = r#"
+            page "/customers" {
+                load customers = sql<Customer[]> {
+                    SELECT id, name FROM customers
+                }
+                html {
+                    <ul>
+                        for customer in customers {
+                            <li>{customer.name}</li>
+                        }
+                    </ul>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(
+            program.pages[0].data[0].result_type,
+            Type::Array(Box::new(Type::Named("Customer".into())))
+        );
+        assert!(program.pages[0].html.contains("for customer in customers"));
+    }
+
+    #[test]
     fn parses_named_view_and_page_view_assignment() {
         let source = r#"
             view AppShell {

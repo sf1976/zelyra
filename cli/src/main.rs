@@ -851,6 +851,10 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
 }
 
 fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
+    let ty = match ty {
+        Type::Array(inner) => inner.as_ref(),
+        other => other,
+    };
     let Type::Named(name) = ty else {
         return false;
     };
@@ -1984,6 +1988,64 @@ fn is_template_expression(expression: &str) -> bool {
     expression.split('.').all(is_template_identifier)
 }
 
+struct TemplateForBlock {
+    start: usize,
+    end: usize,
+    item: String,
+    collection: String,
+    body: String,
+}
+
+fn next_template_for_block(template: &str) -> Option<Result<TemplateForBlock, String>> {
+    let mut search_from = 0;
+    while let Some(relative_start) = template[search_from..].find("for ") {
+        let start = search_from + relative_start;
+        let line_start = template[..start].rfind('\n').map_or(0, |index| index + 1);
+        if !template[line_start..start].trim().is_empty() {
+            search_from = start + 4;
+            continue;
+        }
+        let Some(relative_open) = template[start..].find('{') else {
+            return Some(Err("view `for` block is missing `{`".into()));
+        };
+        let open = start + relative_open;
+        let header = template[start + 4..open].trim();
+        let parts = header.split_whitespace().collect::<Vec<_>>();
+        if parts.len() != 3
+            || parts[1] != "in"
+            || !is_template_identifier(parts[0])
+            || !is_template_identifier(parts[2])
+        {
+            return Some(Err(
+                "view `for` block must use `for item in collection { ... }`".into(),
+            ));
+        }
+        let mut depth = 1;
+        let mut position = open + 1;
+        while position < template.len() {
+            match template.as_bytes()[position] {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(Ok(TemplateForBlock {
+                            start,
+                            end: position + 1,
+                            item: parts[0].into(),
+                            collection: parts[2].into(),
+                            body: template[open + 1..position].into(),
+                        }));
+                    }
+                }
+                _ => {}
+            }
+            position += 1;
+        }
+        return Some(Err("view `for` block is unterminated".into()));
+    }
+    None
+}
+
 fn resolve_template_type(
     expression: &str,
     bindings: &HashMap<String, Type>,
@@ -2052,6 +2114,83 @@ fn template_type_compatible(expected: &Type, actual: &Type) -> bool {
 }
 
 fn validate_template_expressions(
+    path: &str,
+    html: &str,
+    program: &zelyra_ast::Program,
+    bindings: &HashMap<String, Type>,
+    line: usize,
+    column: usize,
+) -> bool {
+    if let Some(block) = next_template_for_block(html) {
+        let block = match block {
+            Ok(block) => block,
+            Err(message) => {
+                diagnostic(path, "E-VIEW-018", &message, line, column);
+                return false;
+            }
+        };
+        let mut valid = validate_template_interpolations(
+            path,
+            &html[..block.start],
+            program,
+            bindings,
+            line,
+            column,
+        );
+        let Some(collection_type) = bindings.get(&block.collection) else {
+            diagnostic(
+                path,
+                "E-VIEW-018",
+                &format!("unknown view collection `{}`", block.collection),
+                line,
+                column,
+            );
+            return false;
+        };
+        let Type::Array(item_type) = collection_type else {
+            diagnostic(
+                path,
+                "E-VIEW-018",
+                &format!(
+                    "view loop source `{}` must have an array type",
+                    block.collection
+                ),
+                line,
+                column,
+            );
+            return false;
+        };
+        if bindings.contains_key(&block.item) {
+            diagnostic(
+                path,
+                "E-VIEW-018",
+                &format!(
+                    "view loop variable `{}` conflicts with an existing value",
+                    block.item
+                ),
+                line,
+                column,
+            );
+            return false;
+        }
+        let mut loop_bindings = bindings.clone();
+        loop_bindings.insert(block.item, (**item_type).clone());
+        valid &=
+            validate_template_expressions(path, &block.body, program, &loop_bindings, line, column);
+        valid &= validate_template_expressions(
+            path,
+            &html[block.end..],
+            program,
+            bindings,
+            line,
+            column,
+        );
+        return valid;
+    }
+    validate_template_interpolations(path, html, program, bindings, line, column)
+}
+
+fn validate_template_interpolations(
     path: &str,
     html: &str,
     program: &zelyra_ast::Program,
@@ -5053,6 +5192,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     name: data.name.clone(),
                     query: data.query.clone(),
                     fields: page_data_fields(&program, &data.result_type),
+                    collection: matches!(data.result_type, Type::Array(_)),
                     optional: matches!(data.result_type, Type::Option(_)),
                 })
                 .collect(),
@@ -5959,7 +6099,7 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
 
 fn page_data_fields(program: &zelyra_ast::Program, ty: &Type) -> Vec<String> {
     let ty = match ty {
-        Type::Option(inner) => inner.as_ref(),
+        Type::Array(inner) | Type::Option(inner) => inner.as_ref(),
         other => other,
     };
     let Type::Named(name) = ty else {
@@ -7425,6 +7565,48 @@ mod tests {
                     SELECT id, name FROM customers WHERE name = :name
                 }
                 html { <h1>{customer.email}</h1> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_page_data("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn validates_typed_page_collection_loops() {
+        let source = r#"
+            table customers { id: Id primary auto name: String(100) }
+            page "/customers" {
+                load customers = sql<Customer[]> {
+                    SELECT id, name FROM customers
+                }
+                html {
+                    <ul>
+                        for customer in customers {
+                            <li>{customer.name}</li>
+                        }
+                    </ul>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_page_data("views.zyl", &program));
+        assert!(validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn rejects_non_array_page_collection_loops() {
+        let source = r#"
+            table customers { id: Id primary auto name: String(100) }
+            page "/customers" {
+                load customer = sql<Customer> {
+                    SELECT id, name FROM customers
+                }
+                html {
+                    for customer in customer {
+                        <p>{customer.name}</p>
+                    }
+                }
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();

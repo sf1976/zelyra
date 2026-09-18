@@ -55,10 +55,19 @@ page "/customers/{name}" {
 }
 ~~~
 
+Collection results use an array result type and a typed server-side loop:
+
+~~~zelyra
+page "/customers" {
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
+}
+~~~
+
 The compiler checks the query against the declared schema, exposes route
 parameters as typed SQL parameters, and validates record-field interpolations.
 At runtime authorization and the `Database` capability are checked before the
 query. Results are rendered with HTML escaping; missing required records and
 database failures produce generic HTTP boundaries without exposing database
-details. Collection loading, optional-aware field expressions, and richer
-view-local data remain planned.
+details. Collection loops are supported for arrays of records. Optional-aware
+field expressions and richer view-local data remain planned.

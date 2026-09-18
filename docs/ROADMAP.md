@@ -181,20 +181,21 @@ architecture requirement for every phase, not a provider-specific feature.
   composition; fallback content for more advanced nested-view scenarios remains
   planned.
 - [ ] View inheritance/composition without hidden global state.
-- [~] View-local data loading is available for one explicit, schema-checked
-  record query per binding using `load name = sql<Type> { ... }`. Route
-  authorization, the `Database` capability, parameter binding, generic error
-  boundaries, and HTML escaping are enforced; collections, optional field
-  handling, and richer view composition remain planned.
+- [~] View-local data loading supports explicit, schema-checked record and
+  record-collection queries using `load name = sql<Type> { ... }`. Array
+  results can be rendered with typed `for item in collection { ... }` blocks.
+  Route authorization, the `Database` capability, parameter binding, generic
+  error boundaries, and HTML escaping are enforced; optional field handling
+  and richer view composition remain planned.
 - [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,
   and null checks) are compiled to safe server-side SQL.
 - [~] Generated CRUD filter controls preserve operator and value state in URLs;
   deterministic filter ordering, semantic fieldsets, and separate operator/value
   labels are available; broader accessibility improvements remain open.
-- [~] The unified typed view pipeline covers declarative `tableview` controls
-  and explicit page-local record loading; filters, search, sorting, and
-  pagination remain tableview-focused while richer arbitrary-view data remains
-  planned.
+- [~] The unified typed view pipeline covers declarative `tableview` controls,
+  explicit page-local record loading, and typed collection loops; filters,
+  search, sorting, and pagination remain tableview-focused while richer
+  arbitrary-view data remains planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

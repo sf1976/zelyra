@@ -1,0 +1,24 @@
+database main {
+    engine: mariadb
+}
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+page "/customers" {
+    load customers = sql<Customer[]> {
+        SELECT id, name
+        FROM customers
+        ORDER BY name
+    }
+    html {
+        <main>
+            <h1>Kunden</h1>
+            <ul>
+                for customer in customers {
+                    <li>{customer.name}</li>
+                }
+            </ul>
+        </main>
+    }
+}

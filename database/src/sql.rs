@@ -1122,6 +1122,16 @@ mod tests {
     }
 
     #[test]
+    fn checks_page_collection_sql_against_schema() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } page \"/customers\" { load customers = sql<Customer[]> { SELECT id, name FROM customers } html { <h1>Customers</h1> } }",
+        )
+        .unwrap())
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
+    }
+
+    #[test]
     fn rejects_unknown_page_data_column() {
         let program = parse(&lex(
             "table customers { id: Id primary auto name: String(100) } page \"/customers/{name}\" { load customer = sql<Customer> { SELECT username FROM customers WHERE name = :name } html { <h1>{customer.name}</h1> } }",

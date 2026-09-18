@@ -57,11 +57,21 @@ page "/customers/{name}" {
 }
 ~~~
 
+Collection-Ergebnisse verwenden einen Array-Ergebnistyp und eine typisierte
+serverseitige Schleife:
+
+~~~zelyra
+page "/customers" {
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
+}
+~~~
+
 Der Compiler prüft die Abfrage gegen das deklarierte Schema, stellt
 Routenparameter als typisierte SQL-Parameter bereit und validiert
 Record-Feldinterpolationen. Zur Laufzeit werden Autorisierung und die
 `Database`-Capability vor der Abfrage geprüft. Ergebnisse werden mit
 HTML-Escaping gerendert; fehlende Pflichtdatensätze und Datenbankfehler
-erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben. Das
-Laden von Collections, Option-aware Feld-Ausdrücke und reichere lokale
-View-Daten bleiben geplant.
+erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben.
+Collection-Schleifen für Arrays von Records sind verfügbar. Option-aware
+Feld-Ausdrücke und reichere lokale View-Daten bleiben geplant.
