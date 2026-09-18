@@ -12,6 +12,18 @@ compiler and repository release.
   Seite jetzt plattformspezifische Hinweise auf die offiziellen
   Installationsanleitungen aus.
 
+## 0.1.43.1 — 2026-09-19
+
+This distribution follow-up release republishes the current `main` state after
+the platform-specific Docker guidance was merged. The Cargo package and CLI
+version remain `0.1.43` because Cargo package versions use the three-part
+SemVer core; `0.1.43.1` is the GitHub distribution identifier.
+
+Diese nachfolgende Distributionsversion veröffentlicht den aktuellen
+`main`-Stand nach der Ergänzung der plattformspezifischen Docker-Hinweise. Die
+Cargo-Paket- und CLI-Version bleibt `0.1.43`, weil Cargo einen dreiteiligen
+SemVer-Kern verwendet; `0.1.43.1` ist der GitHub-Distributionsbezeichner.
+
 ## 0.1.43 — 2026-09-19
 
 This patch release fixes a critical web setup routing error and completes the

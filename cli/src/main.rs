@@ -403,7 +403,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.43
+ARG ZELYRA_REF=v0.1.43.1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -9646,7 +9646,7 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.43"));
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.43.1"));
 
         fs::remove_dir_all(path).unwrap();
     }
