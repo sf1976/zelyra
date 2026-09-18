@@ -1405,7 +1405,9 @@ vendor-neutral so local tools can use them as well.
 - ✅ **Implemented:** human-readable output remains the default;
 - 🧪 **Experimental:** the current JSON interface is schema version `1` and
   covers the `check` and `context` commands;
-- 🗺️ **Planned:** typed gaps, semantic edits, impact analysis, and the
+- ✅ **Implemented:** expression typed holes written as `_` with contextual
+  diagnostics; buildable commands reject incomplete code;
+- 🗺️ **Planned:** richer typed gaps, semantic edits, impact analysis, and the
   reproducible AI authoring benchmark;
 - ❌ **Not available:** automatic production changes, automatic permission
   escalation, or compiler decisions delegated to an AI service.

@@ -49,7 +49,8 @@ ausgegeben; Diagnosen besitzen stabile Codes und UTF-8-Byte-Offsets, technische
 Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
 Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
 `zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
-formatierte Dateien, ohne sie zu verändern. Typed Holes, semantische
+formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
+Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Semantische
 Änderungen, Wirkungsanalyse und vergleichende
 KI-Benchmarks sind geplant, aber noch nicht implementiert. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die

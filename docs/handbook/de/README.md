@@ -1512,7 +1512,9 @@ anbieterneutral, sodass auch lokale Werkzeuge sie verwenden können.
 - ✅ **Implementiert:** menschenlesbare Ausgabe bleibt Standard;
 - 🧪 **Experimentell:** die aktuelle JSON-Schnittstelle hat Schema-Version `1`
   und unterstützt `check` und `context`;
-- 🗺️ **Geplant:** typisierte Lücken, semantische Änderungen,
+- ✅ **Implementiert:** Ausdrucks-Typed-Holes mit `_` und
+  Kontextdiagnosen; baubare Befehle lehnen unvollständigen Code ab;
+- 🗺️ **Geplant:** umfassendere Typed Holes, semantische Änderungen,
   Wirkungsanalyse und der reproduzierbare KI-Benchmark;
 - ❌ **Nicht verfügbar:** automatische Änderungen an Produktionssystemen,
   automatische Berechtigungserweiterungen oder an einen KI-Dienst delegierte

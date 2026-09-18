@@ -8,6 +8,10 @@ compiler and repository release.
 
 ### Added
 
+- Added contextual typed-hole diagnostics for `_`. Buildable commands report
+  the expected type, visible values and functions, active capabilities,
+  contract obligations, and source location; incomplete code is rejected
+  before lowering or execution.
 - Added deterministic `zelyra fmt` source formatting with a non-writing
   `--check` mode for CI. Formatting preserves comments and opaque SQL/HTML
   bodies and is covered by idempotence and example-source checks.

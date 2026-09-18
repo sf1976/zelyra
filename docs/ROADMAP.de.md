@@ -49,9 +49,11 @@ Feature eines bestimmten Anbieters.
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
   Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und
   Semantiktests.
-- [ ] **Stufe C — typisierte Lücken:** Typed Holes mit erwartetem Typ,
-  sichtbaren Werten/Funktionen, Capabilities, Contract-Pflichten und
-  Source-Spans; unvollständiger Code darf nie gebaut oder veröffentlicht werden.
+- [~] **Stufe C — typisierte Lücken:** Ausdrucks-Lücken mit `_` melden jetzt
+  erwartete Kontexttypen, sichtbare Werte/Funktionen, Capabilities,
+  Contract-Pflichten und Source-Spans; unvollständiger Code darf nicht gebaut
+  oder ausgeführt werden. Lücken in weiteren Deklarationskontexten und eine
+  umfassendere Edit-Integration bleiben offen.
 - [ ] **Stufe D — Wirkungsanalyse:** Deterministisches
   `zelyra impact --format=json` für Tabellen, SQL, Formulare, CRUD, Views,
   APIs, E-Mails, Jobs, Berechtigungen, Contracts, Tests und Schemaänderungen.

@@ -45,9 +45,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] **Stage B — canonical source:** deterministic `zelyra fmt` formats
   parseable source, supports `--check` for CI, preserves comments and raw
   SQL/HTML bodies, and has idempotence and semantic-preservation coverage.
-- [ ] **Stage C — typed gaps:** add typed holes with expected type, visible
-  values/functions, capabilities, contract obligations, and source spans;
-  incomplete code must never build or publish.
+- [~] **Stage C — typed gaps:** expression holes written as `_` now report
+  contextual expected types, visible values/functions, capabilities, contract
+  obligations, and source spans; incomplete code cannot build or run. Typed
+  holes in more declaration contexts and richer edit integration remain.
 - [ ] **Stage D — impact analysis:** add deterministic `zelyra impact
   --format=json` for tables, SQL, forms, CRUD, views, APIs, emails, jobs,
   permissions, contracts, tests, and schema changes.

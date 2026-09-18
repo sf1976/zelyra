@@ -85,11 +85,12 @@ idempotent: formatting an already formatted file produces the same bytes.
 
 ## Typed gaps, semantic edits, and impact
 
-Typed holes, semantic edit requests, and dependency impact analysis are planned
-interfaces. When implemented, a typed gap must report its expected type,
-available values and functions, required capabilities, contract obligations,
-and source span. Incomplete code must never be treated as successfully built
-or publishable.
+Expression typed holes written as `_` are available as a first safe slice. The
+compiler reports their contextual expected type, available values and
+functions, active capabilities, contract obligations, and source span.
+Buildable commands reject incomplete code before lowering or execution. Typed
+holes in declaration contexts, semantic edit requests, and dependency impact
+analysis remain planned interfaces.
 
 `zelyra impact --format=json` will eventually report affected tables, SQL,
 forms, CRUD resources, views, APIs, emails, jobs, permissions, contracts,

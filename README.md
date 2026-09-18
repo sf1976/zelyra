@@ -47,7 +47,8 @@ stable codes and UTF-8 byte offsets, while operational messages remain on
 stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical
 source formatting; `--check` reports unformatted files without changing them.
-Typed holes, semantic edits,
+Expression holes written as `_` produce contextual diagnostics and are rejected
+by buildable commands. Semantic edits,
 impact analysis, and comparative AI benchmarks are planned and are not yet
 implemented. See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).

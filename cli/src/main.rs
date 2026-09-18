@@ -34,7 +34,9 @@ use zelyra_web::{
 };
 
 mod formatter;
+mod holes;
 use formatter::format_source;
+use holes::collect_typed_holes;
 
 fn usage() {
     eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
@@ -301,6 +303,9 @@ fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     let program = load(path)?;
+    if !reject_typed_holes(path, &program) {
+        return Err(());
+    }
     if let Err(errors) = lower(&program) {
         for error in errors {
             diagnostic(
@@ -415,6 +420,47 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     }
     Ok(program)
+}
+
+fn reject_typed_holes(path: &str, program: &zelyra_ast::Program) -> bool {
+    let source = fs::read_to_string(path).unwrap_or_default();
+    let holes = collect_typed_holes(program);
+    for hole in &holes {
+        let expected = hole
+            .expected_type
+            .as_ref()
+            .map_or_else(|| "unknown".to_owned(), ToString::to_string);
+        let values = if hole.visible_values.is_empty() {
+            "none".to_owned()
+        } else {
+            hole.visible_values.join(", ")
+        };
+        let functions = if hole.visible_functions.is_empty() {
+            "none".to_owned()
+        } else {
+            hole.visible_functions.join(", ")
+        };
+        let capabilities = if hole.capabilities.is_empty() {
+            "none".to_owned()
+        } else {
+            hole.capabilities.join(", ")
+        };
+        let contracts = if hole.contract_spans.is_empty() {
+            "none".to_owned()
+        } else {
+            hole.contract_spans
+                .iter()
+                .filter_map(|span| source.get(span.start..span.end))
+                .map(|contract| contract.replace(['\n', '\r'], " "))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        let message = format!(
+            "typed hole `_` is incomplete and cannot be built; expected type: {expected}; visible values: {values}; visible functions: {functions}; capabilities: {capabilities}; contract obligations: {contracts}"
+        );
+        diagnostic_with_span(path, "E-HOLE-001", &message, hole.span);
+    }
+    holes.is_empty()
 }
 
 fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
@@ -3636,6 +3682,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
+    if !reject_typed_holes(&path, &program) {
+        return ExitCode::from(1);
+    }
     if validate_capabilities(&path, &program).is_err() {
         return ExitCode::from(1);
     }

@@ -66,11 +66,12 @@ Zeilenkommentare und behandelt SQL- und HTML-Blöcke als opaken Quelltext. Er
 ist idempotent: Ein bereits formatiertes Dokument erzeugt byte-identisch
 dieselbe Ausgabe.
 
-Typed Holes, `zelyra impact --format=json` und
-`zelyra edit --format=json` sind geplante, versionierte Schnittstellen. Eine
-Typed Hole muss erwarteten Typ, sichtbare Werte/Funktionen, benötigte
-Capabilities, Contract-Pflichten und Source-Span liefern. Unvollständiger
-Code darf nie erfolgreich gebaut oder veröffentlicht werden.
+Ausdrucks-Typed-Holes mit `_` sind als erste sichere Stufe verfügbar. Der
+Compiler meldet Kontexttyp, sichtbare Werte und Funktionen, aktive
+Capabilities, Contract-Pflichten und Source-Span. Baubare Befehle lehnen
+unvollständigen Code vor Lowering und Ausführung ab. Typed Holes in
+Deklarationskontexten, `zelyra impact --format=json` und
+`zelyra edit --format=json` bleiben geplante, versionierte Schnittstellen.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

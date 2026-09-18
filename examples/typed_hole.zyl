@@ -1,0 +1,15 @@
+// Typed holes are intentionally rejected before build and execution.
+fn greet(name: String) -> String
+requires {
+    name != ""
+}
+ensures {
+    result != ""
+}
+{
+    message: String = _
+    return message
+}
+fn main() {
+    print(greet("Zelyra"))
+}
