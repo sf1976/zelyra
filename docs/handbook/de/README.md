@@ -662,6 +662,21 @@ Sortierung, Pagination, URL-Zustand, HTML-Escaping und Berechtigungsprüfungen
 bleiben in beiden Modi aktiv. Detail-, Formular-, Lade- und Fehleransichten
 können ebenfalls sicher überschrieben werden.
 
+Für den häufigen Fall kann ein gemeinsames Feldprofil die erzeugte Liste,
+Detailansicht sowie Create-/Edit-Formulare steuern:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { name email active }
+    }
+}
+~~~
+
+Ein explizites `list { ... }` bleibt eine Überschreibung für Liste/Detail.
+Primärschlüssel und automatisch erzeugte Felder bleiben in Formularen
+automatisch ausgeschlossen; unbekannte Profilfelder weist der Compiler zurück.
+
 Detailansichten unterstützen dieselbe kontrollierte Darstellungsauswahl und
 eine eigene Überschrift:
 

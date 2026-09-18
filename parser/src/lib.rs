@@ -510,6 +510,10 @@ impl<'a> Parser<'a> {
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             match self.current().kind.clone() {
+                TokenKind::Fields => {
+                    self.advance();
+                    view.fields = self.crud_view_field_block()?;
+                }
                 TokenKind::List => {
                     self.advance();
                     self.expect(TokenKind::LBrace, "`{` after CRUD view list")?;
@@ -690,7 +694,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     return self.error(
-                        "expected `list`, `detail`, `form`, `delete`, `loading`, or `error` in CRUD view definition",
+                        "expected `fields`, `list`, `detail`, `form`, `delete`, `loading`, or `error` in CRUD view definition",
                     )
                 }
             }
@@ -698,6 +702,22 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RBrace, "`}` after CRUD view definition")?;
         Ok(view)
+    }
+
+    fn crud_view_field_block(&mut self) -> Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after CRUD view fields")?;
+        let mut fields = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            fields.push(self.ident("CRUD view field name")?.0);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        self.expect(TokenKind::RBrace, "`}` after CRUD view fields")?;
+        Ok(fields)
     }
     fn database_definition(&mut self) -> Result<DatabaseDef, ParseError> {
         let start = self.expect(TokenKind::Database, "`database`")?;
@@ -2486,6 +2506,28 @@ mod tests {
                 .and_then(|page| page.message.as_deref()),
             Some("The customer could not be updated.")
         );
+    }
+
+    #[test]
+    fn parses_shared_crud_view_fields() {
+        let program = parse(
+            &lex(r#"table customers {
+                    id: Id primary auto
+                    name: String(100) required
+                    email: Email?
+                    active: Bool default true
+                }
+                crud Customer -> customers {
+                    view {
+                        fields { name email active }
+                    }
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(program.cruds[0].view.fields, ["name", "email", "active"]);
+        assert!(program.cruds[0].list.is_empty());
     }
 
     #[test]

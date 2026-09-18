@@ -223,6 +223,9 @@ pub struct CrudSoftDeleteDef {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CrudViewDef {
+    /// Primary fields shared by generated list, detail, and CRUD form views.
+    /// Explicit CRUD list fields remain an override for the list/detail view.
+    pub fields: Vec<String>,
     pub list: CrudListViewDef,
     pub detail: CrudDetailViewDef,
     pub form: CrudFormViewDef,

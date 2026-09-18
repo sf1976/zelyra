@@ -600,6 +600,21 @@ pagination, URL state, HTML escaping, and permission checks remain generated
 in both modes. Detail, form, loading, and error view overrides are also
 available.
 
+For the common case, one shared field profile can drive the generated list,
+detail, and create/edit forms:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        fields { name email active }
+    }
+}
+~~~
+
+An explicit `list { ... }` remains an override for the list/detail selection.
+Primary-key and auto-generated fields stay out of forms automatically, and
+unknown profile fields are rejected by the compiler.
+
 Detail views support the same controlled presentation choice and an explicit
 heading:
 

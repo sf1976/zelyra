@@ -1336,6 +1336,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
             json!({
                 "name": crud.name,
                 "table": crud.table,
+                "view_fields": crud.view.fields,
                 "span": context_span(source, crud.span)
             })
         })
@@ -3814,7 +3815,13 @@ fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) ->
             valid = false;
             continue;
         }
-        let configured_columns = crud.list.iter().chain(&crud.search).chain(&crud.filters);
+        let configured_columns = crud
+            .view
+            .fields
+            .iter()
+            .chain(&crud.list)
+            .chain(&crud.search)
+            .chain(&crud.filters);
         for column in configured_columns {
             if !crud_column_exists(program, schema, crud, column) {
                 diagnostic(
@@ -4526,7 +4533,12 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             .soft_delete
             .as_ref()
             .map(|definition| definition.column.as_str());
-        let list_columns = configured_crud_columns(&program, &schema, crud, &crud.list, |table| {
+        let view_fields = if crud.list.is_empty() {
+            &crud.view.fields
+        } else {
+            &crud.list
+        };
+        let list_columns = configured_crud_columns(&program, &schema, crud, view_fields, |table| {
             table
                 .columns
                 .iter()
@@ -4687,10 +4699,14 @@ fn generated_crud_form(
     } else {
         effective_crud_permissions(&crud.permissions, &crud.create_permissions)
     };
+    let configured_fields = (!crud.view.fields.is_empty()).then_some(&crud.view.fields);
     let fields = table
         .columns
         .iter()
         .filter(|column| !column.primary_key && !column.auto)
+        .filter(|column| {
+            configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
+        })
         .filter(|column| {
             crud.soft_delete
                 .as_ref()
@@ -7056,12 +7072,62 @@ mod tests {
             }
 
             crud Machine -> machines {
-                list { missing }
+                view { fields { missing } }
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         let schema = build_schema(&program).unwrap();
         assert!(!validate_cruds("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn shared_crud_view_fields_drive_list_and_form_defaults() {
+        let source = r#"
+            table customers {
+                id: Id primary auto
+                name: String(100) required
+                email: Email?
+                active: Bool default true
+            }
+
+            crud Customer -> customers {
+                view { fields { name email active } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(validate_cruds("test.zyl", &program, &schema));
+        let crud = &program.cruds[0];
+        let table = program
+            .tables
+            .iter()
+            .find(|table| table.name == "customers")
+            .unwrap();
+        let form = generated_crud_form(
+            crud,
+            table,
+            &schema,
+            false,
+            CsrfProtection::new("test-csrf"),
+            None,
+            false,
+        );
+        assert_eq!(
+            form.form
+                .fields
+                .iter()
+                .map(|field| field.name.as_str())
+                .collect::<Vec<_>>(),
+            ["name", "email", "active"]
+        );
+        let list = configured_crud_columns(&program, &schema, crud, &crud.view.fields, |table| {
+            table
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect()
+        });
+        assert_eq!(list, ["name", "email", "active"]);
     }
 
     #[test]

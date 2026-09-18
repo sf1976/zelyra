@@ -11,13 +11,13 @@ table customers {
 crud Customer -> customers {
     title: "Customers"
 
-    list {
-        id
-        name
-        active
-    }
-
     view {
+        // One field profile drives the generated list, detail, and forms.
+        fields {
+            name
+            active
+        }
+
         list {
             mode: cards
             empty: "No customers found."
