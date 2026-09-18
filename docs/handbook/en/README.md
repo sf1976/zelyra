@@ -99,10 +99,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.1.41
+./install.sh --release v0.1.42
 ~~~
 
-On Windows, use `-Release v0.1.41` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.1.42` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:
@@ -267,7 +267,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.41"
+version = "0.1.42"
 zelyra = "0.1"
 
 [capabilities]
@@ -1572,7 +1572,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.41"
+version = "0.1.42"
 zelyra = "0.1"
 
 [capabilities]

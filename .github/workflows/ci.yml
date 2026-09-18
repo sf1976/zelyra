@@ -38,7 +38,7 @@ jobs:
         run: |
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          ./install.sh --release v0.1.41 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+          ./install.sh --release v0.1.42 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy
