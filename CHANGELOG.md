@@ -19,6 +19,8 @@ compiler and repository release.
   tags in HTML bodies without treating ordinary HTML markup as symbol references.
 - Extended source-only impact JSON with a deterministic `references` edge list
   for known table, view, component, handler, SQL, and function-call relations.
+- Added focused impact queries with `--symbol <kind:name>` for directly
+  connected known nodes and stable `E-IMPACT-001` diagnostics for unknown nodes.
 - Hardened semantic edit requests with required schema version `1`, project-
   local `.zyl` entry checks, full compiler validation before and after a
   proposed rename, and explicit diagnostics for rejected boundaries.

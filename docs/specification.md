@@ -20,6 +20,7 @@ local-capable, and vendor-neutral. The current machine-oriented interfaces are:
 zelyra check <file.zyl> --format=json
 zelyra context <file.zyl> --format=json
 zelyra impact <file.zyl> --format=json
+zelyra impact <file.zyl> --symbol <kind:name> --format=json
 zelyra edit --format=json change.json
 zelyra fmt <file.zyl> --check
 ```
@@ -34,7 +35,8 @@ The compiler must continue to enforce names, types, nullability, SQL, schemas,
 forms, views, APIs, permissions, contracts, capabilities, tests, and
 destructive-change approvals. AI output may not silently add capabilities,
 expand permissions, execute destructive SQL, weaken checks, or expose secrets.
-Expression typed holes, source-only impact analysis, and versioned semantic
-rename previews are implemented slices; declaration-context holes, complete
+Expression typed holes, source-only impact analysis with optional focused
+queries, and versioned semantic rename previews are implemented slices;
+declaration-context holes, complete
 runtime/schema impact, richer edit operations, granular effects, and
 benchmarks remain roadmap work.

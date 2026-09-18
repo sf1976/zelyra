@@ -1598,6 +1598,7 @@ Quelltextabhängigkeiten eines Programms lassen sich deterministisch prüfen:
 
 ~~~bash
 zelyra impact examples/auth_crud_api.zyl --format=json
+zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
 ~~~
 
 Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
@@ -1605,6 +1606,10 @@ Ressourcen, Views, APIs, Berechtigungen, Contracts und eine deterministische
 `references`-Kantenliste für bekannte Beziehungen. E-Mail-, Job-, Test- und
 Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar; der
 Befehl verbindet sich nie mit MariaDB.
+Mit `--symbol <kind:name>` kann die Ausgabe auf einen bekannten Knoten wie
+`table:customers` fokussiert werden. Die fokussierte Antwort enthält nur direkt
+verbundene Referenzen und zugehörige Knoten-IDs. Unbekannte Knoten liefern
+`E-IMPACT-001` und einen Exit-Code ungleich null.
 
 Eine validierte Symbol-Umbenennung kann ohne Änderung des Quelltexts
 vorschaut werden:

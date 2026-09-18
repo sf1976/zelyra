@@ -1489,12 +1489,17 @@ Inspect deterministic source dependencies for a program:
 
 ~~~bash
 zelyra impact examples/auth_crud_api.zyl --format=json
+zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
 ~~~
 
 The impact response lists source-level tables, SQL, forms, CRUD resources,
 views, APIs, permissions, contracts, and a deterministic `references` edge
 list for known relationships. Email, job, test, and live schema impact are
 explicitly empty or marked unavailable; the command never connects to MariaDB.
+Use `--symbol <kind:name>` to focus the result on one known node, for example
+`table:customers`. The focused response contains only directly connected
+references and related node IDs. Unknown nodes produce `E-IMPACT-001` and a
+non-zero exit code.
 
 Preview a validated symbol rename without modifying the source:
 
