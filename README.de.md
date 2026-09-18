@@ -67,6 +67,45 @@ geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 
+Vor dem Schreiben oder Ändern von `.zyl`-Quellcode ist die
+[Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) zu verwenden.
+Sie ordnet Spezifikation, Parser, Tests, den Status der Standardbibliothek,
+geprüfte Beispiele und Dokumentation und beschreibt den Umgang mit Unsicherheit.
+
+## Einfacher Einstieg, optionale Möglichkeiten
+
+Zelyra hält das erste Projekt klein. Erweiterte Projektbereiche sind optional:
+Dauerhafte Feature-Entscheidungen gehören in `zelyra.toml`,
+umgebungsabhängige Überschreibungen in `.env` oder in die Prozessumgebung.
+Bestehende Projekte benötigen keinen zusätzlichen Abschnitt; die sicheren
+Standards lassen Web, API, CRUD, Authentifizierung und Audit-Deklarationen zu.
+
+Beispiel:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Die entsprechenden nicht geheimen Umgebungsüberschreibungen heißen
+`ZELYRA_FEATURE_WEB`, `ZELYRA_FEATURE_API`, `ZELYRA_FEATURE_CRUD`,
+`ZELYRA_FEATURE_AUTH` und `ZELYRA_FEATURE_AUDIT`. Die Reihenfolge lautet:
+Prozessumgebung, `.env`, `zelyra.toml`, dann Standardwerte. Die wirksame
+Konfiguration kann ohne Ausgabe von Secrets angezeigt werden:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Deaktivierte Bereiche werden vom Compiler abgelehnt, wenn der Quellcode sie
+verwendet; Sicherheitsprüfungen und Capabilities können damit nicht abgeschaltet
+werden. Diese optionale Komfortschicht ist keine Voraussetzung für Einsteiger.
+Die vollständige Referenz für Umgebung und Konfiguration steht in
+[docs/env.md](docs/env.md) (zusätzlich auf
+[Englisch](docs/env.en.md)). Neue Einstellungen müssen dort vor dem Commit
+ergänzt werden.
+
 ## Lizenz und Implementierung
 
 Zelyra ist in Rust implementiert. Rust ist die Implementierungssprache;
@@ -318,6 +357,16 @@ Benannte Slots dürfen sicher escapte, deterministische Fallback-Inhalte besitze
 Aufrufer können sie explizit überschreiben. Siehe
 `examples/component_slots.zyl`.
 
+Das zusammengefasste Beispiel `examples/view_showcase.zyl` zeigt den
+vorgesehenen Release-Pfad in einem kleinen Programm: einen benannten
+Seitenrahmen, typisierte Komponenten, Default- und benannte Slots sowie eine
+schemabasierte CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-,
+Formular- und Ladeansichten. Prüfung:
+
+~~~bash
+zelyra check examples/view_showcase.zyl --format=json
+~~~
+
 Suche, Filter, Sortierung und Pagination sind in erzeugten CRUD-Listen bereits
 verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 `is_null`; die Bedienelemente erhalten ihren Zustand über die URL. Beispiele:
@@ -326,6 +375,11 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 /customers?filter_name__contains=Presse
 /customers?filter_quantity__gte=10
 ~~~
+
+Erzeugte Such- und Filtersteuerungen verwenden ein semantisches Fieldset und
+getrennte Beschriftungen für jeden Operator und Wert. Filterverarbeitung und
+bewahrter URL-Zustand werden deterministisch sortiert, sodass dieselbe Anfrage
+immer dieselbe Reihenfolge von Steuerungen und Pagination erzeugt.
 
 Die Darstellung einer CRUD-Liste kann deklarativ angepasst werden, ohne die
 geprüfte Daten- oder Autorisierungspipeline zu ersetzen:
@@ -686,6 +740,11 @@ Für SQLite:
 export DATABASE_URL='sqlite:///tmp/meine-app.sqlite3'
 zelyra db bootstrap examples/machine_management_sqlite.zyl
 ~~~
+
+Derselbe SQLite-Pfad wird durch `tests/sqlite-e2e.sh` geprüft: Das Skript
+erstellt eine temporäre Datenbank, inspiziert das Schema, prüft einen
+idempotenten Plan und kontrolliert die erzeugten Foreign Keys. Es verwendet
+keine Anwendungsdaten oder Zugangsdaten aus der Host-Umgebung.
 
 Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
 Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies

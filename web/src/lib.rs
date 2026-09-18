@@ -3142,7 +3142,7 @@ fn dispatch_crud(
     };
     let mut filters = Vec::new();
     let mut seen_filter_columns = HashSet::new();
-    for (name, value) in &query_values {
+    for (name, value) in sorted_filter_query_values(&query_values) {
         let Some(filter_name) = name.strip_prefix("filter_") else {
             continue;
         };
@@ -3401,7 +3401,7 @@ fn dispatch_tableview(
     }
     let mut filters = Vec::new();
     let mut seen_filter_columns = HashSet::new();
-    for (name, value) in &query_values {
+    for (name, value) in sorted_filter_query_values(&query_values) {
         let Some(filter_name) = name.strip_prefix("filter_") else {
             continue;
         };
@@ -3470,7 +3470,7 @@ fn dispatch_tableview(
                     format!("<h1>400 Bad Request</h1><p>Filter `{column}` was specified more than once.</p>"),
                 );
             }
-            filters.push((column.to_string(), value.clone(), operator));
+            filters.push((column.to_string(), value.to_string(), operator));
         }
     }
     let source = tableview.source.trim().trim_end_matches(';').trim();
@@ -3618,7 +3618,7 @@ fn render_tableview(
     html.push_str(&html_escape(&tableview.title));
     html.push_str("</h1><form method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
-    html.push_str("\">");
+    html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>");
     if tableview.searchable {
         html.push_str(
             "<label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
@@ -3659,8 +3659,8 @@ fn render_tableview(
         let selected_operator = selected_filter_operator(query_values, &filter.name);
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
-        html.push_str("\">");
-        html.push_str(&html_escape(&filter.name));
+        html.push_str("__operator\">");
+        html.push_str(&html_escape(&format!("{} operator", filter.name)));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\" name=\"filter_");
@@ -3677,7 +3677,11 @@ fn render_tableview(
             html.push_str(operator.label());
             html.push_str("</option>");
         }
-        html.push_str("</select><input id=\"filter_");
+        html.push_str("</select><label for=\"filter_");
+        html.push_str(&html_escape(&filter.name));
+        html.push_str("\">");
+        html.push_str(&html_escape(&format!("Filter {} value", filter.name)));
+        html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\" name=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -3691,7 +3695,7 @@ fn render_tableview(
         ));
         html.push_str("\">");
     }
-    html.push_str("<button type=\"submit\">Apply</button></form>");
+    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>No records found.</p>");
     } else {
@@ -3764,8 +3768,8 @@ fn tableview_page_url(
         url.push_str("&search=");
         url.push_str(&url_encode(search));
     }
-    for (name, value) in query_values {
-        if matches!(name.as_str(), "page" | "sort" | "order" | "search") || value.is_empty() {
+    for (name, value) in sorted_query_values(query_values) {
+        if matches!(name, "page" | "sort" | "order" | "search") || value.is_empty() {
             continue;
         }
         url.push('&');
@@ -4309,6 +4313,22 @@ fn selected_filter_operator(
         .unwrap_or(FilterOperator::Equal)
 }
 
+fn sorted_query_values(query_values: &HashMap<String, String>) -> Vec<(&str, &str)> {
+    let mut values = query_values
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values
+}
+
+fn sorted_filter_query_values(query_values: &HashMap<String, String>) -> Vec<(&str, &str)> {
+    sorted_query_values(query_values)
+        .into_iter()
+        .filter(|(name, _)| name.starts_with("filter_"))
+        .collect()
+}
+
 fn filter_condition(
     table: &zelyra_database::Table,
     column: &str,
@@ -4450,7 +4470,7 @@ fn render_crud_list_with_actions(
     html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str(
-        "\"><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
+        "\"><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
     );
     html.push_str(&html_escape(search));
     html.push_str("\"><label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
@@ -4503,9 +4523,9 @@ fn render_crud_list_with_actions(
         let selected_operator = selected_filter_operator(query_values, column);
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
-        html.push_str("\">");
+        html.push_str("__operator\">");
         html.push_str(&html_escape(&format!(
-            "Filter {}",
+            "Filter {} operator",
             crud_column_label(&crud.schema, &crud.table, column)
         )));
         html.push_str("</label><select id=\"filter_");
@@ -4528,7 +4548,14 @@ fn render_crud_list_with_actions(
         } else {
             html.push_str("<option value=\"eq\" selected>is</option>");
         }
-        html.push_str("</select><input id=\"filter_");
+        html.push_str("</select><label for=\"filter_");
+        html.push_str(&html_escape(column));
+        html.push_str("\">");
+        html.push_str(&html_escape(&format!(
+            "Filter {} value",
+            crud_column_label(&crud.schema, &crud.table, column)
+        )));
+        html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\" name=\"filter_");
         html.push_str(&html_escape(column));
@@ -4541,7 +4568,7 @@ fn render_crud_list_with_actions(
         ));
         html.push_str("\">");
     }
-    html.push_str("<button type=\"submit\">Apply</button></form>");
+    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
         html.push_str(&html_escape(
@@ -6206,7 +6233,12 @@ mod tests {
                 per_page: 25,
             },
         );
+        assert!(html.contains(
+            "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
+        ));
         assert!(html.contains("name=\"filter_orders__operator\""));
+        assert!(html.contains("for=\"filter_orders__operator\">orders operator</label>"));
+        assert!(html.contains("for=\"filter_orders\">Filter orders value</label>"));
         assert!(html.contains("<option value=\"gte\" selected>at least</option>"));
         assert!(html.contains("name=\"filter_orders\" value=\"3\""));
         assert_eq!(
@@ -6221,6 +6253,14 @@ mod tests {
             TableViewFilterKind::Numeric,
             FilterOperator::Contains
         ));
+        let unordered_query_values = HashMap::from([
+            ("filter_z".into(), "2".into()),
+            ("filter_a".into(), "1".into()),
+        ]);
+        assert_eq!(
+            tableview_page_url(&tableview, &unordered_query_values, "", "id", "ASC", 1,),
+            "/views/customers?page=1&sort=id&order=asc&filter_a=1&filter_z=2"
+        );
     }
 
     #[test]
@@ -6299,6 +6339,11 @@ mod tests {
             },
         );
         assert!(html.contains("&lt;unsafe&gt;"));
+        assert!(html.contains(
+            "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
+        ));
+        assert!(html.contains("for=\"filter_name__operator\">Filter Name operator</label>"));
+        assert!(html.contains("for=\"filter_name\">Filter Name value</label>"));
         assert!(html.contains(
             "class=\"zelyra-success\" role=\"status\"><h2>Completed</h2><p>Saved &lt;unsafe&gt;</p>"
         ));

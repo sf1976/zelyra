@@ -16,6 +16,10 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 > **Projektstatus:** Zelyra 0.1 ist experimentell. Viele beschriebene Grundlagen
 > sind implementiert, aber noch nicht für den Produktionseinsatz freigegeben.
 
+Die verbindliche Reihenfolge der Sprachquellen und der Prüfablauf stehen in der
+[Quellenlandkarte](../../source-authority.de.md) und der
+[englischen Quellenübersicht](../../source-authority.md).
+
 ## Statuszeichen
 
 - ✅ **Implementiert:** im aktuellen Repository vorhanden.
@@ -121,10 +125,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.38
+./install.sh --release v0.1.39-alpha.1
 ~~~
 
-Unter Windows in PowerShell `-Release v0.1.38` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.1.39-alpha.1` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
@@ -301,7 +305,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.38"
+version = "0.1.39"
 zelyra = "0.1"
 
 [capabilities]
@@ -936,6 +940,10 @@ explizite URL-Form `filter_<column>__<operator>=<value>` eignet sich für Links
 und gespeicherte Suchen. Werte bleiben gebundene Parameter, Spaltennamen werden
 gegen das Schema geprüft.
 
+Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und
+getrennte Beschriftungen für Operator und Wert jedes Filters. Filterverarbeitung
+und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
+
 🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
 sind Teil der weiteren View-Roadmap.
 
@@ -1506,7 +1514,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.38"
+version = "0.1.39"
 zelyra = "0.1"
 
 [capabilities]
@@ -1527,6 +1535,34 @@ Regeln:
 - Geheimnisse nicht loggen;
 - getrennte Datenbanken für Entwicklung, Tests und Produktion verwenden;
 - destruktive Tests niemals gegen Produktion ausführen.
+
+### Einfacher Einstieg, optionale Möglichkeiten
+
+Für den Einstieg ist keine Feature-Konfiguration erforderlich. Erweiterte
+Projektbereiche können in `zelyra.toml` ausgewählt werden; umgebungsabhängige,
+nicht geheime Überschreibungen gehören in `.env` oder die Prozessumgebung:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Unterstützt werden `web`, `api`, `crud`, `auth` und `audit`. Die Priorität ist
+Prozessumgebung, `.env`, `zelyra.toml` und danach sichere Standardwerte. Die
+wirksamen Werte können ohne Anzeige von Secrets geprüft werden:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Wenn der Quellcode einen deaktivierten Bereich verwendet, meldet der Compiler
+eine stabile Feature-Diagnose. Capabilities, Typprüfung, SQL-Prüfung und
+Sicherheitsregeln können damit nicht abgeschaltet werden. Diese optionale
+Komfortschicht ist keine zusätzliche Pflicht für einfache Projekte. Die
+vollständige [Referenz für Umgebung und Konfiguration](../../env.md) führt alle
+unterstützten Einstellungen auf und muss vor dem Commit einer neuen
+Einstellung aktualisiert werden.
 
 🗺️ Typisierte Connections, verschlüsselte Secret Stores, SMTP-Assistent und
 ODBC-Erkennung sind geplant.

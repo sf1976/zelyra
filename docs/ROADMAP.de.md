@@ -6,8 +6,16 @@ wenn — soweit anwendbar — Syntax oder API-Dokumentation, Implementierung,
 positive und negative Tests, Diagnostik und ein funktionierendes Beispiel
 vorhanden sind.
 
-Status: `[x]` umgesetzt, `[~]` in Arbeit, `[ ]` geplant, `[?]` optional oder
-noch in Prüfung.
+Statuslegende:
+
+- ✅ umgesetzt (`[x]`)
+- 🧪 teilweise umgesetzt oder experimentell (`[~]`)
+- 🗺️ geplant (`[ ]`)
+- ◻️ optional oder noch in Prüfung (`[?]`)
+- ⛔ blockiert oder bewusst zurückgestellt (Grund direkt am Punkt nennen)
+
+Die sichtbaren Emojis machen den Status auf GitHub eindeutig; die
+Klammermarker bleiben vorerst maschinell durchsuchbar.
 
 ## Aktuelle Meilensteine
 
@@ -81,6 +89,12 @@ Feature eines bestimmten Anbieters.
 
 ## 1. Einstieg und Distribution
 
+- [~] Einfache Standards mit optionalen, dokumentierten Projekt-Feature-
+  Schaltern über `zelyra.toml`, `.env` und Prozessüberschreibungen sind
+  verfügbar; umfassendere Profile und interaktive Konfiguration bleiben offen.
+  Die vollständige Referenz wird in `docs/env.md` und `docs/env.en.md`
+  gepflegt.
+
 - [~] Eine Ein-Befehl-Quellcodeinstallation für Linux, Windows und macOS ist
   mit benutzerlokalen, wiederholbaren Bash-/PowerShell-Installern verfügbar;
   eine Rust-freie Release-Installation ist für veröffentlichte Linux-/Windows-
@@ -121,11 +135,13 @@ Feature eines bestimmten Anbieters.
 - [ ] Bessere Typinferenz mit präzisen Quellpositionen und Fix-Vorschlägen.
 - [ ] Typisierte Literale und Konversionen für Decimal, Money, Date, Time,
   UUID, URL, Email, Bytes und Duration.
-- [ ] Explizites Resource-/Effect-Modell für Database, Network, FileSystem,
-  Environment, Process, Clock und Random.
+- [~] Ein erstes Capability-/Effect-Modell für Database, Network, FileSystem,
+  Environment, Process, Clock und Random ist vorhanden; feinere Effekte wie
+  `Database(read)` und `Database(write)` bleiben geplant.
 - [ ] Strukturierte Fehlerweitergabe und eigene Fehlertypen.
 - [ ] Deterministischer Build-Graph, inkrementelle und parallele Kompilierung.
-- [ ] Language Server, Editor-Erweiterungen, Formatter, Linter und Debugger.
+- [~] Der deterministische Formatter ist umgesetzt; Language Server,
+  Editor-Erweiterungen, Linter und Debugger bleiben geplant.
 - [ ] Stabile IR und ein backendunabhängiges Runtime-ABI.
 - [ ] Langfristiger Self-Hosting-Pfad: Compiler-Werkzeuge schrittweise aus Rust
   nach Zelyra verlagern, mit einem kleinen vertrauenswürdigen Bootstrapcompiler.
@@ -172,8 +188,9 @@ Feature eines bestimmten Anbieters.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
   NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
 - [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
-  URLs; stabile Sortierung und weitere Barrierefreiheitsverbesserungen bleiben
-  offen.
+  URLs; deterministische Filterreihenfolge, semantische Fieldsets sowie
+  getrennte Operator-/Wertbeschriftungen sind verfügbar, weitergehende
+  Barrierefreiheitsverbesserungen bleiben offen.
 - [~] Der erste Teil einer einheitlichen typisierten View-Pipeline ist für
   `tableview`-Routen mit deklarativen Filtern, Suche, Sortierung und Pagination
   verfügbar; dieselbe Pipeline für beliebige Views bleibt geplant.
@@ -257,8 +274,8 @@ Feature eines bestimmten Anbieters.
   Bereinigen.
 - [x] Kryptografisch verkettete Audit-Einträge mit dokumentiertem SHA-256-
   Hashformat, kanonischer Serialisierung und transaktionsgesichertem Append.
-- [x] `audit verify` erkennt gebrochene Verbindungen und ungültige Entry-Hashes;
-  die genaue Position des ersten Fehlers und unabhängige Diagnosen bleiben offen.
+- [~] `audit verify` erkennt gebrochene Verbindungen und ungültige Entry-Hashes;
+  genaue Positionen des ersten Fehlers und unabhängige Diagnosen bleiben offen.
 - [ ] Unveränderliche bzw. Append-only-Datenbankrechte für Audit-Tabellen.
 - [ ] Konfigurierbare Aufbewahrung, geplantes Bereinigen und Archivexport.
 - [ ] Verschlüsselte Archive, Schlüsselrotation, Restore-Prüfung und Offline-
@@ -290,8 +307,8 @@ Feature eines bestimmten Anbieters.
 - [ ] Cache für Beweisergebnisse und explizite vertrauenswürdige Annahmen.
 - [ ] SMT-/SMT-LIB-Integration sowie Diagnose für Solver-Ressourcen und
   Timeouts.
-- [ ] Klare Trennung von `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` in
-  CLI, IDE und Dokumentation.
+- [~] Klare Trennung von `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` ist
+  in CLI und Dokumentation vorhanden; IDE-Integration bleibt geplant.
 - [ ] Abbruch, Timeouts, Supervision und DB-Pool-Integration für Structured
   Concurrency.
 - [ ] Regeln für Shared State, Channels, Actors und Race-Tests.
@@ -317,13 +334,16 @@ Feature eines bestimmten Anbieters.
 
 ## Akzeptanzanwendungen aus der Praxis
 
-- [ ] Maschinenverwaltung mit Abteilungen, Maschinen, CRUD, Suche, Filtern,
-  Berechtigungen, Audit und MariaDB-Deployment.
+- [~] Die Maschinenverwaltung ist als MariaDB-Template vorhanden und durch
+  Integrationstests für erzeugte Projekte abgedeckt; Produktionshärtung bleibt
+  offen.
 - [ ] Kunden-/Auftragsanwendung mit komplexen Joins, Aggregaten, Formularen,
   API und individuellen Views.
 - [ ] Mehrbenutzer-Inventar mit Transaktionen und parallelen Änderungen.
-- [ ] Produktionsdeployment mit Docker Compose und konfigurierbarem Web-Port.
-- [ ] Self-Hosted-Deployment ohne Rust oder Cargo auf dem Zielsystem.
+- [~] Ein erzeugtes Docker-Compose-Deployment mit unabhängig konfigurierbarem
+  Web-Port ist getestet; Produktionshärtung bleibt offen.
+- [~] Rust-freie Self-Hosted-Installation ist für veröffentlichte Linux- und
+  Windows-x86_64-Assets verfügbar; weitere Plattformen bleiben offen.
 
 Diese Datei wird bei jeder Statusänderung eines Meilensteins und bei jeder
 neuen verpflichtenden oder optionalen Architekturentscheidung aktualisiert.

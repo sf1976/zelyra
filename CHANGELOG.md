@@ -8,6 +8,48 @@ compiler and repository release.
 
 ### Added
 
+- Added bilingual source-authority guides that map the binding specification,
+  parser, tests, standard-library status, validated examples, documentation,
+  and the required uncertainty and verification workflow. This is a
+  documentation-only change; compiler behavior is unchanged.
+
+- Zweisprachige Quellenlandkarten ergänzt, die Spezifikation, Parser, Tests,
+  Status der Standardbibliothek, geprüfte Beispiele, Dokumentation sowie den
+  verbindlichen Umgang mit Unsicherheit und Prüfung zuordnen. Diese Änderung
+  betrifft ausschließlich die Dokumentation; das Compilerverhalten bleibt
+  unverändert.
+
+- Generated CRUD and tableview filter controls now use semantic fieldsets and
+  separate operator/value labels; filter processing and preserved query URLs
+  use deterministic ordering.
+
+- Erzeugte CRUD- und Tableview-Filtersteuerungen verwenden jetzt semantische
+  Fieldsets und getrennte Operator-/Wertbeschriftungen; Filterverarbeitung und
+  bewahrte Query-URLs verwenden eine deterministische Reihenfolge.
+
+## 0.1.39-alpha.1 — 2026-09-18
+
+This alpha release contains the accumulated AI-native compiler, database,
+web, CRUD, configuration, and view-system work listed below. It is not
+intended for production use. The release includes reproducible MariaDB and
+SQLite schema checks, but the broader runtime/database support remains
+explicitly documented as experimental where noted.
+
+Diese Alpha-Version enthält die unten aufgeführten kumulierten Arbeiten an
+KI-nativem Compiler, Datenbank, Web, CRUD, Konfiguration und View-System. Sie
+ist nicht für den Produktiveinsatz bestimmt. Der Release enthält
+reproduzierbare MariaDB- und SQLite-Schema-Prüfungen; die weitergehende
+Runtime- und Datenbankunterstützung bleibt an den entsprechenden Stellen
+ausdrücklich experimentell.
+
+### Fixed
+
+- Docker end-to-end validation now builds generated projects from the checked
+  branch or tag explicitly, so pre-release CI does not depend on a tag that
+  has not been published yet.
+
+### Added
+
 - Extended `zelyra doctor` with read-only Docker Compose availability checks
   and `--env-file <path>` support for generated projects. Database URLs are
   loaded without exposing credentials, and the selected host port is checked
@@ -131,6 +173,17 @@ compiler and repository release.
   and NULL operators, generated controls, URL state, and validation.
 - Added a MariaDB tableview end-to-end test covering struct-backed joins,
   aggregates, escaping, search, sorting, pagination, and rejected sort fields.
+- Added a combined `examples/view_showcase.zyl` example covering named views,
+  typed components, default and named slots, and independently configurable
+  CRUD list, detail, form, and loading views.
+- Added a reproducible SQLite schema end-to-end test covering bootstrap,
+  inspection, idempotent planning, and foreign-key metadata.
+
+- Ein zusammengefasstes Beispiel `examples/view_showcase.zyl` deckt benannte
+  Views, typisierte Komponenten, Default- und benannte Slots sowie unabhängig
+  konfigurierbare CRUD-Listen-, Detail-, Formular- und Ladeansichten ab.
+- Ein reproduzierbarer SQLite-Schema-End-to-End-Test prüft Bootstrap,
+  Inspektion, idempotente Planung und Foreign-Key-Metadaten.
 
 ## 0.1.38-alpha.1 — 2026-09-18
 

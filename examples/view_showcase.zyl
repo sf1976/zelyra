@@ -1,0 +1,77 @@
+database main {
+    engine: mariadb
+}
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email?
+    active: Bool default true
+}
+component BrandMark {
+    props {
+        label: String
+    }
+    html {
+        <strong class="brand">{label}</strong>
+    }
+}
+component WorkspacePanel {
+    html {
+        <section class="workspace-panel">
+            <header><slot name="header"><h1>Workspace</h1></slot></header>
+            <main><slot /></main>
+        </section>
+    }
+}
+view CustomerShell {
+    html {
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <title>Customer workspace</title>
+            </head>
+            <body>
+                <header><BrandMark label="Zelyra" /></header>
+                <main><slot /></main>
+            </body>
+        </html>
+    }
+}
+crud Customer -> customers {
+    title: "Customers"
+    view {
+        fields {
+            name
+            email
+            active
+        }
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+        detail {
+            mode: cards
+            title: "Customer details"
+        }
+        form {
+            mode: cards
+            title: "Customer form"
+            submit: "Save customer"
+        }
+        loading {
+            message: "Loading customers..."
+        }
+    }
+}
+page "/workspace" {
+    view: CustomerShell
+    html {
+        <WorkspacePanel>
+            <slot name="header"><h1>Customer workspace</h1></slot>
+            <p>Reusable components and generated CRUD views work together.</p>
+        </WorkspacePanel>
+    }
+}
+fn main() {
+    print("Run: zelyra serve examples/view_showcase.zyl")
+}

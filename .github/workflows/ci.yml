@@ -30,21 +30,25 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Install MariaDB client and curl
-        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
+      - name: Install database clients and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client sqlite3 curl
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer
         run: |
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          ./install.sh --release v0.1.38 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+          ./install.sh --release v0.1.39-alpha.1 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build CLI for integration test
         run: cargo build -p zelyra-cli
+      - name: Validate combined view showcase
+        run: |
+          target/debug/zelyra check examples/view_showcase.zyl --format=json > /tmp/zelyra-view-showcase.json
+          python3 -c 'import json; data = json.load(open("/tmp/zelyra-view-showcase.json")); assert data["success"] is True'
       - name: Check deterministic impact output
         run: |
           target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact.json
@@ -78,6 +82,7 @@ jobs:
           ZELYRA_DOCKER_E2E_HOST_PORT: 18082
           ZELYRA_DOCKER_E2E_WEB_PORT: 8081
           ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
+          ZELYRA_DOCKER_E2E_REF: ${{ github.head_ref || github.ref_name }}
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-docker-e2e.sh
       - name: Run generated authentication project end-to-end test
@@ -102,6 +107,10 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
         run: ./tests/mariadb-e2e.sh
+      - name: Run SQLite schema integration test
+        env:
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/sqlite-e2e.sh
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root

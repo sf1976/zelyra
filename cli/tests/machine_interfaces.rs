@@ -41,7 +41,7 @@ fn temporary_project_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
     fs::create_dir_all(&directory).expect("temporary project should be created");
     fs::write(
         directory.join("zelyra.toml"),
-        "[project]\nname = \"edit-test\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = false\nnetwork = false\n",
+        "[project]\nname = \"edit-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = false\nnetwork = false\n",
     )
     .expect("temporary project config should be written");
     let source_path = directory.join("main.zyl");
@@ -386,6 +386,53 @@ fn empty_source_is_a_valid_deterministic_context() {
     assert_eq!(document["command"], "context");
     assert_eq!(document["success"], true);
     assert!(document["declarations"]["tables"].is_array());
+}
+
+#[test]
+fn config_reports_effective_optional_features_without_secret_values() {
+    let (project_directory, source_path) = temporary_project_source("config", "fn main() {}\n");
+    fs::write(
+        project_directory.join("zelyra.toml"),
+        "[project]\nname = \"config-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[features]\napi = false\ncrud = false\n",
+    )
+    .unwrap();
+    fs::write(
+        project_directory.join(".env"),
+        "ZELYRA_FEATURE_CRUD=true\nDATABASE_URL=mariadb://user:super-secret@localhost/app\n",
+    )
+    .unwrap();
+
+    let output = run(&["config", source_path.to_str().unwrap(), "--format=json"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["command"], "config");
+    assert_eq!(document["features"]["api"]["enabled"], false);
+    assert_eq!(document["features"]["api"]["source"], "zelyra.toml");
+    assert_eq!(document["features"]["crud"]["enabled"], true);
+    assert_eq!(document["features"]["crud"]["source"], ".env");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("super-secret"));
+    assert_eq!(document["project"]["config_file"], "zelyra.toml");
+    fs::remove_dir_all(project_directory).unwrap();
+}
+
+#[test]
+fn disabled_api_feature_rejects_api_source() {
+    let (project_directory, source_path) = temporary_project_source(
+        "disabled-api",
+        "api GET \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
+    );
+    fs::write(
+        project_directory.join("zelyra.toml"),
+        "[project]\nname = \"feature-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[features]\napi = false\n",
+    )
+    .unwrap();
+    let output = run(&["check", source_path.to_str().unwrap(), "--format=json"]);
+    assert_eq!(output.status.code(), Some(1));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["diagnostics"][0]["code"], "E-FEATURE-001");
+    fs::remove_dir_all(project_directory).unwrap();
 }
 
 #[test]

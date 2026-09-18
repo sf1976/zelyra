@@ -99,10 +99,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.1.38
+./install.sh --release v0.1.39-alpha.1
 ~~~
 
-On Windows, use `-Release v0.1.38` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.1.39-alpha.1` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:
@@ -267,7 +267,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.38"
+version = "0.1.39"
 zelyra = "0.1"
 
 [capabilities]
@@ -902,6 +902,10 @@ Optional `filter` fields use the same safe URL contract as CRUD filters:
 typed result field; unknown fields, unsupported operators, and invalid numeric
 or boolean values are rejected with HTTP 400.
 
+Generated CRUD and tableview controls use semantic fieldsets and separate
+labels for the operator and value of each filter. Filter processing and
+preserved pagination URLs use deterministic ordering.
+
 ## 13. Authentication and permissions
 
 🧪 Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route
@@ -1411,7 +1415,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.38"
+version = "0.1.39"
 zelyra = "0.1"
 
 [capabilities]
@@ -1432,6 +1436,33 @@ Rules worth keeping:
 - do not log secrets;
 - separate development, test, and production databases;
 - never run destructive tests against production.
+
+### Simple defaults, optional power
+
+The beginner path does not require a feature configuration. Advanced project
+surfaces can be selected in `zelyra.toml`, while environment-specific,
+non-secret overrides can be placed in `.env` or the process environment:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+Supported switches are `web`, `api`, `crud`, `auth`, and `audit`. Precedence is
+the process environment, `.env`, `zelyra.toml`, and then the safe defaults.
+Inspect the effective values without displaying secrets:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+When a source file uses a disabled surface, the compiler reports a stable
+feature diagnostic. Capabilities, type checking, SQL checks, and security
+rules cannot be disabled here. This is an optional convenience layer, not a
+new requirement for simple projects. The complete [environment and
+configuration reference](../env.en.md) lists every supported setting and must
+be updated before a new setting is committed.
 
 🗺️ Typed connections, encrypted secret stores, an SMTP assistant, and ODBC
 discovery are planned.

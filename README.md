@@ -61,6 +61,44 @@ remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
+Before writing or changing `.zyl` source, consult the [source authority and
+verification guide](docs/source-authority.md). It maps the binding
+specification, parser, tests, standard-library status, validated examples,
+and documentation, and defines how uncertainty is reported.
+
+## Simple defaults, optional power
+
+Zelyra keeps the first project small. Advanced project surfaces are optional:
+durable feature choices belong in `zelyra.toml`, while environment-specific
+overrides belong in `.env` or in the process environment. Existing projects
+need no additional section; the current safe defaults keep web, API, CRUD,
+authentication, and audit declarations enabled.
+
+For example:
+
+~~~toml
+[features]
+api = false
+crud = false
+~~~
+
+The corresponding non-secret environment overrides are
+`ZELYRA_FEATURE_WEB`, `ZELYRA_FEATURE_API`, `ZELYRA_FEATURE_CRUD`,
+`ZELYRA_FEATURE_AUTH`, and `ZELYRA_FEATURE_AUDIT`. Precedence is process
+environment, `.env`, `zelyra.toml`, then defaults. Inspect the effective
+configuration without printing secrets:
+
+~~~bash
+zelyra config main.zyl --format=json
+~~~
+
+Disabled surfaces are rejected by the compiler when the source declares them;
+security checks and capabilities cannot be disabled through this mechanism.
+This is an optional convenience layer, not a requirement for beginners.
+The complete environment and configuration reference is in
+[docs/env.md](docs/env.md) (also available in
+[English](docs/env.en.md)). New settings must be added there before commit.
+
 ## License and implementation
 
 Zelyra is implemented in Rust. Rust is used as the implementation language;
@@ -307,6 +345,15 @@ Named slots may provide escaped, deterministic fallback content. Callers can
 override the named slot explicitly; otherwise the fallback is used.
 See `examples/component_slots.zyl`.
 
+The combined `examples/view_showcase.zyl` example demonstrates the intended
+release path in one small program: a named page shell, typed components,
+default and named slots, and a schema-backed CRUD resource with independently
+customizable list, detail, form, and loading views. Validate it with:
+
+~~~bash
+zelyra check examples/view_showcase.zyl --format=json
+~~~
+
 Search, filtering, sorting, and pagination are already available on generated
 CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 `is_null`; the same controls preserve their state in the URL. For example:
@@ -315,6 +362,11 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 /customers?filter_name__contains=Press
 /customers?filter_quantity__gte=10
 ~~~
+
+Generated search and filter controls use a semantic fieldset and separate
+labels for each operator and value. Filter processing and preserved URL state
+are sorted deterministically, so the same request produces the same control
+and pagination order.
 
 CRUD list presentation can be changed declaratively without replacing the
 checked data or authorization pipeline:
@@ -664,6 +716,11 @@ For SQLite:
 export DATABASE_URL='sqlite:///tmp/my-app.sqlite3'
 zelyra db bootstrap examples/machine_management_sqlite.zyl
 ~~~
+
+The same SQLite path is exercised by `tests/sqlite-e2e.sh`: it bootstraps a
+temporary database, inspects the schema, verifies an idempotent plan, and
+checks the generated foreign-key metadata. It never uses application data or
+credentials from the host environment.
 
 Do not commit real credentials. Use environment variables or a secret manager.
 The examples use MariaDB first because it is the default project backend.
