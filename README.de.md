@@ -930,6 +930,9 @@ Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft die
 Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte einschließlich
 getrennter Create-, Edit- und Delete-Berechtigungen sowie einer geschützten
 eigenen Formularaktion.
+Der Test für den generierten Business-Starter prüft außerdem
+`zelyra doctor --json`, OpenAPI 3.0.3 und den generierten TypeScript-Client,
+bevor der geschützte Anwendungsablauf ausgeführt wird.
 Der Chain-Audit-Test aus `tests/mariadb-audit-chain-e2e.sh` prüft
 transaktionale Hash-Anhänge, Manipulationserkennung und die sichere Ablehnung
 des Bereinigens.
