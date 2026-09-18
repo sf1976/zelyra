@@ -42,3 +42,26 @@ versionierte Vorschauen für semantische Umbenennungen sind als erste Stufen
 implementiert. Typed Holes in
 Deklarationskontexten, vollständige Laufzeit-/Schema-Wirkungsanalyse,
 umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.
+
+## Typisiertes Laden von Seitendaten
+
+Seiten können einen oder mehrere explizite Datensätze über die native
+SQL-Grenze laden:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+Der Compiler prüft die Abfrage gegen das deklarierte Schema, stellt
+Routenparameter als typisierte SQL-Parameter bereit und validiert
+Record-Feldinterpolationen. Zur Laufzeit werden Autorisierung und die
+`Database`-Capability vor der Abfrage geprüft. Ergebnisse werden mit
+HTML-Escaping gerendert; fehlende Pflichtdatensätze und Datenbankfehler
+erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben. Das
+Laden von Collections, Option-aware Feld-Ausdrücke und reichere lokale
+View-Daten bleiben geplant.

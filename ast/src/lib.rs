@@ -102,8 +102,17 @@ pub struct PageDef {
     pub path: String,
     pub html: String,
     pub view: Option<String>,
+    pub data: Vec<PageDataDef>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageDataDef {
+    pub name: String,
+    pub result_type: Type,
+    pub query: String,
     pub span: Span,
 }
 

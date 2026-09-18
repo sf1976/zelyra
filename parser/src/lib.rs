@@ -772,6 +772,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
         let mut view = None;
+        let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         self.skip_newlines();
@@ -780,6 +781,21 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after `view`")?;
                 view = Some(self.ident("view name")?.0);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "load") {
+                let load_start = self.advance().span;
+                let (name, _) = self.ident("page data name")?;
+                self.expect(TokenKind::Equal, "`=` after page data name")?;
+                let sql_start = self.expect(TokenKind::Sql, "`sql` after page data name")?;
+                let expression = self.sql_expression(sql_start)?;
+                let ExprKind::Sql { result_type, query } = expression.kind else {
+                    return self.error("page data must use a SQL query");
+                };
+                data.push(PageDataDef {
+                    name,
+                    result_type,
+                    query,
+                    span: load_start.join(expression.span),
+                });
             } else if self.at(&TokenKind::Html) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `html`")?;
@@ -800,7 +816,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `html` in page definition");
+                return self.error("expected `load`, `html`, `view`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -812,6 +828,7 @@ impl<'a> Parser<'a> {
             path,
             html,
             view,
+            data,
             requires_auth,
             permissions,
             span: start.join(end),
@@ -2224,6 +2241,30 @@ mod tests {
         assert_eq!(program.pages.len(), 1);
         assert_eq!(program.pages[0].path, "/hello/{name}");
         assert!(program.pages[0].html.contains("{name}"));
+    }
+
+    #[test]
+    fn parses_typed_page_data_loading() {
+        let source = r#"
+            page "/customers/{name}" {
+                load customer = sql<Customer> {
+                    SELECT id, name FROM customers WHERE name = :name
+                }
+                html {
+                    <h1>{customer.name}</h1>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].data.len(), 1);
+        assert_eq!(program.pages[0].data[0].name, "customer");
+        assert_eq!(
+            program.pages[0].data[0].result_type,
+            Type::Named("Customer".into())
+        );
+        assert!(program.pages[0].data[0]
+            .query
+            .contains("WHERE name = :name"));
     }
 
     #[test]

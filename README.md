@@ -346,9 +346,23 @@ page "/dashboard" {
 
 View interpolations are checked before the server starts. A page can use its
 route parameters, a component can use its declared properties, and a dynamic
-component property must have a compatible type. Unknown values and unsupported
-expressions receive stable `E-VIEW-*` diagnostics. Field access, option-aware
-expressions, and view-local database data remain planned.
+component property must have a compatible type. A page can also load one
+typed record explicitly and use checked field access:
+
+~~~zelyra
+page "/customers/{name}" {
+    load customer = sql<Customer> {
+        SELECT id, name FROM customers WHERE name = :name
+    }
+    html { <h1>{customer.name}</h1> }
+}
+~~~
+
+The SQL is checked against the schema, route parameters are bound safely, and
+the route's authentication, permissions, and `Database` capability are
+enforced before the query runs. Loaded values are HTML-escaped. Optional
+field-aware expressions and richer view data remain planned. See
+`examples/view_data.zyl`.
 
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components
@@ -584,8 +598,8 @@ verify` checks both links and hashes. Pruning is refused for chained logs
 because deleting entries would break the chain.
 
 The first typed slice of the unified view data pipeline is now available on
-`tableview` routes; applying the same operations to arbitrary views remains
-planned.
+`tableview` routes and explicit page-local record loads. Applying collection
+operations and richer data composition to arbitrary views remains planned.
 
 Standalone typed table views can already expose a checked MariaDB query. Their
 result may be a declared table type or a dedicated `struct` for joins and
