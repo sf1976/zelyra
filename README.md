@@ -435,6 +435,12 @@ Delete then sets the timestamp instead of removing the row. The generated
 offers a CSRF-protected `restore` action. Permanent deletion, retention rules,
 and bulk archive operations remain planned.
 
+When an `auth` definition declares an `audit` table, generated CRUD mutations
+also write audit events in the same MariaDB transaction. Create, update, delete,
+archive, restore, and custom actions record the actor, operation, table, target
+record, and field-level changes. Passwords, tokens, secrets, and hashes are
+redacted from change details.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

@@ -34,6 +34,10 @@ compiler and repository release.
 - Added reversible CRUD soft deletion with schema-validated timestamp columns,
   archived list/detail views, and CSRF-protected restore actions. Soft-delete
   markers are excluded from generated forms and default list/filter columns.
+- Added audit-aware CRUD mutation events for generated forms, delete/archive,
+  restore, and custom actions. Events include actor and record context plus
+  field-level changes with sensitive-value redaction and share the mutation
+  transaction.
 - Added CRUD loading metadata and safe configurable error views. Error messages
   remain escaped and generic database details are not exposed; loading metadata
   is suitable for progressive enhancement.

@@ -349,6 +349,8 @@ primary_create_submit_status="$(request_status "${temp_dir}/primary-create-submi
 [[ "${primary_create_submit_status}" == "303" ]]
 created_customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${created_customer_name}'")"
 [[ -n "${created_customer_id}" ]]
+crud_create_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'crud.create' AND target_user_id IS NULL AND details = 'table=customers;operation=crud.create;record_id=<unknown>;changes=name=set'")"
+[[ "${crud_create_audit_count}" == "1" ]]
 
 primary_edit_status="$(request_status "${temp_dir}/primary-edit.html" \
     --cookie "${primary_cookie}" \
@@ -364,6 +366,8 @@ primary_edit_submit_status="$(request_status "${temp_dir}/primary-edit-submit.ht
 [[ "${primary_edit_submit_status}" == "303" ]]
 edited_customer_id="$(client --batch --skip-column-names -e "SELECT id FROM customers WHERE name = '${edited_customer_name}'")"
 [[ "${edited_customer_id}" == "${created_customer_id}" ]]
+crud_update_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'crud.update' AND target_user_id = '${created_customer_id}' AND details = 'table=customers;operation=crud.update;record_id=${created_customer_id};changes=name:${created_customer_name}->${edited_customer_name}'")"
+[[ "${crud_update_audit_count}" == "1" ]]
 
 echo "[6/10] denying a logged-in user without the CRUD/API permission"
 secondary_cookie="${temp_dir}/secondary.cookies"
@@ -466,6 +470,8 @@ primary_delete_status="$(request_status "${temp_dir}/primary-delete.html" \
 [[ "${primary_delete_status}" == "303" ]]
 remaining_created="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM customers WHERE id = '${created_customer_id}'")"
 [[ "${remaining_created}" == "0" ]]
+crud_delete_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'crud.delete' AND target_user_id = '${created_customer_id}' AND details = 'table=customers;operation=crud.delete;record_id=${created_customer_id}'")"
+[[ "${crud_delete_audit_count}" == "1" ]]
 
 echo "[10/10] protected-resource E2E cleanup completed"
 echo "MariaDB protected CRUD/API E2E passed"

@@ -641,6 +641,12 @@ detail view provides a CSRF-protected restore action. The marker is omitted
 from generated forms and default list/filter columns. Permanent purge and
 retention policies are still planned.
 
+If the project also declares an authentication audit table, generated CRUD
+mutations append audit events in the same MariaDB transaction. Create, update,
+delete, archive, restore, and custom actions record the actor, operation, table,
+target record, and field-level changes. Sensitive values such as passwords,
+tokens, secrets, and hashes are redacted.
+
 Relationship fields such as `department: Department` are rendered as checked
 select fields. Zelyra loads their labels from the referenced MariaDB table,
 submits the stored ID, and rejects stale or unknown IDs before executing the

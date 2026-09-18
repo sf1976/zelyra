@@ -171,6 +171,9 @@ noch in Prüfung.
   aktionsspezifische `error_page`-Antworten sind verfügbar.
 - [x] Reversibles CRUD-Soft-Delete mit Archivlisten und CSRF-geschützten
   Wiederherstellungsaktionen.
+- [x] Audit-fähige CRUD-Ereignisse für Erstellen/Ändern/Löschen/Archivieren/
+  Wiederherstellen und eigene Aktionen mit Feldänderungen und Redaction
+  sensibler Werte.
 - [ ] Endgültiges Bereinigen, Aufbewahrungsregeln, Archivexport und
   Massenarchivierungs-Workflows.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.

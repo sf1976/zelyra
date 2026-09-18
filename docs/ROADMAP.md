@@ -171,6 +171,8 @@ under evaluation.
   responses are available.
 - [x] Reversible CRUD soft delete with archived lists and CSRF-protected
   restore actions.
+- [x] Audit-aware CRUD create/update/delete/archive/restore and custom-action
+  events with field-level change details and sensitive-value redaction.
 - [ ] Permanent purge, retention policies, archive export, and bulk archive
   workflows.
 - [ ] Audit-aware CRUD history and field-level change diffs.

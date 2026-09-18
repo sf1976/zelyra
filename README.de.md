@@ -447,6 +447,12 @@ Die Löschaktion setzt dann den Zeitstempel, statt die Zeile zu entfernen.
 bietet eine CSRF-geschützte `restore`-Aktion. Endgültiges Löschen,
 Aufbewahrungsregeln und Massenarchivierung bleiben geplant.
 
+Wenn eine `auth`-Definition eine `audit`-Tabelle angibt, schreiben erzeugte
+CRUD-Mutationen zusätzlich Audit-Ereignisse in derselben MariaDB-Transaktion.
+Erstellen, Ändern, Löschen, Archivieren, Wiederherstellen und eigene Aktionen
+protokollieren Akteur, Operation, Tabelle, Zieldatensatz und Feldänderungen.
+Passwörter, Tokens, Secrets und Hashes werden aus Änderungsdetails entfernt.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

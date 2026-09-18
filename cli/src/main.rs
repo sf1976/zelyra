@@ -3178,6 +3178,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             csrf,
             form_view: zelyra_ast::CrudFormViewDef::default(),
             post_only: false,
+            audit_table: None,
+            audit_event: None,
         });
     }
     for crud in &program.cruds {
@@ -3189,7 +3191,16 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
                 return ExitCode::from(1);
             };
-            form_routes.push(generated_crud_form(crud, table, &schema, edit, csrf));
+            form_routes.push(generated_crud_form(
+                crud,
+                table,
+                &schema,
+                edit,
+                csrf,
+                auth_route
+                    .as_ref()
+                    .and_then(|auth| auth.audit_table.clone()),
+            ));
         }
     }
     let mut crud_routes = Vec::new();
@@ -3238,7 +3249,18 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         let actions = crud
             .actions
             .iter()
-            .map(|action| generated_crud_action(crud, table, &schema, action, csrf.clone()))
+            .map(|action| {
+                generated_crud_action(
+                    crud,
+                    table,
+                    &schema,
+                    action,
+                    csrf.clone(),
+                    auth_route
+                        .as_ref()
+                        .and_then(|auth| auth.audit_table.clone()),
+                )
+            })
             .collect();
         crud_routes.push(CrudRoute {
             path: format!("/{}", crud.table),
@@ -3346,6 +3368,7 @@ fn generated_crud_form(
     schema: &Schema,
     edit: bool,
     csrf: CsrfProtection,
+    audit_table: Option<String>,
 ) -> FormRoute {
     let permissions = if edit {
         effective_crud_permissions(&crud.permissions, &crud.edit_permissions)
@@ -3449,6 +3472,12 @@ fn generated_crud_form(
         csrf,
         form_view: crud.view.form.clone(),
         post_only: false,
+        audit_table,
+        audit_event: Some(if edit {
+            "crud.update".into()
+        } else {
+            "crud.create".into()
+        }),
     }
 }
 
@@ -3458,6 +3487,7 @@ fn generated_crud_action(
     schema: &Schema,
     action: &zelyra_ast::FormAction,
     csrf: CsrfProtection,
+    audit_table: Option<String>,
 ) -> CrudActionRoute {
     let mut permissions = crud.permissions.clone();
     permissions.extend(action.permissions.clone());
@@ -3490,6 +3520,8 @@ fn generated_crud_action(
                 ..zelyra_ast::CrudFormViewDef::default()
             },
             post_only: true,
+            audit_table,
+            audit_event: Some(format!("crud.action.{}", action.name)),
         },
     }
 }

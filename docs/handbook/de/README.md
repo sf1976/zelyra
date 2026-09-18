@@ -704,6 +704,13 @@ sie, und die Detailansicht bietet eine CSRF-geschützte Wiederherstellung. Die
 Markierung wird aus erzeugten Formularen sowie Standardlisten und -filtern
 entfernt. Endgültiges Bereinigen und Aufbewahrungsregeln bleiben geplant.
 
+Wenn das Projekt zusätzlich eine Authentifizierungs-Audit-Tabelle deklariert,
+fügen erzeugte CRUD-Mutationen Audit-Ereignisse in derselben MariaDB-Transaktion
+hinzu. Erstellen, Ändern, Löschen, Archivieren, Wiederherstellen und eigene
+Aktionen protokollieren Akteur, Operation, Tabelle, Zieldatensatz und
+Feldänderungen. Sensible Werte wie Passwörter, Tokens, Secrets und Hashes werden
+entfernt.
+
 Beziehungsfelder wie `department: Department` werden als geprüfte
 Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der
 referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt veraltete

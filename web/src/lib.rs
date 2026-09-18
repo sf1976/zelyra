@@ -260,6 +260,8 @@ pub struct FormRoute {
     pub csrf: CsrfProtection,
     pub form_view: CrudFormViewDef,
     pub post_only: bool,
+    pub audit_table: Option<String>,
+    pub audit_event: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -519,7 +521,14 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_form(form, request, &path_params, self.database_url.as_deref());
+                return dispatch_form(
+                    form,
+                    request,
+                    &path_params,
+                    self.database_url.as_deref(),
+                    session_from_request(self, request, self.database_url.as_deref())
+                        .and_then(|session| session.user_id),
+                );
             }
         }
         for crud in &self.cruds {
@@ -563,6 +572,8 @@ impl WebApp {
                         request,
                         &path_params,
                         self.database_url.as_deref(),
+                        session_from_request(self, request, self.database_url.as_deref())
+                            .and_then(|session| session.user_id),
                     );
                 }
             }
@@ -585,6 +596,11 @@ impl WebApp {
                     request,
                     &path_params,
                     self.database_url.as_deref(),
+                    self.auth_route
+                        .as_ref()
+                        .and_then(|auth| auth.audit_table.as_deref()),
+                    session_from_request(self, request, self.database_url.as_deref())
+                        .and_then(|session| session.user_id),
                 );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
@@ -606,6 +622,11 @@ impl WebApp {
                     request,
                     &path_params,
                     self.database_url.as_deref(),
+                    self.auth_route
+                        .as_ref()
+                        .and_then(|auth| auth.audit_table.as_deref()),
+                    session_from_request(self, request, self.database_url.as_deref())
+                        .and_then(|session| session.user_id),
                 );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
@@ -1283,6 +1304,112 @@ fn execute_auth_admin_mutation(
     }
     zelyra_database::execute_mariadb_queries(database_url, &queries, true)
         .map(|_| zelyra_database::QueryResult::default())
+}
+
+fn audit_insert_query(
+    audit_table: &str,
+    actor_user_id: Option<i64>,
+    event: &str,
+    target_record_id: Option<i64>,
+    details: &str,
+) -> zelyra_database::Query {
+    let details = details.chars().take(1000).collect::<String>();
+    zelyra_database::Query {
+        sql: format!(
+            "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
+            quote_identifier(audit_table)
+        ),
+        params: vec![
+            (
+                "actor_user_id".into(),
+                actor_user_id
+                    .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
+            ),
+            (
+                "event".into(),
+                zelyra_database::QueryValue::String(event.into()),
+            ),
+            (
+                "target_user_id".into(),
+                target_record_id
+                    .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
+            ),
+            ("details".into(), zelyra_database::QueryValue::String(details)),
+        ],
+    }
+}
+
+fn audit_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            ';' | '\n' | '\r' => ' ',
+            character => character,
+        })
+        .collect()
+}
+
+fn audit_sensitive_field(field: &str) -> bool {
+    let field = field.to_ascii_lowercase();
+    ["password", "token", "secret", "hash"]
+        .iter()
+        .any(|marker| field.contains(marker))
+}
+
+fn form_audit_details(
+    form: &FormRoute,
+    event: &str,
+    path_params: &HashMap<String, String>,
+    before_values: Option<&HashMap<String, String>>,
+    values: &HashMap<String, String>,
+) -> (Option<i64>, String) {
+    let record_id = path_params
+        .get("id")
+        .and_then(|value| value.parse::<i64>().ok());
+    let changes = form
+        .form
+        .fields
+        .iter()
+        .filter_map(|field| {
+            let before = before_values.and_then(|values| values.get(&field.name));
+            let after = values.get(&field.name);
+            if event == "crud.create" {
+                return after.map(|_| format!("{}=set", field.name));
+            }
+            if before == after {
+                return None;
+            }
+            if audit_sensitive_field(&field.name) {
+                return Some(format!("{}=changed", field.name));
+            }
+            Some(format!(
+                "{}:{}->{}",
+                field.name,
+                before.map_or("<none>", String::as_str),
+                after.map_or("<none>", String::as_str)
+            ))
+        })
+        .map(|change| audit_component(&change))
+        .collect::<Vec<_>>();
+    let table = form
+        .table
+        .as_ref()
+        .map_or("unknown", |table| table.name.as_str());
+    let changes = if changes.is_empty() {
+        "none".into()
+    } else {
+        changes.join(",")
+    };
+    (
+        record_id,
+        format!(
+            "table={};operation={};record_id={};changes={}",
+            audit_component(table),
+            audit_component(event),
+            record_id.map_or_else(|| "<unknown>".into(), |id| id.to_string()),
+            changes
+        ),
+    )
 }
 
 fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdminData, String> {
@@ -2324,6 +2451,7 @@ fn dispatch_form(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+    actor_user_id: Option<i64>,
 ) -> Response {
     let confirmation_view = form
         .form
@@ -2423,7 +2551,27 @@ fn dispatch_form(
                 "DATABASE_URL is required for this form action.",
             );
         };
-        if let Err(error) = execute_form_action(form, action, &values, path_params, database_url) {
+        let before_values = if form.audit_table.is_some()
+            && form
+                .audit_event
+                .as_deref()
+                .is_some_and(|event| event == "crud.update" || event.starts_with("crud.action."))
+        {
+            load_existing_form_values(form, path_params, Some(database_url))
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+        if let Err(error) = execute_form_action(
+            form,
+            action,
+            &values,
+            path_params,
+            database_url,
+            actor_user_id,
+            before_values.as_ref(),
+        ) {
             eprintln!("zelyra web: form action failed: {error}");
             return action_error_response(
                 action,
@@ -3712,6 +3860,8 @@ fn dispatch_crud_delete(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+    audit_table: Option<&str>,
+    actor_user_id: Option<i64>,
 ) -> Response {
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -3763,14 +3913,31 @@ fn dispatch_crud_delete(
             "Record deleted.",
         )
     };
-    if let Err(error) = zelyra_database::execute_mariadb_queries(
-        database_url,
-        &[zelyra_database::Query {
-            sql: query,
-            params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
-        }],
-        true,
-    ) {
+    let event = if crud.soft_delete.is_some() {
+        "crud.archive"
+    } else {
+        "crud.delete"
+    };
+    let details = format!(
+        "table={};operation={};record_id={}",
+        audit_component(&crud.table),
+        event,
+        id
+    );
+    let mut queries = vec![zelyra_database::Query {
+        sql: query,
+        params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+    }];
+    if let Some(audit_table) = audit_table {
+        queries.push(audit_insert_query(
+            audit_table,
+            actor_user_id,
+            event,
+            Some(id),
+            &details,
+        ));
+    }
+    if let Err(error) = zelyra_database::execute_mariadb_queries(database_url, &queries, true) {
         eprintln!("zelyra web: CRUD delete failed: {error}");
         return crud_error_response(
             crud,
@@ -3791,6 +3958,8 @@ fn dispatch_crud_restore(
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+    audit_table: Option<&str>,
+    actor_user_id: Option<i64>,
 ) -> Response {
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -3831,14 +4000,25 @@ fn dispatch_crud_restore(
         quote_identifier("id"),
         quote_identifier(&soft_delete.column)
     );
-    if let Err(error) = zelyra_database::execute_mariadb_queries(
-        database_url,
-        &[zelyra_database::Query {
-            sql: query,
-            params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
-        }],
-        true,
-    ) {
+    let details = format!(
+        "table={};operation=crud.restore;record_id={}",
+        audit_component(&crud.table),
+        id
+    );
+    let mut queries = vec![zelyra_database::Query {
+        sql: query,
+        params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+    }];
+    if let Some(audit_table) = audit_table {
+        queries.push(audit_insert_query(
+            audit_table,
+            actor_user_id,
+            "crud.restore",
+            Some(id),
+            &details,
+        ));
+    }
+    if let Err(error) = zelyra_database::execute_mariadb_queries(database_url, &queries, true) {
         eprintln!("zelyra web: CRUD restore failed: {error}");
         return crud_error_response(
             crud,
@@ -4843,6 +5023,8 @@ fn execute_form_action(
     values: &HashMap<String, String>,
     path_params: &HashMap<String, String>,
     database_url: &str,
+    actor_user_id: Option<i64>,
+    before_values: Option<&HashMap<String, String>>,
 ) -> Result<(), String> {
     let mut parameters = form_query_parameters(form, values)?;
     for (name, value) in path_params {
@@ -4868,6 +5050,19 @@ fn execute_form_action(
     }
     if queries.is_empty() {
         return Err("form action must contain at least one SQL statement".into());
+    }
+    if let (Some(audit_table), Some(audit_event)) =
+        (form.audit_table.as_deref(), form.audit_event.as_deref())
+    {
+        let (record_id, details) =
+            form_audit_details(form, audit_event, path_params, before_values, values);
+        queries.push(audit_insert_query(
+            audit_table,
+            actor_user_id,
+            audit_event,
+            record_id,
+            &details,
+        ));
     }
     zelyra_database::execute_mariadb_queries(database_url, &queries, true)
         .map(|_| ())
@@ -5375,6 +5570,8 @@ mod tests {
             csrf: CsrfProtection::new("csrf-token"),
             form_view: CrudFormViewDef::default(),
             post_only: false,
+            audit_table: None,
+            audit_event: None,
         }
     }
 
@@ -5438,6 +5635,45 @@ mod tests {
             }],
         });
         route
+    }
+
+    #[test]
+    fn formats_crud_audit_changes_without_exposing_sensitive_values() {
+        let mut route = form_route();
+        route.table = Some(zelyra_ast::TableDef {
+            name: "customers".into(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+            span: zelyra_ast::Span::default(),
+        });
+        route.form.fields.push(zelyra_ast::FormField {
+            name: "password".into(),
+            ty: Some(Type::String),
+            label: None,
+            placeholder: None,
+            required: false,
+            max: None,
+            widget: None,
+            readonly: false,
+            span: zelyra_ast::Span::default(),
+        });
+        let before = HashMap::from([
+            ("name".into(), "Old customer".into()),
+            ("password".into(), "old-secret".into()),
+        ]);
+        let after = HashMap::from([
+            ("name".into(), "New customer".into()),
+            ("password".into(), "new-secret".into()),
+        ]);
+        let path_params = HashMap::from([(String::from("id"), String::from("7"))]);
+        let (record_id, details) =
+            form_audit_details(&route, "crud.update", &path_params, Some(&before), &after);
+        assert_eq!(record_id, Some(7));
+        assert!(details.contains("name:Old customer->New customer"));
+        assert!(details.contains("password=changed"));
+        assert!(!details.contains("old-secret"));
+        assert!(!details.contains("new-secret"));
     }
 
     #[test]
@@ -5750,7 +5986,7 @@ mod tests {
         let mut post_only_route = route.clone();
         post_only_route.post_only = true;
         let get_request = parse_request("GET /forms/action HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None);
+        let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None, None);
         assert_eq!(response.status, 405);
     }
 

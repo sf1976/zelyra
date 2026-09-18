@@ -86,9 +86,13 @@ protection and the declared permission guard.
 An administrative password reset changes the password and atomically removes
 all persistent sessions belonging to that user.
 
-With `audit: auth_audit_log`, login, logout, password, user, role, and
-permission events are written to an append-only table. It requires the columns
-`actor_user_id`, `event`, `target_user_id`, `details`, and `created_at`.
+With `audit: auth_audit_log`, login, logout, password, user, role, permission,
+and generated CRUD events are written to an append-only table. CRUD create,
+update, delete, soft-delete/archive, restore, and custom actions use the same
+MariaDB transaction and record the actor, table, operation, target record, and
+field-level changes. Passwords, tokens, secrets, and hashes are redacted from
+change details. It requires the columns `actor_user_id`, `event`,
+`target_user_id`, `details`, and `created_at`.
 `actor_user_id` is nullable for authentication without a database session and
 for CLI role changes; CLI entries identify themselves with `source=cli` in
 `details`. `target_user_id` can also be empty for user creation because the

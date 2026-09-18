@@ -92,8 +92,12 @@ Ein administrativer Passwort-Reset ändert das Passwort und entfernt in einer
 Transaktion alle persistenten Sessions des betroffenen Benutzers.
 
 Mit `audit: auth_audit_log` werden Login-, Logout-, Passwort-, Benutzer-,
-Rollen- und Berechtigungsereignisse in eine append-only Tabelle geschrieben.
-Sie benötigt die Spalten
+Rollen-, Berechtigungs- und erzeugte CRUD-Ereignisse in eine append-only
+Tabelle geschrieben. CRUD-Erstellen, Ändern, Löschen, Soft Delete/Archivieren,
+Wiederherstellen und eigene Aktionen verwenden dieselbe MariaDB-Transaktion und
+protokollieren Akteur, Tabelle, Operation, Zieldatensatz und Feldänderungen.
+Passwörter, Tokens, Secrets und Hashes werden aus Änderungsdetails entfernt.
+Die Tabelle benötigt die Spalten
 `actor_user_id`, `event`, `target_user_id`, `details` und `created_at`.
 `actor_user_id` ist bei einer nicht sitzungsgebundenen Authentifizierung und
 bei CLI-Rollenänderungen nullable; CLI-Einträge sind in `details` mit
