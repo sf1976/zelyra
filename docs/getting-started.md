@@ -110,8 +110,8 @@ For the easiest source installation you need:
 The installers build Zelyra for the current user and do not use sudo or
 administrator privileges. They install Rust automatically when it is missing.
 The source installers still need an internet connection for the first toolchain
-installation. A standalone release installer for users who do not want Rust is
-still planned.
+installation. Published Linux x86_64 and Windows x86_64 releases can be
+installed without Rust or Cargo.
 
 Apache is not required. A database server is not required for the language
 core, web, and local form examples. MariaDB is needed only when you want to
@@ -149,6 +149,14 @@ installation directory. Use `--offline` when the required Rust dependencies
 are already cached. A broken or stale `cargo` PATH entry is detected and never
 executed as if it were a real compiler.
 
+To install a published release without Rust on Linux x86_64, pass its exact
+tag. The installer downloads the matching archive over HTTPS and verifies its
+SHA-256 checksum before replacing the executable atomically:
+
+~~~bash
+./install.sh --release v0.1.38
+~~~
+
 On Windows, use PowerShell from the repository directory:
 
 ~~~powershell
@@ -166,18 +174,22 @@ Set-ExecutionPolicy -Scope Process Bypass
 The Windows installer uses the current user's `%LOCALAPPDATA%\Zelyra\bin`
 directory and updates the user PATH. No administrator password is required.
 
+On Windows x86_64, use the matching PowerShell option:
+
+~~~powershell
+.\install.ps1 -Release v0.1.38
+~~~
+
 The script builds the CLI in locked release mode and installs it at:
 
 ~~~text
 ~/.local/bin/zelyra
 ~~~
 
-For users who do not want to install Rust, alpha and future stable releases
-provide prebuilt Linux and Windows archives on the [GitHub Releases
-page](https://github.com/sf1976/zelyra/releases). Download the archive for
-your platform, verify its `.sha256` file, extract it, and place `zelyra` (or
-`zelyra.exe`) on your user PATH. The archive includes the CLI, both language
-README files, and the license notices.
+The release mode currently supports Linux x86_64 and Windows x86_64. macOS
+continues to use the source installer until a native release target is
+published. The archives include the CLI, both language README files, and the
+license notices.
 
 If the shell cannot find zelyra, add the directory to PATH for the current
 shell:

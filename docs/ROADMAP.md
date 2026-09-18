@@ -67,11 +67,14 @@ architecture requirement for every phase, not a provider-specific feature.
 ## 1. Beginner experience and distribution
 
 - [~] One-command source installation for Linux, Windows, and macOS is
-  available with user-local, repeatable Bash/PowerShell installers; standalone
-  release installation remains.
-- [ ] Signed release binaries and checksums for every supported platform.
+  available with user-local, repeatable Bash/PowerShell installers; Rust-free
+  release installation is available for published Linux/Windows x86_64 assets.
+- [~] Release archives with SHA-256 checksums are available for Linux and
+  Windows x86_64; signed binaries and checksums for every supported platform
+  remain.
 - [~] Source install/check/update/uninstall scripts with dry-run and safe
-  diagnostics are available; installers without Rust or Cargo remain.
+  diagnostics are available; Rust-free release mode covers published x86_64
+  assets.
 - [ ] First-run wizard for project creation, MariaDB connection, secrets, and
   selectable web port.
 - [ ] Clear Docker Compose templates for MariaDB and the internal web server,

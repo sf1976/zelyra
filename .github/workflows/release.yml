@@ -32,7 +32,9 @@ jobs:
       - name: Validate Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\install.ps1 -DryRun -NoRustup -NoPath
+        run: |
+          .\install.ps1 -DryRun -NoRustup -NoPath
+          .\install.ps1 -DryRun -Release v0.1.38 -NoPath
       - name: Build release binary
         run: cargo build --release --package zelyra-cli --target ${{ matrix.target }}
       - name: Package Linux release

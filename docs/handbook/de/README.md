@@ -116,6 +116,17 @@ Mit `--no-rustup` wird die automatische Rust-Installation deaktiviert,
 `ZELYRA_INSTALL_ROOT` lässt sich ein anderes benutzerbezogenes Ziel wählen.
 Veraltete `cargo`-PATH-Einträge werden erkannt und nicht blind ausgeführt.
 
+Veröffentlichte Releases für Linux x86_64 und Windows x86_64 können ohne Rust
+oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
+per SHA-256 geprüft:
+
+~~~bash
+./install.sh --release v0.1.38
+~~~
+
+Unter Windows in PowerShell `-Release v0.1.38` mit `install.ps1` verwenden.
+macOS nutzt derzeit weiterhin den Quellcode-Installer.
+
 Wenn die Shell `zelyra` nicht findet:
 
 ~~~bash

@@ -195,8 +195,11 @@ The installer builds Zelyra reproducibly for the current user and installs the
 executable in the user-local bin directory. It does not require sudo, a global
 Rust installation, Apache, or a database server for the language-core
 examples. Use `./install.sh --help` for dry-run, check, custom-root,
-no-rustup, and uninstall options; stale `cargo` PATH entries are rejected
+no-rustup, offline, release, and uninstall options; stale `cargo` PATH entries are rejected
 instead of being executed blindly.
+Published Linux x86_64 and Windows x86_64 releases can be installed without
+Rust with `./install.sh --release TAG` or `install.ps1 -Release TAG`; the
+matching SHA-256 checksum is verified before installation.
 On Windows, run `install.ps1` in PowerShell or use `install.cmd`; it installs
 to the user's local application directory and updates the user PATH without
 administrator privileges.

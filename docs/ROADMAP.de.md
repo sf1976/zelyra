@@ -74,11 +74,14 @@ Feature eines bestimmten Anbieters.
 
 - [~] Eine Ein-Befehl-Quellcodeinstallation für Linux, Windows und macOS ist
   mit benutzerlokalen, wiederholbaren Bash-/PowerShell-Installern verfügbar;
-  eine eigenständige Release-Installation bleibt offen.
-- [ ] Signierte Release-Binaries und Checksums für jede unterstützte Plattform.
+  eine Rust-freie Release-Installation ist für veröffentlichte Linux-/Windows-
+  x86_64-Assets verfügbar.
+- [~] Release-Archive mit SHA-256-Checksums sind für Linux und Windows x86_64
+  verfügbar; signierte Binaries und Checksums für jede unterstützte Plattform
+  bleiben offen.
 - [~] Quellcode-Installer mit Prüfung, Update, Deinstallation, Dry-Run und
-  sicheren Diagnosen sind verfügbar; Installer ohne Rust oder Cargo bleiben
-  offen.
+  sicheren Diagnosen sind verfügbar; der Rust-freie Release-Modus deckt
+  veröffentlichte x86_64-Assets ab.
 - [ ] First-Run-Assistent für Projekt, MariaDB, Secrets und Webserver-Port.
 - [ ] Verständliche Docker-Compose-Vorlagen für MariaDB und internen Webserver
   mit konfigurierbaren Host- und Container-Ports.

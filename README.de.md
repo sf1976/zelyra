@@ -202,11 +202,14 @@ Der Installer baut Zelyra reproduzierbar für den aktuellen Benutzer und
 installiert das Programm in einem benutzerlokalen bin-Verzeichnis. Er benötigt
 weder sudo, eine globale Rust-Installation, Apache noch einen Datenbankserver
 für die Sprachkern-Beispiele. `./install.sh --help` zeigt Dry-Run-, Prüf-,
-Zielordner-, No-Rustup- und Deinstallationsoptionen; veraltete `cargo`-PATH-
-Einträge werden abgelehnt statt blind ausgeführt. Unter Windows `install.ps1` in
-PowerShell oder `install.cmd` verwenden; der Installer nutzt das lokale
-Benutzerverzeichnis
-und aktualisiert den Benutzer-PATH ohne Administratorrechte.
+Zielordner-, No-Rustup-, Offline-, Release- und Deinstallationsoptionen; veraltete
+`cargo`-PATH-Einträge werden abgelehnt statt blind ausgeführt. Veröffentlichte
+Linux-x86_64- und Windows-x86_64-Releases können mit
+`./install.sh --release TAG` beziehungsweise `install.ps1 -Release TAG` ohne
+Rust installiert werden; die passende SHA-256-Checksumme wird vor der
+Installation geprüft. Unter Windows `install.ps1` in PowerShell oder
+`install.cmd` verwenden; der Installer aktualisiert den Benutzer-PATH ohne
+Administratorrechte.
 
 Eine Quelldatei direkt aus dem Repository ausführen:
 

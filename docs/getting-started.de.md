@@ -183,12 +183,25 @@ Release-Modus und installiert sie unter:
 ~/.local/bin/zelyra
 ~~~
 
-Für Nutzer, die Rust nicht installieren möchten, stellen Alpha- und spätere
-stabile Releases vorgefertigte Linux- und Windows-Archive auf der
-[GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases) bereit. Das
-passende Archiv herunterladen, die `.sha256`-Datei prüfen, entpacken und
-`zelyra` beziehungsweise `zelyra.exe` in den Benutzer-PATH legen. Das Archiv
-enthält die CLI, beide README-Sprachen und die Lizenzhinweise.
+Für veröffentlichte Linux-x86_64- und Windows-x86_64-Releases ist keine
+Rust- oder Cargo-Installation nötig. Unter Linux den exakten Tag angeben; das
+passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
+ausgetauscht:
+
+~~~bash
+./install.sh --release v0.1.38
+~~~
+
+Unter Windows:
+
+~~~powershell
+.\install.ps1 -Release v0.1.38
+~~~
+
+Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS
+verwendet weiterhin den Quellcode-Installer, bis ein natives Release-Ziel
+veröffentlicht ist. Die Archive enthalten die CLI, beide README-Sprachen und
+die Lizenzhinweise.
 
 Falls die Shell zelyra nicht findet, das Verzeichnis für die aktuelle Shell
 zum PATH hinzufügen:

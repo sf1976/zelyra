@@ -8,6 +8,7 @@ readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly DEFAULT_INSTALL_ROOT="${HOME}/.local"
 
 install_root="${ZELYRA_INSTALL_ROOT:-${DEFAULT_INSTALL_ROOT}}"
+release_tag=""
 auto_rustup=1
 update_path=1
 dry_run=0
@@ -17,6 +18,7 @@ check_only=0
 
 usable_cargo() {
     local candidate
+    hash -r 2>/dev/null || true
     candidate="$(command -v cargo 2>/dev/null || true)"
     [[ -n "$candidate" && -x "$candidate" ]] || return 1
     printf '%s\n' "$candidate"
@@ -29,11 +31,12 @@ Zelyra source installer
 Usage:
   ./install.sh [options]
 
-Builds the CLI from this checkout and installs it for the current user.
-No sudo or administrator privileges are used.
+Builds the CLI from this checkout, or installs a published release, for the
+current user. No sudo or administrator privileges are used.
 
 Options:
   --root PATH       Install below PATH (default: ~/.local)
+  --release TAG     Install a published Linux x86_64 release without Rust
   --no-rustup       Fail instead of installing Rust when cargo is missing
   --no-path         Do not print PATH guidance
   --offline         Do not access the network during cargo install
@@ -96,6 +99,16 @@ parse_args() {
                 install_root="${1#*=}"
                 shift
                 ;;
+            --release)
+                (($# >= 2)) || die "--release requires a tag"
+                release_tag="$2"
+                shift 2
+                ;;
+            --release=*)
+                release_tag="${1#*=}"
+                [[ -n "$release_tag" ]] || die "--release requires a tag"
+                shift
+                ;;
             --no-rustup)
                 auto_rustup=0
                 shift
@@ -138,6 +151,88 @@ parse_args() {
 validate_checkout() {
     [[ -f "${SCRIPT_DIR}/Cargo.toml" ]] || die "Cargo.toml not found in ${SCRIPT_DIR}"
     [[ -f "${SCRIPT_DIR}/cli/Cargo.toml" ]] || die "CLI package not found in ${SCRIPT_DIR}/cli"
+}
+
+validate_release_tag() {
+    [[ -n "$release_tag" ]] || return 0
+    [[ "$release_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
+        die "release tag contains unsupported characters: ${release_tag}"
+}
+
+release_target() {
+    local system machine
+    system="$(uname -s)"
+    machine="$(uname -m)"
+    if [[ "$system" == "Linux" && ( "$machine" == "x86_64" || "$machine" == "amd64" ) ]]; then
+        printf '%s\n' 'x86_64-unknown-linux-gnu'
+        return 0
+    fi
+    die "prebuilt releases currently support Linux x86_64 only; use the source installer on ${system}/${machine}"
+}
+
+verify_checksum() {
+    local checksum_file="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd -- "$(dirname -- "$checksum_file")" && sha256sum --check --strict "$(basename -- "$checksum_file")")
+    elif command -v shasum >/dev/null 2>&1; then
+        (cd -- "$(dirname -- "$checksum_file")" && shasum -a 256 --check "$(basename -- "$checksum_file")")
+    else
+        die "sha256sum or shasum is required to verify release downloads"
+    fi
+}
+
+install_release() {
+    local target archive_name checksum_name base_url temp_dir archive checksum extract_dir
+    local binary_count binary temp_binary
+    local -a binaries=()
+    target="$(release_target)"
+    archive_name="zelyra-${release_tag}-${target}.tar.gz"
+    checksum_name="${archive_name}.sha256"
+    base_url="https://github.com/sf1976/zelyra/releases/download/${release_tag}"
+
+    if ((dry_run)); then
+        printf '+ download %s/%s\n' "$base_url" "$archive_name"
+        printf '+ verify SHA-256 with %s\n' "${checksum_name}"
+        printf '+ install verified %s to %s\n' "$target" "$(installed_binary)"
+        return 0
+    fi
+
+    command -v curl >/dev/null 2>&1 || die "curl is required for release installation"
+    command -v tar >/dev/null 2>&1 || die "tar is required for release installation"
+
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "${temp_dir:-}"' EXIT
+    archive="${temp_dir}/${archive_name}"
+    checksum="${temp_dir}/${checksum_name}"
+    extract_dir="${temp_dir}/extract"
+    mkdir -- "$extract_dir"
+
+    curl --fail --silent --show-error --location \
+        --proto '=https' --tlsv1.2 \
+        "${base_url}/${archive_name}" --output "$archive"
+    curl --fail --silent --show-error --location \
+        --proto '=https' --tlsv1.2 \
+        "${base_url}/${checksum_name}" --output "$checksum"
+    verify_checksum "$checksum"
+
+    while IFS= read -r entry; do
+        [[ "$entry" != /* && ! "$entry" =~ (^|/)\.\.(\/|$) ]] ||
+            die "release archive contains an unsafe path: ${entry}"
+    done < <(tar -tzf "$archive")
+    tar -xzf "$archive" -C "$extract_dir"
+
+    mapfile -t binaries < <(find "$extract_dir" -type f -name zelyra -perm -u+x -print)
+    binary_count="${#binaries[@]}"
+    [[ "$binary_count" -eq 1 ]] || die "release archive must contain exactly one executable named zelyra (found ${binary_count})"
+    binary="${binaries[0]}"
+
+    mkdir -p "${install_root}/bin"
+    temp_binary="${install_root}/bin/.zelyra.tmp.$$"
+    cp -- "$binary" "$temp_binary"
+    chmod 0755 "$temp_binary"
+    mv -f -- "$temp_binary" "$(installed_binary)"
+    trap - EXIT
+    rm -rf -- "$temp_dir"
 }
 
 check_installation() {
@@ -220,9 +315,12 @@ print_path_guidance() {
 main() {
     parse_args "$@"
     validate_root
-    validate_checkout
+    validate_release_tag
 
     ((check_only && uninstall)) && die "--check and --uninstall cannot be combined"
+    [[ -z "$release_tag" || "$offline" -eq 0 ]] || die "--offline cannot be combined with --release"
+    [[ -z "$release_tag" || ( "$check_only" -eq 0 && "$uninstall" -eq 0 ) ]] ||
+        die "--release is only valid for an installation"
 
     if ((uninstall)); then
         remove_installation
@@ -233,21 +331,37 @@ main() {
         exit 0
     fi
 
+    if [[ -z "$release_tag" ]]; then
+        validate_checkout
+    fi
+
     printf 'Zelyra installer %s\n' "$INSTALLER_VERSION"
-    printf 'Source:  %s\n' "$SCRIPT_DIR"
+    if [[ -n "$release_tag" ]]; then
+        printf 'Release: %s\n' "$release_tag"
+    else
+        printf 'Source:  %s\n' "$SCRIPT_DIR"
+    fi
     printf 'Target:  %s\n' "$(installed_binary)"
     if ((dry_run)); then
         printf 'Mode:    dry-run\n'
     fi
-    ensure_cargo
-    install_binary
+    if [[ -n "$release_tag" ]]; then
+        install_release
+    else
+        ensure_cargo
+        install_binary
+    fi
     if ((dry_run)); then
         printf 'dry-run complete: no files or toolchains were changed\n'
         exit 0
     fi
     check_installation
     print_path_guidance
-    printf 'Try: zelyra run %q\n' "${SCRIPT_DIR}/examples/fibonacci.zyl"
+    if [[ -f "${SCRIPT_DIR}/examples/fibonacci.zyl" ]]; then
+        printf 'Try: zelyra run %q\n' "${SCRIPT_DIR}/examples/fibonacci.zyl"
+    else
+        printf 'Try: zelyra --help\n'
+    fi
 }
 
 main "$@"

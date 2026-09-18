@@ -94,6 +94,17 @@ silence PATH guidance, or `--root PATH` / `ZELYRA_INSTALL_ROOT` to choose a
 different user-owned target. Stale `cargo` PATH entries are detected instead
 of being executed blindly.
 
+Published Linux x86_64 and Windows x86_64 releases can be installed without
+Rust or Cargo. The installer downloads the selected archive over HTTPS and
+verifies its SHA-256 checksum:
+
+~~~bash
+./install.sh --release v0.1.38
+~~~
+
+On Windows, use `-Release v0.1.38` with `install.ps1` in PowerShell. macOS
+currently uses the source installer.
+
 If the shell cannot find Zelyra:
 
 ~~~bash
