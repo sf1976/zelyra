@@ -787,55 +787,72 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
     begin_json_diagnostics(&entry, &source);
     let mut success = false;
     let mut preview = json!({"available": false});
-    match lex(&source) {
-        Ok(tokens) => match parse(&tokens) {
-            Ok(program) => match edit::preview(&program, &source, &tokens, &request) {
-                Ok(result) => match lex(&result.source) {
-                    Ok(proposed_tokens) => match parse(&proposed_tokens) {
-                        Ok(_) => {
-                            let applied = if apply_requested {
-                                match edit::apply_atomically(&entry, &result.source) {
-                                    Ok(()) => true,
-                                    Err(error) => {
-                                        diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
-                                        false
+    let current_fingerprint = edit::source_fingerprint(&source);
+    let expected_fingerprint = request
+        .get("expected_source_fingerprint")
+        .and_then(Value::as_str);
+    if apply_requested && expected_fingerprint != Some(current_fingerprint.as_str()) {
+        diagnostic(
+            &entry,
+            "E-EDIT-004",
+            "--apply requires a matching `expected_source_fingerprint`; run a preview first",
+            1,
+            1,
+        );
+    } else {
+        match lex(&source) {
+            Ok(tokens) => match parse(&tokens) {
+                Ok(program) => match edit::preview(&program, &source, &tokens, &request) {
+                    Ok(result) => match lex(&result.source) {
+                        Ok(proposed_tokens) => match parse(&proposed_tokens) {
+                            Ok(_) => {
+                                let applied = if apply_requested {
+                                    match edit::apply_atomically(&entry, &result.source) {
+                                        Ok(()) => true,
+                                        Err(error) => {
+                                            diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
+                                            false
+                                        }
                                     }
-                                }
-                            } else {
-                                false
-                            };
-                            success = !apply_requested || applied;
-                            preview = json!({
-                                "available": true,
-                                "apply_requested": apply_requested,
-                                "applied": applied,
-                                "entry": entry,
-                                "operations": result.operations,
-                                "changes": result.changes,
-                                "changed_tokens": result.changed_tokens,
-                                "before_bytes": source.len(),
-                                "after_bytes": result.source.len()
-                            });
-                        }
+                                } else {
+                                    false
+                                };
+                                success = !apply_requested || applied;
+                                preview = json!({
+                                    "available": true,
+                                    "apply_requested": apply_requested,
+                                    "applied": applied,
+                                    "entry": entry,
+                                    "source_fingerprint": current_fingerprint,
+                                    "operations": result.operations,
+                                    "changes": result.changes,
+                                    "changed_tokens": result.changed_tokens,
+                                    "before_bytes": source.len(),
+                                    "after_bytes": result.source.len()
+                                });
+                            }
+                            Err(error) => diagnostic_with_span(
+                                &entry,
+                                "E-EDIT-002",
+                                &format!("proposed edit is not parseable: {}", error.message),
+                                error.span,
+                            ),
+                        },
                         Err(error) => diagnostic_with_span(
                             &entry,
                             "E-EDIT-002",
-                            &format!("proposed edit is not parseable: {}", error.message),
+                            &format!("proposed edit is not lexable: {}", error.message),
                             error.span,
                         ),
                     },
-                    Err(error) => diagnostic_with_span(
-                        &entry,
-                        "E-EDIT-002",
-                        &format!("proposed edit is not lexable: {}", error.message),
-                        error.span,
-                    ),
+                    Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
                 },
-                Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
+                Err(error) => {
+                    diagnostic_with_span(&entry, "E-PARSE-001", &error.message, error.span)
+                }
             },
-            Err(error) => diagnostic_with_span(&entry, "E-PARSE-001", &error.message, error.span),
-        },
-        Err(error) => diagnostic_with_span(&entry, "E-LEX-001", &error.message, error.span),
+            Err(error) => diagnostic_with_span(&entry, "E-LEX-001", &error.message, error.span),
+        }
     }
     let diagnostics = finish_json_diagnostics();
     print_machine_document(&machine_document(

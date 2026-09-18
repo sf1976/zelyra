@@ -1476,6 +1476,7 @@ Preview a validated symbol rename without modifying the source:
 ~~~json
 {
   "entry": "examples/fibonacci.zyl",
+  "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [
     {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
   ]
@@ -1488,8 +1489,9 @@ Save that request as `change.json` and run:
 zelyra edit --format=json change.json
 ~~~
 
-The result reports the exact token spans. It remains preview-only unless the
-explicit `--apply` flag is supplied:
+The result reports the exact token spans and a deterministic source fingerprint.
+For `--apply`, the request must carry the fingerprint from the preview, which
+prevents overwriting a file changed in the meantime. Applying is explicit:
 
 ~~~bash
 zelyra edit --format=json --apply change.json

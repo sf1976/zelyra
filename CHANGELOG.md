@@ -10,7 +10,8 @@ compiler and repository release.
 
 - Added deterministic `zelyra edit --format=json` requests for validated symbol
   renames. Proposed changes are reparsed atomically; writes require the
-  explicit `--apply` flag and use an atomic replacement.
+  explicit `--apply` flag, use an atomic replacement, and require a matching
+  source fingerprint to prevent stale overwrites.
 - Added deterministic, source-only `zelyra impact --format=json` output for
   tables, SQL, forms, CRUD resources, views, APIs, permissions, and contracts.
   Email, job, test, and live schema impact are explicit empty or unavailable

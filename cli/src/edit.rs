@@ -11,6 +11,15 @@ pub struct EditPreview {
     pub changed_tokens: usize,
 }
 
+pub fn source_fingerprint(source: &str) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in source.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3_u64);
+    }
+    format!("fnv1a64:{hash:016x}")
+}
+
 pub fn apply_atomically(path: &str, source: &str) -> Result<(), String> {
     let target = Path::new(path);
     let parent = target.parent().unwrap_or_else(|| Path::new("."));

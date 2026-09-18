@@ -116,7 +116,7 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     let source_path = temporary_source("edit-source", "fn greet() { greet() }\n");
     let request_path = source_path.with_file_name("change.json");
     let request = format!(
-        "{{\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
+        "{{\"entry\":{},\"expected_source_fingerprint\":\"fnv1a64:2a6e06271b2cae4b\",\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
         serde_json::to_string(source_path.to_str().unwrap()).unwrap()
     );
     fs::write(&request_path, request).expect("edit request should be written");
@@ -136,6 +136,22 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(document["preview"]["applied"], false);
     assert_eq!(document["preview"]["changed_tokens"], 2);
 
+    fs::write(&source_path, "fn changed() {}\n").expect("source should change");
+    let stale = run(&[
+        "edit",
+        "--format=json",
+        "--apply",
+        request_path.to_str().unwrap(),
+    ]);
+    assert!(!stale.status.success());
+    let stale_document: serde_json::Value = serde_json::from_slice(&stale.stdout).unwrap();
+    assert_eq!(stale_document["diagnostics"][0]["code"], "E-EDIT-004");
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn changed() {}\n"
+    );
+
+    fs::write(&source_path, "fn greet() { greet() }\n").expect("source should be restored");
     let applied = run(&[
         "edit",
         "--format=json",

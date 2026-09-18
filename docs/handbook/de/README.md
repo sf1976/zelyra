@@ -1586,6 +1586,7 @@ vorschaut werden:
 ~~~json
 {
   "entry": "examples/fibonacci.zyl",
+  "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [
     {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
   ]
@@ -1598,8 +1599,11 @@ Als `change.json` speichern und ausführen:
 zelyra edit --format=json change.json
 ~~~
 
-Das Ergebnis meldet die genauen Token-Spans. Ohne den ausdrücklichen
-`--apply`-Schalter bleibt es eine Vorschau:
+Das Ergebnis meldet die genauen Token-Spans und einen deterministischen
+Quelltext-Fingerprint. Für `--apply` muss die Anfrage den Fingerprint aus der
+Vorschau enthalten; so wird eine zwischenzeitlich geänderte Datei nicht
+überschrieben. Ohne den ausdrücklichen `--apply`-Schalter bleibt es eine
+Vorschau:
 
 ~~~bash
 zelyra edit --format=json --apply change.json
