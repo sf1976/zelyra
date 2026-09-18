@@ -9,7 +9,8 @@ compiler and repository release.
 ### Added
 
 - Added deterministic `zelyra edit --format=json` requests for validated symbol
-  renames. Proposed changes are reparsed atomically; writes require the
+  renames of functions, types, records, tables, tableviews, forms, CRUDs, views,
+  and components. Proposed changes are reparsed atomically; writes require the
   explicit `--apply` flag, use an atomic replacement, and require a matching
   source fingerprint to prevent stale overwrites.
 - Added deterministic, source-only `zelyra impact --format=json` output for

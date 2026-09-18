@@ -157,7 +157,10 @@ pub fn preview(
 fn declares_symbol(program: &Program, symbol: &str, name: &str) -> bool {
     match symbol {
         "function" => program.functions.iter().any(|item| item.name == name),
+        "type" => program.types.iter().any(|item| item.name == name),
+        "record" => program.records.iter().any(|item| item.name == name),
         "table" => program.tables.iter().any(|item| item.name == name),
+        "tableview" => program.tableviews.iter().any(|item| item.name == name),
         "form" => program.forms.iter().any(|item| item.name == name),
         "crud" => program.cruds.iter().any(|item| item.name == name),
         "view" => program.views.iter().any(|item| item.name == name),
@@ -222,6 +225,33 @@ mod tests {
         assert_eq!(preview.source, "fn welcome() { welcome() }\n");
         assert_eq!(preview.changed_tokens, 2);
         assert_eq!(preview.changes.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn previews_type_record_and_tableview_renames() {
+        let source = r#"
+            type CustomerId = Id
+            struct CustomerInput { id: CustomerId }
+            table customers { id: Id }
+            tableview Customers {
+                source sql<CustomerInput[]> { SELECT id FROM customers }
+                columns { id }
+            }
+        "#;
+        let tokens = lex(source).expect("source should lex");
+        let program = parse(&tokens).expect("source should parse");
+        let request = json!({
+            "entry": "main.zyl",
+            "operations": [
+                {"kind": "rename", "symbol": "type", "from": "CustomerId", "to": "ClientId"},
+                {"kind": "rename", "symbol": "record", "from": "CustomerInput", "to": "ClientInput"},
+                {"kind": "rename", "symbol": "tableview", "from": "Customers", "to": "Clients"}
+            ]
+        });
+        let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
+        assert!(preview.source.contains("type ClientId = Id"));
+        assert!(preview.source.contains("struct ClientInput"));
+        assert!(preview.source.contains("tableview Clients"));
     }
 
     #[test]

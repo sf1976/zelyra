@@ -54,8 +54,9 @@ architecture requirement for every phase, not a provider-specific feature.
   views, APIs, permissions, and contracts; emails, jobs, tests, and live schema
   changes remain to be connected.
 - [~] **Stage E — semantic edits:** a validated, atomic rename operation for
-  declared functions, tables, forms, CRUDs, views, and components is available
-  as a preview and explicit `--apply`; richer operations remain.
+  declared functions, types, records, tables, tableviews, forms, CRUDs, views,
+  and components is available as a preview and explicit `--apply`; richer
+  operations remain.
 - [~] **Stage F — contracts and effects:** contracts and capability checks
   exist; granular effects such as `Database(read)`, `Database(write)`,
   `Email`, and `Jobs` remain planned. AI must never add an effect silently.

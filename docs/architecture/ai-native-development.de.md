@@ -76,8 +76,9 @@ Deklarationskontexte bleiben geplante Schnittstellen.
 erste Stufe verfügbar und meldet betroffene Tabellen, SQL, Formulare, CRUD,
 Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
 Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
-`zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen eine
-validierte, atomare Vorschau und liefert einen deterministischen
+`zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen in
+Funktionen, Typen, Records, Tabellen, Tableviews, Formularen, CRUDs, Views und
+Komponenten eine validierte, atomare Vorschau sowie einen deterministischen
 Quelltext-Fingerprint. Die Anfrage muss diesen Fingerprint bei ausdrücklichem
 `--apply` zurücksenden; so wird das validierte Ergebnis atomar geschrieben,
 ohne zwischenzeitliche Änderungen zu überschreiben. Weitere Operationen folgen
