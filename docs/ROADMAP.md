@@ -124,6 +124,9 @@ under evaluation.
 - [~] CRUD detail view overrides support a safe `standard`/`cards` mode and a
   custom heading while preserving generated action, CSRF, auth, and escaping
   guards.
+- [~] CRUD form view overrides support a safe `standard`/`cards` mode and
+  custom heading/submit labels while preserving validation, CSRF, parameter,
+  and permission guards.
 - [ ] CRUD view overrides for create, edit, delete, loading, and error states
   while preserving generated security guards.
 - [ ] A design-token system for colors, spacing, typography, breakpoints, and

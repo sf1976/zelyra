@@ -9,8 +9,8 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
-    CrudDetailViewDef, CrudDetailViewMode, CrudListViewDef, CrudListViewMode, FormDef, TableDef,
-    Type,
+    CrudDetailViewDef, CrudDetailViewMode, CrudFormViewDef, CrudFormViewMode, CrudListViewDef,
+    CrudListViewMode, FormDef, TableDef, Type,
 };
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
@@ -257,6 +257,7 @@ pub struct FormRoute {
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub csrf: CsrfProtection,
+    pub form_view: CrudFormViewDef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4338,6 +4339,15 @@ fn render_form_with_options(
     relation_options: &HashMap<String, Vec<SelectOption>>,
 ) -> String {
     let mut html = String::new();
+    if let Some(title) = &route.form_view.title {
+        html.push_str("<h1>");
+        html.push_str(&html_escape(title));
+        html.push_str("</h1>");
+    }
+    let cards = route.form_view.mode == CrudFormViewMode::Cards;
+    if cards {
+        html.push_str("<section class=\"zelyra-crud-form-card\">");
+    }
     html.push_str("<form method=\"post\" action=\"");
     html.push_str(&html_escape(&route.action));
     html.push_str("\">");
@@ -4433,7 +4443,14 @@ fn render_form_with_options(
         }
         html.push_str("</div>");
     }
-    html.push_str("<button type=\"submit\">Submit</button></form>");
+    html.push_str("<button type=\"submit\">");
+    html.push_str(&html_escape(
+        route.form_view.submit.as_deref().unwrap_or("Submit"),
+    ));
+    html.push_str("</button></form>");
+    if cards {
+        html.push_str("</section>");
+    }
     html
 }
 
@@ -4751,6 +4768,7 @@ mod tests {
             requires_auth: false,
             permissions: Vec::new(),
             csrf: CsrfProtection::new("csrf-token"),
+            form_view: CrudFormViewDef::default(),
         }
     }
 
@@ -5106,11 +5124,22 @@ mod tests {
 
     #[test]
     fn renders_form_with_csrf_and_field_attributes() {
-        let html = render_form(&form_route(), &HashMap::new(), &[], None);
+        let route = form_route();
+        let html = render_form(&route, &HashMap::new(), &[], None);
         assert!(html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
         assert!(html.contains("name=\"name\" type=\"text\""));
         assert!(html.contains(" required"));
         assert!(html.contains("maxlength=\"20\""));
+
+        let mut cards_route = route.clone();
+        cards_route.form_view.mode = CrudFormViewMode::Cards;
+        cards_route.form_view.title = Some("Customer form".into());
+        cards_route.form_view.submit = Some("Save customer <now>".into());
+        let cards_html = render_form(&cards_route, &HashMap::new(), &[], None);
+        assert!(cards_html.contains(">Customer form</h1>"));
+        assert!(cards_html.contains("zelyra-crud-form-card"));
+        assert!(cards_html.contains("Save customer &lt;now&gt;"));
+        assert!(cards_html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
     }
 
     #[test]

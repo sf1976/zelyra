@@ -3136,6 +3136,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             requires_auth: false,
             permissions: Vec::new(),
             csrf,
+            form_view: zelyra_ast::CrudFormViewDef::default(),
         });
     }
     for crud in &program.cruds {
@@ -3374,6 +3375,7 @@ fn generated_crud_form(
         requires_auth: crud.requires_auth,
         permissions,
         csrf,
+        form_view: crud.view.form.clone(),
     }
 }
 

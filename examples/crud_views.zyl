@@ -27,5 +27,11 @@ crud Customer -> customers {
             mode: cards
             title: "Customer details"
         }
+
+        form {
+            mode: cards
+            title: "Customer form"
+            submit: "Save customer"
+        }
     }
 }

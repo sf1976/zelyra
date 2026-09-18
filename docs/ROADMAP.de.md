@@ -124,6 +124,9 @@ noch in Prüfung.
 - [~] CRUD-View-Überschreibungen für Details unterstützen sicher die Modi
   `standard`/`cards` und eine eigene Überschrift bei Erhalt der generierten
   Aktions-, CSRF-, Auth- und Escaping-Prüfungen.
+- [~] CRUD-View-Überschreibungen für Formulare unterstützen sicher die Modi
+  `standard`/`cards` sowie eigene Überschriften und Absende-Beschriftungen bei
+  Erhalt der Validierungs-, CSRF-, Parameter- und Berechtigungsprüfungen.
 - [ ] CRUD-View-Überschreibungen für Create, Edit, Delete, Laden und Fehler bei
   Erhalt der generierten Sicherheitsprüfungen.
 - [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und

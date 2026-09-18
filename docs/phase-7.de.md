@@ -58,6 +58,25 @@ crud Customer -> customers {
 Der Standard ist `standard`. Generierte Edit-, Create- und Delete-Aktionen,
 CSRF, Escaping und Berechtigungsprüfungen bleiben aktiv.
 
+CRUD-Formulare unterstützen dasselbe kontrollierte Layout, eine Überschrift
+und eine Beschriftung für die Absende-Schaltfläche:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        form {
+            mode: cards
+            title: "Kundenformular"
+            submit: "Kunden speichern"
+        }
+    }
+}
+~~~
+
+Überschrift und Beschriftung werden escaped. Schema-Validierung,
+Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
+bleiben aktiv.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

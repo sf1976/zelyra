@@ -314,6 +314,22 @@ Der Standardmodus für Details ist `standard`. Beide Modi behalten generierte
 Edit-, Create- und Delete-Aktionen, CSRF, Escaping und Berechtigungsprüfungen
 bei.
 
+CRUD-Formulare können dasselbe kontrollierte Layoutsystem verwenden:
+
+~~~zelyra
+view {
+    form {
+        mode: cards
+        title: "Kundenformular"
+        submit: "Kunden speichern"
+    }
+}
+~~~
+
+Überschrift und Absende-Schaltfläche werden escaped. Schema-Validierung,
+Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
+bleiben aktiv.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

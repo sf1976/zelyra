@@ -506,6 +506,21 @@ view {
 The default is `standard`. Generated edit, create, delete, CSRF, escaping, and
 authorization safeguards remain active.
 
+CRUD forms can define a controlled layout, heading, and submit label:
+
+~~~zelyra
+view {
+    form {
+        mode: cards
+        title: "Customer form"
+        submit: "Save customer"
+    }
+}
+~~~
+
+The title and submit label are escaped. Schema validation, readonly checks,
+CSRF protection, parameter binding, and action permissions remain active.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

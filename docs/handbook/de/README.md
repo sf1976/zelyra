@@ -563,6 +563,23 @@ view {
 Der Standard ist `standard`. Generierte Edit-, Create- und Delete-Aktionen,
 CSRF, Escaping und Berechtigungsprüfungen bleiben aktiv.
 
+CRUD-Formulare können ein kontrolliertes Layout, eine Überschrift und eine
+Beschriftung für die Absende-Schaltfläche festlegen:
+
+~~~zelyra
+view {
+    form {
+        mode: cards
+        title: "Kundenformular"
+        submit: "Kunden speichern"
+    }
+}
+~~~
+
+Überschrift und Beschriftung werden escaped. Schema-Validierung,
+Readonly-Prüfungen, CSRF-Schutz, Parameterbindung und Aktionsberechtigungen
+bleiben aktiv.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

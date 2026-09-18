@@ -305,6 +305,21 @@ crud Customer -> customers {
 The default detail mode is standard. Both modes retain generated edit, create,
 delete, CSRF, escaping, and authorization safeguards.
 
+CRUD forms can use the same controlled layout system:
+
+~~~zelyra
+view {
+    form {
+        mode: cards
+        title: "Customer form"
+        submit: "Save customer"
+    }
+}
+~~~
+
+The title and submit label are escaped, and the form keeps schema validation,
+readonly checks, CSRF protection, parameter binding, and action permissions.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

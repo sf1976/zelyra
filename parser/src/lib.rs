@@ -526,7 +526,47 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(TokenKind::RBrace, "`}` after CRUD view detail")?;
                 }
-                _ => return self.error("expected `list` or `detail` in CRUD view definition"),
+                TokenKind::Form => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view form")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD form view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD form view property")?;
+                        match property.as_str() {
+                            "mode" => {
+                                let (mode, _) = self.ident("CRUD form view mode")?;
+                                view.form.mode = match mode.as_str() {
+                                    "standard" => CrudFormViewMode::Standard,
+                                    "cards" => CrudFormViewMode::Cards,
+                                    _ => {
+                                        return self.error(
+                                            "CRUD form view mode must be `standard` or `cards`",
+                                        )
+                                    }
+                                };
+                            }
+                            "title" => {
+                                view.form.title = Some(self.string_value("CRUD form view title")?);
+                            }
+                            "submit" => {
+                                view.form.submit =
+                                    Some(self.string_value("CRUD form submit label")?);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `mode`, `title`, or `submit` in CRUD form view definition",
+                                )
+                            }
+                        }
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view form")?;
+                }
+                _ => {
+                    return self
+                        .error("expected `list`, `detail`, or `form` in CRUD view definition")
+                }
             }
             self.skip_newlines();
         }
@@ -2090,6 +2130,11 @@ mod tests {
                             mode: cards
                             title: "Customer details"
                         }
+                        form {
+                            mode: cards
+                            title: "Edit customer"
+                            submit: "Save customer"
+                        }
                     }
                 }"#)
             .unwrap(),
@@ -2102,6 +2147,15 @@ mod tests {
         assert_eq!(
             program.cruds[0].view.detail.title.as_deref(),
             Some("Customer details")
+        );
+        assert_eq!(program.cruds[0].view.form.mode, CrudFormViewMode::Cards);
+        assert_eq!(
+            program.cruds[0].view.form.title.as_deref(),
+            Some("Edit customer")
+        );
+        assert_eq!(
+            program.cruds[0].view.form.submit.as_deref(),
+            Some("Save customer")
         );
     }
 
@@ -2121,6 +2175,17 @@ mod tests {
         let result = parse(
             &lex(r#"crud Customer -> customers {
                     view { detail { mode: full } }
+                }"#)
+            .unwrap(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_crud_form_view_mode() {
+        let result = parse(
+            &lex(r#"crud Customer -> customers {
+                    view { form { mode: wizard } }
                 }"#)
             .unwrap(),
         );

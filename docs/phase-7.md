@@ -55,6 +55,23 @@ crud Customer -> customers {
 The default is `standard`. Generated edit, create, delete, CSRF, escaping, and
 authorization safeguards remain active.
 
+CRUD forms support the same controlled layout, heading, and submit label:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        form {
+            mode: cards
+            title: "Customer form"
+            submit: "Save customer"
+        }
+    }
+}
+~~~
+
+The title and submit label are escaped. Schema validation, readonly checks,
+CSRF protection, parameter binding, and action permissions remain active.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

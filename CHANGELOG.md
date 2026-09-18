@@ -25,6 +25,9 @@ compiler and repository release.
 - Added safe CRUD detail view overrides with standard/cards presentation modes
   and configurable headings while retaining generated action, CSRF,
   authorization, and escaping safeguards.
+- Added safe CRUD form view overrides with standard/cards layouts, configurable
+  headings, and submit labels while retaining validation, CSRF, parameter, and
+  permission safeguards.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.
