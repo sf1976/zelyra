@@ -901,6 +901,9 @@ permission denial, and logout.
 The protected CRUD/API test from `tests/mariadb-protected-e2e.sh` verifies the
 permission boundary for HTML CRUD and JSON API endpoints, including separate
 Create, Edit, and Delete permissions, plus a protected custom form action.
+The generated business starter test also verifies `zelyra doctor --json`,
+OpenAPI 3.0.3, and the generated TypeScript client before running that
+protected application flow.
 The chained-audit test from `tests/mariadb-audit-chain-e2e.sh` verifies
 transactional hash appends, tamper detection, and the safe prune refusal.
 
