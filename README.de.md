@@ -415,6 +415,12 @@ lädt `field department: Department { required }` die Anzeigewerte aus der
 referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt nicht
 mehr vorhandene IDs ab, bevor das SQL der Aktion ausgeführt wird.
 
+`confirm_page` macht aus dem Aktionsbutton einen GET-Link zu einer
+serverseitig gerenderten Bestätigungsseite. Diese enthält die konfigurierte
+Meldung, typisierte Aktionsfelder, frischen CSRF-Schutz und einen ausdrücklichen
+POST-Submit-Button. Die bisherige Kurzform `confirm: "..."` bleibt als leichte
+Browser-Bestätigung erhalten.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

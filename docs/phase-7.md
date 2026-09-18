@@ -158,6 +158,24 @@ select fields on the detail view. Options come from the referenced MariaDB
 table, and submitted IDs are validated against the current option set before
 the action SQL executes.
 
+Riskier actions can request a server-rendered confirmation page:
+
+~~~zelyra
+action move_department {
+    confirm_page {
+        title: "Confirm department change"
+        message: "Move this machine?"
+        submit: "Move machine"
+    }
+    field department: Department { required }
+    sql { UPDATE machines SET department_id = :department WHERE id = :id }
+}
+~~~
+
+The detail button becomes a GET link. The confirmation page renders the typed
+fields and a fresh CSRF-protected POST form; authorization is checked on both
+requests.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

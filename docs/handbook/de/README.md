@@ -673,6 +673,12 @@ action set_active {
 `success` wird an den Redirect übergeben und auf CRUD-Listen als escaped
 Statusmeldung dargestellt.
 
+Mit `confirm_page { title: "..." message: "..." submit: "..." }` entsteht
+eine serverseitige Bestätigungsstufe. Die Aktion in der Detailansicht wird zu
+einem GET-Link; die Bestätigungsseite rendert die Felder mit einem frischen,
+CSRF-geschützten POST-Formular. Die Autorisierung wird bei beiden Requests
+geprüft.
+
 Beziehungsfelder wie `department: Department` werden als geprüfte
 Auswahlfelder dargestellt. Zelyra lädt ihre Beschriftungen aus der
 referenzierten MariaDB-Tabelle, sendet die gespeicherte ID und lehnt veraltete

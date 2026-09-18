@@ -170,6 +170,7 @@ pub struct FormAction {
     pub label: Option<String>,
     pub icon: Option<String>,
     pub confirm: Option<String>,
+    pub confirm_page: Option<CrudConfirmViewDef>,
     pub fields: Vec<FormField>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -177,6 +178,13 @@ pub struct FormAction {
     pub success: Option<String>,
     pub redirect: Option<String>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudConfirmViewDef {
+    pub title: Option<String>,
+    pub message: Option<String>,
+    pub submit: Option<String>,
 }
 
 #[derive(Clone, Debug)]

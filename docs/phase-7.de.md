@@ -163,6 +163,25 @@ geprüfte Auswahlfelder dargestellt. Die Optionen stammen aus der referenzierten
 MariaDB-Tabelle; gesendete IDs werden vor der Ausführung des Aktions-SQLs gegen
 die aktuelle Optionsmenge validiert.
 
+Riskantere Aktionen können eine serverseitige Bestätigungsseite anfordern:
+
+~~~zelyra
+action move_department {
+    confirm_page {
+        title: "Abteilungsänderung bestätigen"
+        message: "Soll diese Maschine verschoben werden?"
+        submit: "Maschine verschieben"
+    }
+    field department: Department { required }
+    sql { UPDATE machines SET department_id = :department WHERE id = :id }
+}
+~~~
+
+Der Button in der Detailansicht wird zu einem GET-Link. Die
+Bestätigungsseite rendert die typisierten Felder und ein frisches,
+CSRF-geschütztes POST-Formular; die Autorisierung wird bei beiden Requests
+geprüft.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

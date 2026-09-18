@@ -404,6 +404,12 @@ Relationship fields use a checked select automatically. For example,
 referenced MariaDB table, submits the stored ID, and rejects IDs that are no
 longer available before the action SQL runs.
 
+`confirm_page` changes the action button into a GET link to a server-rendered
+confirmation page. The page contains the configured message, typed action
+fields, fresh CSRF protection, and an explicit POST submit button. The
+existing `confirm: "..."` syntax remains the lightweight browser-confirmation
+form.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

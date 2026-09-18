@@ -1066,6 +1066,7 @@ impl<'a> Parser<'a> {
         let mut label = None;
         let mut icon = None;
         let mut confirm = None;
+        let mut confirm_page = None;
         let mut fields = Vec::new();
         let mut success = None;
         let mut redirect = None;
@@ -1094,6 +1095,9 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after confirm")?;
                 confirm = Some(self.string_value("confirmation message")?);
+            } else if self.at(&TokenKind::ConfirmPage) {
+                self.advance();
+                confirm_page = Some(self.crud_confirm_view_block()?);
             } else if self.at(&TokenKind::Success) {
                 self.advance();
                 success = Some(self.string_value("success message")?);
@@ -1111,6 +1115,7 @@ impl<'a> Parser<'a> {
             label,
             icon,
             confirm,
+            confirm_page,
             fields,
             requires_auth,
             permissions,
@@ -1119,6 +1124,29 @@ impl<'a> Parser<'a> {
             redirect,
             span: start.join(end),
         })
+    }
+
+    fn crud_confirm_view_block(&mut self) -> Result<CrudConfirmViewDef, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after confirm_page")?;
+        let mut view = CrudConfirmViewDef::default();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (property, _) = self.ident("confirmation view property")?;
+            self.expect(TokenKind::Colon, "colon after confirmation view property")?;
+            match property.as_str() {
+                "title" => view.title = Some(self.string_value("confirmation title")?),
+                "message" => view.message = Some(self.string_value("confirmation message")?),
+                "submit" => view.submit = Some(self.string_value("confirmation submit label")?),
+                _ => {
+                    return self.error(
+                        "expected `title`, `message`, or `submit` in confirm_page definition",
+                    )
+                }
+            }
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after confirm_page")?;
+        Ok(view)
     }
     fn positive_integer(&mut self, label: &str) -> Result<u32, ParseError> {
         match self.current().kind.clone() {
@@ -2255,6 +2283,11 @@ mod tests {
                         label: "Deactivate customer"
                         icon: "pause"
                         confirm: "Deactivate this customer?"
+                        confirm_page {
+                            title: "Confirm deactivation"
+                            message: "This cannot be undone."
+                            submit: "Deactivate now"
+                        }
                         field active: Bool { required }
                         permits "customers.edit"
                         sql {
@@ -2320,6 +2353,27 @@ mod tests {
         assert_eq!(
             program.cruds[0].actions[0].confirm.as_deref(),
             Some("Deactivate this customer?")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0]
+                .confirm_page
+                .as_ref()
+                .and_then(|view| view.title.as_deref()),
+            Some("Confirm deactivation")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0]
+                .confirm_page
+                .as_ref()
+                .and_then(|view| view.message.as_deref()),
+            Some("This cannot be undone.")
+        );
+        assert_eq!(
+            program.cruds[0].actions[0]
+                .confirm_page
+                .as_ref()
+                .and_then(|view| view.submit.as_deref()),
+            Some("Deactivate now")
         );
         assert_eq!(program.cruds[0].actions[0].fields.len(), 1);
         assert_eq!(program.cruds[0].actions[0].fields[0].name, "active");

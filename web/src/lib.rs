@@ -297,6 +297,7 @@ pub struct CrudActionRoute {
     pub label: String,
     pub icon: Option<String>,
     pub confirm: Option<String>,
+    pub confirm_page: Option<zelyra_ast::CrudConfirmViewDef>,
     pub form: FormRoute,
 }
 
@@ -2302,6 +2303,24 @@ fn dispatch_form(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
+    let confirmation_view = form
+        .form
+        .actions
+        .first()
+        .and_then(|action| action.confirm_page.as_ref());
+    if request.method == "GET" {
+        if let Some(confirmation_view) = confirmation_view {
+            let rendered_form = form_with_path_params(form, path_params);
+            let options = match load_relation_options(&rendered_form, database_url) {
+                Ok(options) => options,
+                Err(error) => return relation_options_error(database_url, error),
+            };
+            return Response::html(
+                200,
+                render_action_confirmation(&rendered_form, confirmation_view, &options),
+            );
+        }
+    }
     if form.post_only && request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -2408,6 +2427,34 @@ fn form_with_path_params(form: &FormRoute, path_params: &HashMap<String, String>
         rendered_form.action = rendered_form.action.replace(&format!("{{{name}}}"), value);
     }
     rendered_form
+}
+
+fn render_action_confirmation(
+    route: &FormRoute,
+    view: &zelyra_ast::CrudConfirmViewDef,
+    relation_options: &HashMap<String, Vec<SelectOption>>,
+) -> String {
+    let title = view.title.as_deref().unwrap_or("Confirm action");
+    let message = view
+        .message
+        .as_deref()
+        .unwrap_or("Please confirm this action.");
+    let submit = view.submit.as_deref().unwrap_or("Confirm");
+    let mut confirmation_form = route.clone();
+    confirmation_form.form_view.title = None;
+    confirmation_form.form_view.submit = Some(submit.to_owned());
+    format!(
+        "<main class=\"zelyra-action-confirmation\"><h1>{}</h1><p>{}</p>{}</main>",
+        html_escape(title),
+        html_escape(message),
+        render_form_with_options(
+            &confirmation_form,
+            &HashMap::new(),
+            &[],
+            None,
+            relation_options
+        )
+    )
 }
 
 fn load_existing_form_values(
@@ -2582,6 +2629,7 @@ struct CrudUiActionLink {
     path: String,
     csrf: String,
     confirm: Option<String>,
+    confirm_page: Option<zelyra_ast::CrudConfirmViewDef>,
     fields: Vec<CrudUiActionField>,
 }
 
@@ -2623,6 +2671,7 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
                     path: action.form.path.clone(),
                     csrf: action.form.csrf.token().into(),
                     confirm: action.confirm.clone(),
+                    confirm_page: action.confirm_page.clone(),
                     fields: action
                         .form
                         .form
@@ -4247,79 +4296,94 @@ fn render_crud_detail_with_actions(
     }
     for action in &ui_actions.custom {
         let action_path = action.path.replace("{id}", id);
-        html.push_str("<form method=\"post\" action=\"");
-        html.push_str(&html_escape(&action_path));
-        html.push('"');
-        if let Some(confirm) = &action.confirm {
-            html.push_str(" onsubmit=\"");
-            html.push_str(&html_escape(&format!(
-                "return confirm({})",
-                javascript_string_literal(confirm)
-            )));
-            html.push('"');
-        }
-        html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-        html.push_str(&html_escape(&action.csrf));
-        html.push_str("\">");
-        for field in &action.fields {
-            html.push_str("<label for=\"");
-            html.push_str(&html_escape(&field.name));
+        if action.confirm_page.is_some() {
+            html.push_str("<p><a class=\"zelyra-action-confirm-link\" href=\"");
+            html.push_str(&html_escape(&action_path));
             html.push_str("\">");
-            html.push_str(&html_escape(&field.label));
-            html.push_str("</label>");
-            if field.relation {
-                html.push_str("<select id=\"");
-                html.push_str(&html_escape(&field.name));
-                html.push_str("\" name=\"");
-                html.push_str(&html_escape(&field.name));
-                html.push('"');
-                if field.required {
-                    html.push_str(" required");
-                }
-                html.push('>');
-                if !field.required {
-                    html.push_str("<option value=\"\">-- Select --</option>");
-                }
-                for option in &field.options {
-                    html.push_str("<option value=\"");
-                    html.push_str(&html_escape(&option.value));
-                    html.push_str("\">");
-                    html.push_str(&html_escape(&option.label));
-                    html.push_str("</option>");
-                }
-                html.push_str("</select>");
-            } else {
-                html.push_str("<input id=\"");
-                html.push_str(&html_escape(&field.name));
-                html.push_str("\" name=\"");
-                html.push_str(&html_escape(&field.name));
-                html.push_str("\" type=\"");
-                html.push_str(&html_escape(&field.input_type));
-                html.push('"');
-                if field.input_type == "checkbox" {
-                    html.push_str(" value=\"true\"");
-                }
-                if field.required && field.input_type != "checkbox" {
-                    html.push_str(" required");
-                }
-                if let Some(max) = field.max {
-                    html.push_str(" maxlength=\"");
-                    html.push_str(&max.to_string());
-                    html.push('"');
-                }
-                html.push('>');
+            if let Some(icon) = &action.icon {
+                html.push_str("<span class=\"zelyra-action-icon zelyra-action-icon-");
+                html.push_str(&html_escape(icon));
+                html.push_str("\" data-icon=\"");
+                html.push_str(&html_escape(icon));
+                html.push_str("\" aria-hidden=\"true\"></span>");
             }
+            html.push_str(&html_escape(&action.label));
+            html.push_str("</a></p>");
+        } else {
+            html.push_str("<form method=\"post\" action=\"");
+            html.push_str(&html_escape(&action_path));
+            html.push('"');
+            if let Some(confirm) = &action.confirm {
+                html.push_str(" onsubmit=\"");
+                html.push_str(&html_escape(&format!(
+                    "return confirm({})",
+                    javascript_string_literal(confirm)
+                )));
+                html.push('"');
+            }
+            html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+            html.push_str(&html_escape(&action.csrf));
+            html.push_str("\">");
+            for field in &action.fields {
+                html.push_str("<label for=\"");
+                html.push_str(&html_escape(&field.name));
+                html.push_str("\">");
+                html.push_str(&html_escape(&field.label));
+                html.push_str("</label>");
+                if field.relation {
+                    html.push_str("<select id=\"");
+                    html.push_str(&html_escape(&field.name));
+                    html.push_str("\" name=\"");
+                    html.push_str(&html_escape(&field.name));
+                    html.push('"');
+                    if field.required {
+                        html.push_str(" required");
+                    }
+                    html.push('>');
+                    if !field.required {
+                        html.push_str("<option value=\"\">-- Select --</option>");
+                    }
+                    for option in &field.options {
+                        html.push_str("<option value=\"");
+                        html.push_str(&html_escape(&option.value));
+                        html.push_str("\">");
+                        html.push_str(&html_escape(&option.label));
+                        html.push_str("</option>");
+                    }
+                    html.push_str("</select>");
+                } else {
+                    html.push_str("<input id=\"");
+                    html.push_str(&html_escape(&field.name));
+                    html.push_str("\" name=\"");
+                    html.push_str(&html_escape(&field.name));
+                    html.push_str("\" type=\"");
+                    html.push_str(&html_escape(&field.input_type));
+                    html.push('"');
+                    if field.input_type == "checkbox" {
+                        html.push_str(" value=\"true\"");
+                    }
+                    if field.required && field.input_type != "checkbox" {
+                        html.push_str(" required");
+                    }
+                    if let Some(max) = field.max {
+                        html.push_str(" maxlength=\"");
+                        html.push_str(&max.to_string());
+                        html.push('"');
+                    }
+                    html.push('>');
+                }
+            }
+            html.push_str("<button type=\"submit\">");
+            if let Some(icon) = &action.icon {
+                html.push_str("<span class=\"zelyra-action-icon zelyra-action-icon-");
+                html.push_str(&html_escape(icon));
+                html.push_str("\" data-icon=\"");
+                html.push_str(&html_escape(icon));
+                html.push_str("\" aria-hidden=\"true\"></span>");
+            }
+            html.push_str(&html_escape(&action.label));
+            html.push_str("</button></form>");
         }
-        html.push_str("<button type=\"submit\">");
-        if let Some(icon) = &action.icon {
-            html.push_str("<span class=\"zelyra-action-icon zelyra-action-icon-");
-            html.push_str(&html_escape(icon));
-            html.push_str("\" data-icon=\"");
-            html.push_str(&html_escape(icon));
-            html.push_str("\" aria-hidden=\"true\"></span>");
-        }
-        html.push_str(&html_escape(&action.label));
-        html.push_str("</button></form>");
     }
     if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
@@ -6243,6 +6307,7 @@ mod tests {
                     path: "/machines/{id}/deactivate".into(),
                     csrf: "crud-csrf".into(),
                     confirm: Some("Deactivate <unsafe> customer?".into()),
+                    confirm_page: None,
                     fields: vec![
                         CrudUiActionField {
                             name: "active".into(),
@@ -6348,6 +6413,7 @@ mod tests {
             label: None,
             icon: None,
             confirm: None,
+            confirm_page: None,
             fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
@@ -6372,6 +6438,7 @@ mod tests {
             label: None,
             icon: None,
             confirm: None,
+            confirm_page: None,
             fields: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.save".into()],
@@ -6395,6 +6462,7 @@ mod tests {
             label: None,
             icon: None,
             confirm: None,
+            confirm_page: None,
             fields: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),

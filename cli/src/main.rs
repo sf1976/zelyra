@@ -3371,6 +3371,7 @@ fn generated_crud_form(
                 label: None,
                 icon: None,
                 confirm: None,
+                confirm_page: None,
                 fields: Vec::new(),
                 requires_auth: false,
                 permissions: Vec::new(),
@@ -3414,6 +3415,7 @@ fn generated_crud_action(
         label: action.label.clone().unwrap_or_else(|| action.name.clone()),
         icon: action.icon.clone(),
         confirm: action.confirm.clone(),
+        confirm_page: action.confirm_page.clone(),
         form: FormRoute {
             path: path.clone(),
             action: path,

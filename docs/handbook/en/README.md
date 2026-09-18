@@ -612,6 +612,11 @@ action set_active {
 `success` is carried to the redirect and rendered as an escaped status notice
 on CRUD lists.
 
+Use `confirm_page { title: "..." message: "..." submit: "..." }` for a
+server-rendered confirmation step. The detail action becomes a GET link, and
+the confirmation page renders the fields with a fresh CSRF-protected POST
+form. Authorization is checked for both requests.
+
 Relationship fields such as `department: Department` are rendered as checked
 select fields. Zelyra loads their labels from the referenced MariaDB table,
 submits the stored ID, and rejects stale or unknown IDs before executing the

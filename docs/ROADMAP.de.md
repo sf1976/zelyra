@@ -165,8 +165,9 @@ noch in Prüfung.
   Formularvalidierung und Parameterbindung; Beziehungsfelder werden als
   geprüfte, MariaDB-gestützte Auswahlfelder dargestellt.
 - [x] Eigene Aktions-Icons und escaped Erfolgsmeldungen sind verfügbar.
-- [ ] Serverseitige Bestätigungsansichten sowie eine umfangreichere
-  aktionsspezifische Erfolgs-/Fehlerdarstellung.
+- [x] Serverseitige `confirm_page`-Ansichten mit frischer
+  CSRF-geschützter POST-Bestätigung sind verfügbar.
+- [ ] Umfangreichere aktionsspezifische Erfolgs-/Fehlerdarstellung.
 - [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.

@@ -80,7 +80,12 @@ crud Machine -> machines {
     action move_department {
         label: "Move department"
         icon: "swap"
-        confirm: "Move this machine to another department?"
+
+        confirm_page {
+            title: "Confirm department change"
+            message: "Please confirm that this machine should move to the selected department."
+            submit: "Move machine"
+        }
 
         field department: Department {
             label: "Department"
