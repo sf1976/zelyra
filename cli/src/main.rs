@@ -229,7 +229,7 @@ fn create_project(path: &str, options: ProjectOptions) -> ExitCode {
     let project_config = if options.with_mariadb {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.40"
+version = "0.1.41"
 zelyra = "0.1"
 
 [database.main]
@@ -242,7 +242,7 @@ network = false
     } else {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.40"
+version = "0.1.41"
 zelyra = "0.1"
 
 [capabilities]
@@ -351,7 +351,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.40
+ARG ZELYRA_REF=v0.1.41
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -9130,7 +9130,7 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.40"));
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.41"));
 
         fs::remove_dir_all(path).unwrap();
     }
