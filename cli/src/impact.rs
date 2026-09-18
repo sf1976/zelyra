@@ -81,6 +81,120 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
     })
 }
 
+pub fn focus_impact(impact: &Value, query: &str) -> Result<Value, String> {
+    let Some((kind, name)) = query.split_once(':') else {
+        return Err("impact symbol must use the form `<kind>:<name>`".into());
+    };
+    if kind.is_empty() || name.is_empty() {
+        return Err("impact symbol must use a non-empty `<kind>:<name>` value".into());
+    }
+
+    let references = impact
+        .get("references")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "impact document has no semantic references".to_owned())?;
+    let known_nodes = known_impact_nodes(impact, references);
+    if !known_nodes.contains(query) {
+        return Err(format!("no known impact node `{query}` exists"));
+    }
+
+    let focused_references = references
+        .iter()
+        .filter(|reference| {
+            reference.get("from").and_then(Value::as_str) == Some(query)
+                || reference.get("to").and_then(Value::as_str) == Some(query)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut related = focused_references
+        .iter()
+        .flat_map(|reference| {
+            [
+                reference.get("from").and_then(Value::as_str),
+                reference.get("to").and_then(Value::as_str),
+            ]
+        })
+        .flatten()
+        .filter(|node| *node != query)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    related.sort_unstable();
+    related.dedup();
+
+    Ok(json!({
+        "focus": query,
+        "references": focused_references,
+        "related": related,
+    }))
+}
+
+fn known_impact_nodes(impact: &Value, references: &[Value]) -> HashSet<String> {
+    let mut nodes = HashSet::new();
+    for table in impact
+        .get("tables")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(name) = table.get("name").and_then(Value::as_str) {
+            nodes.insert(format!("table:{name}"));
+        }
+    }
+    for form in impact
+        .get("forms")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(name) = form.get("name").and_then(Value::as_str) {
+            nodes.insert(format!("form:{name}"));
+        }
+    }
+    for crud in impact
+        .get("crud")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(name) = crud.get("name").and_then(Value::as_str) {
+            nodes.insert(format!("crud:{name}"));
+        }
+    }
+    for view in impact
+        .get("views")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let kind = view.get("kind").and_then(Value::as_str);
+        let name = view.get("name").and_then(Value::as_str);
+        if let (Some(kind), Some(name)) = (kind, name) {
+            nodes.insert(format!("{kind}:{name}"));
+        }
+    }
+    for api in impact
+        .get("apis")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(method), Some(path)) = (
+            api.get("method").and_then(Value::as_str),
+            api.get("path").and_then(Value::as_str),
+        ) {
+            nodes.insert(format!("api:{method} {path}"));
+        }
+    }
+    for reference in references {
+        for key in ["from", "to"] {
+            if let Some(node) = reference.get(key).and_then(Value::as_str) {
+                nodes.insert(node.to_owned());
+            }
+        }
+    }
+    nodes
+}
+
 fn semantic_references(
     program: &Program,
     table_names: &[String],
@@ -896,5 +1010,34 @@ mod tests {
                 && reference["kind"] == "call"
         }));
         assert_eq!(impact, build_impact(&program, source));
+    }
+
+    #[test]
+    fn focuses_impact_on_a_known_node_and_rejects_unknown_nodes() {
+        let source = r#"
+            table customers { id: Id }
+            form CustomerForm -> customers { fields { id } }
+            crud Customer -> customers
+        "#;
+        let program = parse(&lex(source).expect("source should lex")).expect("source should parse");
+        let impact = build_impact(&program, source);
+        let focused = focus_impact(&impact, "table:customers").expect("table should be known");
+        assert_eq!(focused["focus"], "table:customers");
+        assert!(focused["references"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reference| {
+                reference["from"] == "form:CustomerForm" && reference["to"] == "table:customers"
+            }));
+        assert!(focused["related"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|node| node == "crud:Customer"));
+        assert_eq!(
+            focus_impact(&impact, "table:missing").unwrap_err(),
+            "no known impact node `table:missing` exists"
+        );
     }
 }

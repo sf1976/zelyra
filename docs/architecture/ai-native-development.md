@@ -112,6 +112,11 @@ leaving SQL literals, comments, parameters, and HTML untouched. Richer
 operations remain additional semantic change features; text patches remain
 supported.
 
+The optional `--symbol <kind:name>` impact query narrows the machine result to
+one known node and its directly connected references. Unknown nodes produce a
+stable `E-IMPACT-001` diagnostic; the query never performs database or network
+access.
+
 Component renames update the declaration and known opening or closing component
 tags in opaque HTML bodies. Ordinary HTML elements, text, attributes, SQL, and
 unrecognized markup are not treated as symbol references.

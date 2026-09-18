@@ -430,6 +430,51 @@ fn context_exposes_safe_structural_project_information() {
 }
 
 #[test]
+fn impact_can_focus_on_a_known_node_with_versioned_json() {
+    let path = example("auth_crud_api.zyl");
+    let first = run(&[
+        "impact",
+        path.to_str().unwrap(),
+        "--symbol",
+        "table:customers",
+        "--format=json",
+    ]);
+    let second = run(&[
+        "impact",
+        path.to_str().unwrap(),
+        "--symbol",
+        "table:customers",
+        "--format=json",
+    ]);
+    assert!(first.status.success());
+    assert!(first.stderr.is_empty());
+    assert_eq!(first.stdout, second.stdout);
+    let document: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["command"], "impact");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["impact"]["focus"], "table:customers");
+    assert!(document["impact"]["references"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|reference| reference["to"] == "table:customers"));
+
+    let unknown = run(&[
+        "impact",
+        path.to_str().unwrap(),
+        "--symbol",
+        "table:missing",
+        "--format=json",
+    ]);
+    assert_eq!(unknown.status.code(), Some(1));
+    assert!(unknown.stderr.is_empty());
+    let unknown_document: serde_json::Value = serde_json::from_slice(&unknown.stdout).unwrap();
+    assert_eq!(unknown_document["success"], false);
+    assert_eq!(unknown_document["diagnostics"][0]["code"], "E-IMPACT-001");
+}
+
+#[test]
 fn invalid_format_is_rejected_without_machine_output_claims() {
     let output = run(&["check", "../examples/fibonacci.zyl", "--format=xml"]);
     assert_eq!(output.status.code(), Some(2));

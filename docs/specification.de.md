@@ -21,6 +21,7 @@ maschinenorientierten Schnittstellen sind:
 zelyra check <file.zyl> --format=json
 zelyra context <file.zyl> --format=json
 zelyra impact <file.zyl> --format=json
+zelyra impact <file.zyl> --symbol <kind:name> --format=json
 zelyra edit --format=json change.json
 zelyra fmt <file.zyl> --check
 ```
@@ -36,7 +37,8 @@ Formulare, Views, APIs, Berechtigungen, Contracts, Capabilities, Tests und
 Freigaben destruktiver Änderungen prüfen. KI-Code darf Capabilities nicht
 unbemerkt ergänzen, Berechtigungen nicht erweitern, kein destruktives SQL
 ausführen, Prüfungen nicht abschwächen und keine Secrets ausgeben. Expression-
-Typed-Holes, quelltextbasierte Wirkungsanalyse und versionierte Vorschauen für
-semantische Umbenennungen sind als erste Stufen implementiert. Typed Holes in
+Typed-Holes, quelltextbasierte Wirkungsanalyse mit optionaler Fokussierung und
+versionierte Vorschauen für semantische Umbenennungen sind als erste Stufen
+implementiert. Typed Holes in
 Deklarationskontexten, vollständige Laufzeit-/Schema-Wirkungsanalyse,
 umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.

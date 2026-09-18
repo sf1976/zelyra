@@ -41,6 +41,7 @@ zelyra check examples/fibonacci.zyl --format=json
 zelyra context examples/auth_crud_api.zyl --format=json
 zelyra fmt examples/fibonacci.zyl --check
 zelyra impact examples/auth_crud_api.zyl --format=json
+zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
 ~~~
 
 These machine interfaces use schema version `1` where JSON is emitted. JSON is written only to stdout; diagnostics have

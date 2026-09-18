@@ -52,8 +52,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] **Stage D — impact analysis:** a deterministic source-only
   `zelyra impact --format=json` slice now reports tables, SQL, forms, CRUD,
   views, APIs, permissions, contracts, and a structured deterministic
-  `references` edge list; emails, jobs, tests, and live schema changes remain
-  to be connected.
+  `references` edge list. A focused `--symbol <kind:name>` query is available
+  for directly connected references; emails, jobs, tests, and live schema
+  changes remain to be connected.
 - [~] **Stage E — semantic edits:** a validated, atomic rename operation for
   declared functions, types, records, tables, tableviews, forms, CRUDs, views,
   and components is available as a versioned preview and explicit `--apply`.

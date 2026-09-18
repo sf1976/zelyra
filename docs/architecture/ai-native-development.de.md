@@ -95,6 +95,11 @@ SQL-Abfragen (`FROM`, `JOIN`, `INTO` und `UPDATE`), während SQL-Literale,
 Kommentare, Parameter und HTML unverändert bleiben. Weitere Operationen folgen
 später.
 
+Die optionale Impact-Abfrage `--symbol <kind:name>` begrenzt die
+Maschinenausgabe auf einen bekannten Knoten und seine direkt verbundenen
+Referenzen. Unbekannte Knoten liefern die stabile Diagnose `E-IMPACT-001`; die
+Abfrage führt weder Datenbank- noch Netzwerkzugriffe aus.
+
 Komponenten-Umbenennungen aktualisieren die Deklaration sowie bekannte öffnende
 und schließende Komponententags in opaken HTML-Bodies. Gewöhnliche HTML-
 Elemente, Text, Attribute, SQL und nicht erkannte Markup-Strukturen werden
