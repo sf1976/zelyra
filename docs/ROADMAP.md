@@ -23,7 +23,8 @@ under evaluation.
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
-  Multiple slots, themes, and CRUD view overrides remain open.
+  Named slots with fallback content and CRUD view overrides are available;
+  themes remain open.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -160,8 +161,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
   declared columns, typed filters, search, sorting, pagination, URL state, and
   escaping are available for table- and struct-backed result types.
-- [~] Components support default and named slots plus nested composition;
-  fallback content and nested views remain planned.
+- [~] Components support default and named slots, fallback content, and nested
+  composition; fallback content for more advanced nested-view scenarios remains
+  planned.
 - [ ] View inheritance/composition without hidden global state.
 - [ ] View-local data loading with explicit query boundaries and authorization.
 - [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,

@@ -638,7 +638,9 @@ page "/dashboard" {
 
 Verschachtelte Komponenten werden von innen nach außen erweitert. Inhalt an
 eine Komponente ohne passenden Default- oder benannten `<slot />` ist ein
-Fehler zur Compile-Zeit. Fallback-Inhalte bleiben geplant.
+Fehler zur Compile-Zeit. Benannte Slots dürfen sicher escapte,
+deterministische Fallback-Inhalte besitzen und von einem Aufrufer explizit
+überschrieben werden.
 
 CRUD-Listenansichten können angepasst werden, ohne die generierte Abfrage- oder
 Autorisierungspipeline zu ersetzen. Standardmäßig wird eine HTML-Tabelle
