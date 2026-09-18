@@ -309,7 +309,7 @@ zelyra init
 Für eine fertige lokale MariaDB- und Webserver-Vorlage verwenden:
 
 ~~~bash
-zelyra new meine-app --mariadb
+zelyra new meine-app --mariadb --web-port 8080
 cd meine-app
 cp .env.example .env
 # Vor jeder Nutzung außerhalb der lokalen Entwicklung alle change-me-Werte ersetzen.
@@ -318,10 +318,11 @@ set -a; . ./.env; set +a
 zelyra db setup main.zyl
 ~~~
 
-Die erzeugte Compose-Datei startet MariaDB und den Zelyra-Webserver. Mit
-`ZELYRA_WEB_PORT=8080` in `.env` laufen der interne Webserver und sein lokaler
-veröffentlichter Port auf 8080; Standard ist 3000. Nach dem Start ist
-`http://127.0.0.1:3000` erreichbar. Die Vorlage ist für lokale Entwicklung
+Die erzeugte Compose-Datei startet MariaDB und den Zelyra-Webserver. Die mit
+`--mariadb` verwendete Option `--web-port 8080` wählt beim Erstellen den
+internen Serverport und den lokal veröffentlichten Port. Später kann der Wert in `.env` über `ZELYRA_WEB_PORT`
+geändert werden; Standard ist 3000. Nach dem obigen Beispiel ist
+`http://127.0.0.1:8080` erreichbar. Die Vorlage ist für lokale Entwicklung
 gedacht; für Produktion Secret-Manager und TLS verwenden.
 
 Die aktuelle Projektdatei ist bewusst klein:
@@ -732,8 +733,10 @@ Sortierung verwendet `sort=<spalte>&order=asc|desc`.
 ## 11. Nützliche Befehle
 
 ~~~text
-zelyra new <directory>                  Projekt erstellen
-zelyra init [directory]                 Projekt initialisieren
+zelyra new <directory> [--mariadb] [--web-port <port>]
+                                         Projekt erstellen und Webport wählen
+zelyra init [directory] [--mariadb] [--web-port <port>]
+                                         Projekt initialisieren und Webport wählen
 zelyra check <file.zyl> [--format human|json]
                                          Quellcode prüfen; JSON ist versioniert und maschinenlesbar
 zelyra context <file.zyl> [--format human|json]

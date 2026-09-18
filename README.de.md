@@ -715,8 +715,8 @@ ORM-Methodenkette.
 Aktuell verfügbar:
 
 ~~~text
-zelyra new <directory> [--mariadb]
-zelyra init [directory]
+zelyra new <directory> [--mariadb] [--web-port <port>]
+zelyra init [directory] [--mariadb] [--web-port <port>]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
@@ -744,6 +744,12 @@ zelyra db apply <file.zyl> [--allow-destructive]
 
 Die Befehle sind bewusst klein und ausdrücklich. Apache, PHP, ein ORM und ein
 Frontend-Framework sind für die obigen Beispiele keine Voraussetzungen.
+
+Für den einfachsten lokalen Start mit MariaDB und dem integrierten Webserver
+ein Projekt mit `zelyra new meine-app --mariadb --web-port 8080` erstellen. Die
+erzeugte Compose-Datei verwendet diesen Port für den Server und die lokale
+Veröffentlichung. `.env.example` nach `.env` kopieren; `ZELYRA_WEB_PORT` kann
+später dort geändert werden.
 
 ## Repository-Struktur
 

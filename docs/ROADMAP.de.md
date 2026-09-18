@@ -91,9 +91,12 @@ Feature eines bestimmten Anbieters.
 - [~] Quellcode-Installer mit Prüfung, Update, Deinstallation, Dry-Run und
   sicheren Diagnosen sind verfügbar; der Rust-freie Release-Modus deckt
   veröffentlichte x86_64-Assets ab.
-- [ ] First-Run-Assistent für Projekt, MariaDB, Secrets und Webserver-Port.
-- [ ] Verständliche Docker-Compose-Vorlagen für MariaDB und internen Webserver
-  mit konfigurierbaren Host- und Container-Ports.
+- [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding und
+  einen validierten wählbaren Webport über `zelyra new` und `zelyra init`;
+  interaktive MariaDB-Verbindung und Secret-Einrichtung bleiben offen.
+- [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
+  Webserver mit konfigurierbarem Port; Produktionshärtung und unabhängige
+  Host-/Container-Ports bleiben offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [ ] `zelyra doctor` für Datenbank, Ports, TLS, Dateirechte und Werkzeuge mit
