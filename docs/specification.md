@@ -106,3 +106,18 @@ The `paginated` size must be between 1 and 100. The optional `page` URL value
 is a positive integer with default `1` and is exposed to page HTML as `UInt`.
 The runtime applies a parameterized `LIMIT`/`OFFSET` wrapper to collection
 queries. Pagination of arbitrary record loads is rejected by the compiler.
+
+Collection pages may also declare a sort whitelist:
+
+~~~zelyra
+page "/customers" {
+    sort { name }
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>{sort} {order}</p> }
+}
+~~~
+
+The runtime accepts only declared result fields for `sort` and only `asc` or
+`desc` for `order`. Identifiers are quoted after compiler validation; URL
+values are never concatenated into SQL as unchecked identifiers. Sorting and
+pagination may be combined.

@@ -774,6 +774,7 @@ impl<'a> Parser<'a> {
         let mut view = None;
         let mut inputs = Vec::new();
         let mut page_size = None;
+        let mut sort = Vec::new();
         let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
@@ -810,6 +811,19 @@ impl<'a> Parser<'a> {
                     return self.error("page size must be between 1 and 100");
                 }
                 page_size = Some(value as u32);
+            } else if self.at(&TokenKind::Sort) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after page sort")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    sort.push(self.ident("page sort field")?.0);
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after page sort")?;
             } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "load") {
                 let load_start = self.advance().span;
                 let (name, _) = self.ident("page data name")?;
@@ -845,7 +859,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 permissions.push(self.string_value("permission")?);
             } else {
-                return self.error("expected `load`, `html`, `view`, `paginated`, `requires auth`, or `permits` in page definition");
+                return self.error("expected `load`, `html`, `view`, `paginated`, `sort`, `requires auth`, or `permits` in page definition");
             }
             self.skip_newlines();
         }
@@ -859,6 +873,7 @@ impl<'a> Parser<'a> {
             view,
             inputs,
             page_size,
+            sort,
             data,
             requires_auth,
             permissions,
@@ -2371,6 +2386,18 @@ mod tests {
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert_eq!(program.pages[0].page_size, Some(25));
+    }
+
+    #[test]
+    fn parses_page_sort_fields() {
+        let source = r#"
+            page "/customers" {
+                sort { name, created_at }
+                html { <p>Customers</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].sort, ["name", "created_at"]);
     }
 
     #[test]

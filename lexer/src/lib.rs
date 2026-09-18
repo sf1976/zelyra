@@ -57,6 +57,7 @@ pub enum TokenKind {
     List,
     Detail,
     Search,
+    Sort,
     Sortable,
     Searchable,
     Paginated,
@@ -231,6 +232,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "list" => TokenKind::List,
                 "detail" => TokenKind::Detail,
                 "search" => TokenKind::Search,
+                "sort" => TokenKind::Sort,
                 "sortable" => TokenKind::Sortable,
                 "searchable" => TokenKind::Searchable,
                 "paginated" => TokenKind::Paginated,
@@ -665,5 +667,11 @@ mod tests {
         assert!(tokens
             .iter()
             .any(|token| matches!(token.kind, TokenKind::Paginated)));
+    }
+
+    #[test]
+    fn lexes_page_sort_keyword() {
+        let tokens = lex("sort { name }").unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::Sort));
     }
 }

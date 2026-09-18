@@ -202,8 +202,8 @@ Feature eines bestimmten Anbieters.
 - [~] Die einheitliche typisierte View-Pipeline umfasst deklarative
   `tableview`-Steuerungen, explizites seitenlokales Laden einzelner Datensätze
   und typisierte Collection-Schleifen; Filter und Suche bleiben zunächst auf
-  Tableviews konzentriert, seitenlokale Collection-Pagination ist verfügbar,
-  reichere Daten für beliebige Views bleiben geplant.
+  Tableviews konzentriert, seitenlokale Collection-Sortierung und Pagination
+  sind verfügbar, reichere Daten für beliebige Views bleiben geplant.
 - [~] Seitenlokale typisierte Query-Eingaben (`input { search: String? }`) werden
   geprüft, sicher an natives SQL gebunden, für HTML-Interpolationen verfügbar
   gemacht und bei fehlenden Pflichtwerten oder ungültigen skalaren Werten mit
@@ -213,6 +213,9 @@ Feature eines bestimmten Anbieters.
   Ein positiver URL-Wert `page` wird geprüft, als `UInt` bereitgestellt und als
   parametrisierter `LIMIT`-/`OFFSET`-Wrapper angewendet; erzeugte
   Query-Steuerungen und Gesamtseitenzahlen bleiben geplant.
+- [~] Seitenlokale Collection-Sortierung über `sort { field ... }` ist verfügbar.
+  Nur vom Compiler geprüfte Ergebnisfelder sowie `asc`/`desc` werden akzeptiert;
+  eine automatische Erzeugung von Sortiersteuerungen bleibt geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

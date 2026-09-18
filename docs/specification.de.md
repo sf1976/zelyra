@@ -112,3 +112,18 @@ URL-Wert `page` ist eine positive Ganzzahl mit dem Standardwert `1` und steht
 im Seiten-HTML als `UInt` zur Verfügung. Die Laufzeit wendet einen
 parametrisierten `LIMIT`-/`OFFSET`-Wrapper auf Collection-Abfragen an.
 Pagination für beliebige Einzelabfragen weist der Compiler zurück.
+
+Collection-Seiten können außerdem eine Sortier-Whitelist deklarieren:
+
+~~~zelyra
+page "/customers" {
+    sort { name }
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>{sort} {order}</p> }
+}
+~~~
+
+Die Laufzeit akzeptiert für `sort` nur deklarierte Ergebnisfelder und für
+`order` nur `asc` oder `desc`. Identifier werden nach der Compilerprüfung
+quotiert; URL-Werte werden niemals als ungeprüfte SQL-Identifier in SQL
+konkateniert. Sortierung und Pagination können kombiniert werden.
