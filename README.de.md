@@ -345,6 +345,23 @@ view {
 Die generierte Route bleibt POST-only und verlangt weiterhin CSRF- sowie
 Löschberechtigungsprüfungen.
 
+Auch Lade- und Fehlerzustände von CRUD können konfiguriert werden:
+
+~~~zelyra
+view {
+    loading { message: "Kunden werden geladen ..." }
+    error {
+        title: "Kunden nicht verfügbar"
+        message: "Bitte später erneut versuchen."
+    }
+}
+~~~
+
+Die Lademeldung wird als escaped Metadatum für Progressive Enhancement
+ausgegeben. Die serverseitige Antwort behauptet niemals fälschlich, dass ein
+Ladezustand aktiv ist. Konfigurierte Fehlermeldungen ersetzen generische CRUD-
+Datenbankfehler; interne Datenbankdetails bleiben verborgen.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

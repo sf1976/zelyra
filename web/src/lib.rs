@@ -9,8 +9,9 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
-    CrudDeleteViewDef, CrudDetailViewDef, CrudDetailViewMode, CrudFormViewDef, CrudFormViewMode,
-    CrudListViewDef, CrudListViewMode, FormDef, TableDef, Type,
+    CrudDeleteViewDef, CrudDetailViewDef, CrudDetailViewMode, CrudErrorViewDef, CrudFormViewDef,
+    CrudFormViewMode, CrudListViewDef, CrudListViewMode, CrudLoadingViewDef, FormDef, TableDef,
+    Type,
 };
 use zelyra_database::Schema;
 use zelyra_forms::{validate, FieldError};
@@ -277,6 +278,8 @@ pub struct CrudRoute {
     pub list_view: CrudListViewDef,
     pub detail_view: CrudDetailViewDef,
     pub delete_view: CrudDeleteViewDef,
+    pub loading_view: CrudLoadingViewDef,
+    pub error_view: CrudErrorViewDef,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub create_permissions: Vec<String>,
@@ -2531,6 +2534,35 @@ fn can_authorize(
     })
 }
 
+fn crud_loading_attribute(crud: &CrudRoute) -> String {
+    crud.loading_view
+        .message
+        .as_deref()
+        .map(|message| format!(" data-loading-message=\"{}\"", html_escape(message)))
+        .unwrap_or_default()
+}
+
+fn crud_error_response(
+    crud: &CrudRoute,
+    status: u16,
+    default_title: &str,
+    default_message: &str,
+) -> Response {
+    let title = crud.error_view.title.as_deref().unwrap_or(default_title);
+    let message = crud
+        .error_view
+        .message
+        .as_deref()
+        .unwrap_or(default_message);
+    let body = format!(
+        "<main class=\"zelyra-crud-error\"{}><h1>{}</h1><p>{}</p></main>",
+        crud_loading_attribute(crud),
+        html_escape(title),
+        html_escape(message)
+    );
+    Response::html(status, body)
+}
+
 fn dispatch_crud(
     crud: &CrudRoute,
     request: &Request,
@@ -2541,9 +2573,11 @@ fn dispatch_crud(
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
     let Some(database_url) = database_url else {
-        return Response::html(
+        return crud_error_response(
+            crud,
             503,
-            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD lists.</p>",
+            "Service Unavailable",
+            "DATABASE_URL is required for CRUD lists.",
         );
     };
     let query_string = request
@@ -2568,7 +2602,12 @@ fn dispatch_crud(
         .iter()
         .find(|table| table.name == crud.table)
     else {
-        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        return crud_error_response(
+            crud,
+            500,
+            "Internal Server Error",
+            "CRUD table is unavailable.",
+        );
     };
     let all_columns = table
         .columns
@@ -2576,7 +2615,12 @@ fn dispatch_crud(
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
     if all_columns.is_empty() {
-        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        return crud_error_response(
+            crud,
+            500,
+            "Internal Server Error",
+            "CRUD table has no columns.",
+        );
     }
     let display_columns = crud
         .list_columns
@@ -2812,7 +2856,12 @@ fn dispatch_crud(
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD query failed: {error}");
-            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            return crud_error_response(
+                crud,
+                500,
+                "Internal Server Error",
+                "The requested data could not be loaded.",
+            );
         }
     };
     Response::html(
@@ -3289,9 +3338,11 @@ fn dispatch_crud_detail(
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
     let Some(database_url) = database_url else {
-        return Response::html(
+        return crud_error_response(
+            crud,
             503,
-            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD details.</p>",
+            "Service Unavailable",
+            "DATABASE_URL is required for CRUD details.",
         );
     };
     let Some(id) = path_params.get("id") else {
@@ -3343,7 +3394,12 @@ fn dispatch_crud_detail(
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD detail query failed: {error}");
-            return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            return crud_error_response(
+                crud,
+                500,
+                "Internal Server Error",
+                "The requested record could not be loaded.",
+            );
         }
     };
     let Some(row) = result.rows.first() else {
@@ -3365,9 +3421,11 @@ fn dispatch_crud_delete(
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
     let Some(database_url) = database_url else {
-        return Response::html(
+        return crud_error_response(
+            crud,
             503,
-            "<h1>503 Service Unavailable</h1><p>DATABASE_URL is required for CRUD actions.</p>",
+            "Service Unavailable",
+            "DATABASE_URL is required for CRUD actions.",
         );
     };
     let Some(id) = path_params.get("id") else {
@@ -3402,7 +3460,12 @@ fn dispatch_crud_delete(
         true,
     ) {
         eprintln!("zelyra web: CRUD delete failed: {error}");
-        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+        return crud_error_response(
+            crud,
+            500,
+            "Internal Server Error",
+            "The record could not be deleted.",
+        );
     }
     Response::redirect(&crud.path)
 }
@@ -3752,7 +3815,9 @@ fn render_crud_list_with_actions(
         page,
         per_page,
     } = view;
-    let mut html = String::from("<main><h1>");
+    let mut html = String::from("<main");
+    html.push_str(&crud_loading_attribute(crud));
+    html.push_str("><h1>");
     html.push_str(&html_escape(&crud.title));
     html.push_str("</h1>");
     if ui_actions.create {
@@ -3995,7 +4060,9 @@ fn render_crud_detail_with_actions(
         .clone()
         .unwrap_or_else(|| format!("{} detail", crud.title));
     let cards = crud.detail_view.mode == CrudDetailViewMode::Cards;
-    let mut html = String::from("<main><p><a href=\"");
+    let mut html = String::from("<main");
+    html.push_str(&crud_loading_attribute(crud));
+    html.push_str("><p><a href=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str("\">Back to list</a></p><h1>");
     html.push_str(&html_escape(&title));
@@ -5354,6 +5421,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5443,6 +5512,7 @@ mod tests {
         let mut cards_route = route.clone();
         cards_route.list_view.mode = CrudListViewMode::Cards;
         cards_route.list_view.empty = Some("Nothing <yet>.".into());
+        cards_route.loading_view.message = Some("Loading machines...".into());
         let cards_html = render_crud_list(
             &cards_route,
             CrudListView {
@@ -5461,6 +5531,7 @@ mod tests {
         );
         assert!(cards_html.contains("zelyra-crud-cards"));
         assert!(cards_html.contains("zelyra-crud-card"));
+        assert!(cards_html.contains("data-loading-message=\"Loading machines...\""));
         assert!(!cards_html.contains("<table>"));
 
         let empty_rows: Vec<Vec<String>> = Vec::new();
@@ -5481,6 +5552,19 @@ mod tests {
             },
         );
         assert!(empty_html.contains("Nothing &lt;yet&gt;."));
+
+        let mut error_route = route.clone();
+        error_route.error_view.title = Some("Customer error".into());
+        error_route.error_view.message = Some("Try <again>.".into());
+        error_route.loading_view.message = Some("Loading customers".into());
+        let error_response =
+            crud_error_response(&error_route, 500, "Internal Server Error", "Fallback");
+        assert_eq!(error_response.status, 500);
+        assert!(error_response.body.contains(">Customer error</h1>"));
+        assert!(error_response.body.contains("Try &lt;again&gt;."));
+        assert!(error_response
+            .body
+            .contains("data-loading-message=\"Loading customers\""));
     }
 
     #[test]
@@ -5545,6 +5629,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5588,6 +5674,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5621,6 +5709,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5750,6 +5840,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: true,
             permissions: vec!["customers.view".into()],
             create_permissions: vec!["customers.create".into()],
@@ -5820,6 +5912,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5850,6 +5944,8 @@ mod tests {
             list_view: CrudListViewDef::default(),
             detail_view: CrudDetailViewDef::default(),
             delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),

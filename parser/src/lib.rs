@@ -593,9 +593,53 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(TokenKind::RBrace, "`}` after CRUD view delete")?;
                 }
+                TokenKind::Ident(name) if name == "loading" => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view loading")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD loading view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD loading view property")?;
+                        if property != "message" {
+                            return self.error(
+                                "expected `message` in CRUD loading view definition",
+                            );
+                        }
+                        view.loading.message =
+                            Some(self.string_value("CRUD loading message")?);
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view loading")?;
+                }
+                TokenKind::Ident(name) if name == "error" => {
+                    self.advance();
+                    self.expect(TokenKind::LBrace, "`{` after CRUD view error")?;
+                    self.skip_newlines();
+                    while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                        let (property, _) = self.ident("CRUD error view property")?;
+                        self.expect(TokenKind::Colon, "colon after CRUD error view property")?;
+                        match property.as_str() {
+                            "title" => {
+                                view.error.title =
+                                    Some(self.string_value("CRUD error view title")?);
+                            }
+                            "message" => {
+                                view.error.message =
+                                    Some(self.string_value("CRUD error view message")?);
+                            }
+                            _ => {
+                                return self.error(
+                                    "expected `title` or `message` in CRUD error view definition",
+                                )
+                            }
+                        }
+                        self.skip_newlines();
+                    }
+                    self.expect(TokenKind::RBrace, "`}` after CRUD view error")?;
+                }
                 _ => {
                     return self.error(
-                        "expected `list`, `detail`, `form`, or `delete` in CRUD view definition",
+                        "expected `list`, `detail`, `form`, `delete`, `loading`, or `error` in CRUD view definition",
                     )
                 }
             }
@@ -2171,6 +2215,13 @@ mod tests {
                             message: "This cannot be undone."
                             submit: "Delete now"
                         }
+                        loading {
+                            message: "Loading customer..."
+                        }
+                        error {
+                            title: "Customer unavailable"
+                            message: "Please try again later."
+                        }
                     }
                 }"#)
             .unwrap(),
@@ -2204,6 +2255,18 @@ mod tests {
         assert_eq!(
             program.cruds[0].view.delete.submit.as_deref(),
             Some("Delete now")
+        );
+        assert_eq!(
+            program.cruds[0].view.loading.message.as_deref(),
+            Some("Loading customer...")
+        );
+        assert_eq!(
+            program.cruds[0].view.error.title.as_deref(),
+            Some("Customer unavailable")
+        );
+        assert_eq!(
+            program.cruds[0].view.error.message.as_deref(),
+            Some("Please try again later.")
         );
     }
 
@@ -2245,6 +2308,17 @@ mod tests {
         let result = parse(
             &lex(r#"crud Customer -> customers {
                     view { delete { confirm: "yes" } }
+                }"#)
+            .unwrap(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_crud_error_view_property() {
+        let result = parse(
+            &lex(r#"crud Customer -> customers {
+                    view { error { retry: "yes" } }
                 }"#)
             .unwrap(),
         );

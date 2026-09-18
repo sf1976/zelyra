@@ -129,8 +129,8 @@ under evaluation.
   and permission guards.
 - [~] CRUD delete confirmation overrides support custom headings, warning
   messages, and submit labels while preserving POST-only, CSRF, and auth guards.
-- [ ] CRUD view overrides for loading and error states while preserving
-  generated security guards.
+- [~] CRUD loading metadata and configurable error views preserve escaping and
+  generic database-error boundaries; client-side loading UI remains open.
 - [ ] A design-token system for colors, spacing, typography, breakpoints, and
   density.
 - [ ] Per-view themes, application themes, dark mode, and user-selectable

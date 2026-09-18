@@ -89,6 +89,25 @@ crud Customer -> customers {
 The generated endpoint remains POST-only and continues to enforce CSRF and
 delete authorization checks.
 
+CRUD loading and error states can also be configured:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        loading { message: "Loading customers..." }
+        error {
+            title: "Customer unavailable"
+            message: "Please try again later."
+        }
+    }
+}
+~~~
+
+The loading message is emitted as escaped metadata for progressive enhancement;
+the server-rendered response does not claim that loading is active. Configured
+error messages replace generic CRUD database-error pages without exposing
+internal database details.
+
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID
 columns for filters. Configured names are checked against the schema before

@@ -536,6 +536,23 @@ view {
 The generated endpoint remains POST-only and continues to enforce CSRF and
 delete authorization checks.
 
+CRUD loading and error states can also be configured:
+
+~~~zelyra
+view {
+    loading { message: "Loading customers..." }
+    error {
+        title: "Customer unavailable"
+        message: "Please try again later."
+    }
+}
+~~~
+
+The loading message is emitted as escaped metadata for progressive enhancement;
+the server-rendered response does not claim that loading is active. Configured
+error messages replace generic CRUD database-error pages without exposing
+internal database details.
+
 ## 11. Forms
 
 ✅ Forms can inherit table rules:

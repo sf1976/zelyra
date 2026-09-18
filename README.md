@@ -335,6 +335,23 @@ view {
 The generated endpoint remains POST-only and continues to require CSRF and
 delete authorization checks.
 
+CRUD loading and error states can be configured as well:
+
+~~~zelyra
+view {
+    loading { message: "Loading customers..." }
+    error {
+        title: "Customer unavailable"
+        message: "Please try again later."
+    }
+}
+~~~
+
+The loading message is emitted as escaped metadata for progressive enhancement.
+The server-rendered response never pretends that a loading state is active.
+Configured error messages replace generic CRUD database-error pages while
+internal database details remain hidden.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

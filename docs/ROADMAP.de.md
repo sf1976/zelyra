@@ -130,8 +130,9 @@ noch in Prüfung.
 - [~] CRUD-View-Überschreibungen für Löschbestätigungen unterstützen eigene
   Überschriften, Warnungen und Absende-Beschriftungen bei Erhalt der POST-only-,
   CSRF- und Berechtigungsprüfungen.
-- [ ] CRUD-View-Überschreibungen für Lade- und Fehleransichten bei Erhalt der
-  generierten Sicherheitsprüfungen.
+- [~] CRUD-Lademetadaten und konfigurierbare Fehleransichten erhalten Escaping
+  und generische Datenbankfehlergrenzen; eine clientseitige Ladeanzeige bleibt
+  offen.
 - [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und
   Dichte.
 - [ ] View- und globale Themes, Dark Mode und benutzerwählbare Darstellung.

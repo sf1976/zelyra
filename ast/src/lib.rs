@@ -200,6 +200,8 @@ pub struct CrudViewDef {
     pub detail: CrudDetailViewDef,
     pub form: CrudFormViewDef,
     pub delete: CrudDeleteViewDef,
+    pub loading: CrudLoadingViewDef,
+    pub error: CrudErrorViewDef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,6 +274,17 @@ pub struct CrudDeleteViewDef {
     pub title: Option<String>,
     pub message: Option<String>,
     pub submit: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudLoadingViewDef {
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CrudErrorViewDef {
+    pub title: Option<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

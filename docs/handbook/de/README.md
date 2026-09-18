@@ -596,6 +596,23 @@ view {
 Die generierte Route bleibt POST-only und erzwingt weiterhin CSRF- und
 Löschberechtigungsprüfungen.
 
+CRUD-Lade- und Fehlerzustände können ebenfalls konfiguriert werden:
+
+~~~zelyra
+view {
+    loading { message: "Kunden werden geladen ..." }
+    error {
+        title: "Kunden nicht verfügbar"
+        message: "Bitte später erneut versuchen."
+    }
+}
+~~~
+
+Die Lademeldung wird als escaped Metadatum für Progressive Enhancement
+ausgegeben; die serverseitige Antwort behauptet nicht, dass gerade geladen
+wird. Konfigurierte Fehlermeldungen ersetzen generische CRUD-Datenbankfehler,
+ohne interne Datenbankdetails offenzulegen.
+
 ## 11. Formulare
 
 ✅ Formulare können Regeln aus Tabellen übernehmen:

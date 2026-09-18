@@ -94,6 +94,25 @@ crud Customer -> customers {
 Die generierte Route bleibt POST-only und erzwingt weiterhin CSRF- und
 Löschberechtigungsprüfungen.
 
+CRUD-Lade- und Fehlerzustände können ebenfalls konfiguriert werden:
+
+~~~zelyra
+crud Customer -> customers {
+    view {
+        loading { message: "Kunden werden geladen ..." }
+        error {
+            title: "Kunden nicht verfügbar"
+            message: "Bitte später erneut versuchen."
+        }
+    }
+}
+~~~
+
+Die Lademeldung wird als escaped Metadatum für Progressive Enhancement
+ausgegeben; die serverseitige Antwort behauptet nicht, dass gerade geladen
+wird. Konfigurierte Fehlermeldungen ersetzen generische CRUD-Datenbankfehler,
+ohne interne Datenbankdetails offenzulegen.
+
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle
 Spalten außer der ID für Filter. Konfigurierte Namen werden vor dem

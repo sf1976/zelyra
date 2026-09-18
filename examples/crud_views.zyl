@@ -39,5 +39,14 @@ crud Customer -> customers {
             message: "This cannot be undone."
             submit: "Delete now"
         }
+
+        loading {
+            message: "Loading customers..."
+        }
+
+        error {
+            title: "Customer unavailable"
+            message: "Please try again later."
+        }
     }
 }
