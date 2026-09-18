@@ -674,8 +674,20 @@ Query-Werte werden gegen ihren Zelyra-Typ geprüft und sicher als
 Datenbankparameter gebunden. Eine fehlende optionale Eingabe wird zu SQL
 `NULL`; ein fehlender Pflichtwert oder ein ungültiger Wert erzeugt eine
 kontrollierte HTTP-400-Antwort. Automatische Steuerungen für Suche, Filter,
-Sortierung und Pagination in beliebigen Seiten bleiben geplant. Siehe
-`examples/view_query_input.zyl`.
+Sortierung und Pagination in beliebigen Seiten bleiben geplant.
+Page-Collections können bereits sicher serverseitig paginiert werden:
+
+~~~zelyra
+page "/customers" {
+    paginated 25
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <p>Seite: {page}</p> }
+}
+~~~
+
+`page` wird als positive Ganzzahl geprüft, verwendet standardmäßig `1` und
+wird als parametrisierter `LIMIT`-/`OFFSET`-Wrapper um das Collection-SQL
+angewendet. Siehe `examples/view_query_input.zyl`.
 
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 
