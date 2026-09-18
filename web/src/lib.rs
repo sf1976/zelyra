@@ -20,9 +20,16 @@ use zelyra_forms::{validate, FieldError};
 pub struct Route {
     pub path: String,
     pub html: String,
+    pub query: Vec<RouteQuery>,
     pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteQuery {
+    pub name: String,
+    pub ty: Type,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2247,10 +2254,24 @@ impl Router {
         if method != "GET" {
             return Response::html(405, "<h1>405 Method Not Allowed</h1>");
         }
-        let path = path.split_once('?').map_or(path, |(path, _)| path);
+        let target = path;
+        let path = target.split_once('?').map_or(target, |(path, _)| path);
         for route in &self.routes {
             if let Some(params) = match_path(&route.path, path) {
-                let data = match load_route_data(route, &params, database_url) {
+                let query_string = target.split_once('?').map_or("", |(_, query)| query);
+                let query_values = match parse_urlencoded(query_string) {
+                    Ok(values) => values,
+                    Err(error) => {
+                        return Response::html(
+                            400,
+                            format!(
+                                "<h1>400 Bad Request</h1><p>{}</p>",
+                                html_escape(&error.message)
+                            ),
+                        )
+                    }
+                };
+                let data = match load_route_data(route, &params, &query_values, database_url) {
                     Ok(data) => data,
                     Err(RouteDataError::NotFound) => {
                         return Response::html(404, "<h1>404 Not Found</h1>");
@@ -2265,6 +2286,12 @@ impl Router {
                         return Response::html(
                             500,
                             "<h1>500 Internal Server Error</h1><p>Page data could not be loaded.</p>",
+                        );
+                    }
+                    Err(RouteDataError::InvalidQuery(message)) => {
+                        return Response::html(
+                            400,
+                            format!("<h1>400 Bad Request</h1><p>{}</p>", html_escape(&message)),
                         );
                     }
                 };
@@ -5512,11 +5539,12 @@ fn path_parts(path: &str) -> Vec<&str> {
         .collect()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum RouteDataError {
     NotFound,
     DatabaseUnavailable,
     Query,
+    InvalidQuery(String),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -5528,20 +5556,44 @@ struct LoadedRouteData {
 fn load_route_data(
     route: &Route,
     params: &HashMap<String, String>,
+    query_values: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Result<LoadedRouteData, RouteDataError> {
+    let mut bound_query_values = Vec::new();
+    for input in &route.query {
+        let value = match query_values.get(&input.name) {
+            Some(value) => {
+                page_query_value(&input.ty, value).map_err(RouteDataError::InvalidQuery)?
+            }
+            None if matches!(input.ty, Type::Option(_)) => QueryValue::Null,
+            None => {
+                return Err(RouteDataError::InvalidQuery(format!(
+                    "missing required query parameter `{}`",
+                    input.name
+                )))
+            }
+        };
+        bound_query_values.push((input.name.clone(), value));
+    }
+    let mut loaded = LoadedRouteData::default();
+    for input in &route.query {
+        loaded.values.insert(
+            input.name.clone(),
+            query_values.get(&input.name).cloned().unwrap_or_default(),
+        );
+    }
     if route.data.is_empty() {
-        return Ok(LoadedRouteData::default());
+        return Ok(loaded);
     }
     let Some(database_url) = database_url else {
         return Err(RouteDataError::DatabaseUnavailable);
     };
-    let mut loaded = LoadedRouteData::default();
     for data in &route.data {
-        let query_params = params
+        let mut query_params = params
             .iter()
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
-            .collect();
+            .collect::<Vec<_>>();
+        query_params.extend(bound_query_values.iter().cloned());
         let result =
             match zelyra_database::execute_mariadb_query(database_url, &data.query, query_params) {
                 Ok(result) => result,
@@ -5574,6 +5626,33 @@ fn load_route_data(
         }
     }
     Ok(loaded)
+}
+
+fn page_query_value(ty: &Type, value: &str) -> Result<QueryValue, String> {
+    let ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    match ty {
+        Type::Int => value
+            .parse::<i64>()
+            .map(QueryValue::Int)
+            .map_err(|_| "query parameter must be an integer".into()),
+        Type::UInt => value
+            .parse::<u64>()
+            .map(QueryValue::UInt)
+            .map_err(|_| "query parameter must be an unsigned integer".into()),
+        Type::Float | Type::Decimal => value
+            .parse::<f64>()
+            .map(QueryValue::Float)
+            .map_err(|_| "query parameter must be a number".into()),
+        Type::Bool => match value {
+            "true" | "1" => Ok(QueryValue::Bool(true)),
+            "false" | "0" => Ok(QueryValue::Bool(false)),
+            _ => Err("query parameter must be true or false".into()),
+        },
+        _ => Ok(QueryValue::String(value.into())),
+    }
 }
 
 fn route_data_row(
@@ -5853,6 +5932,7 @@ mod tests {
         Router::new(vec![Route {
             path: "/hello/{name}".into(),
             html: "<h1>Hello, {name}!</h1>".into(),
+            query: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6112,6 +6192,20 @@ mod tests {
             ),
             "<h1>&lt;script&gt;</h1>"
         );
+    }
+
+    #[test]
+    fn validates_typed_page_query_values() {
+        assert!(matches!(
+            page_query_value(&Type::Option(Box::new(Type::UInt)), "25"),
+            Ok(QueryValue::UInt(25))
+        ));
+        assert!(matches!(
+            page_query_value(&Type::Bool, "true"),
+            Ok(QueryValue::Bool(true))
+        ));
+        assert!(page_query_value(&Type::Int, "not-a-number").is_err());
+        assert!(page_query_value(&Type::Bool, "yes").is_err());
     }
 
     #[test]
@@ -6914,6 +7008,7 @@ mod tests {
         let route = Route {
             path: "/customers/{name}".into(),
             html: "<h1>{customer.name}</h1>".into(),
+            query: Vec::new(),
             data: vec![RouteData {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
@@ -6964,6 +7059,7 @@ mod tests {
         let route = Route {
             path: "/admin".into(),
             html: "<h1>Admin</h1>".into(),
+            query: Vec::new(),
             data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
@@ -6983,6 +7079,7 @@ mod tests {
             vec![Route {
                 path: "/admin".into(),
                 html: "<h1>Admin</h1>".into(),
+                query: Vec::new(),
                 data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],

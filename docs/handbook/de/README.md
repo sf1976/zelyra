@@ -653,6 +653,30 @@ page "/customers" {
 Option-aware Feld-Ausdrücke und reichere View-Daten bleiben geplant. Siehe
 `examples/view_data.zyl` und `examples/view_collection.zyl`.
 
+Seiten können typisierte Query-Eingaben für ausdrücklich serverseitiges SQL
+deklarieren:
+
+~~~zelyra
+page "/customers" {
+    input { search: String? }
+
+    load customers = sql<Customer[]> {
+        SELECT id, name FROM customers
+        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
+        ORDER BY name
+    }
+
+    html { <p>Suche: {search}</p> }
+}
+~~~
+
+Query-Werte werden gegen ihren Zelyra-Typ geprüft und sicher als
+Datenbankparameter gebunden. Eine fehlende optionale Eingabe wird zu SQL
+`NULL`; ein fehlender Pflichtwert oder ein ungültiger Wert erzeugt eine
+kontrollierte HTTP-400-Antwort. Automatische Steuerungen für Suche, Filter,
+Sortierung und Pagination in beliebigen Seiten bleiben geplant. Siehe
+`examples/view_query_input.zyl`.
+
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 
 ~~~zelyra

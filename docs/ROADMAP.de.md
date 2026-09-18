@@ -204,6 +204,11 @@ Feature eines bestimmten Anbieters.
   und typisierte Collection-Schleifen; Filter, Suche, Sortierung und
   Pagination bleiben zunächst auf Tableviews konzentriert, reichere Daten für
   beliebige Views bleiben geplant.
+- [~] Seitenlokale typisierte Query-Eingaben (`input { search: String? }`) werden
+  geprüft, sicher an natives SQL gebunden, für HTML-Interpolationen verfügbar
+  gemacht und bei fehlenden Pflichtwerten oder ungültigen skalaren Werten mit
+  kontrolliertem HTTP 400 abgelehnt. Automatische Steuerungen für Suche,
+  Filter, Sortierung und Pagination beliebiger Seiten bleiben geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

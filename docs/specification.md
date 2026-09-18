@@ -71,3 +71,23 @@ query. Results are rendered with HTML escaping; missing required records and
 database failures produce generic HTTP boundaries without exposing database
 details. Collection loops are supported for arrays of records. Optional-aware
 field expressions and richer view-local data remain planned.
+
+Pages may declare typed query inputs:
+
+~~~zelyra
+page "/customers" {
+    input { search: String? }
+    load customers = sql<Customer[]> {
+        SELECT id, name FROM customers
+        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
+    }
+    html { <p>{search}</p> }
+}
+~~~
+
+Query inputs are available to page SQL and HTML interpolation. The compiler
+checks their declared scalar type, and the runtime binds decoded URL values as
+database parameters. Missing optional inputs are bound as SQL `NULL`; missing
+required inputs and invalid scalar values produce HTTP 400. Automatic controls
+for search, filtering, sorting, and pagination on arbitrary pages are not yet
+part of this feature.
