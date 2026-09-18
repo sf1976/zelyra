@@ -23,6 +23,12 @@ reproduzierbare MariaDB- und SQLite-Schema-Prüfungen; die weitergehende
 Runtime- und Datenbankunterstützung bleibt an den entsprechenden Stellen
 ausdrücklich experimentell.
 
+### Fixed
+
+- Docker end-to-end validation now builds generated projects from the checked
+  branch or tag explicitly, so pre-release CI does not depend on a tag that
+  has not been published yet.
+
 ### Added
 
 - Extended `zelyra doctor` with read-only Docker Compose availability checks

@@ -8,6 +8,7 @@ web_port="${ZELYRA_DOCKER_E2E_WEB_PORT:-8081}"
 host_port="${ZELYRA_DOCKER_E2E_HOST_PORT:-18082}"
 database_host_port="${ZELYRA_DOCKER_E2E_DB_HOST_PORT:-3309}"
 address="${ZELYRA_DOCKER_E2E_ADDRESS:-127.0.0.1:${host_port}}"
+zelyra_ref="${ZELYRA_DOCKER_E2E_REF:-main}"
 
 if [[ ! -x "${zelyra_bin}" ]]; then
     echo "error: Zelyra binary not found at ${zelyra_bin}; run cargo build -p zelyra-cli first" >&2
@@ -48,7 +49,11 @@ docker compose --project-name "${compose_project}" \
     -f "${project_dir}/docker-compose.mariadb.yml" config >/dev/null
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
-    -f "${project_dir}/docker-compose.mariadb.yml" up -d --build
+    -f "${project_dir}/docker-compose.mariadb.yml" build \
+    --build-arg "ZELYRA_REF=${zelyra_ref}"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" up -d
 
 for _ in $(seq 1 60); do
     if curl --silent --show-error --fail "http://${address}/" \

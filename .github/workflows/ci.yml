@@ -82,6 +82,7 @@ jobs:
           ZELYRA_DOCKER_E2E_HOST_PORT: 18082
           ZELYRA_DOCKER_E2E_WEB_PORT: 8081
           ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
+          ZELYRA_DOCKER_E2E_REF: ${{ github.head_ref || github.ref_name }}
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-docker-e2e.sh
       - name: Run generated authentication project end-to-end test
