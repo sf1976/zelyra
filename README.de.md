@@ -413,6 +413,7 @@ serverseitig sortiert und paginiert werden:
 
 ~~~zelyra
 page "/customers" {
+    search { name }
     sort { name }
     paginated 25
     load customers = sql<Customer[]> { SELECT id, name FROM customers }
@@ -426,6 +427,11 @@ angewendet. `sort` akzeptiert nur deklarierte Ergebnisfelder und `order` nur
 `asc` oder `desc`; beides kann sicher in URLs wie
 `/customers?sort=name&order=desc` verwendet werden. Siehe
 `examples/view_query_input.zyl`.
+
+`search { name email }` stellt dieselbe vom Compiler geprüfte Whitelist für
+den URL-Wert `search` bereit. Suchbegriffe werden als Parameter gebunden und
+mit serverseitigen `LIKE`-Bedingungen angewendet; ungeprüfte SQL-Fragmente
+werden niemals erzeugt.
 
 Komponenten können mit `<slot name="header" />` auch benannte Slots deklarieren;
 Aufrufer übergeben sie mit Blöcken wie

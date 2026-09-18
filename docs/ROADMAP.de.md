@@ -216,6 +216,10 @@ Feature eines bestimmten Anbieters.
 - [~] Seitenlokale Collection-Sortierung über `sort { field ... }` ist verfügbar.
   Nur vom Compiler geprüfte Ergebnisfelder sowie `asc`/`desc` werden akzeptiert;
   eine automatische Erzeugung von Sortiersteuerungen bleibt geplant.
+- [~] Seitenlokale Collection-Suche über `search { field ... }` ist verfügbar.
+  Suchbegriffe werden parametrisiert und mit serverseitigen `LIKE`-Bedingungen
+  auf compiler-geprüfte Felder angewendet; eine automatische Erzeugung von
+  Suchsteuerungen bleibt geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

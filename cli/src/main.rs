@@ -833,6 +833,7 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
             &page.inputs,
             page.page_size,
             !page.sort.is_empty(),
+            !page.search.is_empty(),
         );
         let mut names = HashSet::new();
         for data in &page.data {
@@ -919,6 +920,52 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
                 }
             }
         }
+        if !page.search.is_empty() {
+            let collection_data = page
+                .data
+                .iter()
+                .filter(|data| matches!(data.result_type, Type::Array(_)))
+                .collect::<Vec<_>>();
+            if collection_data.is_empty() {
+                diagnostic(
+                    path,
+                    "E-VIEW-024",
+                    "page `search` requires at least one collection loaded with an array result type",
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
+            } else {
+                let mut search_fields = HashSet::new();
+                for field in &page.search {
+                    if !search_fields.insert(field.as_str()) {
+                        diagnostic(
+                            path,
+                            "E-VIEW-024",
+                            &format!("page search field `{field}` is declared more than once"),
+                            page.span.line,
+                            page.span.column,
+                        );
+                        valid = false;
+                    }
+                    if !collection_data.iter().all(|data| {
+                        page_collection_fields(program, &data.result_type)
+                            .is_some_and(|fields| fields.iter().any(|candidate| candidate == field))
+                    }) {
+                        diagnostic(
+                            path,
+                            "E-VIEW-025",
+                            &format!(
+                                "page search field `{field}` does not exist in every collection result type"
+                            ),
+                            page.span.line,
+                            page.span.column,
+                        );
+                        valid = false;
+                    }
+                }
+            }
+        }
     }
     valid
 }
@@ -926,7 +973,7 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[], &[], None, false);
+        let route_names = page_template_bindings(&page.path, &[], &[], None, false, false);
         let mut names = HashSet::new();
         for input in &page.inputs {
             if !names.insert(input.name.as_str()) {
@@ -985,6 +1032,26 @@ fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
                     path,
                     "E-VIEW-019",
                     &format!("page input `{}` is reserved by `sort`", input.name),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if !page.search.is_empty() && input.name == "search" {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    "page input `search` is reserved by `search`",
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if !page.search.is_empty() && input.name == "zelyra_page_search" {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    "page input `zelyra_page_search` is reserved for search internals",
                     input.span.line,
                     input.span.column,
                 );
@@ -1660,6 +1727,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "inputs": inputs,
                 "page_size": page.page_size,
                 "sort": page.sort,
+                "search": page.search,
                 "data": data,
                 "span": context_span(source, page.span)
             })
@@ -2675,6 +2743,7 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             &page.inputs,
             page.page_size,
             !page.sort.is_empty(),
+            !page.search.is_empty(),
         );
         valid &= validate_component_template(
             path,
@@ -2706,6 +2775,7 @@ fn page_template_bindings(
     inputs: &[zelyra_ast::PageInputDef],
     page_size: Option<u32>,
     sort_enabled: bool,
+    search_enabled: bool,
 ) -> HashMap<String, Type> {
     let mut bindings = path
         .split('/')
@@ -2726,6 +2796,9 @@ fn page_template_bindings(
     if sort_enabled {
         bindings.insert("sort".into(), Type::String);
         bindings.insert("order".into(), Type::String);
+    }
+    if search_enabled {
+        bindings.insert("search".into(), Type::String);
     }
     for data in data {
         bindings.insert(data.name.clone(), data.result_type.clone());
@@ -5443,6 +5516,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 .collect(),
             page_size: page.page_size,
             sort_columns: page.sort.clone(),
+            search_columns: page.search.clone(),
             data: page
                 .data
                 .iter()

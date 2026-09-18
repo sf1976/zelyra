@@ -399,6 +399,7 @@ collections can already opt into safe server-side sorting and pagination:
 
 ~~~zelyra
 page "/customers" {
+    search { name }
     sort { name }
     paginated 25
     load customers = sql<Customer[]> { SELECT id, name FROM customers }
@@ -411,6 +412,10 @@ a parameterized `LIMIT`/`OFFSET` wrapper around collection SQL. `sort` accepts
 only declared result fields and `order` only `asc` or `desc`; both are safe to
 use in URLs such as `/customers?sort=name&order=desc`. See
 `examples/view_query_input.zyl`.
+
+`search { name email }` provides the same compiler-checked whitelist for the
+`search` URL value. Search terms are bound as parameters and applied with
+server-side `LIKE` conditions; unchecked SQL fragments are never created.
 
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components

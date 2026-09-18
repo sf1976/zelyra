@@ -208,6 +208,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Page-local collection sorting via `sort { field ... }` is available.
   Only compiler-validated result fields and `asc`/`desc` order values are
   accepted; automatic sort-control rendering remains planned.
+- [~] Page-local collection search via `search { field ... }` is available.
+  Search terms are parameterized and applied to compiler-validated fields with
+  server-side `LIKE` conditions; automatic search-control rendering remains
+  planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and

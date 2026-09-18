@@ -23,6 +23,7 @@ pub struct Route {
     pub query: Vec<RouteQuery>,
     pub page_size: Option<u32>,
     pub sort_columns: Vec<String>,
+    pub search_columns: Vec<String>,
     pub data: Vec<RouteData>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
@@ -5599,6 +5600,10 @@ fn load_route_data(
             .values
             .insert("order".into(), order.to_ascii_lowercase());
     }
+    let search = page_search_state(route, query_values).map_err(RouteDataError::InvalidQuery)?;
+    if let Some(search) = &search {
+        loaded.values.insert("search".into(), search.clone());
+    }
     if route.data.is_empty() {
         return Ok(loaded);
     }
@@ -5612,9 +5617,16 @@ fn load_route_data(
             .map(|(name, value)| (name.clone(), QueryValue::String(value.clone())))
             .collect::<Vec<_>>();
         query_params.extend(bound_query_values.iter().cloned());
-        if data.collection && (sort.is_some() || route.page_size.is_some()) {
-            let (wrapped_query, generated_params) =
-                page_collection_query(&query, sort.as_deref(), order, route.page_size, page);
+        if data.collection && (search.is_some() || sort.is_some() || route.page_size.is_some()) {
+            let (wrapped_query, generated_params) = page_collection_query(
+                &query,
+                search.as_deref(),
+                &route.search_columns,
+                sort.as_deref(),
+                order,
+                route.page_size,
+                page,
+            );
             query = wrapped_query;
             query_params.extend(generated_params);
         }
@@ -5696,8 +5708,26 @@ fn page_sort_state(
     Ok((Some(sort), order))
 }
 
+fn page_search_state(
+    route: &Route,
+    query_values: &HashMap<String, String>,
+) -> Result<Option<String>, String> {
+    let explicit_search_input = route.query.iter().any(|input| input.name == "search");
+    if route.search_columns.is_empty() {
+        if query_values.contains_key("search") && !explicit_search_input {
+            return Err("this page does not declare searchable fields".into());
+        }
+        return Ok(None);
+    }
+    Ok(Some(
+        query_values.get("search").cloned().unwrap_or_default(),
+    ))
+}
+
 fn page_collection_query(
     source: &str,
+    search: Option<&str>,
+    search_columns: &[String],
     sort: Option<&str>,
     order: &str,
     page_size: Option<u32>,
@@ -5705,13 +5735,32 @@ fn page_collection_query(
 ) -> (String, Vec<(String, QueryValue)>) {
     let source = source.trim().trim_end_matches(';').trim();
     let mut query = format!("SELECT zelyra_page.* FROM ({source}) AS zelyra_page");
+    let mut parameters = Vec::new();
+    if let Some(search) = search.filter(|search| !search.is_empty()) {
+        if !search_columns.is_empty() {
+            query.push_str(" WHERE ");
+            query.push('(');
+            for (index, column) in search_columns.iter().enumerate() {
+                if index > 0 {
+                    query.push_str(" OR ");
+                }
+                query.push_str("CAST(zelyra_page.");
+                query.push_str(&quote_identifier(column));
+                query.push_str(" AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%')");
+            }
+            query.push(')');
+            parameters.push((
+                "zelyra_page_search".into(),
+                QueryValue::String(search.into()),
+            ));
+        }
+    }
     if let Some(sort) = sort {
         query.push_str(" ORDER BY zelyra_page.");
         query.push_str(&quote_identifier(sort));
         query.push(' ');
         query.push_str(order);
     }
-    let mut parameters = Vec::new();
     if let Some(page_size) = page_size {
         query.push_str(" LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset");
         parameters.push((
@@ -6034,6 +6083,7 @@ mod tests {
             query: Vec::new(),
             page_size: None,
             sort_columns: Vec::new(),
+            search_columns: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6318,25 +6368,54 @@ mod tests {
         );
         assert!(page_number(&HashMap::from([("page".into(), "0".into())])).is_err());
         assert!(page_number(&HashMap::from([("page".into(), "nope".into())])).is_err());
-        let (query, parameters) =
-            page_collection_query(" SELECT id FROM customers; ", None, "ASC", Some(25), 1);
+        let (query, parameters) = page_collection_query(
+            " SELECT id FROM customers; ",
+            None,
+            &[],
+            None,
+            "ASC",
+            Some(25),
+            1,
+        );
         assert_eq!(
             query,
             "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
         );
         assert_eq!(parameters.len(), 2);
-        let (sorted_query, _) =
-            page_collection_query("SELECT id FROM customers", Some("name"), "DESC", None, 1);
+        let (sorted_query, _) = page_collection_query(
+            "SELECT id FROM customers",
+            None,
+            &[],
+            Some("name"),
+            "DESC",
+            None,
+            1,
+        );
         assert_eq!(
             sorted_query,
             "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page ORDER BY zelyra_page.`name` DESC"
         );
+        let (searched_query, search_parameters) = page_collection_query(
+            "SELECT id, name, email FROM customers",
+            Some("Ada"),
+            &["name".into(), "email".into()],
+            Some("name"),
+            "ASC",
+            Some(25),
+            1,
+        );
+        assert!(searched_query.contains(
+            "WHERE (CAST(zelyra_page.`name` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%') OR CAST(zelyra_page.`email` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%'))"
+        ));
+        assert!(searched_query.contains("ORDER BY zelyra_page.`name` ASC"));
+        assert_eq!(search_parameters.len(), 3);
         let route = Route {
             path: "/customers".into(),
             html: String::new(),
             query: Vec::new(),
             page_size: None,
             sort_columns: vec!["name".into(), "created_at".into()],
+            search_columns: Vec::new(),
             data: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
@@ -6357,6 +6436,18 @@ mod tests {
             &HashMap::from([("order".into(), "sideways".into())])
         )
         .is_err());
+        let mut searchable_route = route.clone();
+        searchable_route.search_columns = vec!["name".into(), "email".into()];
+        assert_eq!(
+            page_search_state(
+                &searchable_route,
+                &HashMap::from([("search".into(), "Ada".into())])
+            ),
+            Ok(Some("Ada".into()))
+        );
+        assert!(
+            page_search_state(&route, &HashMap::from([("search".into(), "Ada".into())])).is_err()
+        );
     }
 
     #[test]
@@ -7162,6 +7253,7 @@ mod tests {
             query: Vec::new(),
             page_size: None,
             sort_columns: Vec::new(),
+            search_columns: Vec::new(),
             data: vec![RouteData {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
@@ -7215,6 +7307,7 @@ mod tests {
             query: Vec::new(),
             page_size: None,
             sort_columns: Vec::new(),
+            search_columns: Vec::new(),
             data: Vec::new(),
             requires_auth: true,
             permissions: vec!["admin.view".into()],
@@ -7237,6 +7330,7 @@ mod tests {
                 query: Vec::new(),
                 page_size: None,
                 sort_columns: Vec::new(),
+                search_columns: Vec::new(),
                 data: Vec::new(),
                 requires_auth: true,
                 permissions: vec!["admin.delete".into()],
