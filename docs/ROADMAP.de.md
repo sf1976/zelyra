@@ -106,9 +106,10 @@ Feature eines bestimmten Anbieters.
   sicheren Diagnosen sind verfügbar; der Rust-freie Release-Modus deckt
   veröffentlichte x86_64-Assets ab.
 - [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding,
-  sichere lokale `.env`-Erzeugung und validierte wählbare Ports über
-  `zelyra new`, `zelyra init` und `zelyra setup`; eine interaktive
-  Verbindungs-Konfiguration bleibt offen.
+  sichere lokale `.env`-Erzeugung direkt bei `zelyra new` und `zelyra init`,
+  ausführlich kommentierte optionale Einstellungen und validierte wählbare
+  Ports; `zelyra setup` bleibt als idempotenter Nachholpfad verfügbar. Eine
+  interaktive Verbindungs-Konfiguration bleibt offen.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
   Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
   die Docker-Laufzeitprüfung für erzeugte Projekte ist vorhanden,
@@ -154,6 +155,9 @@ Feature eines bestimmten Anbieters.
 - [x] MariaDB als primäres getestetes Backend.
 - [x] SQLite für lokale und eingebettete Anwendungen.
 - [x] PostgreSQL für Schema und Planung.
+- [x] Datenbank-CLI: `create`, `setup`, `bootstrap`, `inspect`, `plan` und das
+  geschützte `apply` sind mit ausdrücklichem Backend-Verhalten und Schutz vor
+  destruktiven Änderungen umgesetzt.
 - [ ] Vollständige PostgreSQL-Runtime-Parität.
 - [ ] MariaDB-/MySQL-Kompatibilitätsmatrix und versionsabhängige Diagnostik.
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.

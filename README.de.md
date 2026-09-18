@@ -878,6 +878,15 @@ erstellt eine temporäre Datenbank, inspiziert das Schema, prüft einen
 idempotenten Plan und kontrolliert die erzeugten Foreign Keys. Es verwendet
 keine Anwendungsdaten oder Zugangsdaten aus der Host-Umgebung.
 
+Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt nur
+compilergeprüftes DDL aus und verbindet sich nie; `setup` legt bei Bedarf eine
+MariaDB-Datenbank an und wendet das Anfangsschema an; `bootstrap` wendet ein
+Anfangsschema auf MariaDB oder SQLite an; `inspect` liest das Ist-Schema;
+`plan` zeigt den deterministischen Diff; und `apply` führt ihn aus, nachdem
+destruktive Änderungen ohne `--allow-destructive` abgelehnt wurden. `setup`,
+`bootstrap`, `inspect` und `apply` benötigen `DATABASE_URL`; `plan` kann ohne
+Variable auch gegen eine leere Datenbank planen.
+
 Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
 Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies
 das Standard-Backend des Projekts ist.
@@ -958,11 +967,17 @@ Für den einfachsten lokalen Start mit MariaDB und dem integrierten Webserver
 ein Projekt mit `zelyra new meine-app --mariadb --web-port 8080 --host-port
 18080 --db-host-port 3307` erstellen. Der erzeugte Compose-Stack verwendet
 intern Port 8080, veröffentlicht den Webserver als
-`http://127.0.0.1:18080` und MariaDB auf Host-Port 3307. Mit
-`zelyra setup meine-app` wird eine geschützte `.env` mit zufälligen lokalen
-MariaDB-Zugangsdaten erzeugt. Eine vorhandene `.env` wird niemals
+`http://127.0.0.1:18080` und MariaDB auf Host-Port 3307. `zelyra new
+--mariadb` erzeugt sofort eine geschützte `.env` mit zufälligen lokalen
+MariaDB-Zugangsdaten. Eine vorhandene `.env` wird niemals
 überschrieben; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT` und
 `ZELYRA_DB_HOST_PORT` können dort unabhängig geändert werden.
+
+`zelyra new --mariadb` und `zelyra init --mariadb` erzeugen diese geschützte
+`.env` bereits direkt; `zelyra setup` bleibt für bestehende Projekte verfügbar.
+Nur die notwendigen Datenbankwerte sind aktiv. Ports, Feature-Schalter,
+Authentifizierung und weitere Optionen stehen ausführlich auskommentiert in
+der Datei; `.env.example` bleibt die sichere Referenzvorlage.
 
 Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet `zelyra setup` dieselben sicheren
@@ -981,11 +996,15 @@ CRUD-Starterprojekt verwenden:
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 set -a; . ./.env; set +a
 zelyra db setup main.zyl
 ~~~
+
+Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
+`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`
+verwenden. `zelyra setup .` bleibt als idempotenter Nachholbefehl für
+bestehende Projekte verfügbar.
 
 Das Starterprojekt enthält Abteilungen und Maschinen, eine Foreign-Key-
 Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,

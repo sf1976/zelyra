@@ -14,6 +14,12 @@ compiler and repository release.
 - `zelyra setup` can initialize an existing MariaDB project that has
   `zelyra.toml` but no `.env.example`, using safe built-in defaults without
   overwriting an existing `.env`.
+- `zelyra new --mariadb` and `zelyra init --mariadb` now create the protected
+  local `.env` immediately. Required database values are active; optional
+  ports, feature switches, and runtime settings are extensively commented.
+- The database CLI contract is documented and covered by a direct `db create`
+  test; generated setup instructions include both Compose command variants
+  and explicitly load `.env` before `db setup`.
 
 - CRUD-Ressourcen können geprüfte benannte Seiten-Views mit
   `layout: ViewName` wiederverwenden; erzeugte Listen, Details und Formulare
@@ -22,8 +28,14 @@ compiler and repository release.
 - `zelyra setup` kann ein bestehendes MariaDB-Projekt mit `zelyra.toml` auch
   ohne `.env.example` einrichten. Sichere eingebaute Standardwerte werden
   verwendet; eine vorhandene `.env` wird nicht überschrieben.
+- `zelyra new --mariadb` und `zelyra init --mariadb` erzeugen die geschützte
+  lokale `.env` jetzt direkt. Notwendige Datenbankwerte sind aktiv; optionale
+  Ports, Feature-Schalter und Laufzeiteinstellungen sind ausführlich
+  kommentiert.
+- Der Vertrag der Datenbank-CLI ist dokumentiert und durch einen direkten
+  `db create`-Test abgedeckt; erzeugte Setup-Hinweise enthalten beide Compose-
+  Varianten und laden `.env` vor `db setup` ausdrücklich.
 
-Keine unveröffentlichten Änderungen.
 
 ## 0.1.42 — 2026-09-19
 

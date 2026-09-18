@@ -178,9 +178,12 @@ Zelyra server port and its local published port independently. You can change
 `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and `ZELYRA_DB_HOST_PORT` later in
 `.env`; the web ports default to 3000 and the MariaDB host port defaults to
 3306.
-Run `zelyra setup machine-management` after scaffolding to create `.env` with
-random local MariaDB credentials. Existing `.env` files are never overwritten
-and credentials are never printed.
+Current `zelyra new --mariadb` and `zelyra init --mariadb` create this protected
+file with random local MariaDB credentials immediately. Existing `.env` files
+are never overwritten and credentials are never printed. Only required database
+values are active; ports, feature
+switches, authentication, and other options are documented as commented
+examples. `zelyra setup` remains an idempotent recovery command.
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, setup uses the same safe built-in defaults. A project without
 MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
@@ -194,11 +197,13 @@ For a complete CRUD starter instead of the minimal welcome page:
 zelyra new machine-management --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd machine-management
-zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 set -a; . ./.env; set +a
 zelyra db setup main.zyl
 ~~~
+
+If `docker compose` is unavailable, use the legacy command
+`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`.
 
 The starter includes related departments and machines, forms, CRUD pages,
 search, filtering, pagination, and custom actions.
@@ -291,8 +296,10 @@ Important commands:
 | `zelyra doctor app.zyl [--json]` | check project, database, and web readiness |
 | `zelyra verify app.zyl` | classify contracts |
 | `zelyra doc app.zyl --openapi` | generate an OpenAPI document |
+| `zelyra db create app.zyl` | emit checked CREATE SQL without connecting |
+| `zelyra db setup app.zyl` | create MariaDB and its initial schema |
+| `zelyra db bootstrap app.zyl` | bootstrap MariaDB or SQLite schema |
 | `zelyra db inspect app.zyl` | inspect the live schema |
-| `zelyra db setup app.zyl` | create a MariaDB database and initial schema |
 | `zelyra db plan app.zyl` | display schema changes |
 | `zelyra db apply app.zyl` | apply an approved plan |
 | `zelyra audit inspect app.zyl` | inspect the latest audit events |
@@ -437,6 +444,13 @@ Destructive changes require explicit permission:
 ~~~bash
 zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
 ~~~
+
+The database command contract is explicit: `create` emits checked DDL without
+connecting; `setup` creates a MariaDB database when needed and applies the
+initial schema; `bootstrap` applies an initial MariaDB or SQLite schema;
+`inspect` reads the live schema; `plan` displays the deterministic diff; and
+`apply` executes it after refusing destructive changes unless
+`--allow-destructive` is supplied. The live commands require `DATABASE_URL`.
 
 That flag does not mean “probably fine.” It means “I read the plan, have a
 backup, and my pulse is normal.”
