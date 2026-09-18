@@ -200,10 +200,11 @@ zelyra init
 ~~~
 
 Für eine lokale MariaDB- und Webserver-Vorlage `zelyra new
-maschinenverwaltung --mariadb --web-port 8080` verwenden. Dadurch entstehen
-`.env.example`, `Dockerfile` und `docker-compose.mariadb.yml`. Die Option wählt
-den Port des internen Zelyra-Servers und seines lokal veröffentlichten Ports.
-Später kann er über `ZELYRA_WEB_PORT` in `.env` geändert werden; Standard ist
+maschinenverwaltung --mariadb --web-port 8080 --host-port 18080` verwenden.
+Dadurch entstehen `.env.example`, `Dockerfile` und
+`docker-compose.mariadb.yml`. Die Optionen wählen den internen Zelyra-Port und
+den lokal veröffentlichten Port unabhängig. `ZELYRA_WEB_PORT` und
+`ZELYRA_HOST_PORT` können später in `.env` geändert werden; Standard ist jeweils
 3000.
 
 Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:

@@ -95,8 +95,8 @@ Feature eines bestimmten Anbieters.
   einen validierten wählbaren Webport über `zelyra new` und `zelyra init`;
   interaktive MariaDB-Verbindung und Secret-Einrichtung bleiben offen.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
-  Webserver mit konfigurierbarem Port; Produktionshärtung und unabhängige
-  Host-/Container-Ports bleiben offen.
+  Webserver mit unabhängig konfigurierbaren Host- und Container-Ports;
+  Produktionshärtung bleibt offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [ ] `zelyra doctor` für Datenbank, Ports, TLS, Dateirechte und Werkzeuge mit

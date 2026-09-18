@@ -92,6 +92,8 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "--mariadb",
         "--web-port",
         "8080",
+        "--host-port",
+        "18080",
     ]);
     assert!(
         output.status.success(),
@@ -102,8 +104,9 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
-    assert!(compose.contains("${ZELYRA_WEB_PORT:-8080}"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
+    assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -127,7 +130,16 @@ fn web_port_requires_the_mariadb_web_template() {
     let directory = temporary_directory("web-port-without-mariadb");
     let output = run(&["new", directory.to_str().unwrap(), "--web-port", "8080"]);
     assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("requires --mariadb"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--mariadb"));
+    assert!(!directory.exists());
+}
+
+#[test]
+fn host_port_requires_the_mariadb_web_template() {
+    let directory = temporary_directory("host-port-without-mariadb");
+    let output = run(&["new", directory.to_str().unwrap(), "--host-port", "18080"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--mariadb"));
     assert!(!directory.exists());
 }
 
