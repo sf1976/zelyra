@@ -699,7 +699,7 @@ zelyra context <file.zyl> [--format human|json]
 zelyra build <file.zyl>
 zelyra run <file.zyl>
 zelyra serve <file.zyl> [address]
-zelyra doctor [file.zyl] [--port <port>] [--json]
+zelyra doctor [file.zyl] [--env-file <path>] [--port <port>] [--json]
 zelyra verify <file.zyl> [--json]
 zelyra doc <file.zyl> [--openapi|--typescript]
 zelyra auth hash-password [--stdin]
@@ -728,6 +728,11 @@ and publishes it as `http://127.0.0.1:18080`. Run `zelyra setup my-app` to
 create a protected `.env` with local random MariaDB credentials. Existing
 `.env` files are never overwritten; `ZELYRA_WEB_PORT` and `ZELYRA_HOST_PORT`
 can be changed independently in `.env`.
+
+After starting the generated Compose stack, run
+`zelyra doctor main.zyl --env-file .env --port 18080 --json` for a read-only
+check of the source, schema, MariaDB connection, Docker Compose, and published
+host port. The loaded database credentials are never printed.
 
 ## Project layout
 

@@ -92,8 +92,10 @@ architecture requirement for every phase, not a provider-specific feature.
   production hardening remains open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
-- [ ] `zelyra doctor` checks for database, port, TLS, permissions, and required
-  external tools with actionable bilingual messages.
+- [~] `zelyra doctor` checks project validity, database connectivity, Docker
+  Compose availability, an optional `.env` without exposing credentials, and
+  host-port readiness; TLS, permissions, and broader external-tool guidance
+  remain open.
 - [ ] Project templates: minimal script, MariaDB CRUD, API, authentication,
   and production deployment.
 - [ ] Offline installation bundle and reproducible toolchain metadata.

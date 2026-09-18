@@ -176,6 +176,30 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     assert!(contents.contains("MARIADB_PASSWORD="));
     assert!(contents.contains("MARIADB_ROOT_PASSWORD="));
 
+    let doctor = run(&[
+        "doctor",
+        directory.join("main.zyl").to_str().unwrap(),
+        "--env-file",
+        env_file.to_str().unwrap(),
+        "--port",
+        "18080",
+        "--json",
+    ]);
+    let doctor_document: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
+    let doctor_checks = doctor_document["checks"].as_array().unwrap();
+    assert!(doctor_checks
+        .iter()
+        .any(|check| check["name"] == "env_file"));
+    assert!(doctor_checks
+        .iter()
+        .any(|check| check["name"] == "docker_compose"));
+    assert!(!String::from_utf8_lossy(&doctor.stdout).contains("change-me"));
+    let database_password = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("MARIADB_PASSWORD="))
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&doctor.stdout).contains(database_password));
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

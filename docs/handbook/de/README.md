@@ -209,6 +209,9 @@ den lokal veröffentlichten Port unabhängig. `ZELYRA_WEB_PORT` und
 Nach dem Scaffolding erzeugt `zelyra setup maschinenverwaltung` eine `.env` mit
 zufälligen lokalen MariaDB-Zugangsdaten. Vorhandene `.env`-Dateien werden nie
 überschrieben und Zugangsdaten nie ausgegeben.
+Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
+--port 18080` Quellcode, Schema, MariaDB-Verbindung, Docker Compose und den
+veröffentlichten Port ohne Datenbankänderung prüfen.
 
 Für Repository-Integrationstests steht eine getrennte MariaDB-Instanz bereit:
 

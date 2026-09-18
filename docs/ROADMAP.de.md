@@ -100,8 +100,10 @@ Feature eines bestimmten Anbieters.
   Produktionshärtung bleibt offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
-- [ ] `zelyra doctor` für Datenbank, Ports, TLS, Dateirechte und Werkzeuge mit
-  verständlichen zweisprachigen Handlungsempfehlungen.
+- [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
+  Compose, eine optionale `.env` ohne Zugangsdaten auszugeben, und die
+  Host-Port-Bereitschaft; TLS, Dateirechte und umfassendere Werkzeug-Hinweise
+  bleiben offen.
 - [ ] Projektvorlagen: minimales Skript, MariaDB-CRUD, API, Authentifizierung
   und Produktionsdeployment.
 - [ ] Offline-Installationspaket und reproduzierbare Toolchain-Metadaten.
