@@ -640,9 +640,18 @@ page "/customers/{name}" {
 
 SQL wird gegen das Schema geprüft, Routenparameter werden sicher gebunden und
 Authentifizierung, Berechtigungen sowie die `Database`-Capability werden vor
-der Abfrage erzwungen. Geladene Werte werden im HTML escaped. Option-aware
-Feld-Ausdrücke und reichere View-Daten bleiben geplant. Siehe
-`examples/view_data.zyl`.
+der Abfrage erzwungen. Geladene Werte werden im HTML escaped. Collections
+können mit einer typisierten serverseitigen Schleife gerendert werden:
+
+~~~zelyra
+page "/customers" {
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
+}
+~~~
+
+Option-aware Feld-Ausdrücke und reichere View-Daten bleiben geplant. Siehe
+`examples/view_data.zyl` und `examples/view_collection.zyl`.
 
 Benannte Slots werden ausdrücklich deklariert und übergeben:
 

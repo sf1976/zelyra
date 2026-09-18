@@ -360,9 +360,18 @@ page "/customers/{name}" {
 
 The SQL is checked against the schema, route parameters are bound safely, and
 the route's authentication, permissions, and `Database` capability are
-enforced before the query runs. Loaded values are HTML-escaped. Optional
-field-aware expressions and richer view data remain planned. See
-`examples/view_data.zyl`.
+enforced before the query runs. Loaded values are HTML-escaped. Collections
+can be rendered with a typed server-side loop:
+
+~~~zelyra
+page "/customers" {
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
+}
+~~~
+
+Optional field-aware expressions and richer view data remain planned. See
+`examples/view_data.zyl` and `examples/view_collection.zyl`.
 
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components

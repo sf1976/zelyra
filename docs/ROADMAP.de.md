@@ -186,11 +186,13 @@ Feature eines bestimmten Anbieters.
   sowie verschachtelte Komposition; Fallback-Inhalte für komplexere
   verschachtelte View-Szenarien bleiben geplant.
 - [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
-- [~] View-lokales Laden ist für eine explizite, schema-geprüfte
-  Datensatzabfrage pro Binding mit `load name = sql<Type> { ... }` verfügbar.
+- [~] View-lokales Laden unterstützt explizite, schema-geprüfte Abfragen für
+  einzelne Datensätze und Record-Collections mit `load name = sql<Type> { ... }`.
+  Array-Ergebnisse können mit typisierten
+  `for item in collection { ... }`-Blöcken gerendert werden.
   Routenautorisierung, `Database`-Capability, Parameterbindung, generische
-  Fehlergrenzen und HTML-Escaping werden erzwungen; Collections, Option-aware
-  Feldzugriff und reichere View-Komposition bleiben geplant.
+  Fehlergrenzen und HTML-Escaping werden erzwungen; Option-aware Feld-Ausdrücke
+  und reichere View-Komposition bleiben geplant.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
   NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
 - [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
@@ -198,9 +200,10 @@ Feature eines bestimmten Anbieters.
   getrennte Operator-/Wertbeschriftungen sind verfügbar, weitergehende
   Barrierefreiheitsverbesserungen bleiben offen.
 - [~] Die einheitliche typisierte View-Pipeline umfasst deklarative
-  `tableview`-Steuerungen und explizites seitenlokales Laden einzelner
-  Datensätze; Filter, Suche, Sortierung und Pagination bleiben zunächst auf
-  Tableviews konzentriert, reichere Daten für beliebige Views bleiben geplant.
+  `tableview`-Steuerungen, explizites seitenlokales Laden einzelner Datensätze
+  und typisierte Collection-Schleifen; Filter, Suche, Sortierung und
+  Pagination bleiben zunächst auf Tableviews konzentriert, reichere Daten für
+  beliebige Views bleiben geplant.
 - [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
   Datumswerte, Booleans, Beziehungen und Volltextsuche.
 - [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,

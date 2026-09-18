@@ -30,6 +30,7 @@ pub struct RouteData {
     pub name: String,
     pub query: String,
     pub fields: Vec<String>,
+    pub collection: bool,
     pub optional: bool,
 }
 
@@ -5518,18 +5519,24 @@ enum RouteDataError {
     Query,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct LoadedRouteData {
+    values: HashMap<String, String>,
+    collections: HashMap<String, Vec<HashMap<String, String>>>,
+}
+
 fn load_route_data(
     route: &Route,
     params: &HashMap<String, String>,
     database_url: Option<&str>,
-) -> Result<HashMap<String, String>, RouteDataError> {
+) -> Result<LoadedRouteData, RouteDataError> {
     if route.data.is_empty() {
-        return Ok(HashMap::new());
+        return Ok(LoadedRouteData::default());
     }
     let Some(database_url) = database_url else {
         return Err(RouteDataError::DatabaseUnavailable);
     };
-    let mut values = HashMap::new();
+    let mut loaded = LoadedRouteData::default();
     for data in &route.data {
         let query_params = params
             .iter()
@@ -5543,28 +5550,165 @@ fn load_route_data(
                     return Err(RouteDataError::Query);
                 }
             };
+        if data.collection {
+            let rows = result
+                .rows
+                .iter()
+                .map(|row| route_data_row(&result.columns, row, &data.fields))
+                .collect();
+            loaded.collections.insert(data.name.clone(), rows);
+            continue;
+        }
         let row = result.rows.first();
         if row.is_none() && !data.optional {
             return Err(RouteDataError::NotFound);
         }
-        for field in &data.fields {
-            let value = row
-                .and_then(|row| {
-                    result
-                        .columns
-                        .iter()
-                        .position(|column| column.eq_ignore_ascii_case(field))
-                        .and_then(|index| row.get(index))
-                })
-                .cloned()
-                .unwrap_or_default();
-            values.insert(format!("{}.{}", data.name, field), value);
+        for (field, value) in route_data_row(
+            &result.columns,
+            row.map_or(&[][..], Vec::as_slice),
+            &data.fields,
+        ) {
+            loaded
+                .values
+                .insert(format!("{}.{}", data.name, field), value);
         }
     }
-    Ok(values)
+    Ok(loaded)
+}
+
+fn route_data_row(
+    columns: &[String],
+    row: &[String],
+    fields: &[String],
+) -> HashMap<String, String> {
+    fields
+        .iter()
+        .map(|field| {
+            let value = columns
+                .iter()
+                .position(|column| column.eq_ignore_ascii_case(field))
+                .and_then(|index| row.get(index))
+                .cloned()
+                .unwrap_or_default();
+            (field.clone(), value)
+        })
+        .collect()
+}
+
+struct TemplateForBlock {
+    start: usize,
+    end: usize,
+    item: String,
+    collection: String,
+    body: String,
+}
+
+fn next_template_for_block(template: &str) -> Option<Result<TemplateForBlock, String>> {
+    let mut search_from = 0;
+    while let Some(relative_start) = template[search_from..].find("for ") {
+        let start = search_from + relative_start;
+        let line_start = template[..start].rfind('\n').map_or(0, |index| index + 1);
+        if !template[line_start..start].trim().is_empty() {
+            search_from = start + 4;
+            continue;
+        }
+        let Some(relative_open) = template[start..].find('{') else {
+            return Some(Err("view `for` block is missing `{`".into()));
+        };
+        let open = start + relative_open;
+        let header = template[start + 4..open].trim();
+        let parts = header.split_whitespace().collect::<Vec<_>>();
+        if parts.len() != 3
+            || parts[1] != "in"
+            || !view_identifier(parts[0])
+            || !view_identifier(parts[2])
+        {
+            return Some(Err(
+                "view `for` block must use `for item in collection { ... }`".into(),
+            ));
+        }
+        let mut depth = 1;
+        let mut position = open + 1;
+        while position < template.len() {
+            match template.as_bytes()[position] {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(Ok(TemplateForBlock {
+                            start,
+                            end: position + 1,
+                            item: parts[0].into(),
+                            collection: parts[2].into(),
+                            body: template[open + 1..position].into(),
+                        }));
+                    }
+                }
+                _ => {}
+            }
+            position += 1;
+        }
+        return Some(Err("view `for` block is unterminated".into()));
+    }
+    None
+}
+
+fn view_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().enumerate().all(|(index, character)| {
+            if index == 0 {
+                character.is_ascii_alphabetic() || character == '_'
+            } else {
+                character.is_ascii_alphanumeric() || character == '_'
+            }
+        })
 }
 
 fn render_template(
+    template: &str,
+    params: &HashMap<String, String>,
+    data: &LoadedRouteData,
+) -> String {
+    render_template_fragment(template, params, &data.values, &data.collections)
+}
+
+fn render_template_fragment(
+    template: &str,
+    params: &HashMap<String, String>,
+    values: &HashMap<String, String>,
+    collections: &HashMap<String, Vec<HashMap<String, String>>>,
+) -> String {
+    if let Some(block) = next_template_for_block(template) {
+        let Ok(block) = block else {
+            return render_interpolations(template, params, values);
+        };
+        let mut rendered = render_interpolations(&template[..block.start], params, values);
+        if let Some(rows) = collections.get(&block.collection) {
+            for row in rows {
+                let mut row_values = values.clone();
+                for (field, value) in row {
+                    row_values.insert(format!("{}.{}", block.item, field), value.clone());
+                }
+                rendered.push_str(&render_template_fragment(
+                    &block.body,
+                    params,
+                    &row_values,
+                    collections,
+                ));
+            }
+        }
+        rendered.push_str(&render_template_fragment(
+            &template[block.end..],
+            params,
+            values,
+            collections,
+        ));
+        return rendered;
+    }
+    render_interpolations(template, params, values)
+}
+
+fn render_interpolations(
     template: &str,
     params: &HashMap<String, String>,
     data: &HashMap<String, String>,
@@ -5958,8 +6102,38 @@ mod tests {
         let params = HashMap::new();
         let data = HashMap::from([("customer.name".into(), "<script>".into())]);
         assert_eq!(
-            render_template("<h1>{customer.name}</h1>", &params, &data),
+            render_template(
+                "<h1>{customer.name}</h1>",
+                &params,
+                &LoadedRouteData {
+                    values: data,
+                    collections: HashMap::new(),
+                },
+            ),
             "<h1>&lt;script&gt;</h1>"
+        );
+    }
+
+    #[test]
+    fn renders_each_loaded_page_collection_row_with_escaping() {
+        let params = HashMap::new();
+        let data = LoadedRouteData {
+            values: HashMap::new(),
+            collections: HashMap::from([(
+                "customers".into(),
+                vec![
+                    HashMap::from([("name".into(), "Ada".into())]),
+                    HashMap::from([("name".into(), "<Grace>".into())]),
+                ],
+            )]),
+        };
+        assert_eq!(
+            render_template(
+                "<ul>\nfor customer in customers {<li>{customer.name}</li>}\n</ul>",
+                &params,
+                &data,
+            ),
+            "<ul>\n<li>Ada</li><li>&lt;Grace&gt;</li>\n</ul>"
         );
     }
 
@@ -6744,6 +6918,7 @@ mod tests {
                 name: "customer".into(),
                 query: "SELECT name FROM customers WHERE name = :name".into(),
                 fields: vec!["name".into()],
+                collection: false,
                 optional: false,
             }],
             requires_auth: false,

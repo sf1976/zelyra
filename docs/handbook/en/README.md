@@ -562,9 +562,18 @@ page "/customers/{name}" {
 
 The SQL is checked against the schema, route parameters are safely bound, and
 authentication, permissions, and the `Database` capability are enforced
-before the query runs. Loaded values are HTML-escaped. Option-aware field
-expressions and richer view data remain planned. See
-`examples/view_data.zyl`.
+before the query runs. Loaded values are HTML-escaped. Collections can be
+rendered with a typed server-side loop:
+
+~~~zelyra
+page "/customers" {
+    load customers = sql<Customer[]> { SELECT id, name FROM customers }
+    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
+}
+~~~
+
+Option-aware field expressions and richer view data remain planned. See
+`examples/view_data.zyl` and `examples/view_collection.zyl`.
 
 Components may accept child HTML through a default slot or named slots:
 
