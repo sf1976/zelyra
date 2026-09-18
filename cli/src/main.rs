@@ -1868,14 +1868,89 @@ fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool
     }
 }
 
+fn template_expressions(html: &str) -> Result<Vec<String>, String> {
+    let mut expressions = Vec::new();
+    let mut rest = html;
+    while let Some(open) = rest.find('{') {
+        let after_open = &rest[open + 1..];
+        let Some(close) = after_open.find('}') else {
+            return Err("view interpolation has an unterminated `{`".into());
+        };
+        let expression = after_open[..close].trim();
+        if expression.is_empty() {
+            return Err("view interpolation cannot be empty".into());
+        }
+        expressions.push(expression.to_owned());
+        rest = &after_open[close + 1..];
+    }
+    Ok(expressions)
+}
+
+fn is_template_identifier(expression: &str) -> bool {
+    expression.chars().enumerate().all(|(index, character)| {
+        if index == 0 {
+            character.is_ascii_alphabetic() || character == '_'
+        } else {
+            character.is_ascii_alphanumeric() || character == '_'
+        }
+    })
+}
+
+fn template_type_compatible(expected: &Type, actual: &Type) -> bool {
+    expected == actual
+        || matches!(expected, Type::Option(inner) if template_type_compatible(inner, actual))
+}
+
+fn validate_template_expressions(
+    path: &str,
+    html: &str,
+    bindings: &HashMap<String, Type>,
+    line: usize,
+    column: usize,
+) -> bool {
+    let expressions = match template_expressions(html) {
+        Ok(expressions) => expressions,
+        Err(message) => {
+            diagnostic(path, "E-VIEW-013", &message, line, column);
+            return false;
+        }
+    };
+    let mut valid = true;
+    for expression in expressions {
+        if !is_template_identifier(&expression) {
+            diagnostic(
+                path,
+                "E-VIEW-014",
+                &format!(
+                    "view expressions currently support identifiers only; found `{{{expression}}}`"
+                ),
+                line,
+                column,
+            );
+            valid = false;
+        } else if !bindings.contains_key(&expression) {
+            diagnostic(
+                path,
+                "E-VIEW-015",
+                &format!("unknown view value `{expression}`"),
+                line,
+                column,
+            );
+            valid = false;
+        }
+    }
+    valid
+}
+
 fn validate_component_template(
     path: &str,
     program: &zelyra_ast::Program,
     html: &str,
     line: usize,
     column: usize,
+    bindings: &HashMap<String, Type>,
 ) -> bool {
-    let mut valid = true;
+    let mut valid = validate_template_expressions(path, html, bindings, line, column);
     let invocations = match component_invocations(html) {
         Ok(invocations) => invocations,
         Err(message) => {
@@ -1952,7 +2027,7 @@ fn validate_component_template(
                     valid = false;
                 }
             }
-            valid &= validate_component_template(path, program, body, line, column);
+            valid &= validate_component_template(path, program, body, line, column, bindings);
         }
         for attribute in attributes.keys() {
             if !component.props.iter().any(|prop| prop.name == *attribute) {
@@ -1983,7 +2058,13 @@ fn validate_component_template(
                 }
                 continue;
             };
-            if !component_prop_accepts(prop, value) {
+            let dynamic_type_error = value
+                .strip_prefix('{')
+                .and_then(|value| value.strip_suffix('}'))
+                .map(str::trim)
+                .and_then(|expression| bindings.get(expression))
+                .filter(|actual| !template_type_compatible(&prop.ty, actual));
+            if dynamic_type_error.is_some() || !component_prop_accepts(prop, value) {
                 diagnostic(
                     path,
                     "E-VIEW-010",
@@ -2065,27 +2146,49 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             &component.html,
             component.span.line,
             component.span.column,
-        );
-    }
-    for view in &program.views {
-        valid &= validate_component_template(
-            path,
-            program,
-            &view.html,
-            view.span.line,
-            view.span.column,
+            &component
+                .props
+                .iter()
+                .map(|prop| (prop.name.clone(), prop.ty.clone()))
+                .collect(),
         );
     }
     for page in &program.pages {
+        let bindings = page_template_bindings(&page.path);
         valid &= validate_component_template(
             path,
             program,
             &page.html,
             page.span.line,
             page.span.column,
+            &bindings,
         );
+        if let Some(view_name) = &page.view {
+            if let Some(view) = program.views.iter().find(|view| view.name == *view_name) {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &view.html,
+                    view.span.line,
+                    view.span.column,
+                    &bindings,
+                );
+            }
+        }
     }
     valid
+}
+
+fn page_template_bindings(path: &str) -> HashMap<String, Type> {
+    path.split('/')
+        .filter_map(|segment| {
+            segment
+                .strip_prefix('{')
+                .and_then(|segment| segment.strip_suffix('}'))
+                .filter(|name| is_template_identifier(name))
+                .map(|name| (name.to_owned(), Type::String))
+        })
+        .collect()
 }
 
 fn verify_command(path: &str, json: bool) -> ExitCode {
@@ -7068,6 +7171,47 @@ mod tests {
         assert!(html.contains("<section class=\"panel\">"));
         assert!(html.contains("<strong>Ready</strong>"));
         assert!(!html.contains("<slot />"));
+    }
+
+    #[test]
+    fn validates_route_values_used_by_typed_view_components() {
+        let source = r#"
+            component Greeting {
+                props { text: String }
+                html { <strong>{text}</strong> }
+            }
+            page "/hello/{name}" {
+                html { <Greeting text="{name}" /> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn rejects_unknown_view_values() {
+        let source = r#"
+            page "/hello" {
+                html { <p>{missing}</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn rejects_route_values_with_an_incompatible_component_property_type() {
+        let source = r#"
+            component Counter {
+                props { count: Int }
+                html { <strong>{count}</strong> }
+            }
+            page "/hello/{name}" {
+                html { <Counter count="{name}" /> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_components("views.zyl", &program));
     }
 
     #[test]

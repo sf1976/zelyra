@@ -546,6 +546,12 @@ page "/status" {
 }
 ~~~
 
+View interpolations are checked before the server starts. A page may use its
+route parameters, a component may use its declared properties, and a dynamic
+component property must have a compatible type. Unknown values and unsupported
+expressions receive stable `E-VIEW-*` diagnostics. Field access, option-aware
+expressions, and view-local database data remain planned.
+
 Components may accept child HTML through a default slot or named slots:
 
 ~~~zelyra

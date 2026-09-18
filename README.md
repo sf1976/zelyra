@@ -344,6 +344,12 @@ page "/dashboard" {
 }
 ~~~
 
+View interpolations are checked before the server starts. A page can use its
+route parameters, a component can use its declared properties, and a dynamic
+component property must have a compatible type. Unknown values and unsupported
+expressions receive stable `E-VIEW-*` diagnostics. Field access, option-aware
+expressions, and view-local database data remain planned.
+
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components
 are expanded from the inside out, and unknown or unused content is rejected.

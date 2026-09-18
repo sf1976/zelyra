@@ -8,6 +8,14 @@ compiler and repository release.
 
 ### Added
 
+- Added compile-time view interpolation checks for route bindings, component
+  properties, and dynamic component-property types, with stable `E-VIEW-010`,
+  `E-VIEW-013`, `E-VIEW-014`, and `E-VIEW-015` diagnostics.
+
+- Prüfungen für View-Interpolationen zur Compile-Zeit ergänzt: Routenbindungen,
+  Component-Properties und dynamische Property-Typen werden mit stabilen
+  Diagnosen `E-VIEW-010`, `E-VIEW-013`, `E-VIEW-014` und `E-VIEW-015` geprüft.
+
 - Added deterministic typed maps with `Map<Key, Value>` types, `Map { ... }`
   literals, null-safe `get`, functional `put`, `keys`, `values`, scalar-key
   validation, and JSON conversion for string-keyed maps.
