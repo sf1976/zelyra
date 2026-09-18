@@ -45,6 +45,11 @@ jobs:
           target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact.json
           target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact-second.json
           diff -u /tmp/zelyra-impact.json /tmp/zelyra-impact-second.json
+      - name: Check deterministic edit preview
+        run: |
+          target/debug/zelyra edit --format=json examples/fibonacci_rename.json > /tmp/zelyra-edit.json
+          target/debug/zelyra edit --format=json examples/fibonacci_rename.json > /tmp/zelyra-edit-second.json
+          diff -u /tmp/zelyra-edit.json /tmp/zelyra-edit-second.json
       - name: Check Zelyra example formatting
         run: |
           for source_file in examples/*.zyl; do

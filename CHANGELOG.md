@@ -8,6 +8,9 @@ compiler and repository release.
 
 ### Added
 
+- Added preview-only, deterministic `zelyra edit --format=json` requests for
+  validated symbol renames. Proposed changes are reparsed atomically and never
+  write files in this first semantic-edit slice.
 - Added deterministic, source-only `zelyra impact --format=json` output for
   tables, SQL, forms, CRUD resources, views, APIs, permissions, and contracts.
   Email, job, test, and live schema impact are explicit empty or unavailable

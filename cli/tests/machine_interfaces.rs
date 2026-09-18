@@ -112,6 +112,32 @@ fn empty_source_is_a_valid_deterministic_context() {
 }
 
 #[test]
+fn edit_json_is_preview_only_and_deterministic() {
+    let source_path = temporary_source("edit-source", "fn greet() { greet() }\n");
+    let request_path = source_path.with_file_name("change.json");
+    let request = format!(
+        "{{\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("edit request should be written");
+
+    let first = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    let second = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(first.status.success());
+    assert_eq!(first.stdout, second.stdout);
+    assert!(first.stderr.is_empty());
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn greet() { greet() }\n"
+    );
+    let document: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["command"], "edit");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["preview"]["applied"], false);
+    assert_eq!(document["preview"]["changed_tokens"], 2);
+}
+
+#[test]
 fn context_exposes_safe_structural_project_information() {
     let auth_example = example("auth_crud_api.zyl");
     let output = run(&["context", auth_example.to_str().unwrap(), "--format=json"]);

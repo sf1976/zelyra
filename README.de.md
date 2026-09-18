@@ -52,9 +52,9 @@ Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
 `zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
 formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
 Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
-quelltextbasierte Stufe der Wirkungsanalyse ist verfügbar; semantische
-Änderungen, eine vollständige Laufzeit-/Schemaanalyse und vergleichende
-KI-Benchmarks bleiben geplant. Siehe die
+quelltextbasierte Wirkungsanalyse und vorschau-fähige semantische
+Umbenennungen sind verfügbar; das Anwenden von Änderungen, eine vollständige
+Laufzeit-/Schemaanalyse und vergleichende KI-Benchmarks bleiben geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 

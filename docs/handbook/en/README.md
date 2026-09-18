@@ -1404,11 +1404,12 @@ vendor-neutral so local tools can use them as well.
   CI, preserving comments and opaque SQL/HTML bodies;
 - ✅ **Implemented:** human-readable output remains the default;
 - 🧪 **Experimental:** the current JSON interface is schema version `1` and
-  covers the `check`, `context`, and source-only `impact` commands;
+  covers the `check`, `context`, source-only `impact`, and preview-only `edit`
+  commands;
 - ✅ **Implemented:** expression typed holes written as `_` with contextual
   diagnostics; buildable commands reject incomplete code;
-- 🗺️ **Planned:** richer typed gaps, semantic edits, complete runtime/schema
-  impact analysis, and the reproducible AI authoring benchmark;
+- 🗺️ **Planned:** richer typed gaps, applying semantic edits, complete
+  runtime/schema impact analysis, and the reproducible AI authoring benchmark;
 - ❌ **Not available:** automatic production changes, automatic permission
   escalation, or compiler decisions delegated to an AI service.
 
@@ -1470,6 +1471,27 @@ views, APIs, permissions, and contracts. Email, job, test, and live schema
 impact are explicitly empty or marked unavailable; the command never connects
 to MariaDB.
 
+Preview a validated symbol rename without modifying the source:
+
+~~~json
+{
+  "entry": "examples/fibonacci.zyl",
+  "operations": [
+    {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
+  ]
+}
+~~~
+
+Save that request as `change.json` and run:
+
+~~~bash
+zelyra edit --format=json change.json
+~~~
+
+The result reports the exact token spans and remains preview-only. The source
+is reparsed after all replacements, so an invalid proposal is rejected
+atomically.
+
 ### Safe automation boundary
 
 Generated code must pass the compiler and tests. An AI must not be trusted
@@ -1478,8 +1500,7 @@ weaken diagnostics, disable tests, reveal secrets, or approve destructive
 schema changes. Human approval remains required for risky database and
 security operations.
 
-The next planned machine interfaces are richer typed gaps, complete impact
-analysis, and a validated semantic edit protocol. They will extend the
-versioned common JSON envelope rather than replace it. Benchmark results will
-be published only after reproducible experiments; this handbook contains no
-invented comparison.
+The next planned machine interfaces are richer typed gaps, applying semantic
+edits, and complete impact analysis. They will extend the versioned common JSON
+envelope rather than replace it. Benchmark results will be published only
+after reproducible experiments; this handbook contains no invented comparison.

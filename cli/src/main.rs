@@ -33,6 +33,7 @@ use zelyra_web::{
     TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
 };
 
+mod edit;
 mod formatter;
 mod holes;
 mod impact;
@@ -41,7 +42,7 @@ use holes::collect_typed_holes;
 use impact::build_impact;
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -717,6 +718,139 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     }
     println!("  schema_changes: source-only");
     ExitCode::SUCCESS
+}
+
+fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
+    let mut request_path = None;
+    let mut json_format = false;
+    for argument in arguments {
+        if argument == "--format=json" {
+            json_format = true;
+        } else if argument == "--format" {
+            eprintln!("error[E-CLI-001]: edit requires `--format=json`");
+            return ExitCode::from(2);
+        } else if argument.starts_with('-') {
+            eprintln!("error[E-CLI-001]: unknown edit option `{argument}`");
+            return ExitCode::from(2);
+        } else if request_path.replace(argument).is_some() {
+            eprintln!("error[E-CLI-001]: edit accepts one change request");
+            return ExitCode::from(2);
+        }
+    }
+    let Some(request_path) = request_path else {
+        usage();
+        return ExitCode::from(2);
+    };
+    if !json_format {
+        eprintln!("error[E-CLI-001]: edit requires `--format=json`");
+        return ExitCode::from(2);
+    }
+
+    let request_source = match fs::read_to_string(&request_path) {
+        Ok(source) => source,
+        Err(error) => {
+            return edit_error_document(
+                &request_path,
+                "E-IO-001",
+                &format!("cannot read `{request_path}`: {error}"),
+            )
+        }
+    };
+    let request: Value = match serde_json::from_str(&request_source) {
+        Ok(request) => request,
+        Err(error) => {
+            return edit_error_document(
+                &request_path,
+                "E-EDIT-001",
+                &format!("invalid edit request JSON: {error}"),
+            )
+        }
+    };
+    let entry = match edit::request_entry(&request) {
+        Ok(entry) => entry,
+        Err(error) => return edit_error_document(&request_path, "E-EDIT-001", &error),
+    };
+    let source = match fs::read_to_string(&entry) {
+        Ok(source) => source,
+        Err(error) => {
+            return edit_error_document(
+                &entry,
+                "E-IO-001",
+                &format!("cannot read `{entry}`: {error}"),
+            )
+        }
+    };
+
+    begin_json_diagnostics(&entry, &source);
+    let mut success = false;
+    let mut preview = json!({"available": false});
+    match lex(&source) {
+        Ok(tokens) => match parse(&tokens) {
+            Ok(program) => match edit::preview(&program, &source, &tokens, &request) {
+                Ok(result) => match lex(&result.source) {
+                    Ok(proposed_tokens) => match parse(&proposed_tokens) {
+                        Ok(_) => {
+                            success = true;
+                            preview = json!({
+                                "available": true,
+                                "applied": false,
+                                "entry": entry,
+                                "operations": result.operations,
+                                "changes": result.changes,
+                                "changed_tokens": result.changed_tokens,
+                                "before_bytes": source.len(),
+                                "after_bytes": result.source.len()
+                            });
+                        }
+                        Err(error) => diagnostic_with_span(
+                            &entry,
+                            "E-EDIT-002",
+                            &format!("proposed edit is not parseable: {}", error.message),
+                            error.span,
+                        ),
+                    },
+                    Err(error) => diagnostic_with_span(
+                        &entry,
+                        "E-EDIT-002",
+                        &format!("proposed edit is not lexable: {}", error.message),
+                        error.span,
+                    ),
+                },
+                Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
+            },
+            Err(error) => diagnostic_with_span(&entry, "E-PARSE-001", &error.message, error.span),
+        },
+        Err(error) => diagnostic_with_span(&entry, "E-LEX-001", &error.message, error.span),
+    }
+    let diagnostics = finish_json_diagnostics();
+    print_machine_document(&machine_document(
+        "edit",
+        success,
+        diagnostics,
+        [
+            ("request".into(), Value::String(request_path)),
+            ("entry".into(), Value::String(entry)),
+            ("preview".into(), preview),
+        ],
+    ));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn edit_error_document(path: &str, code: &str, message: &str) -> ExitCode {
+    begin_json_diagnostics(path, "");
+    diagnostic(path, code, message, 1, 1);
+    let diagnostics = finish_json_diagnostics();
+    print_machine_document(&machine_document(
+        "edit",
+        false,
+        diagnostics,
+        [("request".into(), Value::String(path.into()))],
+    ));
+    ExitCode::from(1)
 }
 
 fn context_span(source: &str, span: zelyra_ast::Span) -> Value {
@@ -5557,6 +5691,9 @@ fn main() -> ExitCode {
     }
     if command == "impact" {
         return impact_command(args);
+    }
+    if command == "edit" {
+        return edit_command(args);
     }
     if command == "context" {
         return context_command(args);

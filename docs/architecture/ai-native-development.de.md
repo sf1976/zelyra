@@ -70,13 +70,15 @@ Ausdrucks-Typed-Holes mit `_` sind als erste sichere Stufe verfügbar. Der
 Compiler meldet Kontexttyp, sichtbare Werte und Funktionen, aktive
 Capabilities, Contract-Pflichten und Source-Span. Baubare Befehle lehnen
 unvollständigen Code vor Lowering und Ausführung ab. Typed Holes in
-Deklarationskontexten und `zelyra edit --format=json` bleiben geplante,
-versionierte Schnittstellen.
+Deklarationskontexte bleiben geplante Schnittstellen.
 
 `zelyra impact --format=json` ist als deterministische, quelltextbasierte
 erste Stufe verfügbar und meldet betroffene Tabellen, SQL, Formulare, CRUD,
 Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
 Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
+`zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen eine
+validierte, atomare Vorschau und schreibt in dieser ersten Stufe keine Dateien.
+Weitere Operationen und ein ausdrücklicher Anwende-Modus folgen später.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

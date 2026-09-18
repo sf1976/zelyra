@@ -1,0 +1,11 @@
+{
+  "entry": "examples/fibonacci.zyl",
+  "operations": [
+    {
+      "kind": "rename",
+      "symbol": "function",
+      "from": "fibonacci",
+      "to": "fib"
+    }
+  ]
+}

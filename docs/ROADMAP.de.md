@@ -58,9 +58,10 @@ Feature eines bestimmten Anbieters.
   erste Stufe von `zelyra impact --format=json` meldet Tabellen, SQL,
   Formulare, CRUD, Views, APIs, Berechtigungen und Contracts; E-Mails, Jobs,
   Tests und Live-Schemaänderungen bleiben anzubinden.
-- [ ] **Stufe E — semantische Änderungen:** Validierte, atomare,
-  vorschau-fähige und versionierte `zelyra edit --format=json`-Operationen
-  zusätzlich zu Textpatches.
+- [~] **Stufe E — semantische Änderungen:** Eine validierte, atomare und nur
+  vorschau-fähige `zelyra edit --format=json`-Umbenennung für deklarierte
+  Funktionen, Tabellen, Formulare, CRUDs, Views und Komponenten ist verfügbar;
+  das Anwenden auf Dateien und weitere Operationen bleiben offen.
 - [~] **Stufe F — Contracts und Effekte:** Contracts und Capability-Prüfung
   existieren; feinere Effekte wie `Database(read)`, `Database(write)`,
   `Email` und `Jobs` sind geplant. KI darf Effekte niemals unbemerkt ergänzen.

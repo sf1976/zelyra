@@ -49,9 +49,9 @@ stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical
 source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
-by buildable commands. The first source-only impact analysis slice is available;
-semantic edits, complete runtime/schema impact analysis, and comparative AI
-benchmarks remain planned. See the [AI-native architecture](docs/architecture/ai-native-development.md)
+by buildable commands. Source-only impact analysis and preview-only semantic
+rename requests are available; applying edits, complete runtime/schema impact
+analysis, and comparative AI benchmarks remain planned. See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 
 ## License and implementation

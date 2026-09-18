@@ -1580,6 +1580,28 @@ Ressourcen, Views, APIs, Berechtigungen und Contracts. E-Mail-, Job-, Test-
 und Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar;
 der Befehl verbindet sich nie mit MariaDB.
 
+Eine validierte Symbol-Umbenennung kann ohne Änderung des Quelltexts
+vorschaut werden:
+
+~~~json
+{
+  "entry": "examples/fibonacci.zyl",
+  "operations": [
+    {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
+  ]
+}
+~~~
+
+Als `change.json` speichern und ausführen:
+
+~~~bash
+zelyra edit --format=json change.json
+~~~
+
+Das Ergebnis meldet die genauen Token-Spans und bleibt eine Vorschau. Nach
+allen Ersetzungen wird der Quelltext erneut geparst; ein ungültiger Vorschlag
+wird atomar abgelehnt.
+
 ### Sichere Automatisierungsgrenze
 
 Generierter Code muss Compiler und Tests bestehen. Einer KI darf nicht vertraut
@@ -1589,8 +1611,8 @@ offenlegen oder destruktive Schemaänderungen freigeben. Für riskante Datenbank
 und Sicherheitsoperationen bleibt eine menschliche Freigabe erforderlich.
 
 Die nächste geplante Ausbaustufe umfasst reichhaltigere typisierte Lücken,
-eine vollständige Wirkungsanalyse und ein validiertes semantisches
-Änderungsprotokoll. Sie erweitern das gemeinsame versionierte JSON-Format,
-ersetzen es aber nicht. Benchmark-Ergebnisse werden erst nach
+das Anwenden semantischer Änderungen und eine vollständige Wirkungsanalyse.
+Sie erweitern das gemeinsame versionierte JSON-Format, ersetzen es aber nicht.
+Benchmark-Ergebnisse werden erst nach
 reproduzierbaren Versuchen veröffentlicht; dieses Handbuch enthält keinen
 erfundenen Vergleich.
