@@ -1,4 +1,6 @@
+use serde_json::{json, Map, Value};
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     env,
     fmt::Write as _,
@@ -22,8 +24,8 @@ use zelyra_runtime::{
     check, check_apis, check_capabilities_with_grants,
     execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
     execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value, VerificationResult,
-    VerificationStatus, KNOWN_CAPABILITIES,
+    FileSystemPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
+    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
@@ -32,7 +34,19 @@ use zelyra_web::{
 };
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl>\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+}
+
+const MACHINE_SCHEMA_VERSION: &str = "1";
+
+struct JsonDiagnosticCollector {
+    path: String,
+    source: String,
+    diagnostics: Vec<Value>,
+}
+
+thread_local! {
+    static JSON_DIAGNOSTICS: RefCell<Option<JsonDiagnosticCollector>> = const { RefCell::new(None) };
 }
 
 fn database_usage() {
@@ -110,41 +124,168 @@ fn create_project(path: &str, allow_current_directory: bool, with_mariadb: bool)
     ExitCode::SUCCESS
 }
 
+fn begin_json_diagnostics(path: &str, source: &str) {
+    JSON_DIAGNOSTICS.with(|collector| {
+        *collector.borrow_mut() = Some(JsonDiagnosticCollector {
+            path: path.into(),
+            source: source.into(),
+            diagnostics: Vec::new(),
+        });
+    });
+}
+
+fn finish_json_diagnostics() -> Vec<Value> {
+    JSON_DIAGNOSTICS.with(|collector| {
+        collector
+            .borrow_mut()
+            .take()
+            .map_or_else(Vec::new, |collector| collector.diagnostics)
+    })
+}
+
+fn source_offset(source: &str, line: usize, column: usize) -> usize {
+    if line == 0 {
+        return 0;
+    }
+    let mut current_line = 1;
+    let mut offset = 0;
+    for line_text in source.split_inclusive('\n') {
+        if current_line == line {
+            return offset
+                + column
+                    .saturating_sub(1)
+                    .min(line_text.trim_end_matches('\n').len());
+        }
+        offset += line_text.len();
+        current_line += 1;
+    }
+    if current_line == line {
+        offset
+            + column
+                .saturating_sub(1)
+                .min(source.len().saturating_sub(offset))
+    } else {
+        source.len()
+    }
+}
+
+fn point_span(source: &str, line: usize, column: usize) -> zelyra_ast::Span {
+    let start_offset = source_offset(source, line, column);
+    let end = if start_offset < source.len() {
+        start_offset
+            + source[start_offset..]
+                .chars()
+                .next()
+                .map_or(1, char::len_utf8)
+    } else {
+        start_offset
+    };
+    zelyra_ast::Span::new(start_offset, end, line, column)
+}
+
+fn span_value(source: &str, span: zelyra_ast::Span) -> Value {
+    let (end_line, end_column) = source_position(source, span.end);
+    json!({
+        "start": { "offset": span.start, "line": span.line, "column": span.column },
+        "end": { "offset": span.end, "line": end_line, "column": end_column }
+    })
+}
+
+fn diagnostic_with_span(path: &str, code: &str, message: &str, span: zelyra_ast::Span) {
+    let captured = JSON_DIAGNOSTICS.with(|collector| {
+        let mut collector = collector.borrow_mut();
+        let Some(collector) = collector.as_mut() else {
+            return false;
+        };
+        let file = if collector.path.is_empty() {
+            path.to_owned()
+        } else {
+            collector.path.clone()
+        };
+        collector.diagnostics.push(json!({
+            "code": code,
+            "severity": "error",
+            "message": message,
+            "file": file,
+            "span": span_value(&collector.source, span)
+        }));
+        true
+    });
+    if !captured {
+        eprintln!(
+            "error[{code}]: {message}\n\n --> {path}:{}:{}",
+            span.line, span.column
+        );
+    }
+}
+
 fn diagnostic(path: &str, code: &str, message: &str, line: usize, column: usize) {
-    eprintln!("error[{code}]: {message}\n\n --> {path}:{line}:{column}");
+    let span = JSON_DIAGNOSTICS.with(|collector| {
+        collector
+            .borrow()
+            .as_ref()
+            .map(|collector| point_span(&collector.source, line, column))
+    });
+    diagnostic_with_span(
+        path,
+        code,
+        message,
+        span.unwrap_or_else(|| zelyra_ast::Span::new(0, 0, line, column)),
+    );
+}
+
+fn machine_document(
+    command: &str,
+    success: bool,
+    diagnostics: Vec<Value>,
+    fields: impl IntoIterator<Item = (String, Value)>,
+) -> Value {
+    let mut document = Map::new();
+    document.insert(
+        "schema_version".into(),
+        Value::String(MACHINE_SCHEMA_VERSION.into()),
+    );
+    document.insert("command".into(), Value::String(command.into()));
+    document.insert("success".into(), Value::Bool(success));
+    document.insert("diagnostics".into(), Value::Array(diagnostics));
+    for (key, value) in fields {
+        document.insert(key, value);
+    }
+    Value::Object(document)
+}
+
+fn print_machine_document(document: &Value) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(document).expect("machine document must be serializable")
+    );
 }
 
 fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
     let source = match fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) => {
-            eprintln!("error[E-IO-001]: cannot read `{path}`: {error}");
+            diagnostic(
+                path,
+                "E-IO-001",
+                &format!("cannot read `{path}`: {error}"),
+                1,
+                1,
+            );
             return Err(());
         }
     };
     let tokens = match lex(&source) {
         Ok(tokens) => tokens,
         Err(error) => {
-            diagnostic(
-                path,
-                "E-LEX-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-LEX-001", &error.message, error.span);
             return Err(());
         }
     };
     match parse(&tokens) {
         Ok(program) => Ok(program),
         Err(error) => {
-            diagnostic(
-                path,
-                "E-PARSE-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-PARSE-001", &error.message, error.span);
             Err(())
         }
     }
@@ -215,7 +356,22 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     if !validate_components(path, &program) {
         return Err(());
     }
-    if let Ok(schema) = build_schema(&program) {
+    let schema = match build_schema(&program) {
+        Ok(schema) => schema,
+        Err(errors) => {
+            for error in errors {
+                diagnostic(
+                    path,
+                    "E-DB-001",
+                    &error.message,
+                    error.span.line,
+                    error.span.column,
+                );
+            }
+            return Err(());
+        }
+    };
+    {
         if !validate_auth(path, &program, &schema) {
             return Err(());
         }
@@ -297,6 +453,327 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
         }
     }
     valid
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputFormat {
+    Human,
+    Json,
+}
+
+fn parse_output_format(value: &str) -> Option<OutputFormat> {
+    match value {
+        "human" => Some(OutputFormat::Human),
+        "json" => Some(OutputFormat::Json),
+        _ => None,
+    }
+}
+
+fn check_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = arguments.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument.starts_with("--format=") {
+            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+            return ExitCode::from(2);
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown check option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+    if format == OutputFormat::Human {
+        return if validate(&path).is_ok() {
+            println!("ok: {path}");
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
+    let source = fs::read_to_string(&path).unwrap_or_default();
+    begin_json_diagnostics(&path, &source);
+    let success = validate(&path).is_ok();
+    let diagnostics = finish_json_diagnostics();
+    print_machine_document(&machine_document(
+        "check",
+        success,
+        diagnostics,
+        std::iter::empty(),
+    ));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn context_span(source: &str, span: zelyra_ast::Span) -> Value {
+    let (end_line, end_column) = source_position(source, span.end);
+    json!({
+        "start": { "offset": span.start, "line": span.line, "column": span.column },
+        "end": { "offset": span.end, "line": end_line, "column": end_column }
+    })
+}
+
+fn default_value_json(value: &zelyra_ast::DefaultValue) -> Value {
+    match value {
+        zelyra_ast::DefaultValue::Int(value) => json!(value),
+        zelyra_ast::DefaultValue::Bool(value) => json!(value),
+        zelyra_ast::DefaultValue::String(value) => json!(value),
+        zelyra_ast::DefaultValue::Ident(value) => json!(value),
+    }
+}
+
+fn project_name(path: &str) -> Option<String> {
+    let config_path = project_config_path(path).ok().flatten()?;
+    let contents = fs::read_to_string(config_path).ok()?;
+    let mut in_project = false;
+    for raw_line in contents.lines() {
+        let line = raw_line.split('#').next()?.trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_project = line == "[project]";
+            continue;
+        }
+        if in_project {
+            let (key, value) = line.split_once('=')?;
+            if key.trim() == "name" {
+                return value
+                    .trim()
+                    .strip_prefix('"')
+                    .and_then(|value| value.strip_suffix('"'))
+                    .map(str::to_owned);
+            }
+        }
+    }
+    None
+}
+
+fn context_entry(path: &str) -> String {
+    let source_path = fs::canonicalize(path).ok();
+    let root = project_config_path(path)
+        .ok()
+        .flatten()
+        .and_then(|path| path.parent().map(PathBuf::from));
+    if let (Some(source_path), Some(root)) = (source_path, root) {
+        if let Ok(relative) = source_path.strip_prefix(root) {
+            return relative.to_string_lossy().replace('\\', "/");
+        }
+    }
+    path.replace('\\', "/")
+}
+
+fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
+    let databases = program
+        .databases
+        .iter()
+        .map(|database| {
+            json!({
+                "name": database.name,
+                "engine": database.engine,
+                "database": database.database,
+                "span": context_span(source, database.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let tables = program
+        .tables
+        .iter()
+        .map(|table| {
+            let fields = table
+                .columns
+                .iter()
+                .map(|column| {
+                    json!({
+                        "name": column.name,
+                        "type": column.ty.to_string(),
+                        "optional": !column.required,
+                        "primary_key": column.primary_key,
+                        "auto_increment": column.auto,
+                        "unique": column.unique,
+                        "default": column.default.as_ref().map(default_value_json),
+                        "span": context_span(source, column.span)
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "name": table.name,
+                "fields": fields,
+                "span": context_span(source, table.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let cruds = program
+        .cruds
+        .iter()
+        .map(|crud| {
+            json!({
+                "name": crud.name,
+                "table": crud.table,
+                "span": context_span(source, crud.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let views = program
+        .views
+        .iter()
+        .map(|view| {
+            json!({
+                "name": view.name,
+                "input_type": Value::Null,
+                "used_fields": Vec::<String>::new(),
+                "span": context_span(source, view.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let tableviews = program
+        .tableviews
+        .iter()
+        .map(|view| {
+            json!({
+                "name": view.name,
+                "result_type": view.result_type.to_string(),
+                "fields": view.columns,
+                "span": context_span(source, view.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let forms = program
+        .forms
+        .iter()
+        .map(|form| {
+            json!({
+                "name": form.name,
+                "table": form.table,
+                "fields": form.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
+                "span": context_span(source, form.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let apis = program
+        .apis
+        .iter()
+        .map(|api| {
+            json!({
+                "method": api.method,
+                "path": api.path,
+                "input": api.input.iter().map(|field| json!({ "name": field.name, "type": field.ty.to_string() })).collect::<Vec<_>>(),
+                "output": api.output.to_string(),
+                "span": context_span(source, api.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    let auth = program
+        .auth
+        .iter()
+        .map(|auth| {
+            json!({
+                "name": auth.name,
+                "table": auth.table,
+                "audit_table": auth.audit_table,
+                "audit_chain": auth.audit_chain,
+                "span": context_span(source, auth.span)
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "databases": databases,
+        "tables": tables,
+        "cruds": cruds,
+        "views": views,
+        "tableviews": tableviews,
+        "forms": forms,
+        "apis": apis,
+        "auth": auth
+    })
+}
+
+fn empty_context_declarations() -> Value {
+    json!({
+        "databases": [],
+        "tables": [],
+        "cruds": [],
+        "views": [],
+        "tableviews": [],
+        "forms": [],
+        "apis": [],
+        "auth": []
+    })
+}
+
+fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let Some(path) = arguments.next() else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut format = OutputFormat::Human;
+    while let Some(argument) = arguments.next() {
+        if argument == "--format=json" {
+            format = OutputFormat::Json;
+        } else if argument == "--format=human" {
+            format = OutputFormat::Human;
+        } else if argument.starts_with("--format=") {
+            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+            return ExitCode::from(2);
+        } else if argument == "--format" {
+            format = match arguments.next().as_deref().and_then(parse_output_format) {
+                Some(format) => format,
+                None => {
+                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
+                    return ExitCode::from(2);
+                }
+            };
+        } else {
+            eprintln!("error[E-CLI-001]: unknown context option `{argument}`");
+            return ExitCode::from(2);
+        }
+    }
+    if format == OutputFormat::Human {
+        return if validate(&path).is_ok() {
+            println!("context: {}", context_entry(&path));
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        };
+    }
+    let source = fs::read_to_string(&path).unwrap_or_default();
+    begin_json_diagnostics(&path, &source);
+    let program = validate(&path);
+    let diagnostics = finish_json_diagnostics();
+    let success = program.is_ok();
+    let declarations = program.as_ref().map_or_else(
+        |_| empty_context_declarations(),
+        |program| context_declarations(program, &source),
+    );
+    let fields = [
+        (
+            "project".into(),
+            json!({
+                "name": project_name(&path),
+                "entry": context_entry(&path)
+            }),
+        ),
+        ("declarations".into(), declarations),
+    ];
+    print_machine_document(&machine_document("context", success, diagnostics, fields));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
 
 struct ComponentInvocation {
@@ -3696,7 +4173,7 @@ fn dispatch_api_with_capabilities(
     for field in &api.input {
         let Some(value) = values.get(&field.name) else {
             if matches!(field.ty, Type::Option(_)) {
-                arguments.push(Value::Option(None));
+                arguments.push(RuntimeValue::Option(None));
                 continue;
             }
             return api_error_response(
@@ -3723,10 +4200,10 @@ fn dispatch_api_with_capabilities(
     }
 }
 
-fn api_result_response(api: &zelyra_ast::ApiDef, value: &Value) -> Response {
-    if let Value::Result(Err(error)) = value {
+fn api_result_response(api: &zelyra_ast::ApiDef, value: &RuntimeValue) -> Response {
+    if let RuntimeValue::Result(Err(error)) = value {
         let error_name = match &**error {
-            Value::Object { type_name, .. } => type_name.clone(),
+            RuntimeValue::Object { type_name, .. } => type_name.clone(),
             _ => error.output(),
         };
         if let Some(declaration) = api.errors.iter().find(|declaration| {
@@ -3756,12 +4233,12 @@ fn api_value_json(
     value: &serde_json::Value,
     ty: &Type,
     program: &zelyra_ast::Program,
-) -> Result<Value, String> {
+) -> Result<RuntimeValue, String> {
     if let Type::Option(inner) = ty {
         if value.is_null() {
-            return Ok(Value::Option(None));
+            return Ok(RuntimeValue::Option(None));
         }
-        return Ok(Value::Option(Some(Box::new(api_value_json(
+        return Ok(RuntimeValue::Option(Some(Box::new(api_value_json(
             value, inner, program,
         )?))));
     }
@@ -3786,22 +4263,22 @@ fn api_value_json(
                 .iter()
                 .map(|value| api_value_json(value, inner, program))
                 .collect::<Result<Vec<_>, _>>()
-                .map(Value::Array)
+                .map(RuntimeValue::Array)
         }
         Type::Int => value
             .as_i64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(Value::Int)
+            .map(RuntimeValue::Int)
             .ok_or_else(|| format!("invalid Int JSON value `{value}`")),
         Type::UInt => value
             .as_u64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(Value::UInt)
+            .map(RuntimeValue::UInt)
             .ok_or_else(|| format!("invalid UInt JSON value `{value}`")),
         Type::Float | Type::Decimal => value
             .as_f64()
             .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(Value::Float)
+            .map(RuntimeValue::Float)
             .ok_or_else(|| format!("invalid numeric JSON value `{value}`")),
         Type::Bool => value
             .as_bool()
@@ -3812,14 +4289,14 @@ fn api_value_json(
                     _ => None,
                 })
             })
-            .map(Value::Bool)
+            .map(RuntimeValue::Bool)
             .ok_or_else(|| format!("invalid Bool JSON value `{value}`")),
         _ => value
             .as_str()
-            .map(|value| Value::String(value.to_owned()))
+            .map(|value| RuntimeValue::String(value.to_owned()))
             .or_else(|| {
                 if value.is_number() || value.is_boolean() {
-                    Some(Value::String(value.to_string()))
+                    Some(RuntimeValue::String(value.to_string()))
                 } else {
                     None
                 }
@@ -3832,7 +4309,7 @@ fn api_record_value(
     value: &serde_json::Value,
     record: &zelyra_ast::RecordDef,
     program: &zelyra_ast::Program,
-) -> Result<Value, String> {
+) -> Result<RuntimeValue, String> {
     let Some(object) = value.as_object() else {
         return Err(format!("expected JSON object for record `{}`", record.name));
     };
@@ -3852,7 +4329,7 @@ fn api_record_value(
     for field in &record.fields {
         let Some(value) = object.get(&field.name) else {
             if matches!(field.ty, Type::Option(_)) {
-                fields.insert(field.name.clone(), Value::Option(None));
+                fields.insert(field.name.clone(), RuntimeValue::Option(None));
                 continue;
             }
             return Err(format!(
@@ -3865,46 +4342,46 @@ fn api_record_value(
             api_value_json(value, &field.ty, program)?,
         );
     }
-    Ok(Value::Object {
+    Ok(RuntimeValue::Object {
         type_name: record.name.clone(),
         fields,
     })
 }
 
-fn api_json_value(value: &Value) -> String {
+fn api_json_value(value: &RuntimeValue) -> String {
     api_json_value_node(value).to_string()
 }
 
-fn api_json_value_node(value: &Value) -> serde_json::Value {
+fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
     match value {
-        Value::Int(value) => serde_json::Value::from(*value),
-        Value::UInt(value) => serde_json::Value::from(*value),
-        Value::Float(value) => serde_json::Number::from_f64(*value)
+        RuntimeValue::Int(value) => serde_json::Value::from(*value),
+        RuntimeValue::UInt(value) => serde_json::Value::from(*value),
+        RuntimeValue::Float(value) => serde_json::Number::from_f64(*value)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
-        Value::Bool(value) => serde_json::Value::from(*value),
-        Value::String(value) => serde_json::Value::String(value.clone()),
-        Value::Char(value) => serde_json::Value::String(value.to_string()),
-        Value::Timestamp(value) => serde_json::Value::from(*value),
-        Value::Array(values) => {
+        RuntimeValue::Bool(value) => serde_json::Value::from(*value),
+        RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
+        RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
+        RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
+        RuntimeValue::Array(values) => {
             serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
         }
-        Value::Object { fields, .. } => {
+        RuntimeValue::Object { fields, .. } => {
             let object = fields
                 .iter()
                 .map(|(name, value)| (name.clone(), api_json_value_node(value)))
                 .collect();
             serde_json::Value::Object(object)
         }
-        Value::Option(Some(value)) => api_json_value_node(value),
-        Value::Option(None) => serde_json::Value::Null,
-        Value::Result(Ok(value)) => api_json_value_node(value),
-        Value::Result(Err(value)) => {
+        RuntimeValue::Option(Some(value)) => api_json_value_node(value),
+        RuntimeValue::Option(None) => serde_json::Value::Null,
+        RuntimeValue::Result(Ok(value)) => api_json_value_node(value),
+        RuntimeValue::Result(Err(value)) => {
             let mut object = serde_json::Map::new();
             object.insert("error".into(), api_json_value_node(value));
             serde_json::Value::Object(object)
         }
-        Value::Rows { columns, rows } => serde_json::Value::Array(
+        RuntimeValue::Rows { columns, rows } => serde_json::Value::Array(
             rows.iter()
                 .map(|row| {
                     let object = columns
@@ -3918,7 +4395,7 @@ fn api_json_value_node(value: &Value) -> serde_json::Value {
                 })
                 .collect(),
         ),
-        Value::Unit => serde_json::Value::Null,
+        RuntimeValue::Unit => serde_json::Value::Null,
     }
 }
 
@@ -3930,7 +4407,7 @@ fn api_error_response_with_details(
     status: u16,
     code: &str,
     message: &str,
-    details: Option<&Value>,
+    details: Option<&RuntimeValue>,
 ) -> Response {
     let mut error = serde_json::Map::new();
     error.insert("code".into(), serde_json::Value::String(code.into()));
@@ -4870,6 +5347,12 @@ fn main() -> ExitCode {
     }
     if command == "doc" {
         return doc_command(args);
+    }
+    if command == "check" {
+        return check_command(args);
+    }
+    if command == "context" {
+        return context_command(args);
     }
     if command == "verify" {
         let Some(path) = args.next() else {
