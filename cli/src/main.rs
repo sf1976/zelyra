@@ -288,7 +288,11 @@ fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
             return Err(());
         }
     };
-    let tokens = match lex(&source) {
+    parse_source(path, &source)
+}
+
+fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
+    let tokens = match lex(source) {
         Ok(tokens) => tokens,
         Err(error) => {
             diagnostic_with_span(path, "E-LEX-001", &error.message, error.span);
@@ -305,8 +309,29 @@ fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
 }
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
-    let program = load(path)?;
-    if !reject_typed_holes(path, &program) {
+    let source = match fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            diagnostic(
+                path,
+                "E-IO-001",
+                &format!("cannot read `{path}`: {error}"),
+                1,
+                1,
+            );
+            return Err(());
+        }
+    };
+    let program = parse_source(path, &source)?;
+    validate_program(path, &source, program)
+}
+
+fn validate_program(
+    path: &str,
+    source: &str,
+    program: zelyra_ast::Program,
+) -> Result<zelyra_ast::Program, ()> {
+    if !reject_typed_holes(source, path, &program) {
         return Err(());
     }
     if let Err(errors) = lower(&program) {
@@ -425,8 +450,7 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     Ok(program)
 }
 
-fn reject_typed_holes(path: &str, program: &zelyra_ast::Program) -> bool {
-    let source = fs::read_to_string(path).unwrap_or_default();
+fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
     let holes = collect_typed_holes(program);
     for hole in &holes {
         let expected = hole
@@ -769,9 +793,16 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
             )
         }
     };
+    if let Err(error) = edit::validate_request(&request) {
+        return edit_error_document(&request_path, "E-EDIT-001", &error);
+    }
     let entry = match edit::request_entry(&request) {
         Ok(entry) => entry,
         Err(error) => return edit_error_document(&request_path, "E-EDIT-001", &error),
+    };
+    let (entry, entry_display) = match edit::resolve_entry(&entry) {
+        Ok(entry) => entry,
+        Err(error) => return edit_error_document(&entry, "E-EDIT-005", &error),
     };
     let source = match fs::read_to_string(&entry) {
         Ok(source) => source,
@@ -802,51 +833,50 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
     } else {
         match lex(&source) {
             Ok(tokens) => match parse(&tokens) {
-                Ok(program) => match edit::preview(&program, &source, &tokens, &request) {
-                    Ok(result) => match lex(&result.source) {
-                        Ok(proposed_tokens) => match parse(&proposed_tokens) {
-                            Ok(_) => {
-                                let applied = if apply_requested {
-                                    match edit::apply_atomically(&entry, &result.source) {
-                                        Ok(()) => true,
-                                        Err(error) => {
-                                            diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
+                Ok(program) => {
+                    if validate_program(&entry, &source, program.clone()).is_ok() {
+                        match edit::preview(&program, &source, &tokens, &request) {
+                            Ok(result) => {
+                                let candidate_source = result.source.clone();
+                                let _ = finish_json_diagnostics();
+                                begin_json_diagnostics(&entry, &candidate_source);
+                                if let Ok(proposed_program) =
+                                    parse_source(&entry, &candidate_source)
+                                {
+                                    if validate_program(&entry, &candidate_source, proposed_program)
+                                        .is_ok()
+                                    {
+                                        let applied = if apply_requested {
+                                            match edit::apply_atomically(&entry, &result.source) {
+                                                Ok(()) => true,
+                                                Err(error) => {
+                                                    diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
+                                                    false
+                                                }
+                                            }
+                                        } else {
                                             false
-                                        }
+                                        };
+                                        success = !apply_requested || applied;
+                                        preview = json!({
+                                            "available": true,
+                                            "apply_requested": apply_requested,
+                                            "applied": applied,
+                                            "entry": entry_display.clone(),
+                                            "source_fingerprint": current_fingerprint,
+                                            "operations": result.operations,
+                                            "changes": result.changes,
+                                            "changed_tokens": result.changed_tokens,
+                                            "before_bytes": source.len(),
+                                            "after_bytes": result.source.len()
+                                        });
                                     }
-                                } else {
-                                    false
-                                };
-                                success = !apply_requested || applied;
-                                preview = json!({
-                                    "available": true,
-                                    "apply_requested": apply_requested,
-                                    "applied": applied,
-                                    "entry": entry,
-                                    "source_fingerprint": current_fingerprint,
-                                    "operations": result.operations,
-                                    "changes": result.changes,
-                                    "changed_tokens": result.changed_tokens,
-                                    "before_bytes": source.len(),
-                                    "after_bytes": result.source.len()
-                                });
+                                }
                             }
-                            Err(error) => diagnostic_with_span(
-                                &entry,
-                                "E-EDIT-002",
-                                &format!("proposed edit is not parseable: {}", error.message),
-                                error.span,
-                            ),
-                        },
-                        Err(error) => diagnostic_with_span(
-                            &entry,
-                            "E-EDIT-002",
-                            &format!("proposed edit is not lexable: {}", error.message),
-                            error.span,
-                        ),
-                    },
-                    Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
-                },
+                            Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
+                        }
+                    }
+                }
                 Err(error) => {
                     diagnostic_with_span(&entry, "E-PARSE-001", &error.message, error.span)
                 }
@@ -861,7 +891,7 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
         diagnostics,
         [
             ("request".into(), Value::String(request_path)),
-            ("entry".into(), Value::String(entry)),
+            ("entry".into(), Value::String(entry_display)),
             ("preview".into(), preview),
         ],
     ));
@@ -3925,7 +3955,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
-    if !reject_typed_holes(&path, &program) {
+    let source = fs::read_to_string(&path).unwrap_or_default();
+    if !reject_typed_holes(&source, &path, &program) {
         return ExitCode::from(1);
     }
     if validate_capabilities(&path, &program).is_err() {

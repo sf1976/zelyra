@@ -11,6 +11,8 @@ pub struct EditPreview {
     pub changed_tokens: usize,
 }
 
+pub const EDIT_SCHEMA_VERSION: &str = "1";
+
 pub fn source_fingerprint(source: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in source.as_bytes() {
@@ -63,6 +65,52 @@ pub fn request_entry(request: &Value) -> Result<String, String> {
         .filter(|entry| !entry.is_empty())
         .map(str::to_owned)
         .ok_or_else(|| "request must contain a non-empty string `entry`".into())
+}
+
+pub fn validate_request(request: &Value) -> Result<(), String> {
+    let schema_version = request
+        .get("schema_version")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "request must contain string `schema_version`".to_owned())?;
+    if schema_version != EDIT_SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported edit request schema `{schema_version}`; expected `{EDIT_SCHEMA_VERSION}`"
+        ));
+    }
+    Ok(())
+}
+
+pub fn resolve_entry(entry: &str) -> Result<(String, String), String> {
+    let path = Path::new(entry);
+    if path.extension().and_then(|extension| extension.to_str()) != Some("zyl") {
+        return Err("edit entry must be a `.zyl` source file".into());
+    }
+    let canonical_entry = fs::canonicalize(path)
+        .map_err(|error| format!("cannot resolve edit entry `{entry}`: {error}"))?;
+    let mut directory = canonical_entry
+        .parent()
+        .ok_or_else(|| "edit entry has no parent directory".to_owned())?;
+    let project_root = loop {
+        if directory.join("zelyra.toml").is_file() {
+            break directory;
+        }
+        let Some(parent) = directory.parent() else {
+            return Err("edit entry is not inside a Zelyra project".into());
+        };
+        if parent == directory {
+            return Err("edit entry is not inside a Zelyra project".into());
+        }
+        directory = parent;
+    };
+    if !canonical_entry.starts_with(project_root) {
+        return Err("edit entry is outside the Zelyra project root".into());
+    }
+    let relative = canonical_entry
+        .strip_prefix(project_root)
+        .map_err(|_| "edit entry is outside the Zelyra project root".to_owned())?
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok((canonical_entry.to_string_lossy().into_owned(), relative))
 }
 
 pub fn preview(
@@ -213,6 +261,7 @@ mod tests {
         let tokens = lex(source).expect("source should lex");
         let program = parse(&tokens).expect("source should parse");
         let request = json!({
+            "schema_version": "1",
             "entry": "main.zyl",
             "operations": [{
                 "kind": "rename",
@@ -241,6 +290,7 @@ mod tests {
         let tokens = lex(source).expect("source should lex");
         let program = parse(&tokens).expect("source should parse");
         let request = json!({
+            "schema_version": "1",
             "entry": "main.zyl",
             "operations": [
                 {"kind": "rename", "symbol": "type", "from": "CustomerId", "to": "ClientId"},

@@ -45,7 +45,8 @@ zelyra fmt examples/fibonacci.zyl --check
 zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
-Beide verwenden Schema-Version `1`. JSON wird ausschließlich auf stdout
+Diese Maschinenschnittstellen verwenden Schema-Version `1`, soweit sie JSON
+ausgeben. JSON wird ausschließlich auf stdout
 ausgegeben; Diagnosen besitzen stabile Codes und UTF-8-Byte-Offsets, technische
 Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
 Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.

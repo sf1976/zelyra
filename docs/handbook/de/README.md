@@ -1610,6 +1610,7 @@ vorschaut werden:
 
 ~~~json
 {
+  "schema_version": "1",
   "entry": "examples/fibonacci.zyl",
   "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [
@@ -1624,18 +1625,21 @@ Als `change.json` speichern und ausführen:
 zelyra edit --format=json change.json
 ~~~
 
-Das Ergebnis meldet die genauen Token-Spans und einen deterministischen
-Quelltext-Fingerprint. Für `--apply` muss die Anfrage den Fingerprint aus der
-Vorschau enthalten; so wird eine zwischenzeitlich geänderte Datei nicht
-überschrieben. Ohne den ausdrücklichen `--apply`-Schalter bleibt es eine
-Vorschau:
+Die Anfrage ist versioniert und darf nur auf eine existierende `.zyl`-Datei
+innerhalb der aufgelösten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
+der Änderung muss die Compilerprüfungen bestehen. Das Ergebnis meldet die
+genauen Token-Spans und einen deterministischen Quelltext-Fingerprint. Für
+`--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so wird
+eine zwischenzeitlich geänderte Datei nicht überschrieben. Ohne den
+ausdrücklichen `--apply`-Schalter bleibt es eine Vorschau:
 
 ~~~bash
 zelyra edit --format=json --apply change.json
 ~~~
 
-Vor dem atomaren Ersetzen wird der Quelltext erneut geparst; ein ungültiger
-Vorschlag kann daher nicht geschrieben werden.
+Vor dem atomaren Ersetzen wird der Quelltext erneut geparst und vollständig
+geprüft; ein ungültiger oder semantisch unsicherer Vorschlag kann daher nicht
+geschrieben werden.
 
 ### Sichere Automatisierungsgrenze
 

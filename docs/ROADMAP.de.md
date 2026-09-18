@@ -61,8 +61,10 @@ Feature eines bestimmten Anbieters.
 - [~] **Stufe E — semantische Änderungen:** Eine validierte, atomare
   `zelyra edit --format=json`-Umbenennung für deklarierte Funktionen, Typen,
   Records, Tabellen, Tableviews, Formulare, CRUDs, Views und Komponenten ist
-  als Vorschau sowie mit ausdrücklichem `--apply` verfügbar; weitere
-  Operationen bleiben offen.
+  als versionierte Vorschau und mit ausdrücklichem `--apply` verfügbar.
+  Projektlokale `.zyl`-Grenzen, Stale-Source-Fingerprints sowie vollständige
+  Compilerprüfungen vor und nach der Änderung sind aktiv; umfangreichere,
+  namensauflösungsbasierte Operationen bleiben offen.
 - [~] **Stufe F — Contracts und Effekte:** Contracts und Capability-Prüfung
   existieren; feinere Effekte wie `Database(read)`, `Database(write)`,
   `Email` und `Jobs` sind geplant. KI darf Effekte niemals unbemerkt ergänzen.

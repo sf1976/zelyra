@@ -55,8 +55,10 @@ architecture requirement for every phase, not a provider-specific feature.
   changes remain to be connected.
 - [~] **Stage E — semantic edits:** a validated, atomic rename operation for
   declared functions, types, records, tables, tableviews, forms, CRUDs, views,
-  and components is available as a preview and explicit `--apply`; richer
-  operations remain.
+  and components is available as a versioned preview and explicit `--apply`.
+  Project-local `.zyl` boundaries, stale-source fingerprints, and full
+  compiler validation before and after the edit are enforced; richer
+  scope-aware operations remain.
 - [~] **Stage F — contracts and effects:** contracts and capability checks
   exist; granular effects such as `Database(read)`, `Database(write)`,
   `Email`, and `Jobs` remain planned. AI must never add an effect silently.

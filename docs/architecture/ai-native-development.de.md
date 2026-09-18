@@ -78,11 +78,14 @@ Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
 Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
 `zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen in
 Funktionen, Typen, Records, Tabellen, Tableviews, Formularen, CRUDs, Views und
-Komponenten eine validierte, atomare Vorschau sowie einen deterministischen
-Quelltext-Fingerprint. Die Anfrage muss diesen Fingerprint bei ausdrücklichem
-`--apply` zurücksenden; so wird das validierte Ergebnis atomar geschrieben,
-ohne zwischenzeitliche Änderungen zu überschreiben. Weitere Operationen folgen
-später.
+Komponenten eine versionierte, validierte, atomare Vorschau sowie einen
+deterministischen Quelltext-Fingerprint. Die Anfrage muss
+`"schema_version": "1"` enthalten; der Einstieg muss eine existierende
+`.zyl`-Datei innerhalb der aufgelösten Zelyra-Projektwurzel sein. Quelltext vor
+und nach der Änderung wird vollständig mit den Compilerprüfungen validiert.
+Die Anfrage muss diesen Fingerprint bei ausdrücklichem `--apply` zurücksenden;
+so wird das validierte Ergebnis atomar geschrieben, ohne zwischenzeitliche
+Änderungen zu überschreiben. Weitere Operationen folgen später.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

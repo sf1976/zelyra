@@ -8,6 +8,9 @@ compiler and repository release.
 
 ### Added
 
+- Hardened semantic edit requests with required schema version `1`, project-
+  local `.zyl` entry checks, full compiler validation before and after a
+  proposed rename, and explicit diagnostics for rejected boundaries.
 - Added deterministic `zelyra edit --format=json` requests for validated symbol
   renames of functions, types, records, tables, tableviews, forms, CRUDs, views,
   and components. Proposed changes are reparsed atomically; writes require the

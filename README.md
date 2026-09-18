@@ -43,7 +43,7 @@ zelyra fmt examples/fibonacci.zyl --check
 zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
-Both use schema version `1`. JSON is written only to stdout; diagnostics have
+These machine interfaces use schema version `1` where JSON is emitted. JSON is written only to stdout; diagnostics have
 stable codes and UTF-8 byte offsets, while operational messages remain on
 stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical

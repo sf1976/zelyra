@@ -1500,6 +1500,7 @@ Preview a validated symbol rename without modifying the source:
 
 ~~~json
 {
+  "schema_version": "1",
   "entry": "examples/fibonacci.zyl",
   "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [
@@ -1514,16 +1515,19 @@ Save that request as `change.json` and run:
 zelyra edit --format=json change.json
 ~~~
 
-The result reports the exact token spans and a deterministic source fingerprint.
-For `--apply`, the request must carry the fingerprint from the preview, which
-prevents overwriting a file changed in the meantime. Applying is explicit:
+The request is versioned and may only name an existing `.zyl` file inside the
+resolved Zelyra project root. The original and proposed source must pass the
+compiler checks. The result reports exact token spans and a deterministic source
+fingerprint. For `--apply`, the request must carry the fingerprint from the
+preview, which prevents overwriting a file changed in the meantime. Applying is
+explicit:
 
 ~~~bash
 zelyra edit --format=json --apply change.json
 ~~~
 
-The source is reparsed before the atomic replacement, so an invalid proposal
-cannot be written.
+The source is reparsed and fully checked before the atomic replacement, so an
+invalid or semantically unsafe proposal cannot be written.
 
 ### Safe automation boundary
 
