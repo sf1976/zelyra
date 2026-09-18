@@ -101,6 +101,21 @@ slots use their declared fallback. Composition happens before component
 expansion and routing, without global view state; authentication, capability
 checks, SQL checks, and HTML escaping remain active.
 
+CRUD resources may reuse the same application shell with `layout: ViewName`:
+
+~~~zelyra
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+The referenced view is checked like a page view and must exist. Its default
+slot receives the generated CRUD list, detail, and generated create/edit or
+custom-action form content. Named slots keep their declared fallback content.
+Composition is deterministic and does not replace generated SQL, validation,
+CSRF, authentication, authorization, or HTML escaping. Redirect responses
+remain redirects and are never wrapped as page HTML.
+
 Pages may declare typed query inputs:
 
 ~~~zelyra

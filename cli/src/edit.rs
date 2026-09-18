@@ -319,6 +319,7 @@ fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<
         }
         "view" => {
             spans.extend(property_reference_spans(tokens, TokenKind::View, name));
+            spans.extend(property_reference_spans(tokens, TokenKind::Layout, name));
         }
         _ => {}
     }
@@ -1035,7 +1036,7 @@ mod tests {
             form CustomerForm -> customers {
                 fields { id }
             }
-            crud Customer -> customers
+            crud Customer -> customers { layout: Shell }
             fn load() {
                 sql { SELECT id FROM customers WHERE note = 'customers' }
             }
@@ -1057,12 +1058,13 @@ mod tests {
         assert!(preview.source.contains("table clients"));
         assert!(preview.source.contains("view AppShell"));
         assert!(preview.source.contains("view: AppShell"));
+        assert!(preview.source.contains("layout: AppShell"));
         assert!(preview.source.contains("form CustomerEditor -> clients"));
         assert!(preview.source.contains("crud CustomerAdmin -> clients"));
         assert!(preview
             .source
             .contains("SELECT id FROM clients WHERE note = 'customers'"));
-        assert_eq!(preview.changed_tokens, 8);
+        assert_eq!(preview.changed_tokens, 9);
     }
 
     #[test]

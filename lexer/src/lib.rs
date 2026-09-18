@@ -54,6 +54,7 @@ pub enum TokenKind {
     AdminPermission,
     AdminRole,
     Title,
+    Layout,
     List,
     Detail,
     Search,
@@ -229,6 +230,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "admin_permission" => TokenKind::AdminPermission,
                 "admin_role" => TokenKind::AdminRole,
                 "title" => TokenKind::Title,
+                "layout" => TokenKind::Layout,
                 "list" => TokenKind::List,
                 "detail" => TokenKind::Detail,
                 "search" => TokenKind::Search,
@@ -643,6 +645,14 @@ mod tests {
             lex("view AppShell { html { <slot /> } }").unwrap()[0].kind,
             TokenKind::View
         ));
+    }
+
+    #[test]
+    fn lexes_crud_layout_keyword() {
+        let tokens = lex("crud Customer -> customers { layout: AppShell }").unwrap();
+        assert!(tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Layout)));
     }
 
     #[test]

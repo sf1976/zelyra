@@ -223,6 +223,8 @@ pub struct CrudDef {
     pub name: String,
     pub table: String,
     pub title: Option<String>,
+    /// Optional named view used as the outer layout for generated CRUD pages.
+    pub layout: Option<String>,
     pub list: Vec<String>,
     pub search: Vec<String>,
     pub filters: Vec<String>,

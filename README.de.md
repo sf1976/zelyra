@@ -964,6 +964,11 @@ MariaDB-Zugangsdaten erzeugt. Eine vorhandene `.env` wird niemals
 überschrieben; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT` und
 `ZELYRA_DB_HOST_PORT` können dort unabhängig geändert werden.
 
+Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
+`.env.example` besitzt, verwendet `zelyra setup` dieselben sicheren
+eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
+konkreten Weg über `zelyra new --mariadb`.
+
 Nach dem Start des erzeugten Compose-Stacks mit
 `zelyra doctor main.zyl --env-file .env --port 18080 --json` Quellcode, Schema,
 MariaDB-Verbindung, Docker Compose und den veröffentlichten Host-Port
@@ -986,6 +991,24 @@ Das Starterprojekt enthält Abteilungen und Maschinen, eine Foreign-Key-
 Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,
 Pagination und eigene Aktionen. Das Standardprojekt bleibt das kleinere
 Willkommensseiten-Scaffolding.
+
+Erzeugte CRUD-Seiten können denselben wiederverwendbaren Rahmen wie normale
+Seiten verwenden:
+
+~~~zelyra
+view AppShell {
+    html { <html><body><main><slot /></main></body></html> }
+}
+
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+Der Rahmen erhält den erzeugten Listen-, Detail- und Create-/Edit-Inhalt. Der
+Compiler prüft, dass `AppShell` existiert; SQL, Validierung, CSRF,
+Berechtigungen und Escaping bleiben erzeugt und aktiv. Ein ausführbares
+Beispiel steht in `examples/view_showcase.zyl`.
 
 Für Authentifizierung, Sessions und Berechtigungsprüfungen verwenden:
 

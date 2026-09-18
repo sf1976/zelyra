@@ -341,6 +341,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
         let (table, table_span) = self.ident("table name after `->`")?;
         let mut title = None;
+        let mut layout = None;
         let mut list = Vec::new();
         let mut search = Vec::new();
         let mut filters = Vec::new();
@@ -362,6 +363,11 @@ impl<'a> Parser<'a> {
                         self.advance();
                         self.expect(TokenKind::Colon, "colon after CRUD title")?;
                         title = Some(self.string_value("CRUD title")?);
+                    }
+                    TokenKind::Layout => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD layout")?;
+                        layout = Some(self.ident("CRUD layout view name")?.0);
                     }
                     TokenKind::List => {
                         self.advance();
@@ -418,7 +424,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         return self.error(
-                            "expected title, list, search, filter, view, requires auth, permits, or action in CRUD definition",
+                            "expected title, layout, list, search, filter, view, requires auth, permits, or action in CRUD definition",
                         )
                     }
                 }
@@ -429,6 +435,7 @@ impl<'a> Parser<'a> {
                 name,
                 table,
                 title,
+                layout,
                 list,
                 search,
                 filters,
@@ -448,6 +455,7 @@ impl<'a> Parser<'a> {
             name,
             table,
             title,
+            layout,
             list,
             search,
             filters,
@@ -2608,6 +2616,18 @@ mod tests {
         assert_eq!(crud.list, ["customer_number", "name"]);
         assert_eq!(crud.search, ["name"]);
         assert_eq!(crud.filters, ["active"]);
+    }
+
+    #[test]
+    fn parses_crud_layout_view_reference() {
+        let program = parse(
+            &lex(r#"crud Customer -> customers {
+                    layout: AppShell
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.cruds[0].layout.as_deref(), Some("AppShell"));
     }
 
     #[test]

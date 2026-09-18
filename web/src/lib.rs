@@ -220,6 +220,19 @@ impl Response {
     }
 }
 
+const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
+
+fn apply_generated_layout(mut response: Response, layout_html: Option<&str>) -> Response {
+    let Some(layout_html) = layout_html else {
+        return response;
+    };
+    if response.location.is_some() || !response.content_type.starts_with("text/html") {
+        return response;
+    }
+    response.body = layout_html.replace(CRUD_LAYOUT_CONTENT_MARKER, &response.body);
+    response
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Router {
     routes: Vec<Route>,
@@ -284,6 +297,8 @@ pub struct FormRoute {
     pub audit_table: Option<String>,
     pub audit_event: Option<String>,
     pub audit_chain: bool,
+    /// Pre-composed named view layout for generated CRUD forms.
+    pub layout_html: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -305,6 +320,8 @@ pub struct CrudRoute {
     pub delete_view: CrudDeleteViewDef,
     pub loading_view: CrudLoadingViewDef,
     pub error_view: CrudErrorViewDef,
+    /// Pre-composed named view layout. The content marker is replaced at request time.
+    pub layout_html: Option<String>,
     pub soft_delete: Option<zelyra_ast::CrudSoftDeleteDef>,
     pub actions: Vec<CrudActionRoute>,
     pub requires_auth: bool,
@@ -544,13 +561,16 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_form(
-                    form,
-                    request,
-                    &path_params,
-                    self.database_url.as_deref(),
-                    session_from_request(self, request, self.database_url.as_deref())
-                        .and_then(|session| session.user_id),
+                return apply_generated_layout(
+                    dispatch_form(
+                        form,
+                        request,
+                        &path_params,
+                        self.database_url.as_deref(),
+                        session_from_request(self, request, self.database_url.as_deref())
+                            .and_then(|session| session.user_id),
+                    ),
+                    form.layout_html.as_deref(),
                 );
             }
         }
@@ -568,11 +588,14 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_crud(
-                    crud,
-                    request,
-                    self.database_url.as_deref(),
-                    crud_ui_actions(crud, request, self),
+                return apply_generated_layout(
+                    dispatch_crud(
+                        crud,
+                        request,
+                        self.database_url.as_deref(),
+                        crud_ui_actions(crud, request, self),
+                    ),
+                    crud.layout_html.as_deref(),
                 );
             }
             for action in &crud.actions {
@@ -590,13 +613,16 @@ impl WebApp {
                     ) {
                         return response;
                     }
-                    return dispatch_form(
-                        &action.form,
-                        request,
-                        &path_params,
-                        self.database_url.as_deref(),
-                        session_from_request(self, request, self.database_url.as_deref())
-                            .and_then(|session| session.user_id),
+                    return apply_generated_layout(
+                        dispatch_form(
+                            &action.form,
+                            request,
+                            &path_params,
+                            self.database_url.as_deref(),
+                            session_from_request(self, request, self.database_url.as_deref())
+                                .and_then(|session| session.user_id),
+                        ),
+                        action.form.layout_html.as_deref(),
                     );
                 }
             }
@@ -614,19 +640,22 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_crud_restore(
-                    crud,
-                    request,
-                    &path_params,
-                    self.database_url.as_deref(),
-                    self.auth_route
-                        .as_ref()
-                        .and_then(|auth| auth.audit_table.as_deref()),
-                    self.auth_route
-                        .as_ref()
-                        .is_some_and(|auth| auth.audit_chain),
-                    session_from_request(self, request, self.database_url.as_deref())
-                        .and_then(|session| session.user_id),
+                return apply_generated_layout(
+                    dispatch_crud_restore(
+                        crud,
+                        request,
+                        &path_params,
+                        self.database_url.as_deref(),
+                        self.auth_route
+                            .as_ref()
+                            .and_then(|auth| auth.audit_table.as_deref()),
+                        self.auth_route
+                            .as_ref()
+                            .is_some_and(|auth| auth.audit_chain),
+                        session_from_request(self, request, self.database_url.as_deref())
+                            .and_then(|session| session.user_id),
+                    ),
+                    crud.layout_html.as_deref(),
                 );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
@@ -643,19 +672,22 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_crud_delete(
-                    crud,
-                    request,
-                    &path_params,
-                    self.database_url.as_deref(),
-                    self.auth_route
-                        .as_ref()
-                        .and_then(|auth| auth.audit_table.as_deref()),
-                    self.auth_route
-                        .as_ref()
-                        .is_some_and(|auth| auth.audit_chain),
-                    session_from_request(self, request, self.database_url.as_deref())
-                        .and_then(|session| session.user_id),
+                return apply_generated_layout(
+                    dispatch_crud_delete(
+                        crud,
+                        request,
+                        &path_params,
+                        self.database_url.as_deref(),
+                        self.auth_route
+                            .as_ref()
+                            .and_then(|auth| auth.audit_table.as_deref()),
+                        self.auth_route
+                            .as_ref()
+                            .is_some_and(|auth| auth.audit_chain),
+                        session_from_request(self, request, self.database_url.as_deref())
+                            .and_then(|session| session.user_id),
+                    ),
+                    crud.layout_html.as_deref(),
                 );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
@@ -672,12 +704,15 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_crud_detail(
-                    crud,
-                    request,
-                    &path_params,
-                    self.database_url.as_deref(),
-                    crud_ui_actions(crud, request, self),
+                return apply_generated_layout(
+                    dispatch_crud_detail(
+                        crud,
+                        request,
+                        &path_params,
+                        self.database_url.as_deref(),
+                        crud_ui_actions(crud, request, self),
+                    ),
+                    crud.layout_html.as_deref(),
                 );
             }
         }
@@ -6493,6 +6528,22 @@ mod tests {
         }])
     }
 
+    #[test]
+    fn applies_crud_layout_only_to_html_responses() {
+        let response = apply_generated_layout(
+            Response::html(200, "<main>CRUD content</main>"),
+            Some("<body>\u{0}ZELYRA_CRUD_CONTENT\u{0}</body>"),
+        );
+        assert_eq!(response.body, "<body><main>CRUD content</main></body>");
+
+        let redirect = apply_generated_layout(
+            Response::redirect("/customers"),
+            Some("<body>\u{0}ZELYRA_CRUD_CONTENT\u{0}</body>"),
+        );
+        assert_eq!(redirect.location.as_deref(), Some("/customers"));
+        assert!(redirect.body.is_empty());
+    }
+
     fn form_route() -> FormRoute {
         FormRoute {
             path: "/forms/CustomerCreate".into(),
@@ -6524,6 +6575,7 @@ mod tests {
             audit_table: None,
             audit_event: None,
             audit_chain: false,
+            layout_html: None,
         }
     }
 
@@ -7409,6 +7461,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
@@ -7641,6 +7694,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
@@ -7691,6 +7745,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
@@ -7728,6 +7783,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
@@ -7901,6 +7957,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: true,
@@ -7975,6 +8032,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,
@@ -8009,6 +8067,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            layout_html: None,
             soft_delete: None,
             actions: Vec::new(),
             requires_auth: false,

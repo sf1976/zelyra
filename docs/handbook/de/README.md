@@ -215,6 +215,10 @@ werden; die Web-Ports verwenden standardmäßig 3000, der MariaDB-Host-Port
 Nach dem Scaffolding erzeugt `zelyra setup maschinenverwaltung` eine `.env` mit
 zufälligen lokalen MariaDB-Zugangsdaten. Vorhandene `.env`-Dateien werden nie
 überschrieben und Zugangsdaten nie ausgegeben.
+Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
+`.env.example` besitzt, verwendet der Setup-Befehl dieselben sicheren
+eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
+konkreten Weg über `zelyra new --mariadb`.
 Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
 --port 18080` Quellcode, Schema, MariaDB-Verbindung, Docker Compose und den
 veröffentlichten Port ohne Datenbankänderung prüfen.
@@ -631,6 +635,25 @@ page "/status" {
     html { <Badge text="Ready" /> }
 }
 ~~~
+
+Derselbe Rahmen kann erzeugte CRUD-Seiten umschließen. Dazu wird beim CRUD
+`layout: ViewName` angegeben:
+
+~~~zelyra
+view AppShell {
+    html { <html><body><main><slot /></main></body></html> }
+}
+
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+Der Default-Slot erhält den erzeugten Listen-, Detail-, Create-/Edit- und
+eigenen Aktionsformular-Inhalt. Der ausgewählte View muss existieren und wird
+zur Compile-Zeit geprüft. SQL, Validierung, CSRF, Autorisierung und Escaping
+bleiben erzeugt und aktiv; Redirects werden nicht als HTML umschlossen. Siehe
+`examples/view_showcase.zyl`.
 
 Komponenten können außerdem über einen Default-Slot oder benannte Slots
 HTML-Kindelemente aufnehmen:

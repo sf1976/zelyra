@@ -31,7 +31,7 @@ view CustomerShell {
                 <title>Customer workspace</title>
             </head>
             <body>
-                <header><BrandMark label="Zelyra" /></header>
+                <header><slot name="header"><BrandMark label="Zelyra" /></slot></header>
                 <main><slot /></main>
             </body>
         </html>
@@ -39,6 +39,7 @@ view CustomerShell {
 }
 crud Customer -> customers {
     title: "Customers"
+    layout: CustomerShell
     view {
         fields {
             name
