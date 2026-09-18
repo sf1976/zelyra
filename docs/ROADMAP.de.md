@@ -29,8 +29,8 @@ noch in Prüfung.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
-  bestätigtes Bereinigen sind verfügbar. Manipulationssichere Verkettung und
-  Archivierung fehlen noch.
+  bestätigtes Bereinigen sind verfügbar. Manipulationssichere Verkettung ist
+  optional verfügbar; Archivierung und Aufbewahrung bleiben offen.
 
 ## 1. Einstieg und Distribution
 
@@ -189,10 +189,10 @@ noch in Prüfung.
 - [x] Browserverwaltung und CLI-Rollenverwaltung.
 - [x] Audit-Anzeige, begrenzter Export, strukturelle Prüfung und sicheres
   Bereinigen.
-- [ ] Kryptografisch verkettete Audit-Einträge mit dokumentiertem Hashformat,
-  kanonischer Serialisierung und nebenläufigkeitssicherem Append-Verfahren.
-- [ ] `audit verify` für gebrochene Hash-Ketten mit Angabe des ersten ungültigen
-  Eintrags und einer unabhängigen Diagnose.
+- [x] Kryptografisch verkettete Audit-Einträge mit dokumentiertem SHA-256-
+  Hashformat, kanonischer Serialisierung und transaktionsgesichertem Append.
+- [x] `audit verify` erkennt gebrochene Verbindungen und ungültige Entry-Hashes;
+  die genaue Position des ersten Fehlers und unabhängige Diagnosen bleiben offen.
 - [ ] Unveränderliche bzw. Append-only-Datenbankrechte für Audit-Tabellen.
 - [ ] Konfigurierbare Aufbewahrung, geplantes Bereinigen und Archivexport.
 - [ ] Verschlüsselte Archive, Schlüsselrotation, Restore-Prüfung und Offline-

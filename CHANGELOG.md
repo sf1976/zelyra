@@ -70,6 +70,10 @@ compiler and repository release.
   `zelyra audit export` with bounded limits.
 - Added structural audit verification and explicitly confirmed, transactional
   audit pruning through `zelyra audit verify` and `zelyra audit prune`.
+- Added opt-in cryptographic audit chaining with canonical SHA-256 entry hashes,
+  transaction-locked appends, chained verification, schema diagnostics, and a
+  safe refusal to prune chained logs. Added the `examples/audit_chain.zyl`
+  MariaDB example and end-to-end test.
 - Added default and named slots for reusable components, including nested
   component composition and compile-time rejection of unconsumed child content.
 - Added typed `tableview` filters with safe equality, text, numeric, boolean,

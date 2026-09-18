@@ -230,7 +230,7 @@ Die wichtigsten Befehle:
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
 | `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
 | `zelyra audit export app.zyl --format json` | Audit-Ereignisse als JSON exportieren |
-| `zelyra audit verify app.zyl` | Pflichtfelder im Audit prüfen |
+| `zelyra audit verify app.zyl` | Audit-Pflichtfelder und optionale Hashkette prüfen |
 | `zelyra audit prune app.zyl --before <timestamp> --confirm` | alte Audit-Ereignisse entfernen |
 
 ## 5. Variablen, Typen und Funktionen
@@ -935,6 +935,17 @@ Export. Das Standardlimit ist 100, maximal sind 10.000 Einträge erlaubt.
 enthält. `zelyra audit prune` verlangt `--before <timestamp>` und löscht ohne
 das ausdrückliche Flag `--confirm` niemals Daten; die Bereinigung wird selbst
 als Audit-Ereignis protokolliert.
+
+Für eine manipulationssichtbare Historie ergänzt die `auth`-Definition
+`audit_chain: true`. Die Audit-Tabelle benötigt dann zusätzlich eine `id`-Spalte
+sowie `previous_hash` und `entry_hash`, üblicherweise `String(64)`. Zelyra berechnet kleingeschriebene
+SHA-256-Hashes aus der kanonischen, durch `|` getrennten Nutzlast
+`previous_hash|actor_user_id|event|target_user_id|details|created_at`; eine
+fehlende ID wird als `NULL` geschrieben und der Zeitstempel verwendet
+`YYYY-MM-DD HH:MM:SS`. Beim Anhängen wird die letzte Zeile gesperrt und die
+Fachtransaktion geteilt. `audit verify` prüft Verbindungen und Hashes.
+Bereinigen wird bei verketteten Protokollen abgelehnt, weil die Kette sonst
+brechen würde.
 
 Zuweisungen können ohne eigene SQL-Befehle über die CLI gepflegt werden. Das
 Projekt wird vor jedem MariaDB-Schreibvorgang geprüft; wiederholte Grants sind

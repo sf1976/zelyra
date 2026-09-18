@@ -323,6 +323,7 @@ pub struct AuthDef {
     pub roles_table: Option<String>,
     pub role_permissions_table: Option<String>,
     pub audit_table: Option<String>,
+    pub audit_chain: bool,
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,

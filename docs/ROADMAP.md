@@ -27,7 +27,8 @@ under evaluation.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
-  confirmed pruning are available. Tamper-evident chaining and archival remain.
+  confirmed pruning are available. Tamper-evident chaining is available as an
+  explicit opt-in; archival and retention remain.
 
 ## 1. Beginner experience and distribution
 
@@ -187,10 +188,11 @@ under evaluation.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.
-- [ ] Cryptographically chained audit entries using a documented hash format,
-  explicit canonical serialization, and a concurrency-safe append strategy.
-- [ ] `audit verify` support for detecting broken hash chains and reporting the
-  first invalid entry with a source-independent diagnostic.
+- [x] Cryptographically chained audit entries using a documented SHA-256 hash
+  format, explicit canonical serialization, and a transaction-locked append
+  strategy.
+- [x] `audit verify` detects broken hash links and invalid entry hashes. The
+  first-invalid-entry location and source-independent diagnostics remain open.
 - [ ] Immutable or append-only database privileges for audit tables.
 - [ ] Configurable retention policies, scheduled pruning, and archive export.
 - [ ] Encrypted archives, key rotation, restore verification, and offline

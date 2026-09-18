@@ -453,6 +453,28 @@ Erstellen, Ändern, Löschen, Archivieren, Wiederherstellen und eigene Aktionen
 protokollieren Akteur, Operation, Tabelle, Zieldatensatz und Feldänderungen.
 Passwörter, Tokens, Secrets und Hashes werden aus Änderungsdetails entfernt.
 
+Für manipulationssichtbare Protokolle kann die kryptografische Verkettung
+aktiviert werden:
+
+~~~zelyra
+auth users {
+    table: users
+    audit: auth_audit_log
+    audit_chain: true
+}
+~~~
+
+Die Audit-Tabelle benötigt dann zusätzlich eine `id`-Spalte sowie die
+Pflichtspalten `previous_hash` und `entry_hash`, üblicherweise als `String(64)`.
+Zelyra speichert kleingeschriebene
+SHA-256-Hexwerte. Jeder Eintrag hasht den vorherigen Hash, die Akteur-ID (oder
+`NULL`), das Ereignis, die Ziel-ID (oder `NULL`), die Details und den MariaDB-
+Zeitstempel im kanonischen Format `YYYY-MM-DD HH:MM:SS`, getrennt durch `|`.
+Die Kette wird gesperrt und in derselben Transaktion wie die Fachänderung
+erweitert. `zelyra audit verify` prüft Verknüpfungen und Hashes. Bereinigen
+wird bei verketteten Protokollen abgelehnt, weil das Löschen die Kette brechen
+würde.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.
@@ -776,6 +798,9 @@ Der geschützte CRUD-/API-Test aus `tests/mariadb-protected-e2e.sh` prüft die
 Berechtigungsgrenze für HTML-CRUD- und JSON-API-Endpunkte einschließlich
 getrennter Create-, Edit- und Delete-Berechtigungen sowie einer geschützten
 eigenen Formularaktion.
+Der Chain-Audit-Test aus `tests/mariadb-audit-chain-e2e.sh` prüft
+transaktionale Hash-Anhänge, Manipulationserkennung und die sichere Ablehnung
+des Bereinigens.
 
 Deutsche und englische Benutzerdokumentation sollen synchron bleiben.
 Architekturentscheidungen sollen Sicherheit, Kontrolle und Erweiterbarkeit

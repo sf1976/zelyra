@@ -1,0 +1,40 @@
+database main {
+    engine: mariadb
+}
+
+auth users {
+    table: users
+    roles: user_roles
+    role_permissions: role_permissions
+    audit: audit_chain_log
+    audit_chain: true
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+}
+
+table user_roles {
+    id: Id primary auto
+    user_id: Int required
+    role: String(100) required
+}
+
+table role_permissions {
+    id: Id primary auto
+    role: String(100) required
+    permission: String(100) required
+}
+
+table audit_chain_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    previous_hash: String(64) required
+    entry_hash: String(64) required
+    created_at: Timestamp default now
+}

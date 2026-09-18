@@ -117,6 +117,30 @@ The audit log can be checked for missing required values:
 zelyra audit verify app.zyl
 ~~~
 
+### Cryptographic audit chaining
+
+Projects that need tamper-evident audit history can opt in explicitly:
+
+~~~zelyra
+auth users {
+    table: users
+    audit: auth_audit_log
+    audit_chain: true
+}
+~~~
+
+The audit table must have an `id` column for chain ordering and add
+`previous_hash` and `entry_hash` columns. Both are
+normally `String(64)` and store lowercase SHA-256 hex. The canonical payload is
+the pipe-separated sequence `previous_hash|actor_user_id|event|target_user_id|details|created_at`; nullable IDs are serialized as the literal `NULL`, and
+`created_at` uses MariaDB's `YYYY-MM-DD HH:MM:SS` representation. The new entry
+hash is SHA-256 of that payload. Zelyra locks the latest entry and writes the
+business mutation plus the audit append in one transaction.
+
+`zelyra audit verify` validates every link and hash. It returns a failure for
+tampered rows. `zelyra audit prune` is deliberately disabled for chained logs;
+retention and verifiable archival are separate roadmap items.
+
 Old entries can be removed only with an explicit cutoff and confirmation. A
 prune operation is recorded after the deletion in the same transaction:
 

@@ -258,6 +258,7 @@ impl<'a> Parser<'a> {
         let mut roles_table = None;
         let mut role_permissions_table = None;
         let mut audit_table = None;
+        let mut audit_chain = false;
         let mut admin_path = None;
         let mut admin_permission = None;
         let mut admin_role = None;
@@ -269,6 +270,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Roles => "roles",
                 TokenKind::RolePermissions => "role_permissions",
                 TokenKind::Audit => "audit",
+                TokenKind::AuditChain => "audit_chain",
                 TokenKind::AdminPath => "admin_path",
                 TokenKind::AdminPermission => "admin_permission",
                 TokenKind::AdminRole => "admin_role",
@@ -276,6 +278,21 @@ impl<'a> Parser<'a> {
             };
             self.advance();
             self.expect(TokenKind::Colon, "colon after authentication option")?;
+            if field == "audit_chain" {
+                audit_chain = match self.current().kind.clone() {
+                    TokenKind::True => {
+                        self.advance();
+                        true
+                    }
+                    TokenKind::False => {
+                        self.advance();
+                        false
+                    }
+                    _ => return self.error("expected `true` or `false` for audit_chain"),
+                };
+                self.skip_newlines();
+                continue;
+            }
             let value = if matches!(field, "admin_path" | "admin_permission") {
                 self.string_value("authentication option value")?
             } else {
@@ -310,6 +327,7 @@ impl<'a> Parser<'a> {
             roles_table,
             role_permissions_table,
             audit_table,
+            audit_chain,
             admin_path,
             admin_permission,
             admin_role,
@@ -2535,6 +2553,7 @@ mod tests {
                     roles: user_roles
                     role_permissions: role_permissions
                     audit: auth_audit_log
+                    audit_chain: true
                     admin_path: "/admin/access"
                     admin_permission: "auth.manage"
                     admin_role: admin
@@ -2569,6 +2588,7 @@ mod tests {
             program.auth[0].audit_table.as_deref(),
             Some("auth_audit_log")
         );
+        assert!(program.auth[0].audit_chain);
         assert_eq!(program.auth[0].admin_path.as_deref(), Some("/admin/access"));
         assert_eq!(
             program.auth[0].admin_permission.as_deref(),

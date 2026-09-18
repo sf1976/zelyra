@@ -262,6 +262,7 @@ pub struct FormRoute {
     pub post_only: bool,
     pub audit_table: Option<String>,
     pub audit_event: Option<String>,
+    pub audit_chain: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -340,6 +341,7 @@ pub struct AuthRoute {
     pub roles_table: Option<String>,
     pub role_permissions_table: Option<String>,
     pub audit_table: Option<String>,
+    pub audit_chain: bool,
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
@@ -599,6 +601,9 @@ impl WebApp {
                     self.auth_route
                         .as_ref()
                         .and_then(|auth| auth.audit_table.as_deref()),
+                    self.auth_route
+                        .as_ref()
+                        .is_some_and(|auth| auth.audit_chain),
                     session_from_request(self, request, self.database_url.as_deref())
                         .and_then(|session| session.user_id),
                 );
@@ -625,6 +630,9 @@ impl WebApp {
                     self.auth_route
                         .as_ref()
                         .and_then(|auth| auth.audit_table.as_deref()),
+                    self.auth_route
+                        .as_ref()
+                        .is_some_and(|auth| auth.audit_chain),
                     session_from_request(self, request, self.database_url.as_deref())
                         .and_then(|session| session.user_id),
                 );
@@ -1277,66 +1285,81 @@ fn execute_auth_admin_mutation(
     details: &str,
 ) -> Result<zelyra_database::QueryResult, zelyra_database::DatabaseError> {
     if let Some(audit_table) = auth.audit_table.as_deref() {
-        let details = details.chars().take(1000).collect::<String>();
-        queries.push(zelyra_database::Query {
-            sql: format!(
-                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-                quote_identifier(audit_table)
-            ),
-            params: vec![
-                (
-                    "actor_user_id".into(),
-                    actor_user_id
-                        .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
-                ),
-                (
-                    "event".into(),
-                    zelyra_database::QueryValue::String(action.into()),
-                ),
-                (
-                    "target_user_id".into(),
-                    target_user_id
-                        .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
-                ),
-                ("details".into(), zelyra_database::QueryValue::String(details)),
-            ],
-        });
+        queries.extend(audit_insert_queries(
+            audit_table,
+            auth.audit_chain,
+            actor_user_id,
+            action,
+            target_user_id,
+            details,
+        ));
     }
     zelyra_database::execute_mariadb_queries(database_url, &queries, true)
         .map(|_| zelyra_database::QueryResult::default())
 }
 
-fn audit_insert_query(
+pub fn audit_insert_queries(
     audit_table: &str,
+    chain: bool,
     actor_user_id: Option<i64>,
     event: &str,
     target_record_id: Option<i64>,
     details: &str,
-) -> zelyra_database::Query {
+) -> Vec<zelyra_database::Query> {
     let details = details.chars().take(1000).collect::<String>();
-    zelyra_database::Query {
-        sql: format!(
-            "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-            quote_identifier(audit_table)
+    let params = vec![
+        (
+            "actor_user_id".into(),
+            actor_user_id.map_or(
+                zelyra_database::QueryValue::Null,
+                zelyra_database::QueryValue::Int,
+            ),
         ),
-        params: vec![
-            (
-                "actor_user_id".into(),
-                actor_user_id
-                    .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
+        (
+            "event".into(),
+            zelyra_database::QueryValue::String(event.into()),
+        ),
+        (
+            "target_user_id".into(),
+            target_record_id.map_or(
+                zelyra_database::QueryValue::Null,
+                zelyra_database::QueryValue::Int,
             ),
-            (
-                "event".into(),
-                zelyra_database::QueryValue::String(event.into()),
+        ),
+        (
+            "details".into(),
+            zelyra_database::QueryValue::String(details),
+        ),
+    ];
+    if !chain {
+        return vec![zelyra_database::Query {
+            sql: format!(
+                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
+                quote_identifier(audit_table)
             ),
-            (
-                "target_user_id".into(),
-                target_record_id
-                    .map_or(zelyra_database::QueryValue::Null, zelyra_database::QueryValue::Int),
-            ),
-            ("details".into(), zelyra_database::QueryValue::String(details)),
-        ],
+            params,
+        }];
     }
+    vec![
+        zelyra_database::Query {
+            sql: "SET @zelyra_prev_hash = '';".into(),
+            params: Vec::new(),
+        },
+        zelyra_database::Query {
+            sql: format!(
+                "SELECT COALESCE(entry_hash, '') INTO @zelyra_prev_hash FROM {} ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                quote_identifier(audit_table)
+            ),
+            params: Vec::new(),
+        },
+        zelyra_database::Query {
+            sql: format!(
+                "INSERT INTO {} (actor_user_id, event, target_user_id, details, previous_hash, entry_hash, created_at) VALUES (:actor_user_id, :event, :target_user_id, :details, @zelyra_prev_hash, SHA2(CONCAT(@zelyra_prev_hash, '|', COALESCE(:actor_user_id, 'NULL'), '|', :event, '|', COALESCE(:target_user_id, 'NULL'), '|', :details, '|', DATE_FORMAT(CURRENT_TIMESTAMP, '%Y-%m-%d %H:%i:%s')), 256), CURRENT_TIMESTAMP)",
+                quote_identifier(audit_table)
+            ),
+            params,
+        },
+    ]
 }
 
 fn audit_component(value: &str) -> String {
@@ -3861,6 +3884,7 @@ fn dispatch_crud_delete(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     audit_table: Option<&str>,
+    audit_chain: bool,
     actor_user_id: Option<i64>,
 ) -> Response {
     if request.method != "POST" {
@@ -3929,8 +3953,9 @@ fn dispatch_crud_delete(
         params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
     }];
     if let Some(audit_table) = audit_table {
-        queries.push(audit_insert_query(
+        queries.extend(audit_insert_queries(
             audit_table,
+            audit_chain,
             actor_user_id,
             event,
             Some(id),
@@ -3959,6 +3984,7 @@ fn dispatch_crud_restore(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     audit_table: Option<&str>,
+    audit_chain: bool,
     actor_user_id: Option<i64>,
 ) -> Response {
     if request.method != "POST" {
@@ -4010,8 +4036,9 @@ fn dispatch_crud_restore(
         params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
     }];
     if let Some(audit_table) = audit_table {
-        queries.push(audit_insert_query(
+        queries.extend(audit_insert_queries(
             audit_table,
+            audit_chain,
             actor_user_id,
             "crud.restore",
             Some(id),
@@ -5056,8 +5083,9 @@ fn execute_form_action(
     {
         let (record_id, details) =
             form_audit_details(form, audit_event, path_params, before_values, values);
-        queries.push(audit_insert_query(
+        queries.extend(audit_insert_queries(
             audit_table,
+            form.audit_chain,
             actor_user_id,
             audit_event,
             record_id,
@@ -5533,6 +5561,23 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn chained_audit_insert_uses_previous_hash_and_sha256() {
+        let queries = audit_insert_queries(
+            "audit_log",
+            true,
+            Some(7),
+            "crud.update",
+            Some(42),
+            "table=customers;changed=name",
+        );
+        assert_eq!(queries.len(), 3);
+        assert!(queries[1].sql.contains("INTO @zelyra_prev_hash"));
+        assert!(queries[2].sql.contains("previous_hash"));
+        assert!(queries[2].sql.contains("SHA2(CONCAT"));
+        assert!(queries[2].sql.contains("DATE_FORMAT(CURRENT_TIMESTAMP"));
+    }
+
     fn router() -> Router {
         Router::new(vec![Route {
             path: "/hello/{name}".into(),
@@ -5572,6 +5617,7 @@ mod tests {
             post_only: false,
             audit_table: None,
             audit_event: None,
+            audit_chain: false,
         }
     }
 
@@ -5897,6 +5943,7 @@ mod tests {
             roles_table: None,
             role_permissions_table: None,
             audit_table: None,
+            audit_chain: false,
             admin_path: None,
             admin_permission: None,
             admin_role: None,
@@ -5947,6 +5994,7 @@ mod tests {
             roles_table: None,
             role_permissions_table: None,
             audit_table: None,
+            audit_chain: false,
             admin_path: None,
             admin_permission: None,
             admin_role: None,
@@ -6540,6 +6588,7 @@ mod tests {
             roles_table: None,
             role_permissions_table: None,
             audit_table: None,
+            audit_chain: false,
             admin_path: None,
             admin_permission: None,
             admin_role: None,

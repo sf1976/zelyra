@@ -26,9 +26,9 @@ use zelyra_runtime::{
     VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
-    html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudActionRoute,
-    CrudRoute, CsrfProtection, FormRoute, Response, Route, TableViewFilter, TableViewFilterKind,
-    TableViewRoute, WebApp,
+    audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
+    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route,
+    TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
 };
 
 fn usage() {
@@ -2383,6 +2383,36 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                     valid = false;
                 }
             }
+            if auth.audit_chain {
+                for required_column in ["id", "previous_hash", "entry_hash"] {
+                    if !audit_table
+                        .columns
+                        .iter()
+                        .any(|column| column.name == required_column)
+                    {
+                        diagnostic(
+                            path,
+                            "E-AUTH-027",
+                            &format!(
+                                "chained authentication audit table {} requires column {}",
+                                audit_table_name, required_column
+                            ),
+                            auth.span.line,
+                            auth.span.column,
+                        );
+                        valid = false;
+                    }
+                }
+            }
+        } else if auth.audit_chain {
+            diagnostic(
+                path,
+                "E-AUTH-028",
+                "audit_chain requires an audit: <table> option",
+                auth.span.line,
+                auth.span.column,
+            );
+            valid = false;
         }
         let admin_options = [
             auth.admin_path.is_some(),
@@ -3146,6 +3176,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             roles_table: auth.roles_table.clone(),
             role_permissions_table: auth.role_permissions_table.clone(),
             audit_table: auth.audit_table.clone(),
+            audit_chain: auth.audit_chain,
             admin_path: auth.admin_path.clone(),
             admin_permission: auth.admin_permission.clone(),
             admin_role: auth.admin_role.clone(),
@@ -3180,6 +3211,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             post_only: false,
             audit_table: None,
             audit_event: None,
+            audit_chain: false,
         });
     }
     for crud in &program.cruds {
@@ -3200,6 +3232,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 auth_route
                     .as_ref()
                     .and_then(|auth| auth.audit_table.clone()),
+                auth_route.as_ref().is_some_and(|auth| auth.audit_chain),
             ));
         }
     }
@@ -3259,6 +3292,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     auth_route
                         .as_ref()
                         .and_then(|auth| auth.audit_table.clone()),
+                    auth_route.as_ref().is_some_and(|auth| auth.audit_chain),
                 )
             })
             .collect();
@@ -3369,6 +3403,7 @@ fn generated_crud_form(
     edit: bool,
     csrf: CsrfProtection,
     audit_table: Option<String>,
+    audit_chain: bool,
 ) -> FormRoute {
     let permissions = if edit {
         effective_crud_permissions(&crud.permissions, &crud.edit_permissions)
@@ -3478,6 +3513,7 @@ fn generated_crud_form(
         } else {
             "crud.create".into()
         }),
+        audit_chain,
     }
 }
 
@@ -3488,6 +3524,7 @@ fn generated_crud_action(
     action: &zelyra_ast::FormAction,
     csrf: CsrfProtection,
     audit_table: Option<String>,
+    audit_chain: bool,
 ) -> CrudActionRoute {
     let mut permissions = crud.permissions.clone();
     permissions.extend(action.permissions.clone());
@@ -3522,6 +3559,7 @@ fn generated_crud_action(
             post_only: true,
             audit_table,
             audit_event: Some(format!("crud.action.{}", action.name)),
+            audit_chain,
         },
     }
 }
@@ -4122,6 +4160,7 @@ struct AuthRoleTables {
     assignments: String,
     permissions: String,
     audit: Option<String>,
+    audit_chain: bool,
 }
 
 fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
@@ -4146,6 +4185,7 @@ fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
         assignments,
         permissions,
         audit: auth.audit_table.clone(),
+        audit_chain: auth.audit_chain,
     })
 }
 
@@ -4167,31 +4207,21 @@ fn execute_auth_role_mutation(
     database_url: &str,
     sql: String,
     params: Vec<(String, QueryValue)>,
-    audit_table: Option<&str>,
+    audit: Option<(&str, bool)>,
     event: &str,
     target_user_id: Option<i64>,
     details: String,
 ) -> Result<(), zelyra_database::DatabaseError> {
     let mut queries = vec![Query { sql, params }];
-    if let Some(audit_table) = audit_table {
-        queries.push(Query {
-            sql: format!(
-                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-                quote_identifier(audit_table)
-            ),
-            params: vec![
-                ("actor_user_id".into(), QueryValue::Null),
-                ("event".into(), QueryValue::String(event.into())),
-                (
-                    "target_user_id".into(),
-                    target_user_id.map_or(QueryValue::Null, QueryValue::Int),
-                ),
-                (
-                    "details".into(),
-                    QueryValue::String(details.chars().take(1000).collect()),
-                ),
-            ],
-        });
+    if let Some((audit_table, audit_chain)) = audit {
+        queries.extend(audit_insert_queries(
+            audit_table,
+            audit_chain,
+            None,
+            event,
+            target_user_id,
+            &details,
+        ));
     }
     zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
 }
@@ -4253,7 +4283,10 @@ fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             ("user_id".into(), QueryValue::Int(user_id)),
             ("role".into(), QueryValue::String(role.clone())),
         ],
-        tables.audit.as_deref(),
+        tables
+            .audit
+            .as_deref()
+            .map(|table| (table, tables.audit_chain)),
         &event,
         Some(user_id),
         details,
@@ -4329,7 +4362,10 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
             ("role".into(), QueryValue::String(role.clone())),
             ("permission".into(), QueryValue::String(permission.clone())),
         ],
-        tables.audit.as_deref(),
+        tables
+            .audit
+            .as_deref()
+            .map(|table| (table, tables.audit_chain)),
         &event,
         None,
         details,
@@ -4351,7 +4387,7 @@ fn audit_usage() {
     );
 }
 
-fn audit_project(path: &str) -> Result<(String, String), ExitCode> {
+fn audit_project(path: &str) -> Result<(String, String, bool), ExitCode> {
     let program = match validate(path) {
         Ok(program) => program,
         Err(()) => return Err(ExitCode::from(1)),
@@ -4377,7 +4413,7 @@ fn audit_project(path: &str) -> Result<(String, String), ExitCode> {
             return Err(ExitCode::from(1));
         }
     };
-    Ok((database_url, audit_table))
+    Ok((database_url, audit_table, auth.audit_chain))
 }
 
 fn audit_limit(value: &str) -> Result<usize, ExitCode> {
@@ -4408,15 +4444,20 @@ fn audit_rows(
 fn audit_integrity(
     database_url: &str,
     audit_table: &str,
+    chain: bool,
 ) -> Result<(u64, u64), zelyra_database::DatabaseError> {
-    let result = zelyra_database::execute_mariadb_query(
-        database_url,
-        &format!(
+    let query = if chain {
+        format!(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL OR previous_hash IS NULL OR entry_hash IS NULL OR previous_hash <> COALESCE(expected_previous_hash, '') OR entry_hash <> SHA2(CONCAT(COALESCE(previous_hash, ''), '|', COALESCE(actor_user_id, 'NULL'), '|', event, '|', COALESCE(target_user_id, 'NULL'), '|', details, '|', DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s')), 256) THEN 1 ELSE 0 END), 0) FROM (SELECT id, actor_user_id, event, target_user_id, details, created_at, previous_hash, entry_hash, LAG(entry_hash) OVER (ORDER BY id ASC) AS expected_previous_hash FROM {}) AS audit_rows",
+            quote_identifier(audit_table)
+        )
+    } else {
+        format!(
             "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL THEN 1 ELSE 0 END), 0) FROM {}",
             quote_identifier(audit_table)
-        ),
-        Vec::new(),
-    )?;
+        )
+    };
+    let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())?;
     let row = result.rows.first().cloned().unwrap_or_default();
     let total = row
         .first()
@@ -4628,12 +4669,12 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         audit_usage();
         return ExitCode::from(2);
     }
-    let (database_url, audit_table) = match audit_project(&path) {
+    let (database_url, audit_table, audit_chain) = match audit_project(&path) {
         Ok(project) => project,
         Err(code) => return code,
     };
     if operation == "verify" {
-        let (total, invalid) = match audit_integrity(&database_url, &audit_table) {
+        let (total, invalid) = match audit_integrity(&database_url, &audit_table, audit_chain) {
             Ok(result) => result,
             Err(error) => {
                 eprintln!("error[E-AUDIT-006]: cannot verify audit log: {error}");
@@ -4648,6 +4689,12 @@ fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(1);
     }
     if operation == "prune" {
+        if audit_chain {
+            eprintln!(
+                "error[E-AUDIT-010]: audit prune is disabled for chained audit logs because deleting entries would break the hash chain"
+            );
+            return ExitCode::from(1);
+        }
         let before = before
             .as_deref()
             .expect("prune requires a before timestamp");
@@ -5616,6 +5663,35 @@ mod tests {
                 id: Id primary auto
                 user: User required
                 role: String(100) required
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        let schema = build_schema(&program).unwrap();
+        assert!(!validate_auth("test.zyl", &program, &schema));
+    }
+
+    #[test]
+    fn rejects_chained_audit_without_hash_columns() {
+        let source = r#"
+            auth users {
+                table: users
+                audit: audit_log
+                audit_chain: true
+            }
+
+            table users {
+                id: Id primary auto
+                email: Email required
+                password_hash: String(255) required
+            }
+
+            table audit_log {
+                id: Id primary auto
+                actor_user_id: Int?
+                event: String(100) required
+                target_user_id: Int?
+                details: String(1000) required
+                created_at: Timestamp default now
             }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();

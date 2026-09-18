@@ -441,6 +441,25 @@ archive, restore, and custom actions record the actor, operation, table, target
 record, and field-level changes. Passwords, tokens, secrets, and hashes are
 redacted from change details.
 
+For tamper-evident logging, opt into cryptographic chaining:
+
+~~~zelyra
+auth users {
+    table: users
+    audit: auth_audit_log
+    audit_chain: true
+}
+~~~
+
+The audit table must then also contain an `id` column plus required
+`previous_hash` and `entry_hash` columns, normally `String(64)`. Zelyra stores lowercase SHA-256
+hex values. Each entry hashes the previous hash, actor ID (or `NULL`), event,
+target ID (or `NULL`), details, and the MariaDB timestamp in the canonical
+format `YYYY-MM-DD HH:MM:SS`, separated by `|`. The chain is locked and
+appended in the same transaction as the business mutation. `zelyra audit
+verify` checks both links and hashes. Pruning is refused for chained logs
+because deleting entries would break the chain.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.
@@ -757,6 +776,8 @@ permission denial, and logout.
 The protected CRUD/API test from `tests/mariadb-protected-e2e.sh` verifies the
 permission boundary for HTML CRUD and JSON API endpoints, including separate
 Create, Edit, and Delete permissions, plus a protected custom form action.
+The chained-audit test from `tests/mariadb-audit-chain-e2e.sh` verifies
+transactional hash appends, tamper detection, and the safe prune refusal.
 
 Please keep German and English user documentation synchronized. Architectural
 decisions should preserve safety, control, and extensibility.

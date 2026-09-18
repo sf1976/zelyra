@@ -200,7 +200,7 @@ Important commands:
 | `zelyra db apply app.zyl` | apply an approved plan |
 | `zelyra audit inspect app.zyl` | inspect the latest audit events |
 | `zelyra audit export app.zyl --format json` | export audit events as JSON |
-| `zelyra audit verify app.zyl` | verify required audit fields |
+| `zelyra audit verify app.zyl` | verify audit fields and optional hash chain |
 | `zelyra audit prune app.zyl --before <timestamp> --confirm` | remove old audit events |
 
 ## 5. Variables, types, and functions
@@ -864,6 +864,16 @@ default limit is 100 and the maximum is 10,000. `zelyra audit verify` checks
 that every row contains an event, details, and timestamp. `zelyra audit prune`
 requires `--before <timestamp>` and never deletes anything without the explicit
 `--confirm` flag; the prune operation is recorded as an audit event.
+
+For tamper-evident history, add `audit_chain: true` to the `auth` definition.
+The audit table must then also contain an `id` column plus `previous_hash` and `entry_hash`,
+normally `String(64)`. Zelyra calculates lowercase SHA-256 hashes from the
+canonical pipe-separated payload
+`previous_hash|actor_user_id|event|target_user_id|details|created_at`; a
+missing ID is written as `NULL` and the timestamp uses
+`YYYY-MM-DD HH:MM:SS`. Appending locks the latest row and shares the business
+transaction. `audit verify` checks links and hashes, while pruning is refused
+for chained logs because it would break the chain.
 
 Use the CLI to maintain assignments without writing SQL. The project is
 validated before the MariaDB write, and repeated grants are safe:

@@ -123,6 +123,34 @@ Das Audit-Protokoll kann auf fehlende Pflichtwerte geprüft werden:
 zelyra audit verify app.zyl
 ~~~
 
+### Kryptografische Audit-Verkettung
+
+Für manipulationssichtbare Audit-Historien kann ein Projekt die Verkettung
+ausdrücklich aktivieren:
+
+~~~zelyra
+auth users {
+    table: users
+    audit: auth_audit_log
+    audit_chain: true
+}
+~~~
+
+Die Audit-Tabelle benötigt eine `id`-Spalte für die Reihenfolge sowie
+`previous_hash` und `entry_hash`,
+üblicherweise als `String(64)` mit kleingeschriebenen SHA-256-Hexwerten. Die
+kanonische Nutzlast ist die durch `|` getrennte Folge
+`previous_hash|actor_user_id|event|target_user_id|details|created_at`; leere
+IDs werden als `NULL` serialisiert und `created_at` verwendet die MariaDB-
+Darstellung `YYYY-MM-DD HH:MM:SS`. Der neue Entry-Hash ist der SHA-256-Hash
+dieser Nutzlast. Zelyra sperrt den letzten Eintrag und schreibt Fachänderung
+und Audit-Anhang in einer Transaktion.
+
+`zelyra audit verify` prüft jede Verbindung und jeden Hash. Manipulierte Zeilen
+führen zu einem Fehler. `zelyra audit prune` ist für verkettete Protokolle
+bewusst deaktiviert; Aufbewahrung und verifizierbare Archivierung bleiben
+separate Roadmap-Punkte.
+
 Alte Einträge können nur mit einem ausdrücklichen Stichtag und einer
 Bestätigung entfernt werden. Die Bereinigung wird nach dem Löschen in derselben
 Transaktion selbst protokolliert:
