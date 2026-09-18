@@ -67,8 +67,18 @@ Secrets nicht angezeigt werden.
 
 ## Generierte MariaDB-/Docker-Projekte
 
-`zelyra new --mariadb` und die MariaDB-Templates erzeugen `.env.example`.
-Nach `zelyra setup` entsteht daraus eine lokale geschützte `.env`.
+`zelyra new --mariadb`, `zelyra init --mariadb` und die MariaDB-Templates
+erzeugen `.env.example` sowie direkt eine lokale geschützte `.env` mit
+zufällig erzeugten Passwörtern. `zelyra setup` bleibt als idempotenter
+Nachholbefehl für bestehende MariaDB-Projekte verfügbar.
+
+Die erzeugte `.env` aktiviert nur die für Compose und lokale
+Datenbankbefehle notwendigen Werte. Der gewählte MariaDB-Host-Port bleibt
+aktiv, damit `DATABASE_URL` und Compose denselben Port verwenden.
+Web-Portüberschreibungen, Feature-Schalter,
+Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
+`.env.example` enthält dieselbe Struktur, aber die Platzhalter
+`change-me` und die aktivierten Secrets sind nur als Vorlage gedacht.
 
 | Variable | Standard im generierten Projekt | Verwendung |
 |---|---:|---|
@@ -78,8 +88,8 @@ Nach `zelyra setup` entsteht daraus eine lokale geschützte `.env`.
 | `DATABASE_URL` | projektabhängig | Datenbankverbindung für CLI/RUNTIME; Secret enthalten möglich |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer |
-| `MARIADB_PASSWORD` | zufällig durch `zelyra setup` | Compose: Passwort des Anwendungsbenutzers |
-| `MARIADB_ROOT_PASSWORD` | zufällig durch `zelyra setup` | Compose: MariaDB-Root-Passwort |
+| `MARIADB_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: Passwort des Anwendungsbenutzers |
+| `MARIADB_ROOT_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: MariaDB-Root-Passwort |
 
 `ZELYRA_REF` im generierten Dockerfile ist ein Docker-`ARG` mit einem
 veröffentlichten Tag, keine von Zelyra geladene `.env`-Variable. Es kann beim

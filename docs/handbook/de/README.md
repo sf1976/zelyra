@@ -212,9 +212,13 @@ den lokal veröffentlichten Port unabhängig. `ZELYRA_WEB_PORT` und
 `ZELYRA_HOST_PORT` und `ZELYRA_DB_HOST_PORT` können später in `.env` geändert
 werden; die Web-Ports verwenden standardmäßig 3000, der MariaDB-Host-Port
 3306.
-Nach dem Scaffolding erzeugt `zelyra setup maschinenverwaltung` eine `.env` mit
-zufälligen lokalen MariaDB-Zugangsdaten. Vorhandene `.env`-Dateien werden nie
-überschrieben und Zugangsdaten nie ausgegeben.
+Aktuelle Aufrufe von `zelyra new --mariadb` und `zelyra init --mariadb`
+erzeugen die geschützte `.env` mit zufälligen lokalen MariaDB-Zugangsdaten
+bereits direkt. Vorhandene `.env`-Dateien werden nie überschrieben und
+Zugangsdaten nie ausgegeben. Nur notwendige
+Datenbankwerte sind aktiv; Ports, Feature-Schalter, Authentifizierung und
+weitere Optionen stehen als kommentierte Beispiele darin. `zelyra setup`
+bleibt ein idempotenter Nachholbefehl.
 Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet der Setup-Befehl dieselben sicheren
 eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
@@ -229,11 +233,14 @@ Für ein vollständiges CRUD-Starterprojekt statt der minimalen Willkommensseite
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-zelyra setup .
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 set -a; . ./.env; set +a
 zelyra db setup main.zyl
 ~~~
+
+Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
+`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`
+verwenden.
 
 Das Starterprojekt enthält verbundene Abteilungen und Maschinen, Formulare,
 CRUD-Seiten, Suche, Filterung, Pagination und eigene Aktionen.
@@ -330,8 +337,10 @@ Die wichtigsten Befehle:
 | `zelyra doctor app.zyl [--json]` | Projekt-, DB- und Web-Bereitschaft prüfen |
 | `zelyra verify app.zyl` | Contracts klassifizieren |
 | `zelyra doc app.zyl --openapi` | OpenAPI-Dokument erzeugen |
-| `zelyra db inspect app.zyl` | Ist-Schema lesen |
+| `zelyra db create app.zyl` | geprüftes CREATE-SQL ohne Verbindung ausgeben |
 | `zelyra db setup app.zyl` | MariaDB und Anfangsschema einrichten |
+| `zelyra db bootstrap app.zyl` | MariaDB- oder SQLite-Schema anlegen |
+| `zelyra db inspect app.zyl` | Ist-Schema lesen |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
 | `zelyra db apply app.zyl` | geprüften Plan anwenden |
 | `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
@@ -490,6 +499,14 @@ werden:
 ~~~bash
 zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
 ~~~
+
+Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt geprüftes DDL
+ohne Verbindung aus; `setup` legt bei Bedarf eine MariaDB-Datenbank an und
+wendet das Anfangsschema an; `bootstrap` wendet ein Anfangsschema auf MariaDB
+oder SQLite an; `inspect` liest das Ist-Schema; `plan` zeigt den deterministischen
+Diff; und `apply` führt ihn aus, nachdem destruktive Änderungen ohne
+`--allow-destructive` abgelehnt wurden. Die Live-Befehle benötigen
+`DATABASE_URL`.
 
 Dieses Flag bedeutet nicht „wird schon gutgehen“. Es bedeutet „ich habe den
 Plan gelesen, ein Backup und einen vernünftigen Puls“.

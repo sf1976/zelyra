@@ -104,13 +104,74 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         String::from_utf8_lossy(&output.stderr)
     );
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
+    let env_file = fs::read_to_string(directory.join(".env")).unwrap();
     let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
     assert!(env_example.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
+    assert!(env_file.contains("# ZELYRA_HOST_PORT=18080"));
+    assert!(env_file.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(!env_file.contains("change-me"));
     assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
-    assert!(compose.contains("127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}:3306"));
+    assert!(compose.contains("127.0.0.1:${ZELYRA_DB_HOST_PORT:-3308}:3306"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
+    let output = run(&[
+        "db",
+        "create",
+        example("machine_management_sqlite.zyl").to_str().unwrap(),
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("CREATE TABLE"));
+    assert!(stdout.contains("departments"));
+    assert!(stdout.contains("machines"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn init_creates_a_ready_commented_mariadb_env() {
+    let directory = temporary_directory("init-env-defaults");
+    let output = run(&[
+        "init",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--web-port",
+        "8080",
+        "--host-port",
+        "18080",
+        "--db-host-port",
+        "3308",
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let env_file = fs::read_to_string(directory.join(".env")).unwrap();
+    assert!(env_file.contains("MARIADB_DATABASE=zelyra_app"));
+    assert!(env_file.contains("MARIADB_USER=zelyra"));
+    assert!(env_file.contains("MARIADB_PASSWORD="));
+    assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
+    assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
+    assert!(env_file.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(!env_file
+        .lines()
+        .any(|line| line == "ZELYRA_FEATURE_API=true"));
+    assert!(!env_file.contains("change-me"));
+    assert!(directory.join(".env.example").is_file());
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -256,6 +317,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "18080",
     ]);
     assert!(scaffold.status.success());
+    fs::remove_file(directory.join(".env")).unwrap();
 
     let setup = run(&["setup", directory.to_str().unwrap()]);
     assert!(
@@ -269,8 +331,8 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     assert!(!stdout.contains("change-me"));
     let env_file = directory.join(".env");
     let contents = fs::read_to_string(&env_file).unwrap();
-    assert!(contents.contains("ZELYRA_WEB_PORT=8080"));
-    assert!(contents.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(contents.contains("# ZELYRA_WEB_PORT=8080"));
+    assert!(contents.contains("# ZELYRA_HOST_PORT=18080"));
     assert!(contents.contains("ZELYRA_DB_HOST_PORT=3306"));
     assert!(!contents.contains("change-me"));
     assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));

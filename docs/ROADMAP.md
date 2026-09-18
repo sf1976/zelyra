@@ -98,8 +98,9 @@ architecture requirement for every phase, not a provider-specific feature.
   diagnostics are available; Rust-free release mode covers published x86_64
   assets.
 - [~] A deterministic first-run project flow supports MariaDB scaffolding,
-  secure local `.env` creation, and validated selectable ports through
-  `zelyra new`, `zelyra init`, and `zelyra setup`; interactive connection
+  secure local `.env` creation directly during `zelyra new` and `zelyra init`,
+  extensively commented optional settings, and validated selectable ports;
+  `zelyra setup` remains an idempotent recovery path. Interactive connection
   configuration remains open.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable web and MariaDB host ports plus
@@ -148,6 +149,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] MariaDB as the primary tested backend.
 - [x] SQLite support for local and embedded applications.
 - [x] PostgreSQL schema and planning support.
+- [x] Database CLI flow: `create`, `setup`, `bootstrap`, `inspect`, `plan`,
+  and guarded `apply` are implemented with explicit backend behavior and
+  destructive-change protection.
 - [ ] Complete PostgreSQL runtime parity.
 - [ ] MariaDB/MySQL compatibility matrix and version-specific diagnostics.
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
