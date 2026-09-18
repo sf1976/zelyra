@@ -373,6 +373,30 @@ page "/customers" {
 Optional field-aware expressions and richer view data remain planned. See
 `examples/view_data.zyl` and `examples/view_collection.zyl`.
 
+Pages can also declare typed query inputs for explicit server-side SQL:
+
+~~~zelyra
+page "/customers" {
+    input {
+        search: String?
+    }
+
+    load customers = sql<Customer[]> {
+        SELECT id, name FROM customers
+        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
+        ORDER BY name
+    }
+
+    html { <p>Search: {search}</p> }
+}
+~~~
+
+Query values are validated against their declared Zelyra type and bound as
+database parameters. A missing optional input becomes SQL `NULL`; missing
+required inputs and invalid values return a controlled HTTP 400 response.
+Automatic search, filter, sort, and pagination controls for arbitrary pages
+remain planned. See `examples/view_query_input.zyl`.
+
 Components may also declare named slots with `<slot name="header" />`; callers
 provide them with `<slot name="header">...</slot>` blocks. Nested components
 are expanded from the inside out, and unknown or unused content is rejected.

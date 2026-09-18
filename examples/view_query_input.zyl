@@ -1,0 +1,33 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+page "/customers" {
+    input {
+        search: String?
+    }
+
+    load customers = sql<Customer[]> {
+        SELECT id, name
+        FROM customers
+        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
+        ORDER BY name
+    }
+
+    html {
+        <form method="get">
+            <input name="search" value="{search}" />
+            <button type="submit">Suchen</button>
+        </form>
+        <ul>
+            for customer in customers {
+                <li>{customer.name}</li>
+            }
+        </ul>
+    }
+}

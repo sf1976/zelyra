@@ -75,3 +75,24 @@ HTML-Escaping gerendert; fehlende Pflichtdatensätze und Datenbankfehler
 erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben.
 Collection-Schleifen für Arrays von Records sind verfügbar. Option-aware
 Feld-Ausdrücke und reichere lokale View-Daten bleiben geplant.
+
+Seiten können typisierte Query-Eingaben deklarieren:
+
+~~~zelyra
+page "/customers" {
+    input { search: String? }
+    load customers = sql<Customer[]> {
+        SELECT id, name FROM customers
+        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
+    }
+    html { <p>{search}</p> }
+}
+~~~
+
+Query-Eingaben stehen dem SQL der Seite und HTML-Interpolationen zur
+Verfügung. Der Compiler prüft ihren deklarierten skalaren Typ; die Laufzeit
+bindet dekodierte URL-Werte als Datenbankparameter. Fehlende optionale Werte
+werden als SQL `NULL` gebunden; fehlende Pflichtwerte und ungültige skalare
+Werte erzeugen HTTP 400. Automatische Steuerungen für Suche, Filter,
+Sortierung und Pagination beliebiger Seiten gehören noch nicht zu diesem
+Feature.

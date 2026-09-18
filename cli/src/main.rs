@@ -31,7 +31,7 @@ use zelyra_runtime::{
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
     CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
-    TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
+    RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
 };
 
 mod edit;
@@ -661,6 +661,9 @@ fn validate_program(
     if !validate_views(path, &program) {
         return Err(());
     }
+    if !validate_page_inputs(path, &program) {
+        return Err(());
+    }
     if !validate_page_data(path, &program) {
         return Err(());
     }
@@ -809,7 +812,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
 fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     for page in &program.pages {
-        let route_names = page_template_bindings(&page.path, &[]);
+        let route_names = page_template_bindings(&page.path, &[], &page.inputs);
         let mut names = HashSet::new();
         for data in &page.data {
             if !names.insert(data.name.as_str()) {
@@ -826,7 +829,10 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
                 diagnostic(
                     path,
                     "E-VIEW-016",
-                    &format!("page data `{}` conflicts with a route parameter", data.name),
+                    &format!(
+                        "page data `{}` conflicts with a route parameter or page input",
+                        data.name
+                    ),
                     data.span.line,
                     data.span.column,
                 );
@@ -848,6 +854,76 @@ fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
         }
     }
     valid
+}
+
+fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
+    let mut valid = true;
+    for page in &program.pages {
+        let route_names = page_template_bindings(&page.path, &[], &[]);
+        let mut names = HashSet::new();
+        for input in &page.inputs {
+            if !names.insert(input.name.as_str()) {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    &format!("page input `{}` is declared more than once", input.name),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if route_names.contains_key(&input.name) {
+                diagnostic(
+                    path,
+                    "E-VIEW-019",
+                    &format!(
+                        "page input `{}` conflicts with a route parameter",
+                        input.name
+                    ),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+            if !page_input_type_supported(&input.ty) {
+                diagnostic(
+                    path,
+                    "E-VIEW-020",
+                    &format!(
+                        "page input `{}` must use a scalar or optional scalar type, found `{}`",
+                        input.name, input.ty
+                    ),
+                    input.span.line,
+                    input.span.column,
+                );
+                valid = false;
+            }
+        }
+    }
+    valid
+}
+
+fn page_input_type_supported(ty: &Type) -> bool {
+    let ty = match ty {
+        Type::Option(inner) => inner.as_ref(),
+        other => other,
+    };
+    matches!(
+        ty,
+        Type::Int
+            | Type::UInt
+            | Type::Float
+            | Type::Decimal
+            | Type::Bool
+            | Type::String
+            | Type::Char
+            | Type::Bytes
+            | Type::Timestamp
+            | Type::Date
+            | Type::Time
+            | Type::Duration
+            | Type::Named(_)
+    )
 }
 
 fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
@@ -1431,9 +1507,21 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                     })
                 })
                 .collect::<Vec<_>>();
+            let inputs = page
+                .inputs
+                .iter()
+                .map(|input| {
+                    json!({
+                        "name": input.name,
+                        "type": input.ty.to_string(),
+                        "span": context_span(source, input.span)
+                    })
+                })
+                .collect::<Vec<_>>();
             json!({
                 "path": page.path,
                 "view": page.view,
+                "inputs": inputs,
                 "data": data,
                 "span": context_span(source, page.span)
             })
@@ -2443,7 +2531,7 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
         );
     }
     for page in &program.pages {
-        let bindings = page_template_bindings(&page.path, &page.data);
+        let bindings = page_template_bindings(&page.path, &page.data, &page.inputs);
         valid &= validate_component_template(
             path,
             program,
@@ -2468,7 +2556,11 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
     valid
 }
 
-fn page_template_bindings(path: &str, data: &[zelyra_ast::PageDataDef]) -> HashMap<String, Type> {
+fn page_template_bindings(
+    path: &str,
+    data: &[zelyra_ast::PageDataDef],
+    inputs: &[zelyra_ast::PageInputDef],
+) -> HashMap<String, Type> {
     let mut bindings = path
         .split('/')
         .filter_map(|segment| {
@@ -2479,6 +2571,9 @@ fn page_template_bindings(path: &str, data: &[zelyra_ast::PageDataDef]) -> HashM
                 .map(|name| (name.to_owned(), Type::String))
         })
         .collect::<HashMap<_, _>>();
+    for input in inputs {
+        bindings.insert(input.name.clone(), input.ty.clone());
+    }
     for data in data {
         bindings.insert(data.name.clone(), data.result_type.clone());
     }
@@ -5185,6 +5280,14 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .map(|page| Route {
             path: page.path.clone(),
             html: compose_page_view(&program, page),
+            query: page
+                .inputs
+                .iter()
+                .map(|input| RouteQuery {
+                    name: input.name.clone(),
+                    ty: input.ty.clone(),
+                })
+                .collect(),
             data: page
                 .data
                 .iter()

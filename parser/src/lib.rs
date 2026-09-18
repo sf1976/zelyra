@@ -772,12 +772,29 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "`{` after page path")?;
         let mut html = None;
         let mut view = None;
+        let mut inputs = Vec::new();
         let mut data = Vec::new();
         let mut requires_auth = false;
         let mut permissions = Vec::new();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::View) {
+            if self.at(&TokenKind::Input) {
+                self.advance();
+                self.expect(TokenKind::LBrace, "`{` after page input")?;
+                self.skip_newlines();
+                while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+                    let (name, span) = self.page_input_name()?;
+                    self.expect(TokenKind::Colon, "`:` after page input name")?;
+                    let ty = self.type_name()?;
+                    inputs.push(PageInputDef { name, ty, span });
+                    self.skip_newlines();
+                    if self.at(&TokenKind::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(TokenKind::RBrace, "`}` after page input")?;
+            } else if self.at(&TokenKind::View) {
                 self.advance();
                 self.expect(TokenKind::Colon, "`:` after `view`")?;
                 view = Some(self.ident("view name")?.0);
@@ -828,11 +845,30 @@ impl<'a> Parser<'a> {
             path,
             html,
             view,
+            inputs,
             data,
             requires_auth,
             permissions,
             span: start.join(end),
         })
+    }
+
+    fn page_input_name(&mut self) -> Result<(String, Span), ParseError> {
+        match self.current().kind.clone() {
+            TokenKind::Ident(name) => {
+                let span = self.advance().span;
+                Ok((name, span))
+            }
+            TokenKind::Search => {
+                let span = self.advance().span;
+                Ok(("search".into(), span))
+            }
+            TokenKind::Page => {
+                let span = self.advance().span;
+                Ok(("page".into(), span))
+            }
+            _ => self.error("expected page input name"),
+        }
     }
 
     fn view_definition(&mut self) -> Result<ViewDef, ParseError> {
@@ -2289,6 +2325,27 @@ mod tests {
             Type::Array(Box::new(Type::Named("Customer".into())))
         );
         assert!(program.pages[0].html.contains("for customer in customers"));
+    }
+
+    #[test]
+    fn parses_typed_page_query_inputs() {
+        let source = r#"
+            page "/customers" {
+                input {
+                    search: String?
+                    page: UInt
+                }
+                html { <p>{search}</p> }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert_eq!(program.pages[0].inputs.len(), 2);
+        assert_eq!(program.pages[0].inputs[0].name, "search");
+        assert_eq!(
+            program.pages[0].inputs[0].ty,
+            Type::Option(Box::new(Type::String))
+        );
+        assert_eq!(program.pages[0].inputs[1].ty, Type::UInt);
     }
 
     #[test]

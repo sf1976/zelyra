@@ -1,0 +1,20 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+page "/customers" {
+    input {
+        search: Customer[]
+    }
+
+    load customers = sql<Customer[]> {
+        SELECT id, name FROM customers
+    }
+
+    html { <h1>Customers</h1> }
+}

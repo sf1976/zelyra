@@ -96,7 +96,7 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
         }
     }
     for page in &program.pages {
-        let environment = page
+        let mut environment = page
             .path
             .split('/')
             .filter_map(|segment| {
@@ -106,6 +106,9 @@ pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(
                     .map(|name| (name.to_owned(), Type::String))
             })
             .collect::<HashMap<_, _>>();
+        for input in &page.inputs {
+            environment.insert(input.name.clone(), input.ty.clone());
+        }
         for data in &page.data {
             if let Some(record_name) = result_record_name(&data.result_type) {
                 if let Some(record) = program
@@ -1125,6 +1128,16 @@ mod tests {
     fn checks_page_collection_sql_against_schema() {
         let program = parse(&lex(
             "table customers { id: Id primary auto name: String(100) } page \"/customers\" { load customers = sql<Customer[]> { SELECT id, name FROM customers } html { <h1>Customers</h1> } }",
+        )
+        .unwrap())
+        .unwrap();
+        assert!(check_program(&program, &source_schema()).is_ok());
+    }
+
+    #[test]
+    fn checks_page_query_input_parameters_against_schema() {
+        let program = parse(&lex(
+            "table customers { id: Id primary auto name: String(100) } page \"/customers\" { input { search: String? } load customers = sql<Customer[]> { SELECT id, name FROM customers WHERE name LIKE :search } html { <h1>Customers</h1> } }",
         )
         .unwrap())
         .unwrap();

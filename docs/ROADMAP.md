@@ -196,6 +196,11 @@ architecture requirement for every phase, not a provider-specific feature.
   explicit page-local record loading, and typed collection loops; filters,
   search, sorting, and pagination remain tableview-focused while richer
   arbitrary-view data remains planned.
+- [~] Page-local typed query inputs (`input { search: String? }`) are checked,
+  safely bound to native SQL, exposed to HTML interpolation, and rejected with
+  controlled HTTP 400 responses when required values are missing or scalar
+  values are invalid. Automatic search, filter, sort, and pagination controls
+  for arbitrary pages remain planned.
 - [ ] Composable filter expressions with typed operators for dates, booleans,
   relations, and full-text search.
 - [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and
