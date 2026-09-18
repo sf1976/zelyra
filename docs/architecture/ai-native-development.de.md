@@ -77,8 +77,8 @@ erste Stufe verfügbar und meldet betroffene Tabellen, SQL, Formulare, CRUD,
 Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
 Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
 `zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen eine
-validierte, atomare Vorschau und schreibt in dieser ersten Stufe keine Dateien.
-Weitere Operationen und ein ausdrücklicher Anwende-Modus folgen später.
+validierte, atomare Vorschau. Mit dem ausdrücklichen `--apply`-Schalter wird
+das validierte Ergebnis atomar geschrieben. Weitere Operationen folgen später.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

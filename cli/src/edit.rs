@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fs, io::Write, path::Path};
 
 use serde_json::{json, Value};
 use zelyra_ast::{Program, Span};
@@ -9,6 +9,42 @@ pub struct EditPreview {
     pub operations: Value,
     pub changes: Value,
     pub changed_tokens: usize,
+}
+
+pub fn apply_atomically(path: &str, source: &str) -> Result<(), String> {
+    let target = Path::new(path);
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("cannot determine file name for `{path}`"))?;
+    let temporary = parent.join(format!(
+        ".{file_name}.zelyra-edit-{}.tmp",
+        std::process::id()
+    ));
+
+    let result = (|| {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|error| format!("cannot create temporary edit file: {error}"))?;
+        file.write_all(source.as_bytes())
+            .map_err(|error| format!("cannot write temporary edit file: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("cannot flush temporary edit file: {error}"))?;
+        let permissions = fs::metadata(target)
+            .map_err(|error| format!("cannot inspect `{path}`: {error}"))?
+            .permissions();
+        fs::set_permissions(&temporary, permissions)
+            .map_err(|error| format!("cannot preserve permissions for `{path}`: {error}"))?;
+        fs::rename(&temporary, target)
+            .map_err(|error| format!("cannot atomically replace `{path}`: {error}"))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 pub fn request_entry(request: &Value) -> Result<String, String> {
@@ -155,6 +191,7 @@ fn source_position(source: &str, offset: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{fs, path::PathBuf};
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
 
@@ -176,5 +213,16 @@ mod tests {
         assert_eq!(preview.source, "fn welcome() { welcome() }\n");
         assert_eq!(preview.changed_tokens, 2);
         assert_eq!(preview.changes.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn applies_a_preview_atomically() {
+        let directory =
+            std::env::temp_dir().join(format!("zelyra-edit-atomic-{}", std::process::id()));
+        fs::create_dir_all(&directory).expect("temporary directory should exist");
+        let path: PathBuf = directory.join("main.zyl");
+        fs::write(&path, "fn greet() {}\n").expect("source should be written");
+        apply_atomically(path.to_str().unwrap(), "fn welcome() {}\n").expect("edit should apply");
+        assert_eq!(fs::read_to_string(path).unwrap(), "fn welcome() {}\n");
     }
 }

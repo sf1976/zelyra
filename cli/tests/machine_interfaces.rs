@@ -112,7 +112,7 @@ fn empty_source_is_a_valid_deterministic_context() {
 }
 
 #[test]
-fn edit_json_is_preview_only_and_deterministic() {
+fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     let source_path = temporary_source("edit-source", "fn greet() { greet() }\n");
     let request_path = source_path.with_file_name("change.json");
     let request = format!(
@@ -135,6 +135,21 @@ fn edit_json_is_preview_only_and_deterministic() {
     assert_eq!(document["success"], true);
     assert_eq!(document["preview"]["applied"], false);
     assert_eq!(document["preview"]["changed_tokens"], 2);
+
+    let applied = run(&[
+        "edit",
+        "--format=json",
+        "--apply",
+        request_path.to_str().unwrap(),
+    ]);
+    assert!(applied.status.success());
+    let applied_document: serde_json::Value = serde_json::from_slice(&applied.stdout).unwrap();
+    assert_eq!(applied_document["preview"]["apply_requested"], true);
+    assert_eq!(applied_document["preview"]["applied"], true);
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn welcome() { welcome() }\n"
+    );
 }
 
 #[test]

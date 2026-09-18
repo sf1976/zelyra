@@ -1598,9 +1598,15 @@ Als `change.json` speichern und ausführen:
 zelyra edit --format=json change.json
 ~~~
 
-Das Ergebnis meldet die genauen Token-Spans und bleibt eine Vorschau. Nach
-allen Ersetzungen wird der Quelltext erneut geparst; ein ungültiger Vorschlag
-wird atomar abgelehnt.
+Das Ergebnis meldet die genauen Token-Spans. Ohne den ausdrücklichen
+`--apply`-Schalter bleibt es eine Vorschau:
+
+~~~bash
+zelyra edit --format=json --apply change.json
+~~~
+
+Vor dem atomaren Ersetzen wird der Quelltext erneut geparst; ein ungültiger
+Vorschlag kann daher nicht geschrieben werden.
 
 ### Sichere Automatisierungsgrenze
 
@@ -1610,9 +1616,9 @@ Capabilities hinzufügen, Diagnosen abschwächen, Tests deaktivieren, Geheimniss
 offenlegen oder destruktive Schemaänderungen freigeben. Für riskante Datenbank-
 und Sicherheitsoperationen bleibt eine menschliche Freigabe erforderlich.
 
-Die nächste geplante Ausbaustufe umfasst reichhaltigere typisierte Lücken,
-das Anwenden semantischer Änderungen und eine vollständige Wirkungsanalyse.
-Sie erweitern das gemeinsame versionierte JSON-Format, ersetzen es aber nicht.
+Die nächste geplante Ausbaustufe umfasst reichhaltigere typisierte Lücken und
+eine vollständige Wirkungsanalyse. Sie erweitern das gemeinsame versionierte
+JSON-Format, ersetzen es aber nicht.
 Benchmark-Ergebnisse werden erst nach
 reproduzierbaren Versuchen veröffentlicht; dieses Handbuch enthält keinen
 erfundenen Vergleich.

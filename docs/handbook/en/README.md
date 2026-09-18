@@ -1408,8 +1408,8 @@ vendor-neutral so local tools can use them as well.
   commands;
 - ✅ **Implemented:** expression typed holes written as `_` with contextual
   diagnostics; buildable commands reject incomplete code;
-- 🗺️ **Planned:** richer typed gaps, applying semantic edits, complete
-  runtime/schema impact analysis, and the reproducible AI authoring benchmark;
+- 🗺️ **Planned:** richer typed gaps, complete runtime/schema impact analysis,
+  and the reproducible AI authoring benchmark;
 - ❌ **Not available:** automatic production changes, automatic permission
   escalation, or compiler decisions delegated to an AI service.
 
@@ -1488,9 +1488,15 @@ Save that request as `change.json` and run:
 zelyra edit --format=json change.json
 ~~~
 
-The result reports the exact token spans and remains preview-only. The source
-is reparsed after all replacements, so an invalid proposal is rejected
-atomically.
+The result reports the exact token spans. It remains preview-only unless the
+explicit `--apply` flag is supplied:
+
+~~~bash
+zelyra edit --format=json --apply change.json
+~~~
+
+The source is reparsed before the atomic replacement, so an invalid proposal
+cannot be written.
 
 ### Safe automation boundary
 
@@ -1500,7 +1506,7 @@ weaken diagnostics, disable tests, reveal secrets, or approve destructive
 schema changes. Human approval remains required for risky database and
 security operations.
 
-The next planned machine interfaces are richer typed gaps, applying semantic
-edits, and complete impact analysis. They will extend the versioned common JSON
-envelope rather than replace it. Benchmark results will be published only
-after reproducible experiments; this handbook contains no invented comparison.
+The next planned machine interfaces are richer typed gaps and complete impact
+analysis. They will extend the versioned common JSON envelope rather than
+replace it. Benchmark results will be published only after reproducible
+experiments; this handbook contains no invented comparison.

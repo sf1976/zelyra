@@ -95,9 +95,10 @@ holes in declaration contexts remain planned interfaces.
 slice for affected tables, SQL, forms, CRUD resources, views, APIs,
 permissions, and contracts. Emails, jobs, tests, live schema changes, and
 deeper runtime dependency analysis remain planned. `zelyra edit --format=json
-change.json` provides a validated, atomic preview for symbol renames; it does
-not write files yet. Richer operations and an explicit apply protocol will be
-additional semantic change features; text patches remain supported.
+change.json` provides a validated, atomic preview for symbol renames; the
+explicit `--apply` flag atomically writes that validated result. Richer
+operations remain additional semantic change features; text patches remain
+supported.
 
 ## Security, privacy, and providers
 

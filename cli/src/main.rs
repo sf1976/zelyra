@@ -42,7 +42,7 @@ use holes::collect_typed_holes;
 use impact::build_impact;
 
 fn usage() {
-    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
+    eprintln!("Zelyra 0.1\n\nUsage:\n  zelyra new <directory> [--mariadb]\n  zelyra init [directory] [--mariadb]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>");
 }
 
 const MACHINE_SCHEMA_VERSION: &str = "1";
@@ -723,9 +723,12 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
 fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
     let mut request_path = None;
     let mut json_format = false;
+    let mut apply_requested = false;
     for argument in arguments {
         if argument == "--format=json" {
             json_format = true;
+        } else if argument == "--apply" {
+            apply_requested = true;
         } else if argument == "--format" {
             eprintln!("error[E-CLI-001]: edit requires `--format=json`");
             return ExitCode::from(2);
@@ -790,10 +793,22 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
                 Ok(result) => match lex(&result.source) {
                     Ok(proposed_tokens) => match parse(&proposed_tokens) {
                         Ok(_) => {
-                            success = true;
+                            let applied = if apply_requested {
+                                match edit::apply_atomically(&entry, &result.source) {
+                                    Ok(()) => true,
+                                    Err(error) => {
+                                        diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
+                                        false
+                                    }
+                                }
+                            } else {
+                                false
+                            };
+                            success = !apply_requested || applied;
                             preview = json!({
                                 "available": true,
-                                "applied": false,
+                                "apply_requested": apply_requested,
+                                "applied": applied,
                                 "entry": entry,
                                 "operations": result.operations,
                                 "changes": result.changes,
