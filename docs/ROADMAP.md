@@ -184,7 +184,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,
   and null checks) are compiled to safe server-side SQL.
 - [~] Generated CRUD filter controls preserve operator and value state in URLs;
-  stable ordering and accessibility improvements remain open.
+  deterministic filter ordering, semantic fieldsets, and separate operator/value
+  labels are available; broader accessibility improvements remain open.
 - [~] The first unified typed view pipeline slice is available on `tableview`
   routes through declarative filters, search, sorting, and pagination; the
   same pipeline for arbitrary views remains planned.

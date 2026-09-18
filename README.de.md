@@ -371,6 +371,11 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 /customers?filter_quantity__gte=10
 ~~~
 
+Erzeugte Such- und Filtersteuerungen verwenden ein semantisches Fieldset und
+getrennte Beschriftungen für jeden Operator und Wert. Filterverarbeitung und
+bewahrter URL-Zustand werden deterministisch sortiert, sodass dieselbe Anfrage
+immer dieselbe Reihenfolge von Steuerungen und Pagination erzeugt.
+
 Die Darstellung einer CRUD-Liste kann deklarativ angepasst werden, ohne die
 geprüfte Daten- oder Autorisierungspipeline zu ersetzen:
 

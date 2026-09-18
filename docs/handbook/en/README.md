@@ -902,6 +902,10 @@ Optional `filter` fields use the same safe URL contract as CRUD filters:
 typed result field; unknown fields, unsupported operators, and invalid numeric
 or boolean values are rejected with HTTP 400.
 
+Generated CRUD and tableview controls use semantic fieldsets and separate
+labels for the operator and value of each filter. Filter processing and
+preserved pagination URLs use deterministic ordering.
+
 ## 13. Authentication and permissions
 
 🧪 Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route

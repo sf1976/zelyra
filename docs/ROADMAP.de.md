@@ -188,8 +188,9 @@ Feature eines bestimmten Anbieters.
 - [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
   NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
 - [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
-  URLs; stabile Sortierung und weitere Barrierefreiheitsverbesserungen bleiben
-  offen.
+  URLs; deterministische Filterreihenfolge, semantische Fieldsets sowie
+  getrennte Operator-/Wertbeschriftungen sind verfügbar, weitergehende
+  Barrierefreiheitsverbesserungen bleiben offen.
 - [~] Der erste Teil einer einheitlichen typisierten View-Pipeline ist für
   `tableview`-Routen mit deklarativen Filtern, Suche, Sortierung und Pagination
   verfügbar; dieselbe Pipeline für beliebige Views bleibt geplant.

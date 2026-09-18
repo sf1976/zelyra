@@ -6,7 +6,15 @@ compiler and repository release.
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- Generated CRUD and tableview filter controls now use semantic fieldsets and
+  separate operator/value labels; filter processing and preserved query URLs
+  use deterministic ordering.
+
+- Erzeugte CRUD- und Tableview-Filtersteuerungen verwenden jetzt semantische
+  Fieldsets und getrennte Operator-/Wertbeschriftungen; Filterverarbeitung und
+  bewahrte Query-URLs verwenden eine deterministische Reihenfolge.
 
 ## 0.1.39-alpha.1 — 2026-09-18
 

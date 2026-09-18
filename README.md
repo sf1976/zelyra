@@ -358,6 +358,11 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 /customers?filter_quantity__gte=10
 ~~~
 
+Generated search and filter controls use a semantic fieldset and separate
+labels for each operator and value. Filter processing and preserved URL state
+are sorted deterministically, so the same request produces the same control
+and pagination order.
+
 CRUD list presentation can be changed declaratively without replacing the
 checked data or authorization pipeline:
 

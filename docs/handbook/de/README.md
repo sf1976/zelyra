@@ -936,6 +936,10 @@ explizite URL-Form `filter_<column>__<operator>=<value>` eignet sich für Links
 und gespeicherte Suchen. Werte bleiben gebundene Parameter, Spaltennamen werden
 gegen das Schema geprüft.
 
+Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und
+getrennte Beschriftungen für Operator und Wert jedes Filters. Filterverarbeitung
+und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
+
 🗺️ Vollständig eigene typisierte Komponenten und feingranulare View-Overrides
 sind Teil der weiteren View-Roadmap.
 
