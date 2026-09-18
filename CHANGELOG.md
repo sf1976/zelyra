@@ -6,7 +6,22 @@ compiler and repository release.
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- CRUD resources can reuse validated named page views with `layout: ViewName`;
+  generated lists, details, and forms are composed into the view's default
+  slot while existing security checks remain active.
+- `zelyra setup` can initialize an existing MariaDB project that has
+  `zelyra.toml` but no `.env.example`, using safe built-in defaults without
+  overwriting an existing `.env`.
+
+- CRUD-Ressourcen können geprüfte benannte Seiten-Views mit
+  `layout: ViewName` wiederverwenden; erzeugte Listen, Details und Formulare
+  werden in den Default-Slot eingesetzt, während die bestehenden
+  Sicherheitsprüfungen aktiv bleiben.
+- `zelyra setup` kann ein bestehendes MariaDB-Projekt mit `zelyra.toml` auch
+  ohne `.env.example` einrichten. Sichere eingebaute Standardwerte werden
+  verwendet; eine vorhandene `.env` wird nicht überschrieben.
 
 Keine unveröffentlichten Änderungen.
 

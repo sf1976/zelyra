@@ -181,6 +181,9 @@ Zelyra server port and its local published port independently. You can change
 Run `zelyra setup machine-management` after scaffolding to create `.env` with
 random local MariaDB credentials. Existing `.env` files are never overwritten
 and credentials are never printed.
+If an existing project declares MariaDB in `zelyra.toml` but has no
+`.env.example`, setup uses the same safe built-in defaults. A project without
+MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
 After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
 18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
 published port without changing the database.
@@ -566,6 +569,25 @@ page "/status" {
     html { <Badge text="Ready" /> }
 }
 ~~~
+
+The same shell can wrap generated CRUD pages. Use `layout: ViewName` on the
+CRUD resource:
+
+~~~zelyra
+view AppShell {
+    html { <html><body><main><slot /></main></body></html> }
+}
+
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+The default slot receives the generated list, detail, create/edit, and custom
+action form content. The selected view must exist and is checked at compile
+time. SQL, validation, CSRF, authorization, and escaping remain generated and
+enforced; redirects are not wrapped as HTML. See
+`examples/view_showcase.zyl`.
 
 View interpolations are checked before the server starts. A page may use its
 route parameters, a component may use its declared properties, and a dynamic

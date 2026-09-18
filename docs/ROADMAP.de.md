@@ -186,6 +186,11 @@ Feature eines bestimmten Anbieters.
   sichere Fallback-Inhalte sowie verschachtelte Komposition. View-Layouts
   prüfen deklarierte Slotnamen und ersetzen sie deterministisch ohne globalen
   Zustand; View-Vererbung und reichere verschachtelte Szenarien bleiben offen.
+- [~] CRUD-Ressourcen können mit `layout: ViewName` einen geprüften benannten
+  View wiederverwenden. Der Default-Slot erhält erzeugte Listen, Details und
+  CRUD-Formulare, ohne SQL-, Validierungs-, CSRF-, Autorisierungs- oder
+  Escaping-Prüfungen zu umgehen; benannte Slot-Anpassungen für erzeugte CRUD-
+  Inhalte bleiben offen.
 - [~] View-lokales Laden unterstützt explizite, schema-geprüfte Abfragen für
   einzelne Datensätze und Record-Collections mit `load name = sql<Type> { ... }`.
   Array-Ergebnisse können mit typisierten

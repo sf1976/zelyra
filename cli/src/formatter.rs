@@ -426,6 +426,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::AdminPermission => "admin_permission",
         TokenKind::AdminRole => "admin_role",
         TokenKind::Title => "title",
+        TokenKind::Layout => "layout",
         TokenKind::List => "list",
         TokenKind::Detail => "detail",
         TokenKind::Search => "search",

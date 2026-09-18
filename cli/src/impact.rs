@@ -33,6 +33,7 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
         "crud": program.cruds.iter().map(|crud| json!({
             "name": crud.name,
             "table": crud.table,
+            "layout": crud.layout,
             "permissions": crud_permissions(crud),
             "actions": crud.actions.iter().map(|action| action.name.clone()).collect::<Vec<_>>(),
             "span": span_value(crud.span, source),
@@ -222,6 +223,15 @@ fn semantic_references(
             "table",
             span_value(crud.span, source),
         );
+        if let Some(layout) = &crud.layout {
+            add_reference(
+                &mut references,
+                format!("crud:{}", crud.name),
+                format!("view:{layout}"),
+                "view",
+                span_value(crud.span, source),
+            );
+        }
     }
     for tableview in &program.tableviews {
         for table in referenced_tables(&tableview.source, table_names) {

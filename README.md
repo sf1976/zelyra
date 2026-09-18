@@ -928,6 +928,11 @@ MariaDB on host port 3307. Run `zelyra setup my-app` to create a protected
 `.env` files are never overwritten; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and
 `ZELYRA_DB_HOST_PORT` can be changed independently in `.env`.
 
+If an existing project declares MariaDB in `zelyra.toml` but has no
+`.env.example`, `zelyra setup` uses the same safe built-in defaults. A project
+without MariaDB configuration receives a concrete `zelyra new --mariadb`
+remedy.
+
 After starting the generated Compose stack, run
 `zelyra doctor main.zyl --env-file .env --port 18080 --json` for a read-only
 check of the source, schema, MariaDB connection, Docker Compose, and published
@@ -949,6 +954,23 @@ zelyra db setup main.zyl
 The starter contains departments and machines, a foreign-key relationship,
 schema-mapped forms, CRUD pages, search, filtering, pagination, and custom
 actions. The default project remains the smaller welcome-page scaffold.
+
+Generated CRUD pages can use the same reusable shell as ordinary pages:
+
+~~~zelyra
+view AppShell {
+    html { <html><body><main><slot /></main></body></html> }
+}
+
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+The shell receives the generated list, detail, and create/edit content. The
+compiler checks that `AppShell` exists; SQL, validation, CSRF, permissions,
+and escaping remain generated and enforced. See
+`examples/view_showcase.zyl` for a runnable example.
 
 For authentication, sessions, and permission checks, use:
 

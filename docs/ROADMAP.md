@@ -182,6 +182,10 @@ architecture requirement for every phase, not a provider-specific feature.
   content, and nested composition. View layouts validate declared slot names
   and replace them deterministically without global state; view inheritance and
   richer nested scenarios remain open.
+- [~] CRUD resources can reuse a validated named view with `layout: ViewName`.
+  The default slot receives generated lists, details, and generated CRUD forms
+  without bypassing SQL, validation, CSRF, authorization, or escaping; named
+  slot customization for generated CRUD content remains open.
 - [~] View-local data loading supports explicit, schema-checked record and
   record-collection queries using `load name = sql<Type> { ... }`. Array
   results can be rendered with typed `for item in collection { ... }` blocks.
