@@ -62,3 +62,26 @@ deferral). Keep the English and German roadmaps semantically synchronized.
 - Avoid both oversized aggregate commits and commits for every trivial change.
 - Keep commits small, focused, and understandable; do not push unverified
   changes or publish a release merely because a commit was created.
+
+### Branch lifecycle
+
+- Keep `main` releasable and use a focused feature, fix, documentation, or
+  chore branch for each independent task.
+- Before merging, verify that the branch is clean, tested, and based on the
+  current `main` (or has been rebased or merged from it as appropriate).
+- Merge only completed work into `main`; do not leave known failing tests or
+  unfinished experiments in the branch being merged.
+- After a successful merge, push `main` and verify that the remote branch
+  points to the merge result.
+- Delete the merged local and remote topic branch after the merge. Retain a
+  branch only when it contains intentionally unmerged work, is needed for an
+  active review, or is explicitly preserved for a release or maintenance
+  reason.
+- Do not delete `main`, release tags, or a branch that is not demonstrably
+  merged. Check `git branch --merged main` and
+  `git branch --no-merged main` before cleanup.
+- If a branch was merged with squash or rebase, compare its changes with
+  `main` before deletion; ancestry alone may not prove equivalence in that
+  case.
+- Branch deletion is cleanup, not a release. Create or move tags only at the
+  separately approved release milestone.
