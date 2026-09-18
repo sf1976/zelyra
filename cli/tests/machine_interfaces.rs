@@ -34,12 +34,32 @@ fn temporary_source(name: &str, source: &str) -> PathBuf {
     path
 }
 
+fn temporary_project_source(name: &str, source: &str) -> (PathBuf, PathBuf) {
+    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join(format!(".zelyra-edit-test-{}-{}", std::process::id(), name));
+    fs::create_dir_all(&directory).expect("temporary project should be created");
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"edit-test\"\nversion = \"0.1.38\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = false\nnetwork = false\n",
+    )
+    .expect("temporary project config should be written");
+    let source_path = directory.join("main.zyl");
+    fs::write(&source_path, source).expect("temporary project source should be written");
+    (directory, source_path)
+}
+
 #[test]
 fn valid_check_json_is_a_stable_machine_document() {
     let path = example("fibonacci.zyl");
     let first = run(&["check", path.to_str().unwrap(), "--format=json"]);
     let second = run(&["check", path.to_str().unwrap(), "--format=json"]);
-    assert!(first.status.success());
+    assert!(
+        first.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
     assert!(second.status.success());
     assert_eq!(first.stderr, second.stderr);
     assert_eq!(first.stdout, second.stdout);
@@ -113,22 +133,28 @@ fn empty_source_is_a_valid_deterministic_context() {
 
 #[test]
 fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
-    let source_path = temporary_source("edit-source", "fn greet() { greet() }\n");
+    let (project_directory, source_path) =
+        temporary_project_source("edit-source", "fn greet() { greet() }\nfn main() {}\n");
     let request_path = source_path.with_file_name("change.json");
     let request = format!(
-        "{{\"entry\":{},\"expected_source_fingerprint\":\"fnv1a64:2a6e06271b2cae4b\",\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
+        "{{\"schema_version\":\"1\",\"entry\":{},\"expected_source_fingerprint\":\"fnv1a64:860a2a12aa4d2f8d\",\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
         serde_json::to_string(source_path.to_str().unwrap()).unwrap()
     );
     fs::write(&request_path, request).expect("edit request should be written");
 
     let first = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
     let second = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
-    assert!(first.status.success());
+    assert!(
+        first.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
     assert_eq!(first.stdout, second.stdout);
     assert!(first.stderr.is_empty());
     assert_eq!(
         fs::read_to_string(&source_path).unwrap(),
-        "fn greet() { greet() }\n"
+        "fn greet() { greet() }\nfn main() {}\n"
     );
     let document: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
     assert_eq!(document["command"], "edit");
@@ -136,7 +162,7 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(document["preview"]["applied"], false);
     assert_eq!(document["preview"]["changed_tokens"], 2);
 
-    fs::write(&source_path, "fn changed() {}\n").expect("source should change");
+    fs::write(&source_path, "fn changed() {}\nfn main() {}\n").expect("source should change");
     let stale = run(&[
         "edit",
         "--format=json",
@@ -148,10 +174,11 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(stale_document["diagnostics"][0]["code"], "E-EDIT-004");
     assert_eq!(
         fs::read_to_string(&source_path).unwrap(),
-        "fn changed() {}\n"
+        "fn changed() {}\nfn main() {}\n"
     );
 
-    fs::write(&source_path, "fn greet() { greet() }\n").expect("source should be restored");
+    fs::write(&source_path, "fn greet() { greet() }\nfn main() {}\n")
+        .expect("source should be restored");
     let applied = run(&[
         "edit",
         "--format=json",
@@ -164,8 +191,220 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(applied_document["preview"]["applied"], true);
     assert_eq!(
         fs::read_to_string(&source_path).unwrap(),
-        "fn welcome() { welcome() }\n"
+        "fn welcome() { welcome() }\nfn main() {}\n"
     );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_requires_a_versioned_request_and_project_local_zelyra_source() {
+    let (project_directory, source_path) =
+        temporary_project_source("edit-boundary", "fn greet() {}\n");
+    let request_path = project_directory.join("change.json");
+    fs::write(
+        &request_path,
+        format!(
+            "{{\"entry\":{}}}",
+            serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+        ),
+    )
+    .expect("unversioned edit request should be written");
+    let unversioned = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert_eq!(unversioned.status.code(), Some(1));
+    let unversioned_document: serde_json::Value =
+        serde_json::from_slice(&unversioned.stdout).unwrap();
+    assert_eq!(unversioned_document["diagnostics"][0]["code"], "E-EDIT-001");
+
+    fs::write(
+        &request_path,
+        format!(
+            "{{\"schema_version\":\"999\",\"entry\":{}}}",
+            serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+        ),
+    )
+    .expect("unsupported edit request should be written");
+    let unsupported = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert_eq!(unsupported.status.code(), Some(1));
+    let unsupported_document: serde_json::Value =
+        serde_json::from_slice(&unsupported.stdout).unwrap();
+    assert_eq!(unsupported_document["diagnostics"][0]["code"], "E-EDIT-001");
+
+    fs::write(
+        &request_path,
+        "{\"schema_version\":\"1\",\"entry\":\"/tmp/not-a-zelyra-project.zyl\",\"operations\":[]}",
+    )
+    .expect("external edit request should be written");
+    let external = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert_eq!(external.status.code(), Some(1));
+    let external_document: serde_json::Value = serde_json::from_slice(&external.stdout).unwrap();
+    assert_eq!(external_document["diagnostics"][0]["code"], "E-EDIT-005");
+    assert_eq!(fs::read_to_string(source_path).unwrap(), "fn greet() {}\n");
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_rejects_a_semantically_invalid_baseline_or_result() {
+    let (project_directory, source_path) =
+        temporary_project_source("edit-semantic", "fn greet() {}\nfn main() {}\n");
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"main\",\"to\":\"greet\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("semantic edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["success"], false);
+    assert_eq!(document["preview"]["available"], false);
+    assert_eq!(document["diagnostics"][0]["code"], "E-NAME-001");
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn greet() {}\nfn main() {}\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_does_not_rename_a_shadowing_local_binding() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-scope",
+        "fn greet() { greet = 1\n print(greet) }\nfn main() { greet() }\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"greet\",\"to\":\"welcome\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("scoped edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 2);
+    assert_eq!(document["preview"]["changes"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "fn greet() { greet = 1\n print(greet) }\nfn main() { greet() }\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_renames_type_and_record_references_through_the_cli() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-types",
+        "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make(id: CustomerId) -> Customer { return Customer { id: id } }\nfn main() {}\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"type\",\"from\":\"CustomerId\",\"to\":\"ClientId\"}},{{\"kind\":\"rename\",\"symbol\":\"record\",\"from\":\"Customer\",\"to\":\"Client\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("type edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 8);
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "type CustomerId = Id\nstruct Customer { id: CustomerId }\nfn load(id: CustomerId) -> CustomerId { return id }\nfn make(id: CustomerId) -> Customer { return Customer { id: id } }\nfn main() {}\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_renames_tables_views_forms_and_cruds_through_the_cli() {
+    let machine_source = fs::read_to_string(example("machine_form.zyl"))
+        .expect("machine form example should be readable");
+    let (machine_directory, machine_path) =
+        temporary_project_source("edit-resources", &machine_source);
+    let machine_request_path = machine_directory.join("change.json");
+    let machine_request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"table\",\"from\":\"machines\",\"to\":\"equipment\"}},{{\"kind\":\"rename\",\"symbol\":\"form\",\"from\":\"MachineCreate\",\"to\":\"MachineEditor\"}},{{\"kind\":\"rename\",\"symbol\":\"crud\",\"from\":\"Machine\",\"to\":\"MachineAdmin\"}}]}}",
+        serde_json::to_string(machine_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&machine_request_path, machine_request)
+        .expect("resource edit request should be written");
+    let machine_output = run(&[
+        "edit",
+        "--format=json",
+        machine_request_path.to_str().unwrap(),
+    ]);
+    assert!(
+        machine_output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&machine_output.stdout),
+        String::from_utf8_lossy(&machine_output.stderr)
+    );
+    let machine_document: serde_json::Value =
+        serde_json::from_slice(&machine_output.stdout).unwrap();
+    assert_eq!(machine_document["preview"]["changed_tokens"], 8);
+    assert_eq!(fs::read_to_string(&machine_path).unwrap(), machine_source);
+    fs::remove_dir_all(machine_directory).expect("machine project should be removed");
+
+    let view_source =
+        fs::read_to_string(example("views.zyl")).expect("view example should be readable");
+    let (view_directory, view_path) = temporary_project_source("edit-view", &view_source);
+    let view_request_path = view_directory.join("change.json");
+    let view_request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"view\",\"from\":\"SiteShell\",\"to\":\"AppShell\"}}]}}",
+        serde_json::to_string(view_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&view_request_path, view_request).expect("view edit request should be written");
+    let view_output = run(&["edit", "--format=json", view_request_path.to_str().unwrap()]);
+    assert!(
+        view_output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&view_output.stdout),
+        String::from_utf8_lossy(&view_output.stderr)
+    );
+    let view_document: serde_json::Value = serde_json::from_slice(&view_output.stdout).unwrap();
+    assert_eq!(view_document["preview"]["changed_tokens"], 2);
+    assert_eq!(fs::read_to_string(&view_path).unwrap(), view_source);
+    fs::remove_dir_all(view_directory).expect("view project should be removed");
+}
+
+#[test]
+fn edit_renames_view_components_in_declarations_and_html() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-components",
+        "component Badge { html { <strong>Ready</strong> } }\nview Shell { html { <Badge /><slot /> } }\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"component\",\"from\":\"Badge\",\"to\":\"StatusBadge\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("component edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 2);
+    assert!(document["preview"]["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|change| change["from"] == "Badge" && change["to"] == "StatusBadge"));
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "component Badge { html { <strong>Ready</strong> } }\nview Shell { html { <Badge /><slot /> } }\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
 }
 
 #[test]

@@ -8,6 +8,20 @@ compiler and repository release.
 
 ### Added
 
+- Made function, type, and record renames AST-aware: declarations and known
+  references are changed while shadowing local bindings remain untouched.
+- Made multi-operation edits position-stable by sorting replacements before
+  applying them from the end of the source.
+- Extended AST-aware resource renames to tables, named views, forms, CRUDs,
+  and structured table references; table renames update checked SQL table
+  positions without changing literals, comments, parameters, or HTML.
+- Component renames now update declarations and known opening/closing component
+  tags in HTML bodies without treating ordinary HTML markup as symbol references.
+- Extended source-only impact JSON with a deterministic `references` edge list
+  for known table, view, component, handler, SQL, and function-call relations.
+- Hardened semantic edit requests with required schema version `1`, project-
+  local `.zyl` entry checks, full compiler validation before and after a
+  proposed rename, and explicit diagnostics for rejected boundaries.
 - Added deterministic `zelyra edit --format=json` requests for validated symbol
   renames of functions, types, records, tables, tableviews, forms, CRUDs, views,
   and components. Proposed changes are reparsed atomically; writes require the

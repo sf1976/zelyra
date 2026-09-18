@@ -45,16 +45,24 @@ zelyra fmt examples/fibonacci.zyl --check
 zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
-Beide verwenden Schema-Version `1`. JSON wird ausschließlich auf stdout
+Diese Maschinenschnittstellen verwenden Schema-Version `1`, soweit sie JSON
+ausgeben. JSON wird ausschließlich auf stdout
 ausgegeben; Diagnosen besitzen stabile Codes und UTF-8-Byte-Offsets, technische
 Meldungen bleiben auf stderr. `context` ist schreibgeschützt und meldet
 Deklarationen, ohne eine Datenbank zu verbinden oder Secrets auszugeben.
 `zelyra fmt` schreibt eine kanonische Formatierung; `--check` meldet nicht
 formatierte Dateien, ohne sie zu verändern. Ausdrucks-Lücken mit `_` liefern
 Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
-quelltextbasierte Wirkungsanalyse und validierte semantische Umbenennungen mit
-ausdrücklichen Vorschau-/Anwende-Modi sind verfügbar; eine vollständige
-Laufzeit-/Schemaanalyse und vergleichende KI-Benchmarks bleiben geplant. Siehe die
+quelltextbasierte Wirkungsanalyse mit deterministischen semantischen
+Referenzkanten und validierte semantische Umbenennungen mit
+ausdrücklichen Vorschau-/Anwende-Modi sind verfügbar, einschließlich
+AST-basierter Umbenennungen von Funktionen, Typen, Records, Tabellen, Views,
+Forms, CRUDs und Komponenten; Tabellenumbenennungen aktualisieren außerdem
+geprüfte SQL-Tabellenpositionen, ohne Literale oder Kommentare zu verändern,
+während Komponenten-Umbenennungen bekannte Komponententags in HTML-Bodies
+aktualisieren. Eine
+vollständige Laufzeit-/Schemaanalyse und vergleichende KI-Benchmarks bleiben
+geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die
 [Benchmark-Spezifikation](docs/benchmarks/ai-authoring.de.md).
 

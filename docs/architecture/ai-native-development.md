@@ -93,14 +93,28 @@ holes in declaration contexts remain planned interfaces.
 
 `zelyra impact --format=json` now provides a deterministic, source-only first
 slice for affected tables, SQL, forms, CRUD resources, views, APIs,
-permissions, and contracts. Emails, jobs, tests, live schema changes, and
-deeper runtime dependency analysis remain planned. `zelyra edit --format=json
-change.json` provides a validated, atomic preview for symbol renames across
-functions, types, records, tables, tableviews, forms, CRUDs, views, and
-components, plus a deterministic source fingerprint. The request must echo that
-fingerprint when the explicit `--apply` flag atomically writes the validated
-result, preventing stale overwrites. Richer operations remain additional
-semantic change features; text patches remain supported.
+permissions, contracts, and a structured `references` edge list. Each known
+edge identifies its source, target, kind, and source span. Emails, jobs, tests,
+live schema changes, and deeper runtime dependency analysis remain planned.
+`zelyra edit --format=json
+change.json` provides a versioned, validated, atomic preview for symbol renames
+across functions, types, records, tables, tableviews, forms, CRUDs, views, and
+components, plus a deterministic source fingerprint. Requests must contain
+`"schema_version": "1"`, and the entry must be an existing `.zyl` file inside
+the resolved Zelyra project root. The original and proposed source both pass
+the compiler checks before an edit is considered available. The request must
+echo the fingerprint when the explicit `--apply` flag atomically writes the
+validated result, preventing stale overwrites. Function, type, and record
+renames use the AST and typed syntax contexts to change declarations and known
+references without changing shadowing local bindings. Table renames also update
+table positions in checked SQL (`FROM`, `JOIN`, `INTO`, and `UPDATE`) while
+leaving SQL literals, comments, parameters, and HTML untouched. Richer
+operations remain additional semantic change features; text patches remain
+supported.
+
+Component renames update the declaration and known opening or closing component
+tags in opaque HTML bodies. Ordinary HTML elements, text, attributes, SQL, and
+unrecognized markup are not treated as symbol references.
 
 ## Security, privacy, and providers
 

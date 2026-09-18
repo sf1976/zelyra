@@ -51,12 +51,19 @@ architecture requirement for every phase, not a provider-specific feature.
   holes in more declaration contexts and richer edit integration remain.
 - [~] **Stage D — impact analysis:** a deterministic source-only
   `zelyra impact --format=json` slice now reports tables, SQL, forms, CRUD,
-  views, APIs, permissions, and contracts; emails, jobs, tests, and live schema
-  changes remain to be connected.
+  views, APIs, permissions, contracts, and a structured deterministic
+  `references` edge list; emails, jobs, tests, and live schema changes remain
+  to be connected.
 - [~] **Stage E — semantic edits:** a validated, atomic rename operation for
   declared functions, types, records, tables, tableviews, forms, CRUDs, views,
-  and components is available as a preview and explicit `--apply`; richer
-  operations remain.
+  and components is available as a versioned preview and explicit `--apply`.
+  Project-local `.zyl` boundaries, stale-source fingerprints, and full
+  compiler validation before and after the edit are enforced; richer
+  scope-aware operations remain. Function, type, and record renames now
+  resolve declarations and known references through the AST without changing
+  shadowing local bindings. Table renames also update checked SQL table
+  positions while preserving literals, comments, parameters, and HTML; richer
+  cross-resource reference resolution remains open.
 - [~] **Stage F — contracts and effects:** contracts and capability checks
   exist; granular effects such as `Database(read)`, `Database(write)`,
   `Email`, and `Jobs` remain planned. AI must never add an effect silently.

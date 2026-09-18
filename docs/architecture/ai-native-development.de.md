@@ -74,15 +74,31 @@ Deklarationskontexte bleiben geplante Schnittstellen.
 
 `zelyra impact --format=json` ist als deterministische, quelltextbasierte
 erste Stufe verfügbar und meldet betroffene Tabellen, SQL, Formulare, CRUD,
-Views, APIs, Berechtigungen und Contracts. E-Mails, Jobs, Tests,
-Live-Schemaänderungen und tiefere Laufzeitabhängigkeiten bleiben geplant.
+Views, APIs, Berechtigungen, Contracts sowie eine strukturierte
+`references`-Kantenliste. Jede bekannte Kante enthält Quelle, Ziel, Art und
+Quelltextspanne. E-Mails, Jobs, Tests, Live-Schemaänderungen und tiefere
+Laufzeitabhängigkeiten bleiben geplant.
 `zelyra edit --format=json change.json` liefert für Symbol-Umbenennungen in
 Funktionen, Typen, Records, Tabellen, Tableviews, Formularen, CRUDs, Views und
-Komponenten eine validierte, atomare Vorschau sowie einen deterministischen
-Quelltext-Fingerprint. Die Anfrage muss diesen Fingerprint bei ausdrücklichem
-`--apply` zurücksenden; so wird das validierte Ergebnis atomar geschrieben,
-ohne zwischenzeitliche Änderungen zu überschreiben. Weitere Operationen folgen
+Komponenten eine versionierte, validierte, atomare Vorschau sowie einen
+deterministischen Quelltext-Fingerprint. Die Anfrage muss
+`"schema_version": "1"` enthalten; der Einstieg muss eine existierende
+`.zyl`-Datei innerhalb der aufgelösten Zelyra-Projektwurzel sein. Quelltext vor
+und nach der Änderung wird vollständig mit den Compilerprüfungen validiert.
+Die Anfrage muss diesen Fingerprint bei ausdrücklichem `--apply` zurücksenden;
+so wird das validierte Ergebnis atomar geschrieben, ohne zwischenzeitliche
+Änderungen zu überschreiben. Umbenennungen von Funktionen, Typen und Records
+verwenden den AST und typisierte Syntaxkontexte, um Deklarationen und bekannte
+Referenzen zu ändern, ohne überschattete lokale Bindungen zu verändern.
+Tabellenumbenennungen aktualisieren außerdem Tabellenpositionen in geprüften
+SQL-Abfragen (`FROM`, `JOIN`, `INTO` und `UPDATE`), während SQL-Literale,
+Kommentare, Parameter und HTML unverändert bleiben. Weitere Operationen folgen
 später.
+
+Komponenten-Umbenennungen aktualisieren die Deklaration sowie bekannte öffnende
+und schließende Komponententags in opaken HTML-Bodies. Gewöhnliche HTML-
+Elemente, Text, Attribute, SQL und nicht erkannte Markup-Strukturen werden
+nicht als Symbolreferenzen behandelt.
 
 ## Sicherheit, Datenschutz und Benchmarks
 

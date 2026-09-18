@@ -43,15 +43,20 @@ zelyra fmt examples/fibonacci.zyl --check
 zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
-Both use schema version `1`. JSON is written only to stdout; diagnostics have
+These machine interfaces use schema version `1` where JSON is emitted. JSON is written only to stdout; diagnostics have
 stable codes and UTF-8 byte offsets, while operational messages remain on
 stderr. The context command is read-only and reports declarations without
 connecting to a database or exposing secrets. `zelyra fmt` writes canonical
 source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
-by buildable commands. Source-only impact analysis and validated semantic
-rename requests with explicit preview/apply modes are available; complete
-runtime/schema impact analysis and comparative AI benchmarks remain planned.
+by buildable commands. Source-only impact analysis, including deterministic
+semantic reference edges, and validated semantic
+rename requests with explicit preview/apply modes are available, including
+AST-aware function, type, record, table, view, form, CRUD, and component
+renames; table renames also update checked SQL table positions without changing
+literals or comments, while component renames update known component tags in
+HTML bodies. Complete runtime/schema impact analysis and comparative AI benchmarks
+remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).
 

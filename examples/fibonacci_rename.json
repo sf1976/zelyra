@@ -1,4 +1,5 @@
 {
+  "schema_version": "1",
   "entry": "examples/fibonacci.zyl",
   "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [

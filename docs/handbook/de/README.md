@@ -1601,15 +1601,17 @@ zelyra impact examples/auth_crud_api.zyl --format=json
 ~~~
 
 Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
-Ressourcen, Views, APIs, Berechtigungen und Contracts. E-Mail-, Job-, Test-
-und Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar;
-der Befehl verbindet sich nie mit MariaDB.
+Ressourcen, Views, APIs, Berechtigungen, Contracts und eine deterministische
+`references`-Kantenliste für bekannte Beziehungen. E-Mail-, Job-, Test- und
+Live-Schemaauswirkungen bleiben ausdrücklich leer oder nicht verfügbar; der
+Befehl verbindet sich nie mit MariaDB.
 
 Eine validierte Symbol-Umbenennung kann ohne Änderung des Quelltexts
 vorschaut werden:
 
 ~~~json
 {
+  "schema_version": "1",
   "entry": "examples/fibonacci.zyl",
   "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
   "operations": [
@@ -1624,18 +1626,31 @@ Als `change.json` speichern und ausführen:
 zelyra edit --format=json change.json
 ~~~
 
-Das Ergebnis meldet die genauen Token-Spans und einen deterministischen
-Quelltext-Fingerprint. Für `--apply` muss die Anfrage den Fingerprint aus der
-Vorschau enthalten; so wird eine zwischenzeitlich geänderte Datei nicht
-überschrieben. Ohne den ausdrücklichen `--apply`-Schalter bleibt es eine
-Vorschau:
+Die Anfrage ist versioniert und darf nur auf eine existierende `.zyl`-Datei
+innerhalb der aufgelösten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
+der Änderung muss die Compilerprüfungen bestehen. Das Ergebnis meldet die
+genauen Token-Spans und einen deterministischen Quelltext-Fingerprint. Für
+`--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so wird
+eine zwischenzeitlich geänderte Datei nicht überschrieben. Ohne den
+ausdrücklichen `--apply`-Schalter bleibt es eine Vorschau:
 
 ~~~bash
 zelyra edit --format=json --apply change.json
 ~~~
 
-Vor dem atomaren Ersetzen wird der Quelltext erneut geparst; ein ungültiger
-Vorschlag kann daher nicht geschrieben werden.
+Vor dem atomaren Ersetzen wird der Quelltext erneut geparst und vollständig
+geprüft; ein ungültiger oder semantisch unsicherer Vorschlag kann daher nicht
+geschrieben werden.
+
+Umbenennungen von Funktionen, Typen und Records sind AST-basiert:
+Deklarationen und bekannte Referenzen werden umbenannt, während lokale
+Bindungen mit demselben Namen unverändert bleiben. Tabellen-, View-, Form- und
+CRUD-Deklarationen sowie ihre strukturierten Referenzen werden ebenfalls
+unterstützt. Tabellenumbenennungen aktualisieren geprüfte SQL-Tabellenpositionen,
+Komponenten-Umbenennungen aktualisieren die Deklaration sowie bekannte öffnende
+und schließende Komponententags in HTML-Bodies. Tabellenumbenennungen
+aktualisieren geprüfte SQL-Tabellenpositionen, lassen aber Literale, Kommentare,
+Parameter und HTML unverändert.
 
 ### Sichere Automatisierungsgrenze
 

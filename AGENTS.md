@@ -42,3 +42,12 @@ only a roadmap design.
 Risky database operations, capability changes, secret handling, and external
 side effects require explicit human-visible boundaries and must never be
 silently approved by tooling.
+
+## Git workflow
+
+- Create a commit after each completed and tested subfeature.
+- Push after each verified milestone or at the latest before a longer pause.
+- Create releases less frequently, only for stable public versions.
+- Avoid both oversized aggregate commits and commits for every trivial change.
+- Keep commits small, focused, and understandable; do not push unverified
+  changes or publish a release merely because a commit was created.
