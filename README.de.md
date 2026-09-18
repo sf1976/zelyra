@@ -56,8 +56,10 @@ Kontextdiagnosen und werden von baubaren Befehlen abgelehnt. Die erste
 quelltextbasierte Wirkungsanalyse und validierte semantische Umbenennungen mit
 ausdrücklichen Vorschau-/Anwende-Modi sind verfügbar, einschließlich
 AST-basierter Umbenennungen von Funktionen, Typen, Records, Tabellen, Views,
-Forms und CRUDs; Tabellenumbenennungen aktualisieren außerdem geprüfte
-SQL-Tabellenpositionen, ohne Literale oder Kommentare zu verändern. Eine
+Forms, CRUDs und Komponenten; Tabellenumbenennungen aktualisieren außerdem
+geprüfte SQL-Tabellenpositionen, ohne Literale oder Kommentare zu verändern,
+während Komponenten-Umbenennungen bekannte Komponententags in HTML-Bodies
+aktualisieren. Eine
 vollständige Laufzeit-/Schemaanalyse und vergleichende KI-Benchmarks bleiben
 geplant. Siehe die
 [KI-native Architektur](docs/architecture/ai-native-development.de.md) und die

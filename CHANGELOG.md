@@ -15,6 +15,8 @@ compiler and repository release.
 - Extended AST-aware resource renames to tables, named views, forms, CRUDs,
   and structured table references; table renames update checked SQL table
   positions without changing literals, comments, parameters, or HTML.
+- Component renames now update declarations and known opening/closing component
+  tags in HTML bodies without treating ordinary HTML markup as symbol references.
 - Hardened semantic edit requests with required schema version `1`, project-
   local `.zyl` entry checks, full compiler validation before and after a
   proposed rename, and explicit diagnostics for rejected boundaries.

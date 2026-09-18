@@ -110,6 +110,10 @@ leaving SQL literals, comments, parameters, and HTML untouched. Richer
 operations remain additional semantic change features; text patches remain
 supported.
 
+Component renames update the declaration and known opening or closing component
+tags in opaque HTML bodies. Ordinary HTML elements, text, attributes, SQL, and
+unrecognized markup are not treated as symbol references.
+
 ## Security, privacy, and providers
 
 The compiler does not send source code or project context to external AI

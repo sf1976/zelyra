@@ -375,6 +375,39 @@ fn edit_renames_tables_views_forms_and_cruds_through_the_cli() {
 }
 
 #[test]
+fn edit_renames_view_components_in_declarations_and_html() {
+    let (project_directory, source_path) = temporary_project_source(
+        "edit-components",
+        "component Badge { html { <strong>Ready</strong> } }\nview Shell { html { <Badge /><slot /> } }\n",
+    );
+    let request_path = project_directory.join("change.json");
+    let request = format!(
+        "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"component\",\"from\":\"Badge\",\"to\":\"StatusBadge\"}}]}}",
+        serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+    );
+    fs::write(&request_path, request).expect("component edit request should be written");
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["preview"]["changed_tokens"], 2);
+    assert!(document["preview"]["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|change| change["from"] == "Badge" && change["to"] == "StatusBadge"));
+    assert_eq!(
+        fs::read_to_string(&source_path).unwrap(),
+        "component Badge { html { <strong>Ready</strong> } }\nview Shell { html { <Badge /><slot /> } }\n"
+    );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
 fn context_exposes_safe_structural_project_information() {
     let auth_example = example("auth_crud_api.zyl");
     let output = run(&["context", auth_example.to_str().unwrap(), "--format=json"]);

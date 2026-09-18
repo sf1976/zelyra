@@ -51,9 +51,10 @@ source formatting; `--check` reports unformatted files without changing them.
 Expression holes written as `_` produce contextual diagnostics and are rejected
 by buildable commands. Source-only impact analysis and validated semantic
 rename requests with explicit preview/apply modes are available, including
-AST-aware function, type, record, table, view, form, and CRUD renames; table
-renames also update checked SQL table positions without changing literals or
-comments. Complete runtime/schema impact analysis and comparative AI benchmarks
+AST-aware function, type, record, table, view, form, CRUD, and component
+renames; table renames also update checked SQL table positions without changing
+literals or comments, while component renames update known component tags in
+HTML bodies. Complete runtime/schema impact analysis and comparative AI benchmarks
 remain planned.
 See the [AI-native architecture](docs/architecture/ai-native-development.md)
 and the [benchmark specification](docs/benchmarks/ai-authoring.md).

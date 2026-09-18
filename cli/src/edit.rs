@@ -175,6 +175,7 @@ pub fn preview(
             "table" | "view" | "form" | "crud" | "tableview" => {
                 Some(resource_rename_spans(tokens, symbol, source_name))
             }
+            "component" => Some(component_rename_spans(tokens, source_name)),
             _ => None,
         };
         for token in tokens {
@@ -190,6 +191,24 @@ pub fn preview(
                 || semantic_spans.is_none()
             {
                 replacements.push((token.span, replacement.clone(), name.clone()));
+            }
+        }
+        if symbol == "component" {
+            if let Some(spans) = semantic_spans.as_ref() {
+                for (start, end) in spans {
+                    if tokens
+                        .iter()
+                        .any(|token| token.span.start == *start && token.span.end == *end)
+                    {
+                        continue;
+                    }
+                    let (line, column) = source_position(source, *start);
+                    replacements.push((
+                        Span::new(*start, *end, line, column),
+                        replacement.clone(),
+                        source_name.clone(),
+                    ));
+                }
             }
         }
         if symbol == "table" {
@@ -302,6 +321,53 @@ fn resource_rename_spans(tokens: &[Token], symbol: &str, name: &str) -> HashSet<
             spans.extend(property_reference_spans(tokens, TokenKind::View, name));
         }
         _ => {}
+    }
+    spans
+}
+
+fn component_rename_spans(tokens: &[Token], name: &str) -> HashSet<(usize, usize)> {
+    let mut spans = HashSet::new();
+    if let Some(span) = any_declaration_name_span(tokens, TokenKind::Component, name) {
+        spans.insert((span.start, span.end));
+    }
+    for token in tokens {
+        let TokenKind::HtmlBody(body) = &token.kind else {
+            continue;
+        };
+        for (start, end) in html_component_name_spans(body, name) {
+            spans.insert((token.span.start + start, token.span.start + end));
+        }
+    }
+    spans
+}
+
+fn html_component_name_spans(html: &str, name: &str) -> Vec<(usize, usize)> {
+    let bytes = html.as_bytes();
+    let name_bytes = name.as_bytes();
+    let mut spans = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'<' {
+            index += 1;
+            continue;
+        }
+        let name_start = if bytes.get(index + 1) == Some(&b'/') {
+            index + 2
+        } else {
+            index + 1
+        };
+        let name_end = name_start.saturating_add(name_bytes.len());
+        let boundary = bytes.get(name_end).copied();
+        if name_end <= bytes.len()
+            && &bytes[name_start..name_end] == name_bytes
+            && boundary
+                .is_some_and(|byte| byte.is_ascii_whitespace() || byte == b'/' || byte == b'>')
+        {
+            spans.push((name_start, name_end));
+            index = name_end;
+        } else {
+            index += 1;
+        }
     }
     spans
 }
@@ -1019,6 +1085,38 @@ mod tests {
         assert!(preview.source.contains("type ClientId = Id"));
         assert!(preview.source.contains("struct ClientInput"));
         assert!(preview.source.contains("tableview Clients"));
+    }
+
+    #[test]
+    fn component_renames_follow_html_opening_and_closing_tags() {
+        let source = r#"
+            component Panel {
+                html { <section><Badge /></section> }
+            }
+            component Badge {
+                html { <strong>Ready</strong> }
+            }
+            view Shell {
+                html { <Panel><Badge></Badge></Panel> }
+            }
+        "#;
+        let tokens = lex(source).expect("source should lex");
+        let program = parse(&tokens).expect("source should parse");
+        let request = json!({
+            "schema_version": "1",
+            "entry": "main.zyl",
+            "operations": [{
+                "kind": "rename",
+                "symbol": "component",
+                "from": "Badge",
+                "to": "StatusBadge"
+            }]
+        });
+        let preview = preview(&program, source, &tokens, &request).expect("edit should preview");
+        assert!(preview.source.contains("component StatusBadge"));
+        assert!(preview.source.contains("<StatusBadge />"));
+        assert!(preview.source.contains("<StatusBadge></StatusBadge>"));
+        assert_eq!(preview.changed_tokens, 4);
     }
 
     #[test]
