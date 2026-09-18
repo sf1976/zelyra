@@ -72,6 +72,35 @@ database failures produce generic HTTP boundaries without exposing database
 details. Collection loops are supported for arrays of records. Optional-aware
 field expressions and richer view-local data remain planned.
 
+### Reusable view layouts
+
+Named views are deterministic page layouts. Each view must declare exactly one
+default `<slot />`; it may additionally declare each named slot once. Named
+slots can contain fallback HTML:
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Page content</p>
+    }
+}
+~~~
+
+The page's named slot blocks must refer to slots declared by the selected view;
+duplicate blocks and unknown slots are compile-time errors. Unprovided named
+slots use their declared fallback. Composition happens before component
+expansion and routing, without global view state; authentication, capability
+checks, SQL checks, and HTML escaping remain active.
+
 Pages may declare typed query inputs:
 
 ~~~zelyra

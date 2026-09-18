@@ -6,9 +6,16 @@ compiler and repository release.
 
 ## Unreleased
 
-No unreleased changes.
+### Added
 
-Keine unveröffentlichten Änderungen.
+- Named page views can now declare named slots with deterministic fallback
+  content; pages provide validated slot blocks without changing the existing
+  authentication, capability, SQL, or escaping pipeline.
+- Benannte Seiten-Views können jetzt benannte Slots mit deterministischem
+  Fallback-Inhalt deklarieren; Seiten liefern geprüfte Slot-Blöcke, ohne die
+  bestehende Authentifizierungs-, Capability-, SQL- oder Escaping-Pipeline zu
+  umgehen.
+
 
 ## 0.1.40 — 2026-09-18
 

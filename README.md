@@ -314,10 +314,29 @@ page "/customers" {
 }
 ~~~
 
-The compiler requires exactly one `<slot />` in every named view. The page
-content is composed into that slot before routing, so authentication and
-escaping continue to use the existing web pipeline. See
-`examples/views.zyl` for a complete example.
+The compiler requires exactly one default `<slot />` in every named view.
+Layouts may also declare named slots with safe fallback content. A page
+provides such content with `<slot name="header">...</slot>`; slots that are
+not overridden use their fallback. Page content is composed before routing,
+so authentication and escaping continue to use the existing web pipeline.
+See `examples/view_composition.zyl` for a complete example.
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Page content</p>
+    }
+}
+~~~
 
 Views can also declare typed, reusable components:
 

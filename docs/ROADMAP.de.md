@@ -170,8 +170,8 @@ Feature eines bestimmten Anbieters.
 
 ## 4. Views und Webdarstellung
 
-- [~] Benannte Views/Layout mit `view: Name` an Seiten und validiertem
-  `<slot />`-Inhaltsslot.
+- [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
+  `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.
 - [~] Typisierte View-Ausdrücke prüfen Identifier- und
   Record-Feldinterpolationen, Seiten-Routenbindungen, Component-Properties
   und dynamische Property-Typen. Option-aware Feld-Ausdrücke und reichere
@@ -182,10 +182,10 @@ Feature eines bestimmten Anbieters.
   deklarierten Spalten, typisierten Filtern, Suche, Sortierung, Pagination,
   URL-Zustand und Escaping sind für tabellen- und struct-basierte Ergebnistypen
   verfügbar.
-- [~] Komponenten unterstützen Default- und benannte Slots, Fallback-Inhalte
-  sowie verschachtelte Komposition; Fallback-Inhalte für komplexere
-  verschachtelte View-Szenarien bleiben geplant.
-- [ ] View-Vererbung/-Komposition ohne versteckten globalen Zustand.
+- [~] Komponenten und benannte Views unterstützen Default- und benannte Slots,
+  sichere Fallback-Inhalte sowie verschachtelte Komposition. View-Layouts
+  prüfen deklarierte Slotnamen und ersetzen sie deterministisch ohne globalen
+  Zustand; View-Vererbung und reichere verschachtelte Szenarien bleiben offen.
 - [~] View-lokales Laden unterstützt explizite, schema-geprüfte Abfragen für
   einzelne Datensätze und Record-Collections mit `load name = sql<Type> { ... }`.
   Array-Ergebnisse können mit typisierten

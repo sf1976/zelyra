@@ -777,24 +777,54 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             );
             valid = false;
         }
-        let slots = view.html.matches("<slot />").count();
-        if slots != 1 {
+        let slots = match slot_invocations(&view.html) {
+            Ok(slots) => slots,
+            Err(message) => {
+                diagnostic(
+                    path,
+                    "E-VIEW-028",
+                    &format!("view `{}` has invalid slots: {message}", view.name),
+                    view.span.line,
+                    view.span.column,
+                );
+                valid = false;
+                Vec::new()
+            }
+        };
+        let default_slots = slots.iter().filter(|slot| slot.name.is_none()).count();
+        if default_slots != 1 {
             diagnostic(
                 path,
                 "E-VIEW-002",
                 &format!(
-                    "view `{}` must contain exactly one `<slot />` content slot (found {slots})",
-                    view.name
+                    "view `{}` must contain exactly one default `<slot />` content slot (found {default_slots})",
+                    view.name,
                 ),
                 view.span.line,
                 view.span.column,
             );
             valid = false;
         }
+        let mut named_slots = HashSet::new();
+        for slot in slots.iter().filter_map(|slot| slot.name.as_deref()) {
+            if !named_slots.insert(slot) {
+                diagnostic(
+                    path,
+                    "E-VIEW-028",
+                    &format!(
+                        "view `{}` declares named slot `{slot}` more than once",
+                        view.name
+                    ),
+                    view.span.line,
+                    view.span.column,
+                );
+                valid = false;
+            }
+        }
     }
     for page in &program.pages {
         if let Some(view_name) = &page.view {
-            if !program.views.iter().any(|view| view.name == *view_name) {
+            let Some(view) = program.views.iter().find(|view| view.name == *view_name) else {
                 diagnostic(
                     path,
                     "E-VIEW-003",
@@ -803,7 +833,32 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                     page.span.column,
                 );
                 valid = false;
+                continue;
+            };
+            if let Err(message) = validate_view_content_slots(view, &page.html) {
+                diagnostic(
+                    path,
+                    "E-VIEW-029",
+                    &format!(
+                        "page `{}` has invalid slots for view `{view_name}`: {message}",
+                        page.path
+                    ),
+                    page.span.line,
+                    page.span.column,
+                );
+                valid = false;
             }
+        } else if page.html.contains("<slot")
+            && slot_invocations(&page.html).is_ok_and(|slots| !slots.is_empty())
+        {
+            diagnostic(
+                path,
+                "E-VIEW-029",
+                "page content slots require a `view: ...` layout",
+                page.span.line,
+                page.span.column,
+            );
+            valid = false;
         }
     }
     valid
@@ -1746,6 +1801,19 @@ fn context_entry(path: &str) -> String {
     path.replace('\\', "/")
 }
 
+fn context_view_slots(html: &str) -> Vec<Value> {
+    slot_invocations(html)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|slot| {
+            json!({
+                "name": slot.name.unwrap_or_else(|| "default".into()),
+                "fallback": slot.body.is_some()
+            })
+        })
+        .collect()
+}
+
 fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
     let databases = program
         .databases
@@ -1806,6 +1874,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "name": view.name,
                 "input_type": Value::Null,
                 "used_fields": Vec::<String>::new(),
+                "slots": context_view_slots(&view.html),
                 "span": context_span(source, view.span)
             })
         })
@@ -2344,6 +2413,53 @@ fn split_component_body(body: &str) -> Result<(String, HashMap<String, String>),
         default_body.replace_range(slot.start..slot.end, "");
     }
     Ok((default_body, named))
+}
+
+fn declared_view_slots(view: &zelyra_ast::ViewDef) -> Result<(bool, HashSet<String>), String> {
+    let mut has_default = false;
+    let mut named = HashSet::new();
+    for slot in slot_invocations(&view.html)? {
+        if let Some(name) = slot.name {
+            if !named.insert(name) {
+                return Err("view declares the same named slot more than once".into());
+            }
+        } else if has_default {
+            return Err("view declares the default slot more than once".into());
+        } else {
+            has_default = true;
+        }
+    }
+    Ok((has_default, named))
+}
+
+fn split_view_content(body: &str) -> Result<(String, HashMap<String, String>), String> {
+    let slots = slot_invocations(body)?;
+    let mut named = HashMap::new();
+    let mut default_body = body.to_owned();
+    for slot in slots.into_iter().rev() {
+        let Some(slot_body) = slot.body else {
+            return Err("view content slots must use opening and closing tags".into());
+        };
+        let Some(name) = slot.name else {
+            return Err("view content slots require a `name` attribute".into());
+        };
+        if named.insert(name, slot_body).is_some() {
+            return Err("the same named view slot is provided more than once".into());
+        }
+        default_body.replace_range(slot.start..slot.end, "");
+    }
+    Ok((default_body, named))
+}
+
+fn validate_view_content_slots(view: &zelyra_ast::ViewDef, body: &str) -> Result<(), String> {
+    let (_, declared_named) = declared_view_slots(view)?;
+    let (_, supplied_named) = split_view_content(body)?;
+    for name in supplied_named.keys() {
+        if !declared_named.contains(name) {
+            return Err(format!("view has no named slot `{name}`"));
+        }
+    }
+    Ok(())
 }
 
 fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
@@ -6561,7 +6677,25 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
             .iter()
             .find(|view| view.name == view_name)
             .expect("page views are validated before route generation");
-        view.html.replace("<slot />", &page.html)
+        let (default_body, named_slots) = split_view_content(&page.html)
+            .expect("page view slots are validated before route generation");
+        let slots = slot_invocations(&view.html).expect("view slots are validated");
+        let mut composed = view.html.clone();
+        for slot in slots.into_iter().rev() {
+            let replacement = slot
+                .name
+                .as_deref()
+                .and_then(|name| named_slots.get(name))
+                .map_or_else(
+                    || match slot.name {
+                        Some(_) => slot.body.as_deref().unwrap_or(""),
+                        None => default_body.as_str(),
+                    },
+                    String::as_str,
+                );
+            composed.replace_range(slot.start..slot.end, replacement);
+        }
+        composed
     } else {
         page.html.clone()
     };
@@ -8233,6 +8367,84 @@ mod tests {
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert!(!validate_components("components.zyl", &program));
+    }
+
+    #[test]
+    fn composes_named_view_slots_and_fallbacks() {
+        let source = r#"
+            view Shell {
+                html {
+                    <html>
+                        <body>
+                            <header><slot name="header"><h1>Default heading</h1></slot></header>
+                            <main><slot /></main>
+                            <footer><slot name="footer">Default footer</slot></footer>
+                        </body>
+                    </html>
+                }
+            }
+            page "/dashboard" {
+                view: Shell
+                html {
+                    <slot name="header"><h1>Custom heading</h1></slot>
+                    <p>Dashboard content</p>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        assert!(validate_components("views.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
+        assert!(html.contains("<main>"));
+        assert!(html.contains("<p>Dashboard content</p>"));
+        assert!(html.contains("<footer>Default footer</footer>"));
+        assert!(!html.contains("<slot"));
+    }
+
+    #[test]
+    fn rejects_unknown_named_view_slots() {
+        let source = r#"
+            view Shell {
+                html {
+                    <body>
+                        <header><slot name="header" /></header>
+                        <main><slot /></main>
+                    </body>
+                }
+            }
+            page "/dashboard" {
+                view: Shell
+                html {
+                    <slot name="footer"><p>Footer</p></slot>
+                    <p>Dashboard content</p>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+    }
+
+    #[test]
+    fn rejects_duplicate_named_view_slots() {
+        let source = r#"
+            view Shell {
+                html {
+                    <header><slot name="header" /></header>
+                    <main><slot /></main>
+                }
+            }
+            page "/dashboard" {
+                view: Shell
+                html {
+                    <slot name="header"><h1>First</h1></slot>
+                    <slot name="header"><h1>Second</h1></slot>
+                    <p>Dashboard content</p>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
     }
 
     #[test]

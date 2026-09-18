@@ -594,10 +594,32 @@ page "/customers" {
 }
 ~~~
 
-Der Compiler verlangt in einem benannten View genau einen `<slot />`. Der
-Seiteninhalt wird vor dem Routing eingesetzt; Authentifizierung,
-Autorisierung und Escaping bleiben aktiv. Typisierte selbstschließende
-Komponenten mit deklarierten Properties sind ebenfalls verfügbar:
+Der Compiler verlangt in einem benannten View genau einen Default-`<slot />`.
+Layouts dürfen zusätzlich benannte Slots mit Fallback-Inhalt deklarieren:
+
+~~~zelyra
+view AppShell {
+    html {
+        <header><slot name="header"><h1>Zelyra</h1></slot></header>
+        <main><slot /></main>
+    }
+}
+
+page "/dashboard" {
+    view: AppShell
+    html {
+        <slot name="header"><h1>Dashboard</h1></slot>
+        <p>Seiteninhalt</p>
+    }
+}
+~~~
+
+Die Seite darf nur Slots des ausgewählten Views liefern; doppelte oder
+unbekannte Slots werden beim Prüfen abgelehnt. Nicht gelieferte benannte Slots
+verwenden ihren Fallback. Der Seiteninhalt wird vor dem Routing eingesetzt;
+Authentifizierung, Autorisierung und Escaping bleiben aktiv. Typisierte
+selbstschließende Komponenten mit deklarierten Properties sind ebenfalls
+verfügbar:
 
 ~~~zelyra
 component Badge {
