@@ -782,7 +782,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             Err(message) => {
                 diagnostic(
                     path,
-                    "E-VIEW-017",
+                    "E-VIEW-028",
                     &format!("view `{}` has invalid slots: {message}", view.name),
                     view.span.line,
                     view.span.column,
@@ -810,7 +810,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             if !named_slots.insert(slot) {
                 diagnostic(
                     path,
-                    "E-VIEW-017",
+                    "E-VIEW-028",
                     &format!(
                         "view `{}` declares named slot `{slot}` more than once",
                         view.name
@@ -838,7 +838,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
             if let Err(message) = validate_view_content_slots(view, &page.html) {
                 diagnostic(
                     path,
-                    "E-VIEW-018",
+                    "E-VIEW-029",
                     &format!(
                         "page `{}` has invalid slots for view `{view_name}`: {message}",
                         page.path
@@ -853,7 +853,7 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
         {
             diagnostic(
                 path,
-                "E-VIEW-018",
+                "E-VIEW-029",
                 "page content slots require a `view: ...` layout",
                 page.span.line,
                 page.span.column,
