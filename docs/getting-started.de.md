@@ -787,6 +787,18 @@ testet verbundene CRUD-Abläufe zum Erstellen, Lesen, Bearbeiten und Löschen.
 Eigene Testdatensätze werden wieder entfernt; das Datenbankpasswort wird weder
 ausgegeben noch gespeichert.
 
+Für den vollständigen Test des erzeugten Projekts gegen eine frische Datenbank
+die isolierte MariaDB-Instanz und deren Root-Passwort verwenden:
+
+~~~bash
+export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-passwort>'
+./tests/generated-project-mariadb-e2e.sh
+~~~
+
+Der Test erzeugt ein temporäres Projekt, führt `zelyra setup` aus, prüft die
+erzeugte Compose- und `doctor`-Konfiguration und entfernt temporäre Datenbank
+und Projekt nach dem CRUD-HTTP-Test wieder.
+
 ## 12. Häufige Probleme
 
 ### zelyra: command not found

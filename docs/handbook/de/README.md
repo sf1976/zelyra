@@ -227,6 +227,20 @@ Sie verwendet den Container `zelyra-mariadb-tests` und ein eigenes Volume.
 MariaDB wird auf Host-Port `3308` veröffentlicht, ohne eine andere
 Datenbankinstallation zu verändern.
 
+Den vollständigen Weg eines erzeugten Projekts gegen eine frische Datenbank
+prüfen:
+
+~~~bash
+cargo build -p zelyra-cli
+export ZELYRA_GENERATED_E2E_ROOT_PASSWORD='<test-passwort>'
+./tests/generated-project-mariadb-e2e.sh
+~~~
+
+Der Test erzeugt mit `zelyra new` ein temporäres Projekt, führt `zelyra setup`
+aus, prüft die erzeugte Compose- und `doctor`-Konfiguration und entfernt
+temporäres Projekt und Datenbank nach dem CRUD-HTTP-Test wieder. Das Passwort
+wird weder ausgegeben noch gespeichert.
+
 Nutzer, die Rust nicht installieren möchten, können das vorgefertigte Linux-
 oder Windows-Archiv von der [GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases)
 herunterladen. Jedes Archiv enthält eine SHA-256-Prüfsumme, die CLI, beide
