@@ -362,6 +362,31 @@ ausgegeben. Die serverseitige Antwort behauptet niemals fälschlich, dass ein
 Ladezustand aktiv ist. Konfigurierte Fehlermeldungen ersetzen generische CRUD-
 Datenbankfehler; interne Datenbankdetails bleiben verborgen.
 
+Eigene CRUD-Aktionen ergänzen fachliche Operationen, ohne die generierte
+Sicherheitspipeline zu ersetzen:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Kunde deaktiviert."
+        redirect "/customers"
+    }
+}
+~~~
+
+Zelyra erzeugt dafür den POST-only-Endpunkt
+`/customers/{id}/deactivate` und zeigt die Schaltfläche in der Detailansicht.
+Die Anfrage verlangt die CRUD-Datenbank-Capability, CSRF-Schutz,
+Authentifizierung und die deklarierte Berechtigung. `:id` wird aus der Route
+gebunden; SQL bleibt parametrisiert. Aktionsnamen werden derzeit auch als
+Schaltflächenbeschriftung verwendet.
+
 Der erste typisierte Teil der einheitlichen View-Datenpipeline ist jetzt für
 `tableview`-Routen verfügbar; die Anwendung derselben Operationen auf beliebige
 Views bleibt geplant.

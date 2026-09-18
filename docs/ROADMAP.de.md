@@ -133,6 +133,9 @@ noch in Prüfung.
 - [~] CRUD-Lademetadaten und konfigurierbare Fehleransichten erhalten Escaping
   und generische Datenbankfehlergrenzen; eine clientseitige Ladeanzeige bleibt
   offen.
+- [~] Eigene CRUD-Aktionen können parametrisiertes, POST-only-Geschäfts-SQL mit
+  CSRF-, Datenbank-Capability-, Authentifizierungs- und Berechtigungsprüfung
+  ausführen; eigene Beschriftungen und aktionsspezifische Views bleiben offen.
 - [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und
   Dichte.
 - [ ] View- und globale Themes, Dark Mode und benutzerwählbare Darstellung.
@@ -156,6 +159,8 @@ noch in Prüfung.
 - [ ] Optimistic Locking und konfliktbewusstes Bearbeiten.
 - [ ] Bulk-Aktionen, Im-/Export, gespeicherte Suchen, Spaltenpräferenzen und
   serverseitige Reports.
+- [ ] Eigene Aktionsbeschriftungen, Icons, Bestätigungsansichten, typisierte
+  Aktionsparameter sowie aktionsspezifische Erfolgs-/Fehlerdarstellung.
 - [ ] Soft Delete, Wiederherstellung, Archivierung und Aufbewahrungsregeln.
 - [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
 - [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.

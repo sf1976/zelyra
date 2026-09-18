@@ -26,8 +26,8 @@ use zelyra_runtime::{
     VerificationStatus, KNOWN_CAPABILITIES,
 };
 use zelyra_web::{
-    html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudRoute,
-    CsrfProtection, FormRoute, Response, Route, TableViewFilter, TableViewFilterKind,
+    html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute, CorsPolicy, CrudActionRoute,
+    CrudRoute, CsrfProtection, FormRoute, Response, Route, TableViewFilter, TableViewFilterKind,
     TableViewRoute, WebApp,
 };
 
@@ -3137,6 +3137,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             permissions: Vec::new(),
             csrf,
             form_view: zelyra_ast::CrudFormViewDef::default(),
+            post_only: false,
         });
     }
     for crud in &program.cruds {
@@ -3153,6 +3154,9 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
     let mut crud_routes = Vec::new();
     for crud in &program.cruds {
+        let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
+            continue;
+        };
         let Some(csrf) = CsrfProtection::generate().ok() else {
             eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
             return ExitCode::from(1);
@@ -3185,6 +3189,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     .map(|column| column.name.clone())
                     .collect()
             });
+        let actions = crud
+            .actions
+            .iter()
+            .map(|action| generated_crud_action(crud, table, &schema, action, csrf.clone()))
+            .collect();
         crud_routes.push(CrudRoute {
             path: format!("/{}", crud.table),
             title: crud.title.clone().unwrap_or_else(|| crud.name.clone()),
@@ -3197,6 +3206,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             delete_view: crud.view.delete.clone(),
             loading_view: crud.view.loading.clone(),
             error_view: crud.view.error.clone(),
+            actions,
             requires_auth: crud.requires_auth,
             permissions: crud.permissions.clone(),
             create_permissions: effective_crud_permissions(
@@ -3379,6 +3389,43 @@ fn generated_crud_form(
         permissions,
         csrf,
         form_view: crud.view.form.clone(),
+        post_only: false,
+    }
+}
+
+fn generated_crud_action(
+    crud: &zelyra_ast::CrudDef,
+    table: &zelyra_ast::TableDef,
+    schema: &Schema,
+    action: &zelyra_ast::FormAction,
+    csrf: CsrfProtection,
+) -> CrudActionRoute {
+    let mut permissions = crud.permissions.clone();
+    permissions.extend(action.permissions.clone());
+    permissions.sort();
+    permissions.dedup();
+    let path = format!("/{}/{{id}}/{}", crud.table, action.name);
+    CrudActionRoute {
+        name: action.name.clone(),
+        label: action.name.clone(),
+        form: FormRoute {
+            path: path.clone(),
+            action: path,
+            form: zelyra_ast::FormDef {
+                name: format!("{}{}", crud.name, action.name),
+                table: Some(table.name.clone()),
+                fields: Vec::new(),
+                actions: vec![action.clone()],
+                span: action.span,
+            },
+            table: Some(table.clone()),
+            schema: Some(schema.clone()),
+            requires_auth: crud.requires_auth || action.requires_auth,
+            permissions,
+            csrf,
+            form_view: zelyra_ast::CrudFormViewDef::default(),
+            post_only: true,
+        },
     }
 }
 

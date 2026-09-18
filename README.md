@@ -352,6 +352,30 @@ The server-rendered response never pretends that a loading state is active.
 Configured error messages replace generic CRUD database-error pages while
 internal database details remain hidden.
 
+Custom CRUD actions can add focused business operations without replacing the
+generated safety pipeline:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Customer deactivated."
+        redirect "/customers"
+    }
+}
+~~~
+
+Zelyra generates a POST-only endpoint at
+`/customers/{id}/deactivate` and renders its button on the detail view. The
+request requires the CRUD database capability, CSRF protection, authentication
+and the declared permission. `:id` is bound from the route; SQL remains
+parameterized. Action names are currently also used as button labels.
+
 The first typed slice of the unified view data pipeline is now available on
 `tableview` routes; applying the same operations to arbitrary views remains
 planned.

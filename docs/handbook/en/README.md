@@ -489,7 +489,8 @@ crud Customer -> customers {
 
 `mode` accepts `table` or `cards`. Search, typed filters, allowlisted sorting,
 pagination, URL state, HTML escaping, and permission checks remain generated
-in both modes. Detail, form, loading, and error view overrides are planned.
+in both modes. Detail, form, loading, and error view overrides are also
+available.
 
 Detail views support the same controlled presentation choice and an explicit
 heading:
@@ -552,6 +553,29 @@ The loading message is emitted as escaped metadata for progressive enhancement;
 the server-rendered response does not claim that loading is active. Configured
 error messages replace generic CRUD database-error pages without exposing
 internal database details.
+
+Custom CRUD actions add focused business operations while retaining the same
+authorization and parameter-binding pipeline:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Customer deactivated."
+        redirect "/customers"
+    }
+}
+~~~
+
+This generates a POST-only `/customers/{id}/deactivate` route and a detail
+view button. CSRF, the database capability, authentication, and declared
+permissions are checked. The route ID is bound to `:id`, so the SQL remains
+parameterized. Action names are currently used as button labels.
 
 ## 11. Forms
 

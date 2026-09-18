@@ -191,6 +191,7 @@ pub struct CrudDef {
     pub create_permissions: Vec<String>,
     pub edit_permissions: Vec<String>,
     pub delete_permissions: Vec<String>,
+    pub actions: Vec<FormAction>,
     pub span: Span,
 }
 

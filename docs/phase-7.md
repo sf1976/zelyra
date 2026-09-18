@@ -37,7 +37,8 @@ crud Customer -> customers {
 `mode` accepts `table` (the default) or `cards`. This changes only the
 presentation. The same checked MariaDB query, search, typed filters,
 allowlisted sorting, pagination, URL state, HTML escaping, and authorization
-guards remain active. Detail and form overrides remain future work.
+guards remain active. Detail, form, loading, and error overrides are available
+as well.
 
 Detail views now support a controlled card layout and an explicit heading:
 
@@ -107,6 +108,28 @@ The loading message is emitted as escaped metadata for progressive enhancement;
 the server-rendered response does not claim that loading is active. Configured
 error messages replace generic CRUD database-error pages without exposing
 internal database details.
+
+Custom CRUD actions add focused business operations to a resource:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Customer deactivated."
+        redirect "/customers"
+    }
+}
+~~~
+
+The compiler generates a POST-only route at `/customers/{id}/deactivate` and
+adds a button to the detail view. The route enforces the database capability,
+CSRF, authentication, and declared permissions. The route `id` is bound to
+`:id`; SQL remains parameterized. Action names are currently used as labels.
 
 The blocks are optional. Without them, Zelyra keeps the safe defaults:
 all schema columns in the list, text columns for search, and all non-ID

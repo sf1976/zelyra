@@ -332,6 +332,7 @@ impl<'a> Parser<'a> {
         let mut create_permissions = Vec::new();
         let mut edit_permissions = Vec::new();
         let mut delete_permissions = Vec::new();
+        let mut actions = Vec::new();
 
         if self.at(&TokenKind::LBrace) {
             self.advance();
@@ -389,9 +390,12 @@ impl<'a> Parser<'a> {
                             _ => unreachable!("CRUD permission scope was validated above"),
                         }
                     }
+                    TokenKind::Action => {
+                        actions.push(self.form_action()?);
+                    }
                     _ => {
                         return self.error(
-                            "expected title, list, search, filter, view, requires auth, or permits in CRUD definition",
+                            "expected title, list, search, filter, view, requires auth, permits, or action in CRUD definition",
                         )
                     }
                 }
@@ -411,6 +415,7 @@ impl<'a> Parser<'a> {
                 create_permissions,
                 edit_permissions,
                 delete_permissions,
+                actions,
                 span: start.join(end),
             });
         }
@@ -428,6 +433,7 @@ impl<'a> Parser<'a> {
             create_permissions,
             edit_permissions,
             delete_permissions,
+            actions,
             span: start.join(table_span),
         })
     }
@@ -2223,6 +2229,16 @@ mod tests {
                             message: "Please try again later."
                         }
                     }
+                    action deactivate {
+                        permits "customers.edit"
+                        sql {
+                            UPDATE customers
+                            SET active = false
+                            WHERE id = :id
+                        }
+                        success "Customer deactivated."
+                        redirect "/customers"
+                    }
                 }"#)
             .unwrap(),
         )
@@ -2267,6 +2283,13 @@ mod tests {
         assert_eq!(
             program.cruds[0].view.error.message.as_deref(),
             Some("Please try again later.")
+        );
+        assert_eq!(program.cruds[0].actions.len(), 1);
+        assert_eq!(program.cruds[0].actions[0].name, "deactivate");
+        assert_eq!(program.cruds[0].actions[0].permissions, ["customers.edit"]);
+        assert_eq!(
+            program.cruds[0].actions[0].success.as_deref(),
+            Some("Customer deactivated.")
         );
     }
 

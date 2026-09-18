@@ -38,8 +38,8 @@ crud Customer -> customers {
 `mode` akzeptiert `table` (Standard) oder `cards`. Das ändert nur die
 Darstellung. Dieselbe geprüfte MariaDB-Abfrage, Suche, typisierten Filter,
 erlaubte Sortierung, Pagination, URL-Zustand, HTML-Escaping und
-Autorisierungsprüfungen bleiben aktiv. Detail- und Formularüberschreibungen
-folgen in weiteren Phasen.
+Autorisierungsprüfungen bleiben aktiv. Detail-, Formular-, Lade- und
+Fehlerüberschreibungen sind ebenfalls verfügbar.
 
 Detailansichten unterstützen jetzt eine kontrollierte Kartenansicht und eine
 eigene Überschrift:
@@ -112,6 +112,29 @@ Die Lademeldung wird als escaped Metadatum für Progressive Enhancement
 ausgegeben; die serverseitige Antwort behauptet nicht, dass gerade geladen
 wird. Konfigurierte Fehlermeldungen ersetzen generische CRUD-Datenbankfehler,
 ohne interne Datenbankdetails offenzulegen.
+
+Eigene CRUD-Aktionen ergänzen fachliche Operationen innerhalb einer Ressource:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Kunde deaktiviert."
+        redirect "/customers"
+    }
+}
+~~~
+
+Der Compiler erzeugt dafür die POST-only-Route `/customers/{id}/deactivate`
+und eine Schaltfläche in der Detailansicht. Die Route erzwingt die
+Datenbank-Capability, CSRF-Schutz, Authentifizierung und die deklarierten
+Berechtigungen. Die Routen-ID wird an `:id` gebunden; SQL bleibt parametrisiert.
+Aktionsnamen werden derzeit als Beschriftung verwendet.
 
 Die Blöcke sind optional. Ohne Konfiguration bleiben die sicheren Defaults
 erhalten: alle Schema-Spalten in der Liste, Textspalten für die Suche und alle

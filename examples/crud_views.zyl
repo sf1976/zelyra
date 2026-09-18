@@ -49,4 +49,17 @@ crud Customer -> customers {
             message: "Please try again later."
         }
     }
+
+    action deactivate {
+        permits "customers.edit"
+
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+
+        success "Customer deactivated."
+        redirect "/customers"
+    }
 }

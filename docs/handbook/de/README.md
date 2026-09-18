@@ -546,7 +546,7 @@ crud Customer -> customers {
 `mode` akzeptiert `table` oder `cards`. Suche, typisierte Filter, erlaubte
 Sortierung, Pagination, URL-Zustand, HTML-Escaping und Berechtigungsprüfungen
 bleiben in beiden Modi aktiv. Detail-, Formular-, Lade- und Fehleransichten
-folgen in weiteren View-Phasen.
+können ebenfalls sicher überschrieben werden.
 
 Detailansichten unterstützen dieselbe kontrollierte Darstellungsauswahl und
 eine eigene Überschrift:
@@ -612,6 +612,30 @@ Die Lademeldung wird als escaped Metadatum für Progressive Enhancement
 ausgegeben; die serverseitige Antwort behauptet nicht, dass gerade geladen
 wird. Konfigurierte Fehlermeldungen ersetzen generische CRUD-Datenbankfehler,
 ohne interne Datenbankdetails offenzulegen.
+
+Eigene CRUD-Aktionen ergänzen fachliche Operationen und behalten dieselbe
+Autorisierungs- und Parameterbindungspipeline:
+
+~~~zelyra
+crud Customer -> customers {
+    action deactivate {
+        permits "customers.edit"
+        sql {
+            UPDATE customers
+            SET active = false
+            WHERE id = :id
+        }
+        success "Kunde deaktiviert."
+        redirect "/customers"
+    }
+}
+~~~
+
+Dadurch entstehen die POST-only-Route `/customers/{id}/deactivate` und eine
+Schaltfläche in der Detailansicht. CSRF-Schutz, Datenbank-Capability,
+Authentifizierung und deklarierte Berechtigungen werden geprüft. Die Routen-ID
+wird an `:id` gebunden, daher bleibt SQL parametrisiert. Aktionsnamen werden
+derzeit als Schaltflächenbeschriftung verwendet.
 
 ## 11. Formulare
 

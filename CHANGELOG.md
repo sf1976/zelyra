@@ -34,6 +34,9 @@ compiler and repository release.
 - Added CRUD loading metadata and safe configurable error views. Error messages
   remain escaped and generic database details are not exposed; loading metadata
   is suitable for progressive enhancement.
+- Added declarative custom CRUD actions with parameterized POST-only SQL,
+  detail-view buttons, route-ID binding, CSRF, database-capability,
+  authentication, and permission checks.
 - Added database-backed role permission groups through `roles` and
   `role_permissions` authentication options. Direct user permissions and
   inherited role permissions are combined for protected requests.

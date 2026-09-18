@@ -259,6 +259,7 @@ pub struct FormRoute {
     pub permissions: Vec<String>,
     pub csrf: CsrfProtection,
     pub form_view: CrudFormViewDef,
+    pub post_only: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -280,6 +281,7 @@ pub struct CrudRoute {
     pub delete_view: CrudDeleteViewDef,
     pub loading_view: CrudLoadingViewDef,
     pub error_view: CrudErrorViewDef,
+    pub actions: Vec<CrudActionRoute>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub create_permissions: Vec<String>,
@@ -287,6 +289,13 @@ pub struct CrudRoute {
     pub delete_permissions: Vec<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
+}
+
+#[derive(Clone, Debug)]
+pub struct CrudActionRoute {
+    pub name: String,
+    pub label: String,
+    pub form: FormRoute,
 }
 
 #[derive(Clone, Debug)]
@@ -529,6 +538,29 @@ impl WebApp {
                     self.database_url.as_deref(),
                     crud_ui_actions(crud, request, self),
                 );
+            }
+            for action in &crud.actions {
+                if let Some(path_params) = match_path(&action.form.path, &request.path) {
+                    if self.database_capability_granted == Some(false) {
+                        return database_capability_denied();
+                    }
+                    let (requires_auth, permissions) = form_authorization(&action.form);
+                    if let Some(response) = authorize(
+                        requires_auth,
+                        &permissions,
+                        request,
+                        self,
+                        self.database_url.as_deref(),
+                    ) {
+                        return response;
+                    }
+                    return dispatch_form(
+                        &action.form,
+                        request,
+                        &path_params,
+                        self.database_url.as_deref(),
+                    );
+                }
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
             if let Some(path_params) = match_path(&delete_path, &request.path) {
@@ -2247,6 +2279,9 @@ fn dispatch_form(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
 ) -> Response {
+    if form.post_only && request.method != "POST" {
+        return Response::html(405, "<h1>405 Method Not Allowed</h1>");
+    }
     let rendered_form = form_with_path_params(form, path_params);
     if request.method == "GET" {
         let options = match load_relation_options(&rendered_form, database_url) {
@@ -2498,11 +2533,19 @@ fn crud_column_label(schema: &Schema, table_name: &str, column: &str) -> String 
     humanize(column)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct CrudUiActions {
     create: bool,
     edit: bool,
     delete: bool,
+    custom: Vec<CrudUiActionLink>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CrudUiActionLink {
+    label: String,
+    path: String,
+    csrf: String,
 }
 
 fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiActions {
@@ -2510,6 +2553,18 @@ fn crud_ui_actions(crud: &CrudRoute, request: &Request, app: &WebApp) -> CrudUiA
         create: can_authorize(crud.requires_auth, &crud.create_permissions, request, app),
         edit: can_authorize(crud.requires_auth, &crud.edit_permissions, request, app),
         delete: can_authorize(crud.requires_auth, &crud.delete_permissions, request, app),
+        custom: crud
+            .actions
+            .iter()
+            .filter_map(|action| {
+                let (requires_auth, permissions) = form_authorization(&action.form);
+                can_authorize(requires_auth, &permissions, request, app).then(|| CrudUiActionLink {
+                    label: action.label.clone(),
+                    path: action.form.path.clone(),
+                    csrf: action.form.csrf.token().into(),
+                })
+            })
+            .collect(),
     }
 }
 
@@ -3793,6 +3848,7 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
             create: true,
             edit: true,
             delete: true,
+            custom: Vec::new(),
         },
     )
 }
@@ -4043,6 +4099,7 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
             create: true,
             edit: true,
             delete: true,
+            custom: Vec::new(),
         },
     )
 }
@@ -4100,6 +4157,16 @@ fn render_crud_detail_with_actions(
         html.push_str("</p>");
     } else {
         html.push_str("</dl>");
+    }
+    for action in &ui_actions.custom {
+        let action_path = action.path.replace("{id}", id);
+        html.push_str("<form method=\"post\" action=\"");
+        html.push_str(&html_escape(&action_path));
+        html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
+        html.push_str(&html_escape(&action.csrf));
+        html.push_str("\"><button type=\"submit\">");
+        html.push_str(&html_escape(&action.label));
+        html.push_str("</button></form>");
     }
     if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
@@ -4851,6 +4918,7 @@ mod tests {
             permissions: Vec::new(),
             csrf: CsrfProtection::new("csrf-token"),
             form_view: CrudFormViewDef::default(),
+            post_only: false,
         }
     }
 
@@ -5222,6 +5290,12 @@ mod tests {
         assert!(cards_html.contains("zelyra-crud-form-card"));
         assert!(cards_html.contains("Save customer &lt;now&gt;"));
         assert!(cards_html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
+
+        let mut post_only_route = route.clone();
+        post_only_route.post_only = true;
+        let get_request = parse_request("GET /forms/action HTTP/1.1\r\n\r\n").unwrap();
+        let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None);
+        assert_eq!(response.status, 405);
     }
 
     #[test]
@@ -5423,6 +5497,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5505,6 +5580,7 @@ mod tests {
                 create: false,
                 edit: false,
                 delete: false,
+                custom: Vec::new(),
             },
         );
         assert!(!restricted_html.contains("href=\"/machines/new\""));
@@ -5631,6 +5707,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5676,6 +5753,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5711,6 +5789,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5842,6 +5921,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: true,
             permissions: vec!["customers.view".into()],
             create_permissions: vec!["customers.create".into()],
@@ -5914,6 +5994,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5946,6 +6027,7 @@ mod tests {
             delete_view: CrudDeleteViewDef::default(),
             loading_view: CrudLoadingViewDef::default(),
             error_view: CrudErrorViewDef::default(),
+            actions: Vec::new(),
             requires_auth: false,
             permissions: Vec::new(),
             create_permissions: Vec::new(),
@@ -5971,11 +6053,32 @@ mod tests {
                 create: false,
                 edit: false,
                 delete: false,
+                custom: Vec::new(),
             },
         );
         assert!(!restricted_html.contains("/machines/1/edit"));
         assert!(!restricted_html.contains("/machines/new"));
         assert!(!restricted_html.contains(">Delete</button>"));
+
+        let action_html = render_crud_detail_with_actions(
+            &route,
+            &["id", "name"],
+            &["1".into(), "CNC".into()],
+            "1",
+            CrudUiActions {
+                create: false,
+                edit: false,
+                delete: false,
+                custom: vec![CrudUiActionLink {
+                    label: "Deactivate".into(),
+                    path: "/machines/{id}/deactivate".into(),
+                    csrf: "crud-csrf".into(),
+                }],
+            },
+        );
+        assert!(action_html.contains("action=\"/machines/1/deactivate\""));
+        assert!(action_html.contains(">Deactivate</button>"));
+        assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
 
         let mut custom_route = route.clone();
         custom_route.delete_view.title = Some("Delete machine".into());
