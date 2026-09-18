@@ -519,20 +519,15 @@ impl WebApp {
                 );
             }
         }
+        let mut api_path_matched = false;
         for api in &self.apis {
             if let Some(path_params) = match_path(&api.path, &request.path) {
+                api_path_matched = true;
                 if request.method == "OPTIONS" {
                     return self.api_preflight(&request.path, request);
                 }
                 if api.method != request.method {
-                    return self.apply_api_cors(
-                        request,
-                        Response::json(
-                        405,
-                        "{\"error\":{\"code\":\"MethodNotAllowed\",\"message\":\"method not allowed\"}}",
-                        )
-                        .with_header("Allow", self.api_allowed_methods(&request.path)),
-                    );
+                    continue;
                 }
                 if let Some(response) = authorize_api(
                     api.requires_auth,
@@ -545,6 +540,16 @@ impl WebApp {
                 }
                 return self.apply_api_cors(request, (api.handler)(request, &path_params));
             }
+        }
+        if api_path_matched {
+            return self.apply_api_cors(
+                request,
+                Response::json(
+                    405,
+                    "{\"error\":{\"code\":\"MethodNotAllowed\",\"message\":\"method not allowed\"}}",
+                )
+                .with_header("Allow", self.api_allowed_methods(&request.path)),
+            );
         }
         for form in &self.forms {
             if let Some(path_params) = match_path(&form.path, &request.path) {
@@ -6707,6 +6712,18 @@ mod tests {
                 .status,
             405
         );
+    }
+
+    #[test]
+    fn dispatches_the_matching_method_when_api_routes_share_a_path() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![
+            ApiRoute::new("GET", "/setup", |_request, _| Response::html(200, "get")),
+            ApiRoute::new("POST", "/setup", |_request, _| Response::html(200, "post")),
+        ]);
+        let get = parse_request("GET /setup HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let post = parse_request("POST /setup HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&get).body, "get");
+        assert_eq!(app.dispatch(&post).body, "post");
     }
 
     #[test]

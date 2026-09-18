@@ -6,6 +6,27 @@ compiler and repository release.
 
 ## Unreleased
 
+No unreleased changes.
+
+## 0.1.43 — 2026-09-19
+
+This patch release fixes a critical web setup routing error and completes the
+real local browser setup flow. It remains an early alpha and is not intended
+for production use.
+
+Diese Patch-Version behebt einen kritischen Routingfehler im Web-Setup und
+vervollständigt den real getesteten lokalen Browser-Setup-Ablauf. Sie bleibt
+eine frühe Alpha-Version und ist nicht für den Produktiveinsatz bestimmt.
+
+### Fixed
+
+- Fixed API dispatch so a `POST` route is still reached when a `GET` route
+  shares the same path. This restores all browser setup form actions while
+  preserving deterministic `405` responses for unsupported methods.
+- Die API-Zustellung prüft jetzt alle Routen mit demselben Pfad, bevor sie
+  `405 Method Not Allowed` liefert. Dadurch erreichen Browser-Setup-Formulare
+  ihre `POST`-Aktionen wieder korrekt.
+
 ### Added
 
 - CRUD resources can reuse validated named page views with `layout: ViewName`;

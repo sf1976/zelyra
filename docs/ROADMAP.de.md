@@ -113,8 +113,8 @@ Feature eines bestimmten Anbieters.
 - [~] Ein gemeinsamer Setup-Assistent für Konsole und Browser ist über
   `zelyra setup --database|--schema|--all` und `zelyra setup --web` verfügbar;
   erzeugte MariaDB-Compose-Projekte werden gestartet und das Anfangsschema
-  angewendet; der MariaDB-Ablauf für erzeugte Projekte ist auf isolierten
-  Ports durch einen Integrationstest abgedeckt. Docker-Installation,
+  angewendet; Konsolen- und Browser-Aktionen sind jetzt durch HTTP- und
+  Integrationstests auf isolierten Ports abgedeckt. Docker-Installation,
   Fernadministration und produktives Deployment bleiben bewusst außerhalb des
   Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen

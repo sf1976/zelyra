@@ -35,6 +35,9 @@ open: http://127.0.0.1:3030/?token=<local-token>
 Der Browser bietet dieselben Aktionen wie die Konsole: Konfiguration
 vorbereiten, MariaDB und Anwendung starten, Schema anwenden oder alles
 ausführen.
+Diese Aktionen sind durch einen HTTP-End-to-End-Test mit dem einmaligen Token
+abgedeckt; das erzeugte MariaDB-Schema und eine CRUD-Seite werden ebenfalls
+geprüft.
 
 Einen anderen lokalen Port setzt man mit `zelyra setup --web --port 3031`.
 Der Setup-Server ist absichtlich nur lokal erreichbar. Er darf nicht über
