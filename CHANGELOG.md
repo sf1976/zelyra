@@ -6,6 +6,29 @@ compiler and repository release.
 
 ## Unreleased
 
+### Fixed
+
+- Generated CRUD lists now link the first displayed field to the record detail
+  page when the technical `id` column is hidden, for both table and card
+  layouts.
+- Bei generierten CRUD-Listen führt jetzt das erste angezeigte Feld zur
+  Detailseite, wenn die technische Spalte `id` ausgeblendet ist. Das gilt für
+  Tabellen- und Kartenlayouts.
+- Fixed the authentication-admin permission revoke form so it submits the
+  correct CSRF token and successfully removes the selected permission.
+- Das Formular zum Entziehen einer Berechtigung in der
+  Authentifizierungsverwaltung übermittelt jetzt das korrekte CSRF-Token und
+  entfernt die ausgewählte Berechtigung erfolgreich.
+
+### Tests
+
+- Updated generated-project end-to-end assertions to match the default German
+  interface and the current humanized tableview column labels; English-specific
+  scenarios now select English explicitly.
+- Die End-to-End-Prüfungen erzeugter Projekte erwarten jetzt die standardmäßig
+  deutsche Oberfläche und die aktuellen lesbaren Tableview-Spaltennamen;
+  englischsprachige Tests wählen Englisch ausdrücklich aus.
+
 ## 0.1.45 — 2026-09-19
 
 This alpha release hardens the MariaDB first-run experience and fixes a valid
