@@ -996,6 +996,25 @@ The starter contains departments and machines, a foreign-key relationship,
 schema-mapped forms, CRUD pages, search, filtering, pagination, and custom
 actions. The default project remains the smaller welcome-page scaffold.
 
+### Localized interface and learning mode
+
+MariaDB scaffolds start in German with the guided interface. Edit `.env` to
+switch languages or hide the guide:
+
+```dotenv
+ZELYRA_LANGUAGE=de # or en
+ZELYRA_LEVEL=learn  # or work
+```
+
+The server reads these settings from the process environment first, then the
+project `.env`. Without either setting, direct `zelyra serve` uses English and
+the concise `work` mode. `learn` adds a page-level guide with small Zelyra
+examples; it does not grant capabilities or change authorization. Built-in UI
+copy is kept in the versioned `web/locales/de.json` and
+`web/locales/en.json` catalogs. The generated machine-management view refers to
+catalog entries instead of embedding a second language's copy. See
+[`docs/env.en.md`](docs/env.en.md) for precedence and limits.
+
 Generated CRUD pages can use the same reusable shell as ordinary pages:
 
 ~~~zelyra

@@ -33,6 +33,11 @@ remain machine-searchable for now.
   slot, and typed self-closing components with properties are available.
   Named slots with fallback content and CRUD view overrides are available;
   themes remain open.
+- [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
+  and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
+  minimal and machine-management MariaDB starters have a responsive Zelyra
+  application shell; project-local catalog overrides, wider template coverage,
+  and replaceable themes remain open.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -181,6 +186,13 @@ architecture requirement for every phase, not a provider-specific feature.
 - [?] Database seed, fixture, snapshot, and anonymized test-data commands.
 
 ## 4. Views and web presentation
+
+- [~] The minimal and machine-management starters include a responsive branded
+  shell and catalog-backed German/English copy; the machine starter uses the
+  learn-mode guide. CRUD, form, authentication, validation, and standard
+  HTTP-error copy use the same built-in locale catalogs; broader theme
+  replacement, remaining template coverage, and project-local catalog
+  extensions remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named

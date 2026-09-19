@@ -41,6 +41,29 @@ declaration-context holes, complete
 runtime/schema impact, richer edit operations, granular effects, and
 benchmarks remain roadmap work.
 
+## Localized web interface and learning level
+
+The built-in web UI is catalog-driven. German and English UI copy is maintained
+in `web/locales/de.json` and `web/locales/en.json`; both files must keep the
+same keys. CRUD, form, authentication, validation, standard HTTP-error, and
+learning-guide copy is rendered from these catalogs. The bundled
+machine-management view marks catalog-backed HTML with
+`data-zelyra-i18n="app.home_title"`; configurable Zelyra text may use
+`@i18n:app.home_title`.
+
+`ZELYRA_LANGUAGE=de|en` selects the UI catalog. `ZELYRA_LEVEL=learn|work`
+shows or hides the contextual learning guide; it never grants capabilities or
+permissions. For `zelyra serve`, process variables override the project's
+`.env`. New MariaDB projects default to `de`/`learn`; direct serving without
+either value defaults to `en`/`work`. These are presentation settings only.
+
+Missing German entries fall back to English. A key missing from both catalogs
+renders `[missing translation]`; a consistency test checks literal references
+against both catalogs. Project-specific catalog overlays are not implemented
+yet. Business records and arbitrary project-authored HTML are content, not
+automatically translated UI copy. API and compiler machine contracts are not
+localized by these settings.
+
 ## Typed page data loading
 
 Pages may declare one or more explicit record loads using the native SQL

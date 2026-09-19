@@ -634,6 +634,7 @@ dependencies = [
  "argon2",
  "blake2",
  "rand_core",
+ "serde_json",
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",

@@ -15,6 +15,11 @@ use zelyra_ast::{
 };
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
+mod i18n;
+use i18n::{field_text, framework_text, identifier as locale_identifier, text as tr};
+
+const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
+pub use i18n::{UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
@@ -233,6 +238,158 @@ fn apply_generated_layout(mut response: Response, layout_html: Option<&str>) -> 
     response
 }
 
+fn localize_html(source: &str, language: UiLanguage) -> String {
+    let language_code = match language {
+        UiLanguage::English => "en",
+        UiLanguage::German => "de",
+    };
+    let translated = localize_framework_markup(source, language);
+    let mut html = translated.replace("data-zelyra-language", &format!("lang=\"{language_code}\""));
+    let marker = "data-zelyra-i18n=\"";
+    let mut search_from = 0;
+    while let Some(relative_start) = html[search_from..].find(marker) {
+        let marker_start = search_from + relative_start;
+        let key_start = marker_start + marker.len();
+        let Some(key_end_relative) = html[key_start..].find('"') else {
+            break;
+        };
+        let key_end = key_start + key_end_relative;
+        let key = html[key_start..key_end].to_owned();
+        let Some(open_tag_start) = html[..marker_start].rfind('<') else {
+            break;
+        };
+        let Some(tag_name_end_relative) = html[open_tag_start + 1..]
+            .find(|character: char| character.is_whitespace() || character == '>')
+        else {
+            break;
+        };
+        let tag_name_end = open_tag_start + 1 + tag_name_end_relative;
+        let tag_name = html[open_tag_start + 1..tag_name_end].to_owned();
+        let Some(open_tag_end_relative) = html[tag_name_end..].find('>') else {
+            break;
+        };
+        let content_start = tag_name_end + open_tag_end_relative + 1;
+        let closing_tag = format!("</{tag_name}>");
+        let Some(content_end_relative) = html[content_start..].find(&closing_tag) else {
+            break;
+        };
+        let content_end = content_start + content_end_relative;
+        let translated = html_escape(tr(language, &key));
+        html.replace_range(content_start..content_end, &translated);
+        search_from = content_start + translated.len() + closing_tag.len();
+    }
+    html
+}
+
+fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
+    let mut html = source.to_owned();
+    for tag in [
+        "h1", "h2", "h3", "p", "button", "label", "legend", "th", "option",
+    ] {
+        let opening = format!("<{tag}");
+        let closing = format!("</{tag}>");
+        let mut cursor = 0;
+        while let Some(relative_start) = html[cursor..].find(&opening) {
+            let start = cursor + relative_start;
+            let after_name = start + opening.len();
+            if html
+                .as_bytes()
+                .get(after_name)
+                .is_some_and(|byte| !byte.is_ascii_whitespace() && *byte != b'>')
+            {
+                cursor = after_name;
+                continue;
+            }
+            let Some(open_end_relative) = html[after_name..].find('>') else {
+                break;
+            };
+            let content_start = after_name + open_end_relative + 1;
+            let Some(content_end_relative) = html[content_start..].find(&closing) else {
+                break;
+            };
+            let content_end = content_start + content_end_relative;
+            if !html[content_start..content_end].contains('<') {
+                if let Some(copy) = framework_text(language, &html[content_start..content_end]) {
+                    let translated = html_escape(&copy);
+                    html.replace_range(content_start..content_end, &translated);
+                    cursor = content_start + translated.len() + closing.len();
+                    continue;
+                }
+            }
+            cursor = content_end + closing.len();
+        }
+    }
+    html
+}
+
+fn localize_user_text(language: UiLanguage, source: &str) -> String {
+    source
+        .strip_prefix("@i18n:")
+        .map(|key| tr(language, key).to_owned())
+        .unwrap_or_else(|| source.to_owned())
+}
+
+fn inject_design_system(source: &str) -> String {
+    if !source.contains("class=\"zelyra-app\"") || source.contains("data-zelyra-theme=\"default\"")
+    {
+        return source.to_owned();
+    }
+    let stylesheet =
+        format!("<style data-zelyra-theme=\"default\">{ZELYRA_DESIGN_SYSTEM_CSS}</style>");
+    if let Some(head_end) = source.rfind("</head>") {
+        let mut html = String::with_capacity(source.len() + stylesheet.len());
+        html.push_str(&source[..head_end]);
+        html.push_str(&stylesheet);
+        html.push_str(&source[head_end..]);
+        html
+    } else {
+        format!("{stylesheet}{source}")
+    }
+}
+
+fn append_learning_assistant(html: &str, path: &str, language: UiLanguage) -> String {
+    let machine_page = path.starts_with("/machines");
+    let section = if machine_page { "machine" } else { "view" };
+    let title = tr(language, &format!("learning.{section}.title"));
+    let introduction = tr(language, &format!("learning.{section}.intro"));
+    let heading = tr(language, &format!("learning.{section}.heading"));
+    let example = tr(language, &format!("learning.{section}.example"));
+    let guidance = tr(language, &format!("learning.{section}.guidance"));
+    let title = html_escape(title);
+    let introduction = html_escape(introduction);
+    let heading = html_escape(heading);
+    let example = html_escape(example);
+    let guidance = html_escape(guidance);
+    let button_label = html_escape(tr(language, "learning.button"));
+    let style = r#"<style>
+.zelyra-learning-assistant{position:fixed;right:24px;bottom:24px;z-index:2147483000;font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#17243b}
+.zelyra-learning-assistant summary{display:flex;align-items:center;gap:9px;list-style:none;cursor:pointer;padding:10px 16px 10px 10px;border:1px solid #dce3f2;border-radius:999px;background:linear-gradient(135deg,#fff 5%,#f2f5ff 100%);box-shadow:0 10px 34px #17243b2b;color:#27375a;font-weight:700}
+.zelyra-learning-assistant summary::-webkit-details-marker{display:none}
+.zelyra-learning-assistant summary:focus-visible{outline:3px solid #927cff;outline-offset:3px}
+.zelyra-learning-assistant-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(145deg,#8067ff,#32c7c1);color:white;font-weight:800}
+.zelyra-learning-assistant[open] summary{border-color:#a89bff}
+.zelyra-learning-panel{position:absolute;right:0;bottom:56px;width:min(390px,calc(100vw - 32px));padding:22px;border:1px solid #e1e6f0;border-radius:18px;background:#fff;box-shadow:0 22px 70px #17243b30}
+.zelyra-learning-panel h2{margin:0 0 6px;font-size:19px;letter-spacing:-.02em}
+.zelyra-learning-panel h3{margin:18px 0 8px;font-size:15px}
+.zelyra-learning-panel p{margin:8px 0;color:#526078}
+.zelyra-learning-panel pre{overflow:auto;margin:10px 0;padding:13px 15px;border-radius:10px;background:#111b31;color:#e4e9ff;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+.zelyra-learning-panel code{color:#5140bb;font:600 12px ui-monospace,SFMono-Regular,Consolas,monospace}
+@media(max-width:560px){.zelyra-learning-assistant{right:14px;bottom:14px}.zelyra-learning-panel{right:-2px;max-height:70vh;overflow:auto}}
+</style>"#;
+    let widget = format!(
+        "{style}<details class=\"zelyra-learning-assistant\"><summary aria-label=\"{button_label}\"><span class=\"zelyra-learning-assistant-icon\" aria-hidden=\"true\">i</span><span>{button_label}</span></summary><section class=\"zelyra-learning-panel\" role=\"region\" aria-label=\"{title}\"><h2>{title}</h2><p>{introduction}</p><h3>{heading}</h3><pre><code>{example}</code></pre><p>{guidance}</p></section></details>"
+    );
+    if let Some(body_end) = html.rfind("</body>") {
+        let mut rendered = String::with_capacity(html.len() + widget.len());
+        rendered.push_str(&html[..body_end]);
+        rendered.push_str(&widget);
+        rendered.push_str(&html[body_end..]);
+        rendered
+    } else {
+        format!("{html}{widget}")
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Router {
     routes: Vec<Route>,
@@ -417,6 +574,8 @@ pub struct WebApp {
     pub auth_permissions: Vec<String>,
     pub auth_route: Option<AuthRoute>,
     pub cors_policy: Option<CorsPolicy>,
+    pub ui_language: UiLanguage,
+    pub ui_level: UiLevel,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
@@ -435,6 +594,8 @@ impl WebApp {
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
+            ui_language: UiLanguage::default(),
+            ui_level: UiLevel::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -457,6 +618,8 @@ impl WebApp {
             auth_permissions: Vec::new(),
             auth_route: None,
             cors_policy: None,
+            ui_language: UiLanguage::default(),
+            ui_level: UiLevel::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -498,7 +661,30 @@ impl WebApp {
         self
     }
 
+    pub fn with_ui_settings(mut self, language: UiLanguage, level: UiLevel) -> Self {
+        self.ui_language = language;
+        self.ui_level = level;
+        self
+    }
+
     pub fn dispatch(&self, request: &Request) -> Response {
+        let mut response = self.dispatch_inner(request);
+        if response.content_type.starts_with("text/html") {
+            response.body = inject_design_system(&response.body);
+            response.body = localize_html(&response.body, self.ui_language);
+        }
+        if self.ui_level == UiLevel::Learn
+            && request.method == "GET"
+            && response.status == 200
+            && response.content_type.starts_with("text/html")
+        {
+            response.body =
+                append_learning_assistant(&response.body, &request.path, self.ui_language);
+        }
+        response
+    }
+
+    fn dispatch_inner(&self, request: &Request) -> Response {
         if let Some(auth_route) = &self.auth_route {
             if request.path == "/login" {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
@@ -567,13 +753,14 @@ impl WebApp {
                     return response;
                 }
                 return apply_generated_layout(
-                    dispatch_form(
+                    dispatch_form_with_language(
                         form,
                         request,
                         &path_params,
                         self.database_url.as_deref(),
                         session_from_request(self, request, self.database_url.as_deref())
                             .and_then(|session| session.user_id),
+                        self.ui_language,
                     ),
                     form.layout_html.as_deref(),
                 );
@@ -599,6 +786,7 @@ impl WebApp {
                         request,
                         self.database_url.as_deref(),
                         crud_ui_actions(crud, request, self),
+                        self.ui_language,
                     ),
                     crud.layout_html.as_deref(),
                 );
@@ -619,13 +807,14 @@ impl WebApp {
                         return response;
                     }
                     return apply_generated_layout(
-                        dispatch_form(
+                        dispatch_form_with_language(
                             &action.form,
                             request,
                             &path_params,
                             self.database_url.as_deref(),
                             session_from_request(self, request, self.database_url.as_deref())
                                 .and_then(|session| session.user_id),
+                            self.ui_language,
                         ),
                         action.form.layout_html.as_deref(),
                     );
@@ -716,6 +905,7 @@ impl WebApp {
                         &path_params,
                         self.database_url.as_deref(),
                         crud_ui_actions(crud, request, self),
+                        self.ui_language,
                     ),
                     crud.layout_html.as_deref(),
                 );
@@ -735,7 +925,12 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return dispatch_tableview(tableview, request, self.database_url.as_deref());
+                return dispatch_tableview(
+                    tableview,
+                    request,
+                    self.database_url.as_deref(),
+                    self.ui_language,
+                );
             }
         }
         for route in &self.routes {
@@ -755,10 +950,11 @@ impl WebApp {
                 break;
             }
         }
-        Router::new(self.routes.clone()).dispatch_with_database(
+        Router::new(self.routes.clone()).dispatch_with_database_and_language(
             &request.method,
             &request.target,
             self.database_url.as_deref(),
+            self.ui_language,
         )
     }
 
@@ -946,7 +1142,7 @@ fn dispatch_login(
     database_url: Option<&str>,
 ) -> Response {
     match request.method.as_str() {
-        "GET" => Response::html(200, render_login(auth)),
+        "GET" => Response::html(200, render_login(auth, app.ui_language)),
         "POST" => {
             if app.database_capability_granted == Some(false) {
                 return database_capability_denied();
@@ -1270,14 +1466,18 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     )
 }
 
-fn render_login(auth: &AuthRoute) -> String {
+fn render_login(auth: &AuthRoute, language: UiLanguage) -> String {
     format!(
-        "<main><h1>Login</h1><form method=\"post\" action=\"/login\">\
+        "<main><h1>{}</h1><form method=\"post\" action=\"/login\">\
          <input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\">\
-         <label for=\"email\">Email</label><input id=\"email\" name=\"email\" type=\"email\" required>\
-         <label for=\"password\">Password</label><input id=\"password\" name=\"password\" type=\"password\" required>\
-         <button type=\"submit\">Login</button></form></main>",
-        html_escape(auth.csrf.token())
+         <label for=\"email\">{}</label><input id=\"email\" name=\"email\" type=\"email\" required>\
+         <label for=\"password\">{}</label><input id=\"password\" name=\"password\" type=\"password\" required>\
+         <button type=\"submit\">{}</button></form></main>",
+        tr(language, "auth.login_title"),
+        html_escape(auth.csrf.token()),
+        tr(language, "auth.email"),
+        tr(language, "auth.password"),
+        tr(language, "auth.login_submit"),
     )
 }
 
@@ -1318,6 +1518,7 @@ fn dispatch_auth_admin(
                     &data.assignments,
                     &data.permissions,
                     &data.audit,
+                    app.ui_language,
                 ),
             ),
             Err(error) => {
@@ -2047,6 +2248,7 @@ fn render_auth_admin(
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
     audit: &[Vec<String>],
+    language: UiLanguage,
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
@@ -2057,18 +2259,28 @@ fn render_auth_admin(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let mut html = format!(
-        "<main><h1>Role administration</h1><h2>User administration</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label>Email</label><input name=\"email\" type=\"email\" required><label>Initial password</label><input name=\"password\" type=\"password\" minlength=\"8\" required><button type=\"submit\">Create user</button></form><table><tr><th>Email</th><th>Status</th><th>Actions</th></tr>"
+        "<main><h1>{}</h1><h2>{}</h2><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"create_user\"><label>{}</label><input name=\"email\" type=\"email\" required><label>{}</label><input name=\"password\" type=\"password\" minlength=\"8\" required><button type=\"submit\">{}</button></form><table><tr><th>{}</th><th>{}</th><th>{}</th></tr>",
+        tr(language, "auth.admin_title"),
+        tr(language, "auth.users_title"),
+        tr(language, "auth.email"),
+        tr(language, "auth.initial_password"),
+        tr(language, "auth.create_user"),
+        tr(language, "auth.email"),
+        tr(language, "auth.status"),
+        tr(language, "auth.actions"),
     );
     for row in users {
         if let (Some(user_id), Some(email), Some(active)) = (row.first(), row.get(1), row.get(2)) {
             let is_active = matches!(active.as_str(), "1" | "true" | "TRUE");
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input name=\"password\" type=\"password\" minlength=\"8\" required placeholder=\"New password\"><button type=\"submit\">Reset password</button></form>{}</td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"reset_password\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input name=\"password\" type=\"password\" minlength=\"8\" required placeholder=\"{}\"><button type=\"submit\">{}</button></form>{}</td></tr>",
                 html_escape(email),
-                if is_active { "Active" } else { "Inactive" },
+                tr(language, if is_active { "auth.active" } else { "auth.inactive" }),
                 path,
                 csrf,
                 html_escape(user_id),
+                tr(language, "auth.new_password_placeholder"),
+                tr(language, "auth.reset_password"),
                 if active_supported {
                     format!(
                         "<form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form>",
@@ -2076,7 +2288,7 @@ fn render_auth_admin(
                         csrf,
                         if is_active { "deactivate_user" } else { "activate_user" },
                         html_escape(user_id),
-                        if is_active { "Deactivate" } else { "Activate" },
+                        tr(language, if is_active { "auth.deactivate" } else { "auth.activate" }),
                     )
                 } else {
                     String::new()
@@ -2084,38 +2296,69 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table><h2>Assign role</h2><form method=\"post\" action=\"");
+    html.push_str("</table><h2>");
+    html.push_str(tr(language, "auth.assign_role"));
+    html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
     html.push_str(&csrf);
-    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>User ID</label><input name=\"user_id\" type=\"number\" required><label>Role</label><input name=\"role\" required><button type=\"submit\">Grant role</button></form>");
-    html.push_str(
-        "<h2>Role assignments</h2><table><tr><th>User</th><th>Role</th><th>Action</th></tr>",
-    );
+    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>");
+    html.push_str(tr(language, "auth.user_id"));
+    html.push_str("</label><input name=\"user_id\" type=\"number\" required><label>");
+    html.push_str(tr(language, "auth.role"));
+    html.push_str("</label><input name=\"role\" required><button type=\"submit\">");
+    html.push_str(tr(language, "auth.grant_role"));
+    html.push_str("</button></form><h2>");
+    html.push_str(tr(language, "auth.role_assignments"));
+    html.push_str("</h2><table><tr><th>");
+    html.push_str(tr(language, "auth.user"));
+    html.push_str("</th><th>");
+    html.push_str(tr(language, "auth.role"));
+    html.push_str("</th><th>");
+    html.push_str(tr(language, "auth.action"));
+    html.push_str("</th></tr>");
     for row in assignments {
         if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button type=\"submit\">Revoke</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_role\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><input type=\"hidden\" name=\"role\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
                 html_escape(email),
                 html_escape(role),
                 path,
                 csrf,
                 html_escape(user_id),
                 html_escape(role),
+                tr(language, "auth.revoke"),
             ));
         }
     }
-    html.push_str("</table><h2>Role permissions</h2><form method=\"post\" action=\"");
+    html.push_str("</table><h2>");
+    html.push_str(tr(language, "auth.role_permissions"));
+    html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
     html.push_str(&csrf);
-    html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>Role</label><input name=\"role\" required><label>Permission</label><input name=\"permission\" required><button type=\"submit\">Grant permission</button></form><table><tr><th>Role</th><th>Permission</th><th>Action</th></tr>");
+    html.push_str(
+        "\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>",
+    );
+    html.push_str(tr(language, "auth.role"));
+    html.push_str("</label><input name=\"role\" required><label>");
+    html.push_str(tr(language, "auth.permission"));
+    html.push_str("</label><input name=\"permission\" required><button type=\"submit\">");
+    html.push_str(tr(language, "auth.grant_permission"));
+    html.push_str("</button></form><table><tr><th>");
+    html.push_str(tr(language, "auth.role"));
+    html.push_str("</th><th>");
+    html.push_str(tr(language, "auth.permission"));
+    html.push_str("</th><th>");
+    html.push_str(tr(language, "auth.action"));
+    html.push_str("</th></tr>");
     for row in permissions {
         if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">Revoke</button></form></td></tr>",
+                "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
                 html_escape(role),
                 html_escape(permission),
+                tr(language, "auth.revoke"),
                 path,
                 csrf,
                 html_escape(role),
@@ -2124,9 +2367,21 @@ fn render_auth_admin(
         }
     }
     if auth.audit_table.is_some() {
-        html.push_str(
-            "</table><h2>Audit log</h2><p>Latest 100 administrative changes.</p><table><tr><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>Created</th></tr>",
-        );
+        html.push_str("</table><h2>");
+        html.push_str(tr(language, "auth.audit_log"));
+        html.push_str("</h2><p>");
+        html.push_str(tr(language, "auth.audit_latest"));
+        html.push_str("</p><table><tr><th>");
+        html.push_str(tr(language, "auth.actor"));
+        html.push_str("</th><th>");
+        html.push_str(tr(language, "auth.action"));
+        html.push_str("</th><th>");
+        html.push_str(tr(language, "auth.target"));
+        html.push_str("</th><th>");
+        html.push_str(tr(language, "auth.details"));
+        html.push_str("</th><th>");
+        html.push_str(tr(language, "auth.created"));
+        html.push_str("</th></tr>");
         for row in audit {
             let cells = row
                 .iter()
@@ -2295,6 +2550,16 @@ impl Router {
         path: &str,
         database_url: Option<&str>,
     ) -> Response {
+        self.dispatch_with_database_and_language(method, path, database_url, UiLanguage::English)
+    }
+
+    pub fn dispatch_with_database_and_language(
+        &self,
+        method: &str,
+        path: &str,
+        database_url: Option<&str>,
+        language: UiLanguage,
+    ) -> Response {
         if method != "GET" {
             return Response::html(405, "<h1>405 Method Not Allowed</h1>");
         }
@@ -2341,7 +2606,7 @@ impl Router {
                 };
                 return Response::html(
                     200,
-                    render_page(route, path, &params, &query_values, &data),
+                    render_page_with_language(route, path, &params, &query_values, &data, language),
                 );
             }
         }
@@ -2587,12 +2852,31 @@ fn form_authorization(form: &FormRoute) -> (bool, Vec<String>) {
     (form.requires_auth || action_requires_auth, permissions)
 }
 
+#[cfg(test)]
 fn dispatch_form(
     form: &FormRoute,
     request: &Request,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     actor_user_id: Option<i64>,
+) -> Response {
+    dispatch_form_with_language(
+        form,
+        request,
+        path_params,
+        database_url,
+        actor_user_id,
+        UiLanguage::English,
+    )
+}
+
+fn dispatch_form_with_language(
+    form: &FormRoute,
+    request: &Request,
+    path_params: &HashMap<String, String>,
+    database_url: Option<&str>,
+    actor_user_id: Option<i64>,
+    language: UiLanguage,
 ) -> Response {
     let confirmation_view = form
         .form
@@ -2608,7 +2892,7 @@ fn dispatch_form(
             };
             return Response::html(
                 200,
-                render_action_confirmation(&rendered_form, confirmation_view, &options),
+                render_action_confirmation(&rendered_form, confirmation_view, &options, language),
             );
         }
     }
@@ -2632,7 +2916,7 @@ fn dispatch_form(
         };
         return Response::html(
             200,
-            render_form_with_options(&rendered_form, &values, &[], None, &options),
+            render_form_with_language(&rendered_form, &values, &[], None, &options, language),
         );
     }
     if request.method != "POST" {
@@ -2674,12 +2958,13 @@ fn dispatch_form(
     if !errors.is_empty() {
         return Response::html(
             422,
-            render_form_with_options(
+            render_form_with_language(
                 &rendered_form,
                 &values,
                 &errors,
-                Some("Please correct the errors."),
+                Some(tr(language, "form.correct_errors")),
                 &relation_options,
+                language,
             ),
         );
     }
@@ -2723,25 +3008,28 @@ fn dispatch_form(
         }
         let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
         if let Some(success) = action_success_message(action) {
-            redirect = append_query_parameter(&redirect, "zelyra_success", success);
+            let success = localize_user_text(language, success);
+            redirect = append_query_parameter(&redirect, "zelyra_success", &success);
         }
         if let Some(title) = action
             .success_page
             .as_ref()
             .and_then(|page| page.title.as_deref())
         {
-            redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
+            let title = localize_user_text(language, title);
+            redirect = append_query_parameter(&redirect, "zelyra_success_title", &title);
         }
         return Response::redirect(redirect);
     }
     Response::html(
         202,
-        render_form_with_options(
+        render_form_with_language(
             &rendered_form,
             &values,
             &[],
-            Some("Input validated. Database action execution is not enabled yet."),
+            Some(tr(language, "form.validated_not_enabled")),
             &relation_options,
+            language,
         ),
     )
 }
@@ -2758,26 +3046,40 @@ fn render_action_confirmation(
     route: &FormRoute,
     view: &zelyra_ast::CrudConfirmViewDef,
     relation_options: &HashMap<String, Vec<SelectOption>>,
+    language: UiLanguage,
 ) -> String {
-    let title = view.title.as_deref().unwrap_or("Confirm action");
-    let message = view
-        .message
-        .as_deref()
-        .unwrap_or("Please confirm this action.");
-    let submit = view.submit.as_deref().unwrap_or("Confirm");
+    let title = localize_user_text(
+        language,
+        view.title
+            .as_deref()
+            .unwrap_or(tr(language, "confirm.title")),
+    );
+    let message = localize_user_text(
+        language,
+        view.message
+            .as_deref()
+            .unwrap_or(tr(language, "confirm.message")),
+    );
+    let submit = localize_user_text(
+        language,
+        view.submit
+            .as_deref()
+            .unwrap_or(tr(language, "confirm.submit")),
+    );
     let mut confirmation_form = route.clone();
     confirmation_form.form_view.title = None;
     confirmation_form.form_view.submit = Some(submit.to_owned());
     format!(
         "<main class=\"zelyra-action-confirmation\"><h1>{}</h1><p>{}</p>{}</main>",
-        html_escape(title),
-        html_escape(message),
-        render_form_with_options(
+        html_escape(&title),
+        html_escape(&message),
+        render_form_with_language(
             &confirmation_form,
             &HashMap::new(),
             &[],
             None,
-            relation_options
+            relation_options,
+            language,
         )
     )
 }
@@ -2965,14 +3267,19 @@ fn crud_relation_joins(schema: &Schema, table: &zelyra_database::Table) -> Strin
         .collect()
 }
 
-fn crud_column_label(schema: &Schema, table_name: &str, column: &str) -> String {
+fn crud_column_label(
+    language: UiLanguage,
+    schema: &Schema,
+    table_name: &str,
+    column: &str,
+) -> String {
     let Some(table) = schema.tables.iter().find(|table| table.name == table_name) else {
-        return humanize(column);
+        return localized_identifier(language, column);
     };
     if crud_foreign_key(table, column).is_some() {
-        return humanize(column.strip_suffix("_id").unwrap_or(column));
+        return localized_identifier(language, column.strip_suffix("_id").unwrap_or(column));
     }
-    humanize(column)
+    localized_identifier(language, column)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3122,6 +3429,7 @@ fn dispatch_crud(
     request: &Request,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
+    language: UiLanguage,
 ) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -3449,6 +3757,7 @@ fn dispatch_crud(
                 success_title: query_values.get("zelyra_success_title").map(String::as_str),
             },
             ui_actions,
+            language,
         ),
     )
 }
@@ -3457,6 +3766,7 @@ fn dispatch_tableview(
     tableview: &TableViewRoute,
     request: &Request,
     database_url: Option<&str>,
+    language: UiLanguage,
 ) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -3706,6 +4016,7 @@ fn dispatch_tableview(
                 page,
                 per_page,
             },
+            language,
         ),
     )
 }
@@ -3723,6 +4034,7 @@ fn render_tableview(
     tableview: &TableViewRoute,
     rows: &[Vec<String>],
     state: TableViewRenderState<'_>,
+    language: UiLanguage,
 ) -> String {
     let TableViewRenderState {
         query_values,
@@ -3736,19 +4048,23 @@ fn render_tableview(
     html.push_str(&html_escape(&tableview.title));
     html.push_str("</h1><form method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
-    html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>");
+    html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>");
+    html.push_str(tr(language, "query.legend"));
+    html.push_str("</legend>");
     if tableview.searchable {
-        html.push_str(
-            "<label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
-        );
+        html.push_str("<label for=\"search\">");
+        html.push_str(tr(language, "query.search"));
+        html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if tableview.sortable {
-        html.push_str("<label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+        html.push_str("<label for=\"sort\">");
+        html.push_str(tr(language, "query.sort"));
+        html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &tableview.columns {
             html.push_str("<option value=\"");
-            html.push_str(&html_escape(column));
+            html.push_str(&html_escape(&localized_identifier(language, column)));
             html.push('"');
             if column == sort {
                 html.push_str(" selected");
@@ -3757,10 +4073,10 @@ fn render_tableview(
             html.push_str(&html_escape(column));
             html.push_str("</option>");
         }
-        html.push_str(
-            "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
-        );
-        for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+        html.push_str("</select><label for=\"order\">");
+        html.push_str(tr(language, "query.order"));
+        html.push_str("</label><select id=\"order\" name=\"order\">");
+        for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
             html.push_str(value);
             html.push('"');
@@ -3768,7 +4084,7 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(label);
+            html.push_str(tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -3778,7 +4094,11 @@ fn render_tableview(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&format!("{} operator", filter.name)));
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_operator",
+            &localized_identifier(language, &filter.name),
+        )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\" name=\"filter_");
@@ -3792,13 +4112,17 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label());
+            html.push_str(operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&format!("Filter {} value", filter.name)));
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_value",
+            &localized_identifier(language, &filter.name),
+        )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\" name=\"filter_");
@@ -3812,14 +4136,18 @@ fn render_tableview(
         )));
         html.push_str("\">");
     }
-    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
+    html.push_str("<button type=\"submit\">");
+    html.push_str(tr(language, "query.apply"));
+    html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
-        html.push_str("<p>No records found.</p>");
+        html.push_str("<p>");
+        html.push_str(tr(language, "table.empty"));
+        html.push_str("</p>");
     } else {
         html.push_str("<table><thead><tr>");
         for column in &tableview.columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(column));
+            html.push_str(&html_escape(&localized_identifier(language, column)));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -3847,9 +4175,11 @@ fn render_tableview(
             order,
             page - 1,
         )));
-        html.push_str("\">Previous</a> ");
+        html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
-    html.push_str("<span>Page ");
+    html.push_str("<span>");
+    html.push_str(tr(language, "pagination.page"));
+    html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
     if rows.len() as u64 == per_page {
@@ -3862,7 +4192,7 @@ fn render_tableview(
             order,
             page + 1,
         )));
-        html.push_str("\">Next</a>");
+        html.push_str(&format!("\">{}</a>", tr(language, "pagination.next")));
     }
     html.push_str("</nav></main>");
     html
@@ -3903,6 +4233,7 @@ fn dispatch_crud_detail(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
+    language: UiLanguage,
 ) -> Response {
     if request.method != "GET" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
@@ -3995,7 +4326,7 @@ fn dispatch_crud_detail(
     };
     Response::html(
         200,
-        render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions),
+        render_crud_detail_with_actions(crud, &columns, row, &id_text, ui_actions, language),
     )
 }
 
@@ -4243,19 +4574,20 @@ impl FilterOperator {
         }
     }
 
-    fn label(self) -> &'static str {
-        match self {
-            Self::Equal => "is",
-            Self::Contains => "contains",
-            Self::StartsWith => "starts with",
-            Self::EndsWith => "ends with",
-            Self::GreaterThan => "greater than",
-            Self::GreaterThanOrEqual => "at least",
-            Self::LessThan => "less than",
-            Self::LessThanOrEqual => "at most",
-            Self::IsNull => "is empty",
-            Self::IsNotNull => "is not empty",
-        }
+    fn label(self, language: UiLanguage) -> &'static str {
+        let key = match self {
+            Self::Equal => "operator.equal",
+            Self::Contains => "operator.contains",
+            Self::StartsWith => "operator.starts_with",
+            Self::EndsWith => "operator.ends_with",
+            Self::GreaterThan => "operator.greater_than",
+            Self::GreaterThanOrEqual => "operator.greater_equal",
+            Self::LessThan => "operator.less_than",
+            Self::LessThanOrEqual => "operator.less_equal",
+            Self::IsNull => "operator.is_null",
+            Self::IsNotNull => "operator.is_not_null",
+        };
+        tr(language, key)
     }
 
     fn needs_value(self) -> bool {
@@ -4550,6 +4882,7 @@ fn render_crud_list(crud: &CrudRoute, view: CrudListView<'_>) -> String {
             restore: false,
             custom: Vec::new(),
         },
+        UiLanguage::English,
     )
 }
 
@@ -4557,6 +4890,7 @@ fn render_crud_list_with_actions(
     crud: &CrudRoute,
     view: CrudListView<'_>,
     ui_actions: CrudUiActions,
+    language: UiLanguage,
 ) -> String {
     let CrudListView {
         query_columns,
@@ -4577,43 +4911,53 @@ fn render_crud_list_with_actions(
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
     html.push_str("><h1>");
-    html.push_str(&html_escape(&crud.title));
+    html.push_str(&html_escape(&localize_user_text(language, &crud.title)));
     html.push_str("</h1>");
     if crud.soft_delete.is_some() {
         html.push_str("<p class=\"zelyra-archive-toggle\"><a href=\"");
         if archived {
             html.push_str(&html_escape(&crud.path));
-            html.push_str("\">Show active records</a></p>");
+            html.push_str(&format!(
+                "\">{}</a></p>",
+                tr(language, "crud.archive.active")
+            ));
         } else {
             html.push_str(&html_escape(&append_query_parameter(
                 &crud.path, "archived", "true",
             )));
-            html.push_str("\">Show archived records</a></p>");
+            html.push_str(&format!(
+                "\">{}</a></p>",
+                tr(language, "crud.archive.archived")
+            ));
         }
     }
     if let Some(success) = success {
         html.push_str("<section class=\"zelyra-success\" role=\"status\">");
         if let Some(title) = success_title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(title));
+            html.push_str(&html_escape(&localize_user_text(language, title)));
             html.push_str("</h2>");
         }
         html.push_str("<p>");
-        html.push_str(&html_escape(success));
+        html.push_str(&html_escape(&localize_user_text(language, success)));
         html.push_str("</p></section>");
     }
     if ui_actions.create {
         html.push_str("<p><a href=\"");
         html.push_str(&html_escape(&format!("{}/new", crud.path)));
-        html.push_str("\">Create new</a></p>");
+        html.push_str(&format!("\">{}</a></p>", tr(language, "crud.create")));
     }
     html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
-    html.push_str(
-        "\"><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend><label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
-    );
+    html.push_str("\"><fieldset class=\"zelyra-query-controls\"><legend>");
+    html.push_str(tr(language, "query.legend"));
+    html.push_str("</legend><label for=\"search\">");
+    html.push_str(tr(language, "query.search"));
+    html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
     html.push_str(&html_escape(search));
-    html.push_str("\"><label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+    html.push_str("\"><label for=\"sort\">");
+    html.push_str(tr(language, "query.sort"));
+    html.push_str("</label><select id=\"sort\" name=\"sort\">");
     for column in sort_columns {
         html.push_str("<option value=\"");
         html.push_str(&html_escape(column));
@@ -4623,16 +4967,17 @@ fn render_crud_list_with_actions(
         }
         html.push('>');
         html.push_str(&html_escape(&crud_column_label(
+            language,
             &crud.schema,
             &crud.table,
             column,
         )));
         html.push_str("</option>");
     }
-    html.push_str(
-        "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
-    );
-    for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+    html.push_str("</select><label for=\"order\">");
+    html.push_str(tr(language, "query.order"));
+    html.push_str("</label><select id=\"order\" name=\"order\">");
+    for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
         html.push_str("<option value=\"");
         html.push_str(value);
         html.push('"');
@@ -4640,7 +4985,7 @@ fn render_crud_list_with_actions(
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(label);
+        html.push_str(tr(language, key));
         html.push_str("</option>");
     }
     html.push_str("</select>");
@@ -4664,9 +5009,10 @@ fn render_crud_list_with_actions(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&format!(
-            "Filter {} operator",
-            crud_column_label(&crud.schema, &crud.table, column)
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_operator",
+            &crud_column_label(language, &crud.schema, &crud.table, column),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(column));
@@ -4682,18 +5028,21 @@ fn render_crud_list_with_actions(
                     html.push_str(" selected");
                 }
                 html.push('>');
-                html.push_str(operator.label());
+                html.push_str(operator.label(language));
                 html.push_str("</option>");
             }
         } else {
-            html.push_str("<option value=\"eq\" selected>is</option>");
+            html.push_str("<option value=\"eq\" selected>");
+            html.push_str(tr(language, "query.operator_equal"));
+            html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
-        html.push_str(&html_escape(&format!(
-            "Filter {} value",
-            crud_column_label(&crud.schema, &crud.table, column)
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_value",
+            &crud_column_label(language, &crud.schema, &crud.table, column),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(column));
@@ -4708,14 +5057,16 @@ fn render_crud_list_with_actions(
         ));
         html.push_str("\">");
     }
-    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
+    html.push_str("<button type=\"submit\">");
+    html.push_str(tr(language, "query.apply"));
+    html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
         html.push_str(&html_escape(
             crud.list_view
                 .empty
                 .as_deref()
-                .unwrap_or("No records found."),
+                .unwrap_or(tr(language, "table.empty")),
         ));
         html.push_str("</p>");
     } else if crud.list_view.mode == CrudListViewMode::Cards {
@@ -4731,6 +5082,7 @@ fn render_crud_list_with_actions(
                     .unwrap_or("");
                 html.push_str("<dl><dt>");
                 html.push_str(&html_escape(&crud_column_label(
+                    language,
                     &crud.schema,
                     &crud.table,
                     column,
@@ -4755,6 +5107,7 @@ fn render_crud_list_with_actions(
         for column in display_columns {
             html.push_str("<th>");
             html.push_str(&html_escape(&crud_column_label(
+                language,
                 &crud.schema,
                 &crud.table,
                 column,
@@ -4799,9 +5152,11 @@ fn render_crud_list_with_actions(
             page - 1,
             per_page,
         )));
-        html.push_str("\">Previous</a> ");
+        html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
-    html.push_str("<span>Page ");
+    html.push_str("<span>");
+    html.push_str(tr(language, "pagination.page"));
+    html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
     if rows.len() as u64 == per_page {
@@ -4815,7 +5170,7 @@ fn render_crud_list_with_actions(
             page + 1,
             per_page,
         )));
-        html.push_str("\">Next</a>");
+        html.push_str(&format!("\">{}</a>", tr(language, "pagination.next")));
     }
     html.push_str("</nav></main>");
     html
@@ -4835,6 +5190,7 @@ fn render_crud_detail(crud: &CrudRoute, columns: &[&str], row: &[String], id: &s
             restore: false,
             custom: Vec::new(),
         },
+        UiLanguage::English,
     )
 }
 
@@ -4844,18 +5200,20 @@ fn render_crud_detail_with_actions(
     row: &[String],
     id: &str,
     ui_actions: CrudUiActions,
+    language: UiLanguage,
 ) -> String {
     let title = crud
         .detail_view
         .title
-        .clone()
-        .unwrap_or_else(|| format!("{} detail", crud.title));
+        .as_deref()
+        .map(|title| localize_user_text(language, title))
+        .unwrap_or_else(|| format!("{} {}", crud.title, tr(language, "detail.suffix")));
     let cards = crud.detail_view.mode == CrudDetailViewMode::Cards;
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
     html.push_str("><p><a href=\"");
     html.push_str(&html_escape(&crud.path));
-    html.push_str("\">Back to list</a></p><h1>");
+    html.push_str(&format!("\">{}</a></p><h1>", tr(language, "detail.back")));
     html.push_str(&html_escape(&title));
     html.push_str("</h1>");
     if cards {
@@ -4865,6 +5223,7 @@ fn render_crud_detail_with_actions(
     for (column, value) in columns.iter().zip(row) {
         html.push_str("<dt>");
         html.push_str(&html_escape(&crud_column_label(
+            language,
             &crud.schema,
             &crud.table,
             column,
@@ -4878,7 +5237,7 @@ fn render_crud_detail_with_actions(
         if ui_actions.edit {
             html.push_str("<a href=\"");
             html.push_str(&html_escape(&format!("{}/{}/edit", crud.path, id)));
-            html.push_str("\">Edit</a>");
+            html.push_str(&format!("\">{}</a>", tr(language, "action.edit")));
         }
         if ui_actions.create {
             if ui_actions.edit {
@@ -4886,7 +5245,7 @@ fn render_crud_detail_with_actions(
             }
             html.push_str("<a href=\"");
             html.push_str(&html_escape(&format!("{}/new", crud.path)));
-            html.push_str("\">Create new</a>");
+            html.push_str(&format!("\">{}</a>", tr(language, "crud.create")));
         }
         html.push_str("</p>");
     } else {
@@ -4905,17 +5264,18 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&action.label));
+            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
             html.push_str("</a></p>");
         } else {
             html.push_str("<form method=\"post\" action=\"");
             html.push_str(&html_escape(&action_path));
             html.push('"');
             if let Some(confirm) = &action.confirm {
+                let confirm = localize_user_text(language, confirm);
                 html.push_str(" onsubmit=\"");
                 html.push_str(&html_escape(&format!(
                     "return confirm({})",
-                    javascript_string_literal(confirm)
+                    javascript_string_literal(&confirm)
                 )));
                 html.push('"');
             }
@@ -4926,7 +5286,7 @@ fn render_crud_detail_with_actions(
                 html.push_str("<label for=\"");
                 html.push_str(&html_escape(&field.name));
                 html.push_str("\">");
-                html.push_str(&html_escape(&field.label));
+                html.push_str(&html_escape(&localize_user_text(language, &field.label)));
                 html.push_str("</label>");
                 if field.relation {
                     html.push_str("<select id=\"");
@@ -4939,7 +5299,10 @@ fn render_crud_detail_with_actions(
                     }
                     html.push('>');
                     if !field.required {
-                        html.push_str("<option value=\"\">-- Select --</option>");
+                        html.push_str(&format!(
+                            "<option value=\"\">-- {} --</option>",
+                            tr(language, "action.select")
+                        ));
                     }
                     for option in &field.options {
                         html.push_str("<option value=\"");
@@ -4979,7 +5342,7 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&action.label));
+            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
             html.push_str("</button></form>");
         }
     }
@@ -4988,16 +5351,18 @@ fn render_crud_detail_with_actions(
         html.push_str(&html_escape(&format!("{}/{}/restore", crud.path, id)));
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
-        html.push_str("\"><button type=\"submit\">Restore</button></form>");
+        html.push_str("\"><button type=\"submit\">");
+        html.push_str(tr(language, "action.restore"));
+        html.push_str("</button></form>");
     } else if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(title));
+            html.push_str(&html_escape(&localize_user_text(language, title)));
             html.push_str("</h2>");
         }
         if let Some(message) = &crud.delete_view.message {
             html.push_str("<p class=\"zelyra-delete-message\">");
-            html.push_str(&html_escape(message));
+            html.push_str(&html_escape(&localize_user_text(language, message)));
             html.push_str("</p>");
         }
         html.push_str("<form method=\"post\" action=\"");
@@ -5005,9 +5370,13 @@ fn render_crud_detail_with_actions(
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
         html.push_str("\"><button type=\"submit\">");
-        html.push_str(&html_escape(
-            crud.delete_view.submit.as_deref().unwrap_or("Delete"),
-        ));
+        html.push_str(&html_escape(&localize_user_text(
+            language,
+            crud.delete_view
+                .submit
+                .as_deref()
+                .unwrap_or(tr(language, "action.delete")),
+        )));
         html.push_str("</button></form>");
     }
     if cards {
@@ -5333,10 +5702,58 @@ fn render_form_with_options(
     notice: Option<&str>,
     relation_options: &HashMap<String, Vec<SelectOption>>,
 ) -> String {
+    render_form_with_language(
+        route,
+        values,
+        errors,
+        notice,
+        relation_options,
+        UiLanguage::English,
+    )
+}
+
+fn render_form_with_language(
+    route: &FormRoute,
+    values: &HashMap<String, String>,
+    errors: &[FieldError],
+    notice: Option<&str>,
+    relation_options: &HashMap<String, Vec<SelectOption>>,
+    language: UiLanguage,
+) -> String {
     let mut html = String::new();
-    if let Some(title) = &route.form_view.title {
+    let form_kind = if route.form.name.ends_with("Create") {
+        Some(("form.create_title", "form.create_submit"))
+    } else if route.form.name.ends_with("Edit") {
+        Some(("form.edit_title", "form.save_submit"))
+    } else {
+        None
+    };
+    let generated_resource = form_kind.map(|_| {
+        route
+            .form
+            .name
+            .strip_suffix("Create")
+            .or_else(|| route.form.name.strip_suffix("Edit"))
+            .unwrap_or_else(|| route.form.table.as_deref().unwrap_or("record"))
+    });
+    let generated_title = form_kind
+        .zip(generated_resource)
+        .map(|((title_key, _), resource)| {
+            field_text(
+                language,
+                title_key,
+                &localized_identifier(language, resource),
+            )
+        });
+    if let Some(title) = route
+        .form_view
+        .title
+        .as_ref()
+        .map(|title| localize_user_text(language, title))
+        .or(generated_title)
+    {
         html.push_str("<h1>");
-        html.push_str(&html_escape(title));
+        html.push_str(&html_escape(&title));
         html.push_str("</h1>");
     }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
@@ -5351,11 +5768,15 @@ fn render_form_with_options(
     html.push_str("\">");
     if let Some(notice) = notice {
         html.push_str("<p class=\"zelyra-notice\">");
-        html.push_str(&html_escape(notice));
+        html.push_str(&html_escape(&localize_user_text(language, notice)));
         html.push_str("</p>");
     }
     for field in &route.form.fields {
-        let label = field.label.clone().unwrap_or_else(|| humanize(&field.name));
+        let label = field
+            .label
+            .as_deref()
+            .map(|label| localize_user_text(language, label))
+            .unwrap_or_else(|| localized_identifier(language, &field.name));
         let value = values.get(&field.name).map(String::as_str).unwrap_or("");
         let field_errors = errors
             .iter()
@@ -5380,7 +5801,10 @@ fn render_form_with_options(
             }
             html.push('>');
             if !required {
-                html.push_str("<option value=\"\">-- Select --</option>");
+                html.push_str(&format!(
+                    "<option value=\"\">-- {} --</option>",
+                    tr(language, "action.select")
+                ));
             }
             for option in options {
                 html.push_str("<option value=\"");
@@ -5423,7 +5847,7 @@ fn render_form_with_options(
             }
             if let Some(placeholder) = &field.placeholder {
                 html.push_str(" placeholder=\"");
-                html.push_str(&html_escape(placeholder));
+                html.push_str(&html_escape(&localize_user_text(language, placeholder)));
                 html.push('"');
             }
             if field.readonly {
@@ -5433,20 +5857,50 @@ fn render_form_with_options(
         }
         for error in field_errors {
             html.push_str("<p class=\"zelyra-error\">");
-            html.push_str(&html_escape(&error.message));
+            html.push_str(&html_escape(&localized_validation_message(
+                language,
+                &error.message,
+            )));
             html.push_str("</p>");
         }
         html.push_str("</div>");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(&html_escape(
-        route.form_view.submit.as_deref().unwrap_or("Submit"),
-    ));
+    let default_submit = form_kind
+        .map(|(_, submit_key)| tr(language, submit_key))
+        .unwrap_or(tr(language, "form.submit"));
+    html.push_str(&html_escape(&localize_user_text(
+        language,
+        route.form_view.submit.as_deref().unwrap_or(default_submit),
+    )));
     html.push_str("</button></form>");
     if cards {
         html.push_str("</section>");
     }
     html
+}
+
+fn localized_validation_message(language: UiLanguage, message: &str) -> String {
+    let key = match message {
+        "unknown form field" => "validation.unknown_field",
+        "read-only field cannot be submitted" => "validation.readonly",
+        "value is required" => "validation.required",
+        "must be an integer" => "validation.integer",
+        "must be an unsigned integer" => "validation.unsigned_integer",
+        "must be a number" => "validation.number",
+        "must be true or false" => "validation.boolean",
+        "must be a valid email address" => "validation.email",
+        "must be a valid HTTP URL" => "validation.url",
+        "must be an integer identifier" => "validation.id",
+        "must be a UUID" => "validation.uuid",
+        _ => {
+            if let Some(maximum) = message.strip_prefix("value exceeds maximum length of ") {
+                return tr(language, "validation.max_length").replace("{max}", maximum);
+            }
+            return message.to_owned();
+        }
+    };
+    tr(language, key).to_owned()
 }
 
 fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'static str {
@@ -5526,6 +5980,25 @@ fn humanize(name: &str) -> String {
         first.make_ascii_uppercase();
     }
     result
+}
+
+pub fn localized_identifier(language: UiLanguage, name: &str) -> String {
+    if let Some(label) = locale_identifier(language, name) {
+        return label.to_owned();
+    }
+    if language == UiLanguage::English {
+        return humanize(name);
+    }
+    let words = name
+        .to_ascii_lowercase()
+        .split('_')
+        .map(|word| locale_identifier(language, word).unwrap_or(word))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut characters = words.chars();
+    characters.next().map_or(words.clone(), |first| {
+        first.to_uppercase().collect::<String>() + characters.as_str()
+    })
 }
 
 pub fn parse_urlencoded(body: &str) -> Result<HashMap<String, String>, HttpError> {
@@ -6158,6 +6631,7 @@ fn render_template(
     render_template_fragment(template, params, &data.values, &data.collections)
 }
 
+#[cfg(test)]
 fn render_page(
     route: &Route,
     path: &str,
@@ -6165,8 +6639,19 @@ fn render_page(
     query_values: &HashMap<String, String>,
     data: &LoadedRouteData,
 ) -> String {
+    render_page_with_language(route, path, params, query_values, data, UiLanguage::English)
+}
+
+fn render_page_with_language(
+    route: &Route,
+    path: &str,
+    params: &HashMap<String, String>,
+    query_values: &HashMap<String, String>,
+    data: &LoadedRouteData,
+    language: UiLanguage,
+) -> String {
     let page = render_template(&route.html, params, data);
-    let controls = render_page_query_controls(route, path, query_values, data);
+    let controls = render_page_query_controls(route, path, query_values, data, language);
     if controls.is_empty() {
         return page;
     }
@@ -6188,6 +6673,7 @@ fn render_page_query_controls(
     path: &str,
     query_values: &HashMap<String, String>,
     data: &LoadedRouteData,
+    language: UiLanguage,
 ) -> String {
     let has_collection = route.data.iter().any(|data| data.collection);
     let has_controls = has_collection
@@ -6213,18 +6699,21 @@ fn render_page_query_controls(
         .get("page")
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(1);
-    let mut html = String::from(
-        "<form method=\"get\"><fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>",
-    );
+    let mut html =
+        String::from("<form method=\"get\"><fieldset class=\"zelyra-query-controls\"><legend>");
+    html.push_str(tr(language, "query.legend"));
+    html.push_str("</legend>");
     if !route.search_columns.is_empty() {
-        html.push_str(
-            "<label for=\"search\">Search</label><input id=\"search\" name=\"search\" value=\"",
-        );
+        html.push_str("<label for=\"search\">");
+        html.push_str(tr(language, "query.search"));
+        html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if !route.sort_columns.is_empty() {
-        html.push_str("<label for=\"sort\">Sort</label><select id=\"sort\" name=\"sort\">");
+        html.push_str("<label for=\"sort\">");
+        html.push_str(tr(language, "query.sort"));
+        html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &route.sort_columns {
             html.push_str("<option value=\"");
             html.push_str(&html_escape(column));
@@ -6233,13 +6722,13 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(&html_escape(&humanize(column)));
+            html.push_str(&html_escape(&localized_identifier(language, column)));
             html.push_str("</option>");
         }
-        html.push_str(
-            "</select><label for=\"order\">Order</label><select id=\"order\" name=\"order\">",
-        );
-        for (value, label) in [("asc", "Ascending"), ("desc", "Descending")] {
+        html.push_str("</select><label for=\"order\">");
+        html.push_str(tr(language, "query.order"));
+        html.push_str("</label><select id=\"order\" name=\"order\">");
+        for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
             html.push_str(value);
             html.push('"');
@@ -6247,7 +6736,7 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(label);
+            html.push_str(tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -6257,9 +6746,10 @@ fn render_page_query_controls(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&format!(
-            "{} operator",
-            humanize(&filter.name)
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_operator",
+            &localized_identifier(language, &filter.name),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -6274,15 +6764,16 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label());
+            html.push_str(operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&format!(
-            "Filter {} value",
-            humanize(&filter.name)
+        html.push_str(&html_escape(&field_text(
+            language,
+            "query.filter_value",
+            &localized_identifier(language, &filter.name),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -6297,7 +6788,9 @@ fn render_page_query_controls(
         )));
         html.push_str("\">");
     }
-    html.push_str("<button type=\"submit\">Apply</button></fieldset></form>");
+    html.push_str("<button type=\"submit\">");
+    html.push_str(tr(language, "query.apply"));
+    html.push_str("</button></fieldset></form>");
     if route.page_size.is_some() {
         let page_count = data
             .values
@@ -6308,19 +6801,23 @@ fn render_page_query_controls(
         if page > 1 {
             html.push_str("<a href=\"");
             html.push_str(&html_escape(&page_query_url(path, query_values, page - 1)));
-            html.push_str("\">Previous</a> ");
+            html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
         }
-        html.push_str("<span>Page ");
+        html.push_str("<span>");
+        html.push_str(tr(language, "pagination.page"));
+        html.push(' ');
         html.push_str(&page.to_string());
         if page_count > 0 {
-            html.push_str(" of ");
+            html.push(' ');
+            html.push_str(tr(language, "pagination.of"));
+            html.push(' ');
             html.push_str(&page_count.to_string());
         }
         html.push_str("</span>");
         if page_count > page {
             html.push_str(" <a href=\"");
             html.push_str(&html_escape(&page_query_url(path, query_values, page + 1)));
-            html.push_str("\">Next</a>");
+            html.push_str(&format!("\">{}</a>", tr(language, "pagination.next")));
         }
         html.push_str("</nav>");
     }
@@ -6690,6 +7187,135 @@ mod tests {
         let response = router().dispatch("GET", "/hello/Zelyra");
         assert_eq!(response.status, 200);
         assert_eq!(response.body, "<h1>Hello, Zelyra!</h1>");
+    }
+
+    #[test]
+    fn applies_locale_catalog_theme_and_learning_mode_to_template_views() {
+        let route = Route {
+            path: "/".into(),
+            html: "<html data-zelyra-language><head><title data-zelyra-i18n=\"app.document_title\">Fallback</title></head><body><div class=\"zelyra-app\"><h1 data-zelyra-i18n=\"app.home_title\">Fallback</h1></div></body></html>".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let german = WebApp::new(vec![route.clone()], Vec::new())
+            .with_ui_settings(UiLanguage::German, UiLevel::Learn);
+        let german_response = german.dispatch(&request);
+        assert!(german_response.body.contains("lang=\"de\""));
+        assert!(german_response
+            .body
+            .contains("Maschinenverwaltung | Zelyra"));
+        assert!(german_response.body.contains("Alle Maschinen im Blick."));
+        assert!(german_response
+            .body
+            .contains("data-zelyra-theme=\"default\""));
+        assert!(
+            german_response.body.contains("Zelyra-Lernhilfe")
+                || german_response.body.contains("Lernhilfe")
+        );
+
+        let english = WebApp::new(vec![route], Vec::new())
+            .with_ui_settings(UiLanguage::English, UiLevel::Work);
+        let english_response = english.dispatch(&request);
+        assert!(english_response.body.contains("lang=\"en\""));
+        assert!(english_response.body.contains("Machine workspace | Zelyra"));
+        assert!(english_response
+            .body
+            .contains("A clear view of every machine."));
+        assert!(!english_response
+            .body
+            .contains("<details class=\"zelyra-learning-assistant\""));
+    }
+
+    #[test]
+    fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
+        let error = localize_html(
+            "<main><h1>403 Forbidden</h1><p>The Database capability is not granted.</p></main>",
+            UiLanguage::German,
+        );
+        assert!(error.contains("403 Zugriff verweigert"));
+        assert!(error.contains("Die Datenbank-Capability wurde nicht freigegeben."));
+        assert_eq!(
+            framework_text(
+                UiLanguage::German,
+                "Operator `contains` is not supported for filter `active`."
+            ),
+            Some("Der Operator `contains` wird für den Filter `active` nicht unterstützt.".into())
+        );
+
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let login = render_login(&auth, UiLanguage::German);
+        assert!(login.contains("<h1>Anmelden</h1>"));
+        assert!(login.contains("<label for=\"email\">E-Mail</label>"));
+        assert!(!login.contains(">Login<"));
+
+        assert_eq!(
+            localized_validation_message(UiLanguage::German, "value is required"),
+            "Ein Wert ist erforderlich."
+        );
+        assert_eq!(
+            localized_validation_message(UiLanguage::German, "value exceeds maximum length of 80"),
+            "Der Wert überschreitet die maximale Länge von 80 Zeichen."
+        );
+    }
+
+    #[test]
+    fn generated_form_titles_buttons_and_field_names_use_selected_language() {
+        let mut route = form_route();
+        route.form.fields[0].label = None;
+        let html = render_form_with_language(
+            &route,
+            &HashMap::new(),
+            &[],
+            None,
+            &HashMap::new(),
+            UiLanguage::German,
+        );
+        assert!(html.contains("<h1>Kunde anlegen</h1>"));
+        assert!(html.contains("<label for=\"name\">Name</label>"));
+        assert!(html.contains(">Anlegen</button>"));
+    }
+
+    #[test]
+    fn localized_filter_and_identifier_labels_are_readable_german() {
+        assert_eq!(
+            localized_identifier(UiLanguage::German, "machine_number"),
+            "Maschinennummer"
+        );
+        assert_eq!(
+            localized_identifier(UiLanguage::German, "department"),
+            "Abteilung"
+        );
+        assert_eq!(
+            FilterOperator::Contains.label(UiLanguage::German),
+            "enthält"
+        );
+        assert_eq!(
+            field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
+            "Wert für Aktiv"
+        );
     }
 
     #[test]
@@ -7394,6 +8020,7 @@ mod tests {
                 page: 2,
                 per_page: 1,
             },
+            UiLanguage::English,
         );
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains("value=\"CNC machine\""));
@@ -7433,13 +8060,14 @@ mod tests {
                 page: 1,
                 per_page: 25,
             },
+            UiLanguage::English,
         );
         assert!(html.contains(
             "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
         ));
         assert!(html.contains("name=\"filter_orders__operator\""));
-        assert!(html.contains("for=\"filter_orders__operator\">orders operator</label>"));
-        assert!(html.contains("for=\"filter_orders\">Filter orders value</label>"));
+        assert!(html.contains("for=\"filter_orders__operator\">Filter Orders operator</label>"));
+        assert!(html.contains("for=\"filter_orders\">Filter Orders value</label>"));
         assert!(html.contains("<option value=\"gte\" selected>at least</option>"));
         assert!(html.contains("name=\"filter_orders\" value=\"3\""));
         assert_eq!(
@@ -7580,6 +8208,7 @@ mod tests {
                 restore: false,
                 custom: Vec::new(),
             },
+            UiLanguage::English,
         );
         assert!(!restricted_html.contains("href=\"/machines/new\""));
 
@@ -8115,6 +8744,7 @@ mod tests {
                 restore: false,
                 custom: Vec::new(),
             },
+            UiLanguage::English,
         );
         assert!(!restricted_html.contains("/machines/1/edit"));
         assert!(!restricted_html.contains("/machines/new"));
@@ -8162,6 +8792,7 @@ mod tests {
                     ],
                 }],
             },
+            UiLanguage::English,
         );
         assert!(action_html.contains("action=\"/machines/1/deactivate\""));
         assert!(action_html.contains(">Deactivate</button>"));

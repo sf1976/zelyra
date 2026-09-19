@@ -91,6 +91,44 @@ Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
 | `MARIADB_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: Passwort des Anwendungsbenutzers |
 | `MARIADB_ROOT_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: MariaDB-Root-Passwort |
 
+## Oberflächensprache und Lernmodus
+
+| Variable | Werte | Standard in neuer MariaDB-`.env` | `serve`-Fallback | Sicherheit / Wirkung |
+|---|---|---:|---:|---|
+| `ZELYRA_LANGUAGE` | `de`, `en` | `de` | `en` | Kein Secret; wählt den UI-Sprachkatalog |
+| `ZELYRA_LEVEL` | `learn`, `work` | `learn` | `work` | Kein Secret und keine Berechtigung; `learn` zeigt die Lernhilfe, `work` blendet sie aus |
+
+Für `zelyra serve` gilt die Reihenfolge Prozessumgebung, dann die `.env` des
+Projektverzeichnisses und anschließend der Serve-Fallback. Der Server liest aus `.env`
+ausschließlich diese beiden UI-Einstellungen automatisch; andere Werte wie
+`DATABASE_URL` müssen weiterhin explizit exportiert oder durch Compose injiziert
+werden. Werte müssen exakt `de`/`en` beziehungsweise `learn`/`work` lauten.
+Ungültige Werte führen zu einem Konfigurationsfehler, statt stillschweigend
+ignoriert zu werden.
+
+Betroffene Befehle und Laufzeitbereiche: `zelyra serve`, die MariaDB-Projekt-
+Scaffolds `new`/`init` sowie der erzeugte Compose-Webdienst. Regressionstests
+prüfen die Priorität Prozessumgebung → `.env` → Fallback im CLI, die gültigen
+Werte und Katalogschlüssel in `web/src/i18n.rs` sowie die erzeugten Defaults
+und Compose-Weitergabe in `cli/tests/machine_interfaces.rs`.
+
+Neue MariaDB-Projekte aktivieren `ZELYRA_LANGUAGE=de` und
+`ZELYRA_LEVEL=learn`; beide Werte können in `.env` geändert werden. Die
+Compose-Vorlage reicht die Variablen an den Webdienst weiter. Die mit Zelyra
+gelieferten Übersetzungskataloge liegen in `web/locales/de.json` und
+`web/locales/en.json`. Darin befinden sich die von Zelyra bereitgestellten
+Oberflächentexte, unter anderem CRUD-, Formular-, Authentifizierungs-, Fehler-
+und Lernhilfetexte. Beispiel-Views referenzieren Einträge mit
+`data-zelyra-i18n="app.home_title"`; konfigurierbare Zelyra-Texte können
+`@i18n:app.home_title` verwenden. Unbekannte deutsche Einträge fallen auf den
+englischen Katalog zurück. Ein auch dort unbekannter Schlüssel erscheint als
+`[missing translation]` und weist auf einen fehlenden Katalogeintrag hin.
+
+Diese Kataloge übersetzen keine fachlichen Datensätze oder beliebige HTML-Texte
+aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
+sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
+werden nicht anhand der UI-Einstellung verändert.
+
 `ZELYRA_REF` im generierten Dockerfile ist ein Docker-`ARG` mit einem
 veröffentlichten Tag, keine von Zelyra geladene `.env`-Variable. Es kann beim
 Docker-Build ausdrücklich über `--build-arg ZELYRA_REF=...` gesetzt werden.

@@ -1,0 +1,61 @@
+:root{color-scheme:light;--zelyra-ink:#172033;--zelyra-muted:#738097;--zelyra-line:#e8edf4;--zelyra-paper:#f5f7fb;--zelyra-purple:#7557f6;--zelyra-teal:#53d2bd}
+*{box-sizing:border-box}
+body{margin:0;background:var(--zelyra-paper);color:var(--zelyra-ink);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit;text-decoration:none}
+main:not(.zelyra-learning-panel){max-width:1180px;margin:34px auto;padding:27px 30px;border:1px solid var(--zelyra-line);border-radius:16px;background:#fff;box-shadow:0 8px 26px #24304a08}
+main>h1{margin:0 0 21px;font-size:24px;letter-spacing:-.035em}
+main>p:first-of-type a,button[type=submit],.zelyra-home-link{display:inline-flex;align-items:center;justify-content:center;min-height:41px;padding:9px 16px;border:0;border-radius:10px;background:linear-gradient(115deg,#7557f6,#665ce9);box-shadow:0 5px 13px #7557f633;color:#fff;font-family:inherit;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer}
+button[type=submit]:hover,.zelyra-home-link:hover{filter:brightness(1.06);transform:translateY(-1px)}
+main form{margin:18px 0 22px}
+fieldset{display:flex;flex-wrap:wrap;align-items:end;gap:12px;padding:17px;border:1px solid var(--zelyra-line);border-radius:12px;background:#f9faff}
+legend{padding:0 6px;color:#5e6980;font-size:12px;font-weight:750}
+label{display:block;color:#536078;font-size:11px;font-weight:700}
+input,select{min-height:39px;margin-top:5px;padding:8px 10px;border:1px solid #dfe5ef;border-radius:8px;background:#fff;color:#27344c;font-family:inherit;font-size:13px;line-height:1.4}
+table{width:100%;border-collapse:collapse;text-align:left}
+th{padding:11px 13px;border-bottom:1px solid #e7ecf3;color:#8390a5;font-size:10px;font-weight:760;letter-spacing:.08em;text-transform:uppercase}
+td{padding:14px 13px;border-bottom:1px solid #eff2f6;color:#39465d;font-size:13px}
+tbody tr:hover{background:#fafaff}
+td a{color:#634ce0;font-weight:700}
+.zelyra-pagination{display:flex;align-items:center;gap:12px;margin-top:18px;color:#69768d;font-size:12px}
+.zelyra-pagination a{color:#634ce0;font-weight:700}
+.zelyra-app{display:grid;grid-template-columns:258px minmax(0,1fr);min-height:100vh}
+.zelyra-sidebar{position:relative;display:flex;flex-direction:column;min-height:100vh;padding:30px 20px 22px;overflow:hidden;background:linear-gradient(165deg,#171c32 0%,#202743 52%,#263958 100%);color:#f6f7ff}
+.zelyra-sidebar:after{position:absolute;right:-116px;bottom:80px;width:250px;height:250px;border:1px solid #ffffff12;border-radius:50%;box-shadow:0 0 0 35px #ffffff08,0 0 0 70px #ffffff05;content:"";pointer-events:none}
+.zelyra-brand{position:relative;z-index:1;display:flex;align-items:center;gap:12px;padding:2px 4px 34px}
+.zelyra-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#8d73ff,#54d9c2);box-shadow:0 8px 24px #6954ec55;color:#fff;font-size:22px;font-weight:850}
+.zelyra-brand-name{display:block;font-size:17px;font-weight:760;letter-spacing:-.035em}
+.zelyra-brand-descriptor{display:block;margin-top:1px;color:#a7b2ca;font-size:9px;font-weight:750;letter-spacing:.17em}
+.zelyra-sidebar-caption{margin:0 0 11px 10px;color:#8996b0;font-size:10px;font-weight:750;letter-spacing:.15em}
+.zelyra-nav{position:relative;z-index:1;display:grid;gap:7px}
+.zelyra-nav a{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid transparent;border-radius:11px;color:#bac4d8;font-weight:620;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.zelyra-nav a:hover,.zelyra-nav a:focus-visible{border-color:#ffffff13;background:#ffffff0c;color:#fff;outline:none}
+.zelyra-nav-icon{display:grid;place-items:center;width:29px;height:29px;border-radius:9px;background:#ffffff10;color:#a99aff;font-size:11px;font-weight:800}
+.zelyra-sidebar-footer{position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin-top:auto;padding:17px 9px 0;border-top:1px solid #ffffff18;color:#b7c1d4;font-size:12px}
+.zelyra-status-dot{width:8px;height:8px;border-radius:50%;background:#55d5b7;box-shadow:0 0 0 4px #55d5b71c}
+.zelyra-workspace{min-width:0;padding:0 46px 52px}
+.zelyra-topbar{display:flex;align-items:center;justify-content:space-between;min-height:82px;border-bottom:1px solid var(--zelyra-line)}
+.zelyra-breadcrumb{display:flex;align-items:center;gap:10px;color:#8894a9;font-size:12px}
+.zelyra-breadcrumb strong{color:#37445c;font-weight:700}
+.zelyra-environment{display:flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid #e2e9f1;border-radius:999px;background:#fff;color:#64738b;font-size:10px;font-weight:760;letter-spacing:.08em}
+.zelyra-environment .zelyra-status-dot{width:7px;height:7px}
+.zelyra-hero{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:202px;margin:29px 0 25px;padding:34px 40px;overflow:hidden;border:1px solid #ffffff27;border-radius:20px;background:linear-gradient(115deg,#262f52 0%,#3e4381 53%,#6258bb 100%);box-shadow:0 16px 38px #36326720;color:#fff}
+.zelyra-hero:before{position:absolute;top:-120px;right:9%;width:300px;height:300px;border:1px solid #ffffff24;border-radius:50%;box-shadow:0 0 0 35px #ffffff0c,0 0 0 74px #ffffff08;content:""}
+.zelyra-hero:after{position:absolute;right:17%;bottom:-180px;width:290px;height:290px;border-radius:50%;background:radial-gradient(circle,#56d8ca66 0%,#56d8ca00 68%);content:""}
+.zelyra-hero-copy{position:relative;z-index:1;max-width:640px}
+.zelyra-hero-eyebrow{margin:0 0 8px;color:#c2c5ff;font-size:10px;font-weight:780;letter-spacing:.17em}
+.zelyra-hero h1{margin:0;font-size:clamp(26px,3vw,38px);font-weight:730;letter-spacing:-.045em;line-height:1.16}
+.zelyra-hero-description{max-width:540px;margin:12px 0 0;color:#e1e3f5;font-size:14px}
+.zelyra-hero-orbit{position:relative;z-index:1;display:grid;place-items:center;width:94px;height:94px;margin-right:18px;border:1px solid #ffffff38;border-radius:50%;background:#ffffff0c}
+.zelyra-hero-orbit:before,.zelyra-hero-orbit:after{position:absolute;border:1px solid #ffffff55;border-radius:50%;content:""}
+.zelyra-hero-orbit:before{inset:12px}
+.zelyra-hero-orbit:after{inset:30px;border:0;background:linear-gradient(145deg,#9c88ff,#55dec4);box-shadow:0 0 27px #72d9e08c}
+.zelyra-page-content>main{max-width:none;margin:0;padding:27px 30px;border:1px solid var(--zelyra-line);border-radius:16px;background:#fff;box-shadow:0 8px 26px #24304a08}
+.zelyra-page-content h1{margin:0 0 21px;font-size:24px;letter-spacing:-.035em}
+.zelyra-home-card{padding:28px;border:1px solid var(--zelyra-line);border-radius:16px;background:linear-gradient(145deg,#fff,#fafaff)}
+.zelyra-home-card h2{margin:0 0 8px;font-size:21px;letter-spacing:-.025em}
+.zelyra-home-card p{max-width:620px;margin:0;color:var(--zelyra-muted)}
+.zelyra-home-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.zelyra-home-link.secondary{border:1px solid #e3e7f0;background:#fff;box-shadow:none;color:#4e5a72}
+.zelyra-learning-assistant summary{background:#fff}
+@media(max-width:900px){.zelyra-app{grid-template-columns:78px minmax(0,1fr)}.zelyra-sidebar{align-items:center;padding:22px 10px}.zelyra-brand{padding:0 0 29px}.zelyra-brand-copy,.zelyra-sidebar-caption,.zelyra-nav-label,.zelyra-sidebar-footer span:last-child{display:none}.zelyra-nav a{padding:8px}.zelyra-nav-icon{width:38px;height:38px}.zelyra-sidebar-footer{justify-content:center;width:100%;padding:18px 0 0}.zelyra-workspace{padding:0 25px 38px}}
+@media(max-width:560px){main:not(.zelyra-learning-panel){margin:16px 8px;padding:19px 15px}.zelyra-app{display:block}.zelyra-sidebar{min-height:0;display:flex;flex-direction:row;justify-content:space-between;padding:12px 15px}.zelyra-brand{padding:0}.zelyra-mark{width:36px;height:36px}.zelyra-nav{display:flex;align-items:center}.zelyra-nav a{padding:4px}.zelyra-nav-icon{width:34px;height:34px}.zelyra-sidebar-footer{display:none}.zelyra-workspace{padding:0 14px 30px}.zelyra-topbar{min-height:59px}.zelyra-breadcrumb{font-size:10px}.zelyra-environment{font-size:8px}.zelyra-hero{min-height:180px;margin:17px 0;padding:25px 22px}.zelyra-hero-orbit{width:57px;height:57px;margin:0 0 0 8px;flex:none}.zelyra-hero-orbit:before{inset:8px}.zelyra-hero-orbit:after{inset:19px}.zelyra-hero-description{font-size:12px}.zelyra-page-content>main{padding:19px 15px}.zelyra-page-content fieldset{align-items:stretch;flex-direction:column}.zelyra-page-content table{display:block;overflow-x:auto;white-space:nowrap}}

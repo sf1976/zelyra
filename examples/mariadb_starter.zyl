@@ -1,0 +1,83 @@
+database main {
+    engine: mariadb
+}
+
+page "/" {
+    html {
+        <!doctype html>
+        <html data-zelyra-language>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title data-zelyra-i18n="starter.document_title"></title>
+            </head>
+            <body>
+                <div class="zelyra-app">
+                    <aside class="zelyra-sidebar">
+                        <a class="zelyra-brand" href="/">
+                            <span class="zelyra-mark" aria-hidden="true">Z</span>
+                            <span class="zelyra-brand-copy">
+                                <span class="zelyra-brand-name">Zelyra</span>
+                                <span class="zelyra-brand-descriptor" data-zelyra-i18n="starter.brand_descriptor"></span>
+                            </span>
+                        </a>
+                        <p class="zelyra-sidebar-caption" data-zelyra-i18n="starter.sidebar_caption"></p>
+                        <nav class="zelyra-nav">
+                            <a href="/">
+                                <span class="zelyra-nav-icon" aria-hidden="true">01</span>
+                                <span class="zelyra-nav-label" data-zelyra-i18n="starter.nav_overview"></span>
+                            </a>
+                        </nav>
+                        <div class="zelyra-sidebar-footer">
+                            <span class="zelyra-status-dot" aria-hidden="true"></span>
+                            <span data-zelyra-i18n="starter.connection_status"></span>
+                        </div>
+                    </aside>
+                    <div class="zelyra-workspace">
+                        <header class="zelyra-topbar">
+                            <div class="zelyra-breadcrumb">
+                                <span data-zelyra-i18n="starter.sidebar_caption"></span>
+                                <span aria-hidden="true">/</span>
+                                <strong>Zelyra</strong>
+                            </div>
+                            <span class="zelyra-environment">
+                                <span class="zelyra-status-dot" aria-hidden="true"></span>
+                                <span data-zelyra-i18n="starter.environment_label"></span>
+                            </span>
+                        </header>
+                        <section class="zelyra-hero">
+                            <div class="zelyra-hero-copy">
+                                <p class="zelyra-hero-eyebrow" data-zelyra-i18n="starter.workspace_label"></p>
+                                <h1 data-zelyra-i18n="starter.workspace_title"></h1>
+                                <p class="zelyra-hero-description" data-zelyra-i18n="starter.workspace_description"></p>
+                            </div>
+                            <span class="zelyra-hero-orbit" aria-hidden="true"></span>
+                        </section>
+                        <main class="zelyra-home-card">
+                            <h2 data-zelyra-i18n="starter.home_title"></h2>
+                            <p data-zelyra-i18n="starter.home_description"></p>
+                            <h3 data-zelyra-i18n="starter.steps_title"></h3>
+                            <ol>
+                                <li>
+                                    <strong data-zelyra-i18n="starter.step_model_title"></strong>
+                                    <p data-zelyra-i18n="starter.step_model_description"></p>
+                                    <code>id: Id primary auto</code>
+                                </li>
+                                <li>
+                                    <strong data-zelyra-i18n="starter.step_check_title"></strong>
+                                    <p data-zelyra-i18n="starter.step_check_description"></p>
+                                    <code>zelyra check main.zyl</code>
+                                </li>
+                                <li>
+                                    <strong data-zelyra-i18n="starter.step_run_title"></strong>
+                                    <p data-zelyra-i18n="starter.step_run_description"></p>
+                                    <code>zelyra serve main.zyl</code>
+                                </li>
+                            </ol>
+                        </main>
+                    </div>
+                </div>
+            </body>
+        </html>
+    }
+}
