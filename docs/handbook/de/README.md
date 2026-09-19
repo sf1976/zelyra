@@ -1134,6 +1134,24 @@ umschlossen. Die Navigation orientiert sich an den deklarierten Ressourcen,
 Framework-Texte an `ZELYRA_LANGUAGE`. Für Tastaturnutzer gibt es sichtbare
 Fokusmarkierungen und einen lokalisierten Sprunglink zum Inhalt.
 
+Die gemeinsame Farbpalette kann in der erzeugten Datei `zelyra.theme.css`
+angepasst werden. Dieses Beispiel ändert Akzentfarbe und Kartenrundung, ohne
+die erzeugten CRUD-Views zu ersetzen:
+
+~~~css
+:root {
+    --zelyra-color-accent: #087f8c;
+    --zelyra-color-accent-strong: #066b76;
+    --zelyra-radius-card: 22px;
+}
+~~~
+
+`zelyra serve` bindet die optionale Datei nach dem eingebauten Design ein.
+Neue Projekte enthalten eine kommentierte Vorlage; Docker-Scaffolds kopieren
+sie ins Image. CSS ist öffentlicher Browserinhalt und wird nicht typgeprüft.
+Verfügbare Tokens und Sicherheitsgrenzen stehen in der
+[Theme- und Umgebungskonfiguration](../../env.md).
+
 Beispiele für URLs:
 
 ~~~text

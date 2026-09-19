@@ -1,8 +1,10 @@
 use std::{
     fs,
-    net::TcpListener,
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Output},
+    time::Duration,
 };
 
 fn binary() -> &'static Path {
@@ -137,6 +139,113 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
     )));
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn serve_loads_and_serves_the_project_theme_stylesheet() {
+    let directory = temporary_directory("serve-theme");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"page "/" {
+    html {
+        <html><head></head><body><div class="zelyra-app"><main><h1>Theme test</h1></main></div></body></html>
+    }
+}
+"#,
+    )
+    .unwrap();
+    let theme = ":root { --zelyra-color-accent: #e04b67; }\n";
+    fs::write(directory.join("zelyra.theme.css"), theme).unwrap();
+
+    let port = free_test_port();
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(binary())
+        .args(["serve", source.to_str().unwrap(), &address])
+        .env("ZELYRA_LANGUAGE", "en")
+        .env("ZELYRA_LEVEL", "work")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("Zelyra server should start");
+
+    let send_request = |path: &str| -> Result<String, String> {
+        let socket_address: SocketAddr = address
+            .parse()
+            .map_err(|error| format!("invalid test server address: {error}"))?;
+        for _ in 0..50 {
+            if let Ok(mut stream) =
+                TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .map_err(|error| error.to_string())?;
+                stream
+                    .write_all(format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n").as_bytes())
+                    .map_err(|error| error.to_string())?;
+                let mut response = String::new();
+                stream
+                    .read_to_string(&mut response)
+                    .map_err(|error| error.to_string())?;
+                if !response.is_empty() {
+                    return Ok(response);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        Err("Zelyra server did not answer before the test timeout".into())
+    };
+
+    let result = (|| {
+        let page = send_request("/")?;
+        let stylesheet = send_request("/__zelyra/theme.css")?;
+        Ok::<_, String>((page, stylesheet))
+    })();
+    let _ = server.kill();
+    let _ = server.wait();
+    fs::remove_dir_all(&directory).unwrap();
+
+    let (page, stylesheet) = result.unwrap_or_else(|error| panic!("{error}"));
+    assert!(page.starts_with("HTTP/1.1 200 OK"));
+    let built_in = page.find("data-zelyra-theme=\"default\"").unwrap();
+    let project = page.find("href=\"/__zelyra/theme.css\"").unwrap();
+    assert!(built_in < project);
+    assert!(stylesheet.starts_with("HTTP/1.1 200 OK"));
+    assert!(stylesheet.contains("Content-Type: text/css; charset=utf-8\r\n"));
+    assert!(stylesheet.contains("X-Content-Type-Options: nosniff\r\n"));
+    assert!(stylesheet.contains("Cache-Control: no-cache\r\n"));
+    assert!(stylesheet.ends_with(theme));
+}
+
+#[test]
+fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
+    let directory = temporary_directory("serve-theme-route-conflict");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"page "/__zelyra/theme.css" {
+    html { <main>Conflicting route</main> }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(directory.join("zelyra.theme.css"), "/* project theme */\n").unwrap();
+
+    let output = Command::new(binary())
+        .args(["serve", source.to_str().unwrap(), "127.0.0.1:0"])
+        .output()
+        .expect("Zelyra CLI should run");
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("E-THEME-002"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(stderr.contains("/__zelyra/theme.css"));
 }
 
 #[test]

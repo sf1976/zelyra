@@ -791,7 +791,9 @@ außer der ID.
 Erzeugte CRUD-, eigenständige Formular- und Tableview-Seiten erhalten
 automatisch den responsiven Zelyra-Anwendungsrahmen. Ein explizites
 `layout: ViewName` beim CRUD ersetzt den Standardrahmen; selbst verfasste
-Seiten behalten ihr eigenes Markup.
+Seiten behalten ihr eigenes Markup. Die gemeinsame Farbpalette lässt sich in
+der erzeugten Datei `zelyra.theme.css` anpassen; ein `.env`-Schalter ist nicht
+erforderlich.
 
 Damit wird `GET /machines` mit escaped Ausgabe, Suche, exakten Filtern,
 Allowlist-Sortierung, Pagination, verlinkten Detailseiten und automatisch

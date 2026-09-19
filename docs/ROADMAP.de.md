@@ -33,7 +33,8 @@ Klammermarker bleiben vorerst maschinell durchsuchbar.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
   Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt und CRUD-
-  View-Überschreibungen sind verfügbar; Themes bleiben offen.
+  View-Überschreibungen sind verfügbar. Projektlokale CSS-Token-Overrides sind
+  implementiert; vollständige Theme-Erstellung und -Auswahl bleiben offen.
 - [~] Eingebaute deutsche/englische UI-Kataloge werden über
   `ZELYRA_LANGUAGE` gewählt; `ZELYRA_LEVEL=learn|work` steuert die
   kontextbezogene Lernhilfe. Die minimalen und
@@ -41,8 +42,9 @@ Klammermarker bleiben vorerst maschinell durchsuchbar.
   Tableview-, Login- und Authentifizierungsverwaltungsseiten haben
   standardmäßig einen responsiven Zelyra-Anwendungsrahmen. Explizite CRUD-
   Layouts haben Vorrang; selbst verfasste Seiten bleiben unverändert.
-  Projektlokale Kataloge, umfassendere Vorlagenabdeckung und austauschbare
-  Themes bleiben offen.
+  Projektlokale CSS-Overrides für dokumentierte Design-Tokens sind jetzt
+  verfügbar; projektspezifische Sprachkataloge, umfassendere Vorlagenabdeckung
+  und ein vollständiger Theme-Editor bleiben offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -209,8 +211,9 @@ Feature eines bestimmten Anbieters.
   responsiven Standardrahmen; explizite CRUD-Layouts haben Vorrang und selbst
   verfasste Seiten werden nicht umgeschrieben. CRUD-, Formular-,
   Authentifizierungs-, Validierungs- und Standard-HTTP-Fehlertexte nutzen
-  dieselben eingebauten Sprachkataloge. Umfassender Theme-Austausch, weitere
-  Vorlagen und projektlokale Katalogerweiterungen bleiben offen.
+  dieselben eingebauten Sprachkataloge. Projektlokale `zelyra.theme.css`-
+  Überschreibungen für Design-Tokens sind verfügbar; umfassender Theme-Austausch,
+  weitere Vorlagen und projektlokale Katalogerweiterungen bleiben offen.
 
 - [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
   `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.
@@ -297,12 +300,18 @@ Feature eines bestimmten Anbieters.
   CSRF-, Datenbank-Capability-, Authentifizierungs- und Berechtigungsprüfung
   ausführen; eigene Beschriftungen und Browser-Bestätigungen sind verfügbar,
   aktionsspezifische Views bleiben offen.
-- [ ] Design-Token-System für Farben, Abstände, Typografie, Breakpoints und
-  Dichte.
-- [ ] View- und globale Themes, Dark Mode und benutzerwählbare Darstellung.
+- [~] Ein erstes Design-Token-System stellt Farben, Schriftfamilie, Karten- und
+  Steuerungsrundung sowie Inhaltsbreite bereit; Abstände, Breakpoints, Dichte
+  und die Abdeckung weiterer Komponenten bleiben offen.
+- [~] Optionale projektlokale `zelyra.theme.css` wird nach dem eingebauten
+  Design geladen, auf 128 KiB begrenzt und von erzeugten Dockerfiles kopiert.
+  Eine vollständige Theme-Engine/-Erstellung, Dark Mode, eingebaute
+  Designvarianten und eine benutzerwählbare Darstellung bleiben offen.
 - [ ] Scoped CSS, Asset-Pipeline, Cache-Busting, statische Dateien und CSP.
-- [ ] Responsive Layouts, Tastaturbedienung, semantisches HTML, ARIA-Hinweise
-  und automatische Accessibility-Prüfungen.
+- [~] Responsive erzeugte Rahmen, beschriftete Navigation, sichtbare
+  Tastaturfokusse und ein lokalisierter Sprunglink sind implementiert; eine
+  breitere semantische/ARIA-Prüfung und automatische Accessibility-Tests
+  bleiben offen.
 - [ ] Lokalisierung, Pluralisierung, Zeitzonen-/Locale-Formatierung und RTL.
 - [ ] Sicherer Raw-HTML-Escape-Hatch mit Diagnostik und Review-Markierung.
 - [ ] Progressive Enhancement: zuerst servergerendertes HTML, danach optional

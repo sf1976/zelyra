@@ -495,7 +495,9 @@ CRUD lists. Filters expose type-aware operators such as `contains`, `gte`, and
 
 Generated CRUD, standalone form, and tableview pages also receive a responsive
 Zelyra application shell by default. An explicit CRUD `layout: ViewName`
-replaces it, while authored pages keep full control of their markup.
+replaces it, while authored pages keep full control of their markup. Customize
+the shared visual tokens in the generated `zelyra.theme.css` without adding a
+framework or an environment switch.
 
 Generated search and filter controls use a semantic fieldset and separate
 labels for each operator and value. Filter processing and preserved URL state

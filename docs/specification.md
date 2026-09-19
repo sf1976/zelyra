@@ -69,6 +69,24 @@ yet. Business records and arbitrary project-authored HTML are content, not
 automatically translated UI copy. API and compiler machine contracts are not
 localized by these settings.
 
+### Project-local theme overrides
+
+Projects may customize the built-in visual design with a root-level
+`zelyra.theme.css`. `zelyra serve` loads it from the directory containing the
+selected `.zyl` file and links it after Zelyra's built-in stylesheet on branded
+pages. Missing files leave the default design unchanged. `zelyra new` and
+`zelyra init` scaffold a commented starter file, and generated Dockerfiles copy
+it into the runtime image.
+
+The stylesheet may override documented `--zelyra-*` design tokens or add
+project CSS. Zelyra does not parse or type-check CSS. It is public browser
+content, is limited to 128 KiB of UTF-8, and must be a regular non-symlink
+file. It is served as `text/css` at the reserved GET-only route
+`/__zelyra/theme.css`; when a theme file exists, pages and APIs may not claim
+that route. Do not put secrets in the stylesheet. Browser requests introduced
+by CSS such as external `url(...)` or `@import` are controlled by the project
+author, not by the Zelyra server's `Network` capability.
+
 ## Typed page data loading
 
 Pages may declare one or more explicit record loads using the native SQL

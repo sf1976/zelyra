@@ -75,6 +75,25 @@ beliebiges, im Projekt verfasstes HTML sind Inhalte und werden nicht automatisch
 übersetzt. API- und Compiler-Maschinenschnittstellen werden von diesen
 Einstellungen nicht lokalisiert.
 
+### Projektlokale Theme-Anpassungen
+
+Projekte können das eingebaute Design mit einer Datei `zelyra.theme.css` im
+Projektstamm anpassen. `zelyra serve` lädt sie aus demselben Verzeichnis wie
+die angegebene `.zyl`-Datei und bindet sie nach dem Zelyra-Standardstylesheet
+auf gebrandeten Seiten ein. Fehlt die Datei, bleibt das Standarddesign
+unverändert. `zelyra new` und `zelyra init` erzeugen eine kommentierte
+Startdatei; erzeugte Dockerfiles kopieren sie in das Laufzeit-Image.
+
+Das Stylesheet kann dokumentierte `--zelyra-*`-Design-Tokens überschreiben
+oder eigenes CSS ergänzen. Zelyra parst oder typprüft CSS nicht. Die Datei ist
+öffentlicher Browserinhalt, darf höchstens 128 KiB UTF-8 groß sein und muss
+eine reguläre Datei ohne symbolischen Link sein. Sie wird als `text/css` über
+die reservierte GET-only-Route `/__zelyra/theme.css` ausgeliefert; bei
+vorhandener Theme-Datei dürfen Seiten und APIs diese Route nicht belegen.
+Lege keine Secrets in das Stylesheet. Browseranfragen durch CSS, etwa über
+externe `url(...)`- oder `@import`-Angaben, kontrolliert der Projektautor und
+nicht die Zelyra-`Network`-Capability des Servers.
+
 ## Typisiertes Laden von Seitendaten
 
 Seiten können einen oder mehrere explizite Datensätze über die native

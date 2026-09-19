@@ -1043,6 +1043,24 @@ are not silently wrapped. The generated navigation follows declared resources,
 and framework copy follows `ZELYRA_LANGUAGE`. Keyboard users get visible focus
 styles and a localized skip-to-content link.
 
+The shared palette is customizable in the generated project's
+`zelyra.theme.css`. For example, this changes the accent and card shape without
+replacing the generated CRUD views:
+
+~~~css
+:root {
+    --zelyra-color-accent: #087f8c;
+    --zelyra-color-accent-strong: #066b76;
+    --zelyra-radius-card: 22px;
+}
+~~~
+
+`zelyra serve` links the optional file after the built-in design system. New
+projects include a commented starter, and Docker scaffolds copy it into the
+image. CSS is public browser content and is not type-checked; see the
+[theme and environment reference](../../env.en.md) for the available tokens
+and safety limits.
+
 Example URLs:
 
 ~~~text

@@ -32,14 +32,16 @@ remain machine-searchable for now.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
   Named slots with fallback content and CRUD view overrides are available;
-  themes remain open.
+  project-local CSS token overrides are implemented, while full theme authoring
+  and selection remain open.
 - [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
   and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
   minimal and machine-management MariaDB starters and generated CRUD, form,
   tableview, login, and authentication-admin pages have a responsive Zelyra
   application shell by default. Explicit CRUD layouts take precedence, and
   authored pages remain untouched; project-local catalog overrides, wider
-  template coverage, and replaceable themes remain open.
+  template coverage, and a full theme editor remain open. Project-local CSS
+  overrides for documented visual tokens are available.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -198,8 +200,9 @@ architecture requirement for every phase, not a provider-specific feature.
   authentication-admin pages now also receive that responsive default shell;
   explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
   authentication, validation, and standard HTTP-error copy use the same
-  built-in locale catalogs. Broader theme replacement, remaining template
-  coverage, and project-local catalog extensions remain open.
+  built-in locale catalogs. Project-local `zelyra.theme.css` token overrides
+  are available; broader theme replacement, remaining template coverage, and
+  project-local catalog extensions remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named
@@ -276,14 +279,18 @@ architecture requirement for every phase, not a provider-specific feature.
   with CSRF, database-capability, authentication, and permission checks;
   custom labels and browser confirmations are available; action-specific view
   configuration remains open.
-- [ ] A design-token system for colors, spacing, typography, breakpoints, and
-  density.
-- [ ] Per-view themes, application themes, dark mode, and user-selectable
-  appearance.
+- [~] A first design-token system exposes colors, typeface, card/control
+  radii, and content width; spacing, breakpoints, density, and coverage across
+  all components remain open.
+- [~] Optional project-local `zelyra.theme.css` is loaded after the built-in
+  design, bounded to 128 KiB, and copied by generated Dockerfiles. A full theme
+  engine/editor, dark mode, built-in theme choices, and user-selectable
+  appearance remain open.
 - [ ] Scoped CSS, asset pipelines, cache-busting, static files, and CSP-aware
   inline assets.
-- [ ] Responsive layouts, keyboard navigation, semantic HTML, ARIA guidance,
-  and automated accessibility checks.
+- [~] Responsive generated shells, labeled navigation, keyboard focus styles,
+  and a localized skip link are implemented; broader semantic/ARIA review and
+  automated accessibility checks remain open.
 - [ ] Localization, pluralization, timezone/locale formatting, and RTL support.
 - [ ] Secure raw HTML escape hatch with diagnostics and review markers.
 - [ ] Progressive enhancement: server-rendered HTML first, optional client

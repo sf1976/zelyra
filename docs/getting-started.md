@@ -762,6 +762,8 @@ minimal form keeps the default list, text search, and non-ID filters.
 Generated CRUD, standalone form, and tableview pages receive the responsive
 Zelyra application shell automatically. A CRUD's explicit `layout: ViewName`
 replaces the default shell; ordinary authored pages keep their own markup.
+Adjust the shared palette in the scaffolded `zelyra.theme.css`; no `.env`
+switch is required.
 
 This exposes `GET /machines` with escaped output, search, exact filters,
 allowlisted sorting, pagination, linked detail pages, and generated Create/Edit

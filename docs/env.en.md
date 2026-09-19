@@ -122,6 +122,65 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Project-local theme (not a `.env` variable)
+
+`zelyra new` and `zelyra init` create an optional `zelyra.theme.css`.
+`zelyra serve` loads this UTF-8 CSS file from the same directory as the given
+`.zyl` file and applies it after the built-in design. If the file is absent,
+the default design is unchanged. There is no theme-selection variable or
+additional configuration precedence.
+
+The file can override these public CSS properties:
+
+```css
+:root {
+    --zelyra-color-accent: #7557f6;
+    --zelyra-color-accent-strong: #665ce9;
+    --zelyra-color-accent-text: #634ce0;
+    --zelyra-color-accent-soft: #f8f6ff;
+    --zelyra-color-ink: #172033;
+    --zelyra-color-muted: #738097;
+    --zelyra-color-border: #e8edf4;
+    --zelyra-color-canvas: #f5f7fb;
+    --zelyra-color-surface: #ffffff;
+    --zelyra-color-surface-subtle: #f9faff;
+    --zelyra-color-sidebar-start: #171c32;
+    --zelyra-color-sidebar-middle: #202743;
+    --zelyra-color-sidebar-end: #263958;
+    --zelyra-color-sidebar-foreground: #f6f7ff;
+    --zelyra-color-sidebar-muted: #bac4d8;
+    --zelyra-color-hero-start: #262f52;
+    --zelyra-color-hero-middle: #3e4381;
+    --zelyra-color-hero-end: #6258bb;
+    --zelyra-color-success-background: #effbf7;
+    --zelyra-color-success-border: #bcebdd;
+    --zelyra-color-success-ink: #17654f;
+    --zelyra-color-danger-background: #fff5f5;
+    --zelyra-color-danger-border: #f2c8cc;
+    --zelyra-color-danger-ink: #8b303c;
+    --zelyra-color-focus: #8f7aff;
+    --zelyra-font-body: Inter, system-ui, sans-serif;
+    --zelyra-radius-card: 16px;
+    --zelyra-radius-control: 10px;
+    --zelyra-content-max-width: 1180px;
+}
+```
+
+All tokens are optional; unset values keep their built-in defaults. The CSS
+file is a public browser asset, not a secret store. Never put passwords,
+tokens, or confidential comments in it. CSS can trigger browser requests, for
+example through `@import` or `url(...)`; use external references deliberately.
+Zelyra accepts only regular, non-symlink files up to 128 KiB with UTF-8
+content. The file is served unchanged at `/__zelyra/theme.css`; that route is
+reserved while a theme file exists. Access is GET-only and includes
+`X-Content-Type-Options: nosniff` and `Cache-Control: no-cache`.
+
+Affected: `zelyra serve`, `new`/`init`, and the generated Docker build. The
+Dockerfile template explicitly copies the theme file into the image. CLI tests
+cover absent and valid files, size limit, UTF-8, symlink rejection, generated
+scaffold file, and reserved route; web tests cover inclusion, MIME type, cache
+policy, and request method. No environment variable was added.
+
 `ZELYRA_REF` in the generated Dockerfile is a Docker `ARG` containing a
 published tag, not a `.env` variable loaded by Zelyra. Set it explicitly during
 the Docker build with `--build-arg ZELYRA_REF=...` if needed.

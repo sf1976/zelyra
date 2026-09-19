@@ -6,6 +6,7 @@ use std::{
     env,
     fmt::Write as _,
     fs,
+    io::Read,
     net::TcpListener,
     path::PathBuf,
     process::Command,
@@ -34,6 +35,7 @@ use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
     CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
     RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage, UiLevel, WebApp,
+    PROJECT_THEME_CSS_PATH,
 };
 
 mod edit;
@@ -49,6 +51,27 @@ const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zy
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
+const PROJECT_THEME_TEMPLATE: &str = r#"/*
+Optional project-local overrides for the built-in Zelyra web design.
+Uncomment a token below and change its value. This file is sent to browsers;
+never put passwords, API keys, or private data here.
+
+Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
+*/
+:root {
+    /* --zelyra-color-accent: #7557f6; */
+    /* --zelyra-color-accent-strong: #665ce9; */
+    /* --zelyra-color-canvas: #f5f7fb; */
+    /* --zelyra-color-surface: #ffffff; */
+    /* --zelyra-color-ink: #172033; */
+    /* --zelyra-color-muted: #738097; */
+    /* --zelyra-color-border: #e8edf4; */
+    /* --zelyra-color-sidebar-start: #171c32; */
+    /* --zelyra-color-sidebar-middle: #202743; */
+    /* --zelyra-color-sidebar-end: #263958; */
+    /* --zelyra-radius-card: 16px; */
+}
+"#;
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
@@ -83,6 +106,8 @@ fn database_usage() {
 const DEFAULT_WEB_PORT: u16 = 3000;
 const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
 const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
+const PROJECT_THEME_CSS_FILE: &str = "zelyra.theme.css";
+const PROJECT_THEME_CSS_MAX_BYTES: u64 = 128 * 1024;
 
 struct ProjectOptions {
     allow_current_directory: bool,
@@ -536,6 +561,7 @@ network = false
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source.to_owned()),
+        (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
     ];
     if options.with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
@@ -619,7 +645,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
-COPY main.zyl zelyra.toml ./
+COPY main.zyl zelyra.toml zelyra.theme.css ./
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
@@ -3449,6 +3475,61 @@ fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
     let level = UiLevel::parse(&level.to_ascii_lowercase())
         .ok_or_else(|| "ZELYRA_LEVEL must be `learn` or `work`".to_owned())?;
     Ok((language, level))
+}
+
+fn project_theme_css(path: &str) -> Result<Option<String>, String> {
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let theme_path = project_directory.join(PROJECT_THEME_CSS_FILE);
+    let metadata = match fs::symlink_metadata(&theme_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(format!("cannot inspect `{PROJECT_THEME_CSS_FILE}`")),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!(
+            "`{PROJECT_THEME_CSS_FILE}` must be a regular project file, not a symbolic link"
+        ));
+    }
+    if metadata.len() > PROJECT_THEME_CSS_MAX_BYTES {
+        return Err(format!(
+            "`{PROJECT_THEME_CSS_FILE}` exceeds the 128 KiB size limit"
+        ));
+    }
+
+    let file = fs::File::open(&theme_path)
+        .map_err(|_| format!("cannot read `{PROJECT_THEME_CSS_FILE}`"))?;
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.take(PROJECT_THEME_CSS_MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| format!("cannot read `{PROJECT_THEME_CSS_FILE}`"))?;
+    if bytes.len() as u64 > PROJECT_THEME_CSS_MAX_BYTES {
+        return Err(format!(
+            "`{PROJECT_THEME_CSS_FILE}` exceeds the 128 KiB size limit"
+        ));
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))
+}
+
+fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
+    program
+        .pages
+        .iter()
+        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, PROJECT_THEME_CSS_PATH))
+        || program
+            .apis
+            .iter()
+            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, PROJECT_THEME_CSS_PATH))
+        || program.auth.iter().any(|auth| {
+            auth.admin_path.as_deref().is_some_and(|path| {
+                zelyra_web::route_pattern_matches_path(path, PROJECT_THEME_CSS_PATH)
+            })
+        })
 }
 
 fn docker_compose_check() -> DoctorCheck {
@@ -6423,10 +6504,29 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let theme_css = match project_theme_css(&path) {
+        Ok(theme_css) => theme_css,
+        Err(error) => {
+            diagnostic(&path, "E-THEME-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let program = match load(&path) {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };
+    if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
+        diagnostic(
+            &path,
+            "E-THEME-002",
+            &format!(
+                "route `{PROJECT_THEME_CSS_PATH}` is reserved for the project theme stylesheet"
+            ),
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
     let source = fs::read_to_string(&path).unwrap_or_default();
     if !reject_typed_holes(&source, &path, &program) {
         return ExitCode::from(1);
@@ -6763,6 +6863,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
         .with_ui_settings(ui_language, ui_level)
+        .with_project_theme_css(theme_css)
         .with_database_capability(database_capability_granted)
         .with_apis(api_routes)
         .with_auth(
@@ -8852,6 +8953,95 @@ mod tests {
     }
 
     #[test]
+    fn project_theme_css_is_optional_utf8_and_size_limited() {
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-theme-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        assert_eq!(
+            project_theme_css(source_path.to_str().unwrap()).unwrap(),
+            None
+        );
+
+        let theme_path = directory.join(PROJECT_THEME_CSS_FILE);
+        let theme = ":root { --zelyra-color-accent: #e04b67; }";
+        fs::write(&theme_path, theme).unwrap();
+        assert_eq!(
+            project_theme_css(source_path.to_str().unwrap()).unwrap(),
+            Some(theme.into())
+        );
+
+        fs::write(
+            &theme_path,
+            vec![b'x'; PROJECT_THEME_CSS_MAX_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(project_theme_css(source_path.to_str().unwrap())
+            .unwrap_err()
+            .contains("128 KiB size limit"));
+
+        fs::write(&theme_path, [0xff, 0xfe]).unwrap();
+        assert!(project_theme_css(source_path.to_str().unwrap())
+            .unwrap_err()
+            .contains("UTF-8"));
+
+        fs::remove_file(&theme_path).unwrap();
+        fs::create_dir(&theme_path).unwrap();
+        assert!(project_theme_css(source_path.to_str().unwrap())
+            .unwrap_err()
+            .contains("regular project file"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_theme_css_does_not_follow_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-theme-link-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        let outside_file = directory.join("private.css");
+        fs::write(&source_path, "").unwrap();
+        fs::write(&outside_file, "private content").unwrap();
+        symlink(&outside_file, directory.join(PROJECT_THEME_CSS_FILE)).unwrap();
+
+        let error = project_theme_css(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("not a symbolic link"));
+        assert!(!error.contains("private content"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
+        let themed_program =
+            parse(&lex("page \"/__zelyra/theme.css\" { html { <main>Theme</main> } }").unwrap())
+                .unwrap();
+        let parameter_program =
+            parse(&lex("page \"/{namespace}/{asset}\" { html { <main>Asset</main> } }").unwrap())
+                .unwrap();
+        let ordinary_program = parse(&lex("fn main() { }").unwrap()).unwrap();
+
+        assert!(project_uses_reserved_theme_route(&themed_program));
+        assert!(project_uses_reserved_theme_route(&parameter_program));
+        assert!(!project_uses_reserved_theme_route(&ordinary_program));
+    }
+
+    #[test]
     fn feature_settings_accept_only_known_env_overrides() {
         let values = parse_env_feature_overrides(
             "# optional\nZELYRA_FEATURE_API=false\nZELYRA_WEB_PORT=3000\n",
@@ -10090,7 +10280,10 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
+        let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
         assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.45"));
+        assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
+        assert!(project_theme.contains("--zelyra-color-accent"));
 
         fs::remove_dir_all(path).unwrap();
     }

@@ -19,6 +19,7 @@ mod i18n;
 use i18n::{field_text, framework_text, identifier as locale_identifier, text as tr};
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
+pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub use i18n::{UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,6 +168,17 @@ impl Response {
             status,
             reason: reason_phrase(status).into(),
             content_type: "application/json; charset=utf-8".into(),
+            body: body.into(),
+            location: None,
+            headers: Vec::new(),
+        }
+    }
+
+    pub fn css(status: u16, body: impl Into<String>) -> Self {
+        Self {
+            status,
+            reason: reason_phrase(status).into(),
+            content_type: "text/css; charset=utf-8".into(),
             body: body.into(),
             location: None,
             headers: Vec::new(),
@@ -444,21 +456,35 @@ fn localize_user_text(language: UiLanguage, source: &str) -> String {
         .unwrap_or_else(|| source.to_owned())
 }
 
-fn inject_design_system(source: &str) -> String {
-    if !source.contains("class=\"zelyra-app\"") || source.contains("data-zelyra-theme=\"default\"")
-    {
+fn inject_design_system(source: &str, has_project_theme: bool) -> String {
+    if !source.contains("class=\"zelyra-app\"") {
         return source.to_owned();
     }
-    let stylesheet =
-        format!("<style data-zelyra-theme=\"default\">{ZELYRA_DESIGN_SYSTEM_CSS}</style>");
+    let default_theme_missing = !source.contains("data-zelyra-theme=\"default\"");
+    let project_theme_missing =
+        has_project_theme && !source.contains(&format!("href=\"{PROJECT_THEME_CSS_PATH}\""));
+    if !default_theme_missing && !project_theme_missing {
+        return source.to_owned();
+    }
+    let mut stylesheets = String::new();
+    if default_theme_missing {
+        stylesheets.push_str(&format!(
+            "<style data-zelyra-theme=\"default\">{ZELYRA_DESIGN_SYSTEM_CSS}</style>"
+        ));
+    }
+    if project_theme_missing {
+        stylesheets.push_str(&format!(
+            "<link rel=\"stylesheet\" href=\"{PROJECT_THEME_CSS_PATH}\" data-zelyra-theme=\"project\">"
+        ));
+    }
     if let Some(head_end) = source.rfind("</head>") {
-        let mut html = String::with_capacity(source.len() + stylesheet.len());
+        let mut html = String::with_capacity(source.len() + stylesheets.len());
         html.push_str(&source[..head_end]);
-        html.push_str(&stylesheet);
+        html.push_str(&stylesheets);
         html.push_str(&source[head_end..]);
         html
     } else {
-        format!("{stylesheet}{source}")
+        format!("{stylesheets}{source}")
     }
 }
 
@@ -702,6 +728,7 @@ pub struct WebApp {
     pub cors_policy: Option<CorsPolicy>,
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
+    pub project_theme_css: Option<String>,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
@@ -722,6 +749,7 @@ impl WebApp {
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
+            project_theme_css: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -746,6 +774,7 @@ impl WebApp {
             cors_policy: None,
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
+            project_theme_css: None,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -790,6 +819,11 @@ impl WebApp {
     pub fn with_ui_settings(mut self, language: UiLanguage, level: UiLevel) -> Self {
         self.ui_language = language;
         self.ui_level = level;
+        self
+    }
+
+    pub fn with_project_theme_css(mut self, css: Option<String>) -> Self {
+        self.project_theme_css = css;
         self
     }
 
@@ -919,7 +953,7 @@ impl WebApp {
                     );
                 }
             }
-            response.body = inject_design_system(&response.body);
+            response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
             response.body = localize_html(&response.body, self.ui_language);
         }
         if self.ui_level == UiLevel::Learn
@@ -942,6 +976,15 @@ impl WebApp {
     }
 
     fn dispatch_inner(&self, request: &Request) -> Response {
+        if request.path == PROJECT_THEME_CSS_PATH {
+            return match (&self.project_theme_css, request.method.as_str()) {
+                (Some(css), "GET") => {
+                    Response::css(200, css.clone()).with_header("Cache-Control", "no-cache")
+                }
+                (Some(_), _) => Response::empty(405).with_header("Allow", "GET"),
+                (None, _) => Response::empty(404),
+            };
+        }
         if let Some(auth_route) = &self.auth_route {
             if request.path == "/login" {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
@@ -7217,6 +7260,10 @@ pub fn serve(routes: Vec<Route>, address: &str) -> io::Result<()> {
     serve_app(WebApp::new(routes, Vec::new()), address)
 }
 
+pub fn route_pattern_matches_path(pattern: &str, path: &str) -> bool {
+    match_path(pattern, path).is_some()
+}
+
 pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
     let listener = TcpListener::bind(address)?;
     for stream in listener.incoming() {
@@ -7506,10 +7553,13 @@ mod tests {
             requires_auth: false,
             permissions: Vec::new(),
         };
-        let custom_app = WebApp::new(vec![page], Vec::new());
+        let custom_app = WebApp::new(vec![page], Vec::new())
+            .with_project_theme_css(Some(":root { --zelyra-color-accent: #e04b67; }".into()));
         let request = parse_request("GET /custom HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
         let response = custom_app.dispatch(&request);
         assert_eq!(response.body, "<main>My custom page</main>");
+        assert!(!response.body.contains("data-zelyra-theme"));
+        assert!(!response.body.contains(PROJECT_THEME_CSS_PATH));
     }
 
     #[test]
@@ -7543,6 +7593,54 @@ mod tests {
         assert!(response.body.contains("Zum Inhalt springen"));
         assert!(response.body.contains("id=\"zelyra-content\""));
         assert!(response.body.contains("href=\"/\""));
+    }
+
+    #[test]
+    fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
+        let route = Route {
+            path: "/".into(),
+            html: "<html><head></head><body><div class=\"zelyra-app\"><main>Home</main></div></body></html>".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let theme_css = ":root { --zelyra-color-accent: #e04b67; }";
+        let app =
+            WebApp::new(vec![route], Vec::new()).with_project_theme_css(Some(theme_css.into()));
+        let page_request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let page = app.dispatch(&page_request);
+
+        let default_style = page
+            .body
+            .find("data-zelyra-theme=\"default\"")
+            .expect("default design system should be embedded");
+        let project_style = page
+            .body
+            .find("href=\"/__zelyra/theme.css\"")
+            .expect("project theme should be linked");
+        assert!(default_style < project_style);
+
+        let css_request =
+            parse_request("GET /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let css = app.dispatch(&css_request);
+        assert_eq!(css.status, 200);
+        assert_eq!(css.content_type, "text/css; charset=utf-8");
+        assert_eq!(css.body, theme_css);
+        assert!(css.to_http().contains("Cache-Control: no-cache\r\n"));
+
+        let post_request =
+            parse_request("POST /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let rejected = app.dispatch(&post_request);
+        assert_eq!(rejected.status, 405);
+        assert!(rejected.to_http().contains("Allow: GET\r\n"));
+
+        let no_theme = WebApp::new(Vec::new(), Vec::new()).dispatch(&css_request);
+        assert_eq!(no_theme.status, 404);
     }
 
     fn relation_form_route() -> FormRoute {
