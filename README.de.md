@@ -261,7 +261,14 @@ Zielordner-, No-Rustup-, Offline-, Release- und Deinstallationsoptionen; veralte
 Linux-x86_64- und Windows-x86_64-Releases können mit
 `./install.sh --release TAG` beziehungsweise `install.ps1 -Release TAG` ohne
 Rust installiert werden; die passende SHA-256-Checksumme wird vor der
-Installation geprüft. Unter Windows `install.ps1` in PowerShell oder
+Installation geprüft. `zelyra update --check` prüft das neueste stabile
+Release ohne Änderungen. `zelyra update` lädt eine neuere offizielle Linux-
+oder Windows-x86_64-Binärdatei herunter, prüft ihre SHA-256-Checksumme und
+ersetzt ausschließlich das gestartete Programm. Neuere Builds werden nicht
+herabgestuft und Projektdateien nicht verändert. Unter Windows erfolgt der
+Austausch unmittelbar nach Ende des Update-Befehls. Automatische Updates
+benötigen die eigenständigen Binärdateien und Checksumme im jeweiligen Release.
+Unter Windows `install.ps1` in PowerShell oder
 `install.cmd` verwenden; der Installer aktualisiert den Benutzer-PATH ohne
 Administratorrechte.
 

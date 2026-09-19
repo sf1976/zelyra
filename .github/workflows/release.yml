@@ -47,8 +47,11 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           package="zelyra-${RELEASE_TAG}-${TARGET}"
+          update_binary="zelyra-${RELEASE_TAG}-${TARGET}.bin"
           mkdir "${package}"
           cp "target/${TARGET}/release/zelyra" "${package}/zelyra"
+          cp "target/${TARGET}/release/zelyra" "${update_binary}"
+          sha256sum "${update_binary}" > "${update_binary}.sha256"
           cp README.md README.de.md LICENSE LICENSE-MIT "${package}/"
           tar -czf "${package}.tar.gz" "${package}"
           sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256"
@@ -60,8 +63,12 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           $package = "zelyra-$env:RELEASE_TAG-$env:TARGET"
+          $updateBinary = "$package.exe"
           New-Item -ItemType Directory -Path $package | Out-Null
           Copy-Item "target/$env:TARGET/release/zelyra.exe" "$package/zelyra.exe"
+          Copy-Item "target/$env:TARGET/release/zelyra.exe" $updateBinary
+          (Get-FileHash $updateBinary -Algorithm SHA256).Hash.ToLower() + "  $updateBinary" |
+            Set-Content -Encoding ascii "$updateBinary.sha256"
           Copy-Item README.md, README.de.md, LICENSE, LICENSE-MIT $package
           Compress-Archive -Path $package -DestinationPath "$package.zip"
           (Get-FileHash "$package.zip" -Algorithm SHA256).Hash.ToLower() + "  $package.zip" |
@@ -75,6 +82,10 @@ jobs:
             zelyra-*.tar.gz.sha256
             zelyra-*.zip
             zelyra-*.zip.sha256
+            zelyra-*-x86_64-unknown-linux-gnu.bin
+            zelyra-*-x86_64-unknown-linux-gnu.bin.sha256
+            zelyra-*-x86_64-pc-windows-msvc.exe
+            zelyra-*-x86_64-pc-windows-msvc.exe.sha256
 
   publish:
     name: Publish GitHub release

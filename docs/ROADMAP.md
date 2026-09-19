@@ -94,9 +94,12 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] Release archives with SHA-256 checksums are available for Linux and
   Windows x86_64; signed binaries and checksums for every supported platform
   remain.
-- [~] Source install/check/update/uninstall scripts with dry-run and safe
-  diagnostics are available; Rust-free release mode covers published x86_64
-  assets.
+- [~] User-local install/check/update/uninstall scripts remain available.
+  `zelyra update [--check]` also checks stable GitHub releases and verifies a
+  SHA-256 checksum before replacing its own Linux/Windows x86_64 executable;
+  Windows replacement is staged until the running process exits. The release
+  workflow is configured to publish standalone update assets with future
+  releases; automatic updates for other targets remain unavailable.
 - [~] A deterministic first-run project flow supports MariaDB scaffolding,
   secure local `.env` creation directly during `zelyra new` and `zelyra init`,
   extensively commented optional settings, and validated selectable ports;

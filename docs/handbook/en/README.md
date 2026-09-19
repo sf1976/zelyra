@@ -86,6 +86,8 @@ The installer is repeatable and user-local. Inspect or control it with:
 ./install.sh --help
 ./install.sh --dry-run --root "$HOME/.local"
 ./install.sh --check
+zelyra update --check
+zelyra update
 ./install.sh --uninstall
 ~~~
 
@@ -93,6 +95,14 @@ Use `--no-rustup` to disable automatic Rust installation, `--no-path` to
 silence PATH guidance, or `--root PATH` / `ZELYRA_INSTALL_ROOT` to choose a
 different user-owned target. Stale `cargo` PATH entries are detected instead
 of being executed blindly.
+
+Use `zelyra update --check` to check for a newer stable release without
+changing files. `zelyra update` downloads the standalone Linux or Windows
+x86_64 binary, verifies its SHA-256 checksum, and replaces only the executable
+that was launched. It does not downgrade a newer local build or change project
+files. On Windows, replacement completes immediately after the update command
+exits. Other platforms use their documented installation method until release
+binaries are published for them.
 
 Published Linux x86_64 and Windows x86_64 releases can be installed without
 Rust or Cargo. The installer downloads the selected archive over HTTPS and

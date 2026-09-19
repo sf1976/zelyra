@@ -250,6 +250,12 @@ instead of being executed blindly.
 Published Linux x86_64 and Windows x86_64 releases can be installed without
 Rust with `./install.sh --release TAG` or `install.ps1 -Release TAG`; the
 matching SHA-256 checksum is verified before installation.
+`zelyra update --check` checks the latest stable release without changing
+files; `zelyra update` downloads and verifies a newer official Linux or Windows
+x86_64 binary before replacing only the executable that was run. It never
+downgrades a newer build or changes project files. On Windows, replacement is
+completed immediately after the update process exits. Automatic updates need
+the standalone binary and checksum assets in the published release.
 On Windows, run `install.ps1` in PowerShell or use `install.cmd`; it installs
 to the user's local application directory and updates the user PATH without
 administrator privileges.

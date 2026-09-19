@@ -102,9 +102,14 @@ Feature eines bestimmten Anbieters.
 - [~] Release-Archive mit SHA-256-Checksums sind für Linux und Windows x86_64
   verfügbar; signierte Binaries und Checksums für jede unterstützte Plattform
   bleiben offen.
-- [~] Quellcode-Installer mit Prüfung, Update, Deinstallation, Dry-Run und
-  sicheren Diagnosen sind verfügbar; der Rust-freie Release-Modus deckt
-  veröffentlichte x86_64-Assets ab.
+- [~] Benutzerlokale Installations-, Prüf-, Update- und Deinstallationswege mit
+  Dry-Run und sicheren Diagnosen sind verfügbar. Zusätzlich prüft
+  `zelyra update [--check]` stabile GitHub-Releases und verifiziert eine
+  SHA-256-Checksumme vor dem Austausch der eigenen Linux-/Windows-x86_64-
+  Binärdatei; unter Windows wird der Austausch bis zum Ende des laufenden
+  Prozesses vorgemerkt. Der Release-Workflow wird solche eigenständigen
+  Update-Dateien mit künftigen Releases veröffentlichen; automatische Updates
+  für andere Ziele bleiben nicht verfügbar.
 - [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding,
   sichere lokale `.env`-Erzeugung direkt bei `zelyra new` und `zelyra init`,
   ausführlich kommentierte optionale Einstellungen und validierte wählbare
