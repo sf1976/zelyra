@@ -425,6 +425,10 @@ Feature eines bestimmten Anbieters.
   explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
   Update- oder Installationsbefehle müssen klar getrennt bleiben.
 - [ ] Reproduzierbare Releases, SBOMs, Provenance-Nachweise und signierte Artefakte.
+- [x] Release-Artefakte für Linux und Windows können bei relevanten Pull
+  Requests und manuell ohne Veröffentlichung gebaut werden; veröffentlicht
+  wird ausschließlich bei geprüften Versions-Tag-Pushes. Siehe die
+  zweisprachige [Release-Anleitung](releasing.de.md).
 - [ ] Synchron gehaltene deutsche und englische Dokumentation einschließlich
   Migrations- und Upgrade-Anleitungen.
 - [ ] Contributing Guide, Architecture Decision Records, Code of Conduct und

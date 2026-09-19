@@ -3,13 +3,67 @@ name: Zelyra Release
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '**/Cargo.toml'
+      - '**/src/**'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag used to name validation artifacts; manual runs never publish a release.
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Resolve and validate release tag
+        id: tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref_name }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          case "${EVENT_NAME}" in
+            push)
+              release_tag="${EVENT_REF}"
+              ;;
+            pull_request)
+              version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+              release_tag="v${version}"
+              ;;
+            workflow_dispatch)
+              release_tag="${INPUT_RELEASE_TAG}"
+              ;;
+            *)
+              echo "Unsupported event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "${release_tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${release_tag}" >&2
+            exit 1
+          fi
+
+          printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -33,7 +87,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
         run: |
           .\install.ps1 -DryRun -NoRustup -NoPath
           .\install.ps1 -DryRun -Release $env:RELEASE_TAG -NoPath
@@ -43,7 +97,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           TARGET: ${{ matrix.target }}
         run: |
           package="zelyra-${RELEASE_TAG}-${TARGET}"
@@ -59,7 +113,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           TARGET: ${{ matrix.target }}
         run: |
           $package = "zelyra-$env:RELEASE_TAG-$env:TARGET"
@@ -89,8 +143,11 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download release packages
         uses: actions/download-artifact@v4
@@ -100,8 +157,8 @@ jobs:
       - name: Publish release and assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ needs.validate.outputs.release_tag }}
+          prerelease: ${{ contains(needs.validate.outputs.release_tag, '-') }}
           generate_release_notes: true
           body: |
             ## Zelyra 0.1 Alpha

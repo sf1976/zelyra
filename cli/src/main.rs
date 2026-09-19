@@ -523,7 +523,7 @@ fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
     let project_config = if options.with_mariadb {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.45"
+version = "0.1.50"
 zelyra = "0.1"
 
 [database.main]
@@ -536,7 +536,7 @@ network = false
     } else {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.45"
+version = "0.1.50"
 zelyra = "0.1"
 
 [capabilities]
@@ -633,7 +633,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.45
+ARG ZELYRA_REF=v0.1.50
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -10253,7 +10253,7 @@ mod tests {
     }
 
     #[test]
-    fn generates_dockerfile_with_published_release_ref() {
+    fn generates_project_with_target_release_version() {
         let path = env::temp_dir().join(format!(
             "zelyra-cli-template-{}-{}",
             std::process::id(),
@@ -10280,8 +10280,10 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
+        let project_config = fs::read_to_string(path.join("zelyra.toml")).unwrap();
         let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.45"));
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.50"));
+        assert!(project_config.contains("version = \"0.1.50\""));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
         assert!(project_theme.contains("--zelyra-color-accent"));
 
