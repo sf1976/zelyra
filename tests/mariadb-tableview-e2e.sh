@@ -144,8 +144,8 @@ if ! curl --silent --show-error --fail "${base_url}/views/customers" -o "${temp_
 fi
 
 echo "[5/7] checking struct projection, aggregates, and escaping"
-grep -Fq "<th>orders</th>" "${temp_dir}/health.html"
-grep -Fq "<th>turnover</th>" "${temp_dir}/health.html"
+grep -Fq "<th>Orders</th>" "${temp_dir}/health.html"
+grep -Fq "<th>Turnover</th>" "${temp_dir}/health.html"
 grep -Fq "${alpha_name}" "${temp_dir}/health.html"
 grep -Fq "${escaped_beta_name}" "${temp_dir}/health.html"
 ! grep -Fq "${beta_name}" "${temp_dir}/health.html"
