@@ -69,8 +69,21 @@ After installation, run `docker compose version` and repeat `zelyra setup
 --all` or the browser action.
 
 If Docker is installed but access to its socket is denied, setup reports a
-safe Linux group-membership remedy instead of showing raw Docker output. Port
-collisions are also reported without exposing credentials.
+safe Linux group-membership remedy instead of showing raw Docker output. After
+adding the current user to the `docker` group, either fully sign out of the
+Linux session and sign in again, or run these commands in the current terminal:
+
+```bash
+newgrp docker
+id -nG
+docker ps
+```
+
+Retry setup when `docker` appears in the group list and `docker ps` succeeds;
+opening another terminal window alone may not refresh the session's group list.
+Membership in the Docker group grants highly privileged, effectively
+root-equivalent access to the machine. Port collisions are also reported
+without exposing credentials.
 
 Credentials are generated locally, never printed, and never returned in setup
 status messages. Destructive database changes remain outside this first-run

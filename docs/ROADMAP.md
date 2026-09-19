@@ -109,7 +109,8 @@ architecture requirement for every phase, not a provider-specific feature.
   generated MariaDB Compose projects and applies the initial schema; console
   and browser actions are now HTTP-/integration-tested on isolated ports, with
   platform-specific Docker installation guidance when Compose is missing,
-  compose-command detection, and safe Docker-permission/port-conflict errors.
+  compose-command detection, safe Docker-permission/port-conflict errors, and
+  actionable Linux group refresh and access verification steps.
   Docker installation, remote administration, and production deployment remain
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal

@@ -231,6 +231,10 @@ Für ein konsolenbasiertes Setup ohne Rückfragen `zelyra setup --all` verwenden
 Dieselben Aktionen stehen lokal im Browser mit `zelyra setup --web` bereit; die
 CLI gibt eine URL mit Token auf `127.0.0.1` aus. Siehe
 [`docs/setup-web.de.md`](../../setup-web.de.md).
+Verweigert Linux nach dem Hinzufügen des Benutzers zur Gruppe `docker` den
+Socket-Zugriff, `newgrp docker` ausführen und mit `id -nG` sowie `docker ps`
+prüfen. Ein weiteres Terminalfenster aktualisiert die Gruppenmitgliedschaft
+möglicherweise nicht.
 Nach dem Start von Compose mit `zelyra doctor main.zyl --env-file .env
 --port 18080` Quellcode, Schema, MariaDB-Verbindung, Docker Compose und den
 veröffentlichten Port ohne Datenbankänderung prüfen.
