@@ -100,6 +100,11 @@ ZELYRA_HOST_PORT=18080
 ZELYRA_DB_HOST_PORT=3308
 ```
 
+`zelyra new`, `zelyra init`, and `zelyra setup` select free published host
+ports when they create a new `.env` and a default is occupied. `setup` accepts
+`--host-port` and `--db-host-port` for strict selections. It never changes an
+existing `.env`; edit that file explicitly when changing a running project.
+
 Then run:
 
 ```bash

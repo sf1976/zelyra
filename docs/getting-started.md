@@ -154,7 +154,7 @@ tag. The installer downloads the matching archive over HTTPS and verifies its
 SHA-256 checksum before replacing the executable atomically:
 
 ~~~bash
-./install.sh --release v0.1.43.1
+./install.sh --release v0.1.45
 ~~~
 
 On Windows, use PowerShell from the repository directory:
@@ -177,7 +177,7 @@ directory and updates the user PATH. No administrator password is required.
 On Windows x86_64, use the matching PowerShell option:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.43.1
+.\install.ps1 -Release v0.1.45
 ~~~
 
 The script builds the CLI in locked release mode and installs it at:
@@ -321,6 +321,11 @@ MariaDB passwords and protects the file on Unix systems. It never overwrites
 an existing `.env` and never prints the credentials. Do not use generated
 local-development credentials as production secrets.
 
+When setup creates a missing `.env`, it selects free published web and MariaDB
+ports if the template defaults are occupied. Use `zelyra setup . --host-port
+18080 --db-host-port 3308` for exact ports; explicit port choices are rejected
+when unavailable and are never applied to an existing `.env`.
+
 For a ready CRUD application instead of the minimal welcome page, use the
 MariaDB CRUD template:
 
@@ -363,7 +368,7 @@ The current project file is intentionally small:
 ~~~toml
 [project]
 name = "my-app"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]
@@ -761,7 +766,7 @@ zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth
                                          create a project and choose its ports
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          initialize a project and choose its ports
-zelyra setup [directory] [--database|--schema|--all]
+zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]
                                          prepare .env, MariaDB, or schema
 zelyra setup --web [directory] [--port <port>]
                                          open the local browser setup assistant

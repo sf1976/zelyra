@@ -108,15 +108,19 @@ Feature eines bestimmten Anbieters.
 - [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding,
   sichere lokale `.env`-Erzeugung direkt bei `zelyra new` und `zelyra init`,
   ausführlich kommentierte optionale Einstellungen und validierte wählbare
-  Ports; bei neuen Projekten werden belegte Standardports automatisch durch
-  freie Host-Ports ersetzt. `zelyra setup` bleibt als idempotenter Nachholpfad
-  verfügbar. Eine interaktive Verbindungs-Konfiguration bleibt offen.
+  Ports; bei neuen Projekten und beim Anlegen einer fehlenden `.env` durch
+  Setup werden belegte Standardports automatisch durch freie Host-Ports
+  ersetzt. Explizite Setup-Portwerte bleiben verbindlich und vorhandene
+  `.env`-Dateien geschützt. Eine interaktive Verbindungs-Konfiguration bleibt
+  offen.
 - [~] Ein gemeinsamer Setup-Assistent für Konsole und Browser ist über
   `zelyra setup --database|--schema|--all` und `zelyra setup --web` verfügbar;
   erzeugte MariaDB-Compose-Projekte werden gestartet und das Anfangsschema
   angewendet; Konsolen- und Browser-Aktionen sind jetzt durch HTTP- und
   Integrationstests auf isolierten Ports abgedeckt und zeigen bei fehlendem
-  Compose plattformspezifische Docker-Installationshinweise. Docker-
+  Compose plattformspezifische Docker-Installationshinweise sowie erkannte
+  Compose-Befehle und sichere Hinweise zu Docker-Berechtigungen und
+  Portkonflikten. Docker-
   Installation, Fernadministration und produktives Deployment bleiben bewusst
   außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen

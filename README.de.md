@@ -934,8 +934,8 @@ Aktuell verfügbar:
 ~~~text
 zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra setup [directory] [--database|--schema|--all]
-zelyra setup --web [directory] [--port <port>]
+zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]
+zelyra setup [directory] --web [--port <port>]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
@@ -984,6 +984,13 @@ verbindlich und liefern bei Belegung eine klare Fehlermeldung.
 Nur die notwendigen Datenbankwerte sind aktiv. Ports, Feature-Schalter,
 Authentifizierung und weitere Optionen stehen ausführlich auskommentiert in
 der Datei; `.env.example` bleibt die sichere Referenzvorlage.
+
+Muss `zelyra setup` eine fehlende `.env` anlegen, wählt es ebenfalls freie
+Web- und MariaDB-Host-Ports, wenn die Vorlagen-Standardports belegt sind. Mit
+`--host-port` und `--db-host-port` kann ein bestimmter freier Port verlangt
+werden; ein ausdrücklich belegter Port wird abgelehnt. Vorhandene `.env`-
+Dateien werden durch diese Optionen nie verändert, damit Ports und
+Zugangsdaten unter expliziter menschlicher Kontrolle bleiben.
 
 Für einen vollständig konsolenbasierten Erststart `zelyra setup --all`
 verwenden. Der Befehl bereitet die lokale Umgebung vor, startet den erzeugten

@@ -11,12 +11,19 @@ zelyra setup
 zelyra setup --database
 zelyra setup --schema
 zelyra setup --all
+zelyra setup --host-port 18080 --db-host-port 3308
 ```
 
 `setup` legt eine geschützte `.env` an, wenn sie fehlt. `--database` startet
 das erzeugte MariaDB-Compose-Projekt, `--schema` startet es und wendet das
 Schema aus `main.zyl` an, und `--all` führt beide Aktionen aus. Vorhandene
 `.env`-Dateien werden niemals überschrieben.
+
+Legt Setup eine fehlende `.env` an, wählt es bei belegten Vorlagen-
+Standardports automatisch freie veröffentlichte Web- und MariaDB-Ports. Die
+optionalen Flags `--host-port` und `--db-host-port` verlangen genaue Ports und
+lehnen einen Konflikt ab. Eine vorhandene `.env` wird durch diese Flags bewusst
+nicht verändert.
 
 ## Browser
 
@@ -43,6 +50,8 @@ Einen anderen lokalen Port setzt man mit `zelyra setup --web --port 3031`.
 Der Setup-Server ist absichtlich nur lokal erreichbar. Er darf nicht über
 einen Reverse Proxy veröffentlicht oder an eine öffentliche Schnittstelle
 gebunden werden. Nach dem Setup mit `Ctrl+C` beenden.
+Ist der Standardport `3030` belegt, wählt der Assistent den nächsten freien
+lokalen Port; ein ausdrücklich angegebener belegter `--port` wird abgelehnt.
 
 ## Docker-Grenze
 
@@ -62,6 +71,11 @@ unter Windows [Docker Desktop für Windows](https://docs.docker.com/desktop/setu
 und unter macOS [Docker Desktop für Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
 Nach der Installation `docker compose version` prüfen und anschließend
 `zelyra setup --all` oder die Browser-Aktion erneut ausführen.
+
+Ist Docker installiert, aber der Zugriff auf seinen Socket verweigert, meldet
+Setup einen sicheren Hinweis zur Linux-Gruppenmitgliedschaft statt der rohen
+Docker-Ausgabe. Auch Portkonflikte werden ohne Preisgabe von Zugangsdaten
+gemeldet.
 
 Zugangsdaten werden lokal erzeugt, niemals ausgegeben und nicht in
 Statusmeldungen zurückgegeben. Destruktive Datenbankänderungen gehören nicht

@@ -899,8 +899,8 @@ Currently available:
 ~~~text
 zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
-zelyra setup [directory] [--database|--schema|--all]
-zelyra setup --web [directory] [--port <port>]
+zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]
+zelyra setup [directory] --web [--port <port>]
 zelyra check <file.zyl> [--format human|json]
 zelyra fmt <file.zyl> [--check]
 zelyra context <file.zyl> [--format human|json]
@@ -948,6 +948,12 @@ protected `.env`; `zelyra setup` remains available for existing projects. Only
 the required database values are active. Ports, feature switches, authentication
 and other options are provided as detailed commented examples, while
 `.env.example` remains the safe reference template.
+
+When `zelyra setup` must create a missing `.env`, it also selects free web and
+MariaDB host ports if the template defaults are occupied. Use `--host-port` or
+`--db-host-port` to request a specific free port; an explicitly occupied port
+is rejected. Existing `.env` files are never edited by these flags, so their
+ports and credentials remain under explicit human control.
 
 For a console-driven first run, use `zelyra setup --all`. This prepares the
 local environment, starts the generated MariaDB container and application, and

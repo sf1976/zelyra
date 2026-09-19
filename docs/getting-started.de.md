@@ -189,13 +189,13 @@ passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
 ausgetauscht:
 
 ~~~bash
-./install.sh --release v0.1.43.1
+./install.sh --release v0.1.45
 ~~~
 
 Unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.43.1
+.\install.ps1 -Release v0.1.45
 ~~~
 
 Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS
@@ -335,6 +335,12 @@ lokalen MariaDB-Passwörtern und schützt die Datei unter Unix. Eine vorhandene
 `.env` wird nicht überschrieben, und Zugangsdaten werden nicht ausgegeben. Die
 lokalen Zugangsdaten nicht als Produktions-Secrets verwenden.
 
+Muss Setup eine fehlende `.env` erzeugen, wählt es freie veröffentlichte Web-
+und MariaDB-Ports, wenn die Vorlagen-Standardports belegt sind. Mit
+`zelyra setup . --host-port 18080 --db-host-port 3308` können genaue Ports
+vorgegeben werden; nicht verfügbare explizite Ports werden abgelehnt und bei
+einer vorhandenen `.env` niemals angewendet.
+
 Für eine fertige CRUD-Anwendung statt der minimalen Willkommensseite das
 MariaDB-CRUD-Template verwenden:
 
@@ -378,7 +384,7 @@ Die aktuelle Projektdatei ist bewusst klein:
 ~~~toml
 [project]
 name = "meine-app"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]
@@ -789,7 +795,7 @@ zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth
                                          Projekt erstellen und Ports wählen
 zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]
                                          Projekt initialisieren und Ports wählen
-zelyra setup [directory] [--database|--schema|--all]
+zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]
                                          .env, MariaDB oder Schema vorbereiten
 zelyra setup --web [directory] [--port <port>]
                                          lokalen Browser-Setup-Assistenten öffnen
