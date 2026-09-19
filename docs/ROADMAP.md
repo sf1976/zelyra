@@ -402,6 +402,10 @@ architecture requirement for every phase, not a provider-specific feature.
   installation commands must remain separately visible.
 - [ ] Reproducible release builds, SBOMs, provenance attestations, and signed
   artifacts.
+- [x] Release assets can be built for Linux and Windows on relevant pull
+  requests and through a manual, non-publishing workflow run; publication is
+  restricted to validated version-tag pushes. See the bilingual
+  [release guide](releasing.md).
 - [ ] Bilingual documentation kept in sync, including migration and upgrade
   guides.
 - [ ] Contributor guide, architecture decision records, code of conduct, and
