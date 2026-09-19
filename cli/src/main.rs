@@ -3536,7 +3536,7 @@ fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -
     if details.contains("permission denied")
         && (details.contains("docker.sock") || details.contains("docker"))
     {
-        "Docker access was denied. On Linux, add the current user to the `docker` group with `sudo usermod -aG docker $USER`, then sign out and sign in again. Alternatively follow your distribution's Docker setup instructions.".into()
+        "Docker access was denied. On Linux, add the current user to the `docker` group with `sudo usermod -aG docker $USER`, then either fully sign out and sign in again or run these commands in the current terminal:\n  newgrp docker\n  id -nG\n  docker ps\nRetry setup when `docker` appears in the group list and `docker ps` succeeds. Opening another terminal window alone may not refresh group membership. Alternatively follow your distribution's Docker setup instructions.".into()
     } else if details.contains("address already in use")
         || details.contains("port is already allocated")
         || details.contains("failed to bind")
@@ -10177,6 +10177,8 @@ mod tests {
             &format!("permission denied while connecting to docker.sock: {secret}"),
         );
         assert!(permission.contains("usermod -aG docker"));
+        assert!(permission.contains("\n  newgrp docker\n  id -nG\n  docker ps\n"));
+        assert!(permission.contains("Opening another terminal window alone"));
         assert!(!permission.contains(secret));
 
         let conflict = compose_start_failure_message(

@@ -961,7 +961,9 @@ applies `main.zyl`. The same actions are available in a local browser with
 `zelyra setup --web`; Zelyra prints a tokenized `127.0.0.1` address to open.
 Docker itself is not installed or modified by Zelyra. See
 [`docs/setup-web.md`](docs/setup-web.md) for the security boundary and all
-options.
+options. If Linux reports Docker socket permission denied after adding your
+user to the `docker` group, run `newgrp docker`, then verify with `id -nG` and
+`docker ps`; opening another terminal alone may not refresh group membership.
 
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, `zelyra setup` uses the same safe built-in defaults. A project

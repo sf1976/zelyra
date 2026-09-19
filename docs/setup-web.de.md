@@ -74,8 +74,21 @@ Nach der Installation `docker compose version` prüfen und anschließend
 
 Ist Docker installiert, aber der Zugriff auf seinen Socket verweigert, meldet
 Setup einen sicheren Hinweis zur Linux-Gruppenmitgliedschaft statt der rohen
-Docker-Ausgabe. Auch Portkonflikte werden ohne Preisgabe von Zugangsdaten
-gemeldet.
+Docker-Ausgabe. Nach dem Hinzufügen des aktuellen Benutzers zur Gruppe `docker`
+entweder vollständig von der Linux-Sitzung abmelden und wieder anmelden oder
+folgende Befehle im aktuellen Terminal ausführen:
+
+```bash
+newgrp docker
+id -nG
+docker ps
+```
+
+Setup erst erneut starten, wenn `docker` in der Gruppenliste erscheint und
+`docker ps` funktioniert; ein zusätzlich geöffnetes Terminalfenster
+aktualisiert die Gruppenliste möglicherweise nicht. Die Mitgliedschaft in der
+Docker-Gruppe gewährt weitreichende, praktisch root-äquivalente Rechnerrechte.
+Auch Portkonflikte werden ohne Preisgabe von Zugangsdaten gemeldet.
 
 Zugangsdaten werden lokal erzeugt, niemals ausgegeben und nicht in
 Statusmeldungen zurückgegeben. Destruktive Datenbankänderungen gehören nicht

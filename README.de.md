@@ -998,7 +998,10 @@ MariaDB-Container samt Anwendung und wendet `main.zyl` an. Dieselben Aktionen
 sind lokal im Browser mit `zelyra setup --web` verfügbar; Zelyra gibt dafür eine
 URL mit Token auf `127.0.0.1` aus. Docker selbst wird von Zelyra nicht
 installiert oder verändert. Details und Sicherheitsgrenzen stehen in
-[`docs/setup-web.de.md`](docs/setup-web.de.md).
+[`docs/setup-web.de.md`](docs/setup-web.de.md). Meldet Linux nach dem Hinzufügen
+des Benutzers zur Gruppe `docker` weiterhin einen verweigerten Socket-Zugriff,
+`newgrp docker` ausführen und mit `id -nG` sowie `docker ps` prüfen; ein neues
+Terminal allein aktualisiert die Gruppenmitgliedschaft möglicherweise nicht.
 
 Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet `zelyra setup` dieselben sicheren

@@ -119,8 +119,8 @@ Feature eines bestimmten Anbieters.
   angewendet; Konsolen- und Browser-Aktionen sind jetzt durch HTTP- und
   Integrationstests auf isolierten Ports abgedeckt und zeigen bei fehlendem
   Compose plattformspezifische Docker-Installationshinweise sowie erkannte
-  Compose-Befehle und sichere Hinweise zu Docker-Berechtigungen und
-  Portkonflikten. Docker-
+  Compose-Befehle und sichere Hinweise zu Docker-Berechtigungen,
+  Gruppenaktualisierung und Zugriffsprüfung sowie Portkonflikten. Docker-
   Installation, Fernadministration und produktives Deployment bleiben bewusst
   außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen

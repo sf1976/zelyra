@@ -193,6 +193,9 @@ MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
 For a non-interactive console setup use `zelyra setup --all`. To use the same
 actions in a local browser, run `zelyra setup --web`; the CLI prints a
 tokenized `127.0.0.1` URL. See [`docs/setup-web.md`](../../setup-web.md).
+If Linux denies access to the Docker socket after adding your user to the
+`docker` group, run `newgrp docker`, then verify with `id -nG` and `docker ps`.
+Opening another terminal window alone may not refresh group membership.
 After starting Compose, run `zelyra doctor main.zyl --env-file .env --port
 18080` to check source, schema, MariaDB connectivity, Docker Compose, and the
 published port without changing the database.
