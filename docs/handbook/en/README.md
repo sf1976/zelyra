@@ -227,6 +227,23 @@ If `docker compose` is unavailable, use the legacy command
 The starter includes related departments and machines, forms, CRUD pages,
 search, filtering, pagination, and custom actions.
 
+### Interface language and learning guide
+
+Generated MariaDB projects use German and show the guided help by default.
+Change `.env` to use English or hide the guide:
+
+```dotenv
+ZELYRA_LANGUAGE=en
+ZELYRA_LEVEL=work
+```
+
+`zelyra serve` reads process variables before the project's `.env`. Its direct
+fallback is English with `work`; new MariaDB scaffolds explicitly select
+German and `learn`. The shipped UI copy is maintained in
+`web/locales/en.json` and `web/locales/de.json`; the CRUD sample view and
+framework controls use those catalogs. Learning help is explanatory only and
+does not grant capabilities or permissions. See [the environment reference](../../env.en.md).
+
 For an authentication starter with persistent sessions and permissions:
 
 ~~~bash

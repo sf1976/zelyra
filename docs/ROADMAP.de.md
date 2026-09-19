@@ -34,6 +34,12 @@ Klammermarker bleiben vorerst maschinell durchsuchbar.
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
   Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt und CRUD-
   View-Überschreibungen sind verfügbar; Themes bleiben offen.
+- [~] Eingebaute deutsche/englische UI-Kataloge werden über
+  `ZELYRA_LANGUAGE` gewählt; `ZELYRA_LEVEL=learn|work` steuert die
+  kontextbezogene Lernhilfe. Die minimalen und
+  Maschinenverwaltungs-MariaDB-Starter haben einen responsiven
+  Zelyra-Anwendungsrahmen; projektlokale Kataloge, umfassendere
+  Vorlagenabdeckung und austauschbare Themes bleiben offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -191,6 +197,14 @@ Feature eines bestimmten Anbieters.
 - [?] Seed-, Fixture-, Snapshot- und anonymisierte Testdaten-Befehle.
 
 ## 4. Views und Webdarstellung
+
+- [~] Das minimale und das Maschinenverwaltungs-Starterprojekt enthalten
+  responsive, gebrandete Rahmen mit kataloggebundenen deutschen/englischen
+  UI-Texten; das Maschinenverwaltungs-Starterprojekt ergänzt die Lernhilfe im
+  `learn`-Modus. CRUD-, Formular-, Authentifizierungs-, Validierungs- und
+  Standard-HTTP-Fehlertexte nutzen dieselben eingebauten Sprachkataloge;
+  umfassender Theme-Austausch, weitere Vorlagen und projektlokale
+  Katalogerweiterungen bleiben offen.
 
 - [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
   `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.

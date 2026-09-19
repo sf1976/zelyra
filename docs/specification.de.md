@@ -43,6 +43,32 @@ implementiert. Typed Holes in
 Deklarationskontexten, vollständige Laufzeit-/Schema-Wirkungsanalyse,
 umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.
 
+## Lokalisierte Weboberfläche und Lernmodus
+
+Die eingebaute Weboberfläche bezieht ihre Texte aus Sprachkatalogen. Deutsche
+und englische UI-Texte werden in `web/locales/de.json` und
+`web/locales/en.json` gepflegt; beide Dateien müssen dieselben Schlüssel
+enthalten. CRUD-, Formular-, Authentifizierungs-, Validierungs-, HTTP-Fehler-
+und Lernhilfetexte stammen aus diesen Katalogen. Die
+Maschinenverwaltungs-View markiert kataloggebundene HTML-Texte mit
+`data-zelyra-i18n="app.home_title"`; konfigurierbare Zelyra-Texte können
+`@i18n:app.home_title` verwenden.
+
+`ZELYRA_LANGUAGE=de|en` wählt den UI-Katalog. `ZELYRA_LEVEL=learn|work` zeigt
+die kontextbezogene Lernhilfe oder blendet sie aus; dadurch werden keine
+Capabilities oder Berechtigungen erteilt. Bei `zelyra serve` überschreiben
+Prozessvariablen die `.env` des Projekts. Neue MariaDB-Projekte verwenden
+standardmäßig `de`/`learn`; direktes Starten ohne diese Werte verwendet
+`en`/`work`. Diese Einstellungen beeinflussen ausschließlich die Darstellung.
+
+Fehlende deutsche Einträge fallen auf Englisch zurück. Fehlt ein Schlüssel in
+beiden Katalogen, wird `[missing translation]` ausgegeben; ein Konsistenztest
+prüft literale Referenzen gegen beide Dateien. Projektspezifische
+Katalogüberschreibungen sind noch nicht implementiert. Fachliche Datensätze und
+beliebiges, im Projekt verfasstes HTML sind Inhalte und werden nicht automatisch
+übersetzt. API- und Compiler-Maschinenschnittstellen werden von diesen
+Einstellungen nicht lokalisiert.
+
 ## Typisiertes Laden von Seitendaten
 
 Seiten können einen oder mehrere explizite Datensätze über die native

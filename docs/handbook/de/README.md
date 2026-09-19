@@ -268,6 +268,25 @@ verwenden.
 Das Starterprojekt enthält verbundene Abteilungen und Maschinen, Formulare,
 CRUD-Seiten, Suche, Filterung, Pagination und eigene Aktionen.
 
+### Oberflächensprache und Lernhilfe
+
+Neue MariaDB-Projekte starten standardmäßig auf Deutsch und zeigen die
+Lernhilfe. Für Englisch und den knappen Arbeitsmodus `.env` ändern:
+
+```dotenv
+ZELYRA_LANGUAGE=en
+ZELYRA_LEVEL=work
+```
+
+`zelyra serve` liest Prozessvariablen vor der `.env` des Projekts. Ohne beide
+Werte verwendet ein direkt gestarteter Server Englisch und `work`; neue
+MariaDB-Starter setzen ausdrücklich Deutsch und `learn`. Die von Zelyra
+bereitgestellten Oberflächentexte stehen in `web/locales/de.json` und
+`web/locales/en.json`; sowohl die Beispiel-View als auch die generierten
+Steuerungen verwenden diese Kataloge. Die Lernhilfe erklärt lediglich die
+Sprache und erweitert keine Capabilities oder Berechtigungen. Details stehen
+in der [Umgebungsvariablen-Referenz](../../env.md).
+
 Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und
 Berechtigungen:
 

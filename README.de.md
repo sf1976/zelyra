@@ -1042,6 +1042,27 @@ Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,
 Pagination und eigene Aktionen. Das Standardprojekt bleibt das kleinere
 Willkommensseiten-Scaffolding.
 
+### Sprache der Oberfläche und Lernmodus
+
+MariaDB-Starterprojekte beginnen auf Deutsch mit aktivierter Lernhilfe. Die
+Sprache und den Lernmodus kannst du in `.env` ändern:
+
+```dotenv
+ZELYRA_LANGUAGE=de # oder en
+ZELYRA_LEVEL=learn  # oder work
+```
+
+Der Server verwendet zuerst Prozessvariablen und danach die `.env` des
+Projekts. Fehlen beide Werte, nutzt ein direkt gestartetes `zelyra serve`
+Englisch und den knappen `work`-Modus. `learn` blendet auf den Seiten eine
+kontextbezogene Hilfe mit kleinen Zelyra-Beispielen ein; dadurch werden keine
+Capabilities oder Berechtigungen erteilt. Die von Zelyra bereitgestellten
+Oberflächentexte liegen in den versionierten Katalogen
+`web/locales/de.json` und `web/locales/en.json`. Die Maschinenverwaltungs-View
+verweist auf Katalogeinträge, statt die Texte einer zweiten Sprache direkt
+einzubetten. Details zu Priorität und Grenzen stehen in
+[`docs/env.md`](docs/env.md).
+
 Erzeugte CRUD-Seiten können denselben wiederverwendbaren Rahmen wie normale
 Seiten verwenden:
 

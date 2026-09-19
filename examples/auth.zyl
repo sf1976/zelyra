@@ -29,7 +29,7 @@ page "/admin" {
     permits "admin.view"
 
     html {
-        <h1>Admin</h1>
-        <p>Authenticated Zelyra page.</p>
+        <h1 data-zelyra-i18n="auth.page_title"></h1>
+        <p data-zelyra-i18n="auth.page_description"></p>
     }
 }

@@ -33,7 +33,7 @@ use zelyra_runtime::{
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
     CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
-    RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, WebApp,
+    RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage, UiLevel, WebApp,
 };
 
 mod edit;
@@ -46,6 +46,7 @@ use holes::collect_typed_holes;
 use impact::{build_impact, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
+const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
 
@@ -206,11 +207,14 @@ fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) 
         r#"# Zelyra local MariaDB configuration.
 # This file is safe to edit locally but must never be committed.
 #
-# The active values below are the minimum required for the generated
-# MariaDB Compose project and for `zelyra db setup` after exporting this file.
+# The active values below configure the generated MariaDB Compose project and
+# the default German, guided Zelyra experience. Change language to `en` or
+# level to `work` for the concise English work interface.
 # The database host port is active so the CLI and Compose always use the
 # selected port together.
 ZELYRA_DB_HOST_PORT={database_host_port}
+ZELYRA_LANGUAGE=de
+ZELYRA_LEVEL=learn
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -522,21 +526,7 @@ network = false
     } else if options.auth_template {
         MARIADB_AUTH_TEMPLATE
     } else if options.with_mariadb {
-        r#"database main {
-    engine: mariadb
-}
-
-page "/" {
-    html {
-        <h1>Welcome to Zelyra</h1>
-        <p>Your MariaDB-ready application is running.</p>
-    }
-}
-
-fn main() {
-    print("Hello from Zelyra")
-}
-"#
+        MARIADB_MINIMAL_TEMPLATE
     } else {
         r#"fn main() {
     print("Hello from Zelyra")
@@ -590,6 +580,8 @@ fn main() {
     command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     environment:
       DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
+      ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
+      ZELYRA_LEVEL: __ZELYRA_LEVEL__
     depends_on:
       mariadb:
         condition: service_healthy
@@ -603,6 +595,11 @@ volumes:
                 .replace("__MARIADB_USER__", &env_value("MARIADB_USER"))
                 .replace("__MARIADB_PASSWORD__", &env_value("MARIADB_PASSWORD"))
                 .replace("__MARIADB_ROOT_PASSWORD__", &env_value("MARIADB_ROOT_PASSWORD"))
+                .replace(
+                    "__ZELYRA_LANGUAGE__",
+                    &format!("{}{{ZELYRA_LANGUAGE:-de}}", '$'),
+                )
+                .replace("__ZELYRA_LEVEL__", &format!("{}{{ZELYRA_LEVEL:-learn}}", '$'))
                 .replace("__WEB_PORT__", &web_port_value)
                 .replace("__HOST_PORT__", &host_port_value)
                 .replace("__DATABASE_HOST_PORT__", &database_host_port_value),
@@ -3425,6 +3422,33 @@ fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
         }
     }
     Ok(None)
+}
+
+fn project_ui_setting(path: &str, key: &str, default: &str) -> Result<String, String> {
+    if let Ok(value) = env::var(key) {
+        return Ok(value);
+    }
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let env_path = project_directory.join(".env");
+    if !env_path.is_file() {
+        return Ok(default.to_owned());
+    }
+    let env_path_string = env_path.to_string_lossy();
+    Ok(read_env_value(&env_path_string, key)?.unwrap_or_else(|| default.to_owned()))
+}
+
+fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
+    let language = project_ui_setting(path, "ZELYRA_LANGUAGE", "en")?;
+    let language = UiLanguage::parse(&language.to_ascii_lowercase())
+        .ok_or_else(|| "ZELYRA_LANGUAGE must be `en` or `de`".to_owned())?;
+    let level = project_ui_setting(path, "ZELYRA_LEVEL", "work")?;
+    let level = UiLevel::parse(&level.to_ascii_lowercase())
+        .ok_or_else(|| "ZELYRA_LEVEL must be `learn` or `work`".to_owned())?;
+    Ok((language, level))
 }
 
 fn docker_compose_check() -> DoctorCheck {
@@ -6392,6 +6416,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         usage();
         return ExitCode::from(2);
     }
+    let (ui_language, ui_level) = match project_ui_settings(&path) {
+        Ok(settings) => settings,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let program = match load(&path) {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
@@ -6662,7 +6693,10 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             .collect();
         crud_routes.push(CrudRoute {
             path: format!("/{}", crud.table),
-            title: crud.title.clone().unwrap_or_else(|| crud.name.clone()),
+            title: crud
+                .title
+                .clone()
+                .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
             table: crud.table.clone(),
             list_columns,
             search_columns,
@@ -6695,7 +6729,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .iter()
         .map(|tableview| TableViewRoute {
             path: format!("/views/{}", tableview.name.to_ascii_lowercase()),
-            title: tableview.name.clone(),
+            title: zelyra_web::localized_identifier(ui_language, &tableview.name),
             source: tableview.source.clone(),
             columns: tableview.columns.clone(),
             filters: tableview
@@ -6728,6 +6762,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     );
     eprintln!("Zelyra server listening on http://{address}");
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+        .with_ui_settings(ui_language, ui_level)
         .with_database_capability(database_capability_granted)
         .with_apis(api_routes)
         .with_auth(
@@ -6868,7 +6903,7 @@ fn generated_crud_form(
                     },
                     span: table.span,
                 })],
-                success: Some("Saved.".into()),
+                success: Some("@i18n:form.saved".into()),
                 redirect: Some(format!("/{}", crud.table)),
                 span: table.span,
             }],
@@ -8771,6 +8806,49 @@ mod tests {
         assert_eq!(values.get("api"), Some(&false));
         assert_eq!(values.get("crud"), Some(&true));
         assert!(!values.contains_key("web"));
+    }
+
+    #[test]
+    fn project_environment_settings_use_process_then_dotenv_then_fallback() {
+        let directory = std::env::temp_dir().join(format!(
+            "zelyra-ui-settings-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        fs::write(directory.join(".env"), "ZELYRA_TEST_UI_LOCALE=de\n").unwrap();
+
+        let key = "ZELYRA_TEST_UI_LOCALE";
+        let previous = env::var_os(key);
+        env::remove_var(key);
+        assert_eq!(
+            project_ui_setting(source_path.to_str().unwrap(), key, "en").unwrap(),
+            "de"
+        );
+        env::set_var(key, "en");
+        assert_eq!(
+            project_ui_setting(source_path.to_str().unwrap(), key, "fallback").unwrap(),
+            "en"
+        );
+        env::remove_var(key);
+        assert_eq!(
+            project_ui_setting(
+                source_path.to_str().unwrap(),
+                "ZELYRA_TEST_UI_MISSING",
+                "work"
+            )
+            .unwrap(),
+            "work"
+        );
+        if let Some(previous) = previous {
+            env::set_var(key, previous);
+        }
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

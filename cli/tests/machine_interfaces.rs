@@ -118,10 +118,16 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     let env_file = fs::read_to_string(directory.join(".env")).unwrap();
     let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
+    assert!(env_example.contains("ZELYRA_LANGUAGE=de"));
+    assert!(env_example.contains("ZELYRA_LEVEL=learn"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
+    assert!(compose.contains("ZELYRA_LANGUAGE: ${ZELYRA_LANGUAGE:-de}"));
+    assert!(compose.contains("ZELYRA_LEVEL: ${ZELYRA_LEVEL:-learn}"));
     assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
+    assert!(env_file.contains("ZELYRA_LEVEL=learn"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains("# ZELYRA_HOST_PORT=18080"));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
@@ -179,6 +185,8 @@ fn init_creates_a_ready_commented_mariadb_env() {
     assert!(env_file.contains("MARIADB_USER=zelyra"));
     assert!(env_file.contains("MARIADB_PASSWORD="));
     assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
+    assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
+    assert!(env_file.contains("ZELYRA_LEVEL=learn"));
     assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(
@@ -192,6 +200,39 @@ fn init_creates_a_ready_commented_mariadb_env() {
         .any(|line| line == "ZELYRA_FEATURE_API=true"));
     assert!(!env_file.contains("change-me"));
     assert!(directory.join(".env.example").is_file());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
+    let directory = temporary_directory("new-mariadb-starter-localized");
+    let database_host_port = free_test_port();
+    let output = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--db-host-port",
+        &database_host_port,
+    ]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    assert!(source.contains("class=\"zelyra-app\""));
+    assert!(source.contains("data-zelyra-language"));
+    assert!(source.contains("data-zelyra-i18n=\"starter.workspace_title\""));
+    assert!(!source.contains("A clear start for your next application."));
+
+    let checked = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(
+        checked.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&checked.stdout),
+        String::from_utf8_lossy(&checked.stderr)
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 
