@@ -6,6 +6,12 @@ Zelyra ist für den Teil der Softwareentwicklung gedacht, der häufig
 wiederholt wird und trotzdem starke Korrektheitsgarantien benötigt:
 datenbankbasierte Businessanwendungen.
 
+Digitale Souveränität ist ein durchgängiges Entwicklungskriterium: Zelyra darf
+weder einen Cloud- oder KI-Anbieter voraussetzen noch Produkt-Telemetrie
+erheben oder externe Effekte verbergen. Das sind verbindliche Prinzipien,
+keine Behauptung, dass Portabilität oder Verifikation bereits vollständig
+umgesetzt sind. Siehe [Manifest](MANIFESTO.de.md) und [Roadmap](ROADMAP.de.md).
+
 ## Was Zelyra unterscheidet
 
 ### 1. Eine Quelle der Wahrheit vom Schema bis zur Anwendung

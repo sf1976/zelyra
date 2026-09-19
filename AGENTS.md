@@ -31,6 +31,42 @@ compiler, tests and security rules remain authoritative.
 Do not weaken diagnostics, type safety, SQL validation, contracts,
 capabilities or tests to make generated code pass.
 
+## Digital sovereignty and engineering craft
+
+Digital sovereignty is a core decision criterion for every Zelyra feature,
+dependency, default, integration, and public claim. The manifesto in
+`docs/MANIFESTO.de.md` and `docs/MANIFESTO.md` describes the product direction;
+it must not be presented as proof that every aspiration is already delivered.
+
+Before accepting a design, assess whether it:
+
+- keeps application code, data, and infrastructure under the user's control;
+- avoids mandatory cloud accounts and closed providers;
+- prohibits telemetry, analytics, crash reporting, and background phone-home
+  behavior;
+- makes network access and other external effects explicit and reviewable;
+- favors local execution, open interfaces, portable data, and replaceable
+  dependencies without claiming that Zelyra has zero dependencies;
+- preserves a simple default path while making advanced controls optional;
+- measures memory, performance, and reliability rather than relying on
+  superlatives;
+- states exactly what is proven, checked at runtime, unproven, or unsupported.
+
+Do not claim universal mathematical error-freedom, absolute independence,
+unrestricted database portability, or peak performance unless the specific
+scope is demonstrated and tested. Design-by-contract and the verifier provide
+scoped guarantees, not a proof that every application is defect-free.
+Telemetry, analytics, crash reporting, and background phone-home behavior are
+prohibited; reconsidering that policy requires an explicit change to this core
+rule by the project owner. Explicit application network operations are not
+telemetry and must remain capability-checked, visible, and reviewable.
+
+Rust is the current bootstrap implementation, not Zelyra's language identity
+or a required end-user runtime dependency. Keep the source language and its
+semantics independent of Rust, preserve Rust-free installation where
+available, and track self-hosting as a long-term direction rather than a
+completed capability.
+
 ## Working agreement
 
 Before changing a phase, inspect the repository and the relevant bilingual
@@ -42,6 +78,11 @@ only a roadmap design.
 Risky database operations, capability changes, secret handling, and external
 side effects require explicit human-visible boundaries and must never be
 silently approved by tooling.
+
+For each milestone, check its effect on data ownership, offline/local use,
+external network calls, telemetry, dependency surface, database portability,
+resource use, and the accuracy of public guarantees. Record any unmet
+sovereignty goal as a limitation or roadmap item.
 
 Every new environment variable or project configuration switch must be added
 to `docs/env.md` and `docs/env.en.md` before commit, including its default,

@@ -26,6 +26,13 @@ See the maintained [roadmap](docs/ROADMAP.md) for required and optional future
 work, including the Views System, AI-native compiler interfaces, and
 cryptographic audit chaining.
 
+Digital sovereignty is a core design constraint: Zelyra aims to keep code,
+data, and deployment under the user's control, avoid mandatory cloud or AI
+providers, prohibit telemetry, and make guarantees evidence-based. This is a
+product direction, not a claim that every goal is already complete; see the
+[manifesto](docs/MANIFESTO.md) and the implementation
+[roadmap](docs/ROADMAP.md).
+
 ## AI-native development
 
 Zelyra's strategic direction is **AI writes. Zelyra verifies.** A person or an

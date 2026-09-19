@@ -27,6 +27,13 @@ Die gepflegte [Roadmap](docs/ROADMAP.de.md) enthält alle geplanten Pflicht- und
 optionalen Arbeiten, einschließlich Views-System, KI-nativer
 Compiler-Schnittstellen und kryptografischer Audit-Verkettung.
 
+Digitale Souveränität ist ein Kernkriterium der Entwicklung: Code, Daten und
+Betrieb sollen unter der Kontrolle der Anwender bleiben; verpflichtende Cloud-
+oder KI-Anbieter und Telemetrie sind ausgeschlossen, Garantien müssen belegt
+sein. Das ist eine Produktausrichtung und keine Behauptung, dass jedes Ziel
+bereits erreicht ist. Siehe das [Manifest](docs/MANIFESTO.de.md) und die
+[Roadmap](docs/ROADMAP.de.md).
+
 ## KI-native Entwicklung
 
 Zelyras strategische Richtung lautet: **Die KI schreibt. Zelyra prüft.** Ein

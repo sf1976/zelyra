@@ -16,6 +16,12 @@ Status legend:
 The visible emoji makes the status unambiguous on GitHub; the bracket markers
 remain machine-searchable for now.
 
+Digital sovereignty is a cross-cutting product constraint, not a completed
+feature: local control, no mandatory cloud or AI provider, no unsolicited
+telemetry, explicit effects, portable data, resource discipline, and honest
+proof claims guide every phase. The [manifesto](MANIFESTO.md) states the
+principles; the roadmap below tracks what is actually implemented.
+
 ## Current milestones
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
@@ -184,8 +190,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Connection pooling, retry policies, timeouts, cancellation, and health
   checks.
 - [ ] Streaming large results and bounded memory behavior.
-- [ ] N+1 query detection, query-plan hints, slow-query diagnostics, and query
-  observability.
+- [ ] N+1 query detection, query-plan hints, slow-query diagnostics, and
+  application-owner-controlled, locally inspectable query observability.
 - [ ] Typed relations, joins, aggregates, subqueries, CTEs, unions, and
   database-specific extensions.
 - [ ] Read replicas, read/write routing, tenant isolation, and migration
@@ -344,8 +350,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Configurable retention policies, scheduled pruning, and archive export.
 - [ ] Encrypted archives, key rotation, restore verification, and offline
   integrity checks.
-- [ ] External audit sinks (syslog, OpenTelemetry, object storage, SIEM) with
-  delivery status and retry behavior.
+- [ ] Explicit, user-controlled audit exports to destinations such as syslog,
+  object storage, or SIEM, with delivery status and retry behavior; usage
+  telemetry and hidden remote collection are out of scope.
 - [ ] MFA/WebAuthn, password reset flows, session/device management, and login
   notifications.
 - [ ] Fine-grained policy expressions, policy testing, and permission explain
@@ -379,7 +386,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Shared-state rules, channels, actors, and data-race testing.
 - [ ] Benchmark suite for compile time, startup, routing, SQL, forms, CRUD, and
   memory use.
-- [ ] Profiling and observability hooks without changing application semantics.
+- [ ] Local, opt-in profiling and diagnostics without hidden collection or
+  automatic remote telemetry.
 - [?] CP-SAT, MILP, and SMT optimization interface with reproducible solver
   inputs and bounded execution.
 
@@ -389,6 +397,9 @@ architecture requirement for every phase, not a provider-specific feature.
   versions.
 - [ ] Fuzzing for lexer, parser, SQL binder, template renderer, and HTTP parser.
 - [ ] Security regression suite and dependency/license scanning in CI.
+- [ ] Regression guard against unsolicited network or telemetry activity;
+  explicit application network capabilities and user-initiated update or
+  installation commands must remain separately visible.
 - [ ] Reproducible release builds, SBOMs, provenance attestations, and signed
   artifacts.
 - [ ] Bilingual documentation kept in sync, including migration and upgrade

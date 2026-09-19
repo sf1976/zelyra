@@ -16,6 +16,9 @@ ersten Programm bis zur datenbankgestützten Webanwendung.
 > **Projektstatus:** Zelyra 0.1 ist experimentell. Viele beschriebene Grundlagen
 > sind implementiert, aber noch nicht für den Produktionseinsatz freigegeben.
 
+Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
+Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).
+
 Die verbindliche Reihenfolge der Sprachquellen und der Prüfablauf stehen in der
 [Quellenlandkarte](../../source-authority.de.md) und der
 [englischen Quellenübersicht](../../source-authority.md).

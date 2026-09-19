@@ -6,6 +6,12 @@ Zelyra is built for the part of software work that is often repetitive but
 still deserves strong correctness guarantees: database-backed business
 applications.
 
+Digital sovereignty is a cross-cutting design criterion: Zelyra must not
+require a cloud or AI vendor, collect product telemetry, or hide external
+effects. These are binding principles, not a claim that every portability or
+verification goal is already complete; see the
+[manifesto](MANIFESTO.md) and [roadmap](ROADMAP.md).
+
 ## What makes Zelyra distinct
 
 ### 1. One source of truth from schema to application

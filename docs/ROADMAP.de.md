@@ -17,6 +17,13 @@ Statuslegende:
 Die sichtbaren Emojis machen den Status auf GitHub eindeutig; die
 Klammermarker bleiben vorerst maschinell durchsuchbar.
 
+Digitale Souveränität ist eine querschnittliche Produktanforderung, kein
+bereits vollständig umgesetztes Feature: lokale Kontrolle, keine verpflichtende
+Cloud oder KI, keine ungefragte Telemetrie, explizite Effekte, portable Daten,
+Ressourcendisziplin und ehrliche Beweisaussagen leiten jede Phase. Das
+[Manifest](MANIFESTO.de.md) beschreibt die Prinzipien; die Roadmap kennzeichnet
+den tatsächlich implementierten Stand.
+
 ## Aktuelle Meilensteine
 
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
@@ -195,7 +202,8 @@ Feature eines bestimmten Anbieters.
   Lock-Warnungen und Planung von Wartungsfenstern.
 - [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
-- [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und Monitoring.
+- [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
+  einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.
 - [ ] Typisierte Relationen, Joins, Aggregate, Subqueries, CTEs, Unions und
   datenbankspezifische Erweiterungen.
 - [ ] Read Replicas, Read/Write-Routing, Mandantentrennung und Umgebungen.
@@ -366,8 +374,9 @@ Feature eines bestimmten Anbieters.
 - [ ] Konfigurierbare Aufbewahrung, geplantes Bereinigen und Archivexport.
 - [ ] Verschlüsselte Archive, Schlüsselrotation, Restore-Prüfung und Offline-
   Integritätsprüfung.
-- [ ] Externe Audit-Ziele (Syslog, OpenTelemetry, Object Storage, SIEM) mit
-  Zustellstatus und Retries.
+- [ ] Ausdrückliche, anwenderkontrollierte Audit-Exporte an Ziele wie Syslog,
+  Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
+  und versteckte externe Erfassung sind ausgeschlossen.
 - [ ] MFA/WebAuthn, Passwort-Reset-Flows, Geräte-/Sessionverwaltung und
   Login-Benachrichtigungen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
@@ -402,7 +411,8 @@ Feature eines bestimmten Anbieters.
 - [ ] Regeln für Shared State, Channels, Actors und Race-Tests.
 - [ ] Benchmark-Suite für Compilezeit, Startup, Routing, SQL, Forms, CRUD und
   Speicherverbrauch.
-- [ ] Profiling und Observability-Hooks ohne Änderung der Semantik.
+- [ ] Lokales, ausdrücklich aktiviertes Profiling und Diagnostik ohne
+  versteckte Erfassung oder automatische externe Telemetrie.
 - [?] CP-SAT-, MILP- und SMT-Optimierung mit reproduzierbaren Solverinputs
   und begrenzter Laufzeit.
 
@@ -411,6 +421,9 @@ Feature eines bestimmten Anbieters.
 - [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
 - [ ] Fuzzing für Lexer, Parser, SQL-Binder, Template-Renderer und HTTP-Parser.
 - [ ] Security-Regression-Suite und Dependency-/Lizenzprüfung in CI.
+- [ ] Regressionstest gegen ungefragte Netzwerk- oder Telemetrieaktivität;
+  explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
+  Update- oder Installationsbefehle müssen klar getrennt bleiben.
 - [ ] Reproduzierbare Releases, SBOMs, Provenance-Nachweise und signierte Artefakte.
 - [ ] Synchron gehaltene deutsche und englische Dokumentation einschließlich
   Migrations- und Upgrade-Anleitungen.

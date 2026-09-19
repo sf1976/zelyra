@@ -16,6 +16,9 @@ program and ending with a database-backed web application.
 > **Project status:** Zelyra 0.1 is experimental. Many foundations described
 > here are implemented, but the project is not ready for production use.
 
+The binding product goals for digital sovereignty and evidence-based
+correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).
+
 ## Status marks
 
 - ✅ **Implemented:** available in the current repository.
