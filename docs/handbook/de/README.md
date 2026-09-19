@@ -125,10 +125,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.43.1
+./install.sh --release v0.1.45
 ~~~
 
-Unter Windows in PowerShell `-Release v0.1.43.1` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.1.45` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
@@ -219,6 +219,10 @@ Zugangsdaten nie ausgegeben. Nur notwendige
 Datenbankwerte sind aktiv; Ports, Feature-Schalter, Authentifizierung und
 weitere Optionen stehen als kommentierte Beispiele darin. `zelyra setup`
 bleibt ein idempotenter Nachholbefehl.
+Erzeugt Setup eine fehlende `.env`, wählt es freie veröffentlichte Web- und
+MariaDB-Ports, falls Standardports belegt sind. `--host-port` und
+`--db-host-port` setzen verbindliche Werte; vorhandene `.env`-Dateien werden
+durch diese Flags nie verändert.
 Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet der Setup-Befehl dieselben sicheren
 eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
@@ -320,7 +324,7 @@ Eine minimale `zelyra.toml`:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]
@@ -1725,7 +1729,7 @@ Projektkonfiguration gehört in `zelyra.toml`, Geheimnisse nicht:
 ~~~toml
 [project]
 name = "maschinenverwaltung"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]

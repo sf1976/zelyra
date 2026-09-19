@@ -6,6 +6,17 @@ compiler and repository release.
 
 ## Unreleased
 
+## 0.1.45 — 2026-09-19
+
+This alpha release hardens the MariaDB first-run experience and fixes a valid
+component-slot example that was incorrectly rejected by page-view validation.
+
+Diese Alpha-Version härtet den MariaDB-Ersteinstieg und behebt ein gültiges
+Komponenten-Slot-Beispiel, das von der Page-View-Prüfung fälschlich abgelehnt
+wurde.
+
+### Fixed
+
 - Missing Docker/Compose now produces platform-specific official installation
   guidance in the console, `doctor`, and the local browser setup page.
 - Fehlt Docker/Compose, geben Konsole, `doctor` und die lokale Browser-Setup-
@@ -16,6 +27,23 @@ compiler and repository release.
 - Neue MariaDB-Projekte wählen automatisch freie Web- und MariaDB-Host-Ports,
   wenn die Standardports belegt sind; ausdrücklich gesetzte Ports bleiben
   verbindlich.
+- `zelyra setup` now also selects free published web and MariaDB ports when it
+  creates a missing `.env`; exact `--host-port` and `--db-host-port` values are
+  validated, and existing `.env` files are never changed.
+- `zelyra setup` wählt nun ebenfalls freie veröffentlichte Web- und MariaDB-
+  Ports, wenn es eine fehlende `.env` erzeugt; genaue Werte für `--host-port`
+  und `--db-host-port` werden geprüft, vorhandene `.env`-Dateien bleiben
+  unverändert.
+- Setup detects the available Compose command for its first-run instructions
+  and reports Docker socket permissions and published-port conflicts without
+  exposing credentials.
+- Setup erkennt den verfügbaren Compose-Befehl für seine Ersteinstiegs-Hinweise
+  und meldet Docker-Socket-Berechtigungen sowie veröffentlichte Portkonflikte,
+  ohne Zugangsdaten preiszugeben.
+- Component slots nested inside a component invocation no longer incorrectly
+  require a page `view:` layout.
+- Komponenten-Slots innerhalb einer Komponentenverwendung benötigen nicht mehr
+  fälschlich ein Seiten-`view:`-Layout.
 
 ## 0.1.43.1 — 2026-09-19
 

@@ -51,8 +51,8 @@ const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_a
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("  setup supports `--database`, `--schema`, `--all`, and `--web [--port <port>]`");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
+    eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -93,6 +93,17 @@ struct ProjectOptions {
     database_host_port: u16,
     host_port_given: bool,
     database_host_port_given: bool,
+}
+
+#[derive(Default)]
+struct SetupOptions {
+    host_port: Option<u16>,
+    database_host_port: Option<u16>,
+}
+
+struct LocalEnvSetup {
+    created: bool,
+    port_notes: Vec<String>,
 }
 
 fn parse_web_port(value: &str) -> Result<u16, String> {
@@ -228,6 +239,94 @@ MARIADB_ROOT_PASSWORD=change-me-root
     )
 }
 
+fn template_port(template: &str, key: &str, fallback: u16) -> u16 {
+    template
+        .lines()
+        .map(str::trim)
+        .map(|line| line.strip_prefix('#').unwrap_or(line).trim())
+        .find_map(|line| {
+            line.strip_prefix(&format!("{key}="))
+                .and_then(|value| parse_port(value.trim(), key).ok())
+        })
+        .unwrap_or(fallback)
+}
+
+fn replace_template_env_assignment(template: &str, key: &str, value: u16, active: bool) -> String {
+    let mut replaced = false;
+    let mut lines = template
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let setting = trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start();
+            if setting.starts_with(&format!("{key}=")) {
+                replaced = true;
+                let indentation = &line[..line.len() - trimmed.len()];
+                if active {
+                    format!("{indentation}{key}={value}")
+                } else {
+                    format!("{indentation}# {key}={value}")
+                }
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>();
+    if !replaced {
+        lines.push(if active {
+            format!("{key}={value}")
+        } else {
+            format!("# {key}={value}")
+        });
+    }
+    lines.join("\n") + "\n"
+}
+
+fn prepared_local_env_template(
+    directory: &std::path::Path,
+    options: &SetupOptions,
+) -> Result<(String, Vec<String>), String> {
+    let mut template = local_mariadb_template(directory)?;
+    let requested_host_port = options
+        .host_port
+        .unwrap_or_else(|| template_port(&template, "ZELYRA_HOST_PORT", DEFAULT_WEB_PORT));
+    let template_database_host_port =
+        template_port(&template, "ZELYRA_DB_HOST_PORT", DEFAULT_DATABASE_HOST_PORT);
+    let requested_database_host_port = options
+        .database_host_port
+        .unwrap_or(template_database_host_port);
+    let (host_port, host_note) = resolve_host_port(
+        requested_host_port,
+        options.host_port.is_some(),
+        "web host",
+        true,
+        &[],
+    )?;
+    let (database_host_port, database_note) = resolve_host_port(
+        requested_database_host_port,
+        options.database_host_port.is_some(),
+        "MariaDB host",
+        true,
+        &[host_port],
+    )?;
+    if database_host_port != template_database_host_port
+        && !template.contains("${ZELYRA_DB_HOST_PORT")
+    {
+        return Err(
+            "cannot safely select a MariaDB port because DATABASE_URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
+                .into(),
+        );
+    }
+    if options.host_port.is_some() || host_port != requested_host_port {
+        template = replace_template_env_assignment(&template, "ZELYRA_HOST_PORT", host_port, true);
+    }
+    template =
+        replace_template_env_assignment(&template, "ZELYRA_DB_HOST_PORT", database_host_port, true);
+    Ok((
+        template,
+        [host_note, database_note].into_iter().flatten().collect(),
+    ))
+}
+
 fn render_local_env(template: &str) -> Result<String, String> {
     let database_password = generate_local_secret()?;
     let root_password = generate_local_secret()?;
@@ -296,16 +395,32 @@ fn local_mariadb_template(directory: &std::path::Path) -> Result<String, String>
     ))
 }
 
-fn ensure_local_env_file(directory: &std::path::Path) -> Result<bool, String> {
+fn ensure_local_env_file(
+    directory: &std::path::Path,
+    options: &SetupOptions,
+) -> Result<LocalEnvSetup, String> {
     let env_file = directory.join(".env");
     if env_file.exists() {
-        return Ok(false);
+        if options.host_port.is_some() || options.database_host_port.is_some() {
+            return Err(
+                "an existing .env is never changed; update its ZELYRA_HOST_PORT or ZELYRA_DB_HOST_PORT manually"
+                    .into(),
+            );
+        }
+        return Ok(LocalEnvSetup {
+            created: false,
+            port_notes: Vec::new(),
+        });
     }
-    let template = local_mariadb_template(directory)?;
-    write_local_env_file(&env_file, &template)
+    let (template, port_notes) = prepared_local_env_template(directory, options)?;
+    let created = write_local_env_file(&env_file, &template)?;
+    Ok(LocalEnvSetup {
+        created,
+        port_notes,
+    })
 }
 
-fn setup_project(path: &str) -> ExitCode {
+fn setup_project(path: &str, options: &SetupOptions) -> ExitCode {
     let directory = std::path::Path::new(path);
     if !directory.is_dir() {
         eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
@@ -316,22 +431,34 @@ fn setup_project(path: &str) -> ExitCode {
     if !existed && !directory.join(".env.example").is_file() {
         println!("`.env.example` not found; using the safe built-in MariaDB defaults for `{path}`");
     }
-    if let Err(error) = ensure_local_env_file(directory) {
-        eprintln!("error[E-SETUP-001]: {error}");
-        return ExitCode::from(1);
+    let setup = match ensure_local_env_file(directory, options) {
+        Ok(setup) => setup,
+        Err(error) => {
+            eprintln!("error[E-SETUP-001]: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    for note in setup.port_notes {
+        println!("note: {note}");
     }
     if existed {
         println!("kept existing {}", env_file.display());
         println!("no credentials were changed or printed");
         return ExitCode::SUCCESS;
     }
+    if !setup.created {
+        eprintln!(
+            "error[E-SETUP-002]: could not create {}",
+            env_file.display()
+        );
+        return ExitCode::from(1);
+    }
     println!(
         "created {} with local MariaDB credentials",
         env_file.display()
     );
     println!("credentials were generated locally and are not shown");
-    println!("next: docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build");
-    println!("if `docker compose` is unavailable, use: docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build");
+    print_compose_start_hint();
     if cfg!(windows) {
         println!("then load .env in your shell and run: zelyra db setup main.zyl");
     } else {
@@ -366,7 +493,7 @@ fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
     let project_config = if options.with_mariadb {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [database.main]
@@ -379,7 +506,7 @@ network = false
     } else {
         r#"[project]
 name = "zelyra-app"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]
@@ -482,7 +609,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.43.1
+ARG ZELYRA_REF=v0.1.45
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -540,9 +667,7 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
         }
         println!("reference template: {}", env_example.display());
         println!("then start MariaDB with:");
-        println!("  docker compose --env-file .env -f docker-compose.mariadb.yml up -d");
-        println!("if `docker compose` is unavailable, use:");
-        println!("  docker-compose --env-file .env -f docker-compose.mariadb.yml up -d");
+        print_compose_start_hint();
         if cfg!(windows) {
             println!("then load .env in your shell and run: zelyra db setup main.zyl");
         } else {
@@ -999,17 +1124,30 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
-        } else if page.html.contains("<slot")
-            && slot_invocations(&page.html).is_ok_and(|slots| !slots.is_empty())
-        {
-            diagnostic(
-                path,
-                "E-VIEW-029",
-                "page content slots require a `view: ...` layout",
-                page.span.line,
-                page.span.column,
-            );
-            valid = false;
+        } else {
+            match page_layout_slot_invocations(&page.html) {
+                Ok(slots) if !slots.is_empty() => {
+                    diagnostic(
+                        path,
+                        "E-VIEW-029",
+                        "page content slots require a `view: ...` layout",
+                        page.span.line,
+                        page.span.column,
+                    );
+                    valid = false;
+                }
+                Ok(_) => {}
+                Err(message) => {
+                    diagnostic(
+                        path,
+                        "E-VIEW-029",
+                        &format!("page `{}` has invalid slots: {message}", page.path),
+                        page.span.line,
+                        page.span.column,
+                    );
+                    valid = false;
+                }
+            }
         }
     }
     for crud in &program.cruds {
@@ -2620,6 +2758,21 @@ fn split_view_content(body: &str) -> Result<(String, HashMap<String, String>), S
     Ok((default_body, named))
 }
 
+fn page_layout_slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, String> {
+    let component_ranges = component_invocations(html)?
+        .into_iter()
+        .map(|component| component.start..component.end)
+        .collect::<Vec<_>>();
+    Ok(slot_invocations(html)?
+        .into_iter()
+        .filter(|slot| {
+            !component_ranges
+                .iter()
+                .any(|range| range.start <= slot.start && slot.end <= range.end)
+        })
+        .collect())
+}
+
 fn validate_view_content_slots(view: &zelyra_ast::ViewDef, body: &str) -> Result<(), String> {
     let (_, declared_named) = declared_view_slots(view)?;
     let (_, supplied_named) = split_view_content(body)?;
@@ -3351,6 +3504,16 @@ fn docker_compose_install_hint() -> String {
     )
 }
 
+fn print_compose_start_hint() {
+    match detect_docker_compose() {
+        Some(command) => println!(
+            "  {} --env-file .env -f docker-compose.mariadb.yml up -d --build",
+            command.label()
+        ),
+        None => println!("{}", docker_compose_install_hint()),
+    }
+}
+
 fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -> Command {
     let mut process = match command {
         DockerComposeCommand::Plugin => {
@@ -3368,6 +3531,26 @@ fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -
     process
 }
 
+fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -> String {
+    let details = details.to_ascii_lowercase();
+    if details.contains("permission denied")
+        && (details.contains("docker.sock") || details.contains("docker"))
+    {
+        "Docker access was denied. On Linux, add the current user to the `docker` group with `sudo usermod -aG docker $USER`, then sign out and sign in again. Alternatively follow your distribution's Docker setup instructions.".into()
+    } else if details.contains("address already in use")
+        || details.contains("port is already allocated")
+        || details.contains("failed to bind")
+    {
+        "a published web or MariaDB port is already in use. For a newly created .env, run `zelyra setup` to select free defaults; for an existing .env, choose free ZELYRA_HOST_PORT and ZELYRA_DB_HOST_PORT values, then retry.".into()
+    } else {
+        format!(
+            "{} could not start the generated MariaDB application. Inspect the stack with `{} --env-file .env -f docker-compose.mariadb.yml logs`.",
+            command.label(),
+            command.label()
+        )
+    }
+}
+
 fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> {
     if !directory.join("docker-compose.mariadb.yml").is_file() {
         return Err(
@@ -3377,20 +3560,24 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
     let Some(command) = detect_docker_compose() else {
         return Err(docker_compose_install_hint());
     };
-    let status = compose_command(directory, command)
+    let output = compose_command(directory, command)
         .args(["up", "-d", "--build"])
-        .status()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
         .map_err(|error| format!("could not start {}: {error}", command.label()))?;
-    if status.success() {
+    if output.status.success() {
         Ok(format!(
             "MariaDB and the application were started with {}",
             command.label()
         ))
     } else {
-        Err(format!(
-            "{} could not start the generated MariaDB application",
-            command.label()
-        ))
+        let details = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Err(compose_start_failure_message(command, &details))
     }
 }
 
@@ -3441,17 +3628,22 @@ fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String>
     Err("schema setup did not succeed after waiting for MariaDB; inspect the Compose logs and retry".into())
 }
 
-fn setup_action(path: &str, action: &str) -> Result<String, String> {
+fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<String, String> {
     let directory = std::path::Path::new(path);
     if !directory.is_dir() {
         return Err(format!("project directory `{path}` does not exist"));
     }
-    let created = ensure_local_env_file(directory)?;
-    let mut messages = vec![if created {
+    let setup = ensure_local_env_file(directory, options)?;
+    let mut messages = setup
+        .port_notes
+        .into_iter()
+        .map(|note| format!("note: {note}"))
+        .collect::<Vec<_>>();
+    messages.push(if setup.created {
         "created protected .env".to_owned()
     } else {
         "kept existing .env; credentials were not changed".to_owned()
-    }];
+    });
     if matches!(action, "database" | "schema" | "all") {
         messages.push(start_mariadb_compose(directory)?);
     }
@@ -3559,21 +3751,33 @@ fn setup_web_response(
             .map(String::as_str)
             .unwrap_or("prepare");
         state.message = match action {
-            "prepare" | "database" | "schema" | "all" => {
-                setup_action(state.directory.to_str().unwrap_or("."), action)
-                    .unwrap_or_else(|error| format!("Fehler: {error}"))
-            }
+            "prepare" | "database" | "schema" | "all" => setup_action(
+                state.directory.to_str().unwrap_or("."),
+                action,
+                &SetupOptions::default(),
+            )
+            .unwrap_or_else(|error| format!("Fehler: {error}")),
             _ => "Fehler: unbekannte Setup-Aktion".into(),
         };
     }
     Response::html(200, setup_web_html(&state))
 }
 
-fn setup_web_command(path: &str, port: u16) -> ExitCode {
+fn setup_web_command(path: &str, port: u16, port_given: bool) -> ExitCode {
     let directory = std::path::Path::new(path);
     if !directory.is_dir() {
         eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
         return ExitCode::from(1);
+    }
+    let (port, port_note) = match resolve_host_port(port, port_given, "setup web", true, &[]) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("error[E-SETUP-WEB-001]: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    if let Some(note) = port_note {
+        println!("note: {note}");
     }
     let Ok(token) = generate_local_secret() else {
         eprintln!("error[E-SETUP-WEB-001]: cannot create a secure setup token");
@@ -8091,6 +8295,8 @@ fn main() -> ExitCode {
         let mut web = false;
         let mut action = "prepare";
         let mut web_port = DEFAULT_SETUP_WEB_PORT;
+        let mut web_port_given = false;
+        let mut setup_options = SetupOptions::default();
         let mut arguments = args;
         while let Some(argument) = arguments.next() {
             if argument == "--web" {
@@ -8106,10 +8312,35 @@ fn main() -> ExitCode {
                     usage();
                     return ExitCode::from(2);
                 };
+                web_port_given = true;
                 web_port = match parse_web_port(&value) {
                     Ok(port) => port,
                     Err(error) => {
                         eprintln!("error[E-SETUP-WEB-001]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
+            } else if argument == "--host-port" {
+                let Some(value) = arguments.next() else {
+                    usage();
+                    return ExitCode::from(2);
+                };
+                setup_options.host_port = match parse_web_port(&value) {
+                    Ok(port) => Some(port),
+                    Err(error) => {
+                        eprintln!("error[E-SETUP-002]: {error}");
+                        return ExitCode::from(2);
+                    }
+                };
+            } else if argument == "--db-host-port" {
+                let Some(value) = arguments.next() else {
+                    usage();
+                    return ExitCode::from(2);
+                };
+                setup_options.database_host_port = match parse_database_host_port(&value) {
+                    Ok(port) => Some(port),
+                    Err(error) => {
+                        eprintln!("error[E-SETUP-002]: {error}");
                         return ExitCode::from(2);
                     }
                 };
@@ -8122,12 +8353,22 @@ fn main() -> ExitCode {
             }
         }
         if web {
-            return setup_web_command(&path, web_port);
+            if setup_options.host_port.is_some() || setup_options.database_host_port.is_some() {
+                eprintln!(
+                    "error[E-SETUP-002]: --host-port and --db-host-port cannot be used with --web"
+                );
+                return ExitCode::from(2);
+            }
+            return setup_web_command(&path, web_port, web_port_given);
+        }
+        if web_port_given {
+            eprintln!("error[E-SETUP-002]: --port requires --web");
+            return ExitCode::from(2);
         }
         if action == "prepare" {
-            return setup_project(&path);
+            return setup_project(&path, &setup_options);
         }
-        return match setup_action(&path, action) {
+        return match setup_action(&path, action, &setup_options) {
             Ok(message) => {
                 println!("{message}");
                 ExitCode::SUCCESS
@@ -8876,6 +9117,34 @@ mod tests {
         assert!(html.contains("<main>"));
         assert!(html.contains("<p>Content</p>"));
         assert!(!html.contains("<slot"));
+    }
+
+    #[test]
+    fn allows_component_slots_without_a_page_view_layout() {
+        let source = r#"
+            component DashboardPanel {
+                html {
+                    <section>
+                        <header><slot name="header"><h1>Dashboard</h1></slot></header>
+                        <main><slot /></main>
+                    </section>
+                }
+            }
+            page "/dashboard" {
+                html {
+                    <DashboardPanel>
+                        <slot name="header"><h1>Custom dashboard</h1></slot>
+                        <p>Reusable content.</p>
+                    </DashboardPanel>
+                }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("components.zyl", &program));
+        assert!(validate_components("components.zyl", &program));
+        let html = compose_page_view(&program, &program.pages[0]);
+        assert!(html.contains("Custom dashboard"));
+        assert!(html.contains("Reusable content."));
     }
 
     #[test]
@@ -9731,7 +10000,7 @@ mod tests {
         assert_eq!(status, ExitCode::SUCCESS);
 
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.43.1"));
+        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.45"));
 
         fs::remove_dir_all(path).unwrap();
     }
@@ -9806,7 +10075,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(setup_project(path.to_str().unwrap()), ExitCode::SUCCESS);
+        assert_eq!(
+            setup_project(path.to_str().unwrap(), &SetupOptions::default()),
+            ExitCode::SUCCESS
+        );
         let env_file = fs::read_to_string(path.join(".env")).unwrap();
         assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
         assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
@@ -9831,9 +10103,11 @@ mod tests {
         )
         .unwrap();
 
-        let first = setup_action(path.to_str().unwrap(), "prepare").unwrap();
+        let first =
+            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
         let contents = fs::read_to_string(path.join(".env")).unwrap();
-        let second = setup_action(path.to_str().unwrap(), "prepare").unwrap();
+        let second =
+            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
         assert!(first.contains("created protected .env"));
         assert!(second.contains("kept existing .env"));
         assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
@@ -9893,6 +10167,24 @@ mod tests {
         assert!(hint.contains("Docker Compose is unavailable"));
         assert!(hint.contains("https://docs.docker.com/"));
         assert!(hint.contains("docker compose version"));
+    }
+
+    #[test]
+    fn compose_start_errors_are_actionable_without_exposing_output() {
+        let secret = "mariadb://zelyra:secret-value@127.0.0.1:3306/zelyra_app";
+        let permission = compose_start_failure_message(
+            DockerComposeCommand::Legacy,
+            &format!("permission denied while connecting to docker.sock: {secret}"),
+        );
+        assert!(permission.contains("usermod -aG docker"));
+        assert!(!permission.contains(secret));
+
+        let conflict = compose_start_failure_message(
+            DockerComposeCommand::Plugin,
+            "failed to bind host port: address already in use",
+        );
+        assert!(conflict.contains("port is already in use"));
+        assert!(!conflict.contains("failed to bind"));
     }
 
     #[test]

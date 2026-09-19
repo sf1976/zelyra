@@ -413,6 +413,103 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
 }
 
 #[test]
+fn setup_selects_free_ports_for_a_new_local_environment() {
+    let directory = temporary_directory("setup-free-ports");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[database.main]\nengine = \"mariadb\"\n",
+    )
+    .unwrap();
+    let web_listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let requested_web_port = web_listener.local_addr().unwrap().port();
+    let database_listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let requested_database_port = database_listener.local_addr().unwrap().port();
+    fs::write(
+        directory.join(".env.example"),
+        format!(
+            "ZELYRA_DB_HOST_PORT={requested_database_port}\nDATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n# ZELYRA_HOST_PORT={requested_web_port}\n"
+        ),
+    )
+    .unwrap();
+
+    let output = run(&["setup", directory.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("selected free port"));
+    let env_file = fs::read_to_string(directory.join(".env")).unwrap();
+    assert!(env_file.contains("ZELYRA_HOST_PORT="));
+    assert!(!env_file.contains(&format!("ZELYRA_HOST_PORT={requested_web_port}")));
+    assert!(!env_file.contains(&format!("ZELYRA_DB_HOST_PORT={requested_database_port}")));
+    assert!(env_file.contains("${ZELYRA_DB_HOST_PORT:-3306}"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn setup_rejects_web_server_port_without_the_web_assistant() {
+    let directory = temporary_directory("setup-port-without-web");
+    fs::create_dir_all(&directory).unwrap();
+    let output = run(&["setup", directory.to_str().unwrap(), "--port", "3031"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--port requires --web"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn setup_rejects_an_explicitly_occupied_host_port_without_creating_env() {
+    let directory = temporary_directory("setup-explicit-port-conflict");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[database.main]\nengine = \"mariadb\"\n",
+    )
+    .unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied_port = listener.local_addr().unwrap().port().to_string();
+    let output = run(&[
+        "setup",
+        directory.to_str().unwrap(),
+        "--host-port",
+        &occupied_port,
+    ]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("already in use"));
+    assert!(!directory.join(".env").exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn setup_refuses_to_change_a_static_database_url_port() {
+    let directory = temporary_directory("setup-static-database-url");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[database.main]\nengine = \"mariadb\"\n",
+    )
+    .unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let occupied_port = listener.local_addr().unwrap().port();
+    fs::write(
+        directory.join(".env.example"),
+        format!(
+            "ZELYRA_DB_HOST_PORT={occupied_port}\nDATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:{occupied_port}/zelyra_app\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n"
+        ),
+    )
+    .unwrap();
+
+    let output = run(&["setup", directory.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot safely select"));
+    assert!(!directory.join(".env").exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn setup_rejects_a_directory_without_a_mariadb_scaffold() {
     let directory = temporary_directory("setup-missing-scaffold");
     fs::create_dir_all(&directory).unwrap();

@@ -99,10 +99,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.1.43.1
+./install.sh --release v0.1.45
 ~~~
 
-On Windows, use `-Release v0.1.43.1` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.1.45` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:
@@ -184,6 +184,9 @@ are never overwritten and credentials are never printed. Only required database
 values are active; ports, feature
 switches, authentication, and other options are documented as commented
 examples. `zelyra setup` remains an idempotent recovery command.
+When it creates a missing `.env`, setup selects free published web and MariaDB
+ports if defaults are occupied. Use `--host-port` and `--db-host-port` for
+strict choices; existing `.env` files are never modified by these flags.
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, setup uses the same safe built-in defaults. A project without
 MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
@@ -278,7 +281,7 @@ Minimal `zelyra.toml`:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]
@@ -1613,7 +1616,7 @@ Project configuration belongs in `zelyra.toml`; secrets do not:
 ~~~toml
 [project]
 name = "machine-management"
-version = "0.1.43"
+version = "0.1.45"
 zelyra = "0.1"
 
 [capabilities]

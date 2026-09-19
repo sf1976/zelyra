@@ -100,14 +100,16 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] A deterministic first-run project flow supports MariaDB scaffolding,
   secure local `.env` creation directly during `zelyra new` and `zelyra init`,
   extensively commented optional settings, and validated selectable ports;
-  free host ports are selected automatically for new projects when defaults
-  are occupied; `zelyra setup` remains an idempotent recovery path. Interactive
+  free host ports are selected automatically for new projects and when setup
+  creates a missing `.env` while defaults are occupied; explicit setup port
+  choices remain strict and existing `.env` files remain protected. Interactive
   connection configuration remains open.
 - [~] A shared console/browser setup assistant is available through
   `zelyra setup --database|--schema|--all` and `zelyra setup --web`; it starts
   generated MariaDB Compose projects and applies the initial schema; console
   and browser actions are now HTTP-/integration-tested on isolated ports, with
-  platform-specific Docker installation guidance when Compose is missing.
+  platform-specific Docker installation guidance when Compose is missing,
+  compose-command detection, and safe Docker-permission/port-conflict errors.
   Docker installation, remote administration, and production deployment remain
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal
