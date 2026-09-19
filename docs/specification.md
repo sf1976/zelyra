@@ -152,6 +152,40 @@ shell by default. A CRUD's explicit `layout: ViewName` replaces that default
 shell with the checked project view. Authored pages are never silently
 rewritten and may choose their own page-level view.
 
+A CRUD may supply content for declared named slots in that outer layout:
+
+~~~zelyra
+view BusinessShell {
+    html {
+        <html><body>
+            <header><slot name="resource_heading"><h1>Business data</h1></slot></header>
+            <main><slot /></main>
+            <aside><slot name="resource_help"><p>Resource help</p></slot></aside>
+        </body></html>
+    }
+}
+
+crud Machine -> machines {
+    layout: BusinessShell
+    slots {
+        resource_heading {
+            html { <h1>Machine register</h1> }
+        }
+        resource_help {
+            html { <p>Use search and filters to find a machine.</p> }
+        }
+    }
+}
+~~~
+
+The compiler rejects an unknown layout, an undeclared slot, duplicate slot
+content, or slot content without a layout (diagnostic E-VIEW-031). Omitted
+named slots keep the layout's fallback. The layout's default slot remains
+reserved for generated CRUD output; custom slot markup can use checked
+components but has no record, request, or CRUD-action bindings. The generated
+CRUD continues to own its SQL, validation, CSRF, authorization, and escaping
+boundaries.
+
 CRUD resources may reuse a project-defined application shell with
 `layout: ViewName`:
 

@@ -32,7 +32,10 @@ view CustomerShell {
             </head>
             <body>
                 <header><slot name="header"><BrandMark label="Zelyra" /></slot></header>
-                <main><slot /></main>
+                <main>
+                    <slot name="intro"><p>Customer administration</p></slot>
+                    <slot />
+                </main>
             </body>
         </html>
     }
@@ -40,6 +43,18 @@ view CustomerShell {
 crud Customer -> customers {
     title: "Customers"
     layout: CustomerShell
+    slots {
+        header {
+            html {
+                <BrandMark label="Customer administration" />
+            }
+        }
+        intro {
+            html {
+                <p>Manage customer records in a reusable layout.</p>
+            }
+        }
+    }
     view {
         fields {
             name

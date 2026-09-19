@@ -1176,7 +1176,28 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     }
     for crud in &program.cruds {
         if let Some(layout) = &crud.layout {
-            if program.views.iter().all(|view| view.name != *layout) {
+            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if let Err((slot_index, message)) =
+                    validate_crud_layout_slots(view, &crud.layout_slots)
+                {
+                    let span = crud
+                        .layout_slots
+                        .get(slot_index)
+                        .map(|slot| slot.span)
+                        .unwrap_or(crud.span);
+                    diagnostic(
+                        path,
+                        "E-VIEW-031",
+                        &format!(
+                            "CRUD `{}` has invalid content for layout `{layout}`: {message}",
+                            crud.name
+                        ),
+                        span.line,
+                        span.column,
+                    );
+                    valid = false;
+                }
+            } else {
                 diagnostic(
                     path,
                     "E-VIEW-030",
@@ -1189,6 +1210,19 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+        } else if !crud.layout_slots.is_empty() {
+            let slot = &crud.layout_slots[0];
+            diagnostic(
+                path,
+                "E-VIEW-031",
+                &format!(
+                    "CRUD `{}` supplies layout slots but has no `layout: ...` reference",
+                    crud.name
+                ),
+                slot.span.line,
+                slot.span.column,
+            );
+            valid = false;
         }
     }
     valid
@@ -2192,6 +2226,10 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "name": crud.name,
                 "table": crud.table,
                 "layout": crud.layout,
+                "layout_slots": crud.layout_slots.iter().map(|slot| json!({
+                    "name": slot.name,
+                    "span": context_span(source, slot.span)
+                })).collect::<Vec<_>>(),
                 "view_fields": crud.view.fields,
                 "span": context_span(source, crud.span)
             })
@@ -2808,6 +2846,26 @@ fn validate_view_content_slots(view: &zelyra_ast::ViewDef, body: &str) -> Result
     Ok(())
 }
 
+fn validate_crud_layout_slots(
+    view: &zelyra_ast::ViewDef,
+    supplied_slots: &[zelyra_ast::CrudLayoutSlotDef],
+) -> Result<(), (usize, String)> {
+    let (_, declared_slots) = declared_view_slots(view).map_err(|message| (0, message))?;
+    let mut supplied_names = HashSet::new();
+    for (index, slot) in supplied_slots.iter().enumerate() {
+        if !declared_slots.contains(&slot.name) {
+            return Err((index, format!("view has no named slot `{}`", slot.name)));
+        }
+        if !supplied_names.insert(slot.name.as_str()) {
+            return Err((
+                index,
+                format!("named slot `{}` is supplied more than once", slot.name),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
     if value.starts_with('{') && value.ends_with('}') {
         return value.len() > 2;
@@ -3342,6 +3400,30 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
                     view.span.line,
                     view.span.column,
                     &bindings,
+                );
+            }
+        }
+    }
+    for crud in &program.cruds {
+        if let Some(layout_name) = &crud.layout {
+            if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &layout.html,
+                    layout.span.line,
+                    layout.span.column,
+                    &HashMap::new(),
+                );
+            }
+            for slot in &crud.layout_slots {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &slot.html,
+                    slot.span.line,
+                    slot.span.column,
+                    &HashMap::new(),
                 );
             }
         }
@@ -7514,13 +7596,22 @@ fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
 const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 
 fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
+    let (default_body, named_slots) =
+        split_view_content(content).expect("page view slots are validated before route generation");
+    compose_view_parts(program, view_name, &default_body, &named_slots)
+}
+
+fn compose_view_parts(
+    program: &zelyra_ast::Program,
+    view_name: &str,
+    default_body: &str,
+    named_slots: &HashMap<String, String>,
+) -> String {
     let view = program
         .views
         .iter()
         .find(|view| view.name == view_name)
-        .expect("page views are validated before route generation");
-    let (default_body, named_slots) =
-        split_view_content(content).expect("page view slots are validated before route generation");
+        .expect("page and CRUD views are validated before route generation");
     let slots = slot_invocations(&view.html).expect("view slots are validated");
     let mut composed = view.html.clone();
     for slot in slots.into_iter().rev() {
@@ -7531,7 +7622,7 @@ fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &s
             .map_or_else(
                 || match slot.name {
                     Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body.as_str(),
+                    None => default_body,
                 },
                 String::as_str,
             );
@@ -7549,9 +7640,14 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
 }
 
 fn crud_layout_html(program: &zelyra_ast::Program, crud: &zelyra_ast::CrudDef) -> Option<String> {
-    crud.layout
-        .as_deref()
-        .map(|layout| compose_view_html(program, layout, CRUD_LAYOUT_CONTENT_MARKER))
+    crud.layout.as_deref().map(|layout| {
+        let supplied_slots = crud
+            .layout_slots
+            .iter()
+            .map(|slot| (slot.name.clone(), slot.html.clone()))
+            .collect::<HashMap<_, _>>();
+        compose_view_parts(program, layout, CRUD_LAYOUT_CONTENT_MARKER, &supplied_slots)
+    })
 }
 
 fn page_data_fields(program: &zelyra_ast::Program, ty: &Type) -> Vec<String> {
@@ -9544,20 +9640,122 @@ mod tests {
     #[test]
     fn composes_crud_layout_with_generated_content_marker() {
         let source = r#"
+            component Badge {
+                props { label: String }
+                html { <strong>{label}</strong> }
+            }
             view Shell {
                 html {
-                    <html><body><header><h1>Customers</h1></header><main><slot /></main></body></html>
+                    <html><body>
+                        <header><slot name="heading"><h1>Customers</h1></slot></header>
+                        <main><slot /></main>
+                        <aside><slot name="help"><p>Default help</p></slot></aside>
+                        <footer><slot name="footer"><p>Default footer</p></slot></footer>
+                    </body></html>
                 }
             }
             table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers { layout: Shell }
+            crud Customer -> customers {
+                layout: Shell
+                slots {
+                    heading { html { <Badge label="Machine register" /> } }
+                    help { html { <p>Choose a machine to see its details.</p> } }
+                }
+            }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert!(validate_views("views.zyl", &program));
+        assert!(validate_components("views.zyl", &program));
         let layout = crud_layout_html(&program, &program.cruds[0]).unwrap();
-        assert!(layout.contains("<header><h1>Customers</h1></header>"));
+        assert!(layout.contains("<strong>Machine register</strong>"));
         assert!(layout.contains(CRUD_LAYOUT_CONTENT_MARKER));
+        assert!(layout.contains("<p>Choose a machine to see its details.</p>"));
+        assert!(!layout.contains("Default help"));
+        assert!(layout.contains("Default footer"));
         assert!(!layout.contains("<slot"));
+    }
+
+    #[test]
+    fn rejects_crud_layout_slots_without_a_matching_layout() {
+        let source = r#"
+            view Shell {
+                html { <header><slot name="heading" /></header><main><slot /></main> }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots { missing { html { <p>Custom content</p> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+
+        let source_without_layout = r#"
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                slots { heading { html { <h1>Customers</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source_without_layout).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+
+        let duplicate_slots = r#"
+            view Shell {
+                html {
+                    <header><slot name="heading" /></header><main><slot /></main>
+                }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots {
+                    heading { html { <h1>First heading</h1> } }
+                    heading { html { <h1>Second heading</h1> } }
+                }
+            }
+        "#;
+        let program = parse(&lex(duplicate_slots).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+    }
+
+    #[test]
+    fn crud_layout_slot_content_cannot_read_crud_record_values() {
+        let source = r#"
+            view Shell {
+                html { <header><slot name="heading" /></header><main><slot /></main> }
+            }
+            table customers { id: Id primary auto name: String(100) }
+            crud Customer -> customers {
+                layout: Shell
+                slots { heading { html { <h1>{customer.name}</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn crud_layout_components_are_checked_even_without_a_page_using_the_view() {
+        let source = r#"
+            component BrandMark {
+                props { label: String }
+                html { <strong>{label}</strong> }
+            }
+            view Shell {
+                html {
+                    <header><slot name="heading" /><BrandMark /></header><main><slot /></main>
+                }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots { heading { html { <h1>Customers</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
     }
 
     #[test]

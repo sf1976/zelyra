@@ -334,6 +334,11 @@ not overridden use their fallback. Page content is composed before routing,
 so authentication and escaping continue to use the existing web pipeline.
 See `examples/view_composition.zyl` for a complete example.
 
+CRUD resources can also fill named slots in their selected outer layout with
+static, component-checked content. The default slot remains exclusively owned
+by the generated CRUD, preserving its SQL, validation, CSRF, authorization,
+and escaping boundaries. See `examples/view_showcase.zyl`.
+
 ~~~zelyra
 view AppShell {
     html {
@@ -484,8 +489,9 @@ See `examples/component_slots.zyl`.
 
 The combined `examples/view_showcase.zyl` example demonstrates the intended
 release path in one small program: a named page shell, typed components,
-default and named slots, and a schema-backed CRUD resource with independently
-customizable list, detail, form, and loading views. Validate it with:
+default and named slots, per-resource CRUD layout-slot content, and a
+schema-backed CRUD resource with independently customizable list, detail,
+form, and loading views. Validate it with:
 
 ~~~bash
 zelyra check examples/view_showcase.zyl --format=json

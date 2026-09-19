@@ -1125,6 +1125,52 @@ fn context_exposes_view_slot_structure_without_rendered_content() {
 }
 
 #[test]
+fn context_exposes_crud_layout_slot_names_without_rendered_content() {
+    let path = example("view_showcase.zyl");
+    let output = run(&["context", path.to_str().unwrap(), "--format=json"]);
+    let repeated = run(&["context", path.to_str().unwrap(), "--format=json"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, repeated.stdout);
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let customer_crud = document["declarations"]["cruds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|crud| crud["name"] == "Customer")
+        .expect("Customer CRUD should be present");
+    assert_eq!(customer_crud["layout"], "CustomerShell");
+    assert_eq!(customer_crud["layout_slots"][0]["name"], "header");
+    assert_eq!(customer_crud["layout_slots"][1]["name"], "intro");
+    assert!(customer_crud["layout_slots"][0]["span"]["start"]["offset"]
+        .as_u64()
+        .is_some());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Manage customer records"));
+}
+
+#[test]
+fn reports_unknown_crud_layout_slot_with_stable_json_diagnostic() {
+    let source = r#"
+        view Shell { html { <main><slot /></main> } }
+        table customers { id: Id primary auto }
+        crud Customer -> customers {
+            layout: Shell
+            slots { heading { html { <h1>Customers</h1> } } }
+        }
+    "#;
+    let (project_directory, source_path) =
+        temporary_project_source("invalid-crud-layout-slot", source);
+    let output = run(&["check", source_path.to_str().unwrap(), "--format=json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["success"], false);
+    assert_eq!(document["diagnostics"][0]["code"], "E-VIEW-031");
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
 fn impact_can_focus_on_a_known_node_with_versioned_json() {
     let path = example("auth_crud_api.zyl");
     let first = run(&[

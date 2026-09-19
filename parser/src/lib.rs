@@ -342,6 +342,7 @@ impl<'a> Parser<'a> {
         let (table, table_span) = self.ident("table name after `->`")?;
         let mut title = None;
         let mut layout = None;
+        let mut layout_slots = Vec::new();
         let mut list = Vec::new();
         let mut search = Vec::new();
         let mut filters = Vec::new();
@@ -368,6 +369,10 @@ impl<'a> Parser<'a> {
                         self.advance();
                         self.expect(TokenKind::Colon, "colon after CRUD layout")?;
                         layout = Some(self.ident("CRUD layout view name")?.0);
+                    }
+                    TokenKind::Ident(name) if name == "slots" => {
+                        self.advance();
+                        layout_slots.extend(self.crud_layout_slots_block()?);
                     }
                     TokenKind::List => {
                         self.advance();
@@ -424,7 +429,7 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         return self.error(
-                            "expected title, layout, list, search, filter, view, requires auth, permits, or action in CRUD definition",
+                            "expected title, layout, slots, list, search, filter, view, requires auth, permits, or action in CRUD definition",
                         )
                     }
                 }
@@ -436,6 +441,7 @@ impl<'a> Parser<'a> {
                 table,
                 title,
                 layout,
+                layout_slots,
                 list,
                 search,
                 filters,
@@ -456,6 +462,7 @@ impl<'a> Parser<'a> {
             table,
             title,
             layout,
+            layout_slots,
             list,
             search,
             filters,
@@ -469,6 +476,40 @@ impl<'a> Parser<'a> {
             actions,
             span: start.join(table_span),
         })
+    }
+
+    fn crud_layout_slots_block(
+        &mut self,
+    ) -> Result<Vec<zelyra_ast::CrudLayoutSlotDef>, ParseError> {
+        self.expect(TokenKind::LBrace, "`{` after CRUD layout slots")?;
+        let mut slots = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (name, start) = self.ident("CRUD layout slot name")?;
+            self.expect(TokenKind::LBrace, "`{` after CRUD layout slot name")?;
+            self.skip_newlines();
+            self.expect(TokenKind::Html, "`html` in CRUD layout slot")?;
+            self.skip_newlines();
+            self.expect(TokenKind::LBrace, "`{` after CRUD layout slot `html`")?;
+            let html = match self.current().kind.clone() {
+                TokenKind::HtmlBody(body) => {
+                    self.advance();
+                    body
+                }
+                _ => return self.error("expected HTML body in CRUD layout slot"),
+            };
+            self.expect(TokenKind::RBrace, "`}` after CRUD layout slot HTML")?;
+            self.skip_newlines();
+            let end = self.expect(TokenKind::RBrace, "`}` after CRUD layout slot")?;
+            slots.push(zelyra_ast::CrudLayoutSlotDef {
+                name,
+                html,
+                span: start.join(end),
+            });
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after CRUD layout slots")?;
+        Ok(slots)
     }
 
     fn crud_column_block(&mut self, label: &str) -> Result<Vec<String>, ParseError> {
@@ -2623,11 +2664,24 @@ mod tests {
         let program = parse(
             &lex(r#"crud Customer -> customers {
                     layout: AppShell
+                    slots {
+                        header {
+                            html {
+                                <h1>Customers</h1>
+                            }
+                        }
+                    }
                 }"#)
             .unwrap(),
         )
         .unwrap();
         assert_eq!(program.cruds[0].layout.as_deref(), Some("AppShell"));
+        assert_eq!(program.cruds[0].layout_slots.len(), 1);
+        assert_eq!(program.cruds[0].layout_slots[0].name, "header");
+        assert_eq!(
+            program.cruds[0].layout_slots[0].html.trim(),
+            "<h1>Customers</h1>"
+        );
     }
 
     #[test]

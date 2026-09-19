@@ -37,9 +37,11 @@ principles; the roadmap below tracks what is actually implemented.
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
-  Named slots with fallback content and CRUD view overrides are available;
-  project-local CSS token overrides are implemented, while full theme authoring
-  and selection remain open.
+  Named slots with fallback content, CRUD view overrides, and per-resource
+  content for named CRUD-layout slots are available. Static slot markup may
+  use checked components; record-bound custom slot content remains open.
+  Project-local CSS token overrides are implemented, while full theme
+  authoring and selection remain open.
 - [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
   and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
   minimal and machine-management MariaDB starters and generated CRUD, form,
@@ -228,7 +230,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] CRUD resources can reuse a validated named view with `layout: ViewName`.
   The default slot receives generated lists, details, and generated CRUD forms
   without bypassing SQL, validation, CSRF, authorization, or escaping; named
-  slot customization for generated CRUD content remains open.
+  slots may be filled per resource with compile-checked static markup and
+  components. Generated CRUD content remains confined to the layout's default
+  slot; record-bound custom slot content remains open.
 - [~] View-local data loading supports explicit, schema-checked record and
   record-collection queries using `load name = sql<Type> { ... }`. Array
   results can be rendered with typed `for item in collection { ... }` blocks.
@@ -413,6 +417,38 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Semantic versioning policy, deprecation window, and compatibility tests.
 - [ ] Public alpha, beta, and stable release criteria based on real business
   applications, not only language demonstrations.
+
+## 0.2.0 release milestone
+
+0.2.0 is a target, not a release date. Do not publish it until the
+database-to-business-application workflow is demonstrably usable on a clean
+supported machine and the release gates below pass.
+
+- [~] **Distinctive Views system:** reusable layouts/components, typed CRUD
+  presentation controls, and per-resource named layout slots are available.
+  Complete coverage, project-local language catalogs, deeper theme authoring,
+  and record-bound custom slots remain open.
+- [~] **Flagship business application:** the MariaDB business template and
+  generated-project integration path exist. Complete novice-tested onboarding,
+  customized machine/department Views, German/English Learn/Work behavior, and
+  documented acceptance coverage remain release work.
+- [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
+  .env, Docker Compose, free-port selection, and actionable Docker permission
+  guidance exist.
+  Clean-machine installation verification and recovery coverage across
+  supported platforms remain open.
+- [~] **Database safety:** MariaDB is the reference runtime and SQLite has an
+  end-to-end path; PostgreSQL runtime parity is not promised. Publish an
+  explicit compatibility matrix and verify safe planning, destructive-change
+  approval, and generated-project database tests before release.
+- [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
+  complete automated tests, security review of the shipped vertical slice, and
+  reproducible release artifacts must pass before tagging 0.2.0.
+
+The 0.2.0 scope does not require a visual drag-and-drop editor, a model-provider
+integration, compiler self-hosting, full formal verification, or PostgreSQL
+runtime parity. Keep those as separate roadmap goals; do not blur planned
+capabilities into the 0.2.0 release claim.
 
 ## Real-world acceptance applications
 

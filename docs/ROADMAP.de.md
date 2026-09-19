@@ -39,9 +39,12 @@ den tatsächlich implementierten Stand.
   Pagination, APIs, OpenAPI und TypeScript-Client-Erzeugung.
 - [~] Wiederverwendbare Web-Views: benannte Layouts, Seitenkomposition, ein
   validierter Content-Slot und typisierte selbstschließende Komponenten mit
-  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt und CRUD-
-  View-Überschreibungen sind verfügbar. Projektlokale CSS-Token-Overrides sind
-  implementiert; vollständige Theme-Erstellung und -Auswahl bleiben offen.
+  Properties sind verfügbar. Benannte Slots mit Fallback-Inhalt, CRUD-View-
+  Überschreibungen und ressourcenspezifische Inhalte für benannte CRUD-Layout-
+  Slots sind verfügbar. Statische Slot-Markups dürfen geprüfte Komponenten
+  verwenden; datensatzgebundene Slot-Inhalte bleiben offen. Projektlokale
+  CSS-Token-Overrides sind implementiert; vollständige Theme-Erstellung und
+  -Auswahl bleiben offen.
 - [~] Eingebaute deutsche/englische UI-Kataloge werden über
   `ZELYRA_LANGUAGE` gewählt; `ZELYRA_LEVEL=learn|work` steuert die
   kontextbezogene Lernhilfe. Die minimalen und
@@ -242,8 +245,10 @@ Feature eines bestimmten Anbieters.
 - [~] CRUD-Ressourcen können mit `layout: ViewName` einen geprüften benannten
   View wiederverwenden. Der Default-Slot erhält erzeugte Listen, Details und
   CRUD-Formulare, ohne SQL-, Validierungs-, CSRF-, Autorisierungs- oder
-  Escaping-Prüfungen zu umgehen; benannte Slot-Anpassungen für erzeugte CRUD-
-  Inhalte bleiben offen.
+  Escaping-Prüfungen zu umgehen; benannte Slots können pro Ressource mit
+  statischem, komponentengeprüftem Inhalt befüllt werden. Der erzeugte CRUD-
+  Inhalt bleibt auf den Default-Slot beschränkt; datensatzgebundener
+  Slot-Inhalt bleibt offen.
 - [~] View-lokales Laden unterstützt explizite, schema-geprüfte Abfragen für
   einzelne Datensätze und Record-Collections mit `load name = sql<Type> { ... }`.
   Array-Ergebnisse können mit typisierten
@@ -436,6 +441,42 @@ Feature eines bestimmten Anbieters.
 - [ ] SemVer-Regeln, Deprecation-Fenster und Kompatibilitätstests.
 - [ ] Kriterien für öffentliche Alpha, Beta und Stable Releases auf Grundlage
   echter Businessanwendungen statt nur Sprachbeispielen.
+
+## Release-Meilenstein 0.2.0
+
+0.2.0 ist ein Ziel und kein Veröffentlichungstermin. Das Release darf erst
+erscheinen, wenn der Weg von der Datenbank zur Businessanwendung nachweislich
+auf einem unterstützten, frischen System funktioniert und alle folgenden
+Freigabekriterien bestanden sind.
+
+- [~] **Eigenständiges Views-System:** Wiederverwendbare Layouts/Komponenten,
+  typisierte CRUD-Darstellungsoptionen und ressourcenspezifische benannte
+  Layout-Slots sind verfügbar. Vollständige Abdeckung, projektlokale
+  Sprachkataloge, weitergehende Theme-Erstellung und datensatzgebundene
+  benutzerdefinierte Slots bleiben offen.
+- [~] **Vorzeige-Businessanwendung:** Das MariaDB-Business-Template und der
+  Integrationstestpfad für erzeugte Projekte existieren. Einsteigergeprüfter
+  Einstieg, angepasste Maschinen-/Abteilungs-Views, Deutsch/Englisch mit
+  Learn-/Work-Modus und dokumentierte Abdeckung bleiben Release-Arbeiten.
+- [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
+  erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
+  Docker-Berechtigungen sind verfügbar. Prüfungen auf frischen Systemen sowie
+  Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
+- [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
+  gibt es einen End-to-End-Pfad. PostgreSQL-Runtime-Parität wird nicht
+  versprochen. Vor dem Release sind eine klare Kompatibilitätsmatrix sowie
+  sichere Planung, Freigabe destruktiver Änderungen und Datenbanktests des
+  erzeugten Projekts nachzuweisen.
+- [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
+  vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
+  vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor
+  dem Tag 0.2.0 bestanden sein.
+
+Für 0.2.0 sind weder ein visueller Drag-and-drop-Editor noch eine Anbindung an
+einen KI-Anbieter, Compiler-Self-Hosting, vollständige formale Verifikation
+oder PostgreSQL-Runtime-Parität erforderlich. Diese Ziele bleiben separat in
+der Roadmap; geplante Fähigkeiten dürfen nicht Teil des Releaseversprechens
+werden.
 
 ## Akzeptanzanwendungen aus der Praxis
 

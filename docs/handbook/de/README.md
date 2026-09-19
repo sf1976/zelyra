@@ -719,6 +719,37 @@ zur Compile-Zeit geprüft. SQL, Validierung, CSRF, Autorisierung und Escaping
 bleiben erzeugt und aktiv; Redirects werden nicht als HTML umschlossen. Siehe
 `examples/view_showcase.zyl`.
 
+Benannte Slots des äußeren CRUD-Layouts können pro Ressource angepasst werden.
+Der Default-Slot bleibt ausschließlich für den sicher erzeugten CRUD-Inhalt
+reserviert:
+
+~~~zelyra
+view BusinessShell {
+    html {
+        <html><body>
+            <header><slot name="resource_heading"><h1>Businessdaten</h1></slot></header>
+            <main><slot /></main>
+            <aside><slot name="resource_help"><p>Hilfe zur Ressource</p></slot></aside>
+        </body></html>
+    }
+}
+
+crud Machine -> machines {
+    layout: BusinessShell
+    slots {
+        resource_heading { html { <h1>Maschinen</h1> } }
+        resource_help { html { <p>Nutze Suche und Filter.</p> } }
+    }
+}
+~~~
+
+Der Compiler prüft, ob Layout und benannte Slots existieren und nicht mehrfach
+belegt werden. Nicht angegebene Slots behalten ihren Fallback. Der statische
+Slotinhalt darf geprüfte Komponenten verwenden, hat aber keinen Zugriff auf
+Datensätze, Request-Werte oder CRUD-Aktionen. SQL, Validierung, CSRF,
+Berechtigungen und Escaping bleiben beim generierten CRUD. Ungültige
+CRUD-Slotkonfigurationen melden E-VIEW-031.
+
 Komponenten können außerdem über einen Default-Slot oder benannte Slots
 HTML-Kindelemente aufnehmen:
 

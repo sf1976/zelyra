@@ -348,6 +348,12 @@ Authentifizierung und Escaping bleiben dadurch in der bestehenden sicheren
 Web-Pipeline. Ein vollständiges Beispiel steht in
 `examples/view_composition.zyl`.
 
+CRUD-Ressourcen können zusätzlich benannte Slots ihres äußeren Layouts mit
+statischem, komponentengeprüftem Inhalt befüllen. Der Default-Slot bleibt
+ausschließlich dem generierten CRUD vorbehalten; SQL, Validierung, CSRF,
+Berechtigungen und Escaping bleiben dadurch erhalten. Siehe
+`examples/view_showcase.zyl`.
+
 ~~~zelyra
 view AppShell {
     html {
@@ -504,9 +510,10 @@ Aufrufer können sie explizit überschreiben. Siehe
 
 Das zusammengefasste Beispiel `examples/view_showcase.zyl` zeigt den
 vorgesehenen Release-Pfad in einem kleinen Programm: einen benannten
-Seitenrahmen, typisierte Komponenten, Default- und benannte Slots sowie eine
-schemabasierte CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-,
-Formular- und Ladeansichten. Prüfung:
+Seitenrahmen, typisierte Komponenten, Default- und benannte Slots,
+ressourcenspezifische CRUD-Layout-Slots sowie eine schemabasierte
+CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-, Formular- und
+Ladeansichten. Prüfung:
 
 ~~~bash
 zelyra check examples/view_showcase.zyl --format=json

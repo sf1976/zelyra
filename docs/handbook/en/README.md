@@ -644,6 +644,35 @@ time. SQL, validation, CSRF, authorization, and escaping remain generated and
 enforced; redirects are not wrapped as HTML. See
 `examples/view_showcase.zyl`.
 
+Each CRUD resource can fill named slots in its outer layout. The default slot
+remains reserved for safely generated CRUD content:
+
+~~~zelyra
+view BusinessShell {
+    html {
+        <html><body>
+            <header><slot name="resource_heading"><h1>Business data</h1></slot></header>
+            <main><slot /></main>
+            <aside><slot name="resource_help"><p>Resource help</p></slot></aside>
+        </body></html>
+    }
+}
+
+crud Machine -> machines {
+    layout: BusinessShell
+    slots {
+        resource_heading { html { <h1>Machines</h1> } }
+        resource_help { html { <p>Use search and filters.</p> } }
+    }
+}
+~~~
+
+The compiler checks that the layout and named slots exist and are not supplied
+more than once. Unfilled slots retain their fallback. Static slot content may
+use checked components, but cannot access records, request values, or CRUD
+actions. SQL, validation, CSRF, permissions, and escaping remain owned by the
+generated CRUD. Invalid CRUD slot configuration reports E-VIEW-031.
+
 View interpolations are checked before the server starts. A page may use its
 route parameters, a component may use its declared properties, and a dynamic
 component property must have a compatible type. A page may also load one
