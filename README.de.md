@@ -974,6 +974,11 @@ MariaDB-Zugangsdaten. Eine vorhandene `.env` wird niemals
 überschrieben; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT` und
 `ZELYRA_DB_HOST_PORT` können dort unabhängig geändert werden.
 
+Wenn keine Host-Ports angegeben werden, wählt `zelyra new` automatisch freie
+Web- und MariaDB-Host-Ports, falls die Standardports bereits belegt sind.
+Ausdrücklich gesetzte Werte für `--host-port` und `--db-host-port` bleiben
+verbindlich und liefern bei Belegung eine klare Fehlermeldung.
+
 `zelyra new --mariadb` und `zelyra init --mariadb` erzeugen diese geschützte
 `.env` bereits direkt; `zelyra setup` bleibt für bestehende Projekte verfügbar.
 Nur die notwendigen Datenbankwerte sind aktiv. Ports, Feature-Schalter,

@@ -91,6 +91,8 @@ struct ProjectOptions {
     web_port: u16,
     host_port: u16,
     database_host_port: u16,
+    host_port_given: bool,
+    database_host_port_given: bool,
 }
 
 fn parse_web_port(value: &str) -> Result<u16, String> {
@@ -109,6 +111,70 @@ fn parse_port(value: &str, label: &str) -> Result<u16, String> {
         return Err(format!("{label} port must be between 1 and 65535"));
     }
     Ok(port)
+}
+
+fn port_is_available(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+fn find_free_port(start: u16, reserved: &[u16]) -> Option<u16> {
+    (start..=u16::MAX).find(|port| !reserved.contains(port) && port_is_available(*port))
+}
+
+fn resolve_host_port(
+    requested: u16,
+    explicitly_given: bool,
+    label: &str,
+    auto_select: bool,
+    reserved: &[u16],
+) -> Result<(u16, Option<String>), String> {
+    if !explicitly_given && !auto_select {
+        return Ok((requested, None));
+    }
+    if port_is_available(requested) && !reserved.contains(&requested) {
+        return Ok((requested, None));
+    }
+    if explicitly_given {
+        return Err(format!(
+            "{label} port {requested} is already in use; choose a different port"
+        ));
+    }
+    let selected = find_free_port(requested.saturating_add(1), reserved).ok_or_else(|| {
+        format!("could not find a free {label} port after {requested}; choose a port explicitly")
+    })?;
+    Ok((
+        selected,
+        Some(format!(
+            "{label} port {requested} is unavailable; selected free port {selected}"
+        )),
+    ))
+}
+
+fn resolve_project_host_ports(
+    path: &str,
+    options: &ProjectOptions,
+) -> Result<(u16, u16, Vec<String>), String> {
+    if !options.with_mariadb {
+        return Ok((options.host_port, options.database_host_port, Vec::new()));
+    }
+    let env_exists = std::path::Path::new(path).join(".env").is_file();
+    let auto_select = !env_exists;
+    let (host_port, host_note) = resolve_host_port(
+        options.host_port,
+        options.host_port_given,
+        "web host",
+        auto_select,
+        &[],
+    )?;
+    let (database_host_port, database_note) = resolve_host_port(
+        options.database_host_port,
+        options.database_host_port_given,
+        "MariaDB host",
+        auto_select,
+        &[host_port],
+    )?;
+    let notes = [host_note, database_note].into_iter().flatten().collect();
+    Ok((host_port, database_host_port, notes))
 }
 
 fn generate_local_secret() -> Result<String, String> {
@@ -274,11 +340,24 @@ fn setup_project(path: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn create_project(path: &str, options: ProjectOptions) -> ExitCode {
+fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
     let directory = std::path::Path::new(path);
     if directory.exists() && !options.allow_current_directory {
         eprintln!("error[E-INIT-001]: directory `{path}` already exists");
         return ExitCode::from(1);
+    }
+    let (host_port, database_host_port, port_notes) =
+        match resolve_project_host_ports(path, &options) {
+            Ok(ports) => ports,
+            Err(error) => {
+                eprintln!("error[E-INIT-005]: {error}");
+                return ExitCode::from(2);
+            }
+        };
+    options.host_port = host_port;
+    options.database_host_port = database_host_port;
+    for note in port_notes {
+        println!("note: {note}");
     }
     if let Err(error) = fs::create_dir_all(directory) {
         eprintln!("error[E-INIT-002]: cannot create `{path}`: {error}");
@@ -8175,6 +8254,8 @@ fn main() -> ExitCode {
                 web_port,
                 host_port,
                 database_host_port,
+                host_port_given,
+                database_host_port_given,
             },
         );
     }
@@ -8295,6 +8376,8 @@ fn main() -> ExitCode {
                 web_port,
                 host_port,
                 database_host_port,
+                host_port_given,
+                database_host_port_given,
             },
         );
     }
@@ -9641,6 +9724,8 @@ mod tests {
                 web_port: DEFAULT_WEB_PORT,
                 host_port: DEFAULT_WEB_PORT,
                 database_host_port: DEFAULT_DATABASE_HOST_PORT,
+                host_port_given: false,
+                database_host_port_given: false,
             },
         );
         assert_eq!(status, ExitCode::SUCCESS);
@@ -9661,6 +9746,8 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
+        let database_host_port = find_free_port(34_000, &[]).unwrap();
+        let host_port = find_free_port(35_000, &[database_host_port]).unwrap();
         let status = create_project(
             path.to_str().unwrap(),
             ProjectOptions {
@@ -9670,8 +9757,10 @@ mod tests {
                 auth_template: false,
                 business_template: false,
                 web_port: 8080,
-                host_port: 18080,
-                database_host_port: 3308,
+                host_port,
+                database_host_port,
+                host_port_given: true,
+                database_host_port_given: true,
             },
         );
         assert_eq!(status, ExitCode::SUCCESS);
@@ -9682,11 +9771,15 @@ mod tests {
         let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
         let gitignore = fs::read_to_string(path.join(".gitignore")).unwrap();
         assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
-        assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
-        assert!(env_example.contains("ZELYRA_DB_HOST_PORT=3308"));
+        assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={host_port}")));
+        assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(compose.contains("127.0.0.1:${ZELYRA_DB_HOST_PORT:-3308}:3306"));
+        assert!(compose.contains(&format!(
+            "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
+        )));
+        assert!(compose.contains(&format!(
+            "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
+        )));
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
         assert!(dockerfile.contains("EXPOSE 8080"));
         assert!(dockerfile.contains("0.0.0.0:8080"));
@@ -9800,5 +9893,23 @@ mod tests {
         assert!(hint.contains("Docker Compose is unavailable"));
         assert!(hint.contains("https://docs.docker.com/"));
         assert!(hint.contains("docker compose version"));
+    }
+
+    #[test]
+    fn free_port_selection_skips_a_bound_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = listener.local_addr().unwrap().port();
+        let selected = find_free_port(occupied, &[]).unwrap();
+        assert_ne!(selected, occupied);
+    }
+
+    #[test]
+    fn explicit_port_conflicts_are_rejected() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let occupied = listener.local_addr().unwrap().port();
+        let error = resolve_host_port(occupied, true, "web host", true, &[])
+            .expect_err("an explicitly occupied port must be rejected");
+        assert!(error.contains("already in use"));
+        assert!(error.contains("choose a different port"));
     }
 }

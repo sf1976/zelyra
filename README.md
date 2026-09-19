@@ -938,6 +938,11 @@ with local random MariaDB credentials immediately. Existing
 `.env` files are never overwritten; `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and
 `ZELYRA_DB_HOST_PORT` can be changed independently in `.env`.
 
+When no host ports are specified, `zelyra new` automatically selects free web
+and MariaDB host ports if the defaults are already occupied. Explicit
+`--host-port` and `--db-host-port` values remain strict and produce a clear
+error when unavailable.
+
 `zelyra new --mariadb` and `zelyra init --mariadb` already create this
 protected `.env`; `zelyra setup` remains available for existing projects. Only
 the required database values are active. Ports, feature switches, authentication

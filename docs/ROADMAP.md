@@ -100,8 +100,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] A deterministic first-run project flow supports MariaDB scaffolding,
   secure local `.env` creation directly during `zelyra new` and `zelyra init`,
   extensively commented optional settings, and validated selectable ports;
-  `zelyra setup` remains an idempotent recovery path. Interactive connection
-  configuration remains open.
+  free host ports are selected automatically for new projects when defaults
+  are occupied; `zelyra setup` remains an idempotent recovery path. Interactive
+  connection configuration remains open.
 - [~] A shared console/browser setup assistant is available through
   `zelyra setup --database|--schema|--all` and `zelyra setup --web`; it starts
   generated MariaDB Compose projects and applies the initial schema; console

@@ -310,6 +310,9 @@ server port; `--host-port 18080` chooses the local published web port; and
 `--db-host-port 3307` chooses the local MariaDB port. You can change
 `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT`, and `ZELYRA_DB_HOST_PORT` independently
 later in `.env`.
+If the host-port flags are omitted, new projects automatically choose free
+host ports when the defaults are occupied. Explicit host-port flags are never
+silently changed.
 Open `http://127.0.0.1:18080` after the example above. The template is for
 local development; use a secret manager and TLS for production.
 
