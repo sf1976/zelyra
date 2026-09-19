@@ -549,7 +549,9 @@ crud Customer -> customers {
 
 Die generierten Modi `table` (Standard) und `cards` behalten Suche, typisierte
 Filter, erlaubte Sortierung, Pagination, URL-Zustand, Escaping und
-Berechtigungsprüfungen bei.
+Berechtigungsprüfungen bei. Detailseiten bleiben auch dann erreichbar, wenn das
+technische Feld `id` ausgeblendet ist: Das erste angezeigte Feld verlinkt auf
+die Detailseite. Wird `id` angezeigt, bleibt dieses Feld der Detail-Link.
 
 Auch die Detaildarstellung kann unabhängig angepasst werden:
 

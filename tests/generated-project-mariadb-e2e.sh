@@ -83,6 +83,7 @@ print("generated project doctor: ready")
 
 echo "[3/4] running schema and CRUD HTTP integration"
 DATABASE_URL="${test_database_url}" \
+    ZELYRA_LANGUAGE=en \
     ZELYRA_BIN="${zelyra_bin}" \
     ZELYRA_E2E_PROJECT="${project_dir}/main.zyl" \
     ZELYRA_E2E_ADDRESS="${address}" \
