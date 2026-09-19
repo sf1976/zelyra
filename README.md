@@ -527,6 +527,9 @@ crud Customer -> customers {
 
 The generated `table` (default) and `cards` modes keep search, typed filters,
 allowlisted sorting, pagination, URL state, escaping, and permission checks.
+Record details remain reachable even when the technical `id` field is hidden:
+the first displayed field links to the detail page. If `id` is displayed, it
+continues to link to that page.
 
 Detail presentation can be customized independently:
 

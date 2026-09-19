@@ -145,7 +145,10 @@ create_machine() {
         "${base_url}/machines" -o "${temp_dir}/${file_prefix}-list.html"
     grep -Fq "${name}" "${temp_dir}/${file_prefix}-list.html"
     created_machine_id="$(sed -n 's#.*href="/machines/\([0-9][0-9]*\)">.*#\1#p' "${temp_dir}/${file_prefix}-list.html" | head -1)"
-    [[ -n "${created_machine_id}" ]]
+    if [[ -z "${created_machine_id}" ]]; then
+        echo "error: CRUD list did not link the created machine to its detail page" >&2
+        exit 1
+    fi
 }
 
 delete_machine() {
@@ -196,8 +199,8 @@ grep -Fq "<th>Department</th>" "${temp_dir}/machine-list.html"
 grep -Fq '<fieldset class="zelyra-query-controls"><legend>Search and filters</legend>' "${temp_dir}/machine-list.html"
 grep -Fq 'for="filter_active__operator">Filter Active operator</label>' "${temp_dir}/machine-list.html"
 grep -Fq 'for="filter_active">Filter Active value</label>' "${temp_dir}/machine-list.html"
-grep -Fq "<td>${department_name}</td>" "${temp_dir}/machine-list.html"
-grep -Fq "<td>${machine_number}</td>" "${temp_dir}/machine-list.html"
+grep -Fq "${department_name}" "${temp_dir}/machine-list.html"
+grep -Fq "${machine_number}" "${temp_dir}/machine-list.html"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}" -o "${temp_dir}/machine-detail.html"
 grep -Fq "<dt>Department</dt><dd>${department_name}</dd>" "${temp_dir}/machine-detail.html"
 

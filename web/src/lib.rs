@@ -5388,9 +5388,11 @@ fn render_crud_list_with_actions(
                     column,
                 )));
                 html.push_str("</dt><dd>");
-                if *column == "id" {
+                if let Some(href) =
+                    crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
+                {
                     html.push_str("<a href=\"");
-                    html.push_str(&html_escape(&format!("{}/{}", crud.path, value)));
+                    html.push_str(&html_escape(&href));
                     html.push_str("\">");
                     html.push_str(&html_escape(value));
                     html.push_str("</a>");
@@ -5425,9 +5427,11 @@ fn render_crud_list_with_actions(
                     .and_then(|index| row.get(index))
                     .map(String::as_str)
                     .unwrap_or("");
-                if *column == "id" {
+                if let Some(href) =
+                    crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
+                {
                     html.push_str("<a href=\"");
-                    html.push_str(&html_escape(&format!("{}/{}", crud.path, value)));
+                    html.push_str(&html_escape(&href));
                     html.push_str("\">");
                     html.push_str(&html_escape(value));
                     html.push_str("</a>");
@@ -5474,6 +5478,29 @@ fn render_crud_list_with_actions(
     }
     html.push_str("</nav></main>");
     html
+}
+
+fn crud_list_detail_href(
+    crud: &CrudRoute,
+    query_columns: &[&str],
+    display_columns: &[&str],
+    row: &[String],
+    column: &str,
+    value: &str,
+) -> Option<String> {
+    let detail_id = if column == "id" {
+        Some(value)
+    } else if display_columns.first().copied() == Some(column) {
+        query_columns
+            .iter()
+            .position(|query_column| *query_column == "id")
+            .and_then(|index| row.get(index))
+            .map(String::as_str)
+    } else {
+        None
+    }?;
+
+    Some(format!("{}/{}", crud.path, detail_id))
 }
 
 #[cfg(test)]
@@ -8745,6 +8772,28 @@ mod tests {
         assert!(html
             .contains("page=3&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
 
+        let name_column = ["name"];
+        let name_only_html = render_crud_list(
+            &route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &name_column,
+                filter_columns: &[],
+                sort_columns: &columns,
+                rows: &rows,
+                search: "",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+                archived: false,
+                success: None,
+                success_title: None,
+            },
+        );
+        assert!(name_only_html.contains("<td><a href=\"/machines/1\">&lt;unsafe&gt;</a></td>"));
+
         let restricted_html = render_crud_list_with_actions(
             &route,
             CrudListView {
@@ -8801,6 +8850,29 @@ mod tests {
         assert!(cards_html.contains("zelyra-crud-card"));
         assert!(cards_html.contains("data-loading-message=\"Loading machines...\""));
         assert!(!cards_html.contains("<table>"));
+
+        let cards_name_only_html = render_crud_list(
+            &cards_route,
+            CrudListView {
+                query_columns: &columns,
+                display_columns: &name_column,
+                filter_columns: &[],
+                sort_columns: &columns,
+                rows: &rows,
+                search: "",
+                query_values: &query_values,
+                sort: "id",
+                order: "ASC",
+                page: 1,
+                per_page: 50,
+                archived: false,
+                success: None,
+                success_title: None,
+            },
+        );
+        assert!(
+            cards_name_only_html.contains("<dd><a href=\"/machines/1\">&lt;unsafe&gt;</a></dd>")
+        );
 
         let empty_rows: Vec<Vec<String>> = Vec::new();
         let empty_html = render_crud_list(
