@@ -2658,11 +2658,11 @@ fn render_auth_admin(
                 "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_permission\"><input type=\"hidden\" name=\"role\" value=\"{}\"><input type=\"hidden\" name=\"permission\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
                 html_escape(role),
                 html_escape(permission),
-                tr(language, "auth.revoke"),
                 path,
                 csrf,
                 html_escape(role),
                 html_escape(permission),
+                tr(language, "auth.revoke"),
             ));
         }
     }

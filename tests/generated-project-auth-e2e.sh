@@ -57,6 +57,7 @@ docker compose --env-file "${project_dir}/.env" \
 
 echo "[3/3] running login, session, and permission integration"
 DATABASE_URL="${database_url}" \
+    ZELYRA_LANGUAGE=en \
     ZELYRA_AUTH_DB_PASSWORD="${root_password}" \
     ZELYRA_BIN="${zelyra_bin}" \
     ZELYRA_AUTH_E2E_PROJECT="${project_dir}/main.zyl" \

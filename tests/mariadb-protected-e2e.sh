@@ -223,7 +223,7 @@ primary_admin_status="$(request_status "${temp_dir}/primary-admin.html" \
     --cookie "${primary_cookie}" \
     "${base_url}/admin/access")"
 [[ "${primary_admin_status}" == "200" ]]
-grep -Fq "Role administration" "${temp_dir}/primary-admin.html"
+grep -Fq "Access management" "${temp_dir}/primary-admin.html"
 admin_csrf="$(extract_csrf "${temp_dir}/primary-admin.html")"
 [[ -n "${admin_csrf}" ]]
 admin_grant_status="$(request_status "${temp_dir}/primary-admin-grant.html" \
@@ -236,6 +236,26 @@ admin_grant_status="$(request_status "${temp_dir}/primary-admin-grant.html" \
 [[ "${admin_grant_status}" == "303" ]]
 admin_role_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${viewer_user_id}' AND role = '${temporary_role}'")"
 [[ "${admin_role_count}" == "1" ]]
+admin_revoke_permission_status="$(request_status "${temp_dir}/primary-admin-revoke-permission.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=revoke_permission" \
+    --data-urlencode "role=${primary_role}" \
+    --data-urlencode "permission=customers.create" \
+    "${base_url}/admin/access")"
+[[ "${admin_revoke_permission_status}" == "303" ]]
+admin_revoked_permission_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM role_permissions WHERE role = '${primary_role}' AND permission = 'customers.create'")"
+[[ "${admin_revoked_permission_count}" == "0" ]]
+admin_restore_permission_status="$(request_status "${temp_dir}/primary-admin-restore-permission.html" \
+    --cookie "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode "operation=grant_permission" \
+    --data-urlencode "role=${primary_role}" \
+    --data-urlencode "permission=customers.create" \
+    "${base_url}/admin/access")"
+[[ "${admin_restore_permission_status}" == "303" ]]
+admin_restored_permission_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM role_permissions WHERE role = '${primary_role}' AND permission = 'customers.create'")"
+[[ "${admin_restored_permission_count}" == "1" ]]
 admin_create_user_status="$(request_status "${temp_dir}/primary-admin-create-user.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${admin_csrf}" \

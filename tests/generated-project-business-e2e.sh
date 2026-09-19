@@ -100,6 +100,7 @@ PY
 
 echo "[3/4] running authentication, CRUD, API, and permission integration"
 DATABASE_URL="${database_url}" \
+    ZELYRA_LANGUAGE=en \
     ZELYRA_PROTECTED_E2E_DB_PASSWORD="${root_password}" \
     ZELYRA_BIN="${zelyra_bin}" \
     ZELYRA_PROTECTED_E2E_PROJECT="${project_dir}/main.zyl" \
