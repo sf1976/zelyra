@@ -112,10 +112,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.1.45
+./install.sh --release v0.1.50
 ~~~
 
-On Windows, use `-Release v0.1.45` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.1.50` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:

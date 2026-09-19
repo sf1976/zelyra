@@ -6,6 +6,15 @@ compiler and repository release.
 
 ## Unreleased
 
+## 0.1.50 — 2026-09-19
+
+This alpha patch release fixes generated CRUD detail navigation and permission
+revocation, and aligns the end-to-end suite with the current localized UI.
+
+Diese Alpha-Patch-Version behebt die Detailnavigation in generierten CRUD-
+Listen und den Entzug von Berechtigungen. Außerdem ist die End-to-End-Testsuite
+an die aktuelle lokalisierte Oberfläche angepasst.
+
 ### Fixed
 
 - Generated CRUD lists now link the first displayed field to the record detail
