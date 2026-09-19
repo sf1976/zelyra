@@ -1126,6 +1126,14 @@ Zelyra stellt Listen, Details, Create/Edit-Formulare, Suche, Filter, Sortierung,
 Pagination und eine CSRF-geschützte Löschaktion bereit. Spalten werden gegen
 das Schema geprüft.
 
+Erzeugte CRUD-Seiten verwenden standardmäßig den responsiven Zelyra-
+Anwendungsrahmen. Eigenständige erzeugte Formulare und Tableviews nutzen ihn
+ebenfalls. Ein explizites `layout: ViewName` beim CRUD ersetzt den
+Standardrahmen; selbst verfasste Seiten werden nicht stillschweigend
+umschlossen. Die Navigation orientiert sich an den deklarierten Ressourcen,
+Framework-Texte an `ZELYRA_LANGUAGE`. Für Tastaturnutzer gibt es sichtbare
+Fokusmarkierungen und einen lokalisierten Sprunglink zum Inhalt.
+
 Beispiele für URLs:
 
 ~~~text

@@ -56,6 +56,11 @@ shows or hides the contextual learning guide; it never grants capabilities or
 permissions. For `zelyra serve`, process variables override the project's
 `.env`. New MariaDB projects default to `de`/`learn`; direct serving without
 either value defaults to `en`/`work`. These are presentation settings only.
+Generated CRUD, standalone form, tableview, login, and authentication-admin
+pages receive the responsive Zelyra application shell when no explicit custom
+layout is selected. The shell provides labeled navigation, keyboard focus
+styles, and a localized skip-to-content link. Authored page HTML remains under
+the page author's control.
 
 Missing German entries fall back to English. A key missing from both catalogs
 renders `[missing translation]`; a consistency test checks literal references
@@ -124,7 +129,13 @@ slots use their declared fallback. Composition happens before component
 expansion and routing, without global view state; authentication, capability
 checks, SQL checks, and HTML escaping remain active.
 
-CRUD resources may reuse the same application shell with `layout: ViewName`:
+Generated CRUD, form, and tableview pages use the built-in Zelyra application
+shell by default. A CRUD's explicit `layout: ViewName` replaces that default
+shell with the checked project view. Authored pages are never silently
+rewritten and may choose their own page-level view.
+
+CRUD resources may reuse a project-defined application shell with
+`layout: ViewName`:
 
 ~~~zelyra
 crud Customer -> customers {

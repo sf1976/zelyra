@@ -514,6 +514,11 @@ verfügbar. Filter bieten typabhängige Operatoren wie `contains`, `gte` und
 /customers?filter_quantity__gte=10
 ~~~
 
+Erzeugte CRUD-, eigenständige Formular- und Tableview-Seiten erhalten außerdem
+standardmäßig den responsiven Zelyra-Anwendungsrahmen. Ein explizites
+`layout: ViewName` beim CRUD ersetzt ihn; selbst verfasste Seiten behalten die
+volle Kontrolle über ihr Markup.
+
 Erzeugte Such- und Filtersteuerungen verwenden ein semantisches Fieldset und
 getrennte Beschriftungen für jeden Operator und Wert. Filterverarbeitung und
 bewahrter URL-Zustand werden deterministisch sortiert, sodass dieselbe Anfrage

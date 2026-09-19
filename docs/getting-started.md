@@ -759,6 +759,9 @@ crud Machine -> machines {
 All blocks are optional. Configured columns are checked against the schema;
 relationship fields are mapped to their stored foreign-key columns. The
 minimal form keeps the default list, text search, and non-ID filters.
+Generated CRUD, standalone form, and tableview pages receive the responsive
+Zelyra application shell automatically. A CRUD's explicit `layout: ViewName`
+replaces the default shell; ordinary authored pages keep their own markup.
 
 This exposes `GET /machines` with escaped output, search, exact filters,
 allowlisted sorting, pagination, linked detail pages, and generated Create/Edit

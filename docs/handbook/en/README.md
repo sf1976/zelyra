@@ -1036,6 +1036,13 @@ Zelyra provides list and detail pages, Create/Edit forms, search, filters,
 allowlisted sorting, pagination, and CSRF-protected deletion. Configured fields
 are checked against the schema.
 
+Generated CRUD pages use the responsive Zelyra application shell by default.
+Standalone generated forms and tableviews use it too. An explicit
+`layout: ViewName` on a CRUD replaces the default shell; custom authored pages
+are not silently wrapped. The generated navigation follows declared resources,
+and framework copy follows `ZELYRA_LANGUAGE`. Keyboard users get visible focus
+styles and a localized skip-to-content link.
+
 Example URLs:
 
 ~~~text

@@ -35,9 +35,11 @@ remain machine-searchable for now.
   themes remain open.
 - [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
   and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
-  minimal and machine-management MariaDB starters have a responsive Zelyra
-  application shell; project-local catalog overrides, wider template coverage,
-  and replaceable themes remain open.
+  minimal and machine-management MariaDB starters and generated CRUD, form,
+  tableview, login, and authentication-admin pages have a responsive Zelyra
+  application shell by default. Explicit CRUD layouts take precedence, and
+  authored pages remain untouched; project-local catalog overrides, wider
+  template coverage, and replaceable themes remain open.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -192,10 +194,12 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [~] The minimal and machine-management starters include a responsive branded
   shell and catalog-backed German/English copy; the machine starter uses the
-  learn-mode guide. CRUD, form, authentication, validation, and standard
-  HTTP-error copy use the same built-in locale catalogs; broader theme
-  replacement, remaining template coverage, and project-local catalog
-  extensions remain open.
+  learn-mode guide. Generated CRUD, standalone form, tableview, login, and
+  authentication-admin pages now also receive that responsive default shell;
+  explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
+  authentication, validation, and standard HTTP-error copy use the same
+  built-in locale catalogs. Broader theme replacement, remaining template
+  coverage, and project-local catalog extensions remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named

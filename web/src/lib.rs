@@ -227,6 +227,19 @@ impl Response {
 
 const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DefaultNavigationLink {
+    path: String,
+    label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DefaultUiContext {
+    current_path: String,
+    current_label: String,
+    navigation: Vec<DefaultNavigationLink>,
+}
+
 fn apply_generated_layout(mut response: Response, layout_html: Option<&str>) -> Response {
     let Some(layout_html) = layout_html else {
         return response;
@@ -236,6 +249,108 @@ fn apply_generated_layout(mut response: Response, layout_html: Option<&str>) -> 
     }
     response.body = layout_html.replace(CRUD_LAYOUT_CONTENT_MARKER, &response.body);
     response
+}
+
+fn render_default_application_shell(
+    content: &str,
+    context: &DefaultUiContext,
+    language: UiLanguage,
+) -> String {
+    let document_start = content.trim_start();
+    if document_start
+        .get(..14)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<!doctype html"))
+        || document_start
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<html"))
+    {
+        return content.to_owned();
+    }
+
+    let localized_current_label = localize_user_text(language, &context.current_label);
+    let current_label = html_escape(&localized_current_label);
+    let page_title = html_escape(&format!("{localized_current_label} | Zelyra"));
+    let home_path = context
+        .navigation
+        .first()
+        .map(|link| link.path.as_str())
+        .unwrap_or(if context.current_path == "/login" {
+            "/"
+        } else {
+            &context.current_path
+        });
+    let mut navigation = String::new();
+    for (index, link) in context.navigation.iter().enumerate() {
+        let active = navigation_link_is_active(&link.path, &context.current_path);
+        let current = if active { " aria-current=\"page\"" } else { "" };
+        let label = html_escape(&localize_user_text(language, &link.label));
+        navigation.push_str(&format!(
+            "<a href=\"{}\" aria-label=\"{label}\"{current}><span class=\"zelyra-nav-icon\" aria-hidden=\"true\">{:02}</span><span class=\"zelyra-nav-label\">{label}</span></a>",
+            html_escape(&link.path),
+            index + 1,
+        ));
+    }
+
+    let main_content = if content.trim_start().starts_with("<main") {
+        content.to_owned()
+    } else {
+        format!("<main>{content}</main>")
+    };
+    format!(
+        "<!doctype html><html data-zelyra-language><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{page_title}</title></head><body><a class=\"zelyra-skip-link\" href=\"#zelyra-content\">{}</a><div class=\"zelyra-app\"><aside class=\"zelyra-sidebar\"><a class=\"zelyra-brand\" aria-label=\"Zelyra\" href=\"{}\"><span class=\"zelyra-mark\" aria-hidden=\"true\">Z</span><span class=\"zelyra-brand-copy\"><span class=\"zelyra-brand-name\">Zelyra</span><span class=\"zelyra-brand-descriptor\">{}</span></span></a><p class=\"zelyra-sidebar-caption\">{}</p><nav class=\"zelyra-nav\" aria-label=\"{}\">{navigation}</nav><div class=\"zelyra-sidebar-footer\"><span class=\"zelyra-status-dot\" aria-hidden=\"true\"></span><span>{}</span></div></aside><div class=\"zelyra-workspace\"><header class=\"zelyra-topbar\"><div class=\"zelyra-breadcrumb\"><span>{}</span><span aria-hidden=\"true\">/</span><strong>{current_label}</strong></div><span class=\"zelyra-environment\">{}</span></header><div class=\"zelyra-page-content\" id=\"zelyra-content\">{main_content}</div></div></div></body></html>",
+        tr(language, "shell.skip_to_content"),
+        html_escape(home_path),
+        tr(language, "shell.brand_descriptor"),
+        tr(language, "shell.navigation_caption"),
+        tr(language, "shell.navigation_label"),
+        tr(language, "shell.powered_by"),
+        tr(language, "shell.workspace_label"),
+        tr(language, "shell.environment_label"),
+    )
+}
+
+fn navigation_link_is_active(link_path: &str, current_path: &str) -> bool {
+    if link_path == "/" {
+        return current_path == "/";
+    }
+    current_path == link_path
+        || current_path
+            .strip_prefix(link_path.trim_end_matches('/'))
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn crud_route_matches_path(crud: &CrudRoute, path: &str) -> bool {
+    let base = crud.path.trim_end_matches('/');
+    let base = if base.is_empty() { "/" } else { base };
+    let patterns = [
+        crud.path.clone(),
+        format!("{base}/new"),
+        format!("{base}/{{id}}"),
+        format!("{base}/{{id}}/edit"),
+        format!("{base}/{{id}}/delete"),
+        format!("{base}/{{id}}/restore"),
+    ];
+    patterns
+        .iter()
+        .any(|pattern| match_path(pattern, path).is_some())
+        || crud
+            .actions
+            .iter()
+            .any(|action| match_path(&action.form.path, path).is_some())
+}
+
+fn add_navigation_link(
+    navigation: &mut Vec<DefaultNavigationLink>,
+    path: impl Into<String>,
+    label: impl Into<String>,
+) {
+    let path = path.into();
+    if !navigation.iter().any(|link| link.path == path) {
+        navigation.push(DefaultNavigationLink {
+            path,
+            label: label.into(),
+        });
+    }
 }
 
 fn localize_html(source: &str, language: UiLanguage) -> String {
@@ -347,9 +462,20 @@ fn inject_design_system(source: &str) -> String {
     }
 }
 
-fn append_learning_assistant(html: &str, path: &str, language: UiLanguage) -> String {
+fn append_learning_assistant(
+    html: &str,
+    path: &str,
+    language: UiLanguage,
+    generated_crud: bool,
+) -> String {
     let machine_page = path.starts_with("/machines");
-    let section = if machine_page { "machine" } else { "view" };
+    let section = if machine_page {
+        "machine"
+    } else if generated_crud {
+        "crud"
+    } else {
+        "view"
+    };
     let title = tr(language, &format!("learning.{section}.title"));
     let introduction = tr(language, &format!("learning.{section}.intro"));
     let heading = tr(language, &format!("learning.{section}.heading"));
@@ -667,9 +793,132 @@ impl WebApp {
         self
     }
 
+    fn default_ui_context(&self, request: &Request) -> Option<DefaultUiContext> {
+        let mut context = if let Some(crud) = self
+            .cruds
+            .iter()
+            .find(|crud| crud_route_matches_path(crud, &request.path))
+        {
+            if crud.layout_html.is_some() {
+                return None;
+            }
+            DefaultUiContext {
+                current_path: crud.path.clone(),
+                current_label: crud.title.clone(),
+                navigation: Vec::new(),
+            }
+        } else if let Some(form) = self
+            .forms
+            .iter()
+            .find(|form| match_path(&form.path, &request.path).is_some())
+        {
+            if form.layout_html.is_some() {
+                return None;
+            }
+            let label = form
+                .table
+                .as_ref()
+                .map(|table| localized_identifier(self.ui_language, &table.name))
+                .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+            DefaultUiContext {
+                current_path: form.path.clone(),
+                current_label: label,
+                navigation: Vec::new(),
+            }
+        } else if let Some(tableview) = self
+            .tableviews
+            .iter()
+            .find(|tableview| match_path(&tableview.path, &request.path).is_some())
+        {
+            DefaultUiContext {
+                current_path: tableview.path.clone(),
+                current_label: tableview.title.clone(),
+                navigation: Vec::new(),
+            }
+        } else if request.path == "/login" && self.auth_route.is_some() {
+            DefaultUiContext {
+                current_path: request.path.clone(),
+                current_label: "@i18n:auth.login_title".into(),
+                navigation: Vec::new(),
+            }
+        } else {
+            let admin_path = self
+                .auth_route
+                .as_ref()
+                .and_then(|auth| auth.admin_path.as_deref())
+                .filter(|admin_path| *admin_path == request.path)?;
+            DefaultUiContext {
+                current_path: admin_path.to_owned(),
+                current_label: "@i18n:auth.admin_title".into(),
+                navigation: Vec::new(),
+            }
+        };
+
+        if request.path != "/login" {
+            if self.routes.iter().any(|route| route.path == "/") {
+                add_navigation_link(&mut context.navigation, "/", "@i18n:shell.overview");
+            }
+            for crud in &self.cruds {
+                add_navigation_link(
+                    &mut context.navigation,
+                    crud.path.clone(),
+                    crud.title.clone(),
+                );
+            }
+            for tableview in &self.tableviews {
+                add_navigation_link(
+                    &mut context.navigation,
+                    tableview.path.clone(),
+                    tableview.title.clone(),
+                );
+            }
+            for form in &self.forms {
+                if self
+                    .cruds
+                    .iter()
+                    .any(|crud| crud_route_matches_path(crud, &form.path))
+                {
+                    continue;
+                }
+                let label = form
+                    .table
+                    .as_ref()
+                    .map(|table| localized_identifier(self.ui_language, &table.name))
+                    .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+                add_navigation_link(&mut context.navigation, form.path.clone(), label);
+            }
+            if let Some(auth) = &self.auth_route {
+                if let Some(path) = &auth.admin_path {
+                    add_navigation_link(
+                        &mut context.navigation,
+                        path.clone(),
+                        "@i18n:auth.admin_title",
+                    );
+                }
+            }
+        }
+        if context.navigation.is_empty() && request.path != "/login" {
+            add_navigation_link(
+                &mut context.navigation,
+                context.current_path.clone(),
+                context.current_label.clone(),
+            );
+        }
+        Some(context)
+    }
+
     pub fn dispatch(&self, request: &Request) -> Response {
         let mut response = self.dispatch_inner(request);
         if response.content_type.starts_with("text/html") {
+            if response.location.is_none() {
+                if let Some(context) = self.default_ui_context(request) {
+                    response.body = render_default_application_shell(
+                        &response.body,
+                        &context,
+                        self.ui_language,
+                    );
+                }
+            }
             response.body = inject_design_system(&response.body);
             response.body = localize_html(&response.body, self.ui_language);
         }
@@ -678,8 +927,16 @@ impl WebApp {
             && response.status == 200
             && response.content_type.starts_with("text/html")
         {
-            response.body =
-                append_learning_assistant(&response.body, &request.path, self.ui_language);
+            let generated_crud = self
+                .cruds
+                .iter()
+                .any(|crud| crud_route_matches_path(crud, &request.path));
+            response.body = append_learning_assistant(
+                &response.body,
+                &request.path,
+                self.ui_language,
+                generated_crud,
+            );
         }
         response
     }
@@ -7079,6 +7336,213 @@ mod tests {
             audit_chain: false,
             layout_html: None,
         }
+    }
+
+    fn default_shell_crud(layout_html: Option<String>) -> CrudRoute {
+        CrudRoute {
+            path: "/machines".into(),
+            title: "Maschinen".into(),
+            table: "machines".into(),
+            list_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filter_columns: Vec::new(),
+            list_view: CrudListViewDef::default(),
+            detail_view: CrudDetailViewDef::default(),
+            delete_view: CrudDeleteViewDef::default(),
+            loading_view: CrudLoadingViewDef::default(),
+            error_view: CrudErrorViewDef::default(),
+            layout_html,
+            soft_delete: None,
+            actions: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+            create_permissions: Vec::new(),
+            edit_permissions: Vec::new(),
+            delete_permissions: Vec::new(),
+            csrf: CsrfProtection::new("crud-csrf"),
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn generated_crud_routes_use_the_default_localized_shell_and_crud_guide() {
+        let mut create_form = form_route();
+        create_form.path = "/machines/new".into();
+        create_form.action = "/machines/new".into();
+        create_form.form.name = "MachineCreate".into();
+        let mut edit_form = create_form.clone();
+        edit_form.path = "/machines/{id}/edit".into();
+        edit_form.action = "/machines/{id}/edit".into();
+        edit_form.form.name = "MachineEdit".into();
+        let app = WebApp::new(Vec::new(), vec![create_form, edit_form])
+            .with_cruds(vec![default_shell_crud(None)])
+            .with_ui_settings(UiLanguage::German, UiLevel::Learn);
+
+        for path in [
+            "/machines",
+            "/machines/new",
+            "/machines/7",
+            "/machines/7/edit",
+            "/machines/7/delete",
+            "/machines/7/restore",
+        ] {
+            let request =
+                parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
+            let response = app.dispatch(&request);
+            assert!(
+                response.body.contains("class=\"zelyra-app\""),
+                "default app shell missing for {path}"
+            );
+            assert!(response.body.contains("lang=\"de\""));
+            assert!(response.body.contains("data-zelyra-theme=\"default\""));
+            assert!(response
+                .body
+                .contains("<a href=\"/machines\" aria-label=\"Maschinen\" aria-current=\"page\">"));
+        }
+    }
+
+    #[test]
+    fn generated_crud_learning_guide_uses_general_crud_guidance() {
+        let html = append_learning_assistant(
+            "<html><body><main>Inventory</main></body></html>",
+            "/inventory",
+            UiLanguage::German,
+            true,
+        );
+        assert!(html.contains("Deine Zelyra-CRUD-Lernhilfe"));
+        assert!(html.contains("Ein Feld in der Verwaltung ergänzen"));
+        assert!(html.contains("list, search, filter oder form"));
+    }
+
+    #[test]
+    fn default_application_shell_escapes_project_navigation_labels_and_paths() {
+        let context = DefaultUiContext {
+            current_path: "/machines".into(),
+            current_label: "Machines <script>".into(),
+            navigation: vec![DefaultNavigationLink {
+                path: "/machines\" onmouseover=\"alert(1)".into(),
+                label: "Machines <script>".into(),
+            }],
+        };
+        let html =
+            render_default_application_shell("<h1>Machines</h1>", &context, UiLanguage::English);
+
+        assert!(html.contains("Machines &lt;script&gt;"));
+        assert!(html.contains("href=\"/machines&quot; onmouseover=&quot;alert(1)\""));
+        assert!(!html.contains("<script>"));
+    }
+
+    #[test]
+    fn default_application_shell_does_not_rewrap_complete_html_documents() {
+        let context = DefaultUiContext {
+            current_path: "/machines".into(),
+            current_label: "Machines".into(),
+            navigation: Vec::new(),
+        };
+        for document in [
+            "<!doctype html><html><body>Existing shell</body></html>",
+            "  <HTML><body>Existing shell</body></HTML>",
+        ] {
+            assert_eq!(
+                render_default_application_shell(document, &context, UiLanguage::English),
+                document
+            );
+        }
+    }
+
+    #[test]
+    fn explicitly_configured_crud_layout_takes_precedence_over_the_default_shell() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_cruds(vec![default_shell_crud(Some(
+            format!("<div class=\"custom-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"),
+        ))]);
+        let request = parse_request("GET /machines HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+
+        assert!(response.body.starts_with("<div class=\"custom-shell\">"));
+        assert!(!response.body.contains("class=\"zelyra-app\""));
+        assert!(!response.body.contains("data-zelyra-theme=\"default\""));
+    }
+
+    #[test]
+    fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
+        let form = form_route();
+        let tableview = TableViewRoute {
+            path: "/reports".into(),
+            title: "Reports".into(),
+            source: "report query".into(),
+            columns: Vec::new(),
+            filters: Vec::new(),
+            searchable: false,
+            sortable: false,
+            page_size: None,
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(Vec::new(), vec![form])
+            .with_cruds(vec![default_shell_crud(None)])
+            .with_tableviews(vec![tableview])
+            .with_ui_settings(UiLanguage::English, UiLevel::Work);
+
+        for path in ["/forms/CustomerCreate", "/reports"] {
+            let request =
+                parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
+            let response = app.dispatch(&request);
+            assert!(response.body.contains("class=\"zelyra-app\""));
+            assert!(response.body.contains("href=\"/forms/CustomerCreate\""));
+        }
+
+        let page = Route {
+            path: "/custom".into(),
+            html: "<main>My custom page</main>".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let custom_app = WebApp::new(vec![page], Vec::new());
+        let request = parse_request("GET /custom HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = custom_app.dispatch(&request);
+        assert_eq!(response.body, "<main>My custom page</main>");
+    }
+
+    #[test]
+    fn generated_login_page_uses_the_localized_default_shell() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: Some("/admin".into()),
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("login-csrf"),
+        };
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth_route(auth)
+            .with_ui_settings(UiLanguage::German, UiLevel::Work);
+        let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+
+        assert!(response.body.contains("class=\"zelyra-app\""));
+        assert!(response.body.contains("lang=\"de\""));
+        assert!(response.body.contains("<title>Anmelden | Zelyra</title>"));
+        assert!(response.body.contains("Zum Inhalt springen"));
+        assert!(response.body.contains("id=\"zelyra-content\""));
+        assert!(response.body.contains("href=\"/\""));
     }
 
     fn relation_form_route() -> FormRoute {

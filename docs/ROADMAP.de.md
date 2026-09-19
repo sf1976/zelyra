@@ -37,9 +37,12 @@ Klammermarker bleiben vorerst maschinell durchsuchbar.
 - [~] Eingebaute deutsche/englische UI-Kataloge werden über
   `ZELYRA_LANGUAGE` gewählt; `ZELYRA_LEVEL=learn|work` steuert die
   kontextbezogene Lernhilfe. Die minimalen und
-  Maschinenverwaltungs-MariaDB-Starter haben einen responsiven
-  Zelyra-Anwendungsrahmen; projektlokale Kataloge, umfassendere
-  Vorlagenabdeckung und austauschbare Themes bleiben offen.
+  Maschinenverwaltungs-MariaDB-Starter sowie erzeugte CRUD-, Formular-,
+  Tableview-, Login- und Authentifizierungsverwaltungsseiten haben
+  standardmäßig einen responsiven Zelyra-Anwendungsrahmen. Explizite CRUD-
+  Layouts haben Vorrang; selbst verfasste Seiten bleiben unverändert.
+  Projektlokale Kataloge, umfassendere Vorlagenabdeckung und austauschbare
+  Themes bleiben offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -201,10 +204,13 @@ Feature eines bestimmten Anbieters.
 - [~] Das minimale und das Maschinenverwaltungs-Starterprojekt enthalten
   responsive, gebrandete Rahmen mit kataloggebundenen deutschen/englischen
   UI-Texten; das Maschinenverwaltungs-Starterprojekt ergänzt die Lernhilfe im
-  `learn`-Modus. CRUD-, Formular-, Authentifizierungs-, Validierungs- und
-  Standard-HTTP-Fehlertexte nutzen dieselben eingebauten Sprachkataloge;
-  umfassender Theme-Austausch, weitere Vorlagen und projektlokale
-  Katalogerweiterungen bleiben offen.
+  `learn`-Modus. Erzeugte CRUD-, eigenständige Formular-, Tableview-, Login-
+  und Authentifizierungsverwaltungsseiten erhalten jetzt ebenfalls diesen
+  responsiven Standardrahmen; explizite CRUD-Layouts haben Vorrang und selbst
+  verfasste Seiten werden nicht umgeschrieben. CRUD-, Formular-,
+  Authentifizierungs-, Validierungs- und Standard-HTTP-Fehlertexte nutzen
+  dieselben eingebauten Sprachkataloge. Umfassender Theme-Austausch, weitere
+  Vorlagen und projektlokale Katalogerweiterungen bleiben offen.
 
 - [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
   `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.

@@ -60,6 +60,12 @@ Capabilities oder Berechtigungen erteilt. Bei `zelyra serve` überschreiben
 Prozessvariablen die `.env` des Projekts. Neue MariaDB-Projekte verwenden
 standardmäßig `de`/`learn`; direktes Starten ohne diese Werte verwendet
 `en`/`work`. Diese Einstellungen beeinflussen ausschließlich die Darstellung.
+Erzeugte CRUD-, eigenständige Formular-, Tableview-, Login- und
+Authentifizierungsverwaltungsseiten erhalten standardmäßig den responsiven
+Zelyra-Anwendungsrahmen, sofern kein eigenes Layout gewählt wurde. Der Rahmen
+enthält beschriftete Navigation, sichtbare Tastaturfokusse und einen
+lokalisierten Sprunglink zum Inhalt. Selbst verfasste Seiten bleiben vollständig
+unter Kontrolle ihrer Autoren.
 
 Fehlende deutsche Einträge fallen auf Englisch zurück. Fehlt ein Schlüssel in
 beiden Katalogen, wird `[missing translation]` ausgegeben; ein Konsistenztest
@@ -131,6 +137,27 @@ benannte Slots verwenden ihren deklarierten Fallback. Die Komposition erfolgt
 vor Component-Erweiterung und Routing ohne globalen View-Zustand;
 Authentifizierung, Capability-Prüfungen, SQL-Prüfung und HTML-Escaping bleiben
 aktiv.
+
+Erzeugte CRUD-, Formular- und Tableview-Seiten verwenden standardmäßig den
+Zelyra-Anwendungsrahmen. Ein ausdrücklich gesetztes `layout: ViewName` eines
+CRUDs ersetzt diesen durch den geprüften Projekt-View. Selbst verfasste
+Seiten werden nicht stillschweigend umgebaut und können ihr Seiten-View selbst
+wählen.
+
+CRUD-Ressourcen können denselben projektspezifischen Anwendungsrahmen mit
+`layout: ViewName` wiederverwenden:
+
+~~~zelyra
+crud Customer -> customers {
+    layout: AppShell
+}
+~~~
+
+Der referenzierte View muss existieren und wird wie ein Seiten-View geprüft.
+Sein Default-Slot erhält generierte Listen, Details sowie erzeugte Create-,
+Edit- oder Aktionsformulare. SQL, Validierung, CSRF, Authentifizierung,
+Autorisierung und HTML-Escaping bleiben aktiv. Redirects werden nicht als
+HTML umschlossen.
 
 Seiten können typisierte Query-Eingaben deklarieren:
 

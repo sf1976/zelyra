@@ -14,7 +14,7 @@ page "/" {
             <body>
                 <div class="zelyra-app">
                     <aside class="zelyra-sidebar">
-                        <a class="zelyra-brand" href="/">
+                        <a class="zelyra-brand" aria-label="Zelyra" href="/">
                             <span class="zelyra-mark" aria-hidden="true">Z</span>
                             <span class="zelyra-brand-copy">
                                 <span class="zelyra-brand-name">Zelyra</span>

@@ -788,6 +788,10 @@ Alle Blöcke sind optional. Konfigurierte Spalten werden gegen das Schema
 geprüft; Beziehungsfelder werden auf ihre gespeicherten Foreign-Key-Spalten
 abgebildet. Die Kurzform behält die Defaults für Liste, Textsuche und Filter
 außer der ID.
+Erzeugte CRUD-, eigenständige Formular- und Tableview-Seiten erhalten
+automatisch den responsiven Zelyra-Anwendungsrahmen. Ein explizites
+`layout: ViewName` beim CRUD ersetzt den Standardrahmen; selbst verfasste
+Seiten behalten ihr eigenes Markup.
 
 Damit wird `GET /machines` mit escaped Ausgabe, Suche, exakten Filtern,
 Allowlist-Sortierung, Pagination, verlinkten Detailseiten und automatisch

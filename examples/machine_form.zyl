@@ -47,7 +47,7 @@ view ZelyraShell {
             <body>
                 <div class="zelyra-app">
                     <aside class="zelyra-sidebar">
-                        <a class="zelyra-brand" href="/machines">
+                        <a class="zelyra-brand" aria-label="Zelyra" href="/machines">
                             <span class="zelyra-mark" aria-hidden="true">Z</span>
                             <span class="zelyra-brand-copy"><span class="zelyra-brand-name">Zelyra</span><span class="zelyra-brand-descriptor" data-zelyra-i18n="app.brand_descriptor"></span></span>
                         </a>
