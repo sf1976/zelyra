@@ -70,7 +70,8 @@ if ! curl --silent --show-error --fail "http://${address}/" \
         -f "${project_dir}/docker-compose.mariadb.yml" logs >&2 || true
     exit 1
 fi
-grep -Fq 'Welcome to Zelyra' "${project_root}/response.html"
+# Fresh minimal MariaDB projects default to German unless overridden.
+grep -Fq 'Dein Arbeitsbereich kann wachsen.' "${project_root}/response.html"
 
 echo "[3/3] checking the published ports"
 docker compose --project-name "${compose_project}" \
