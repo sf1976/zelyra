@@ -112,6 +112,8 @@ Der Installer ist wiederholbar und benutzerlokal. Optionen zur Kontrolle:
 ./install.sh --help
 ./install.sh --dry-run --root "$HOME/.local"
 ./install.sh --check
+zelyra update --check
+zelyra update
 ./install.sh --uninstall
 ~~~
 
@@ -119,6 +121,15 @@ Mit `--no-rustup` wird die automatische Rust-Installation deaktiviert,
 `--no-path` unterdrückt PATH-Hinweise. Mit `--root PATH` oder
 `ZELYRA_INSTALL_ROOT` lässt sich ein anderes benutzerbezogenes Ziel wählen.
 Veraltete `cargo`-PATH-Einträge werden erkannt und nicht blind ausgeführt.
+
+`zelyra update --check` sucht ohne Dateiänderungen nach einem neueren stabilen
+Release. `zelyra update` lädt die eigenständige Linux- oder
+Windows-x86_64-Binärdatei herunter, prüft ihre SHA-256-Checksumme und ersetzt
+ausschließlich das gestartete Programm. Ein neuerer lokaler Build wird nicht
+herabgestuft; Projektdateien bleiben unverändert. Unter Windows wird der
+Austausch unmittelbar nach Ende des Update-Befehls abgeschlossen. Andere
+Plattformen verwenden ihren dokumentierten Installationsweg, bis Release-
+Binärdateien für sie verfügbar sind.
 
 Veröffentlichte Releases für Linux x86_64 und Windows x86_64 können ohne Rust
 oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und

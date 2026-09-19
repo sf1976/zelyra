@@ -938,6 +938,19 @@ fn reports_the_full_compiler_version() {
 }
 
 #[test]
+fn update_rejects_unknown_arguments_without_network_or_file_changes() {
+    for arguments in [
+        &["update", "--force"][..],
+        &["update", "--check", "extra"][..],
+    ] {
+        let output = run(arguments);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("zelyra update [--check]"));
+    }
+}
+
+#[test]
 fn context_exposes_view_slot_structure_without_rendered_content() {
     let path = example("view_composition.zyl");
     let output = run(&["context", path.to_str().unwrap(), "--format=json"]);

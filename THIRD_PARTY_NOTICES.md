@@ -8,8 +8,8 @@ The Zelyra source code is licensed under either the MIT License or the Apache
 License, Version 2.0, at the licensee's option. See LICENSE-MIT and LICENSE.
 
 The Cargo dependency graph is recorded in Cargo.lock. The following
-third-party crates are included in the distributed Zelyra build through the
-Argon2 password-verification dependency:
+third-party crates are included in distributed Zelyra builds through the
+Argon2 password-verification and CLI self-update dependencies:
 
 | Crate | Version | License |
 | --- | ---: | --- |
@@ -25,6 +25,8 @@ Argon2 password-verification dependency:
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | base64ct | 1.8.3 | Apache-2.0 OR MIT |
 | rand_core | 0.6.4 | MIT OR Apache-2.0 |
+| semver | 1.0.28 | MIT OR Apache-2.0 |
+| sha2 | 0.10.9 | MIT OR Apache-2.0 |
 
 License texts and copyright notices for these crates are distributed with
 their source packages in the Cargo registry. The authoritative package

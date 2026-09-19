@@ -139,6 +139,8 @@ options are:
 ./install.sh --help
 ./install.sh --dry-run --root "$HOME/.local"
 ./install.sh --check
+zelyra update --check
+zelyra update
 ./install.sh --uninstall
 ~~~
 
@@ -148,6 +150,14 @@ Use `--no-rustup` to fail clearly instead of installing Rust automatically,
 installation directory. Use `--offline` when the required Rust dependencies
 are already cached. A broken or stale `cargo` PATH entry is detected and never
 executed as if it were a real compiler.
+
+`zelyra update --check` checks for a newer stable release without modifying
+files. `zelyra update` downloads the standalone Linux or Windows x86_64 binary,
+verifies its SHA-256 checksum, and replaces only the executable that was
+launched. It does not downgrade a newer local build or touch project files. On
+Windows, the verified replacement completes immediately after the update
+command exits. macOS and other targets keep using their documented installation
+method until release binaries are published for them.
 
 To install a published release without Rust on Linux x86_64, pass its exact
 tag. The installer downloads the matching archive over HTTPS and verifies its

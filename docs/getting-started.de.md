@@ -146,6 +146,8 @@ Der Installer ist wiederholbar und benutzerlokal. Nützliche Optionen sind:
 ./install.sh --help
 ./install.sh --dry-run --root "$HOME/.local"
 ./install.sh --check
+zelyra update --check
+zelyra update
 ./install.sh --uninstall
 ~~~
 
@@ -156,6 +158,15 @@ benutzerbezogenes Installationsverzeichnis wählen. Mit `--offline` werden nur
 bereits gecachte Rust-Abhängigkeiten verwendet. Ein veralteter oder defekter
 `cargo`-PATH-Eintrag wird erkannt und niemals als ausführbarer Compiler
 verwendet.
+
+`zelyra update --check` prüft ohne Dateiänderungen, ob ein neueres stabiles
+Release verfügbar ist. `zelyra update` lädt die eigenständige Linux- oder
+Windows-x86_64-Binärdatei, prüft ihre SHA-256-Checksumme und ersetzt nur das
+gestartete Programm. Ein neuerer lokaler Build wird nicht herabgestuft;
+Projektdateien bleiben unverändert. Unter Windows wird der Austausch direkt
+nach Ende des Update-Befehls abgeschlossen. Für macOS und andere Ziele bleibt
+es beim dokumentierten Installationsweg, bis passende Release-Dateien
+bereitstehen.
 
 Unter Windows PowerShell aus dem Repository-Verzeichnis verwenden:
 
