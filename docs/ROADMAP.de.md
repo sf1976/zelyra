@@ -108,8 +108,9 @@ Feature eines bestimmten Anbieters.
 - [~] Ein deterministischer Projektstart unterstützt MariaDB-Scaffolding,
   sichere lokale `.env`-Erzeugung direkt bei `zelyra new` und `zelyra init`,
   ausführlich kommentierte optionale Einstellungen und validierte wählbare
-  Ports; `zelyra setup` bleibt als idempotenter Nachholpfad verfügbar. Eine
-  interaktive Verbindungs-Konfiguration bleibt offen.
+  Ports; bei neuen Projekten werden belegte Standardports automatisch durch
+  freie Host-Ports ersetzt. `zelyra setup` bleibt als idempotenter Nachholpfad
+  verfügbar. Eine interaktive Verbindungs-Konfiguration bleibt offen.
 - [~] Ein gemeinsamer Setup-Assistent für Konsole und Browser ist über
   `zelyra setup --database|--schema|--all` und `zelyra setup --web` verfügbar;
   erzeugte MariaDB-Compose-Projekte werden gestartet und das Anfangsschema

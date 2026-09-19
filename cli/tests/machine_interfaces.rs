@@ -1,5 +1,6 @@
 use std::{
     fs,
+    net::TcpListener,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
@@ -61,6 +62,15 @@ fn temporary_directory(name: &str) -> PathBuf {
     ))
 }
 
+fn free_test_port() -> String {
+    TcpListener::bind(("127.0.0.1", 0))
+        .expect("a test port should be available")
+        .local_addr()
+        .expect("test listener should have an address")
+        .port()
+        .to_string()
+}
+
 #[test]
 fn valid_check_json_is_a_stable_machine_document() {
     let path = example("fibonacci.zyl");
@@ -86,6 +96,7 @@ fn valid_check_json_is_a_stable_machine_document() {
 #[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
+    let database_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -95,7 +106,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "--host-port",
         "18080",
         "--db-host-port",
-        "3308",
+        &database_host_port,
     ]);
     assert!(
         output.status.success(),
@@ -109,14 +120,16 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
-    assert!(env_example.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains("# ZELYRA_HOST_PORT=18080"));
-    assert!(env_file.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(!env_file.contains("change-me"));
     assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
-    assert!(compose.contains("127.0.0.1:${ZELYRA_DB_HOST_PORT:-3308}:3306"));
+    assert!(compose.contains(&format!(
+        "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
+    )));
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -143,6 +156,7 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 #[test]
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
+    let database_host_port = free_test_port();
     let output = run(&[
         "init",
         directory.to_str().unwrap(),
@@ -152,7 +166,7 @@ fn init_creates_a_ready_commented_mariadb_env() {
         "--host-port",
         "18080",
         "--db-host-port",
-        "3308",
+        &database_host_port,
     ]);
     assert!(
         output.status.success(),
@@ -166,9 +180,11 @@ fn init_creates_a_ready_commented_mariadb_env() {
     assert!(env_file.contains("MARIADB_PASSWORD="));
     assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
     assert!(env_file.contains("# ZELYRA_FEATURE_API=true"));
-    assert!(env_file.contains("ZELYRA_DB_HOST_PORT=3308"));
+    assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(
-        env_file.find("ZELYRA_DB_HOST_PORT=3308").unwrap()
+        env_file
+            .find(&format!("ZELYRA_DB_HOST_PORT={database_host_port}"))
+            .unwrap()
             < env_file.find("DATABASE_URL=mariadb://").unwrap()
     );
     assert!(!env_file
@@ -182,6 +198,7 @@ fn init_creates_a_ready_commented_mariadb_env() {
 #[test]
 fn new_mariadb_crud_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-crud-template");
+    let database_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -192,7 +209,7 @@ fn new_mariadb_crud_template_is_self_contained() {
         "--host-port",
         "18080",
         "--db-host-port",
-        "3308",
+        &database_host_port,
     ]);
     assert!(
         output.status.success(),
@@ -213,6 +230,7 @@ fn new_mariadb_crud_template_is_self_contained() {
 #[test]
 fn new_mariadb_auth_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-auth-template");
+    let database_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -223,7 +241,7 @@ fn new_mariadb_auth_template_is_self_contained() {
         "--host-port",
         "18080",
         "--db-host-port",
-        "3308",
+        &database_host_port,
     ]);
     assert!(
         output.status.success(),
@@ -245,6 +263,7 @@ fn new_mariadb_auth_template_is_self_contained() {
 #[test]
 fn new_mariadb_business_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-business-template");
+    let database_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -255,7 +274,7 @@ fn new_mariadb_business_template_is_self_contained() {
         "--host-port",
         "18080",
         "--db-host-port",
-        "3308",
+        &database_host_port,
     ]);
     assert!(
         output.status.success(),
@@ -311,6 +330,7 @@ fn host_port_requires_the_mariadb_web_template() {
 #[test]
 fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let directory = temporary_directory("setup-env");
+    let database_host_port = free_test_port();
     let scaffold = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -319,6 +339,8 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "8080",
         "--host-port",
         "18080",
+        "--db-host-port",
+        &database_host_port,
     ]);
     assert!(scaffold.status.success());
     fs::remove_file(directory.join(".env")).unwrap();
@@ -334,10 +356,16 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     assert!(!stdout.contains("MARIADB_PASSWORD"));
     assert!(!stdout.contains("change-me"));
     let env_file = directory.join(".env");
+    let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let contents = fs::read_to_string(&env_file).unwrap();
     assert!(contents.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(contents.contains("# ZELYRA_HOST_PORT=18080"));
-    assert!(contents.contains("ZELYRA_DB_HOST_PORT=3306"));
+    assert!(contents.contains(
+        env_example
+            .lines()
+            .find(|line| line.starts_with("ZELYRA_DB_HOST_PORT="))
+            .unwrap()
+    ));
     assert!(!contents.contains("change-me"));
     assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(contents.contains("MARIADB_PASSWORD="));

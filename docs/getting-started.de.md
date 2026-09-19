@@ -324,7 +324,10 @@ internen Serverport; `--host-port 18080` wählt den lokal veröffentlichten
 Web-Port und `--db-host-port 3307` den lokal veröffentlichten MariaDB-Port.
 Später können `ZELYRA_WEB_PORT`, `ZELYRA_HOST_PORT` und
 `ZELYRA_DB_HOST_PORT` in `.env` unabhängig geändert werden. Nach dem obigen
-Beispiel ist `http://127.0.0.1:18080` erreichbar. Die Vorlage ist für lokale
+Beispiel ist `http://127.0.0.1:18080` erreichbar. Wenn die Host-Port-Optionen
+fehlen, wählen neue Projekte bei belegten Standardports automatisch freie
+Host-Ports. Ausdrücklich gesetzte Host-Port-Optionen werden niemals still
+geändert. Die Vorlage ist für lokale
 Entwicklung gedacht; für Produktion Secret-Manager und TLS verwenden.
 
 `zelyra setup .` erzeugt aus der Vorlage eine geschützte `.env` mit zufälligen

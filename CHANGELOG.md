@@ -11,6 +11,11 @@ compiler and repository release.
 - Fehlt Docker/Compose, geben Konsole, `doctor` und die lokale Browser-Setup-
   Seite jetzt plattformspezifische Hinweise auf die offiziellen
   Installationsanleitungen aus.
+- New MariaDB projects automatically select free web and MariaDB host ports
+  when the defaults are occupied; explicitly requested ports remain strict.
+- Neue MariaDB-Projekte wählen automatisch freie Web- und MariaDB-Host-Ports,
+  wenn die Standardports belegt sind; ausdrücklich gesetzte Ports bleiben
+  verbindlich.
 
 ## 0.1.43.1 — 2026-09-19
 
