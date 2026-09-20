@@ -24,7 +24,8 @@ requests.
 Release builds use Rust 1.98.1 and pinned, platform-available Python patch
 versions (3.12.11 on Linux and 3.12.10 on Windows), plus `Cargo.lock`.
 Each platform job builds the CLI twice in separate target directories and
-requires byte-identical binaries.
+requires byte-identical binaries. The Windows MSVC build passes `/Brepro` to
+the linker so PE timestamp metadata does not make equivalent builds differ.
 The packaging script normalizes archive ordering, ownership, permissions, and
 timestamps; its tests require byte-identical archives and SHA-256 sidecars for
 repeated packaging. This verifies repeatability in the same runner/toolchain

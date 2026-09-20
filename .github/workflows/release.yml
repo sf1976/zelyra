@@ -109,6 +109,12 @@ jobs:
           .\install.ps1 -DryRun -NoRustup -NoPath
           .\install.ps1 -DryRun -Release $env:RELEASE_TAG -NoPath
       - name: Build release binary
+        if: runner.os == 'Windows'
+        env:
+          RUSTFLAGS: -C link-arg=/Brepro
+        run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
+      - name: Build release binary
+        if: runner.os == 'Linux'
         run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
       - name: Verify repeated release binary build
         if: runner.os == 'Linux'
@@ -127,6 +133,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/zelyra-repeat-build
+          RUSTFLAGS: -C link-arg=/Brepro
         run: |
           $firstBuild = "target/$env:TARGET/release/zelyra.exe"
           $secondBuild = "$env:CARGO_TARGET_DIR/$env:TARGET/release/zelyra.exe"
@@ -134,7 +141,7 @@ jobs:
           $firstHash = (Get-FileHash $firstBuild -Algorithm SHA256).Hash
           $secondHash = (Get-FileHash $secondBuild -Algorithm SHA256).Hash
           if ($firstHash -ne $secondHash) {
-            throw "Release binary differs between repeated builds."
+            throw "Release binary differs between repeated builds (first: $firstHash; second: $secondHash)."
           }
       - name: Package Linux release
         if: runner.os == 'Linux'
