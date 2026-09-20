@@ -2,13 +2,27 @@
   "name": "zelyra-language",
   "displayName": "Zelyra",
   "description": "Official syntax highlighting and language configuration for Zelyra (.zyl)",
-  "version": "0.1.0",
-  "publisher": "zelyra",
+  "version": "0.1.50",
+  "publisher": "sf1976",
+  "author": "Stefan Siedelmann",
+  "license": "Apache-2.0",
+  "homepage": "https://siedelmann.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sf1976/zelyra"
+  },
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
     "Programming Languages"
+  ],
+  "keywords": [
+    "zelyra",
+    "zyl",
+    "syntax",
+    "programming language"
   ],
   "contributes": {
     "languages": [
