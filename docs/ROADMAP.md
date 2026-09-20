@@ -441,9 +441,12 @@ supported machine and the release gates below pass.
   references. Business records and unmarked authored text remain unchanged;
   deeper theme authoring and record-bound custom slots remain open.
 - [~] **Flagship business application:** the MariaDB business template and
-  generated-project integration path exist. Complete novice-tested onboarding,
-  customized machine/department Views, German/English Learn/Work behavior, and
-  documented acceptance coverage remain release work.
+  generated-project integration path exist. A database-free CLI/HTTP test now
+  covers its generated CRUD form, missing-token and insufficient-API-permission
+  denials, authorized access, and project-local German/English copy overrides;
+  the separate MariaDB-backed acceptance path remains. Complete novice-tested
+  onboarding, customized machine/department Views, German/English Learn/Work
+  behavior, and documented acceptance coverage remain release work.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
   .env, Docker Compose, free-port selection, and actionable Docker permission
   guidance exist.

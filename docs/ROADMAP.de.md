@@ -468,9 +468,13 @@ Freigabekriterien bestanden sind.
   Weitergehende Theme-Erstellung und datensatzgebundene benutzerdefinierte
   Slots bleiben offen.
 - [~] **Vorzeige-Businessanwendung:** Das MariaDB-Business-Template und der
-  Integrationstestpfad für erzeugte Projekte existieren. Einsteigergeprüfter
-  Einstieg, angepasste Maschinen-/Abteilungs-Views, Deutsch/Englisch mit
-  Learn-/Work-Modus und dokumentierte Abdeckung bleiben Release-Arbeiten.
+  Integrationstestpfad für erzeugte Projekte existieren. Ein datenbankfreier
+  CLI-/HTTP-Test deckt jetzt das generierte CRUD-Formular, Ablehnungen ohne
+  Token und ohne ausreichende API-Berechtigung, autorisierten Zugriff sowie
+  projektlokale deutsche/englische Texte ab; der separate MariaDB-gestützte
+  Abnahmepfad bleibt bestehen. Einsteigergeprüfter Einstieg, angepasste
+  Maschinen-/Abteilungs-Views, Deutsch/Englisch mit Learn-/Work-Modus und
+  dokumentierte Abdeckung bleiben Release-Arbeiten.
 - [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
   erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
   Docker-Berechtigungen sind verfügbar. Prüfungen auf frischen Systemen sowie

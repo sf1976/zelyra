@@ -337,6 +337,160 @@ crud Customer -> customers {
 }
 
 #[test]
+fn generated_mariadb_business_starter_localizes_and_protects_crud_without_database() {
+    const TEST_TOKEN: &str = "zelyra-business-e2e-test-token";
+
+    let directory = temporary_directory("business-starter-localized-auth");
+    let scaffold = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--template",
+        "mariadb-business",
+    ]);
+    assert!(
+        scaffold.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&scaffold.stdout),
+        String::from_utf8_lossy(&scaffold.stderr)
+    );
+    let source = directory.join("main.zyl");
+    let check = run(&["check", source.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{
+            "form.create_title": "Add {field} to the workspace",
+            "form.create_submit": "Save customer profile",
+            "identifier.name": "Customer display label",
+            "error.authentication_required": "English access check required"
+        }"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/de.json"),
+        r#"{
+            "form.create_title": "{field} zum Arbeitsbereich hinzufügen",
+            "form.create_submit": "Kundenprofil speichern",
+            "identifier.name": "Anzeigename des Kunden",
+            "error.authentication_required": "Deutsche Anmeldung erforderlich"
+        }"#,
+    )
+    .unwrap();
+
+    let run_requests = |language: &str, requests: &[(&str, Option<&str>)]| {
+        let port = free_test_port();
+        let address = format!("127.0.0.1:{port}");
+        let mut server = Command::new(binary())
+            .args(["serve", source.to_str().unwrap(), &address])
+            .env("ZELYRA_LANGUAGE", language)
+            .env("ZELYRA_LEVEL", "work")
+            .env("ZELYRA_AUTH_TOKEN", TEST_TOKEN)
+            .env("ZELYRA_AUTH_PERMISSIONS", "customers.create")
+            .env_remove("DATABASE_URL")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("Zelyra business server should start");
+
+        let responses = (|| {
+            let socket_address: SocketAddr = address
+                .parse()
+                .map_err(|error| format!("invalid test server address: {error}"))?;
+            let mut responses = Vec::with_capacity(requests.len());
+            for (path, token) in requests {
+                let authorization = token
+                    .map(|token| format!("Authorization: Bearer {token}\r\n"))
+                    .unwrap_or_default();
+                let mut response = None;
+                for _ in 0..50 {
+                    if let Ok(mut stream) =
+                        TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                    {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .map_err(|error| error.to_string())?;
+                        let request = format!(
+                            "GET {path} HTTP/1.1\r\nHost: localhost\r\n{authorization}\r\n"
+                        );
+                        stream
+                            .write_all(request.as_bytes())
+                            .map_err(|error| error.to_string())?;
+                        let mut response_text = String::new();
+                        stream
+                            .read_to_string(&mut response_text)
+                            .map_err(|error| error.to_string())?;
+                        if !response_text.is_empty() {
+                            response = Some(response_text);
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(40));
+                }
+                responses.push(response.ok_or_else(|| {
+                    "Zelyra business server did not answer before the test timeout".to_owned()
+                })?);
+            }
+            Ok::<_, String>(responses)
+        })();
+        let _ = server.kill();
+        let _ = server.wait();
+        responses.unwrap_or_else(|error| panic!("{error}"))
+    };
+
+    let english = run_requests(
+        "en",
+        &[
+            ("/customers/new", None),
+            ("/customers/new", Some(TEST_TOKEN)),
+            ("/api/customers/1", Some(TEST_TOKEN)),
+        ],
+    );
+    let german = run_requests(
+        "de",
+        &[
+            ("/customers/new", None),
+            ("/customers/new", Some(TEST_TOKEN)),
+            ("/api/customers/1", Some(TEST_TOKEN)),
+        ],
+    );
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert!(english[0].starts_with("HTTP/1.1 401 "), "{}", english[0]);
+    assert!(english[0].contains("English access check required"));
+    assert!(english[1].starts_with("HTTP/1.1 200 "));
+    assert!(
+        english[1].contains("Add Customer to the workspace"),
+        "{}",
+        english[1]
+    );
+    assert!(english[1].contains("Customer display label"));
+    assert!(english[1].contains("Save customer profile"));
+    assert!(english[2].starts_with("HTTP/1.1 403 "));
+
+    assert!(german[0].starts_with("HTTP/1.1 401 "));
+    assert!(german[0].contains("Deutsche Anmeldung erforderlich"));
+    assert!(german[1].starts_with("HTTP/1.1 200 "));
+    assert!(
+        german[1].contains("Kunde zum Arbeitsbereich hinzufügen"),
+        "{}",
+        german[1]
+    );
+    assert!(german[1].contains("Anzeigename des Kunden"));
+    assert!(german[1].contains("Kundenprofil speichern"));
+    assert!(german[2].starts_with("HTTP/1.1 403 "));
+    for response in english.iter().chain(&german) {
+        assert!(!response.contains(TEST_TOKEN));
+    }
+}
+
+#[test]
 fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
     let directory = temporary_directory("serve-theme-route-conflict");
     fs::create_dir_all(&directory).unwrap();
