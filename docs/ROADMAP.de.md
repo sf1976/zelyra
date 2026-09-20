@@ -577,6 +577,16 @@ oder PostgreSQL-Runtime-Parität erforderlich. Diese Ziele bleiben separat in
 der Roadmap; geplante Fähigkeiten dürfen nicht Teil des Releaseversprechens
 werden.
 
+## Vorgeschlagener Release-Meilenstein 0.3.0
+
+Der separate [Releaseplan 0.3.0](release-plans/0.3.0.de.md) ist ein
+Arbeitsvorschlag und kein Releaseversprechen. Er priorisiert den einfachen
+Einstieg, ein ausbaubares und eigenständiges Views-/Template-System,
+MariaDB-/Schema-Sicherheit, eine reproduzierbare Abnahme mit einer realen
+Anwendung, verlässliche Compiler-Schnittstellen und ehrliche Release-Nachweise.
+Umfang und Status werden während der Arbeit überprüft; nicht alle langfristigen
+Roadmap-Punkte werden dadurch zu Anforderungen für 0.3.0.
+
 ## Akzeptanzanwendungen aus der Praxis
 
 - [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten
