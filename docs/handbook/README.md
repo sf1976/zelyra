@@ -4,9 +4,9 @@ The handbook is available in synchronized editions and formats:
 
 ### 1. Complete Master Edition (Lehrbuch & Technische Referenz)
 The comprehensive 75-chapter textbook, technical reference, and complete appendices:
-- **[Deutsch: Vollständiges Zelyra-Handbuch (zelyra.de.md)](zelyra.de.md)**
-- **[English: Complete Zelyra Handbook (zelyra.en.md)](zelyra.en.md)**
-- **Online:** [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch) · [https://siedelmann.com/handbook](https://siedelmann.com/handbook)
+- **[Deutsch: Vollständiges Zelyra-Handbuch (de/handbuch.md)](de/handbuch.md)**
+- **[English: Complete Zelyra Handbook (en/handbook.md)](en/handbook.md)**
+- **Online (Interactive with search):** [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch) · [https://siedelmann.com/handbook](https://siedelmann.com/handbook)
 
 ### 2. Guided Introductory Edition
 A concise, step-by-step introduction building a machine-management application:

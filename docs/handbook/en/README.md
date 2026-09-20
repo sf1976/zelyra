@@ -4,6 +4,9 @@
 
 English · [Deutsche Ausgabe](../de/README.md)
 
+> 📖 **Looking for the complete 75-chapter textbook & language reference?**  
+> This is the guided 30-minute introductory tutorial (machine-management app). For the complete textbook and technical reference, see **[handbook.md](handbook.md)** or read it online at **[siedelmann.com/handbook](https://siedelmann.com/handbook)**.
+
 Welcome to Zelyra, the programming language for people who wanted to build a
 customer database and somehow ended up maintaining seven frameworks, three
 configuration formats, and a small existential crisis.
@@ -1928,3 +1931,14 @@ The next planned machine interfaces are richer typed gaps and complete impact
 analysis. They will extend the versioned common JSON envelope rather than
 replace it. Benchmark results will be published only after reproducible
 experiments; this handbook contains no invented comparison.
+
+---
+
+## Where to go next?
+
+You have completed the 20 core chapters of the Zelyra practical tutorial!
+
+For all advanced language features, type safety guarantees, compiler architecture, and standard library reference:
+- **[Complete Zelyra Handbook (75 chapters)](handbook.md)**
+- **[Interactive web edition with search at siedelmann.com/handbook](https://siedelmann.com/handbook)**
+
