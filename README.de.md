@@ -908,14 +908,23 @@ erstellt eine temporäre Datenbank, inspiziert das Schema, prüft einen
 idempotenten Plan und kontrolliert die erzeugten Foreign Keys. Es verwendet
 keine Anwendungsdaten oder Zugangsdaten aus der Host-Umgebung.
 
+`tests/schema-safety-e2e.sh` weist zusätzlich nach, dass das Löschen einer
+Spalte im Plan als destruktiv erscheint, standardmäßig ohne Datenänderung
+abgelehnt und erst mit `--allow-destructive` angewendet wird. Der Test nutzt
+immer eine isolierte temporäre SQLite-Datei. Für MariaDB
+`ZELYRA_SCHEMA_SAFETY_MARIADB_URL` auf eine lokale URL mit der Datenbank
+`zelyra_ci` oder `zelyra_test` setzen; das Skript erstellt und entfernt eine
+eindeutig benannte Testdatenbank.
+
 Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt nur
 compilergeprüftes DDL aus und verbindet sich nie; `setup` legt bei Bedarf eine
 MariaDB-Datenbank an und wendet das Anfangsschema an; `bootstrap` wendet ein
 Anfangsschema auf MariaDB oder SQLite an; `inspect` liest das Ist-Schema;
 `plan` zeigt den deterministischen Diff; und `apply` führt ihn aus, nachdem
-destruktive Änderungen ohne `--allow-destructive` abgelehnt wurden. `setup`,
-`bootstrap`, `inspect` und `apply` benötigen `DATABASE_URL`; `plan` kann ohne
-Variable auch gegen eine leere Datenbank planen.
+destruktive Änderungen ohne `--allow-destructive` abgelehnt wurden. Der
+Schema-Sicherheitstest prüft diese Ablehnung und die ausdrückliche Freigabe
+für SQLite und MariaDB. `setup`, `bootstrap`, `inspect` und `apply` benötigen
+`DATABASE_URL`; `plan` kann ohne Variable auch gegen eine leere Datenbank planen.
 
 Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
 Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies

@@ -338,6 +338,17 @@ DATABASE_URL='mariadb://root:<test-password>@127.0.0.1:3308/zelyra_test' \
 It uses the `zelyra-mariadb-tests` container and a dedicated volume, publishing
 MariaDB on host port `3308` without changing any other database installation.
 
+To verify destructive schema-change protection on SQLite and MariaDB:
+
+~~~bash
+ZELYRA_SCHEMA_SAFETY_MARIADB_URL='mariadb://root:<test-password>@127.0.0.1:3308/zelyra_test' \
+    bash ./tests/schema-safety-e2e.sh
+~~~
+
+The test always uses a disposable SQLite file and creates/removes a separate
+MariaDB database. It is restricted to a local server and the `zelyra_test` or
+`zelyra_ci` base database; never point it at production.
+
 To test the complete generated-project path against a fresh database:
 
 ~~~bash

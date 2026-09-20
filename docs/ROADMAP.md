@@ -459,11 +459,13 @@ supported machine and the release gates below pass.
   startup, HTTP, port-mapping, and cleanup smoke test on this host.
   Clean-machine installation verification and recovery coverage across
   supported platforms remain open.
-- [~] **Database safety:** MariaDB is the reference runtime and SQLite has an
-  end-to-end path; the generated MariaDB business acceptance test has passed;
-  PostgreSQL runtime parity is not promised. Publish an explicit compatibility
-  matrix, then verify safe planning and destructive-change approval before
-  release.
+- [~] **Database safety:** MariaDB is the reference runtime and SQLite has
+  end-to-end paths. A new schema-safety test exercises both backends: a column
+  drop is planned as destructive, refused by default with `E-DB-004` while
+  preserving the test row, and applied only with `--allow-destructive` in an
+  isolated test database. The generated MariaDB business acceptance test has
+  passed; PostgreSQL runtime parity is not promised. A clear version
+  compatibility matrix and broader risk analysis remain before release.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

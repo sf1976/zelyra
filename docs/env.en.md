@@ -140,6 +140,12 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Integration-test only
+
+| Variable | Default | Precedence / source | Security classification | Affected commands and tests |
+|---|---|---|---|---|
+| `ZELYRA_SCHEMA_SAFETY_MARIADB_URL` | unset; SQLite test only | Process environment only; it is not loaded from a project `.env`. An explicit value enables the additional MariaDB test path. | May contain a username and password; use only a local test database, never print or commit it. | `bash tests/schema-safety-e2e.sh`; GitHub Actions sets a local `zelyra_ci` test URL. The test accepts only `localhost`/loopback and a `zelyra_ci` or `zelyra_test` base database; it creates and drops a separate database. |
+
 ## Project-local theme (not a `.env` variable)
 
 `zelyra new` and `zelyra init` create an optional `zelyra.theme.css`.

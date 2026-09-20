@@ -127,6 +127,11 @@ jobs:
         env:
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/sqlite-e2e.sh
+      - name: Run database schema safety integration test
+        env:
+          ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/schema-safety-e2e.sh
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root

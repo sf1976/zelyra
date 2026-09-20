@@ -385,6 +385,18 @@ Sie verwendet den Container `zelyra-mariadb-tests` und ein eigenes Volume.
 MariaDB wird auf Host-Port `3308` veröffentlicht, ohne eine andere
 Datenbankinstallation zu verändern.
 
+Destruktiven Schema-Schutz für SQLite und MariaDB prüfen:
+
+~~~bash
+ZELYRA_SCHEMA_SAFETY_MARIADB_URL='mariadb://root:<test-passwort>@127.0.0.1:3308/zelyra_test' \
+    bash ./tests/schema-safety-e2e.sh
+~~~
+
+Der Test verwendet immer eine wegwerfbare SQLite-Datei und erstellt/löscht
+eine separate MariaDB-Datenbank. Er ist auf lokale Server und die
+Basisdatenbank `zelyra_test` oder `zelyra_ci` beschränkt; niemals Produktion
+angeben.
+
 Den vollständigen Weg eines erzeugten Projekts gegen eine frische Datenbank
 prüfen:
 

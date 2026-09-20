@@ -491,10 +491,13 @@ Freigabekriterien bestanden sind.
   Portzuordnungen und Bereinigung. Prüfungen auf frischen Systemen sowie
   Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
-  gibt es einen End-to-End-Pfad; der MariaDB-Abnahmetest des erzeugten
-  Business-Projekts ist erfolgreich. PostgreSQL-Runtime-Parität wird nicht
-  versprochen. Vor dem Release sind eine klare Kompatibilitätsmatrix, sichere
-  Planung und die Freigabe destruktiver Änderungen nachzuweisen.
+  gibt es End-to-End-Pfade. Ein neuer Schema-Sicherheitstest prüft auf beiden
+  Backends, dass ein Spalten-Drop als destruktiv geplant, standardmäßig mit
+  `E-DB-004` abgelehnt und ohne Datenverlust zurückgelassen wird; erst
+  `--allow-destructive` wendet die Änderung in einer isolierten Testdatenbank
+  an. PostgreSQL-Runtime-Parität wird nicht versprochen. Eine klare
+  Versions-Kompatibilitätsmatrix und weitergehende Risikoanalyse bleiben vor
+  dem Release offen.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

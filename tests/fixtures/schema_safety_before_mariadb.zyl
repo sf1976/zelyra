@@ -1,0 +1,10 @@
+database main {
+    engine: mariadb
+    database: "schema_safety"
+}
+
+table safety_records {
+    id: Id primary auto
+    label: String(80) required
+    archive_note: String(80)
+}

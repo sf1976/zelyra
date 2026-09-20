@@ -874,12 +874,21 @@ temporary database, inspects the schema, verifies an idempotent plan, and
 checks the generated foreign-key metadata. It never uses application data or
 credentials from the host environment.
 
+`tests/schema-safety-e2e.sh` additionally proves that a destructive column
+drop is shown in the plan, refused by default without changing the test row,
+and applied only when `--allow-destructive` is supplied. It always uses an
+isolated temporary SQLite file. To include MariaDB, set
+`ZELYRA_SCHEMA_SAFETY_MARIADB_URL` to a local `zelyra_ci` or `zelyra_test`
+database URL; the script creates and removes a uniquely named test database.
+
 The database command contract is explicit: `create` only emits compiler-checked
 DDL and never connects; `setup` creates a MariaDB database when needed and
 applies the initial schema; `bootstrap` applies an initial schema to MariaDB or
 SQLite; `inspect` reads the live schema; `plan` displays the deterministic diff;
 and `apply` executes that diff after refusing destructive changes unless
-`--allow-destructive` is supplied. `setup`, `bootstrap`, `inspect`, and `apply`
+`--allow-destructive` is supplied. The schema safety end-to-end test exercises
+the refusal and explicit-approval boundary on SQLite and MariaDB. `setup`,
+`bootstrap`, `inspect`, and `apply`
 require `DATABASE_URL`; `plan` can also plan against an empty database when it
 is absent.
 
