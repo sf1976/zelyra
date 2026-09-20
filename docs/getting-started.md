@@ -627,6 +627,10 @@ Unsupported operations are always refused:
 zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
+Changes to defaults, primary keys, or MariaDB auto-increment settings are
+currently detected but not migrated automatically. The plan marks them
+`UNSUPPORTED`; approval flags cannot override that decision.
+
 Review the full plan carefully. In particular, required columns without a
 default may receive engine-specific values for existing rows after approval;
 verify those values before relying on them. Unique-constraint creation may fail

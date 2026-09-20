@@ -41,7 +41,9 @@ can run the same scripts against a disposable MariaDB service:
   foreign-key additions/removals are marked `REVIEW`; duplicate rows survive a
   rejected unique-index creation and orphan rows survive a rejected foreign-key
   addition; unsupported nullability changes and SQLite type, foreign-key, and
-  unique-constraint alterations are blocked by `E-DB-006` even with approval.
+  unique-constraint alterations are blocked by `E-DB-006` even with approval;
+  MariaDB default/key/auto-increment and SQLite default/key drift are detected
+  and refused rather than silently ignored.
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
 schema-safety test creates and drops only a uniquely named test database. It

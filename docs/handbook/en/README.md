@@ -565,9 +565,12 @@ SQLite type, foreign-key, and unique-constraint alterations are currently
 unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`; SQLite
 foreign-key alterations are refused. The schema-safety integration verifies
 that a failed unique-constraint creation leaves duplicate rows intact and
-invalid foreign-key relationships are retained. MariaDB may assign
-engine-specific implicit values to existing rows when an approved required
-column has no default, so verify the resulting data before using it.
+invalid foreign-key relationships are retained. MariaDB default, primary-key,
+and auto-increment drift plus SQLite default and primary-key drift are detected
+and marked `UNSUPPORTED`; PostgreSQL key/default/identity inspection and
+SQLite's explicit `AUTOINCREMENT` distinction remain incomplete. MariaDB may
+assign engine-specific implicit values to existing rows when an approved
+required column has no default, so verify the resulting data before using it.
 Unrecognized external indexes are preserved; untracked foreign-key removals
 are blocked instead of guessed.
 

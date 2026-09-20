@@ -200,8 +200,11 @@ architecture requirement for every phase, not a provider-specific feature.
   compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
-- [ ] Detect and plan default, primary-key, and auto-increment changes from
-  inspected live schemas.
+- [~] Live schema inspection now detects MariaDB default, primary-key, and
+  auto-increment drift, plus SQLite default and primary-key drift. These
+  changes fail closed as `UNSUPPORTED`; SQLite's explicit `AUTOINCREMENT`
+  distinction and PostgreSQL default/identity/primary-key metadata are not yet
+  reliably inspected. Safe backend-specific migrations remain planned.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
@@ -474,20 +477,23 @@ supported machine and the release gates below pass.
   end-to-end paths. The schema-safety test exercises both backends: destructive
   drops require approval; required columns without defaults, new unique
   constraints, and MariaDB foreign-key additions/removals are marked `REVIEW`;
+  default/primary-key/auto-increment drift detected by the current inspectors
+  is marked `UNSUPPORTED`;
   duplicate rows and orphan rows remain intact when index/foreign-key changes
   fail; unknown external indexes are preserved and untracked foreign-key
   removals fail closed. Unsupported changes fail closed with `E-DB-006`.
   The legacy `--allow-destructive` option does not approve `REVIEW` changes;
   `--allow-risky` is required after reviewing them. Nullability changes and
   SQLite type, foreign-key, and unique-constraint alterations remain
-  unsupported. The generated
-  MariaDB business acceptance test has passed. The [version
+  unsupported. Type and nullability drift are evaluated independently, so a
+  safe type widening cannot conceal an unsupported nullability change. The
+  generated MariaDB business acceptance test has passed. The [version
   matrix](database-compatibility.en.md) lists four
   MariaDB Community LTS patch images and the core database/CRUD paths they
   test; this is not MySQL or full feature certification. PostgreSQL runtime
   parity, nullability migration support, backfill safety, and operational risk
-  analysis remain outside the 0.2.0 claim. Default, primary-key, and
-  auto-increment drift are not fully detected by live schema inspection.
+  analysis remain outside the 0.2.0 claim. PostgreSQL default/identity/key
+  metadata and SQLite's explicit `AUTOINCREMENT` property remain undetected.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

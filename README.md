@@ -882,7 +882,8 @@ for destructive drops, review of required columns without defaults and new
 unique constraints, MariaDB foreign-key add/remove review, and preservation of
 duplicate or orphan rows when index/foreign-key changes fail. Changes currently
 unsupported by the planner return `E-DB-006` and are refused even when approval
-is supplied.
+is supplied. MariaDB default, primary-key, and auto-increment drift plus
+SQLite default and primary-key drift are detected and fail closed.
 
 The database command contract is explicit: `create` only emits compiler-checked
 DDL and never connects; `setup` creates a MariaDB database when needed and

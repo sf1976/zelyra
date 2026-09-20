@@ -214,8 +214,12 @@ Feature eines bestimmten Anbieters.
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
-- [ ] Änderungen an Defaults, Primärschlüsseln und Auto-Increment-Werten anhand
-  inspizierter Ist-Schemata erkennen und planen.
+- [~] Die Live-Inspektion erkennt jetzt Drift bei Defaults und Primärschlüsseln
+  für MariaDB und SQLite sowie bei MariaDB-Auto-Increment. Diese Änderungen
+  werden als `UNSUPPORTED` fail-closed abgelehnt. SQLite unterscheidet
+  explizites `AUTOINCREMENT` noch nicht zuverlässig; Default-, Identity- und
+  Primärschlüssel-Metadaten von PostgreSQL werden ebenfalls noch nicht sicher
+  inspiziert. Sichere backend-spezifische Migrationen bleiben geplant.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
@@ -510,17 +514,21 @@ Freigabekriterien bestanden sind.
   verwaiste Zeilen bleiben erhalten, wenn Index- oder Foreign-Key-Änderungen
   scheitern. Unbekannte externe Indizes bleiben bestehen, nicht verfolgte
   Foreign-Key-Entfernungen werden fail-closed blockiert. Nicht unterstützte
-  Änderungen werden mit `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
+  Default-, Schlüssel- und Auto-Increment-Änderungen werden erkannt und mit
+  `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
   keine `REVIEW`-Änderungen; diese benötigen nach Prüfung `--allow-risky`.
   Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
-  Unique-Constraint-Änderungen werden noch nicht unterstützt. Die
+  Unique-Constraint-Änderungen werden noch nicht unterstützt. Typ- und
+  Nullbarkeitsänderungen werden unabhängig bewertet; eine sichere
+  Typvergrößerung kann eine nicht unterstützte Nullbarkeitsänderung nicht
+  verdecken. Die
   [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
   Community-LTS-Patch-Images und die getesteten Datenbank-/CRUD-Pfade auf;
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
   PostgreSQL-Runtime-Parität, Nullbarkeitsmigrationen, sichere Backfills und
-  betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. Drift bei
-  Defaults, Primärschlüsseln und Auto-Increment wird durch die Live-Inspektion
-  noch nicht vollständig erkannt.
+  betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-
+  Default-/Identity-/Schlüssel-Metadaten und explizites SQLite-`AUTOINCREMENT`
+  werden noch nicht zuverlässig erkannt.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

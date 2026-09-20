@@ -47,7 +47,9 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
   bei einem abgelehnten Foreign-Key nicht verloren; nicht unterstützte
   Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
   Unique-Constraint-Änderungen werden auch mit Freigabe durch `E-DB-006`
-  blockiert.
+  blockiert; MariaDB-Default-/Schlüssel-/Auto-Increment-Drift sowie SQLite-
+  Default-/Schlüssel-Drift werden erkannt und statt stillschweigend ignoriert
+  abgelehnt.
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine

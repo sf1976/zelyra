@@ -604,31 +604,8 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             .map(|column| (column.name.as_str(), column))
             .collect::<HashMap<_, _>>();
         for desired_column in &desired_table.columns {
-            match current_columns.get(desired_column.name.as_str()) {
-                None => plan.changes.push(SchemaChange {
-                    description: if !desired_column.nullable && desired_column.default.is_none() {
-                        format!(
-                            "add required column {}.{} without a default; review existing rows",
-                            desired_table.name, desired_column.name
-                        )
-                    } else {
-                        format!(
-                            "add column {}.{}",
-                            desired_table.name, desired_column.name
-                        )
-                    },
-                    sql: format!(
-                        "ALTER TABLE {} ADD COLUMN {};",
-                        quote_identifier(&desired_table.name, backend),
-                        column_sql(desired_column, backend)
-                    ),
-                    risk: if !desired_column.nullable && desired_column.default.is_none() {
-                        Risk::RequiresApproval
-                    } else {
-                        Risk::Safe
-                    },
-                }),
-                Some(current_column) if current_column.sql_type != desired_column.sql_type => {
+            if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
+                if current_column.sql_type != desired_column.sql_type {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "change type of {}.{}",
@@ -640,9 +617,9 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                             &desired_column.sql_type,
                             backend,
                         ),
-                    })
+                    });
                 }
-                Some(current_column) if current_column.nullable != desired_column.nullable => {
+                if current_column.nullable != desired_column.nullable {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "change nullability of {}.{}",
@@ -653,9 +630,75 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                             desired_table.name, desired_column.name
                         ),
                         risk: Risk::Unsupported,
-                    })
+                    });
                 }
-                _ => {}
+            } else {
+                plan.changes.push(SchemaChange {
+                    description: if !desired_column.nullable && desired_column.default.is_none() {
+                        format!(
+                            "add required column {}.{} without a default; review existing rows",
+                            desired_table.name, desired_column.name
+                        )
+                    } else {
+                        format!("add column {}.{}", desired_table.name, desired_column.name)
+                    },
+                    sql: format!(
+                        "ALTER TABLE {} ADD COLUMN {};",
+                        quote_identifier(&desired_table.name, backend),
+                        column_sql(desired_column, backend)
+                    ),
+                    risk: if !desired_column.nullable && desired_column.default.is_none() {
+                        Risk::RequiresApproval
+                    } else {
+                        Risk::Safe
+                    },
+                });
+            }
+            if backend != Backend::Postgres {
+                if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
+                    if current_column.primary_key != desired_column.primary_key {
+                        plan.changes.push(SchemaChange {
+                            description: format!(
+                                "change primary-key status of {}.{}",
+                                desired_table.name, desired_column.name
+                            ),
+                            sql: format!(
+                                "-- Changing primary-key status of {}.{} is not supported by the current schema planner.",
+                                desired_table.name, desired_column.name
+                            ),
+                            risk: Risk::Unsupported,
+                        });
+                    }
+                    if backend == Backend::MariaDb && current_column.auto != desired_column.auto {
+                        plan.changes.push(SchemaChange {
+                            description: format!(
+                                "change auto-increment status of {}.{}",
+                                desired_table.name, desired_column.name
+                            ),
+                            sql: format!(
+                                "-- Changing auto-increment status of {}.{} is not supported by the current schema planner.",
+                                desired_table.name, desired_column.name
+                            ),
+                            risk: Risk::Unsupported,
+                        });
+                    }
+                    if !defaults_equivalent(
+                        current_column.default.as_deref(),
+                        desired_column.default.as_deref(),
+                    ) {
+                        plan.changes.push(SchemaChange {
+                            description: format!(
+                                "change default of {}.{}",
+                                desired_table.name, desired_column.name
+                            ),
+                            sql: format!(
+                                "-- Changing the default of {}.{} is not supported by the current schema planner.",
+                                desired_table.name, desired_column.name
+                            ),
+                            risk: Risk::Unsupported,
+                        });
+                    }
+                }
             }
         }
         for current_column in &current_table.columns {
@@ -811,6 +854,36 @@ fn type_change_risk(current: &str, desired: &str, backend: Backend) -> Risk {
     match (parse_varchar(current), parse_varchar(desired)) {
         (Some(current), Some(desired)) if desired >= current => Risk::Safe,
         _ => Risk::Destructive,
+    }
+}
+
+fn defaults_equivalent(current: Option<&str>, desired: Option<&str>) -> bool {
+    let Some(current) = current else {
+        return desired.is_none();
+    };
+    let Some(desired) = desired else {
+        return false;
+    };
+    let current = normalize_default(current);
+    let desired = normalize_default(desired);
+    current == desired
+        || matches!(
+            (current.as_str(), desired.as_str()),
+            ("1", "TRUE") | ("TRUE", "1")
+        )
+        || matches!(
+            (current.as_str(), desired.as_str()),
+            ("0", "FALSE") | ("FALSE", "0")
+        )
+}
+
+fn normalize_default(value: &str) -> String {
+    let trimmed = value.trim();
+    let upper = trimmed.to_ascii_uppercase();
+    match upper.as_str() {
+        "CURRENT_TIMESTAMP()" => "CURRENT_TIMESTAMP".into(),
+        "TRUE" | "FALSE" | "CURRENT_TIMESTAMP" => upper,
+        _ => trimmed.into(),
     }
 }
 
@@ -1216,7 +1289,7 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let output = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, '') FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
@@ -1477,8 +1550,8 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
     };
     for table_name in tables_output.lines().filter(|line| !line.is_empty()) {
         let pragma = format!(
-            "PRAGMA table_info({});",
-            quote_identifier(table_name, Backend::Sqlite)
+            "SELECT cid, name, type, \"notnull\", CASE WHEN dflt_value IS NULL THEN 'N' ELSE 'V' || hex(CAST(dflt_value AS BLOB)) END, pk FROM pragma_table_info({}) ORDER BY cid;",
+            quote_string(table_name)
         );
         let output = run_sqlite(&path, &pragma)?;
         let columns = parse_sqlite_columns(&output)?;
@@ -1640,12 +1713,16 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
     };
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 9 {
+        if fields.len() != 10 {
             return Err(DatabaseError {
-                message: format!("unexpected MariaDB column row: {line}"),
+                message: format!(
+                    "unexpected MariaDB column metadata with {} fields",
+                    fields.len()
+                ),
             });
         }
         let sql_type = mariadb_sql_type(fields[2], fields[6], fields[7], fields[8]);
+        let default = mariadb_default_value(fields[9], &sql_type, fields[3] == "YES")?;
         let column = Column {
             name: fields[1].into(),
             sql_type,
@@ -1653,7 +1730,7 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
             primary_key: fields[4] == "PRI",
             auto: fields[5].contains("auto_increment"),
             unique: fields[4] == "UNI",
-            default: None,
+            default,
         };
         if let Some(table) = schema
             .tables
@@ -1672,6 +1749,63 @@ fn parse_mariadb_columns(output: &str) -> Result<Schema, DatabaseError> {
         }
     }
     Ok(schema)
+}
+
+fn mariadb_default_value(
+    encoded: &str,
+    sql_type: &str,
+    nullable: bool,
+) -> Result<Option<String>, DatabaseError> {
+    let Some(hex) = encoded.strip_prefix('V') else {
+        if encoded == "N" {
+            return Ok(None);
+        }
+        return Err(DatabaseError {
+            message: "unexpected MariaDB default metadata marker".into(),
+        });
+    };
+    let value = decode_hex_metadata(hex)?;
+    if nullable && value.eq_ignore_ascii_case("NULL") {
+        return Ok(None);
+    }
+    let default = if sql_type == "TIMESTAMP"
+        && (value.eq_ignore_ascii_case("current_timestamp")
+            || value.eq_ignore_ascii_case("current_timestamp()"))
+    {
+        "CURRENT_TIMESTAMP".into()
+    } else if sql_type == "BOOLEAN" && (value == "1" || value == "0") {
+        if value == "1" {
+            "TRUE".into()
+        } else {
+            "FALSE".into()
+        }
+    } else {
+        value
+    };
+    Ok(Some(default))
+}
+
+fn decode_hex_metadata(hex: &str) -> Result<String, DatabaseError> {
+    let bytes = hex
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            if pair.len() != 2 {
+                return Err(DatabaseError {
+                    message: "invalid encoded schema metadata".into(),
+                });
+            }
+            let digits = std::str::from_utf8(pair).map_err(|_| DatabaseError {
+                message: "invalid encoded schema metadata".into(),
+            })?;
+            u8::from_str_radix(digits, 16).map_err(|_| DatabaseError {
+                message: "invalid encoded schema metadata".into(),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    String::from_utf8(bytes).map_err(|_| DatabaseError {
+        message: "encoded schema metadata is not valid UTF-8".into(),
+    })
 }
 
 fn mariadb_sql_type(data_type: &str, length: &str, precision: &str, scale: &str) -> String {
@@ -1821,9 +1955,22 @@ fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
             let fields = line.split('\t').collect::<Vec<_>>();
             if fields.len() != 6 {
                 return Err(DatabaseError {
-                    message: format!("unexpected SQLite column row: {line}"),
+                    message: format!(
+                        "unexpected SQLite column metadata with {} fields",
+                        fields.len()
+                    ),
                 });
             }
+            let default = if fields[4] == "N" {
+                None
+            } else {
+                let Some(hex) = fields[4].strip_prefix('V') else {
+                    return Err(DatabaseError {
+                        message: "unexpected SQLite default metadata marker".into(),
+                    });
+                };
+                Some(decode_hex_metadata(hex)?)
+            };
             Ok(Column {
                 name: fields[1].into(),
                 sql_type: fields[2].to_ascii_uppercase(),
@@ -1833,7 +1980,7 @@ fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
                 primary_key: fields[5] != "0",
                 auto: fields[5] != "0" && fields[2].eq_ignore_ascii_case("INTEGER"),
                 unique: false,
-                default: None,
+                default,
             })
         })
         .collect()
@@ -1988,6 +2135,110 @@ mod tests {
     }
 
     #[test]
+    fn detects_default_primary_key_and_mariadb_auto_increment_drift() {
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto active: Bool default true name: String default \"new\" }",
+        );
+        let current = schema(
+            "database main { engine: mariadb } table users { id: Id primary active: Bool name: String }",
+        );
+        let plan = diff(&desired, &current);
+        assert!(plan.has_unsupported());
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change auto-increment status of users.id"));
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change default of users.active"));
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change default of users.name"));
+
+        let current = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto active: Bool default true name: String default \"new\" }",
+        );
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id active: Bool default true name: String default \"new\" }",
+        );
+        let plan = diff(&desired, &current);
+        assert!(plan.has_unsupported());
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change primary-key status of users.id"));
+    }
+
+    #[test]
+    fn detects_sqlite_default_and_primary_key_drift_but_not_unobservable_autoincrement() {
+        let desired = schema(
+            "database main { engine: sqlite } table users { id: Id active: Bool default true }",
+        );
+        let mut current = schema(
+            "database main { engine: sqlite } table users { id: Id primary auto active: Bool }",
+        );
+        current.tables[0].columns[1].default = None;
+        let plan = diff(&desired, &current);
+        assert!(plan.has_unsupported());
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change primary-key status of users.id"));
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| change.description == "change default of users.active"));
+        assert!(!plan.changes.iter().any(|change| {
+            change
+                .description
+                .starts_with("change auto-increment status of")
+        }));
+    }
+
+    #[test]
+    fn treats_equivalent_boolean_and_timestamp_defaults_as_equal() {
+        assert!(defaults_equivalent(Some("1"), Some("TRUE")));
+        assert!(defaults_equivalent(Some("0"), Some("FALSE")));
+        assert!(defaults_equivalent(
+            Some("current_timestamp()"),
+            Some("CURRENT_TIMESTAMP")
+        ));
+        assert!(!defaults_equivalent(Some("'true'"), Some("TRUE")));
+        assert!(!defaults_equivalent(None, Some("0")));
+    }
+
+    #[test]
+    fn keeps_timestamp_looking_string_defaults_as_literals() {
+        assert_eq!(
+            mariadb_default_value(
+                "V2743555252454e545f54494d455354414d5027",
+                "VARCHAR(40)",
+                false,
+            )
+            .unwrap()
+            .as_deref(),
+            Some("'CURRENT_TIMESTAMP'")
+        );
+        assert_eq!(
+            mariadb_default_value(
+                "V63757272656e745f74696d657374616d702829",
+                "TIMESTAMP",
+                false,
+            )
+            .unwrap()
+            .as_deref(),
+            Some("CURRENT_TIMESTAMP")
+        );
+        assert_eq!(
+            mariadb_default_value("V4E554C4C", "TIMESTAMP", true).unwrap(),
+            None
+        );
+        assert!(mariadb_default_value("V0", "TEXT", false).is_err());
+    }
+
+    #[test]
     fn blocks_nullability_changes_until_supported_migration_exists() {
         let desired = schema("table users { id: Id primary auto email: Email required }");
         let current = schema("table users { id: Id primary auto email: Email? }");
@@ -1996,6 +2247,26 @@ mod tests {
         assert_eq!(plan.changes[0].risk, Risk::Unsupported);
         assert!(plan.has_unsupported());
         assert!(plan.changes[0].sql.starts_with("--"));
+    }
+
+    #[test]
+    fn type_widening_does_not_hide_unsupported_nullability_drift() {
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto name: String(200) required }",
+        );
+        let mut current = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto name: String(100) required }",
+        );
+        current.tables[0].columns[1].nullable = true;
+        let plan = diff(&desired, &current);
+        assert!(plan.has_unsupported());
+        assert!(plan.changes.iter().any(|change| {
+            change.description == "change type of users.name" && change.risk == Risk::Safe
+        }));
+        assert!(plan.changes.iter().any(|change| {
+            change.description == "change nullability of users.name"
+                && change.risk == Risk::Unsupported
+        }));
     }
 
     #[test]
@@ -2253,7 +2524,7 @@ mod tests {
     #[test]
     fn parses_sqlite_columns_foreign_keys_and_indexes() {
         let columns =
-            parse_sqlite_columns("0\tid\tINTEGER\t1\t\t1\n1\tdepartment_id\tINTEGER\t1\t\t0\n")
+            parse_sqlite_columns("0\tid\tINTEGER\t1\tN\t1\n1\tdepartment_id\tINTEGER\t1\tN\t0\n")
                 .unwrap();
         let mut table = Table {
             name: "machines".into(),
@@ -2272,9 +2543,45 @@ mod tests {
     }
 
     #[test]
+    fn parses_sqlite_default_metadata() {
+        let columns = parse_sqlite_columns(
+            "0\tid\tINTEGER\t1\tN\t1\n1\tname\tTEXT\t0\tV2768656c6c6f27\t0\n2\tactive\tINTEGER\t1\tV54525545\t0\n",
+        )
+        .unwrap();
+        assert_eq!(columns[0].default, None);
+        assert_eq!(columns[1].default.as_deref(), Some("'hello'"));
+        assert_eq!(columns[2].default.as_deref(), Some("TRUE"));
+        assert_eq!(decode_hex_metadata("276109620a6327").unwrap(), "'a\tb\nc'");
+        let error = parse_sqlite_columns("secret-default-metadata").unwrap_err();
+        assert!(!error.message.contains("secret-default-metadata"));
+    }
+
+    #[test]
+    fn parses_mariadb_default_metadata_without_exposing_encoded_values() {
+        let schema = parse_mariadb_columns(
+            "users\tname\tvarchar\tNO\t\t\t80\t\t\tV2768656c6c6f27\nusers\tactive\ttinyint\tNO\t\t\t1\t\t\tV31\nusers\tempty\tvarchar\tNO\t\t\t80\t\t\tV2727\nusers\tmissing\tvarchar\tYES\t\t\t80\t\t\tN\nusers\tdeleted_at\ttimestamp\tYES\t\t\t\t\t\tV4E554C4C\n",
+        )
+        .unwrap();
+        let columns = &schema.tables[0].columns;
+        assert_eq!(columns[0].default.as_deref(), Some("'hello'"));
+        assert_eq!(columns[1].default.as_deref(), Some("TRUE"));
+        assert_eq!(columns[2].default.as_deref(), Some("''"));
+        assert_eq!(columns[3].default, None);
+        assert_eq!(columns[4].default, None);
+        assert!(!columns[1].primary_key);
+    }
+
+    #[test]
+    fn malformed_mariadb_metadata_errors_do_not_echo_row_contents() {
+        let error = parse_mariadb_columns("secret-default-metadata").unwrap_err();
+        assert!(!error.message.contains("secret-default-metadata"));
+    }
+
+    #[test]
     fn parses_mariadb_foreign_keys() {
         let mut schema =
-            parse_mariadb_columns("machines\tid\tbigint\tNO\tPRI\tauto_increment\t\t\t\n").unwrap();
+            parse_mariadb_columns("machines\tid\tbigint\tNO\tPRI\tauto_increment\t\t\t\tN\n")
+                .unwrap();
         parse_foreign_key_output(
             &mut schema,
             "machines\tdepartment_id\tdepartments\tid\tfk_machines_department_id\n",

@@ -114,3 +114,10 @@ specialized migration implementation. Adding or removing MariaDB foreign keys
 requires `REVIEW`; SQLite foreign-key alterations are blocked until table
 rebuilds are supported. The planner preserves unrecognized external indexes
 and refuses untracked foreign-key removals rather than guessing ownership.
+MariaDB default, primary-key, and auto-increment drift plus SQLite default and
+primary-key drift are detected but blocked as `UNSUPPORTED` until safe
+backend-specific migrations are implemented. PostgreSQL default/identity/key
+metadata and SQLite's explicit `AUTOINCREMENT` distinction are not yet
+reliably inspected. Type changes and nullability changes are classified
+independently, preventing a safe type widening from masking unsupported
+nullability drift.

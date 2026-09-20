@@ -130,6 +130,25 @@ assert_sqlite_safety() {
     [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM machines;")" == "1" ]]
     [[ "$(sqlite3 "${database_path}" "PRAGMA foreign_key_list(machines);" | wc -l)" == "0" ]]
     echo "[SQLite] foreign-key additions are refused without a supported table rebuild"
+
+    local metadata_before metadata_after metadata_plan metadata_defaults
+    metadata_before="${fixture_dir}/schema_safety_metadata_before_sqlite.zyl"
+    metadata_after="${fixture_dir}/schema_safety_metadata_after_sqlite.zyl"
+    DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db bootstrap "${metadata_before}" >/dev/null
+    sqlite3 "${database_path}" "INSERT INTO metadata_records(active, name) VALUES (0, 'retained');"
+    metadata_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${metadata_after}")"
+    grep -Fq "[UNSUPPORTED] change primary-key status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.active" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.name" <<<"${metadata_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${metadata_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied schema metadata drift marked unsupported" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT name FROM metadata_records;")" == "retained" ]]
+    metadata_defaults="$(sqlite3 "${database_path}" "PRAGMA table_info(metadata_records);" | awk -F'|' '($2 == "active" || $2 == "name") && $5 != "" { count++ } END { print count + 0 }')"
+    [[ "${metadata_defaults}" == "0" ]]
+    echo "[SQLite] default and primary-key drift are detected and fail closed"
 }
 
 assert_mariadb_safety() {
@@ -340,6 +359,31 @@ assert_mariadb_safety() {
         -e "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='machines' AND CONSTRAINT_NAME='fk_machines_department_id';")"
     [[ "${fk_count}" == "0" ]]
     echo "[MariaDB] foreign-key changes require review and retain data"
+
+    local metadata_before metadata_after metadata_plan metadata_state
+    metadata_before="${fixture_dir}/schema_safety_metadata_before_mariadb.zyl"
+    metadata_after="${fixture_dir}/schema_safety_metadata_after_mariadb.zyl"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${metadata_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO metadata_records(active, name) VALUES (0, 'retained');"
+    metadata_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${metadata_after}")"
+    grep -Fq "[UNSUPPORTED] change primary-key status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.active" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.name" <<<"${metadata_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${metadata_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB applied schema metadata drift marked unsupported" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    metadata_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM metadata_records WHERE name='retained'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME IN ('active','name') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME='id' AND COLUMN_KEY='PRI' AND EXTRA LIKE '%auto_increment%'));" )"
+    [[ "${metadata_state}" == "1:0:1" ]]
+    echo "[MariaDB] default, primary-key, and auto-increment drift are detected and fail closed"
 }
 
 assert_sqlite_safety

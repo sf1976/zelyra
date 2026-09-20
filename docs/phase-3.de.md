@@ -77,9 +77,8 @@ interaktiv oder über einen Secret-Manager gesetzt werden.
 
 ## Inspect, Plan und Apply
 
-Für Befehle, die auf eine laufende Datenbank zugreifen, muss eine explizite
-Für `inspect`, `plan` und `apply` muss eine passende Verbindungszeichenkette
-gesetzt werden:
+Für Befehle, die auf eine laufende Datenbank zugreifen, muss eine passende
+Verbindungszeichenkette über `DATABASE_URL` gesetzt werden:
 
 ```bash
 export DATABASE_URL='postgres://user:password@localhost/machine_management'
@@ -118,4 +117,11 @@ und benötigen eine spezialisierte Migration. Hinzufügen und Entfernen von
 Foreign Keys benötigt bei MariaDB eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
 Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
 Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
-nicht erraten, sondern blockiert.
+nicht erraten, sondern blockiert. MariaDB-Drift bei Defaults, Primärschlüsseln
+und Auto-Increment sowie SQLite-Drift bei Defaults und Primärschlüsseln wird
+erkannt, aber bis zur Implementierung sicherer backend-spezifischer
+Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-Default-/Identity-/
+Schlüssel-Metadaten und die explizite SQLite-`AUTOINCREMENT`-Unterscheidung
+werden noch nicht zuverlässig inspiziert. Typ- und Nullbarkeitsänderungen
+werden unabhängig bewertet; eine sichere Typvergrößerung kann eine nicht
+unterstützte Nullbarkeitsänderung nicht verdecken.

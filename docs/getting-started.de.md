@@ -654,6 +654,10 @@ abgelehnt:
 zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
+Änderungen an Defaults, Primärschlüsseln oder MariaDB-Auto-Increment werden
+derzeit erkannt, aber nicht automatisch migriert. Der Plan markiert sie als
+`UNSUPPORTED`; Freigabe-Flags können diese Einstufung nicht übergehen.
+
 Den vollständigen Plan sorgfältig prüfen. Pflichtspalten ohne Standardwert
 können nach Freigabe engineabhängige Werte für vorhandene Zeilen erhalten;
 diese Werte müssen vor der Nutzung durch die Anwendung geprüft werden. Das

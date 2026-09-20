@@ -1,0 +1,10 @@
+database main {
+    engine: mariadb
+    database: "schema_safety"
+}
+
+table metadata_records {
+    id: Id primary auto
+    active: Bool required
+    name: String(80) required
+}
