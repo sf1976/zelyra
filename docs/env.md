@@ -278,6 +278,17 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | `ZELYRA_TABLEVIEW_E2E_PROJECT`, `ZELYRA_TABLEVIEW_E2E_ADDRESS`, `ZELYRA_TABLEVIEW_E2E_DB_PASSWORD`, `ZELYRA_TABLEVIEW_E2E_KEEP_TEMP` | Test-/Entwicklungswerkzeug | Tableview-E2E-Projekt, Adresse, Testpasswort und temporäre Daten |
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | Test-/Entwicklungswerkzeug | Audit-Chain-E2E-Projekt und Testpasswort |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | Test-/Entwicklungswerkzeug | erzeugtes Docker-E2E-Projekt und Portwahl |
+| `ZELYRA_DOCKER_E2E_REF` | Test-/Entwicklungswerkzeug; Standard ist der lokale Checkout-Branch (bei detached HEAD der veröffentlichte Zelyra-Tag) | Git-Branch oder Tag für das isolierte Docker-E2E-Anwendungsimage |
+
+`ZELYRA_DOCKER_E2E_REF` betrifft ausschließlich
+`tests/generated-project-docker-e2e.sh`. Ist die Variable nicht gesetzt,
+verwendet der Test den Branch des lokalen Checkouts; bei detached HEAD gilt der
+im erzeugten Dockerfile festgelegte veröffentlichte Tag. Ein gesetzter
+Prozess-Umgebungswert hat Vorrang; `.env` wird dafür nicht ausgewertet. Der
+Wert ist kein Secret, wird auf einen einfachen Git-Ref beschränkt und ohne
+wiederverwendete Compiler-Build-Schichten gebaut. Der Branch oder Tag muss im
+GitHub-Repository verfügbar sein. CI setzt den Branch des geprüften Commits.
+Der Test deckt Ref-Auswahl, Build und Laufzeit ab.
 
 Die Testvariablen mit `GENERATED_*`, `*_E2E_*` und `ZELYRA_BIN` sind keine
 öffentliche Anwendungsschnittstelle. Sie dienen reproduzierbaren CI- und

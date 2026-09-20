@@ -3856,6 +3856,35 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
     Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
 }
 
+fn project_web_url(directory: &std::path::Path) -> Result<String, String> {
+    let env_path = directory.join(".env");
+    let env_path_string = env_path.to_string_lossy();
+    project_web_url_with_host_port(
+        directory,
+        env::var("ZELYRA_HOST_PORT").ok().as_deref(),
+        &env_path_string,
+    )
+}
+
+fn project_web_url_with_host_port(
+    directory: &std::path::Path,
+    host_port_override: Option<&str>,
+    env_path: &str,
+) -> Result<String, String> {
+    let port = match host_port_override.map(str::to_owned) {
+        Some(value) => Some(value),
+        None => read_env_value(env_path, "ZELYRA_HOST_PORT")?,
+    };
+    let port = match port {
+        Some(value) => parse_web_port(&value)?,
+        None => {
+            let template = local_mariadb_template(directory)?;
+            template_port(&template, "ZELYRA_HOST_PORT", DEFAULT_WEB_PORT)
+        }
+    };
+    Ok(format!("http://127.0.0.1:{port}"))
+}
+
 fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let database_url = expanded_database_url(directory)?;
     let executable =
@@ -3911,7 +3940,9 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
+        let web_url = project_web_url(directory)?;
         messages.push(start_mariadb_compose(directory)?);
+        messages.push(format!("open: {web_url}"));
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
@@ -10886,6 +10917,50 @@ mod tests {
         assert!(first.contains("created protected .env"));
         assert!(second.contains("kept existing .env"));
         assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn setup_web_url_uses_the_effective_host_port() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-setup-web-url-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        fs::write(
+            path.join("zelyra.toml"),
+            "[database.main]\nengine = \"mariadb\"\n",
+        )
+        .unwrap();
+        fs::write(
+            path.join(".env.example"),
+            "# ZELYRA_HOST_PORT=18080\nZELYRA_DB_HOST_PORT=3308\n",
+        )
+        .unwrap();
+        fs::write(path.join(".env"), "ZELYRA_HOST_PORT=18443\n").unwrap();
+
+        let env_path = path.join(".env");
+        let env_path = env_path.to_string_lossy();
+        assert_eq!(
+            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
+            "http://127.0.0.1:18443"
+        );
+
+        fs::write(path.join(".env"), "ZELYRA_DB_HOST_PORT=3308\n").unwrap();
+        assert_eq!(
+            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
+            "http://127.0.0.1:18080"
+        );
+
+        assert_eq!(
+            project_web_url_with_host_port(&path, Some("18444"), "unused.env").unwrap(),
+            "http://127.0.0.1:18444"
+        );
 
         fs::remove_dir_all(path).unwrap();
     }

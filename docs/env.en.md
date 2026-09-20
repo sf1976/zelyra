@@ -264,6 +264,16 @@ diagnostics, context output, or logs.
 | `ZELYRA_TABLEVIEW_E2E_PROJECT`, `ZELYRA_TABLEVIEW_E2E_ADDRESS`, `ZELYRA_TABLEVIEW_E2E_DB_PASSWORD`, `ZELYRA_TABLEVIEW_E2E_KEEP_TEMP` | test/development tool | tableview E2E project, address, password, and temporary data |
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | test/development tool | audit-chain E2E project and test password |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | test/development tool | generated Docker E2E project and ports |
+| `ZELYRA_DOCKER_E2E_REF` | test/development tool; defaults to the local checkout branch (published Zelyra tag on detached HEAD) | Git branch or tag used to build the isolated Docker E2E application image |
+
+`ZELYRA_DOCKER_E2E_REF` applies only to
+`tests/generated-project-docker-e2e.sh`. When unset, the test uses the local
+checkout branch; on a detached HEAD it uses the published tag pinned in the
+generated Dockerfile. A process-environment value takes precedence; `.env` is
+not read for this setting. The value is not a secret, is restricted to a
+simple Git ref, and is built without reusing compiler build layers. The branch
+or tag must be available in the GitHub repository. CI sets the branch of the
+commit under test. The test covers ref selection, build, and runtime behavior.
 
 Variables beginning with `GENERATED_*`, `*_E2E_*`, and `ZELYRA_BIN` are not a
 public application API. They exist for reproducible CI and local integration

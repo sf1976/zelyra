@@ -141,10 +141,13 @@ architecture requirement for every phase, not a provider-specific feature.
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable web and MariaDB host ports plus
-  container ports. `tests/generated-project-docker-e2e.sh` has built the
-  current feature branch, started both services on isolated host ports,
-  verified the German home page and published port mappings, then removed only
-  its Compose project and volume; production hardening remains open.
+  container ports. `tests/generated-project-docker-e2e.sh` now creates a fresh
+  CRUD project and runs `zelyra setup --all` twice. It verifies schema-backed
+  machine/department pages, the reported local URL, owner-only `.env` mode,
+  secret-free output, unchanged credentials across recovery, port mappings,
+  and cleanup of only its uniquely named Compose project and volume. Clean-host
+  coverage beyond this isolated Docker workflow and production hardening remain
+  open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
 - [~] `zelyra doctor` checks project validity, database connectivity, Docker
@@ -480,10 +483,11 @@ supported machine and the release gates below pass.
   tested onboarding and broader documented user acceptance remain release
   work.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
-  .env, Docker Compose, free-port selection, and actionable Docker permission
-  guidance exist. The generated Docker stack also passed an isolated build,
-  startup, HTTP, port-mapping, and cleanup smoke test on this host.
-  Clean-machine installation verification and recovery coverage across
+  protected `.env`, Docker Compose, free-port selection, actionable Docker
+  permission guidance, and a printed application URL exist. The generated
+  CRUD stack has passed an isolated first-run and repeat-setup test, including
+  schema-backed HTTP pages, unchanged credentials, secret-free setup output,
+  ports, and cleanup. Clean-host installation and recovery coverage across
   supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has
   end-to-end paths. The schema-safety test exercises both backends: destructive

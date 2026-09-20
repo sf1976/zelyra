@@ -156,11 +156,14 @@ Feature eines bestimmten Anbieters.
   Installation, Fernadministration und produktives Deployment bleiben bewusst
   außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
-  Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
-  `tests/generated-project-docker-e2e.sh` hat den aktuellen Feature-Branch
-  gebaut, beide Dienste auf isolierten Host-Ports gestartet, die deutsche
-  Startseite und Portzuordnungen geprüft und anschließend nur Compose-Projekt
-  und Volume dieses Tests entfernt. Produktionshärtung bleibt offen.
+  Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports.
+  `tests/generated-project-docker-e2e.sh` erzeugt jetzt ein frisches CRUD-Projekt
+  und führt `zelyra setup --all` zweimal aus. Geprüft werden
+  schemabasierte Maschinen-/Abteilungsseiten, die ausgegebene lokale Adresse,
+  geschützte `.env`-Rechte, geheimnisfreie Ausgabe, unveränderte Zugangsdaten
+  beim erneuten Setup, Portzuordnungen und die Bereinigung ausschließlich des
+  eindeutig benannten Compose-Projekts samt Volume. Abdeckung über diesen
+  isolierten Docker-Ablauf hinaus und Produktionshärtung bleiben offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
@@ -512,12 +515,13 @@ Freigabekriterien bestanden sind.
   aus Deutsch/Englisch und Learn/Work – einschließlich Anzeige, Ausblendung und
   Übersetzung der Lernhilfe. Einsteigergeprüfter Einstieg und eine umfassendere
   dokumentierte Nutzerabnahme bleiben Release-Arbeiten.
-- [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
-  erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
-  Docker-Berechtigungen sind verfügbar. Der erzeugte Docker-Stack bestand auf
-  diesem Host zusätzlich einen isolierten Test für Build, Start, HTTP-Zugriff,
-  Portzuordnungen und Bereinigung. Prüfungen auf frischen Systemen sowie
-  Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
+- [~] **Einfacher Erststart:** zelyra new und zelyra setup, geschützte
+  `.env`, Docker Compose, freie Portwahl, konkrete Docker-Berechtigungshinweise
+  und die Ausgabe der App-Adresse sind vorhanden. Der erzeugte CRUD-Stack hat
+  einen isolierten Erststart- und Wiederholungstest bestanden, einschließlich
+  schemaabhängiger HTTP-Seiten, unveränderter Zugangsdaten, geheimnisfreier
+  Setup-Ausgabe, Portzuordnungen und Bereinigung. Prüfungen auf sauberen Hosts
+  und Wiederherstellungsfälle über diesen Docker-Ablauf hinaus bleiben offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
   gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
   Backends: destruktive Löschungen benötigen Freigabe; Pflichtspalten ohne

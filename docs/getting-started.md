@@ -307,11 +307,8 @@ For a ready local MariaDB and web-server template, use:
 ~~~bash
 zelyra new my-app --mariadb --web-port 8080 --host-port 18080 --db-host-port 3307
 cd my-app
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
+zelyra setup --all
 zelyra doctor main.zyl --env-file .env --port 18080
-zelyra db setup main.zyl
 ~~~
 
 The generated Compose file starts MariaDB and the Zelyra web server. The
@@ -325,11 +322,13 @@ host ports when the defaults are occupied. Explicit host-port flags are never
 silently changed.
 Open `http://127.0.0.1:18080` after the example above. The template is for
 local development; use a secret manager and TLS for production.
+`zelyra setup --all` starts MariaDB and the app, applies the initial schema,
+and prints the effective local URL so you do not need to derive it from ports.
 
-`zelyra setup .` creates `.env` from the generated template with random local
-MariaDB passwords and protects the file on Unix systems. It never overwrites
-an existing `.env` and never prints the credentials. Do not use generated
-local-development credentials as production secrets.
+`zelyra new --mariadb` creates `.env` with random local MariaDB passwords and
+protects it on Unix systems. `zelyra setup` remains an idempotent recovery
+command. It never overwrites an existing `.env` and never prints credentials.
+Do not use generated local-development credentials as production secrets.
 
 When setup creates a missing `.env`, it selects free published web and MariaDB
 ports if the template defaults are occupied. Use `zelyra setup . --host-port
@@ -343,17 +342,14 @@ MariaDB CRUD template:
 zelyra new machine-management --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd machine-management
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
 It includes a fictional workshop model with six production areas and 30
 machines, localized machine/department views, schema-mapped forms, CRUD pages,
 search, category/status/department filters, pagination, and custom actions.
 The generated `machine-management-demo.sql` contains only fictional records
-and is safe to import repeatedly. After `zelyra db setup main.zyl`, load it
+and is safe to import repeatedly. After `zelyra setup --all`, load it
 into the local MariaDB service with:
 
 ~~~bash
@@ -867,9 +863,11 @@ To also verify the generated Docker runtime, run:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-It builds the generated image, starts MariaDB and the web server on host ports
-3309 and 18082 by default, checks the welcome page and published mappings, and
-removes all temporary Docker resources afterwards.
+It creates a fresh CRUD project and runs `zelyra setup --all` twice. The test
+checks protected, unchanged credentials, the reported app URL, generated
+machine/department pages, and published mappings. MariaDB and the web server
+use isolated host ports 3309 and 18082 by default; all temporary Docker
+resources are removed afterwards.
 
 ## 12. Common problems
 

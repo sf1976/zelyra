@@ -1073,15 +1073,13 @@ CRUD-Starterprojekt verwenden:
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
-`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`
-verwenden. `zelyra setup .` bleibt als idempotenter Nachholbefehl für
-bestehende Projekte verfügbar.
+`zelyra setup --all` erzeugt fehlende lokale Konfiguration, startet MariaDB
+und die Webanwendung, wendet das Schema an und gibt die lokale App-Adresse aus.
+Der Befehl kann sicher wiederholt werden: Eine vorhandene `.env` und ihre
+Zugangsdaten bleiben unverändert.
 
 Das Starterprojekt enthält sechs fiktionale Produktionsbereiche und 30
 Maschinen, eine Foreign-Key-Beziehung, deutsche/englische Maschinen- und
@@ -1089,8 +1087,8 @@ Bereichs-Views, schemaabhängige Formulare, CRUD-Seiten, Suche, Kategorie-,
 Status- und Bereichsfilter, Pagination sowie eigene Aktionen. Eine optionale,
 wiederholt ausführbare `machine-management-demo.sql` wird erzeugt; Setup fügt
 keine Beispieldaten automatisch ein. Das Standardprojekt bleibt das kleinere
-Willkommensseiten-Scaffolding.
-Nach `zelyra db setup main.zyl` lassen sich die Fantasiedatensätze laden:
+Willkommensseiten-Scaffolding. Nach `zelyra setup --all` (oder
+`zelyra db setup main.zyl`) lassen sich die Fantasiedatensätze laden:
 
 ~~~bash
 docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
@@ -1271,10 +1269,15 @@ Die erzeugte Docker-Laufzeit kann separat geprüft werden:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-Dabei wird der erzeugte Dockerfile gegen den veröffentlichten Zelyra-Tag
-gebaut, MariaDB und Webserver werden standardmäßig auf den eigenen Ports 3309
-und 18082 gestartet, die Willkommensseite und Port-Zuordnungen werden geprüft
-und Container, Netzwerk sowie Volume anschließend automatisch entfernt.
+Dabei wird ein frisches CRUD-Projekt erzeugt und `zelyra setup --all` zweimal
+ausgeführt. Der Test prüft die geschützte und unveränderte `.env`, die
+ausgegebene App-Adresse, Maschinen- und Abteilungsseiten sowie die
+Port-Zuordnungen. MariaDB und Webserver laufen standardmäßig auf den isolierten
+Ports 3309 und 18082; Container, Netzwerk und Volume werden anschließend
+automatisch entfernt. Standardmäßig baut der Test den aktuellen Checkout-Branch
+(bei detached HEAD den festgelegten Release-Tag). Mit
+`ZELYRA_DOCKER_E2E_REF` lässt sich ein anderer Branch oder Tag wählen, der im
+GitHub-Repository verfügbar sein muss.
 
 ## Mitwirken
 

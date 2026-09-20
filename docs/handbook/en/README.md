@@ -203,7 +203,9 @@ strict choices; existing `.env` files are never modified by these flags.
 If an existing project declares MariaDB in `zelyra.toml` but has no
 `.env.example`, setup uses the same safe built-in defaults. A project without
 MariaDB configuration receives a concrete `zelyra new --mariadb` remedy.
-For a non-interactive console setup use `zelyra setup --all`. To use the same
+For a non-interactive first run use `zelyra setup --all`; it starts MariaDB
+and the app, applies the schema, and prints the local application URL. It can
+be repeated without replacing `.env` or its credentials. To use the same
 actions in a local browser, run `zelyra setup --web`; the CLI prints a
 tokenized `127.0.0.1` URL. See [`docs/setup-web.md`](../../setup-web.md).
 If Linux denies access to the Docker socket after adding your user to the
@@ -219,19 +221,15 @@ For a complete CRUD starter instead of the minimal welcome page:
 zelyra new machine-management --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd machine-management
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
-
-If `docker compose` is unavailable, use the legacy command
-`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`.
 
 The starter includes a fictional workshop model with six production areas and
 30 machines, localized machine/department views, schema-mapped forms, CRUD
 pages, search, category/status/department filters, pagination, and custom
 actions. The generated `machine-management-demo.sql` contains fictional data
-only and can be imported repeatedly. After `zelyra db setup main.zyl`, load it
+only and can be imported repeatedly. After `zelyra setup --all` (or
+`zelyra db setup main.zyl`), load it
 into the local MariaDB service explicitly:
 
 ~~~bash
@@ -368,9 +366,11 @@ The generated Docker runtime can also be verified:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-It builds the generated image from the published Zelyra tag, starts MariaDB
-and the web server on host ports 3309 and 18082 by default, checks the welcome
-page and port mappings, and removes all temporary Docker resources.
+It creates a fresh CRUD project and runs `zelyra setup --all` twice. The test
+checks protected, unchanged credentials, the reported app URL, generated
+machine and department pages, and port mappings. MariaDB and the web server
+use isolated host ports 3309 and 18082 by default; all temporary Docker
+resources are removed afterwards.
 
 Users who do not want to install Rust can download the prebuilt Linux or
 Windows archive from the [GitHub Releases page](https://github.com/sf1976/zelyra/releases).

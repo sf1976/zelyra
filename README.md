@@ -1031,15 +1031,12 @@ starter:
 zelyra new machine-management --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd machine-management
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-If `docker compose` is unavailable, use the legacy command
-`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`.
-`zelyra setup .` remains available as an idempotent recovery command for
-existing projects.
+`zelyra setup --all` creates missing local configuration, starts MariaDB and
+the web app, applies the schema, and prints the local application URL. It is
+safe to repeat: an existing `.env` and its credentials are preserved.
 
 The starter contains six fictional production areas and 30 machines, a
 foreign-key relationship, German/English machine and department views,
@@ -1047,7 +1044,8 @@ schema-mapped forms, CRUD pages, search, category/status/department filters,
 pagination, and custom actions. It generates an optional, repeatable
 `machine-management-demo.sql` import; setup does not insert sample data
 automatically. The default project remains the smaller welcome-page scaffold.
-Load the fictional records after `zelyra db setup main.zyl` with:
+Load the fictional records after `zelyra setup --all` (or
+`zelyra db setup main.zyl`) with:
 
 ~~~bash
 docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
@@ -1224,10 +1222,15 @@ The generated Docker runtime can be tested separately:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-This builds the generated Dockerfile from the published Zelyra tag, starts the
-generated MariaDB and web containers on temporary ports (`3309` and `18082` by
-default), checks the welcome page, verifies the published mappings, and removes
-the containers, network, and volume automatically.
+This builds the generated Dockerfile from the current checkout branch (or its
+pinned release tag on detached HEAD), starts the generated MariaDB and web
+containers on temporary ports (`3309` and `18082` by default), runs the
+`zelyra setup --all` first-run/recovery flow twice, checks that `.env` is
+unchanged and no credentials are printed, opens the generated machine CRUD
+pages, verifies the published mappings, and removes the containers, network,
+and volume. Set
+`ZELYRA_DOCKER_E2E_REF` to select a specific branch or tag; it must be available
+in the GitHub repository.
 
 ## Contributing
 
