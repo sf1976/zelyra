@@ -110,7 +110,10 @@ Betroffene Befehle und Laufzeitbereiche: `zelyra serve`, die MariaDB-Projekt-
 Scaffolds `new`/`init` sowie der erzeugte Compose-Webdienst. Regressionstests
 prüfen die Priorität Prozessumgebung → `.env` → Fallback im CLI, die gültigen
 Werte und Katalogschlüssel in `web/src/i18n.rs` sowie die erzeugten Defaults
-und Compose-Weitergabe in `cli/tests/machine_interfaces.rs`.
+und Compose-Weitergabe in `cli/tests/machine_interfaces.rs`. Projektkataloge
+werden zusätzlich auf UTF-8, JSON-Form, Größenlimit und Symlinks geprüft; ein
+CLI-Integrationstest kontrolliert die Verwendung der Marker und die sichere
+Fehlerausgabe.
 
 Neue MariaDB-Projekte aktivieren `ZELYRA_LANGUAGE=de` und
 `ZELYRA_LEVEL=learn`; beide Werte können in `.env` geändert werden. Die
@@ -123,6 +126,22 @@ und Lernhilfetexte. Beispiel-Views referenzieren Einträge mit
 `@i18n:app.home_title` verwenden. Unbekannte deutsche Einträge fallen auf den
 englischen Katalog zurück. Ein auch dort unbekannter Schlüssel erscheint als
 `[missing translation]` und weist auf einen fehlenden Katalogeintrag hin.
+
+`zelyra new` und `zelyra init` erzeugen zusätzlich optionale Projektkataloge
+`locales/de.json` und `locales/en.json`; das erzeugte Dockerfile übernimmt den
+Ordner ebenfalls in das Laufzeitimage. Darin können eigene UI-Schlüssel
+hinzugefügt und Texte überschrieben werden, auf die eine View mit
+`data-zelyra-i18n="eigener.schluessel"` oder eine Zelyra-Texteinstellung mit
+`@i18n:eigener.schluessel` verweist. Für Deutsch gilt die Auflösung:
+Projektkatalog Deutsch → Projektkatalog Englisch → eingebauter deutscher
+Katalog → dessen englischer Fallback. Erzeugte Standardtexte, die keinen
+solchen Katalogmarker verwenden, behalten weiterhin den eingebauten Wortlaut.
+Die Dateien sind optionale UTF-8-JSON-Objekte mit nichtleeren Zeichenketten;
+pro Datei gelten maximal 256 KiB. Ungültige Dateien, Symlinks und andere
+Dateitypen werden von `zelyra serve` mit `E-I18N-001` abgewiesen. Katalogtexte
+werden beim Einfügen in HTML escaped. Sie sind Anzeigeinhalt, keine
+Konfiguration für Berechtigungen oder Geschäftsregeln; Zugangsdaten und andere
+Secrets gehören nicht hinein.
 
 Diese Kataloge übersetzen keine fachlichen Datensätze oder beliebige HTML-Texte
 aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben

@@ -247,6 +247,34 @@ German and `learn`. The shipped UI copy is maintained in
 framework controls use those catalogs. Learning help is explanatory only and
 does not grant capabilities or permissions. See [the environment reference](../../env.en.md).
 
+#### Project-specific copy
+
+Every new project includes optional `locales/en.json` and `locales/de.json`
+files. Put application-specific text there and reference it explicitly from a
+view or a supported Zelyra text setting:
+
+~~~json
+{
+  "workshop.title": "Machine workshop",
+  "workshop.saved": "Machine saved."
+}
+~~~
+
+~~~zelyra
+page "/" {
+    html { <h1 data-zelyra-i18n="workshop.title"></h1> }
+}
+~~~
+
+For supported labels, messages, and actions, use `@i18n:workshop.saved`.
+Catalog entries can also override built-in translations at these explicit
+references. German lookup checks the project German catalog, then project
+English, then Zelyra's built-in German and English catalogs. Generated standard
+labels without a catalog reference still use their built-in wording. Catalogs
+are presentation-only; values are HTML-escaped and cannot grant permissions or
+change business rules. Do not put secrets or customer data in them. See the
+[environment reference](../../env.en.md) for file limits and validation.
+
 For an authentication starter with persistent sessions and permissions:
 
 ~~~bash

@@ -1043,6 +1043,14 @@ copy is kept in the versioned `web/locales/de.json` and
 catalog entries instead of embedding a second language's copy. See
 [`docs/env.en.md`](docs/env.en.md) for precedence and limits.
 
+New projects also contain editable `locales/de.json` and `locales/en.json`
+files. Add translations there for view markers such as
+`data-zelyra-i18n="workshop.title"` or text settings such as
+`@i18n:workshop.saved`. Project entries can override built-in copy at these
+explicit catalog references. German falls back to the project English catalog
+before using Zelyra's built-in catalogs. See the
+[handbook](docs/handbook/en/README.md) for the exact scope and an example.
+
 Generated CRUD pages can use the same reusable shell as ordinary pages:
 
 ~~~zelyra

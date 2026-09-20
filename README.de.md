@@ -1086,6 +1086,15 @@ verweist auf Katalogeinträge, statt die Texte einer zweiten Sprache direkt
 einzubetten. Details zu Priorität und Grenzen stehen in
 [`docs/env.md`](docs/env.md).
 
+Neue Projekte enthalten außerdem bearbeitbare Dateien `locales/de.json` und
+`locales/en.json`. Dort kannst du Texte für View-Marker wie
+`data-zelyra-i18n="werkstatt.titel"` und Texteinstellungen wie
+`@i18n:werkstatt.gespeichert` eintragen. Projekttexte überschreiben den
+eingebauten Wortlaut an diesen ausdrücklich markierten Stellen. Fehlt ein
+deutscher Eintrag, wird zuerst der englische Projektkatalog und anschließend
+der eingebaute Katalog verwendet. Das [Handbuch](docs/handbook/de/README.md)
+zeigt den genauen Umfang und ein Beispiel.
+
 Erzeugte CRUD-Seiten können denselben wiederverwendbaren Rahmen wie normale
 Seiten verwenden:
 

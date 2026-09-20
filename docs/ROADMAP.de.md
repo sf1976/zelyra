@@ -53,8 +53,12 @@ den tatsächlich implementierten Stand.
   standardmäßig einen responsiven Zelyra-Anwendungsrahmen. Explizite CRUD-
   Layouts haben Vorrang; selbst verfasste Seiten bleiben unverändert.
   Projektlokale CSS-Overrides für dokumentierte Design-Tokens sind jetzt
-  verfügbar; projektspezifische Sprachkataloge, umfassendere Vorlagenabdeckung
-  und ein vollständiger Theme-Editor bleiben offen.
+  verfügbar. Projektlokale `locales/de.json`- und `locales/en.json`-Overlays
+  sind für markierte View-/Texteinträge und kataloggebundene Standardfehler
+  implementiert, einschließlich HTML-Escaping und englischem Fallback.
+  Nicht markierte generierte Standardtexte behalten ihren eingebauten Wortlaut;
+  umfassendere Vorlagenabdeckung und ein vollständiger Theme-Editor bleiben
+  offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -222,9 +226,12 @@ Feature eines bestimmten Anbieters.
   responsiven Standardrahmen; explizite CRUD-Layouts haben Vorrang und selbst
   verfasste Seiten werden nicht umgeschrieben. CRUD-, Formular-,
   Authentifizierungs-, Validierungs- und Standard-HTTP-Fehlertexte nutzen
-  dieselben eingebauten Sprachkataloge. Projektlokale `zelyra.theme.css`-
-  Überschreibungen für Design-Tokens sind verfügbar; umfassender Theme-Austausch,
-  weitere Vorlagen und projektlokale Katalogerweiterungen bleiben offen.
+  dieselben eingebauten Sprachkataloge. Projektlokale Sprachkataloge können
+  markierte View-/Texteinträge ergänzen oder überschreiben; nicht markierte
+  generierte Beschriftungen verwenden weiterhin die eingebauten Texte.
+  Projektlokale `zelyra.theme.css`-Überschreibungen für Design-Tokens sind
+  verfügbar; umfassender Theme-Austausch, weitere Vorlagen und Überschreibungen
+  sämtlicher generierter Beschriftungen bleiben offen.
 
 - [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
   `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.
@@ -451,9 +458,11 @@ Freigabekriterien bestanden sind.
 
 - [~] **Eigenständiges Views-System:** Wiederverwendbare Layouts/Komponenten,
   typisierte CRUD-Darstellungsoptionen und ressourcenspezifische benannte
-  Layout-Slots sind verfügbar. Vollständige Abdeckung, projektlokale
-  Sprachkataloge, weitergehende Theme-Erstellung und datensatzgebundene
-  benutzerdefinierte Slots bleiben offen.
+  Layout-Slots sind verfügbar. Projektlokale deutsche/englische Kataloge
+  unterstützen ausdrücklich markierte View- und Texteinstellungen.
+  Vollständige Abdeckung, Überschreibungen sämtlicher generierter Beschriftungen,
+  weitergehende Theme-Erstellung und datensatzgebundene benutzerdefinierte
+  Slots bleiben offen.
 - [~] **Vorzeige-Businessanwendung:** Das MariaDB-Business-Template und der
   Integrationstestpfad für erzeugte Projekte existieren. Einsteigergeprüfter
   Einstieg, angepasste Maschinen-/Abteilungs-Views, Deutsch/Englisch mit

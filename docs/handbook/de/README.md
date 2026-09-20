@@ -290,6 +290,36 @@ Steuerungen verwenden diese Kataloge. Die Lernhilfe erklärt lediglich die
 Sprache und erweitert keine Capabilities oder Berechtigungen. Details stehen
 in der [Umgebungsvariablen-Referenz](../../env.md).
 
+#### Eigene Anwendungstexte
+
+Jedes neue Projekt enthält die optionalen Dateien `locales/de.json` und
+`locales/en.json`. Anwendungstexte kommen dort hinein und werden aus einer View
+oder einer unterstützten Zelyra-Texteinstellung ausdrücklich referenziert:
+
+~~~json
+{
+  "werkstatt.titel": "Maschinenwerkstatt",
+  "werkstatt.gespeichert": "Maschine wurde gespeichert."
+}
+~~~
+
+~~~zelyra
+page "/" {
+    html { <h1 data-zelyra-i18n="werkstatt.titel"></h1> }
+}
+~~~
+
+Für unterstützte Beschriftungen, Meldungen und Aktionen kann
+`@i18n:werkstatt.gespeichert` verwendet werden. Projekttexte überschreiben an
+diesen markierten Stellen auch eingebaute Übersetzungen. Bei Deutsch prüft
+Zelyra zuerst den deutschen und dann den englischen Projektkatalog, danach die
+eingebauten deutschen und englischen Kataloge. Erzeugte Standardbeschriftungen
+ohne Katalogreferenz behalten ihren eingebauten Wortlaut. Kataloge ändern nur
+die Darstellung; Werte werden für HTML escaped und können weder Berechtigungen
+erteilen noch Geschäftsregeln ändern. Keine Secrets oder Kundendaten darin
+ablegen. Größenlimit und Prüfregeln stehen in der
+[Umgebungsvariablen-Referenz](../../env.md).
+
 Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und
 Berechtigungen:
 

@@ -99,6 +99,7 @@ fn valid_check_json_is_a_stable_machine_document() {
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -106,7 +107,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -125,16 +126,18 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(compose.contains("ZELYRA_LANGUAGE: ${ZELYRA_LANGUAGE:-de}"));
     assert!(compose.contains("ZELYRA_LEVEL: ${ZELYRA_LEVEL:-learn}"));
-    assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
-    assert!(env_file.contains("# ZELYRA_HOST_PORT=18080"));
+    assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(!env_file.contains("change-me"));
-    assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
+    assert!(compose.contains(&format!(
+        "127.0.0.1:${{ZELYRA_HOST_PORT:-{web_host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
+    )));
     assert!(compose.contains(&format!(
         "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
     )));
@@ -142,7 +145,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
 }
 
 #[test]
-fn serve_loads_and_serves_the_project_theme_stylesheet() {
+fn serve_loads_project_theme_and_locale_catalogs() {
     let directory = temporary_directory("serve-theme");
     fs::create_dir_all(&directory).unwrap();
     let source = directory.join("main.zyl");
@@ -150,7 +153,7 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
         &source,
         r#"page "/" {
     html {
-        <html><head></head><body><div class="zelyra-app"><main><h1>Theme test</h1></main></div></body></html>
+        <html><head></head><body><div class="zelyra-app"><main><h1 data-zelyra-i18n="app.home_title"></h1><p data-zelyra-i18n="project.greeting"></p></main></div></body></html>
     }
 }
 "#,
@@ -158,6 +161,12 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
     .unwrap();
     let theme = ":root { --zelyra-color-accent: #e04b67; }\n";
     fs::write(directory.join("zelyra.theme.css"), theme).unwrap();
+    fs::create_dir(directory.join("locales")).unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{"app.home_title":"Custom project title","project.greeting":"Welcome to our workshop"}"#,
+    )
+    .unwrap();
 
     let port = free_test_port();
     let address = format!("127.0.0.1:{port}");
@@ -208,6 +217,8 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
 
     let (page, stylesheet) = result.unwrap_or_else(|error| panic!("{error}"));
     assert!(page.starts_with("HTTP/1.1 200 OK"));
+    assert!(page.contains("Custom project title"));
+    assert!(page.contains("Welcome to our workshop"));
     let built_in = page.find("data-zelyra-theme=\"default\"").unwrap();
     let project = page.find("href=\"/__zelyra/theme.css\"").unwrap();
     assert!(built_in < project);
@@ -249,6 +260,29 @@ fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
 }
 
 #[test]
+fn serve_reports_invalid_project_locale_catalog_without_echoing_contents() {
+    let directory = temporary_directory("serve-invalid-locale");
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(&source, "fn main() { print(\"ok\") }\n").unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{"custom.title":"PRIVATE_SENTINEL", bad-json}"#,
+    )
+    .unwrap();
+
+    let output = run(&["serve", source.to_str().unwrap(), "127.0.0.1:0"]);
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-I18N-001"));
+    assert!(stderr.contains("locales/en.json"));
+    assert!(!stderr.contains("PRIVATE_SENTINEL"));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
     let output = run(&[
         "db",
@@ -272,6 +306,7 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "init",
         directory.to_str().unwrap(),
@@ -279,7 +314,7 @@ fn init_creates_a_ready_commented_mariadb_env() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -309,6 +344,8 @@ fn init_creates_a_ready_commented_mariadb_env() {
         .any(|line| line == "ZELYRA_FEATURE_API=true"));
     assert!(!env_file.contains("change-me"));
     assert!(directory.join(".env.example").is_file());
+    assert!(directory.join("locales/de.json").is_file());
+    assert!(directory.join("locales/en.json").is_file());
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -349,6 +386,7 @@ fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
 fn new_mariadb_crud_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-crud-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -357,7 +395,7 @@ fn new_mariadb_crud_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -381,6 +419,7 @@ fn new_mariadb_crud_template_is_self_contained() {
 fn new_mariadb_auth_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-auth-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -389,7 +428,7 @@ fn new_mariadb_auth_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -414,6 +453,7 @@ fn new_mariadb_auth_template_is_self_contained() {
 fn new_mariadb_business_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-business-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -422,7 +462,7 @@ fn new_mariadb_business_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -481,6 +521,7 @@ fn host_port_requires_the_mariadb_web_template() {
 fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let directory = temporary_directory("setup-env");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let scaffold = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -488,7 +529,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -509,7 +550,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let contents = fs::read_to_string(&env_file).unwrap();
     assert!(contents.contains("# ZELYRA_WEB_PORT=8080"));
-    assert!(contents.contains("# ZELYRA_HOST_PORT=18080"));
+    assert!(contents.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
     assert!(contents.contains(
         env_example
             .lines()

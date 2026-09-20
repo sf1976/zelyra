@@ -47,9 +47,12 @@ principles; the roadmap below tracks what is actually implemented.
   minimal and machine-management MariaDB starters and generated CRUD, form,
   tableview, login, and authentication-admin pages have a responsive Zelyra
   application shell by default. Explicit CRUD layouts take precedence, and
-  authored pages remain untouched; project-local catalog overrides, wider
-  template coverage, and a full theme editor remain open. Project-local CSS
-  overrides for documented visual tokens are available.
+  authored pages remain untouched. Project-local `locales/de.json` and
+  `locales/en.json` overlays are implemented for marked view/text references
+  and catalog-backed standard errors, including safe escaping and English
+  fallback. Unmarked generated standard labels retain their built-in copy;
+  wider template coverage and a full theme editor remain open. Project-local
+  CSS overrides for documented visual tokens are available.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -208,9 +211,11 @@ architecture requirement for every phase, not a provider-specific feature.
   authentication-admin pages now also receive that responsive default shell;
   explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
   authentication, validation, and standard HTTP-error copy use the same
-  built-in locale catalogs. Project-local `zelyra.theme.css` token overrides
+  built-in locale catalogs. Scaffolded project locale overlays can add or
+  override explicitly marked view/text entries; unmarked generated labels
+  still use built-in wording. Project-local `zelyra.theme.css` token overrides
   are available; broader theme replacement, remaining template coverage, and
-  project-local catalog extensions remain open.
+  universal project overrides for every generated label remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named
@@ -426,8 +431,9 @@ supported machine and the release gates below pass.
 
 - [~] **Distinctive Views system:** reusable layouts/components, typed CRUD
   presentation controls, and per-resource named layout slots are available.
-  Complete coverage, project-local language catalogs, deeper theme authoring,
-  and record-bound custom slots remain open.
+  Project-local German/English catalogs now support explicitly marked view and
+  text references. Complete coverage, universal generated-label overrides,
+  deeper theme authoring, and record-bound custom slots remain open.
 - [~] **Flagship business application:** the MariaDB business template and
   generated-project integration path exist. Complete novice-tested onboarding,
   customized machine/department Views, German/English Learn/Work behavior, and

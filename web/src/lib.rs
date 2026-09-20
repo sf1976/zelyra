@@ -16,11 +16,13 @@ use zelyra_ast::{
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
 mod i18n;
-use i18n::{field_text, framework_text, identifier as locale_identifier, text as tr};
+#[cfg(test)]
+use i18n::framework_text;
+use i18n::{field_text, framework_text_with_catalog, identifier as locale_identifier, text as tr};
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
-pub use i18n::{UiLanguage, UiLevel};
+pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
@@ -365,12 +367,25 @@ fn add_navigation_link(
     }
 }
 
+const LOCALE_REFERENCE_START: &str = "\u{e000}zelyra-locale:";
+const LOCALE_REFERENCE_END: char = '\u{e001}';
+
+#[cfg(test)]
 fn localize_html(source: &str, language: UiLanguage) -> String {
+    localize_html_with_catalog(source, language, &ProjectUiCatalogs::default())
+}
+
+fn localize_html_with_catalog(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
     let language_code = match language {
         UiLanguage::English => "en",
         UiLanguage::German => "de",
     };
-    let translated = localize_framework_markup(source, language);
+    let translated = localize_framework_markup_with_catalog(source, language, project_catalogs);
+    let translated = resolve_locale_references(&translated, language, project_catalogs);
     let mut html = translated.replace("data-zelyra-language", &format!("lang=\"{language_code}\""));
     let marker = "data-zelyra-i18n=\"";
     let mut search_from = 0;
@@ -401,14 +416,18 @@ fn localize_html(source: &str, language: UiLanguage) -> String {
             break;
         };
         let content_end = content_start + content_end_relative;
-        let translated = html_escape(tr(language, &key));
+        let translated = html_escape(&project_catalogs.text(language, &key));
         html.replace_range(content_start..content_end, &translated);
         search_from = content_start + translated.len() + closing_tag.len();
     }
     html
 }
 
-fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
+fn localize_framework_markup_with_catalog(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
     let mut html = source.to_owned();
     for tag in [
         "h1", "h2", "h3", "p", "button", "label", "legend", "th", "option",
@@ -436,7 +455,11 @@ fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
             };
             let content_end = content_start + content_end_relative;
             if !html[content_start..content_end].contains('<') {
-                if let Some(copy) = framework_text(language, &html[content_start..content_end]) {
+                if let Some(copy) = framework_text_with_catalog(
+                    language,
+                    &html[content_start..content_end],
+                    project_catalogs,
+                ) {
                     let translated = html_escape(&copy);
                     html.replace_range(content_start..content_end, &translated);
                     cursor = content_start + translated.len() + closing.len();
@@ -449,11 +472,44 @@ fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
     html
 }
 
-fn localize_user_text(language: UiLanguage, source: &str) -> String {
-    source
-        .strip_prefix("@i18n:")
-        .map(|key| tr(language, key).to_owned())
-        .unwrap_or_else(|| source.to_owned())
+fn resolve_locale_references(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut remaining = source;
+    while let Some(start) = remaining.find(LOCALE_REFERENCE_START) {
+        output.push_str(&remaining[..start]);
+        let reference_start = start + LOCALE_REFERENCE_START.len();
+        let Some(end_relative) = remaining[reference_start..].find(LOCALE_REFERENCE_END) else {
+            output.push_str(&remaining[start..]);
+            return output;
+        };
+        let end = reference_start + end_relative;
+        let key = &remaining[reference_start..end];
+        if i18n::valid_catalog_key(key) {
+            output.push_str(&html_escape(&project_catalogs.text(language, key)));
+        } else {
+            output.push_str(&remaining[start..=end]);
+        }
+        remaining = &remaining[end + LOCALE_REFERENCE_END.len_utf8()..];
+    }
+    output.push_str(remaining);
+    output
+}
+
+fn localize_user_text(_language: UiLanguage, source: &str) -> String {
+    source.strip_prefix("@i18n:").map_or_else(
+        || source.to_owned(),
+        |key| {
+            if i18n::valid_catalog_key(key) {
+                format!("{LOCALE_REFERENCE_START}{key}{LOCALE_REFERENCE_END}")
+            } else {
+                source.to_owned()
+            }
+        },
+    )
 }
 
 fn inject_design_system(source: &str, has_project_theme: bool) -> String {
@@ -729,6 +785,7 @@ pub struct WebApp {
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
     pub project_theme_css: Option<String>,
+    project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
@@ -750,6 +807,7 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -775,6 +833,7 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -824,6 +883,11 @@ impl WebApp {
 
     pub fn with_project_theme_css(mut self, css: Option<String>) -> Self {
         self.project_theme_css = css;
+        self
+    }
+
+    pub fn with_project_ui_catalogs(mut self, catalogs: ProjectUiCatalogs) -> Self {
+        self.project_ui_catalogs = catalogs;
         self
     }
 
@@ -954,7 +1018,11 @@ impl WebApp {
                 }
             }
             response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
-            response.body = localize_html(&response.body, self.ui_language);
+            response.body = localize_html_with_catalog(
+                &response.body,
+                self.ui_language,
+                &self.project_ui_catalogs,
+            );
         }
         if self.ui_level == UiLevel::Learn
             && request.method == "GET"
@@ -7820,6 +7888,47 @@ mod tests {
         assert!(!english_response
             .body
             .contains("<details class=\"zelyra-learning-assistant\""));
+    }
+
+    #[test]
+    fn project_catalogs_override_markers_escape_html_and_fall_back_to_english() {
+        let action_label = localize_user_text(UiLanguage::German, "@i18n:custom.action");
+        let route = Route {
+            path: "/".into(),
+            html: format!(
+                r#"<main><h1 data-zelyra-i18n="custom.title"></h1><p data-zelyra-i18n="app.home_title"></p><strong>{action_label}</strong></main>"#
+            ),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let mut catalogs = ProjectUiCatalogs::default();
+        catalogs
+            .set_json(
+                UiLanguage::English,
+                r#"{"custom.title":"Project title","custom.action":"<script>alert(1)</script>","app.home_title":"Project home"}"#,
+            )
+            .unwrap();
+        catalogs
+            .set_json(UiLanguage::German, r#"{"custom.title":"Projekttitel"}"#)
+            .unwrap();
+
+        let app = WebApp::new(vec![route], Vec::new())
+            .with_ui_settings(UiLanguage::German, UiLevel::Work)
+            .with_project_ui_catalogs(catalogs);
+        let response = app.dispatch(&request);
+        assert!(response.body.contains(">Projekttitel</h1>"));
+        assert!(response.body.contains(">Project home</p>"));
+        assert!(response
+            .body
+            .contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!response.body.contains("<script>alert(1)</script>"));
     }
 
     #[test]

@@ -105,7 +105,9 @@ Affected commands and runtime surfaces: `zelyra serve`, the MariaDB project
 scaffolds `new`/`init`, and the generated Compose web service. Regression tests
 cover process-environment → `.env` → fallback precedence in the CLI, accepted
 values and catalog references in `web/src/i18n.rs`, and generated defaults and
-Compose forwarding in `cli/tests/machine_interfaces.rs`.
+Compose forwarding in `cli/tests/machine_interfaces.rs`. Project catalogs are
+also checked for UTF-8, valid JSON, size limits, and symbolic links; a CLI
+integration test verifies marker resolution and safe error output.
 
 New MariaDB projects activate `ZELYRA_LANGUAGE=de` and
 `ZELYRA_LEVEL=learn`; edit `.env` to change them. The Compose template passes
@@ -117,7 +119,20 @@ configurable Zelyra text can use `@i18n:app.home_title`. Missing German entries
 fall back to English. A key missing from both catalogs renders as
 `[missing translation]` to expose the incomplete catalog entry.
 
-These catalogs do not translate business records or arbitrary HTML text from a
+`zelyra new` and `zelyra init` also create optional project catalogs at
+`locales/de.json` and `locales/en.json`; the generated Dockerfile copies this
+directory into the runtime image. Add project UI keys or override text
+referenced by a view using `data-zelyra-i18n="custom.key"` or by a Zelyra text
+setting using `@i18n:custom.key`. German lookup order is project German →
+project English → built-in German → its English fallback. Generated standard
+copy that does not use a catalog marker keeps its built-in wording. These files
+are optional UTF-8 JSON objects containing nonempty strings, limited to 256
+KiB each. `zelyra serve` rejects invalid catalogs, symbolic links, and other
+file types with `E-I18N-001`. Catalog text is HTML-escaped when inserted. It is
+presentation content, not authorization or business-rule configuration; never
+put credentials or other secrets in a catalog.
+
+Catalogs do not translate business records or arbitrary HTML text from a
 project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.

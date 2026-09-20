@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -16,6 +17,75 @@ impl UiLanguage {
             _ => None,
         }
     }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::German => "de",
+        }
+    }
+}
+
+/// Project-provided translations layered over Zelyra's built-in UI catalogs.
+///
+/// Project entries are presentation text only. They cannot change compiler,
+/// authorization, or API behavior.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProjectUiCatalogs {
+    english: BTreeMap<String, String>,
+    german: BTreeMap<String, String>,
+}
+
+impl ProjectUiCatalogs {
+    /// Replaces one language catalog after validating its JSON object and keys.
+    pub fn set_json(&mut self, language: UiLanguage, source: &str) -> Result<(), String> {
+        let catalog = serde_json::from_str::<BTreeMap<String, String>>(source).map_err(|_| {
+            "catalog must be a JSON object containing only string values".to_owned()
+        })?;
+        for (key, value) in &catalog {
+            if !valid_catalog_key(key) {
+                return Err("catalog contains an invalid translation key".to_owned());
+            }
+            if value.trim().is_empty() {
+                return Err("catalog contains an empty translation".to_owned());
+            }
+            if value
+                .chars()
+                .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+            {
+                return Err("catalog contains a control character".to_owned());
+            }
+        }
+        match language {
+            UiLanguage::English => self.english = catalog,
+            UiLanguage::German => self.german = catalog,
+        }
+        Ok(())
+    }
+
+    pub(crate) fn text<'a>(&'a self, language: UiLanguage, key: &str) -> Cow<'a, str> {
+        let selected = match language {
+            UiLanguage::English => &self.english,
+            UiLanguage::German => &self.german,
+        };
+        if let Some(value) = selected.get(key) {
+            return Cow::Borrowed(value);
+        }
+        if language == UiLanguage::German {
+            if let Some(value) = self.english.get(key) {
+                return Cow::Borrowed(value);
+            }
+        }
+        Cow::Borrowed(text(language, key))
+    }
+}
+
+pub(crate) fn valid_catalog_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 128
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -113,20 +183,35 @@ pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn framework_text(language: UiLanguage, value: &str) -> Option<String> {
+    framework_text_with_catalog(language, value, &ProjectUiCatalogs::default())
+}
+
+pub(crate) fn framework_text_with_catalog(
+    language: UiLanguage,
+    value: &str,
+    project: &ProjectUiCatalogs,
+) -> Option<String> {
     if let Some(key) = framework_text_key(value) {
-        return Some(text(language, key).to_owned());
+        return Some(project.text(language, key).into_owned());
     }
     if let Some(permission) = value.strip_prefix("Missing permission: ") {
         return Some(
-            text(language, "error.missing_permission").replace("{permission}", permission),
+            project
+                .text(language, "error.missing_permission")
+                .replace("{permission}", permission),
         );
     }
     if let Some(column) = value
         .strip_prefix("Unknown filter operator for ")
         .and_then(|value| value.strip_suffix('.'))
     {
-        return Some(text(language, "error.unknown_filter_operator").replace("{field}", column));
+        return Some(
+            project
+                .text(language, "error.unknown_filter_operator")
+                .replace("{field}", column),
+        );
     }
     if let Some((operator, column)) = value
         .strip_prefix("Operator `")
@@ -134,7 +219,8 @@ pub(crate) fn framework_text(language: UiLanguage, value: &str) -> Option<String
         .and_then(|(operator, column)| column.strip_suffix("`.").map(|column| (operator, column)))
     {
         return Some(
-            text(language, "error.unsupported_filter_operator")
+            project
+                .text(language, "error.unsupported_filter_operator")
                 .replace("{operator}", operator)
                 .replace("{field}", column),
         );
@@ -143,7 +229,11 @@ pub(crate) fn framework_text(language: UiLanguage, value: &str) -> Option<String
         .strip_prefix("Filter `")
         .and_then(|value| value.strip_suffix("` was specified more than once."))
     {
-        return Some(text(language, "error.duplicate_filter").replace("{field}", column));
+        return Some(
+            project
+                .text(language, "error.duplicate_filter")
+                .replace("{field}", column),
+        );
     }
     None
 }
@@ -215,5 +305,44 @@ mod tests {
         assert_eq!(UiLevel::parse("learn"), Some(UiLevel::Learn));
         assert_eq!(UiLevel::parse("work"), Some(UiLevel::Work));
         assert_eq!(UiLevel::parse("expert"), None);
+    }
+
+    #[test]
+    fn project_catalogs_validate_values_and_fall_back_to_english() {
+        let mut catalogs = ProjectUiCatalogs::default();
+        catalogs
+            .set_json(
+                UiLanguage::English,
+                r#"{"custom.title":"Project title","app.home_title":"Home override"}"#,
+            )
+            .unwrap();
+        catalogs
+            .set_json(UiLanguage::German, r#"{"custom.title":"Projekttitel"}"#)
+            .unwrap();
+
+        assert_eq!(
+            catalogs.text(UiLanguage::German, "custom.title"),
+            "Projekttitel"
+        );
+        assert_eq!(
+            catalogs.text(UiLanguage::German, "app.home_title"),
+            "Home override"
+        );
+        assert_eq!(
+            catalogs.text(UiLanguage::German, "shell.skip_to_content"),
+            "Zum Inhalt springen"
+        );
+        assert!(catalogs
+            .set_json(UiLanguage::English, r#"{"label":false}"#)
+            .unwrap_err()
+            .contains("string values"));
+        assert!(catalogs
+            .set_json(UiLanguage::English, r#"{"bad key":"value"}"#)
+            .unwrap_err()
+            .contains("invalid translation key"));
+        assert!(catalogs
+            .set_json(UiLanguage::English, r#"{"label":"  "}"#)
+            .unwrap_err()
+            .contains("empty translation"));
     }
 }

@@ -33,9 +33,9 @@ use zelyra_runtime::{
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
-    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
-    RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage, UiLevel, WebApp,
-    PROJECT_THEME_CSS_PATH,
+    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, ProjectUiCatalogs, Response,
+    Route, RouteData, RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage,
+    UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
 };
 
 mod edit;
@@ -108,6 +108,8 @@ const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
 const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
 const PROJECT_THEME_CSS_FILE: &str = "zelyra.theme.css";
 const PROJECT_THEME_CSS_MAX_BYTES: u64 = 128 * 1024;
+const PROJECT_LOCALE_DIRECTORY: &str = "locales";
+const PROJECT_LOCALE_MAX_BYTES: u64 = 256 * 1024;
 
 struct ProjectOptions {
     allow_current_directory: bool,
@@ -562,6 +564,8 @@ network = false
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source.to_owned()),
         (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
+        ("locales/de.json", "{}\n".to_owned()),
+        ("locales/en.json", "{}\n".to_owned()),
     ];
     if options.with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
@@ -646,6 +650,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 COPY main.zyl zelyra.toml zelyra.theme.css ./
+COPY locales ./locales
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
@@ -660,6 +665,15 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
         let file = directory.join(name);
         if file.exists() && options.allow_current_directory {
             continue;
+        }
+        if let Some(parent) = file.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                eprintln!(
+                    "error[E-INIT-003]: cannot create `{}`: {error}",
+                    parent.display()
+                );
+                return ExitCode::from(1);
+            }
         }
         let contents = contents.to_owned();
         if let Err(error) = fs::write(&file, contents) {
@@ -3596,6 +3610,61 @@ fn project_theme_css(path: &str) -> Result<Option<String>, String> {
     String::from_utf8(bytes)
         .map(Some)
         .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))
+}
+
+fn project_ui_catalogs(path: &str) -> Result<ProjectUiCatalogs, String> {
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let locale_directory = project_directory.join(PROJECT_LOCALE_DIRECTORY);
+    let directory_metadata = match fs::symlink_metadata(&locale_directory) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ProjectUiCatalogs::default());
+        }
+        Err(_) => return Err("cannot inspect project locale directory".to_owned()),
+    };
+    if directory_metadata.file_type().is_symlink() || !directory_metadata.is_dir() {
+        return Err("project `locales` must be a regular directory and not a symbolic link".into());
+    }
+
+    let mut catalogs = ProjectUiCatalogs::default();
+    for language in [UiLanguage::German, UiLanguage::English] {
+        let file_name = format!("{}.json", language.code());
+        let display_name = format!("{PROJECT_LOCALE_DIRECTORY}/{file_name}");
+        let catalog_path = locale_directory.join(&file_name);
+        let metadata = match fs::symlink_metadata(&catalog_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(format!("cannot inspect `{display_name}`")),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(format!(
+                "`{display_name}` must be a regular file, not a symbolic link"
+            ));
+        }
+        if metadata.len() > PROJECT_LOCALE_MAX_BYTES {
+            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
+        }
+
+        let file =
+            fs::File::open(&catalog_path).map_err(|_| format!("cannot read `{display_name}`"))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(PROJECT_LOCALE_MAX_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| format!("cannot read `{display_name}`"))?;
+        if bytes.len() as u64 > PROJECT_LOCALE_MAX_BYTES {
+            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
+        }
+        let source = String::from_utf8(bytes)
+            .map_err(|_| format!("`{display_name}` must contain UTF-8 text"))?;
+        catalogs
+            .set_json(language, &source)
+            .map_err(|error| format!("invalid `{display_name}`: {error}"))?;
+    }
+    Ok(catalogs)
 }
 
 fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
@@ -6593,6 +6662,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let ui_catalogs = match project_ui_catalogs(&path) {
+        Ok(catalogs) => catalogs,
+        Err(error) => {
+            diagnostic(&path, "E-I18N-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let program = match load(&path) {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
@@ -6946,6 +7022,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
         .with_ui_settings(ui_language, ui_level)
         .with_project_theme_css(theme_css)
+        .with_project_ui_catalogs(ui_catalogs)
         .with_database_capability(database_capability_granted)
         .with_apis(api_routes)
         .with_auth(
@@ -9123,6 +9200,90 @@ mod tests {
     }
 
     #[test]
+    fn project_locale_catalogs_are_optional_validated_and_size_limited() {
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-locales-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
+
+        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
+        fs::create_dir(&locale_directory).unwrap();
+        fs::write(
+            locale_directory.join("de.json"),
+            r#"{"custom.title":"Titel"}"#,
+        )
+        .unwrap();
+        fs::write(
+            locale_directory.join("en.json"),
+            r#"{"custom.title":"Title"}"#,
+        )
+        .unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
+
+        fs::write(locale_directory.join("de.json"), r#"{"custom.title":true}"#).unwrap();
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales/de.json"));
+        assert!(error.contains("string values"));
+        assert!(!error.contains("true"));
+
+        fs::write(
+            locale_directory.join("de.json"),
+            vec![b'x'; PROJECT_LOCALE_MAX_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap())
+            .unwrap_err()
+            .contains("256 KiB size limit"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_locale_catalog_loader_does_not_follow_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-locales-link-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        let outside_file = directory.join("outside.json");
+        fs::write(&outside_file, r#"{"title":"private"}"#).unwrap();
+        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
+        fs::create_dir(&locale_directory).unwrap();
+        symlink(&outside_file, locale_directory.join("de.json")).unwrap();
+
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales/de.json"));
+        assert!(error.contains("symbolic link"));
+        assert!(!error.contains("private"));
+
+        fs::remove_file(locale_directory.join("de.json")).unwrap();
+        fs::remove_dir(&locale_directory).unwrap();
+        let outside_directory = directory.join("outside-locales");
+        fs::create_dir(&outside_directory).unwrap();
+        symlink(&outside_directory, &locale_directory).unwrap();
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales"));
+        assert!(error.contains("symbolic link"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
         let themed_program =
             parse(&lex("page \"/__zelyra/theme.css\" { html { <main>Theme</main> } }").unwrap())
@@ -10483,6 +10644,9 @@ mod tests {
         assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.50"));
         assert!(project_config.contains("version = \"0.1.50\""));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
+        assert!(dockerfile.contains("COPY locales ./locales"));
+        assert!(path.join("locales/de.json").is_file());
+        assert!(path.join("locales/en.json").is_file());
         assert!(project_theme.contains("--zelyra-color-accent"));
 
         fs::remove_dir_all(path).unwrap();
