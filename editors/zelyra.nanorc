@@ -1,0 +1,33 @@
+## Syntax highlighting for Zelyra (.zyl) in GNU nano
+## Language: Zelyra
+## Website: https://siedelmann.com
+
+syntax zelyra "\.zyl$"
+comment "//"
+
+# Keywords & Declarations
+color magenta "\<(fn|page|schema|table|form|let|mut|mutable|const|type|struct|enum|impl|use|mod|html|sql|route|rule)\>"
+
+# Control Flow & Invariants
+color yellow "\<(if|else|match|for|in|while|break|continue|return|invariant)\>"
+
+# Standard Types
+color green "\<(Int|Float|Text|String|Bool|List|Map|Option|Result|Email|Date|DateTime|Id|Void)\>"
+
+# Literals & Constants
+color cyan "\<(true|false|null|none|Ok|Err|Some|None)\>"
+color brightmagenta "\<[0-9]+(\.[0-9]+)?\>"
+
+# Annotations & Decorators
+color brightblue "@[a-zA-Z0-9_]+"
+
+# Strings & String Interpolations
+color brightyellow ""([^"\\]|\\.)*""
+color brightcyan "\{[a-zA-Z0-9_]+\}"
+
+# Comments
+color brightblack "(^|[[:space:]])//.*$"
+color brightblack start="/\*" end="\*/"
+
+# Trailing Whitespace indicator
+color ,red "[[:space:]]+$"
