@@ -206,7 +206,12 @@ Feature eines bestimmten Anbieters.
   geschützte `apply` sind mit ausdrücklichem Backend-Verhalten und Schutz vor
   destruktiven Änderungen umgesetzt.
 - [ ] Vollständige PostgreSQL-Runtime-Parität.
-- [ ] MariaDB-/MySQL-Kompatibilitätsmatrix und versionsabhängige Diagnostik.
+- [~] MariaDB-Kompatibilität wird für die offiziellen Image-Tags `10.11.19`,
+  `11.4.13`, `11.8.9` und `12.3.3` hinsichtlich Schema-/CRUD-HTTP-Pfad und
+  Freigabe destruktiver Änderungen ausdrücklich getestet. Dies ist keine
+  MySQL-Kompatibilitätsaussage; versionsabhängige Diagnostik bleibt geplant.
+  Siehe die [deutsche Kompatibilitätsmatrix](database-compatibility.de.md) und
+  die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
 - [ ] Bessere Analyse destruktiver Änderungen, Zeilenschätzungen,
@@ -491,13 +496,15 @@ Freigabekriterien bestanden sind.
   Portzuordnungen und Bereinigung. Prüfungen auf frischen Systemen sowie
   Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
-  gibt es End-to-End-Pfade. Ein neuer Schema-Sicherheitstest prüft auf beiden
+  gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
   Backends, dass ein Spalten-Drop als destruktiv geplant, standardmäßig mit
   `E-DB-004` abgelehnt und ohne Datenverlust zurückgelassen wird; erst
   `--allow-destructive` wendet die Änderung in einer isolierten Testdatenbank
-  an. PostgreSQL-Runtime-Parität wird nicht versprochen. Eine klare
-  Versions-Kompatibilitätsmatrix und weitergehende Risikoanalyse bleiben vor
-  dem Release offen.
+  an. Die [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
+  Community-LTS-Patch-Images und die getesteten Datenbank-/CRUD-Pfade auf;
+  sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
+  PostgreSQL-Runtime-Parität und weitergehende Migrationsrisikoanalyse bleiben
+  außerhalb der 0.2.0-Aussage.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

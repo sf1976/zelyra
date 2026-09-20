@@ -192,7 +192,12 @@ architecture requirement for every phase, not a provider-specific feature.
   and guarded `apply` are implemented with explicit backend behavior and
   destructive-change protection.
 - [ ] Complete PostgreSQL runtime parity.
-- [ ] MariaDB/MySQL compatibility matrix and version-specific diagnostics.
+- [~] MariaDB compatibility is explicitly tested against official image tags
+  `10.11.19`, `11.4.13`, `11.8.9`, and `12.3.3` for schema/CRUD HTTP and
+  destructive-change approval. This is not a MySQL compatibility claim;
+  version-specific diagnostics remain planned. See the [English
+  compatibility matrix](database-compatibility.en.md) and [German
+  compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
 - [ ] Better destructive-change analysis, row estimates, lock warnings, and
@@ -460,12 +465,14 @@ supported machine and the release gates below pass.
   Clean-machine installation verification and recovery coverage across
   supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has
-  end-to-end paths. A new schema-safety test exercises both backends: a column
+  end-to-end paths. The schema-safety test exercises both backends: a column
   drop is planned as destructive, refused by default with `E-DB-004` while
   preserving the test row, and applied only with `--allow-destructive` in an
   isolated test database. The generated MariaDB business acceptance test has
-  passed; PostgreSQL runtime parity is not promised. A clear version
-  compatibility matrix and broader risk analysis remain before release.
+  passed. The [version matrix](database-compatibility.en.md) lists four
+  MariaDB Community LTS patch images and the core database/CRUD paths they
+  test; this is not MySQL or full feature certification. PostgreSQL runtime
+  parity and broader migration risk analysis remain outside the 0.2.0 claim.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

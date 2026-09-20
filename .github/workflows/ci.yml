@@ -156,3 +156,58 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
         run: ./tests/mariadb-protected-e2e.sh
+
+  mariadb-compatibility:
+    name: MariaDB ${{ matrix.version }} compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.version }}
+        env:
+          MARIADB_DATABASE: zelyra_ci
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install MariaDB client and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
+      - name: Build Zelyra CLI
+        run: cargo build -p zelyra-cli
+      - name: Verify MariaDB server version
+        env:
+          MYSQL_PWD: root
+        run: |
+          expected_version='${{ matrix.version }}'
+          server_version="$(mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e 'SELECT VERSION()')"
+          case "${server_version}" in
+            "${expected_version}"*) ;;
+            *) echo "Expected MariaDB ${expected_version}, got ${server_version}" >&2; exit 1 ;;
+          esac
+          echo "Testing MariaDB ${server_version}"
+          docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Run MariaDB database and CRUD HTTP integration
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
+        run: ./tests/mariadb-e2e.sh
+      - name: Run destructive schema approval integration
+        env:
+          ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/schema-safety-e2e.sh

@@ -494,6 +494,9 @@ fn load_machine(id: MachineId)
 ## 7. MariaDB and tables
 
 ✅ MariaDB is the default backend and primary runtime reference.
+The [compatibility matrix](../../database-compatibility.en.md) lists the exact
+MariaDB server images exercised by Zelyra's database and CRUD integration
+tests. MySQL Server is not included in that matrix.
 
 ~~~zelyra
 database main {
@@ -560,6 +563,10 @@ initial schema; `bootstrap` applies an initial MariaDB or SQLite schema;
 `inspect` reads the live schema; `plan` displays the deterministic diff; and
 `apply` executes it after refusing destructive changes unless
 `--allow-destructive` is supplied. The live commands require `DATABASE_URL`.
+
+That approval behavior is exercised on the MariaDB versions listed in the
+compatibility matrix; this is test evidence for those paths, not a promise that
+all possible database changes are automatically safe.
 
 That flag does not mean “probably fine.” It means “I read the plan, have a
 backup, and my pulse is normal.”

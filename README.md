@@ -836,6 +836,8 @@ Pages, APIs, and CRUD
 MariaDB is the default backend for new Zelyra definitions and the primary
 runtime reference. SQLite is available for small local applications and
 testing. PostgreSQL schema support is also part of the Database Core.
+The exact MariaDB versions tested and the limits of that coverage are listed
+in the [MariaDB compatibility matrix](docs/database-compatibility.en.md).
 
 Example:
 
