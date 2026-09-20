@@ -64,7 +64,7 @@ den tatsächlich implementierten Stand.
 - [x] Authentifizierung, persistente Sessions, Argon2-Passwörter, direkte und
   rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
   Schreibende Browseranfragen benötigen zusätzlich gleichursprüngliche
-  Nachweise; der 0.2.0-Branch ergänzt eine Loopback-Host-Allowlist gegen
+  Nachweise; das 0.2.0-Release ergänzt eine Loopback-Host-Allowlist gegen
   manipulierte Hosts und DNS-Rebinding.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
   bestätigtes Bereinigen sind verfügbar. Manipulationssichere Verkettung ist
@@ -130,11 +130,12 @@ Feature eines bestimmten Anbieters.
   eine Rust-freie Release-Installation ist für veröffentlichte Linux-/Windows-
   x86_64-Assets verfügbar.
 - [~] Release-Archive mit SHA-256-Prüfsummen sind für Linux und Windows x86_64
-  verfügbar. Der 0.2.0-Kandidat bestand in der PR-CI festgelegte Linux-/Windows-
-  Release-Builds, byte-identische Wiederholungs-Builds und Tests normalisierter
-  Archive; öffentliche 0.2.0-Artefakte warten noch auf das Versionstag.
-  Signierte Binärdateien und Prüfsummen für alle unterstützten Plattformen
-  fehlen noch.
+  verfügbar. Das öffentliche [0.2.0-Release][release-020] enthält festgelegte
+  Linux-/Windows-Builds, byte-identische Wiederholungs-Builds, normalisierte
+  Archive und SHA-256-Prüfsummen. Signierte Binärdateien und Prüfsummen für
+  alle unterstützten Plattformen fehlen noch.
+
+[release-020]: https://github.com/sf1976/zelyra/releases/tag/v0.2.0
 - [~] Benutzerlokale Installations-, Prüf-, Update- und Deinstallationswege mit
   Dry-Run und sicheren Diagnosen sind verfügbar. Zusätzlich prüft
   `zelyra update [--check]` stabile GitHub-Releases und verifiziert eine
@@ -495,10 +496,11 @@ Feature eines bestimmten Anbieters.
 
 ## Release-Meilenstein 0.2.0
 
-0.2.0 ist ein Ziel und kein Veröffentlichungstermin. Das Release darf erst
-erscheinen, wenn der Weg von der Datenbank zur Businessanwendung nachweislich
-auf einem unterstützten, frischen System funktioniert und alle folgenden
-Freigabekriterien bestanden sind.
+Zelyra 0.2.0 wurde am 2026-09-20 veröffentlicht. Dieser Abschnitt hält den
+gelieferten Umfang und die Release-Nachweise fest; das Release bleibt
+experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
+bestandenen Release-Kriterien bedeuten nicht, dass alle folgenden Roadmap-
+Arbeiten abgeschlossen sind.
 
 - [~] **Eigenständiges Views-System:** Wiederverwendbare Layouts/Komponenten,
   typisierte CRUD-Darstellungsoptionen und ressourcenspezifische benannte
