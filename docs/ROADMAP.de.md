@@ -157,8 +157,10 @@ Feature eines bestimmten Anbieters.
   außerhalb des Assistenten.
 - [~] Die erzeugte Docker-Compose-Vorlage startet MariaDB und den internen
   Webserver mit unabhängig konfigurierbaren Web-, MariaDB- und Container-Ports;
-  die Docker-Laufzeitprüfung für erzeugte Projekte ist vorhanden,
-  Produktionshärtung bleibt offen.
+  `tests/generated-project-docker-e2e.sh` hat den aktuellen Feature-Branch
+  gebaut, beide Dienste auf isolierten Host-Ports gestartet, die deutsche
+  Startseite und Portzuordnungen geprüft und anschließend nur Compose-Projekt
+  und Volume dieses Tests entfernt. Produktionshärtung bleibt offen.
 - [ ] Optionale automatische Reverse-Proxy-Einrichtung für Apache und Nginx
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
@@ -479,7 +481,9 @@ Freigabekriterien bestanden sind.
   Release-Arbeiten.
 - [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
   erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
-  Docker-Berechtigungen sind verfügbar. Prüfungen auf frischen Systemen sowie
+  Docker-Berechtigungen sind verfügbar. Der erzeugte Docker-Stack bestand auf
+  diesem Host zusätzlich einen isolierten Test für Build, Start, HTTP-Zugriff,
+  Portzuordnungen und Bereinigung. Prüfungen auf frischen Systemen sowie
   Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
   gibt es einen End-to-End-Pfad; der MariaDB-Abnahmetest des erzeugten

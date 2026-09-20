@@ -141,8 +141,10 @@ architecture requirement for every phase, not a provider-specific feature.
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable web and MariaDB host ports plus
-  container ports; generated-project Docker runtime coverage is implemented,
-  while production hardening remains open.
+  container ports. `tests/generated-project-docker-e2e.sh` has built the
+  current feature branch, started both services on isolated host ports,
+  verified the German home page and published port mappings, then removed only
+  its Compose project and volume; production hardening remains open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
 - [~] `zelyra doctor` checks project validity, database connectivity, Docker
@@ -450,7 +452,8 @@ supported machine and the release gates below pass.
   Learn/Work behavior, and documented acceptance coverage remain release work.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
   .env, Docker Compose, free-port selection, and actionable Docker permission
-  guidance exist.
+  guidance exist. The generated Docker stack also passed an isolated build,
+  startup, HTTP, port-mapping, and cleanup smoke test on this host.
   Clean-machine installation verification and recovery coverage across
   supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has an
