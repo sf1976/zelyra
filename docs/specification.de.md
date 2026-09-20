@@ -43,6 +43,9 @@ implementiert. Typed Holes in
 Deklarationskontexten, vollständige Laufzeit-/Schema-Wirkungsanalyse,
 umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.
 
+String- und Zeichenliterale bewahren gültige Unicode-Zeichen unverändert.
+Source-Spans verwenden weiterhin UTF-8-Byte-Offsets.
+
 ## Interaktive Konsoleneingabe
 
 CLI-Programme lesen eine Zeile mit `read_console(prompt: String) -> String?`.

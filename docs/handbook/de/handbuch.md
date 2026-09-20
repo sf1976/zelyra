@@ -8364,7 +8364,7 @@ page "/items" {
 - `Some(wert)` / `None`: Konstruktoren für den Typ `Option<T>`.
 - `Ok(wert)` / `Err(fehler)`: Konstruktoren für den Typ `Result<T, E>`.
 - `json_encode(wert)` -> `String`: Wandelt Daten in JSON um.
-- `json_decode<T>(text)` -> `Result<T, String>`: Parst typisiertes JSON.
+- `json_decode<T>(text)` -> `T`: Parst typisiertes JSON; ungültige Daten werden als Laufzeitfehler gemeldet.
 
 ### Funktionen mit Capabilities
 - `uses Console`:

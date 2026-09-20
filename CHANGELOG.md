@@ -12,6 +12,12 @@ releases follow Semantic Versioning independently of the language line.
 - `read_console(prompt)` ergänzt interaktive CLI-Eingabe. Die Funktion liefert
   `String?`, meldet EOF als `None` und erfordert `uses Console` sowie bei
   konfigurierter Capability-Allowlist eine ausdrückliche Projektfreigabe.
+- Fixed UTF-8 handling in string and character literals so Unicode text is
+  preserved; added a console example that spells out each digit of a signed
+  integer.
+- UTF-8-Verarbeitung in String- und Zeichenliteralen korrigiert, damit
+  Unicode-Text erhalten bleibt; ein Konsolenbeispiel schreibt die Ziffern
+  einer vorzeichenbehafteten Ganzzahl einzeln aus.
 
 ## 0.2.0 — 2026-09-20
 

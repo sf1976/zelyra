@@ -41,6 +41,9 @@ declaration-context holes, complete
 runtime/schema impact, richer edit operations, granular effects, and
 benchmarks remain roadmap work.
 
+String and character literals preserve valid Unicode characters as written.
+Source spans continue to use UTF-8 byte offsets.
+
 ## Interactive console input
 
 CLI programs read one line with `read_console(prompt: String) -> String?`.

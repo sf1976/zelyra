@@ -8273,7 +8273,7 @@ page "/items" {
 - `Some(value)` / `None`: Value constructors for the `Option<T>` type.
 - `Ok(value)` / `Err(error)`: Value constructors for the `Result<T, E>` type.
 - `json_encode(value)` -> `String`: Serializes typed data into a JSON string.
-- `json_decode<T>(text)` -> `Result<T, String>`: Safely parses JSON into a typed data structure.
+- `json_decode<T>(text)` -> `T`: Parses typed JSON; invalid data are reported as runtime errors.
 
 ### Capability-Guarded Functions
 - `uses Console`:

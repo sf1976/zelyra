@@ -142,6 +142,66 @@ fn run_reads_console_input_and_handles_eof_and_capability_denial() {
 }
 
 #[test]
+fn digits_in_words_example_handles_signed_ints_and_unicode_output() {
+    let directory = temporary_directory("digits-in-words");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"digits-in-words\"\nversion = \"0.2.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nconsole = true\ndatabase = false\nnetwork = false\n",
+    )
+    .unwrap();
+    let source = directory.join("main.zyl");
+    fs::copy(example("digits_in_words.zyl"), &source).unwrap();
+
+    let run_with_input = |input: &[u8]| {
+        let mut child = Command::new(binary())
+            .args(["run", source.to_str().unwrap()])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Zelyra process should start");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input)
+            .expect("test input should be written");
+        child.wait_with_output().unwrap()
+    };
+
+    for (input, expected) in [
+        (b"124\n".as_slice(), "Zahl: Eins-Zwei-Vier\n"),
+        (b"0\n".as_slice(), "Zahl: Null\n"),
+        (b"-124\n".as_slice(), "Zahl: Minus-Eins-Zwei-Vier\n"),
+        (b"5\n".as_slice(), "Zahl: Fünf\n"),
+        (
+            b"-9223372036854775808\n".as_slice(),
+            "Zahl: Minus-Neun-Zwei-Zwei-Drei-Drei-Sieben-Zwei-Null-Drei-Sechs-Acht-Fünf-Vier-Sieben-Sieben-Fünf-Acht-Null-Acht\n",
+        ),
+        (
+            b"9223372036854775807\n".as_slice(),
+            "Zahl: Neun-Zwei-Zwei-Drei-Drei-Sieben-Zwei-Null-Drei-Sechs-Acht-Fünf-Vier-Sieben-Sieben-Fünf-Acht-Null-Sieben\n",
+        ),
+    ] {
+        let output = run_with_input(input);
+        assert!(
+            output.status.success(),
+            "input {input:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+        assert!(output.stderr.is_empty());
+    }
+
+    let invalid = run_with_input(b"not a number\n");
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("json_decode received invalid JSON"));
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn valid_check_json_is_a_stable_machine_document() {
     let path = example("fibonacci.zyl");
     let first = run(&["check", path.to_str().unwrap(), "--format=json"]);

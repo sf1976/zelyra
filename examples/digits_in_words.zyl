@@ -1,0 +1,88 @@
+fn digit_word(digit: Int) -> String {
+    match digit {
+        0 => {
+            return "Null"
+        }
+        1 => {
+            return "Eins"
+        }
+        2 => {
+            return "Zwei"
+        }
+        3 => {
+            return "Drei"
+        }
+        4 => {
+            return "Vier"
+        }
+        5 => {
+            return "Fünf"
+        }
+        6 => {
+            return "Sechs"
+        }
+        7 => {
+            return "Sieben"
+        }
+        8 => {
+            return "Acht"
+        }
+        9 => {
+            return "Neun"
+        }
+        _ => {
+            return "Unbekannte Ziffer"
+        }
+    }
+}
+fn number_in_words(number: Int) -> String {
+    if number == 0 {
+        return "Null"
+    }
+    // Keep the value signed so the minimum Int also works without abs().
+    mutable remaining = number
+    mutable probe = number
+    mutable place = 1
+    if number > 0 {
+        while probe >= 10 {
+            probe = probe / 10
+            place = place * 10
+        }
+    } else {
+        while probe <=-10 {
+            probe = probe / 10
+            place = place * 10
+        }
+    }
+    mutable words = ""
+    if number < 0 {
+        words = "Minus"
+    }
+    // Extract digits from the highest decimal place down to the units.
+    while place > 0 {
+        mutable digit = remaining / place
+        if digit < 0 {
+            digit = 0 - digit
+        }
+        if words == "" {
+            words = digit_word(digit)
+        } else {
+            words = words + "-" + digit_word(digit)
+        }
+        remaining = remaining % place
+        place = place / 10
+    }
+    return words
+}
+fn main() uses Console {
+    eingabe = read_console("Zahl: ")
+    match eingabe {
+        Some(text) => {
+            zahl = json_decode<Int>(text)
+            print(number_in_words(zahl))
+        }
+        None => {
+            print("Keine Eingabe.")
+        }
+    }
+}

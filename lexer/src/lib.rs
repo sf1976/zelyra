@@ -343,9 +343,12 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             let mut value = String::new();
             let mut closed = false;
             while i < bytes.len() {
-                let ch = bytes[i] as char;
+                let ch = source[i..]
+                    .chars()
+                    .next()
+                    .expect("string literal offset must be a UTF-8 boundary");
                 if ch == quote {
-                    i += 1;
+                    i += ch.len_utf8();
                     column += 1;
                     closed = true;
                     break;
@@ -387,7 +390,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                     column += 1;
                 } else {
                     value.push(ch);
-                    i += 1;
+                    i += ch.len_utf8();
                     column += 1;
                 }
             }
@@ -619,6 +622,20 @@ mod tests {
             lex(r#""hello\n""#).unwrap()[0].kind,
             TokenKind::String("hello\n".into())
         );
+    }
+
+    #[test]
+    fn lexes_unicode_string_literals_without_changing_utf8_bytes() {
+        let tokens = lex(r#""Fünf — fünf 🙂" + "Null""#).unwrap();
+
+        assert_eq!(tokens[0].kind, TokenKind::String("Fünf — fünf 🙂".into()));
+        assert_eq!(tokens[0].span.end, "\"Fünf — fünf 🙂\"".len());
+        assert_eq!(tokens[2].kind, TokenKind::String("Null".into()));
+    }
+
+    #[test]
+    fn lexes_unicode_character_literals() {
+        assert_eq!(lex("'ü'").unwrap()[0].kind, TokenKind::Char('ü'));
     }
 
     #[test]
