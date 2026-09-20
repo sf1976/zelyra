@@ -230,6 +230,113 @@ fn serve_loads_project_theme_and_locale_catalogs() {
 }
 
 #[test]
+fn serve_generated_crud_forms_use_project_catalogs_in_german_and_english() {
+    let directory = temporary_directory("serve-crud-project-catalogs");
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+crud Customer -> customers {
+    list {
+        name
+    }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{
+            "form.create_title": "Add {field} to the directory",
+            "form.create_submit": "Save English customer",
+            "identifier.name": "English display name"
+        }"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/de.json"),
+        r#"{
+            "form.create_title": "{field} zum Verzeichnis hinzufügen",
+            "form.create_submit": "Kunden speichern",
+            "identifier.name": "Deutscher Anzeigename"
+        }"#,
+    )
+    .unwrap();
+
+    let render_form = |language: &str| {
+        let port = free_test_port();
+        let address = format!("127.0.0.1:{port}");
+        let mut server = Command::new(binary())
+            .args(["serve", source.to_str().unwrap(), &address])
+            .env("ZELYRA_LANGUAGE", language)
+            .env("ZELYRA_LEVEL", "work")
+            .env_remove("DATABASE_URL")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("Zelyra server should start");
+
+        let response = (|| {
+            let socket_address: SocketAddr = address
+                .parse()
+                .map_err(|error| format!("invalid test server address: {error}"))?;
+            for _ in 0..50 {
+                if let Ok(mut stream) =
+                    TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .map_err(|error| error.to_string())?;
+                    stream
+                        .write_all(b"GET /customers/new HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                        .map_err(|error| error.to_string())?;
+                    let mut response = String::new();
+                    stream
+                        .read_to_string(&mut response)
+                        .map_err(|error| error.to_string())?;
+                    if !response.is_empty() {
+                        return Ok(response);
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            Err("Zelyra server did not answer before the test timeout".to_owned())
+        })();
+        let _ = server.kill();
+        let _ = server.wait();
+        response.unwrap_or_else(|error| panic!("{error}"))
+    };
+
+    let english = render_form("en");
+    let german = render_form("de");
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert!(english.starts_with("HTTP/1.1 200 OK"), "{english}");
+    assert!(
+        english.contains("Add Customer to the directory"),
+        "{english}"
+    );
+    assert!(english.contains("English display name"), "{english}");
+    assert!(english.contains("Save English customer"), "{english}");
+    assert!(german.starts_with("HTTP/1.1 200 OK"), "{german}");
+    assert!(
+        german.contains("Kunde zum Verzeichnis hinzufügen"),
+        "{german}"
+    );
+    assert!(german.contains("Deutscher Anzeigename"), "{german}");
+    assert!(german.contains("Kunden speichern"), "{german}");
+}
+
+#[test]
 fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
     let directory = temporary_directory("serve-theme-route-conflict");
     fs::create_dir_all(&directory).unwrap();
