@@ -151,3 +151,6 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
         run: ./tests/mariadb-protected-e2e.sh
+      - name: Validate Handbook Code Snippets
+        run: python3 scripts/validate_handbook.py
+
