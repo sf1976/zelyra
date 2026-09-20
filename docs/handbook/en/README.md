@@ -567,8 +567,9 @@ foreign-key alterations are refused. The schema-safety integration verifies
 that a failed unique-constraint creation leaves duplicate rows intact and
 invalid foreign-key relationships are retained. MariaDB default, primary-key,
 and auto-increment drift plus SQLite default, primary-key, and explicit
-`AUTOINCREMENT` drift are detected and marked `UNSUPPORTED`; PostgreSQL
-key/default/identity inspection remains incomplete. MariaDB may
+`AUTOINCREMENT` drift and PostgreSQL default, key, and serial/identity drift
+are detected and marked `UNSUPPORTED`; PostgreSQL schema-safety tests run on
+version 16 in CI, not as a runtime-parity guarantee. MariaDB may
 assign engine-specific implicit values to existing rows when an approved
 required column has no default, so verify the resulting data before using it.
 Unrecognized external indexes are preserved; untracked foreign-key removals

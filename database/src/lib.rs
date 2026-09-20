@@ -605,7 +605,11 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             .collect::<HashMap<_, _>>();
         for desired_column in &desired_table.columns {
             if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
-                if current_column.sql_type != desired_column.sql_type {
+                if !sql_types_equivalent(
+                    &current_column.sql_type,
+                    &desired_column.sql_type,
+                    backend,
+                ) {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "change type of {}.{}",
@@ -654,52 +658,56 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                     },
                 });
             }
-            if backend != Backend::Postgres {
-                if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
-                    if current_column.primary_key != desired_column.primary_key {
-                        plan.changes.push(SchemaChange {
-                            description: format!(
-                                "change primary-key status of {}.{}",
-                                desired_table.name, desired_column.name
-                            ),
-                            sql: format!(
-                                "-- Changing primary-key status of {}.{} is not supported by the current schema planner.",
-                                desired_table.name, desired_column.name
-                            ),
-                            risk: Risk::Unsupported,
-                        });
-                    }
-                    if matches!(backend, Backend::MariaDb | Backend::Sqlite)
-                        && current_column.auto != desired_column.auto
-                    {
-                        plan.changes.push(SchemaChange {
-                            description: format!(
-                                "change auto-increment status of {}.{}",
-                                desired_table.name, desired_column.name
-                            ),
-                            sql: format!(
-                                "-- Changing auto-increment status of {}.{} is not supported by the current schema planner.",
-                                desired_table.name, desired_column.name
-                            ),
-                            risk: Risk::Unsupported,
-                        });
-                    }
-                    if !defaults_equivalent(
+            if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
+                if current_column.primary_key != desired_column.primary_key {
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "change primary-key status of {}.{}",
+                            desired_table.name, desired_column.name
+                        ),
+                        sql: format!(
+                            "-- Changing primary-key status of {}.{} is not supported by the current schema planner.",
+                            desired_table.name, desired_column.name
+                        ),
+                        risk: Risk::Unsupported,
+                    });
+                }
+                if current_column.auto != desired_column.auto {
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "change auto-increment status of {}.{}",
+                            desired_table.name, desired_column.name
+                        ),
+                        sql: format!(
+                            "-- Changing auto-increment status of {}.{} is not supported by the current schema planner.",
+                            desired_table.name, desired_column.name
+                        ),
+                        risk: Risk::Unsupported,
+                    });
+                }
+                let defaults_match = if backend == Backend::Postgres {
+                    postgres_defaults_equivalent(
                         current_column.default.as_deref(),
                         desired_column.default.as_deref(),
-                    ) {
-                        plan.changes.push(SchemaChange {
-                            description: format!(
-                                "change default of {}.{}",
-                                desired_table.name, desired_column.name
-                            ),
-                            sql: format!(
-                                "-- Changing the default of {}.{} is not supported by the current schema planner.",
-                                desired_table.name, desired_column.name
-                            ),
-                            risk: Risk::Unsupported,
-                        });
-                    }
+                    )
+                } else {
+                    defaults_equivalent(
+                        current_column.default.as_deref(),
+                        desired_column.default.as_deref(),
+                    )
+                };
+                if !defaults_match {
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "change default of {}.{}",
+                            desired_table.name, desired_column.name
+                        ),
+                        sql: format!(
+                            "-- Changing the default of {}.{} is not supported by the current schema planner.",
+                            desired_table.name, desired_column.name
+                        ),
+                        risk: Risk::Unsupported,
+                    });
                 }
             }
         }
@@ -859,6 +867,22 @@ fn type_change_risk(current: &str, desired: &str, backend: Backend) -> Risk {
     }
 }
 
+fn sql_types_equivalent(current: &str, desired: &str, backend: Backend) -> bool {
+    if backend != Backend::Postgres {
+        return current == desired;
+    }
+    postgres_storage_type(current) == postgres_storage_type(desired)
+}
+
+fn postgres_storage_type(sql_type: &str) -> &str {
+    match sql_type {
+        "BIGSERIAL" => "BIGINT",
+        "SERIAL" => "INTEGER",
+        "SMALLSERIAL" => "SMALLINT",
+        other => other,
+    }
+}
+
 fn defaults_equivalent(current: Option<&str>, desired: Option<&str>) -> bool {
     let Some(current) = current else {
         return desired.is_none();
@@ -877,6 +901,130 @@ fn defaults_equivalent(current: Option<&str>, desired: Option<&str>) -> bool {
             (current.as_str(), desired.as_str()),
             ("0", "FALSE") | ("FALSE", "0")
         )
+}
+
+fn postgres_defaults_equivalent(current: Option<&str>, desired: Option<&str>) -> bool {
+    let normalize = |value: &str| {
+        let Some((literal, cast_type)) = value.rsplit_once("::") else {
+            return value.trim().to_string();
+        };
+        let cast_type = cast_type.trim().to_ascii_lowercase();
+        if is_postgres_literal_cast(&cast_type) && is_simple_sql_literal(literal.trim()) {
+            literal.trim().to_string()
+        } else {
+            value.trim().to_string()
+        }
+    };
+    let current = current.map(normalize);
+    let desired = desired.map(normalize);
+    defaults_equivalent(current.as_deref(), desired.as_deref())
+}
+
+fn is_postgres_literal_cast(cast_type: &str) -> bool {
+    matches!(
+        cast_type,
+        "text"
+            | "character varying"
+            | "character"
+            | "varchar"
+            | "char"
+            | "boolean"
+            | "bool"
+            | "smallint"
+            | "integer"
+            | "bigint"
+            | "int2"
+            | "int4"
+            | "int8"
+            | "numeric"
+            | "decimal"
+            | "real"
+            | "double precision"
+            | "float4"
+            | "float8"
+            | "date"
+            | "time without time zone"
+            | "time with time zone"
+            | "timestamp without time zone"
+            | "timestamp with time zone"
+            | "uuid"
+            | "bytea"
+    ) || [
+        "character varying",
+        "character",
+        "varchar",
+        "char",
+        "numeric",
+        "decimal",
+    ]
+    .iter()
+    .any(|prefix| {
+        cast_type
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('(') && suffix.ends_with(')'))
+    })
+}
+
+fn is_simple_sql_literal(value: &str) -> bool {
+    if matches!(
+        value.to_ascii_lowercase().as_str(),
+        "true" | "false" | "null"
+    ) {
+        return true;
+    }
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2 && bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\'' {
+        let mut index = 1;
+        while index < bytes.len() - 1 {
+            if bytes[index] == b'\'' {
+                if bytes.get(index + 1) != Some(&b'\'') || index + 1 >= bytes.len() - 1 {
+                    return false;
+                }
+                index += 2;
+            } else {
+                index += 1;
+            }
+        }
+        return true;
+    }
+
+    is_numeric_sql_literal(bytes)
+}
+
+fn is_numeric_sql_literal(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    if matches!(bytes.first(), Some(b'+') | Some(b'-')) {
+        index += 1;
+    }
+    let mut digits = 0;
+    while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+        digits += 1;
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'.') {
+        index += 1;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            digits += 1;
+            index += 1;
+        }
+    }
+    if digits == 0 {
+        return false;
+    }
+    if matches!(bytes.get(index), Some(b'e') | Some(b'E')) {
+        index += 1;
+        if matches!(bytes.get(index), Some(b'+') | Some(b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if index == exponent_start {
+            return false;
+        }
+    }
+    index == bytes.len()
 }
 
 fn normalize_default(value: &str) -> String {
@@ -1136,7 +1284,57 @@ impl fmt::Display for DatabaseError {
 }
 
 pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
-    let query = "SELECT table_name, column_name, data_type, udt_name, is_nullable, COALESCE(character_maximum_length::text, '') FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position";
+    let query = r#"
+        WITH inspected_columns AS (
+            SELECT
+                c.table_schema,
+                c.table_name,
+                c.column_name,
+                c.data_type,
+                c.udt_name,
+                c.is_nullable,
+                COALESCE(c.character_maximum_length::text, '') AS character_maximum_length,
+                c.ordinal_position,
+                EXISTS (
+                    SELECT 1
+                    FROM pg_constraint constraint_row
+                    JOIN pg_class table_row
+                        ON table_row.oid = constraint_row.conrelid
+                    JOIN pg_namespace schema_row
+                        ON schema_row.oid = table_row.relnamespace
+                    JOIN pg_attribute column_row
+                        ON column_row.attrelid = table_row.oid
+                        AND column_row.attname = c.column_name
+                        AND NOT column_row.attisdropped
+                    WHERE constraint_row.contype = 'p'
+                        AND schema_row.nspname = c.table_schema
+                        AND table_row.relname = c.table_name
+                        AND column_row.attnum = ANY (constraint_row.conkey)
+                ) AS is_primary_key,
+                COALESCE((
+                    c.is_identity = 'YES'
+                    OR left(lower(c.column_default), 8) = 'nextval('
+                ), false) AS is_auto_generated,
+                c.column_default
+            FROM information_schema.columns c
+            WHERE c.table_schema = 'public'
+        )
+        SELECT
+            table_name,
+            column_name,
+            data_type,
+            udt_name,
+            is_nullable,
+            character_maximum_length,
+            is_primary_key,
+            is_auto_generated,
+            CASE
+                WHEN is_auto_generated OR column_default IS NULL THEN 'N'
+                ELSE 'V' || encode(convert_to(column_default, 'UTF8'), 'hex')
+            END
+        FROM inspected_columns
+        ORDER BY table_name, ordinal_position
+    "#;
     let output = run_psql(database_url, query)?;
     let mut schema = parse_inspection_output(&output)?;
     let index_output = run_psql(
@@ -1171,21 +1369,26 @@ fn parse_inspection_output(output: &str) -> Result<Schema, DatabaseError> {
     let mut tables: Vec<Table> = Vec::new();
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 6 {
+        if fields.len() != 9 {
             return Err(DatabaseError {
-                message: format!("unexpected psql inspection row: {line}"),
+                message: format!(
+                    "unexpected PostgreSQL column metadata with {} fields",
+                    fields.len()
+                ),
             });
         }
         let table_name = fields[0].to_string();
         let sql_type = inspected_sql_type(fields[2], fields[3], fields[5]);
+        let primary_key = parse_postgres_bool(fields[6])?;
+        let auto = parse_postgres_bool(fields[7])?;
         let column = Column {
             name: fields[1].to_string(),
             sql_type,
             nullable: fields[4] == "YES",
-            primary_key: false,
-            auto: false,
+            primary_key,
+            auto,
             unique: false,
-            default: None,
+            default: postgres_default_value(fields[8], auto)?,
         };
         if let Some(table) = tables.iter_mut().find(|table| table.name == table_name) {
             table.columns.push(column);
@@ -1203,6 +1406,31 @@ fn parse_inspection_output(output: &str) -> Result<Schema, DatabaseError> {
         database: None,
         tables,
     })
+}
+
+fn parse_postgres_bool(value: &str) -> Result<bool, DatabaseError> {
+    match value {
+        "t" => Ok(true),
+        "f" => Ok(false),
+        _ => Err(DatabaseError {
+            message: "unexpected PostgreSQL boolean metadata".into(),
+        }),
+    }
+}
+
+fn postgres_default_value(
+    encoded: &str,
+    auto_generated: bool,
+) -> Result<Option<String>, DatabaseError> {
+    if auto_generated || encoded == "N" {
+        return Ok(None);
+    }
+    let Some(hex) = encoded.strip_prefix('V') else {
+        return Err(DatabaseError {
+            message: "unexpected PostgreSQL default metadata marker".into(),
+        });
+    };
+    decode_hex_metadata(hex).map(Some)
 }
 
 fn inspected_sql_type(data_type: &str, _udt_name: &str, length: &str) -> String {
@@ -2304,6 +2532,56 @@ mod tests {
     }
 
     #[test]
+    fn compares_postgres_defaults_after_removing_only_known_literal_casts() {
+        assert!(postgres_defaults_equivalent(
+            Some("'pending'::character varying"),
+            Some("'pending'")
+        ));
+        assert!(postgres_defaults_equivalent(
+            Some("'O''Reilly'::text"),
+            Some("'O''Reilly'")
+        ));
+        assert!(postgres_defaults_equivalent(Some("true"), Some("TRUE")));
+        assert!(!postgres_defaults_equivalent(
+            Some("'first'::text"),
+            Some("'second'")
+        ));
+        assert!(!postgres_defaults_equivalent(
+            Some("'first'::custom_domain"),
+            Some("'first'")
+        ));
+        assert!(!postgres_defaults_equivalent(
+            Some("lower('first'::text)"),
+            Some("'first'")
+        ));
+    }
+
+    #[test]
+    fn compares_postgres_serial_aliases_by_their_storage_types() {
+        assert!(sql_types_equivalent(
+            "BIGINT",
+            "BIGSERIAL",
+            Backend::Postgres
+        ));
+        assert!(sql_types_equivalent("INTEGER", "SERIAL", Backend::Postgres));
+        assert!(sql_types_equivalent(
+            "SMALLINT",
+            "SMALLSERIAL",
+            Backend::Postgres
+        ));
+        assert!(!sql_types_equivalent(
+            "BIGINT",
+            "INTEGER",
+            Backend::Postgres
+        ));
+        assert!(!sql_types_equivalent(
+            "BIGINT",
+            "BIGSERIAL",
+            Backend::MariaDb
+        ));
+    }
+
+    #[test]
     fn keeps_timestamp_looking_string_defaults_as_literals() {
         assert_eq!(
             mariadb_default_value(
@@ -2560,7 +2838,7 @@ mod tests {
     #[test]
     fn parses_postgres_inspection_rows_and_indexes() {
         let mut schema = parse_inspection_output(
-            "machines\tid\tbigint\tint8\tNO\t\nmachines\tname\tcharacter varying\tvarchar\tYES\t100\n",
+            "machines\tid\tbigint\tint8\tNO\t\tt\tt\tN\nmachines\tname\tcharacter varying\tvarchar\tYES\t100\tf\tf\tN\n",
         )
         .unwrap();
         parse_index_output(
@@ -2568,8 +2846,27 @@ mod tests {
             "machines\tidx_machines_name\tCREATE INDEX idx_machines_name ON public.machines USING btree (name)\n",
         )
         .unwrap();
+        assert!(schema.tables[0].columns[0].primary_key);
+        assert!(schema.tables[0].columns[0].auto);
+        assert!(!schema.tables[0].columns[1].primary_key);
         assert_eq!(schema.tables[0].columns[1].sql_type, "VARCHAR(100)");
         assert_eq!(schema.tables[0].indexes[0].columns, ["name"]);
+    }
+
+    #[test]
+    fn postgres_inspection_decodes_defaults_and_redacts_malformed_metadata() {
+        let schema = parse_inspection_output(
+            "users\tactive\tboolean\tbool\tNO\t\tf\tf\tV74727565\nusers\tid\tbigint\tint8\tNO\t\tt\tt\tN\n",
+        )
+        .unwrap();
+        assert_eq!(schema.tables[0].columns[0].default.as_deref(), Some("true"));
+        assert_eq!(schema.tables[0].columns[1].default, None);
+
+        let malformed = parse_inspection_output("sensitive-default-value").unwrap_err();
+        assert!(!malformed.message.contains("sensitive-default-value"));
+        let malformed_boolean =
+            parse_inspection_output("users\tid\tbigint\tint8\tNO\t\tsecret\tf\tN\n").unwrap_err();
+        assert!(!malformed_boolean.message.contains("secret"));
     }
 
     #[test]

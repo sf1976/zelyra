@@ -117,6 +117,8 @@ and refuses untracked foreign-key removals rather than guessing ownership.
 MariaDB default, primary-key, and auto-increment drift plus SQLite default,
 primary-key, and explicit `AUTOINCREMENT` drift are detected but blocked as
 `UNSUPPORTED` until safe backend-specific migrations are implemented.
-PostgreSQL default/identity/key metadata is not yet reliably inspected. Type
-changes and nullability changes are classified independently, preventing a
-safe type widening from masking unsupported nullability drift.
+PostgreSQL default, primary-key, and serial/identity drift is also detected and
+blocked; its schema-safety integration runs against PostgreSQL 16 in CI. This
+does not establish PostgreSQL runtime parity. Type changes and nullability
+changes are classified independently, preventing a safe type widening from
+masking unsupported nullability drift.

@@ -34,6 +34,19 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: zelyra_ci
+          POSTGRES_USER: zelyra_ci
+          POSTGRES_PASSWORD: zelyra_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U zelyra_ci -d zelyra_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
 
     steps:
       - name: Check out repository
@@ -43,7 +56,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install database clients and curl
-        run: sudo apt-get update && sudo apt-get install --yes mariadb-client sqlite3 curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer
@@ -132,6 +145,11 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Run PostgreSQL schema safety integration test
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/postgres-schema-safety-e2e.sh
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root

@@ -120,8 +120,9 @@ Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
 nicht erraten, sondern blockiert. MariaDB-Drift bei Defaults, Primärschlüsseln
 und Auto-Increment sowie SQLite-Drift bei Defaults, Primärschlüsseln und
 explizitem `AUTOINCREMENT` werden erkannt, aber bis zur Implementierung sicherer
-backend-spezifischer Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-
-Default-/Identity-/Schlüssel-Metadaten werden noch nicht zuverlässig
-inspiziert. Typ- und Nullbarkeitsänderungen werden unabhängig bewertet; eine
-sichere Typvergrößerung kann eine nicht unterstützte Nullbarkeitsänderung
-nicht verdecken.
+backend-spezifischer Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-Drift
+bei Defaults, Primärschlüsseln und Serial-/Identity-Eigenschaften wird ebenfalls
+erkannt und blockiert; die Schemasicherheitsintegration läuft in CI mit
+PostgreSQL 16. Das belegt keine PostgreSQL-Runtime-Parität. Typ- und
+Nullbarkeitsänderungen werden unabhängig bewertet; eine sichere Typvergrößerung
+kann eine nicht unterstützte Nullbarkeitsänderung nicht verdecken.

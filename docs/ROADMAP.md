@@ -202,9 +202,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
   auto-increment drift, plus SQLite default, primary-key, and explicit
-  `AUTOINCREMENT` drift. These changes fail closed as `UNSUPPORTED`;
-  PostgreSQL default/identity/primary-key metadata is not yet reliably
-  inspected. Safe backend-specific migrations remain planned.
+  `AUTOINCREMENT` drift, plus PostgreSQL default, primary-key, and
+  serial/identity drift. These changes fail closed as `UNSUPPORTED`; safe
+  backend-specific migrations remain planned. PostgreSQL schema safety is
+  exercised against PostgreSQL 16 in CI, not as a runtime-parity claim.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
@@ -492,8 +493,8 @@ supported machine and the release gates below pass.
   MariaDB Community LTS patch images and the core database/CRUD paths they
   test; this is not MySQL or full feature certification. PostgreSQL runtime
   parity, nullability migration support, backfill safety, and operational risk
-  analysis remain outside the 0.2.0 claim. PostgreSQL default/identity/key
-  metadata remains undetected.
+  analysis remain outside the 0.2.0 claim. PostgreSQL metadata drift is
+  detected and refused, but safe metadata migrations remain unsupported.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

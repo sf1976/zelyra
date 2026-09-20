@@ -50,6 +50,9 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
   blockiert; MariaDB-Default-/Schlüssel-/Auto-Increment-Drift sowie SQLite-
   Default-/Schlüssel-/expliziter `AUTOINCREMENT`-Drift werden erkannt und
   statt stillschweigend ignoriert abgelehnt.
+- `tests/postgres-schema-safety-e2e.sh` prüft PostgreSQL-Drift bei Defaults,
+  Primärschlüsseln sowie Serial- und Identity-Metadaten mit PostgreSQL 16. Das
+  ist ein Schemasicherheitstest, keine PostgreSQL-Runtime-Kompatibilitätszusage.
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine

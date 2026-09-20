@@ -216,10 +216,11 @@ Feature eines bestimmten Anbieters.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB sowie bei Defaults, Primärschlüsseln und
-  explizitem `AUTOINCREMENT` für SQLite. Diese Änderungen werden als
-  `UNSUPPORTED` fail-closed abgelehnt. Default-, Identity- und
-  Primärschlüssel-Metadaten von PostgreSQL werden noch nicht sicher inspiziert.
-  Sichere backend-spezifische Migrationen bleiben geplant.
+  explizitem `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln
+  und Serial-/Identity-Eigenschaften für PostgreSQL. Diese Änderungen werden
+  als `UNSUPPORTED` fail-closed abgelehnt; sichere backend-spezifische
+  Migrationen bleiben geplant. PostgreSQL-Schemasicherheit wird in CI mit
+  PostgreSQL 16 geprüft; das ist keine Runtime-Paritätsaussage.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
@@ -527,8 +528,8 @@ Freigabekriterien bestanden sind.
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
   PostgreSQL-Runtime-Parität, Nullbarkeitsmigrationen, sichere Backfills und
   betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-
-  Default-/Identity-/Schlüssel-Metadaten werden noch nicht zuverlässig
-  erkannt.
+  Metadatenabweichungen werden erkannt und abgelehnt; sichere Änderungen daran
+  werden noch nicht migriert.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

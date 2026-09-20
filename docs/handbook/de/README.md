@@ -633,8 +633,9 @@ Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
 Foreign-Key-Beziehungen erhalten bleiben. MariaDB-Drift bei Defaults,
 Primärschlüsseln und Auto-Increment sowie SQLite-Drift bei Defaults,
 Primärschlüsseln und explizitem `AUTOINCREMENT` werden erkannt und als
-`UNSUPPORTED` markiert; die PostgreSQL-Inspektion von Defaults, Schlüsseln und
-Identity ist noch unvollständig. MariaDB kann
+`UNSUPPORTED` markiert. PostgreSQL-Drift bei Defaults, Primärschlüsseln sowie
+Serial-/Identity-Eigenschaften wird ebenfalls erkannt und blockiert; CI prüft
+die Schemasicherheit mit Version 16, jedoch keine Runtime-Parität. MariaDB kann
 vorhandenen Zeilen beim ausdrücklich freigegebenen Hinzufügen einer
 Pflichtspalte ohne Standardwert
 engineabhängige implizite Werte geben; prüfe die Daten vor ihrer Nutzung. Nicht

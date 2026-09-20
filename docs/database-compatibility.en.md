@@ -44,6 +44,9 @@ can run the same scripts against a disposable MariaDB service:
   unique-constraint alterations are blocked by `E-DB-006` even with approval;
   MariaDB default/key/auto-increment and SQLite default/key/explicit
   `AUTOINCREMENT` drift are detected and refused rather than silently ignored.
+- `tests/postgres-schema-safety-e2e.sh` checks PostgreSQL default, primary-key,
+  serial, and identity metadata drift against PostgreSQL 16. It is a schema
+  safety check, not a PostgreSQL runtime compatibility claim.
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
 schema-safety test creates and drops only a uniquely named test database. It
