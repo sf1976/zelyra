@@ -6,7 +6,7 @@ English · [Deutsche Ausgabe](/handbuch)
 
 Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra – Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 23), and comprehensive **Appendices** (A to J).
 
-> **Project status:** Zelyra 0.1.50 is experimental. Many described foundations are implemented, but not yet approved for production use.
+> **Project status:** Compiler 0.2.0 implements a tested, experimental subset of language line 0.1. Zelyra is not approved for production use.
 
 ## Status marks
 
@@ -315,7 +315,7 @@ fn main() {
 ### 1. What will I learn in this chapter?
 - System requirements for the Zelyra development environment on Linux, macOS, and Windows.
 - Platform-specific Docker setup and verification with `docker compose version`.
-- How to install Zelyra from source (`./install.sh` / `install.ps1`) or precompiled release archives (`--release v0.1.50`).
+- How to install Zelyra from source (`./install.sh` / `install.ps1`) or precompiled release archives (`--release v0.2.0`).
 - Complete compiler version query with `zelyra --version` and environment diagnosis with `zelyra doctor`.
 - The integrated, token-protected web setup assistant (`zelyra setup --web`).
 - Typical permission and port conflicts (such as Docker socket permissions and automatic port selection).
@@ -342,13 +342,13 @@ cd zelyra
 ```
 Or directly as a precompiled release archive without Rust:
 ```bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ```
 On Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ```
 
 **Step 2: Verify version and help**
@@ -356,7 +356,7 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.1.50`).
+`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.2.0`). The language compatibility line remains 0.1.
 
 **Step 3: Verify Docker Compose (for MariaDB projects)**
 ```bash
@@ -387,7 +387,7 @@ Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use s
 ### 6. Key takeaways
 1. The Zelyra CLI bundles compiler, runner, form checker, migrator, web server, and setup assistant in a single tool.
 2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
-3. Official release binaries can be installed directly with `--release v0.1.50`.
+3. Official release binaries can be installed directly with `--release v0.2.0`.
 4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.
 
 ### 7. Exercises
@@ -903,7 +903,7 @@ A program that cannot receive input or communicate output is useless to users. I
   4. **Web Requests:** Form declarations (`form`) and route endpoints (`page "/user/{id}"`) process browser input.
 
 > **Status Note on Interactive Console Input:**
-> In Zelyra 0.1.50, there is deliberately no blocking `read_line()` function for terminal keyboard prompts. The language design emphasizes declarative web forms, structured payloads, and deterministic data flow.
+> In compiler 0.2.0, there is deliberately no blocking `read_line()` function for terminal keyboard prompts. The language design emphasizes declarative web forms, structured payloads, and deterministic data flow.
 > *(Roadmap placeholder: `// [Placeholder: Interactive read_line() via standard input will be specified in Phase 11]`)*.
 
 ### 4. Small, progressive examples
@@ -5700,7 +5700,7 @@ Use `--no-rustup` to disable automatic Rust installation; `--no-path` suppresses
 Published releases for Linux x86_64 and Windows x86_64 can be installed without Rust or Cargo. The archive is downloaded over HTTPS and verified with SHA-256:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 On Windows, `install.ps1` is available for PowerShell and `install.cmd` for the Command Prompt:
@@ -5715,7 +5715,7 @@ zelyra --version
 Release archive installation on Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 Then:
@@ -6647,6 +6647,39 @@ same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
 lockout. A successful login rotates and invalidates the previous browser
 session token.
 
+Every state-changing browser form requires its CSRF token and a same-origin
+`Origin` or `Referer` matching the request `Host` and effective scheme.
+Malformed, missing, or cross-origin evidence is rejected, so copying a token
+from another browser cannot authorize a cross-site form submission. API
+requests carrying browser-origin information or a browser session cookie also
+receive this check, including `GET` requests because handlers are not yet
+statically restricted to read-only behavior. Cross-origin API access is
+possible only for an exact origin explicitly listed in the project's CORS
+policy; a session cookie additionally requires credentialed CORS. The current
+CSRF token is process-scoped rather than individually stored per session, so
+these origin checks are a required part of the protection.
+
+The Zelyra server currently speaks plain HTTP. Put it behind a trusted TLS
+terminating proxy before exposing it beyond a local development machine. The
+proxy must preserve the public `Host`, overwrite `X-Forwarded-Proto` with the
+actual external scheme, and prevent direct public access to the application
+port. Zelyra uses that header to validate the effective origin and to add the
+`Secure` attribute to session cookies for HTTPS requests. Never trust a
+client-supplied forwarded header at an exposed proxy boundary.
+
+The server also checks every supplied `Host` header against
+`ZELYRA_ALLOWED_HOSTS`. The default permits only `localhost`, `127.0.0.1`, and
+`[::1]`, which also blocks DNS rebinding through arbitrary hostnames. Add the
+actual hostname explicitly to the comma-separated `.env` setting when using a
+custom domain or LAN host. Schemes, ports, and wildcards are not accepted.
+Duplicate security-sensitive request headers such as `Host`, `Origin`,
+`Referer`, `Cookie`, and `Authorization` are rejected to avoid ambiguous
+parsing. The response policy `Referrer-Policy: same-origin` allows
+same-origin API GETs to provide that evidence without sending referrer
+information to other origins.
+Process environment overrides the project `.env`, which overrides the
+fallback. The allowlist does not replace TLS or origin/CSRF checks.
+
 Create a value for the required `password_hash` column with the CLI. The
 interactive command disables password echo and asks for confirmation:
 
@@ -6811,7 +6844,7 @@ default headers:
 ~~~http
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Referrer-Policy: no-referrer
+Referrer-Policy: same-origin
 ~~~
 
 These defaults do not replace TLS, authentication, authorization, CSRF
@@ -7492,7 +7525,7 @@ feature.
 | Jobs | external job/queue systems | no background-job construct | no stable job syntax | ❌ |
 | Audit | external logging/audit crates | audit table, CLI inspection, and optional hash chain | tied to auth/CRUD and still experimental | 🧪 |
 | Deployment | Cargo, containers, CI, and infrastructure are free choices | generated Docker/Compose template exists | template is a development start, not a production platform | 🧪 |
-| Production maturity | widely used in production | Zelyra 0.1.50 is experimental | maturity and ecosystem are not comparable | 🧪 |
+| Production maturity | widely used in production | Zelyra compiler 0.2.0 is experimental | maturity and ecosystem are not comparable | 🧪 |
 | Ecosystem | very large: crates, tools, frameworks | small repository and few integrations | Zelyra cannot directly import Rust crates | 🧪 |
 
 Rust is the technical foundation, not the application language behind Zelyra. A

@@ -63,7 +63,9 @@ jobs:
         run: |
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          ./install.sh --release v0.1.45 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+          ./install.sh --release v0.2.0 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+      - name: Test deterministic release packaging
+        run: python3 scripts/test_package_release.py
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy

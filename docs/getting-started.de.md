@@ -200,13 +200,13 @@ passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
 ausgetauscht:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 Unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS

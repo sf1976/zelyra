@@ -19,9 +19,10 @@ möglich.
 
 ## Aktueller Stand
 
-Zelyra 0.1 ist eine aktive frühe Implementierung. Das Repository enthält echten,
-kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
-Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
+Der Zelyra-Compiler 0.2.0 ist ein frühes experimentelles Release und
+implementiert einen geprüften Teil der Zelyra-Sprachspezifikation 0.1. Die
+vollständige langfristige Sprachspezifikation ist noch nicht umgesetzt; dieses
+Release ist nicht für den Produktiveinsatz freigegeben.
 
 Die gepflegte [Roadmap](docs/ROADMAP.de.md) enthält alle geplanten Pflicht- und
 optionalen Arbeiten, einschließlich Views-System, KI-nativer
@@ -169,6 +170,9 @@ Heute implementiert:
   einschließlich `error.details`, OpenAPI-Schemas und TypeScript-Payload-Typen;
 - exakte CORS-Origin-Konfiguration für Browser-APIs mit automatischer
   `OPTIONS`-Preflight-Verarbeitung, standardmäßig deaktiviert;
+- Same-Origin-Prüfungen für Browser-Schreibzugriffe und eine explizite
+  Host-Allowlist mit sicheren Loopback-Standards, konfigurierbar über die
+  Projekt-`.env`;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;

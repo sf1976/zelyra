@@ -115,10 +115,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
-On Windows, use `-Release v0.1.50` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.2.0` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:
@@ -2071,4 +2071,3 @@ You have completed the 20 core chapters of the Zelyra practical tutorial!
 For all advanced language features, type safety guarantees, compiler architecture, and standard library reference:
 - **[Complete Zelyra Handbook (75 chapters)](handbook.md)**
 - **[Interactive web edition with search at siedelmann.com/handbook](https://siedelmann.com/handbook)**
-

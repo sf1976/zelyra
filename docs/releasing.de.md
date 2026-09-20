@@ -13,15 +13,30 @@ GitHub-Release veröffentlichen.
 4. Den Release-Vorbereitungsbranch pushen und einen Pull Request nach `main`
    öffnen.
 
+Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
+(zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
+Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter
+CLI-Version zu veröffentlichen.
+
 Bei Änderungen an Release-Automatisierung, Paketmanifesten oder Quellcode baut
 der Release-Workflow die Linux- und Windows-Artefakte bereits im Pull Request.
 Das sind ausschließlich Prüf-Artefakte; der Veröffentlichungsjob läuft bei
 Pull Requests nicht.
 
+Release-Builds verwenden festgelegte Rust- und Python-Toolchains sowie
+`Cargo.lock`. Jeder Plattformjob baut die CLI zweimal in getrennten
+Target-Verzeichnissen und verlangt byte-identische Binärdateien. Das
+Packaging-Skript vereinheitlicht
+Archivsortierung, Eigentümer, Rechte und Zeitstempel. Seine Tests verlangen bei
+wiederholtem Packaging byte-identische Archive und SHA-256-Dateien. Das prüft
+die Wiederholbarkeit innerhalb derselben Runner-/Toolchain-Umgebung; es ist kein
+unabhängiger, hersteller- oder toolchainübergreifender
+Reproduzierbarkeitsnachweis.
+
 ## Manuelle Probe ohne Veröffentlichung
 
 In GitHub **Actions → Zelyra Release → Run workflow** öffnen, den zu prüfenden
-Branch auswählen und das Release-Tag eingeben, zum Beispiel `v0.1.50`. Der
+Branch auswählen und das Release-Tag eingeben, zum Beispiel `v0.2.0`. Der
 Workflow prüft das Tag-Format und baut Plattformarchive, eigenständige
 Updater-Binärdateien und SHA-256-Dateien. Er lädt sie als Workflow-Artefakte
 hoch, erstellt aber weder ein Tag noch ein Release.
@@ -32,13 +47,15 @@ durch einen Tag-Push ausgelöste Veröffentlichungsjob erhält die Berechtigung
 
 ## Veröffentlichen
 
-Nach Review und Merge nach `main` das passende Versions-Tag pushen, zum Beispiel:
+Nach Review und Merge nach `main` zuerst sicherstellen, dass CI, Datenbanktests
+und die Ersteinstiegsprüfung des Release-Kandidaten erfolgreich waren. Danach
+das passende Versions-Tag pushen, zum Beispiel:
 
 ~~~bash
 git switch main
 git pull --ff-only
-git tag -a v0.1.50 -m "Zelyra 0.1.50"
-git push origin v0.1.50
+git tag -a v0.2.0 -m "Zelyra 0.2.0"
+git push origin v0.2.0
 ~~~
 
 Das Tag muss `vMAJOR.MINOR.PATCH` entsprechen; optional ist ein

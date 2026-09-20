@@ -164,7 +164,7 @@ tag. The installer downloads the matching archive over HTTPS and verifies its
 SHA-256 checksum before replacing the executable atomically:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 On Windows, use PowerShell from the repository directory:
@@ -187,7 +187,7 @@ directory and updates the user PATH. No administrator password is required.
 On Windows x86_64, use the matching PowerShell option:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 The script builds the CLI in locked release mode and installs it at:

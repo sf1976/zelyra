@@ -142,10 +142,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
-Unter Windows in PowerShell `-Release v0.1.50` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.2.0` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
@@ -2224,4 +2224,3 @@ Du hast die 20 Kern-Kapitel des Zelyra-Praxistutorials durchlaufen!
 Für alle weiteren Sprachkonstrukte, vollständige Typgarantien, Compiler-Interna und die vollständige Standardbibliothek:
 - **[Vollständiges Zelyra-Handbuch (75 Kapitel)](handbuch.md)**
 - **[Online-Ausgabe mit Suche und dunklem Modus auf siedelmann.com/handbuch](https://siedelmann.com/handbuch)**
-
