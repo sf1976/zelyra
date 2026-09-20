@@ -130,10 +130,11 @@ Feature eines bestimmten Anbieters.
   eine Rust-freie Release-Installation ist für veröffentlichte Linux-/Windows-
   x86_64-Assets verfügbar.
 - [~] Release-Archive mit SHA-256-Prüfsummen sind für Linux und Windows x86_64
-  verfügbar. Der 0.2.0-Branch ergänzt festgelegte Build-Werkzeuge, wiederholte
-  Binär-Builds und normalisierte Archive mit Byte-für-Byte-Packagingtests;
-  die Branch-CI muss den finalen Release-Kandidaten noch prüfen. Signierte
-  Binärdateien und Prüfsummen für alle unterstützten Plattformen fehlen noch.
+  verfügbar. Der 0.2.0-Kandidat bestand in der PR-CI festgelegte Linux-/Windows-
+  Release-Builds, byte-identische Wiederholungs-Builds und Tests normalisierter
+  Archive; öffentliche 0.2.0-Artefakte warten noch auf das Versionstag.
+  Signierte Binärdateien und Prüfsummen für alle unterstützten Plattformen
+  fehlen noch.
 - [~] Benutzerlokale Installations-, Prüf-, Update- und Deinstallationswege mit
   Dry-Run und sicheren Diagnosen sind verfügbar. Zusätzlich prüft
   `zelyra update [--check]` stabile GitHub-Releases und verifiziert eine
@@ -556,13 +557,17 @@ Freigabekriterien bestanden sind.
   Primärschlüsseln und Serial-/Identity-Eigenschaften wird erkannt und
   abgelehnt; Migrationen dieser Metadatenänderungen werden noch nicht
   unterstützt.
-- [~] **Release-Nachweise:** Zweisprachige Quickstarts und
-  Plattformvalidierung liegen vor. Dieser Branch ergänzt ein internes
-  Sicherheitsreview des ausgelieferten vertikalen Anwendungswegs sowie
-  festgelegte, wiederholbare Release-Pakete. Branch-CI, vollständige Workspace-
-  und datenbankgestützte Prüfungen sowie eine Ersteinstiegsabnahme des
-  Release-Kandidaten auf einem sauberen System müssen vor dem Tag `0.2.0` noch
-  erfolgreich sein; ein externes Sicherheitsaudit wird nicht behauptet.
+- [x] **Release-Nachweise:** Zweisprachige Quickstarts, internes
+  Sicherheitsreview, vollständige Branch-CI, Workspace-Prüfungen, die
+  MariaDB-Kompatibilitätsmatrix mit vier Versionen und datenbankgestützte
+  Integrationstests sind erfolgreich. Eine frisch erzeugte MariaDB-CRUD-
+  Anwendung bestand Erststart und wiederholtes Setup im isolierten Docker-E2E-
+  Test. Linux- und Windows-Release-Binärdateien wurden in den festgelegten
+  CI-Toolchains byte-identisch erneut gebaut; beide Release-Pakete bestanden
+  die Prüfung. Das ist technische Abnahme für ein experimentelles Release,
+  keine Einsteigerstudie, Windows-Ersteinstiegsstudie auf einem sauberen Host,
+  Produktionsfreigabe oder externes Sicherheitsaudit; solche Aussagen werden
+  nicht gemacht.
 
 Für 0.2.0 sind weder ein visueller Drag-and-drop-Editor noch eine Anbindung an
 einen KI-Anbieter, Compiler-Self-Hosting, vollständige formale Verifikation

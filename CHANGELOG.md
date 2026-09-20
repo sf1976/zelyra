@@ -4,16 +4,17 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
-## 0.2.0 — nicht veröffentlicht / unreleased
+## 0.2.0 — 2026-09-20
 
 This release adds reusable view layouts and named component slots, project-local
 German/English UI catalogs, and stronger schema-drift handling with explicit
 review gates and safe preflights. It expands the MariaDB business-app test
 coverage and compatibility matrix. Browser-origin checks and a configurable
 host allowlist harden the web runtime. Release archives are packaged
-deterministically and include SHA-256 checksums. This remains an experimental
-release; it is not production-approved and has not undergone an independent
-external security audit.
+deterministically and include SHA-256 checksums. Repeated Linux and Windows
+release builds are byte-identical in the pinned CI toolchains. This remains an
+experimental release; it is not production-approved and has not undergone an
+independent external security audit.
 
 Dieses Release ergänzt wiederverwendbare View-Layouts und benannte
 Komponenten-Slots, projektlokale deutsche/englische UI-Sprachdateien sowie eine
@@ -21,9 +22,11 @@ strengere Erkennung von Schemaabweichungen mit ausdrücklichen Prüfgrenzen und
 sicheren Vorprüfungen. Die Tests und Kompatibilitätsmatrix für
 MariaDB-Businessanwendungen werden erweitert. Browser-Origin-Prüfungen und eine
 konfigurierbare Host-Allowlist härten die Web-Laufzeit. Release-Archive werden
-deterministisch gepackt und enthalten SHA-256-Prüfsummen. Das Release bleibt
-experimentell, ist nicht für den Produktiveinsatz freigegeben und wurde keinem
-unabhängigen externen Sicherheitsaudit unterzogen.
+deterministisch gepackt und enthalten SHA-256-Prüfsummen. Wiederholte Linux-
+und Windows-Release-Builds sind in den festgelegten CI-Toolchains byte-identisch.
+Das Release bleibt experimentell, ist nicht für den Produktiveinsatz
+freigegeben und wurde keinem unabhängigen externen Sicherheitsaudit
+unterzogen.
 
 ## 0.1.50 — 2026-09-19
 

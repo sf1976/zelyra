@@ -1,8 +1,9 @@
 # Zelyra 0.2.0 security review / Sicherheitsreview
 
-**Status:** Local formatting, full-workspace checks, Clippy, tests, handbook
-snippets, and release-package tests pass. Database-backed acceptance and branch
-CI are still required. This is not an external audit or penetration test.
+**Status:** Local quality checks, full branch CI, MariaDB compatibility tests,
+database-backed acceptance, and Linux/Windows release validation pass. The
+release remains experimental. This is not an external audit or penetration
+test.
 
 ## English
 
@@ -77,9 +78,15 @@ independent penetration testing.
 - Shell syntax checks passed for the MariaDB authentication, protected CRUD,
   and CRUD integration scripts after their Origin headers were added.
 - Full workspace tests, formatting, locked workspace check, Clippy, handbook
-  snippet validation, and release-package tests passed locally. Database-backed
-  acceptance and GitHub Actions for the updated branch remain pending; this is
-  an internal review, not an external audit.
+  snippet validation, and release-package tests passed locally. The final
+  branch's [full CI run](https://github.com/sf1976/zelyra/actions/runs/35504163055)
+  passed, including the generated Docker application, protected CRUD/API, schema
+  safety, SQLite/PostgreSQL integration, and MariaDB 10.11.19, 11.4.13, 11.8.9,
+  and 12.3.3 compatibility jobs. The [release validation
+  run](https://github.com/sf1976/zelyra/actions/runs/35504163084) passed for
+  Linux and Windows, including byte-identical repeated release binaries and
+  validated archives. These are internal automated checks, not an external
+  audit.
 
 ## Deutsch
 
@@ -162,6 +169,12 @@ enthalten.
 - Shell-Syntaxprüfungen der MariaDB-Authentifizierungs-, Protected-CRUD- und
   CRUD-Integrationsskripte nach Ergänzung der Origin-Header bestanden.
 - Workspace-Tests, Formatierung, gesperrte Workspace-Prüfung, Clippy,
-  Handbuch-Codeblockprüfung und Release-Pakettests bestanden lokal.
-  Datenbankgestützte Abnahme und GitHub Actions für den aktualisierten Branch
-  stehen noch aus; dies ist ein internes Review, kein externes Audit.
+  Handbuch-Codeblockprüfung und Release-Pakettests bestanden lokal. Die
+  vollständige [Branch-CI](https://github.com/sf1976/zelyra/actions/runs/35504163055)
+  bestand, einschließlich erzeugter Docker-Anwendung, geschütztem CRUD/API,
+  Schema-Sicherheit, SQLite-/PostgreSQL-Integration sowie MariaDB-Kompatibilität
+  für 10.11.19, 11.4.13, 11.8.9 und 12.3.3. Die
+  [Release-Prüfung](https://github.com/sf1976/zelyra/actions/runs/35504163084)
+  für Linux und Windows bestand ebenfalls, einschließlich byte-identischer
+  wiederholter Release-Builds und geprüfter Archive. Dies sind interne
+  automatisierte Prüfungen, kein externes Audit.

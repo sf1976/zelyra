@@ -117,10 +117,10 @@ architecture requirement for every phase, not a provider-specific feature.
   available with user-local, repeatable Bash/PowerShell installers; Rust-free
   release installation is available for published Linux/Windows x86_64 assets.
 - [~] Release archives with SHA-256 checksums are available for Linux and
-  Windows x86_64. The 0.2.0 branch adds pinned build tools, repeated binary
-  builds, and normalized archives with byte-for-byte packaging tests; branch CI
-  still has to verify the final release candidate. Signed binaries and
-  checksums for every supported platform remain.
+  Windows x86_64. The 0.2.0 candidate passed pinned Linux/Windows release
+  builds, byte-identical repeated binaries, and normalized archive tests in PR
+  CI; public 0.2.0 assets await the version tag. Signed binaries and checksums
+  for every supported platform remain.
 - [~] User-local install/check/update/uninstall scripts remain available.
   `zelyra update [--check]` also checks stable GitHub releases and verifies a
   SHA-256 checksum before replacing its own Linux/Windows x86_64 executable;
@@ -520,12 +520,15 @@ supported machine and the release gates below pass.
   serial/identity metadata drift is
   detected and refused; migrations for those metadata changes remain
   unsupported.
-- [~] **Release evidence:** the bilingual quickstarts and supported-platform
-  validation are in place. This branch adds an internal security review of the
-  shipped vertical slice and pinned, repeatable release packaging. Final
-  branch CI, full-workspace and database-backed checks, and a clean-machine
-  first-run acceptance on the release candidate remain required before the
-  `0.2.0` tag; no external security audit is claimed.
+- [x] **Release evidence:** the bilingual quickstarts, internal security review,
+  full branch CI, workspace checks, four-version MariaDB compatibility matrix,
+  and database-backed integration tests pass. A fresh generated MariaDB CRUD
+  application passed first-run and repeat-setup acceptance in the isolated
+  Docker E2E test. Linux and Windows release binaries were rebuilt byte-for-byte
+  identically in their pinned CI toolchains, and both release packages passed
+  validation. This is technical acceptance for an experimental release, not a
+  novice-user study, Windows clean-host onboarding study, production approval,
+  or external security audit; those are not claimed.
 
 The 0.2.0 scope does not require a visual drag-and-drop editor, a model-provider
 integration, compiler self-hosting, full formal verification, or PostgreSQL
