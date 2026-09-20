@@ -225,17 +225,22 @@ Feature eines bestimmten Anbieters.
 - [~] Das minimale und das Maschinenverwaltungs-Starterprojekt enthalten
   responsive, gebrandete Rahmen mit kataloggebundenen deutschen/englischen
   UI-Texten; das Maschinenverwaltungs-Starterprojekt ergänzt die Lernhilfe im
-  `learn`-Modus. Erzeugte CRUD-, eigenständige Formular-, Tableview-, Login-
+  `learn`-Modus. Das Template `mariadb-crud` definiert jetzt umfassendere
+  Maschinen- und Bereichsdaten, lokalisierte CRUD-Listen, -Details, -Formulare
+  und Löschzustände, Kartenansichten sowie eine optionale, wiederholt
+  importierbare SQL-Fixture mit sechs fiktionalen Bereichen und 30 Maschinen.
+  Erzeugte CRUD-, eigenständige Formular-, Tableview-, Login-
   und Authentifizierungsverwaltungsseiten erhalten jetzt ebenfalls diesen
   responsiven Standardrahmen; explizite CRUD-Layouts haben Vorrang und selbst
   verfasste Seiten werden nicht umgeschrieben. CRUD-, Formular-,
   Authentifizierungs-, Validierungs- und Standard-HTTP-Fehlertexte nutzen
-  dieselben eingebauten Sprachkataloge. Projektlokale Sprachkataloge können
-  markierte View-/Texteinträge ergänzen oder überschreiben; nicht markierte
-  generierte Beschriftungen verwenden weiterhin die eingebauten Texte.
-  Projektlokale `zelyra.theme.css`-Überschreibungen für Design-Tokens sind
-  verfügbar; umfassender Theme-Austausch, weitere Vorlagen und Überschreibungen
-  sämtlicher generierter Beschriftungen bleiben offen.
+  dieselben Sprachkataloge. Projektlokale Sprachkataloge können alle
+  kataloggebundenen generierten Beschriftungen einschließlich parametrisierter
+  Feldlabels ergänzen oder überschreiben sowie markierte View-/Texteinträge
+  bereitstellen; Geschäftsdaten und nicht markierte eigene Texte bleiben
+  unverändert. Projektlokale `zelyra.theme.css`-Überschreibungen für
+  Design-Tokens sind verfügbar; umfassender Theme-Austausch und weitere
+  Vorlagen bleiben offen.
 
 - [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
   `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.
@@ -503,9 +508,13 @@ werden.
 
 ## Akzeptanzanwendungen aus der Praxis
 
-- [~] Die Maschinenverwaltung ist als MariaDB-Template vorhanden und durch
-  Integrationstests für erzeugte Projekte abgedeckt; Produktionshärtung bleibt
-  offen.
+- [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten
+  Maschinen-/Bereichs-Views, Suche, Kategorie-/Status-/Bereichsfiltern und
+  einer optionalen SQL-Fixture mit 30 fiktionalen Datensätzen. Der
+  MariaDB-Integrationstest importiert die Fixture zweimal und prüft die Daten
+  über HTTP; einsteigergeprüfter Erststart auf sauberen Systemen und
+  Produktionshärtung bleiben offen. Native Seed-/Fixture-Befehle bleiben
+  optionale Roadmap-Arbeit.
 - [ ] Kunden-/Auftragsanwendung mit komplexen Joins, Aggregaten, Formularen,
   API und individuellen Views.
 - [ ] Mehrbenutzer-Inventar mit Transaktionen und parallelen Änderungen.

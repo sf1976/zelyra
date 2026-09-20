@@ -48,6 +48,8 @@ use holes::collect_typed_holes;
 use impact::{build_impact, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
+const MACHINE_MANAGEMENT_DEMO_DATA: &str =
+    include_str!("../../examples/machine_management_demo.sql");
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
@@ -567,6 +569,12 @@ network = false
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
     ];
+    if options.crud_template {
+        files.push((
+            "machine-management-demo.sql",
+            MACHINE_MANAGEMENT_DEMO_DATA.to_owned(),
+        ));
+    }
     if options.with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
         let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{}}}", '$', options.web_port);
@@ -10648,6 +10656,43 @@ mod tests {
         assert!(path.join("locales/de.json").is_file());
         assert!(path.join("locales/en.json").is_file());
         assert!(project_theme.contains("--zelyra-color-accent"));
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-crud-demo-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let status = create_project(
+            path.to_str().unwrap(),
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb: true,
+                crud_template: true,
+                auth_template: false,
+                business_template: false,
+                web_port: DEFAULT_WEB_PORT,
+                host_port: DEFAULT_WEB_PORT,
+                database_host_port: DEFAULT_DATABASE_HOST_PORT,
+                host_port_given: false,
+                database_host_port_given: false,
+            },
+        );
+        assert_eq!(status, ExitCode::SUCCESS);
+
+        let fixture = fs::read_to_string(path.join("machine-management-demo.sql")).unwrap();
+        assert!(fixture.contains("ZLY-DEMO-030"));
+        assert!(fixture.contains("INSERT IGNORE INTO machines"));
+        let source = fs::read_to_string(path.join("main.zyl")).unwrap();
+        assert!(source.contains("machines.resources.title"));
+        assert!(source.contains("mode: cards"));
 
         fs::remove_dir_all(path).unwrap();
     }

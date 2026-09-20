@@ -212,7 +212,10 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [~] The minimal and machine-management starters include a responsive branded
   shell and catalog-backed German/English copy; the machine starter uses the
-  learn-mode guide. Generated CRUD, standalone form, tableview, login, and
+  learn-mode guide. The `mariadb-crud` starter now defines richer machine and
+  department records, localized CRUD list/detail/form/delete states, card views,
+  and a repeatable optional fixture containing six fictional areas and 30
+  machines. Generated CRUD, standalone form, tableview, login, and
   authentication-admin pages now also receive that responsive default shell;
   explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
   authentication, validation, learning-guide, and standard HTTP-error copy use
@@ -473,8 +476,12 @@ capabilities into the 0.2.0 release claim.
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template
-  and covered by generated-project integration tests; production hardening
-  remains open.
+  with localized machine/department views, search and category/status/area
+  filters, plus an optional 30-record fictional SQL fixture. Generated-project
+  MariaDB integration tests import the fixture twice and verify the records
+  through HTTP; novice-tested clean-machine onboarding and production
+  hardening remain open. Native seed/fixture commands remain optional roadmap
+  work.
 - [ ] Customer/order application with complex joins, aggregates, forms, API,
   and custom views.
 - [ ] Multi-user inventory application with transactions and concurrent edits.

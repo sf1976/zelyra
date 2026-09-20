@@ -227,8 +227,21 @@ zelyra db setup main.zyl
 If `docker compose` is unavailable, use the legacy command
 `docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`.
 
-The starter includes related departments and machines, forms, CRUD pages,
-search, filtering, pagination, and custom actions.
+The starter includes a fictional workshop model with six production areas and
+30 machines, localized machine/department views, schema-mapped forms, CRUD
+pages, search, category/status/department filters, pagination, and custom
+actions. The generated `machine-management-demo.sql` contains fictional data
+only and can be imported repeatedly. After `zelyra db setup main.zyl`, load it
+into the local MariaDB service explicitly:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
+
+This import is optional and explicit; setup never inserts sample records on
+its own.
 
 ### Interface language and learning guide
 

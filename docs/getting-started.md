@@ -349,8 +349,20 @@ set -a; . ./.env; set +a
 zelyra db setup main.zyl
 ~~~
 
-It includes departments, machines, a relationship, schema-mapped forms, CRUD
-pages, search, filters, pagination, and custom actions.
+It includes a fictional workshop model with six production areas and 30
+machines, localized machine/department views, schema-mapped forms, CRUD pages,
+search, category/status/department filters, pagination, and custom actions.
+The generated `machine-management-demo.sql` contains only fictional records
+and is safe to import repeatedly. After `zelyra db setup main.zyl`, load it
+into the local MariaDB service with:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
+
+The import is explicit; setup never inserts sample records automatically.
 
 For an authentication starter with persistent sessions and permissions:
 

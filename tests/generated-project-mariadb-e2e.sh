@@ -86,6 +86,7 @@ DATABASE_URL="${test_database_url}" \
     ZELYRA_LANGUAGE=en \
     ZELYRA_BIN="${zelyra_bin}" \
     ZELYRA_E2E_PROJECT="${project_dir}/main.zyl" \
+    ZELYRA_E2E_DEMO_FIXTURE="${project_dir}/machine-management-demo.sql" \
     ZELYRA_E2E_ADDRESS="${address}" \
     "${script_dir}/mariadb-e2e.sh"
 

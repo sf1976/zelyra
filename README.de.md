@@ -1060,10 +1060,20 @@ Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
 verwenden. `zelyra setup .` bleibt als idempotenter Nachholbefehl für
 bestehende Projekte verfügbar.
 
-Das Starterprojekt enthält Abteilungen und Maschinen, eine Foreign-Key-
-Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,
-Pagination und eigene Aktionen. Das Standardprojekt bleibt das kleinere
+Das Starterprojekt enthält sechs fiktionale Produktionsbereiche und 30
+Maschinen, eine Foreign-Key-Beziehung, deutsche/englische Maschinen- und
+Bereichs-Views, schemaabhängige Formulare, CRUD-Seiten, Suche, Kategorie-,
+Status- und Bereichsfilter, Pagination sowie eigene Aktionen. Eine optionale,
+wiederholt ausführbare `machine-management-demo.sql` wird erzeugt; Setup fügt
+keine Beispieldaten automatisch ein. Das Standardprojekt bleibt das kleinere
 Willkommensseiten-Scaffolding.
+Nach `zelyra db setup main.zyl` lassen sich die Fantasiedatensätze laden:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
 
 ### Sprache der Oberfläche und Lernmodus
 

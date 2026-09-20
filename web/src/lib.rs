@@ -3471,16 +3471,16 @@ fn dispatch_form_with_language(
         }
         let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
         if let Some(success) = action_success_message(action) {
-            let success = localize_user_text(language, success);
-            redirect = append_query_parameter(&redirect, "zelyra_success", &success);
+            // Keep catalog keys intact across the redirect. The destination
+            // resolves them with the active project catalog when it renders.
+            redirect = append_query_parameter(&redirect, "zelyra_success", success);
         }
         if let Some(title) = action
             .success_page
             .as_ref()
             .and_then(|page| page.title.as_deref())
         {
-            let title = localize_user_text(language, title);
-            redirect = append_query_parameter(&redirect, "zelyra_success_title", &title);
+            redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
         }
         return Response::redirect(redirect);
     }
