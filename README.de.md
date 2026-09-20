@@ -1089,11 +1089,15 @@ einzubetten. Details zu Priorität und Grenzen stehen in
 Neue Projekte enthalten außerdem bearbeitbare Dateien `locales/de.json` und
 `locales/en.json`. Dort kannst du Texte für View-Marker wie
 `data-zelyra-i18n="werkstatt.titel"` und Texteinstellungen wie
-`@i18n:werkstatt.gespeichert` eintragen. Projekttexte überschreiben den
-eingebauten Wortlaut an diesen ausdrücklich markierten Stellen. Fehlt ein
-deutscher Eintrag, wird zuerst der englische Projektkatalog und anschließend
-der eingebaute Katalog verwendet. Das [Handbuch](docs/handbook/de/README.md)
-zeigt den genauen Umfang und ein Beispiel.
+`@i18n:werkstatt.gespeichert` eintragen. Dieselben Kataloge können alle
+kataloggebundenen generierten Texte in Anwendungsrahmen, CRUD, Formularen,
+Tableviews, Login, Auth-Verwaltung, Validierung und Lernhilfe ergänzen oder
+überschreiben. Für generierte Feldbeschriftungen gibt es Schlüssel wie
+`identifier.department`; parametrisierte Texte können `{field}` oder `{max}`
+verwenden. Fachdatensätze und nicht markierte eigene Texte werden nicht
+automatisch übersetzt. Fehlt ein deutscher Eintrag, wird zuerst der englische
+Projektkatalog und anschließend der eingebaute Katalog verwendet. Das
+[Handbuch](docs/handbook/de/README.md) zeigt Umfang und Beispiele.
 
 Erzeugte CRUD-Seiten können denselben wiederverwendbaren Rahmen wie normale
 Seiten verwenden:

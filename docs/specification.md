@@ -68,14 +68,17 @@ references against both catalogs. `zelyra new` and `zelyra init` create
 optional `locales/de.json` and `locales/en.json` project catalogs. These can
 add keys or override built-in keys when referenced by
 `data-zelyra-i18n="key"`, `@i18n:key` text settings, or catalog-backed standard
-HTTP errors. German lookup uses the project German catalog, then project
-English, then the built-in German catalog and its English fallback. Standard
-generated copy that does not pass through one of those catalog references
-retains its built-in wording. Files must be UTF-8 JSON objects with nonempty
-string values and are limited to 256 KiB each; invalid files and symbolic links
-are rejected by `serve`. Resolved text is HTML-escaped. Business records and
-arbitrary unmarked project-authored HTML are not automatically translated. API
-and compiler machine contracts are not localized by these settings.
+HTTP errors. The same project catalogs can override every catalog-backed
+generated shell, CRUD, form, tableview, login, authentication-admin,
+validation, and learning-guide label. Generated field identifiers and
+parameterized labels (for example, a filter label containing a field name) are
+also resolved through the catalogs. German lookup uses the project German
+catalog, then project English, then the built-in German catalog and its English
+fallback. Files must be UTF-8 JSON objects with nonempty string values and are
+limited to 256 KiB each; invalid files and symbolic links are rejected by
+`serve`. Resolved text is HTML-escaped. Business records and unmarked
+project-authored content are not automatically translated. API and compiler
+machine contracts are not localized by these settings.
 
 ### Project-local theme overrides
 

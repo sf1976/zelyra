@@ -74,15 +74,19 @@ Konsistenztest prüft literale Referenzen gegen beide Dateien. `zelyra new` und
 `locales/en.json`. Sie können Schlüssel ergänzen oder eingebaute Einträge
 überschreiben, wenn diese mit `data-zelyra-i18n="schluessel"`, einer
 `@i18n:schluessel`-Texteinstellung oder einem kataloggebundenen Standard-HTTP-
-Fehler referenziert werden. Für Deutsch gilt die Reihenfolge: Projekt Deutsch,
-Projekt Englisch, eingebautes Deutsch und dessen englischer Fallback. Erzeugte
-Standardtexte ohne eine solche Katalogreferenz behalten ihren eingebauten
-Wortlaut. Dateien müssen UTF-8-kodierte JSON-Objekte mit nichtleeren
-Stringwerten sein und dürfen jeweils höchstens 256 KiB groß sein; ungültige
-Dateien und Symlinks weist `serve` zurück. Eingefügte Texte werden für HTML
-escaped. Fachliche Datensätze und beliebiges, nicht markiertes Projekt-HTML
-werden nicht automatisch übersetzt. API- und Compiler-Maschinenschnittstellen
-werden von diesen Einstellungen nicht lokalisiert.
+Fehler referenziert werden. Dieselben Projektkataloge können alle
+kataloggebundenen generierten Texte für Anwendungsrahmen, CRUD, Formulare,
+Tableviews, Login, Authentifizierungsverwaltung, Validierung und Lernhilfe
+überschreiben. Auch generierte Feldnamen und parametrisierte Beschriftungen
+(zum Beispiel ein Filtertext mit Feldnamen) werden über Kataloge aufgelöst.
+Für Deutsch gilt die Reihenfolge: Projekt Deutsch, Projekt Englisch,
+eingebautes Deutsch und dessen englischer Fallback. Dateien müssen
+UTF-8-kodierte JSON-Objekte mit nichtleeren Stringwerten sein und dürfen
+jeweils höchstens 256 KiB groß sein; ungültige Dateien und Symlinks weist
+`serve` zurück. Eingefügte Texte werden für HTML escaped. Fachliche Datensätze
+und unmarkierte eigene Inhalte werden nicht automatisch übersetzt. API- und
+Compiler-Maschinenschnittstellen werden von diesen Einstellungen nicht
+lokalisiert.
 
 ### Projektlokale Theme-Anpassungen
 

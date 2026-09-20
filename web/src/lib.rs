@@ -18,7 +18,10 @@ use zelyra_forms::{validate, FieldError};
 mod i18n;
 #[cfg(test)]
 use i18n::framework_text;
-use i18n::{field_text, framework_text_with_catalog, identifier as locale_identifier, text as tr};
+use i18n::{
+    field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
+    LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
+};
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
@@ -282,8 +285,9 @@ fn render_default_application_shell(
     }
 
     let localized_current_label = localize_user_text(language, &context.current_label);
-    let current_label = html_escape(&localized_current_label);
-    let page_title = html_escape(&format!("{localized_current_label} | Zelyra"));
+    let current_label = html_escape_preserving_locale_references(&localized_current_label);
+    let page_title =
+        html_escape_preserving_locale_references(&format!("{localized_current_label} | Zelyra"));
     let home_path = context
         .navigation
         .first()
@@ -297,7 +301,8 @@ fn render_default_application_shell(
     for (index, link) in context.navigation.iter().enumerate() {
         let active = navigation_link_is_active(&link.path, &context.current_path);
         let current = if active { " aria-current=\"page\"" } else { "" };
-        let label = html_escape(&localize_user_text(language, &link.label));
+        let label =
+            html_escape_preserving_locale_references(&localize_user_text(language, &link.label));
         navigation.push_str(&format!(
             "<a href=\"{}\" aria-label=\"{label}\"{current}><span class=\"zelyra-nav-icon\" aria-hidden=\"true\">{:02}</span><span class=\"zelyra-nav-label\">{label}</span></a>",
             html_escape(&link.path),
@@ -367,8 +372,9 @@ fn add_navigation_link(
     }
 }
 
-const LOCALE_REFERENCE_START: &str = "\u{e000}zelyra-locale:";
-const LOCALE_REFERENCE_END: char = '\u{e001}';
+fn tr(_language: UiLanguage, key: &str) -> String {
+    i18n::reference(key)
+}
 
 #[cfg(test)]
 fn localize_html(source: &str, language: UiLanguage) -> String {
@@ -385,7 +391,6 @@ fn localize_html_with_catalog(
         UiLanguage::German => "de",
     };
     let translated = localize_framework_markup_with_catalog(source, language, project_catalogs);
-    let translated = resolve_locale_references(&translated, language, project_catalogs);
     let mut html = translated.replace("data-zelyra-language", &format!("lang=\"{language_code}\""));
     let marker = "data-zelyra-i18n=\"";
     let mut search_from = 0;
@@ -420,7 +425,7 @@ fn localize_html_with_catalog(
         html.replace_range(content_start..content_end, &translated);
         search_from = content_start + translated.len() + closing_tag.len();
     }
-    html
+    resolve_locale_references(&html, language, project_catalogs)
 }
 
 fn localize_framework_markup_with_catalog(
@@ -487,28 +492,79 @@ fn resolve_locale_references(
             return output;
         };
         let end = reference_start + end_relative;
-        let key = &remaining[reference_start..end];
-        if i18n::valid_catalog_key(key) {
-            output.push_str(&html_escape(&project_catalogs.text(language, key)));
+        let token_end = end + LOCALE_REFERENCE_END.len_utf8();
+        let reference = &remaining[reference_start..end];
+        if let Some(translated) = locale_reference_text(reference, language, project_catalogs, 0) {
+            output.push_str(&html_escape(&translated));
         } else {
-            output.push_str(&remaining[start..=end]);
+            output.push_str(&remaining[start..token_end]);
         }
-        remaining = &remaining[end + LOCALE_REFERENCE_END.len_utf8()..];
+        remaining = &remaining[token_end..];
     }
     output.push_str(remaining);
     output
 }
 
+fn locale_reference_text(
+    reference: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+    depth: usize,
+) -> Option<String> {
+    if depth > 8 {
+        return None;
+    }
+    let (key, encoded_field) = reference
+        .split_once(LOCALE_REFERENCE_PARAMETER)
+        .map_or((reference, None), |(key, value)| (key, Some(value)));
+    if !i18n::valid_catalog_key(key) {
+        return None;
+    }
+    let mut translated = project_catalogs.text(language, key).into_owned();
+    if let Some(encoded_parameter) = encoded_field {
+        let (parameter, encoded_value) = encoded_parameter.split_once('=')?;
+        if !i18n::valid_catalog_key(parameter) {
+            return None;
+        }
+        let mut value = decode_locale_parameter(encoded_value)?;
+        if parameter == "field" {
+            if let Some(nested) = value
+                .strip_prefix(LOCALE_REFERENCE_START)
+                .and_then(|value| value.strip_suffix(LOCALE_REFERENCE_END))
+            {
+                value = locale_reference_text(nested, language, project_catalogs, depth + 1)?;
+            }
+        }
+        translated = translated.replace(&format!("{{{parameter}}}"), &value);
+    }
+    Some(translated)
+}
+
+fn decode_locale_parameter(value: &str) -> Option<String> {
+    if value.len() & 1 != 0 {
+        return None;
+    }
+    let bytes = value
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            let pair: &[u8; 2] = pair.try_into().ok()?;
+            let digits = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(digits, 16).ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
 fn localize_user_text(_language: UiLanguage, source: &str) -> String {
     source.strip_prefix("@i18n:").map_or_else(
-        || source.to_owned(),
-        |key| {
-            if i18n::valid_catalog_key(key) {
-                format!("{LOCALE_REFERENCE_START}{key}{LOCALE_REFERENCE_END}")
-            } else {
-                source.to_owned()
-            }
+        || {
+            source
+                .replace(LOCALE_REFERENCE_START, "&#xe000;zelyra-locale:")
+                .replace(LOCALE_REFERENCE_PARAMETER, "&#xe002;")
+                .replace(LOCALE_REFERENCE_END, "&#xe001;")
         },
+        i18n::reference,
     )
 }
 
@@ -563,12 +619,12 @@ fn append_learning_assistant(
     let heading = tr(language, &format!("learning.{section}.heading"));
     let example = tr(language, &format!("learning.{section}.example"));
     let guidance = tr(language, &format!("learning.{section}.guidance"));
-    let title = html_escape(title);
-    let introduction = html_escape(introduction);
-    let heading = html_escape(heading);
-    let example = html_escape(example);
-    let guidance = html_escape(guidance);
-    let button_label = html_escape(tr(language, "learning.button"));
+    let title = html_escape_preserving_locale_references(&title);
+    let introduction = html_escape_preserving_locale_references(&introduction);
+    let heading = html_escape_preserving_locale_references(&heading);
+    let example = html_escape_preserving_locale_references(&example);
+    let guidance = html_escape_preserving_locale_references(&guidance);
+    let button_label = html_escape_preserving_locale_references(&tr(language, "learning.button"));
     let style = r#"<style>
 .zelyra-learning-assistant{position:fixed;right:24px;bottom:24px;z-index:2147483000;font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#17243b}
 .zelyra-learning-assistant summary{display:flex;align-items:center;gap:9px;list-style:none;cursor:pointer;padding:10px 16px 10px 10px;border:1px solid #dce3f2;border-radius:999px;background:linear-gradient(135deg,#fff 5%,#f2f5ff 100%);box-shadow:0 10px 34px #17243b2b;color:#27375a;font-weight:700}
@@ -916,8 +972,8 @@ impl WebApp {
             let label = form
                 .table
                 .as_ref()
-                .map(|table| localized_identifier(self.ui_language, &table.name))
-                .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+                .map(|table| localized_identifier_marker(self.ui_language, &table.name))
+                .unwrap_or_else(|| localized_identifier_marker(self.ui_language, &form.form.name));
             DefaultUiContext {
                 current_path: form.path.clone(),
                 current_label: label,
@@ -981,8 +1037,10 @@ impl WebApp {
                 let label = form
                     .table
                     .as_ref()
-                    .map(|table| localized_identifier(self.ui_language, &table.name))
-                    .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+                    .map(|table| localized_identifier_marker(self.ui_language, &table.name))
+                    .unwrap_or_else(|| {
+                        localized_identifier_marker(self.ui_language, &form.form.name)
+                    });
                 add_navigation_link(&mut context.navigation, form.path.clone(), label);
             }
             if let Some(auth) = &self.auth_route {
@@ -1018,11 +1076,6 @@ impl WebApp {
                 }
             }
             response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
-            response.body = localize_html_with_catalog(
-                &response.body,
-                self.ui_language,
-                &self.project_ui_catalogs,
-            );
         }
         if self.ui_level == UiLevel::Learn
             && request.method == "GET"
@@ -1038,6 +1091,13 @@ impl WebApp {
                 &request.path,
                 self.ui_language,
                 generated_crud,
+            );
+        }
+        if response.content_type.starts_with("text/html") {
+            response.body = localize_html_with_catalog(
+                &response.body,
+                self.ui_language,
+                &self.project_ui_catalogs,
             );
         }
         response
@@ -1318,11 +1378,12 @@ impl WebApp {
                 break;
             }
         }
-        Router::new(self.routes.clone()).dispatch_with_database_and_language(
+        Router::new(self.routes.clone()).dispatch_with_database_language_and_catalogs(
             &request.method,
             &request.target,
             self.database_url.as_deref(),
             self.ui_language,
+            &self.project_ui_catalogs,
         )
     }
 
@@ -2665,25 +2726,25 @@ fn render_auth_admin(
         }
     }
     html.push_str("</table><h2>");
-    html.push_str(tr(language, "auth.assign_role"));
+    html.push_str(&tr(language, "auth.assign_role"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
     html.push_str(&csrf);
     html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>");
-    html.push_str(tr(language, "auth.user_id"));
+    html.push_str(&tr(language, "auth.user_id"));
     html.push_str("</label><input name=\"user_id\" type=\"number\" required><label>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</label><input name=\"role\" required><button type=\"submit\">");
-    html.push_str(tr(language, "auth.grant_role"));
+    html.push_str(&tr(language, "auth.grant_role"));
     html.push_str("</button></form><h2>");
-    html.push_str(tr(language, "auth.role_assignments"));
+    html.push_str(&tr(language, "auth.role_assignments"));
     html.push_str("</h2><table><tr><th>");
-    html.push_str(tr(language, "auth.user"));
+    html.push_str(&tr(language, "auth.user"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.action"));
+    html.push_str(&tr(language, "auth.action"));
     html.push_str("</th></tr>");
     for row in assignments {
         if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
@@ -2700,7 +2761,7 @@ fn render_auth_admin(
         }
     }
     html.push_str("</table><h2>");
-    html.push_str(tr(language, "auth.role_permissions"));
+    html.push_str(&tr(language, "auth.role_permissions"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
@@ -2708,17 +2769,17 @@ fn render_auth_admin(
     html.push_str(
         "\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>",
     );
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</label><input name=\"role\" required><label>");
-    html.push_str(tr(language, "auth.permission"));
+    html.push_str(&tr(language, "auth.permission"));
     html.push_str("</label><input name=\"permission\" required><button type=\"submit\">");
-    html.push_str(tr(language, "auth.grant_permission"));
+    html.push_str(&tr(language, "auth.grant_permission"));
     html.push_str("</button></form><table><tr><th>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.permission"));
+    html.push_str(&tr(language, "auth.permission"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.action"));
+    html.push_str(&tr(language, "auth.action"));
     html.push_str("</th></tr>");
     for row in permissions {
         if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
@@ -2736,19 +2797,19 @@ fn render_auth_admin(
     }
     if auth.audit_table.is_some() {
         html.push_str("</table><h2>");
-        html.push_str(tr(language, "auth.audit_log"));
+        html.push_str(&tr(language, "auth.audit_log"));
         html.push_str("</h2><p>");
-        html.push_str(tr(language, "auth.audit_latest"));
+        html.push_str(&tr(language, "auth.audit_latest"));
         html.push_str("</p><table><tr><th>");
-        html.push_str(tr(language, "auth.actor"));
+        html.push_str(&tr(language, "auth.actor"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.action"));
+        html.push_str(&tr(language, "auth.action"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.target"));
+        html.push_str(&tr(language, "auth.target"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.details"));
+        html.push_str(&tr(language, "auth.details"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.created"));
+        html.push_str(&tr(language, "auth.created"));
         html.push_str("</th></tr>");
         for row in audit {
             let cells = row
@@ -2928,6 +2989,23 @@ impl Router {
         database_url: Option<&str>,
         language: UiLanguage,
     ) -> Response {
+        self.dispatch_with_database_language_and_catalogs(
+            method,
+            path,
+            database_url,
+            language,
+            &ProjectUiCatalogs::default(),
+        )
+    }
+
+    fn dispatch_with_database_language_and_catalogs(
+        &self,
+        method: &str,
+        path: &str,
+        database_url: Option<&str>,
+        language: UiLanguage,
+        project_catalogs: &ProjectUiCatalogs,
+    ) -> Response {
         if method != "GET" {
             return Response::html(405, "<h1>405 Method Not Allowed</h1>");
         }
@@ -2972,9 +3050,11 @@ impl Router {
                         );
                     }
                 };
+                let html =
+                    render_page_with_language(route, path, &params, &query_values, &data, language);
                 return Response::html(
                     200,
-                    render_page_with_language(route, path, &params, &query_values, &data, language),
+                    localize_html_with_catalog(&html, language, project_catalogs),
                 );
             }
         }
@@ -3181,31 +3261,46 @@ pub fn html_escape(value: &str) -> String {
             '>' => escaped.push_str("&gt;"),
             '"' => escaped.push_str("&quot;"),
             '\'' => escaped.push_str("&#39;"),
+            '\u{e000}' => escaped.push_str("&#xe000;"),
+            '\u{e001}' => escaped.push_str("&#xe001;"),
+            '\u{e002}' => escaped.push_str("&#xe002;"),
             _ => escaped.push(character),
         }
     }
     escaped
 }
 
-fn javascript_string_literal(value: &str) -> String {
-    let mut literal = String::from("'");
-    for character in value.chars() {
-        match character {
-            '\\' => literal.push_str("\\\\"),
-            '\'' => literal.push_str("\\'"),
-            '\n' => literal.push_str("\\n"),
-            '\r' => literal.push_str("\\r"),
-            '\t' => literal.push_str("\\t"),
-            '\u{2028}' => literal.push_str("\\u2028"),
-            '\u{2029}' => literal.push_str("\\u2029"),
-            character if character.is_control() => {
-                literal.push_str(&format!("\\u{:04x}", character as u32));
-            }
-            character => literal.push(character),
+fn html_escape_preserving_locale_references(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(start) = remaining.find(LOCALE_REFERENCE_START) {
+        escaped.push_str(&html_escape(&remaining[..start]));
+        let reference_start = start + LOCALE_REFERENCE_START.len();
+        let Some(end_relative) = remaining[reference_start..].find(LOCALE_REFERENCE_END) else {
+            escaped.push_str(&html_escape(&remaining[start..]));
+            return escaped;
+        };
+        let end = reference_start + end_relative;
+        let token_end = end + LOCALE_REFERENCE_END.len_utf8();
+        let reference = &remaining[reference_start..end];
+        let (key, parameter) = reference
+            .split_once(LOCALE_REFERENCE_PARAMETER)
+            .map_or((reference, None), |(key, value)| (key, Some(value)));
+        let valid_parameter = match parameter {
+            None => true,
+            Some(value) => value.split_once('=').is_some_and(|(name, encoded)| {
+                i18n::valid_catalog_key(name) && decode_locale_parameter(encoded).is_some()
+            }),
+        };
+        if i18n::valid_catalog_key(key) && valid_parameter {
+            escaped.push_str(&remaining[start..token_end]);
+        } else {
+            escaped.push_str(&html_escape(&remaining[start..token_end]));
         }
+        remaining = &remaining[token_end..];
     }
-    literal.push('\'');
-    literal
+    escaped.push_str(&html_escape(remaining));
+    escaped
 }
 
 fn form_authorization(form: &FormRoute) -> (bool, Vec<String>) {
@@ -3330,7 +3425,7 @@ fn dispatch_form_with_language(
                 &rendered_form,
                 &values,
                 &errors,
-                Some(tr(language, "form.correct_errors")),
+                Some("@i18n:form.correct_errors"),
                 &relation_options,
                 language,
             ),
@@ -3395,7 +3490,7 @@ fn dispatch_form_with_language(
             &rendered_form,
             &values,
             &[],
-            Some(tr(language, "form.validated_not_enabled")),
+            Some("@i18n:form.validated_not_enabled"),
             &relation_options,
             language,
         ),
@@ -3416,31 +3511,27 @@ fn render_action_confirmation(
     relation_options: &HashMap<String, Vec<SelectOption>>,
     language: UiLanguage,
 ) -> String {
-    let title = localize_user_text(
-        language,
-        view.title
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.title")),
-    );
-    let message = localize_user_text(
-        language,
-        view.message
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.message")),
-    );
-    let submit = localize_user_text(
-        language,
-        view.submit
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.submit")),
-    );
+    let title = view
+        .title
+        .as_deref()
+        .map(|title| localize_user_text(language, title))
+        .unwrap_or_else(|| tr(language, "confirm.title"));
+    let message = view
+        .message
+        .as_deref()
+        .map(|message| localize_user_text(language, message))
+        .unwrap_or_else(|| tr(language, "confirm.message"));
+    let submit = view
+        .submit
+        .clone()
+        .unwrap_or_else(|| "@i18n:confirm.submit".to_owned());
     let mut confirmation_form = route.clone();
     confirmation_form.form_view.title = None;
-    confirmation_form.form_view.submit = Some(submit.to_owned());
+    confirmation_form.form_view.submit = Some(submit);
     format!(
         "<main class=\"zelyra-action-confirmation\"><h1>{}</h1><p>{}</p>{}</main>",
-        html_escape(&title),
-        html_escape(&message),
+        html_escape_preserving_locale_references(&title),
+        html_escape_preserving_locale_references(&message),
         render_form_with_language(
             &confirmation_form,
             &HashMap::new(),
@@ -3642,12 +3733,15 @@ fn crud_column_label(
     column: &str,
 ) -> String {
     let Some(table) = schema.tables.iter().find(|table| table.name == table_name) else {
-        return localized_identifier(language, column);
+        return localized_identifier_reference(language, column);
     };
     if crud_foreign_key(table, column).is_some() {
-        return localized_identifier(language, column.strip_suffix("_id").unwrap_or(column));
+        return localized_identifier_reference(
+            language,
+            column.strip_suffix("_id").unwrap_or(column),
+        );
     }
-    localized_identifier(language, column)
+    localized_identifier_reference(language, column)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4417,22 +4511,24 @@ fn render_tableview(
     html.push_str("</h1><form method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
     html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend>");
     if tableview.searchable {
         html.push_str("<label for=\"search\">");
-        html.push_str(tr(language, "query.search"));
+        html.push_str(&tr(language, "query.search"));
         html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if tableview.sortable {
         html.push_str("<label for=\"sort\">");
-        html.push_str(tr(language, "query.sort"));
+        html.push_str(&tr(language, "query.sort"));
         html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &tableview.columns {
             html.push_str("<option value=\"");
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push('"');
             if column == sort {
                 html.push_str(" selected");
@@ -4442,7 +4538,7 @@ fn render_tableview(
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"order\">");
-        html.push_str(tr(language, "query.order"));
+        html.push_str(&tr(language, "query.order"));
         html.push_str("</label><select id=\"order\" name=\"order\">");
         for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
@@ -4452,7 +4548,7 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(tr(language, key));
+            html.push_str(&tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -4462,10 +4558,10 @@ fn render_tableview(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -4480,16 +4576,16 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label(language));
+            html.push_str(&operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -4505,17 +4601,19 @@ fn render_tableview(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
-        html.push_str(tr(language, "table.empty"));
+        html.push_str(&tr(language, "table.empty"));
         html.push_str("</p>");
     } else {
         html.push_str("<table><thead><tr>");
         for column in &tableview.columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -4546,7 +4644,7 @@ fn render_tableview(
         html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
     html.push_str("<span>");
-    html.push_str(tr(language, "pagination.page"));
+    html.push_str(&tr(language, "pagination.page"));
     html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
@@ -4942,7 +5040,7 @@ impl FilterOperator {
         }
     }
 
-    fn label(self, language: UiLanguage) -> &'static str {
+    fn label(self, language: UiLanguage) -> String {
         let key = match self {
             Self::Equal => "operator.equal",
             Self::Contains => "operator.contains",
@@ -5279,7 +5377,9 @@ fn render_crud_list_with_actions(
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
     html.push_str("><h1>");
-    html.push_str(&html_escape(&localize_user_text(language, &crud.title)));
+    html.push_str(&html_escape_preserving_locale_references(
+        &localize_user_text(language, &crud.title),
+    ));
     html.push_str("</h1>");
     if crud.soft_delete.is_some() {
         html.push_str("<p class=\"zelyra-archive-toggle\"><a href=\"");
@@ -5303,11 +5403,15 @@ fn render_crud_list_with_actions(
         html.push_str("<section class=\"zelyra-success\" role=\"status\">");
         if let Some(title) = success_title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(&localize_user_text(language, title)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, title),
+            ));
             html.push_str("</h2>");
         }
         html.push_str("<p>");
-        html.push_str(&html_escape(&localize_user_text(language, success)));
+        html.push_str(&html_escape_preserving_locale_references(
+            &localize_user_text(language, success),
+        ));
         html.push_str("</p></section>");
     }
     if ui_actions.create {
@@ -5318,13 +5422,13 @@ fn render_crud_list_with_actions(
     html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str("\"><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend><label for=\"search\">");
-    html.push_str(tr(language, "query.search"));
+    html.push_str(&tr(language, "query.search"));
     html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
     html.push_str(&html_escape(search));
     html.push_str("\"><label for=\"sort\">");
-    html.push_str(tr(language, "query.sort"));
+    html.push_str(&tr(language, "query.sort"));
     html.push_str("</label><select id=\"sort\" name=\"sort\">");
     for column in sort_columns {
         html.push_str("<option value=\"");
@@ -5334,16 +5438,13 @@ fn render_crud_list_with_actions(
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(&html_escape(&crud_column_label(
-            language,
-            &crud.schema,
-            &crud.table,
-            column,
-        )));
+        html.push_str(&html_escape_preserving_locale_references(
+            &crud_column_label(language, &crud.schema, &crud.table, column),
+        ));
         html.push_str("</option>");
     }
     html.push_str("</select><label for=\"order\">");
-    html.push_str(tr(language, "query.order"));
+    html.push_str(&tr(language, "query.order"));
     html.push_str("</label><select id=\"order\" name=\"order\">");
     for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
         html.push_str("<option value=\"");
@@ -5353,7 +5454,7 @@ fn render_crud_list_with_actions(
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(tr(language, key));
+        html.push_str(&tr(language, key));
         html.push_str("</option>");
     }
     html.push_str("</select>");
@@ -5377,7 +5478,7 @@ fn render_crud_list_with_actions(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
             &crud_column_label(language, &crud.schema, &crud.table, column),
@@ -5396,18 +5497,18 @@ fn render_crud_list_with_actions(
                     html.push_str(" selected");
                 }
                 html.push('>');
-                html.push_str(operator.label(language));
+                html.push_str(&operator.label(language));
                 html.push_str("</option>");
             }
         } else {
             html.push_str("<option value=\"eq\" selected>");
-            html.push_str(tr(language, "query.operator_equal"));
+            html.push_str(&tr(language, "query.operator_equal"));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
             &crud_column_label(language, &crud.schema, &crud.table, column),
@@ -5426,16 +5527,17 @@ fn render_crud_list_with_actions(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
-        html.push_str(&html_escape(
-            crud.list_view
-                .empty
-                .as_deref()
-                .unwrap_or(tr(language, "table.empty")),
-        ));
+        let empty_label = crud
+            .list_view
+            .empty
+            .as_deref()
+            .map(str::to_owned)
+            .unwrap_or_else(|| tr(language, "table.empty"));
+        html.push_str(&html_escape_preserving_locale_references(&empty_label));
         html.push_str("</p>");
     } else if crud.list_view.mode == CrudListViewMode::Cards {
         html.push_str("<section class=\"zelyra-crud-cards\">");
@@ -5449,12 +5551,9 @@ fn render_crud_list_with_actions(
                     .map(String::as_str)
                     .unwrap_or("");
                 html.push_str("<dl><dt>");
-                html.push_str(&html_escape(&crud_column_label(
-                    language,
-                    &crud.schema,
-                    &crud.table,
-                    column,
-                )));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &crud_column_label(language, &crud.schema, &crud.table, column),
+                ));
                 html.push_str("</dt><dd>");
                 if let Some(href) =
                     crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
@@ -5476,12 +5575,9 @@ fn render_crud_list_with_actions(
         html.push_str("<table><thead><tr>");
         for column in display_columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(&crud_column_label(
-                language,
-                &crud.schema,
-                &crud.table,
-                column,
-            )));
+            html.push_str(&html_escape_preserving_locale_references(
+                &crud_column_label(language, &crud.schema, &crud.table, column),
+            ));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -5527,7 +5623,7 @@ fn render_crud_list_with_actions(
         html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
     html.push_str("<span>");
-    html.push_str(tr(language, "pagination.page"));
+    html.push_str(&tr(language, "pagination.page"));
     html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
@@ -5609,7 +5705,7 @@ fn render_crud_detail_with_actions(
     html.push_str("><p><a href=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str(&format!("\">{}</a></p><h1>", tr(language, "detail.back")));
-    html.push_str(&html_escape(&title));
+    html.push_str(&html_escape_preserving_locale_references(&title));
     html.push_str("</h1>");
     if cards {
         html.push_str("<article class=\"zelyra-crud-detail-card\">");
@@ -5617,12 +5713,9 @@ fn render_crud_detail_with_actions(
     html.push_str("<dl>");
     for (column, value) in columns.iter().zip(row) {
         html.push_str("<dt>");
-        html.push_str(&html_escape(&crud_column_label(
-            language,
-            &crud.schema,
-            &crud.table,
-            column,
-        )));
+        html.push_str(&html_escape_preserving_locale_references(
+            &crud_column_label(language, &crud.schema, &crud.table, column),
+        ));
         html.push_str("</dt><dd>");
         html.push_str(&html_escape(value));
         html.push_str("</dd>");
@@ -5659,7 +5752,9 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, &action.label),
+            ));
             html.push_str("</a></p>");
         } else {
             html.push_str("<form method=\"post\" action=\"");
@@ -5667,12 +5762,9 @@ fn render_crud_detail_with_actions(
             html.push('"');
             if let Some(confirm) = &action.confirm {
                 let confirm = localize_user_text(language, confirm);
-                html.push_str(" onsubmit=\"");
-                html.push_str(&html_escape(&format!(
-                    "return confirm({})",
-                    javascript_string_literal(&confirm)
-                )));
-                html.push('"');
+                html.push_str(" data-confirm=\"");
+                html.push_str(&html_escape_preserving_locale_references(&confirm));
+                html.push_str("\" onsubmit=\"return confirm(this.dataset.confirm)\"");
             }
             html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
             html.push_str(&html_escape(&action.csrf));
@@ -5681,7 +5773,9 @@ fn render_crud_detail_with_actions(
                 html.push_str("<label for=\"");
                 html.push_str(&html_escape(&field.name));
                 html.push_str("\">");
-                html.push_str(&html_escape(&localize_user_text(language, &field.label)));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &localize_user_text(language, &field.label),
+                ));
                 html.push_str("</label>");
                 if field.relation {
                     html.push_str("<select id=\"");
@@ -5737,7 +5831,9 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, &action.label),
+            ));
             html.push_str("</button></form>");
         }
     }
@@ -5747,17 +5843,21 @@ fn render_crud_detail_with_actions(
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
         html.push_str("\"><button type=\"submit\">");
-        html.push_str(tr(language, "action.restore"));
+        html.push_str(&tr(language, "action.restore"));
         html.push_str("</button></form>");
     } else if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(&localize_user_text(language, title)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, title),
+            ));
             html.push_str("</h2>");
         }
         if let Some(message) = &crud.delete_view.message {
             html.push_str("<p class=\"zelyra-delete-message\">");
-            html.push_str(&html_escape(&localize_user_text(language, message)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, message),
+            ));
             html.push_str("</p>");
         }
         html.push_str("<form method=\"post\" action=\"");
@@ -5765,13 +5865,13 @@ fn render_crud_detail_with_actions(
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
         html.push_str("\"><button type=\"submit\">");
-        html.push_str(&html_escape(&localize_user_text(
-            language,
-            crud.delete_view
-                .submit
-                .as_deref()
-                .unwrap_or(tr(language, "action.delete")),
-        )));
+        let submit = crud
+            .delete_view
+            .submit
+            .as_deref()
+            .map(|submit| localize_user_text(language, submit))
+            .unwrap_or_else(|| tr(language, "action.delete"));
+        html.push_str(&html_escape_preserving_locale_references(&submit));
         html.push_str("</button></form>");
     }
     if cards {
@@ -6137,7 +6237,7 @@ fn render_form_with_language(
             field_text(
                 language,
                 title_key,
-                &localized_identifier(language, resource),
+                &localized_identifier_reference(language, resource),
             )
         });
     if let Some(title) = route
@@ -6148,7 +6248,7 @@ fn render_form_with_language(
         .or(generated_title)
     {
         html.push_str("<h1>");
-        html.push_str(&html_escape(&title));
+        html.push_str(&html_escape_preserving_locale_references(&title));
         html.push_str("</h1>");
     }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
@@ -6163,7 +6263,9 @@ fn render_form_with_language(
     html.push_str("\">");
     if let Some(notice) = notice {
         html.push_str("<p class=\"zelyra-notice\">");
-        html.push_str(&html_escape(&localize_user_text(language, notice)));
+        html.push_str(&html_escape_preserving_locale_references(
+            &localize_user_text(language, notice),
+        ));
         html.push_str("</p>");
     }
     for field in &route.form.fields {
@@ -6171,7 +6273,7 @@ fn render_form_with_language(
             .label
             .as_deref()
             .map(|label| localize_user_text(language, label))
-            .unwrap_or_else(|| localized_identifier(language, &field.name));
+            .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
         let value = values.get(&field.name).map(String::as_str).unwrap_or("");
         let field_errors = errors
             .iter()
@@ -6183,7 +6285,7 @@ fn render_form_with_language(
         html.push_str("<label for=\"");
         html.push_str(&html_escape(&field.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&label));
+        html.push_str(&html_escape_preserving_locale_references(&label));
         html.push_str("</label>");
         if let Some(options) = relation_options.get(&field.name) {
             html.push_str("<select id=\"");
@@ -6242,7 +6344,9 @@ fn render_form_with_language(
             }
             if let Some(placeholder) = &field.placeholder {
                 html.push_str(" placeholder=\"");
-                html.push_str(&html_escape(&localize_user_text(language, placeholder)));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &localize_user_text(language, placeholder),
+                ));
                 html.push('"');
             }
             if field.readonly {
@@ -6252,10 +6356,9 @@ fn render_form_with_language(
         }
         for error in field_errors {
             html.push_str("<p class=\"zelyra-error\">");
-            html.push_str(&html_escape(&localized_validation_message(
-                language,
-                &error.message,
-            )));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_validation_message(language, &error.message),
+            ));
             html.push_str("</p>");
         }
         html.push_str("</div>");
@@ -6264,10 +6367,13 @@ fn render_form_with_language(
     let default_submit = form_kind
         .map(|(_, submit_key)| tr(language, submit_key))
         .unwrap_or(tr(language, "form.submit"));
-    html.push_str(&html_escape(&localize_user_text(
-        language,
-        route.form_view.submit.as_deref().unwrap_or(default_submit),
-    )));
+    let submit = route
+        .form_view
+        .submit
+        .as_deref()
+        .map(|submit| localize_user_text(language, submit))
+        .unwrap_or(default_submit);
+    html.push_str(&html_escape_preserving_locale_references(&submit));
     html.push_str("</button></form>");
     if cards {
         html.push_str("</section>");
@@ -6290,7 +6396,7 @@ fn localized_validation_message(language: UiLanguage, message: &str) -> String {
         "must be a UUID" => "validation.uuid",
         _ => {
             if let Some(maximum) = message.strip_prefix("value exceeds maximum length of ") {
-                return tr(language, "validation.max_length").replace("{max}", maximum);
+                return i18n::parameterized_reference("validation.max_length", "max", maximum);
             }
             return message.to_owned();
         }
@@ -6394,6 +6500,24 @@ pub fn localized_identifier(language: UiLanguage, name: &str) -> String {
     characters.next().map_or(words.clone(), |first| {
         first.to_uppercase().collect::<String>() + characters.as_str()
     })
+}
+
+fn localized_identifier_reference(language: UiLanguage, name: &str) -> String {
+    let key = format!("identifier.{}", name.to_ascii_lowercase());
+    if i18n::valid_catalog_key(&key) {
+        i18n::reference(&key)
+    } else {
+        localized_identifier(language, name)
+    }
+}
+
+fn localized_identifier_marker(language: UiLanguage, name: &str) -> String {
+    let key = format!("identifier.{}", name.to_ascii_lowercase());
+    if i18n::valid_catalog_key(&key) {
+        format!("@i18n:{key}")
+    } else {
+        localized_identifier(language, name)
+    }
 }
 
 pub fn parse_urlencoded(body: &str) -> Result<HashMap<String, String>, HttpError> {
@@ -7096,18 +7220,18 @@ fn render_page_query_controls(
         .unwrap_or(1);
     let mut html =
         String::from("<form method=\"get\"><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend>");
     if !route.search_columns.is_empty() {
         html.push_str("<label for=\"search\">");
-        html.push_str(tr(language, "query.search"));
+        html.push_str(&tr(language, "query.search"));
         html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if !route.sort_columns.is_empty() {
         html.push_str("<label for=\"sort\">");
-        html.push_str(tr(language, "query.sort"));
+        html.push_str(&tr(language, "query.sort"));
         html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &route.sort_columns {
             html.push_str("<option value=\"");
@@ -7117,11 +7241,13 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"order\">");
-        html.push_str(tr(language, "query.order"));
+        html.push_str(&tr(language, "query.order"));
         html.push_str("</label><select id=\"order\" name=\"order\">");
         for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
@@ -7131,7 +7257,7 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(tr(language, key));
+            html.push_str(&tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -7141,10 +7267,10 @@ fn render_page_query_controls(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -7159,16 +7285,16 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label(language));
+            html.push_str(&operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -7184,7 +7310,7 @@ fn render_page_query_controls(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if route.page_size.is_some() {
         let page_count = data
@@ -7199,12 +7325,12 @@ fn render_page_query_controls(
             html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
         }
         html.push_str("<span>");
-        html.push_str(tr(language, "pagination.page"));
+        html.push_str(&tr(language, "pagination.page"));
         html.push(' ');
         html.push_str(&page.to_string());
         if page_count > 0 {
             html.push(' ');
-            html.push_str(tr(language, "pagination.of"));
+            html.push_str(&tr(language, "pagination.of"));
             html.push(' ');
             html.push_str(&page_count.to_string());
         }
@@ -7554,6 +7680,7 @@ mod tests {
             UiLanguage::German,
             true,
         );
+        let html = localize_html(&html, UiLanguage::German);
         assert!(html.contains("Deine Zelyra-CRUD-Lernhilfe"));
         assert!(html.contains("Ein Feld in der Verwaltung ergänzen"));
         assert!(html.contains("list, search, filter oder form"));
@@ -7932,6 +8059,70 @@ mod tests {
     }
 
     #[test]
+    fn project_catalogs_override_generated_ui_and_parameterized_labels() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("catalog-csrf"),
+        };
+        let mut catalogs = ProjectUiCatalogs::default();
+        catalogs
+            .set_json(
+                UiLanguage::German,
+                r#"{"shell.brand_descriptor":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
+            )
+            .unwrap();
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth_route(auth)
+            .with_ui_settings(UiLanguage::German, UiLevel::Learn)
+            .with_project_ui_catalogs(catalogs.clone());
+        let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+
+        assert!(response.body.contains("Eigene Oberfläche"));
+        assert!(response.body.contains("<h1>Projektanmeldung</h1>"));
+        assert!(response
+            .body
+            .contains("<label for=\"email\">E-Mail-Adresse</label>"));
+        assert!(response.body.contains("Projekt-Hilfe öffnen"));
+        assert!(!response.body.contains(LOCALE_REFERENCE_START));
+
+        let filter_label = field_text(
+            UiLanguage::German,
+            "query.filter_value",
+            &localized_identifier_reference(UiLanguage::German, "department"),
+        );
+        assert_eq!(
+            resolve_locale_references(&filter_label, UiLanguage::German, &catalogs),
+            "Wert für Kostenstelle"
+        );
+    }
+
+    #[test]
+    fn html_escaped_user_text_cannot_forge_a_locale_reference() {
+        let forged_reference =
+            format!("{LOCALE_REFERENCE_START}shell.brand_descriptor{LOCALE_REFERENCE_END}");
+        let escaped = html_escape(&forged_reference);
+        let resolved =
+            resolve_locale_references(&escaped, UiLanguage::German, &ProjectUiCatalogs::default());
+
+        assert_eq!(resolved, escaped);
+        assert!(!resolved.contains("Zuverlässige Business-Anwendungen"));
+    }
+
+    #[test]
     fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
         let error = localize_html(
             "<main><h1>403 Forbidden</h1><p>The Database capability is not granted.</p></main>",
@@ -7964,17 +8155,26 @@ mod tests {
             },
             csrf: CsrfProtection::new("csrf-token"),
         };
-        let login = render_login(&auth, UiLanguage::German);
+        let login = localize_html(&render_login(&auth, UiLanguage::German), UiLanguage::German);
         assert!(login.contains("<h1>Anmelden</h1>"));
         assert!(login.contains("<label for=\"email\">E-Mail</label>"));
         assert!(!login.contains(">Login<"));
 
         assert_eq!(
-            localized_validation_message(UiLanguage::German, "value is required"),
+            localize_html(
+                &localized_validation_message(UiLanguage::German, "value is required"),
+                UiLanguage::German,
+            ),
             "Ein Wert ist erforderlich."
         );
         assert_eq!(
-            localized_validation_message(UiLanguage::German, "value exceeds maximum length of 80"),
+            localize_html(
+                &localized_validation_message(
+                    UiLanguage::German,
+                    "value exceeds maximum length of 80",
+                ),
+                UiLanguage::German,
+            ),
             "Der Wert überschreitet die maximale Länge von 80 Zeichen."
         );
     }
@@ -7991,6 +8191,7 @@ mod tests {
             &HashMap::new(),
             UiLanguage::German,
         );
+        let html = localize_html(&html, UiLanguage::German);
         assert!(html.contains("<h1>Kunde anlegen</h1>"));
         assert!(html.contains("<label for=\"name\">Name</label>"));
         assert!(html.contains(">Anlegen</button>"));
@@ -8007,11 +8208,17 @@ mod tests {
             "Abteilung"
         );
         assert_eq!(
-            FilterOperator::Contains.label(UiLanguage::German),
+            localize_html(
+                &FilterOperator::Contains.label(UiLanguage::German),
+                UiLanguage::German,
+            ),
             "enthält"
         );
         assert_eq!(
-            field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
+            localize_html(
+                &field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
+                UiLanguage::German,
+            ),
             "Wert für Aktiv"
         );
     }
@@ -8367,7 +8574,10 @@ mod tests {
             ]),
             collections: HashMap::new(),
         };
-        let html = render_page(&route, "/customers", &HashMap::new(), &query_values, &data);
+        let html = localize_html(
+            &render_page(&route, "/customers", &HashMap::new(), &query_values, &data),
+            UiLanguage::English,
+        );
         assert!(html.contains("<body><form method=\"get\">"));
         assert!(html.contains("name=\"filter_name\" value=\"Ada\""));
         assert!(html.contains("Page 2 of 3"));
@@ -8720,6 +8930,7 @@ mod tests {
             },
             UiLanguage::English,
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains("value=\"CNC machine\""));
         assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
@@ -8760,6 +8971,7 @@ mod tests {
             },
             UiLanguage::English,
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains(
             "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
         ));
@@ -8866,6 +9078,7 @@ mod tests {
                 success_title: Some("Completed"),
             },
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains(
             "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
@@ -9115,6 +9328,7 @@ mod tests {
                 success_title: None,
             },
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("<th>Department</th>"));
         assert!(html.contains("<td>Production</td>"));
         assert!(html.contains("Filter Department"));
@@ -9470,7 +9684,10 @@ mod tests {
                 tables: Vec::new(),
             },
         };
-        let html = render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1");
+        let html = localize_html(
+            &render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1"),
+            UiLanguage::English,
+        );
         assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
         assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
         assert!(html.contains(">Delete</button>"));
@@ -9546,7 +9763,7 @@ mod tests {
         assert!(action_html.contains("<select id=\"department\" name=\"department\" required>"));
         assert!(action_html.contains("<option value=\"2\">Production &lt;unsafe&gt;</option>"));
         assert!(action_html.contains(
-            "onsubmit=\"return confirm(&#39;Deactivate &lt;unsafe&gt; customer?&#39;)\""
+            "data-confirm=\"Deactivate &lt;unsafe&gt; customer?\" onsubmit=\"return confirm(this.dataset.confirm)\""
         ));
 
         let mut custom_route = route.clone();

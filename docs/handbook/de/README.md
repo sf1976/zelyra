@@ -310,14 +310,29 @@ page "/" {
 ~~~
 
 Für unterstützte Beschriftungen, Meldungen und Aktionen kann
-`@i18n:werkstatt.gespeichert` verwendet werden. Projekttexte überschreiben an
-diesen markierten Stellen auch eingebaute Übersetzungen. Bei Deutsch prüft
-Zelyra zuerst den deutschen und dann den englischen Projektkatalog, danach die
-eingebauten deutschen und englischen Kataloge. Erzeugte Standardbeschriftungen
-ohne Katalogreferenz behalten ihren eingebauten Wortlaut. Kataloge ändern nur
-die Darstellung; Werte werden für HTML escaped und können weder Berechtigungen
-erteilen noch Geschäftsregeln ändern. Keine Secrets oder Kundendaten darin
-ablegen. Größenlimit und Prüfregeln stehen in der
+`@i18n:werkstatt.gespeichert` verwendet werden. Projektkataloge können außerdem
+alle kataloggebundenen generierten Beschriftungen in Anwendungsrahmen, CRUD,
+Formularen, Tableviews, Login, Auth-Verwaltung, Validierung und Lernhilfe
+überschreiben. Einträge wie `auth.login_title` und `identifier.department`
+ersetzen generierte UI-Texte; parametrisierte Texte wie `query.filter_value`
+können `{field}` enthalten. Alle verfügbaren Schlüssel stehen in
+`web/locales/de.json` und `web/locales/en.json`. Zum Beispiel passt dieser
+Eintrag in `locales/de.json` den Login- und Abteilungsfilter an:
+
+~~~json
+{
+  "auth.login_title": "Werkstatt-Anmeldung",
+  "identifier.department": "Kostenstelle",
+  "query.filter_value": "Wert für {field}"
+}
+~~~
+
+Bei Deutsch prüft Zelyra zuerst den deutschen und dann den englischen
+Projektkatalog, danach die eingebauten deutschen und englischen Kataloge.
+Fachdatensätze und nicht markierte, anwendungseigene Texte bleiben unverändert.
+Kataloge ändern nur die Darstellung; aufgelöste Werte werden für HTML escaped
+und können weder Berechtigungen erteilen noch Geschäftsregeln ändern. Keine
+Secrets oder Kundendaten darin ablegen. Größenlimit und Prüfregeln stehen in der
 [Umgebungsvariablen-Referenz](../../env.md).
 
 Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und

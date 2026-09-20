@@ -267,12 +267,28 @@ page "/" {
 ~~~
 
 For supported labels, messages, and actions, use `@i18n:workshop.saved`.
-Catalog entries can also override built-in translations at these explicit
-references. German lookup checks the project German catalog, then project
-English, then Zelyra's built-in German and English catalogs. Generated standard
-labels without a catalog reference still use their built-in wording. Catalogs
-are presentation-only; values are HTML-escaped and cannot grant permissions or
-change business rules. Do not put secrets or customer data in them. See the
+Project catalogs can also override every catalog-backed generated label in
+the shell, CRUD, forms, tableviews, login, authentication administration,
+validation, and learning guide. For example, entries such as
+`auth.login_title` and `identifier.department` replace generated UI copy;
+parameterized strings such as `query.filter_value` can retain `{field}`. The
+available keys are listed in `web/locales/en.json` and `web/locales/de.json`.
+For example, add this to `locales/en.json` to customize the generated login and
+department filter labels:
+
+~~~json
+{
+  "auth.login_title": "Workshop sign-in",
+  "identifier.department": "Cost center",
+  "query.filter_value": "Filter by {field}"
+}
+~~~
+
+German lookup checks project German, project English, then Zelyra's built-in
+German and English catalogs. Business records and unmarked application-authored
+text remain unchanged. Catalogs are presentation-only; resolved values are
+HTML-escaped and cannot grant permissions or change business rules. Do not put
+secrets or customer data in them. See the
 [environment reference](../../env.en.md) for file limits and validation.
 
 For an authentication starter with persistent sessions and permissions:

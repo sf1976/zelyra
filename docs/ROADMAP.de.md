@@ -54,11 +54,13 @@ den tatsächlich implementierten Stand.
   Layouts haben Vorrang; selbst verfasste Seiten bleiben unverändert.
   Projektlokale CSS-Overrides für dokumentierte Design-Tokens sind jetzt
   verfügbar. Projektlokale `locales/de.json`- und `locales/en.json`-Overlays
-  sind für markierte View-/Texteinträge und kataloggebundene Standardfehler
-  implementiert, einschließlich HTML-Escaping und englischem Fallback.
-  Nicht markierte generierte Standardtexte behalten ihren eingebauten Wortlaut;
-  umfassendere Vorlagenabdeckung und ein vollständiger Theme-Editor bleiben
-  offen.
+  können alle kataloggebundenen generierten Texte für Rahmen, CRUD, Formulare,
+  Tableviews, Login, Auth-Verwaltung, Validierung und Lernhilfe ergänzen oder
+  überschreiben, zusätzlich zu markierten View-/Texteinträgen. Parametrisierte
+  Beschriftungen und generierte Feldnamen werden unterstützt; HTML-Escaping
+  und englischer Fallback bleiben aktiv. Fachdatensätze und unmarkierte eigene
+  Texte werden nicht übersetzt. Umfassendere Vorlagenabdeckung und ein
+  vollständiger Theme-Editor bleiben offen.
 - [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
   und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
@@ -459,9 +461,11 @@ Freigabekriterien bestanden sind.
 - [~] **Eigenständiges Views-System:** Wiederverwendbare Layouts/Komponenten,
   typisierte CRUD-Darstellungsoptionen und ressourcenspezifische benannte
   Layout-Slots sind verfügbar. Projektlokale deutsche/englische Kataloge
-  unterstützen ausdrücklich markierte View- und Texteinstellungen.
-  Vollständige Abdeckung, Überschreibungen sämtlicher generierter Beschriftungen,
-  weitergehende Theme-Erstellung und datensatzgebundene benutzerdefinierte
+  können alle kataloggebundenen generierten Standardtexte sowie ausdrücklich
+  markierte View-/Texteinträge ergänzen oder überschreiben. Parametrisierte
+  Feld- und generierte Identifier-Beschriftungen werden unterstützt;
+  Fachdatensätze und unmarkierte eigene Texte bleiben unverändert.
+  Weitergehende Theme-Erstellung und datensatzgebundene benutzerdefinierte
   Slots bleiben offen.
 - [~] **Vorzeige-Businessanwendung:** Das MariaDB-Business-Template und der
   Integrationstestpfad für erzeugte Projekte existieren. Einsteigergeprüfter

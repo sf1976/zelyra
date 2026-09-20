@@ -1046,10 +1046,14 @@ catalog entries instead of embedding a second language's copy. See
 New projects also contain editable `locales/de.json` and `locales/en.json`
 files. Add translations there for view markers such as
 `data-zelyra-i18n="workshop.title"` or text settings such as
-`@i18n:workshop.saved`. Project entries can override built-in copy at these
-explicit catalog references. German falls back to the project English catalog
-before using Zelyra's built-in catalogs. See the
-[handbook](docs/handbook/en/README.md) for the exact scope and an example.
+`@i18n:workshop.saved`. The same catalogs can add or override all
+catalog-backed generated text in the application shell, CRUD, forms,
+tableviews, login, authentication administration, validation, and the learning
+guide. Generated field labels support keys such as `identifier.department`;
+parameterized translations can use `{field}` or `{max}`. Business records and
+unmarked project-authored text are not automatically translated. German falls
+back to the project English catalog before using Zelyra's built-in catalogs.
+See the [handbook](docs/handbook/en/README.md) for the exact scope and examples.
 
 Generated CRUD pages can use the same reusable shell as ordinary pages:
 

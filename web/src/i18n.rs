@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,8 +77,39 @@ impl ProjectUiCatalogs {
                 return Cow::Borrowed(value);
             }
         }
-        Cow::Borrowed(text(language, key))
+        let bundled = text(language, key);
+        if bundled != "[missing translation]" {
+            return Cow::Borrowed(bundled);
+        }
+        if let Some(identifier) = key.strip_prefix("identifier.") {
+            return Cow::Owned(humanize_identifier(language, identifier));
+        }
+        Cow::Borrowed(bundled)
     }
+}
+
+fn humanize_identifier(language: UiLanguage, identifier: &str) -> String {
+    let normalized = if language == UiLanguage::German {
+        identifier.to_ascii_lowercase()
+    } else {
+        identifier.to_owned()
+    };
+    let words = normalized
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let key = format!("identifier.{part}");
+            catalog(language)
+                .get(&key)
+                .map(String::as_str)
+                .unwrap_or(part)
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut characters = words.chars();
+    characters.next().map_or(words.clone(), |first| {
+        first.to_uppercase().collect::<String>() + characters.as_str()
+    })
 }
 
 pub(crate) fn valid_catalog_key(key: &str) -> bool {
@@ -128,8 +160,32 @@ pub(crate) fn text(language: UiLanguage, key: &str) -> &'static str {
         .unwrap_or("[missing translation]")
 }
 
-pub(crate) fn field_text(language: UiLanguage, key: &str, field: &str) -> String {
-    text(language, key).replace("{field}", field)
+pub(crate) const LOCALE_REFERENCE_START: &str = "\u{e000}zelyra-locale:";
+pub(crate) const LOCALE_REFERENCE_PARAMETER: char = '\u{e002}';
+pub(crate) const LOCALE_REFERENCE_END: char = '\u{e001}';
+
+pub(crate) fn reference(key: &str) -> String {
+    if !valid_catalog_key(key) {
+        return "[missing translation]".to_owned();
+    }
+    format!("{LOCALE_REFERENCE_START}{key}{LOCALE_REFERENCE_END}")
+}
+
+pub(crate) fn field_text(_language: UiLanguage, key: &str, field: &str) -> String {
+    parameterized_reference(key, "field", field)
+}
+
+pub(crate) fn parameterized_reference(key: &str, parameter: &str, value: &str) -> String {
+    if !valid_catalog_key(key) || !valid_catalog_key(parameter) {
+        return "[missing translation]".to_owned();
+    }
+    let mut encoded_value = String::with_capacity(value.len() * 2);
+    for byte in value.as_bytes() {
+        let _ = write!(encoded_value, "{byte:02x}");
+    }
+    format!(
+        "{LOCALE_REFERENCE_START}{key}{LOCALE_REFERENCE_PARAMETER}{parameter}={encoded_value}{LOCALE_REFERENCE_END}"
+    )
 }
 
 pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {

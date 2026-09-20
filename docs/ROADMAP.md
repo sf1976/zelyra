@@ -48,11 +48,14 @@ principles; the roadmap below tracks what is actually implemented.
   tableview, login, and authentication-admin pages have a responsive Zelyra
   application shell by default. Explicit CRUD layouts take precedence, and
   authored pages remain untouched. Project-local `locales/de.json` and
-  `locales/en.json` overlays are implemented for marked view/text references
-  and catalog-backed standard errors, including safe escaping and English
-  fallback. Unmarked generated standard labels retain their built-in copy;
-  wider template coverage and a full theme editor remain open. Project-local
-  CSS overrides for documented visual tokens are available.
+  `locales/en.json` overlays can add or override all catalog-backed generated
+  shell, CRUD, form, tableview, login, authentication-admin, validation, and
+  learning-guide copy, as well as explicitly marked view/text references.
+  Parameterized labels and generated field identifiers are supported; resolved
+  values are escaped and German falls back through the project English catalog
+  to built-in translations. Business records and unmarked user-authored content
+  are not translated. Broader template coverage and a full theme editor remain
+  open. Project-local CSS overrides for documented visual tokens are available.
 - [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
@@ -210,12 +213,13 @@ architecture requirement for every phase, not a provider-specific feature.
   learn-mode guide. Generated CRUD, standalone form, tableview, login, and
   authentication-admin pages now also receive that responsive default shell;
   explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
-  authentication, validation, and standard HTTP-error copy use the same
-  built-in locale catalogs. Scaffolded project locale overlays can add or
-  override explicitly marked view/text entries; unmarked generated labels
-  still use built-in wording. Project-local `zelyra.theme.css` token overrides
-  are available; broader theme replacement, remaining template coverage, and
-  universal project overrides for every generated label remain open.
+  authentication, validation, learning-guide, and standard HTTP-error copy use
+  the same catalogs. Project locale overlays can add or override every
+  catalog-backed generated label, including parameterized field labels and
+  generated identifier labels, in addition to explicitly marked view/text
+  entries. Business records and unmarked user-authored content remain
+  unchanged. Project-local `zelyra.theme.css` token overrides are available;
+  broader template coverage and full theme replacement remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named
@@ -431,9 +435,11 @@ supported machine and the release gates below pass.
 
 - [~] **Distinctive Views system:** reusable layouts/components, typed CRUD
   presentation controls, and per-resource named layout slots are available.
-  Project-local German/English catalogs now support explicitly marked view and
-  text references. Complete coverage, universal generated-label overrides,
-  deeper theme authoring, and record-bound custom slots remain open.
+  Project-local German/English catalogs can add or override all
+  catalog-backed generated labels, including parameterized field labels and
+  generated identifier labels, as well as explicitly marked view/text
+  references. Business records and unmarked authored text remain unchanged;
+  deeper theme authoring and record-bound custom slots remain open.
 - [~] **Flagship business application:** the MariaDB business template and
   generated-project integration path exist. Complete novice-tested onboarding,
   customized machine/department Views, German/English Learn/Work behavior, and
