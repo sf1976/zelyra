@@ -227,9 +227,12 @@ Feature eines bestimmten Anbieters.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
-  Foreign-Key-Entfernungen werden blockiert. Nullbarkeitsänderungen sowie
-  nicht unterstützte SQLite-Typ-, Foreign-Key- und Unique-Constraint-
-  Änderungen werden ebenfalls blockiert. Zeilenschätzungen, Lock-Warnungen,
+  Foreign-Key-Entfernungen werden blockiert. Nullbarkeitsänderungen bei
+  MariaDB und PostgreSQL benötigen `REVIEW`; vor einer Verschärfung auf
+  `NOT NULL` prüft ein lesender NULL-Zeilen-Preflight den gesamten Plan und
+  blockiert ihn vor jeglichem SQL, wenn Daten korrigiert werden müssen.
+  SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
+  Änderungen bleiben nicht unterstützt. Zeilenschätzungen, Lock-Warnungen,
   Backfill-Pläne und Wartungsfenster bleiben geplant.
 - [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
@@ -522,18 +525,19 @@ Freigabekriterien bestanden sind.
   sowie Primärschlüssel-/Auto-Increment-Änderungen ohne unterstützte Migration
   werden mit `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
   keine `REVIEW`-Änderungen; diese benötigen nach Prüfung `--allow-risky`.
-  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
+  Nullbarkeitsänderungen bei MariaDB und PostgreSQL benötigen Freigabe; vor
+  einer Verschärfung prüft Zelyra vorhandene NULL-Werte, bevor irgendein SQL
+  des Plans läuft. SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und
   Unique-Constraint-Änderungen werden noch nicht unterstützt. Typ- und
-  Nullbarkeitsänderungen werden unabhängig bewertet; eine sichere
-  Typvergrößerung kann eine nicht unterstützte Nullbarkeitsänderung nicht
-  verdecken. Die
+  Nullbarkeitsänderungen werden unabhängig bewertet. Die
   [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
   Community-LTS-Patch-Images und die getesteten Datenbank-/CRUD-Pfade auf;
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
-  PostgreSQL-Runtime-Parität, Nullbarkeitsmigrationen, sichere Backfills und
-  betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-
-  Metadatenabweichungen werden erkannt und abgelehnt; sichere Änderungen daran
-  werden noch nicht migriert.
+  PostgreSQL-Runtime-Parität, allgemeine sichere Backfills und betriebliche
+  Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-Drift bei
+  Primärschlüsseln und Serial-/Identity-Eigenschaften wird erkannt und
+  abgelehnt; Migrationen dieser Metadatenänderungen werden noch nicht
+  unterstützt.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

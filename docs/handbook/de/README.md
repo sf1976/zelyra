@@ -624,10 +624,15 @@ zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
 `UNSUPPORTED`-Änderungen werden auch mit Freigabe abgelehnt. Neue Pflichtspalten
-ohne Standardwert und neue Unique-Constraints müssen geprüft werden;
-Nullbarkeitsänderungen und SQLite-Typ-, Foreign-Key- sowie
-Unique-Constraint-Änderungen werden derzeit nicht unterstützt. Neue und
-entfernte MariaDB-Foreign-Keys benötigen `REVIEW`; SQLite-Foreign-Key-Umbauten
+ohne Standardwert und neue Unique-Constraints müssen geprüft werden.
+Nullbarkeitsänderungen bei MariaDB und PostgreSQL benötigen `REVIEW`; vor einer
+Verschärfung auf `NOT NULL` prüft Zelyra lesend, ob NULL-Werte vorhanden sind.
+Ist das der Fall, wird der gesamte Plan ohne Schemaänderung abgelehnt.
+MariaDB führt dieses DDL zusätzlich im Strict-Modus aus, damit ein gleichzeitig
+entstandener NULL-Wert nicht stillschweigend umgewandelt wird. SQLite-
+Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-Änderungen
+bleiben nicht unterstützt. Neue und entfernte MariaDB-Foreign-Keys benötigen
+`REVIEW`; SQLite-Foreign-Key-Umbauten
 werden abgelehnt. Die Integrationstests prüfen, dass bei einem fehlgeschlagenen
 Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
 Foreign-Key-Beziehungen erhalten bleiben. Defaultänderungen bei MariaDB und

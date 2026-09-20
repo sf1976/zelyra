@@ -108,10 +108,13 @@ source.
 
 MariaDB is the primary runtime reference backend; PostgreSQL schema inspection
 and planning are available, but runtime parity is not. SQL Server is not
-integrated yet. Nullability changes and SQLite type, foreign-key, and
-unique-constraint alterations are marked unsupported and require a future
-specialized migration implementation. Adding or removing MariaDB foreign keys
-requires `REVIEW`; SQLite foreign-key alterations are blocked until table
+integrated yet. MariaDB and PostgreSQL nullability changes produce `REVIEW`
+plans. Tightening a column to `NOT NULL` requires approval and a read-only
+preflight; if existing rows contain NULL, Zelyra refuses the entire plan before
+executing any schema SQL. MariaDB applies the DDL in strict mode to prevent
+implicit NULL-to-default coercion. SQLite nullability and type, foreign-key,
+and unique-constraint alterations remain unsupported. Adding or removing
+MariaDB foreign keys requires `REVIEW`; SQLite foreign-key alterations are blocked until table
 rebuilds are supported. The planner preserves unrecognized external indexes
 and refuses untracked foreign-key removals rather than guessing ownership.
 MariaDB and PostgreSQL default additions, changes, and removals produce
@@ -120,6 +123,6 @@ existing values survive and that replanning is idempotent. SQLite default
 changes and primary-key/auto-increment metadata changes, as well as
 primary-key/auto-increment changes on MariaDB and PostgreSQL, remain
 `UNSUPPORTED`. PostgreSQL schema-safety integration runs against PostgreSQL 16
-in CI; this does not establish PostgreSQL runtime parity. Type changes and
-nullability changes are classified independently, preventing a safe type
-widening from masking unsupported nullability drift.
+in CI; this does not establish PostgreSQL runtime parity. Type and nullability
+changes are classified independently so one change cannot hide the risk of the
+other.

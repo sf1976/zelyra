@@ -213,8 +213,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
-  It also fails closed for unsupported nullability changes and SQLite
-  type/FK/unique-constraint alterations. Row estimates, lock warnings,
+  MariaDB and PostgreSQL nullability changes require `REVIEW`; tightening to
+  `NOT NULL` performs a read-only NULL-row preflight before any plan SQL and
+  fails closed if rows need repair. SQLite nullability and type/FK/unique-
+  constraint alterations remain unsupported. Row estimates, lock warnings,
   backfill plans, and maintenance-window planning remain planned.
 - [ ] Connection pooling, retry policies, timeouts, cancellation, and health
   checks.
@@ -489,17 +491,19 @@ supported machine and the release gates below pass.
   fail; unknown external indexes are preserved and untracked foreign-key
   removals fail closed. Unsupported changes fail closed with `E-DB-006`.
   The legacy `--allow-destructive` option does not approve `REVIEW` changes;
-  `--allow-risky` is required after reviewing them. Nullability changes and
-  SQLite type, foreign-key, and unique-constraint alterations remain
-  unsupported. Type and nullability drift are evaluated independently, so a
-  safe type widening cannot conceal an unsupported nullability change. The
+  `--allow-risky` is required after reviewing them. MariaDB/PostgreSQL
+  nullability changes require review and tightening checks existing NULL rows
+  before any SQL; SQLite nullability and type, foreign-key, and unique-
+  constraint alterations remain unsupported. Type and nullability drift are
+  evaluated independently. The
   generated MariaDB business acceptance test has passed. The [version
   matrix](database-compatibility.en.md) lists four
   MariaDB Community LTS patch images and the core database/CRUD paths they
   test; this is not MySQL or full feature certification. PostgreSQL runtime
-  parity, nullability migration support, backfill safety, and operational risk
-  analysis remain outside the 0.2.0 claim. PostgreSQL metadata drift is
-  detected and refused, but safe metadata migrations remain unsupported.
+  parity, general backfill safety, and operational risk analysis remain outside
+  the 0.2.0 claim. PostgreSQL primary-key and serial/identity metadata drift is
+  detected and refused; migrations for those metadata changes remain
+  unsupported.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

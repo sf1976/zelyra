@@ -46,9 +46,14 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
   `REVIEW`. Tests prüfen, dass Setzen/Ändern/Entfernen von Defaults Freigabe
   erfordert, bestehende Werte erhält und danach idempotent geplant wird.
   Doppelte Zeilen bleiben bei einem abgelehnten Unique-Index erhalten,
-  verwaiste Zeilen bei einem abgelehnten Foreign Key; nicht unterstützte
-  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key-, Unique-Constraint-
-  und Defaultänderungen werden auch mit Freigabe durch `E-DB-006` blockiert.
+  verwaiste Zeilen bei einem abgelehnten Foreign Key. Nullbarkeitsänderungen
+  bei MariaDB und PostgreSQL benötigen `REVIEW`; vor jeder Plan-SQL-Ausführung
+  prüft ein NULL-Zeilen-Preflight die Verschärfung und blockiert den gesamten
+  Plan, wenn vorhandene NULL-Werte korrigiert werden müssen. Tests prüfen beide
+  Richtungen nach Freigabe; MariaDBs Strict-DDL-Schutz vor stiller NULL-
+  Umwandlung wird ebenfalls getestet. SQLite-Nullbarkeit sowie SQLite-Typ-,
+  Foreign-Key-, Unique-Constraint- und Defaultänderungen werden auch mit
+  Freigabe durch `E-DB-006` blockiert.
   MariaDB-Primärschlüssel-/Auto-Increment- und SQLite-Schlüssel-/explizite
   `AUTOINCREMENT`-Drift bleiben blockiert.
 - `tests/postgres-schema-safety-e2e.sh` prüft PostgreSQL-Defaultänderungen mit

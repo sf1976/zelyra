@@ -20,12 +20,20 @@ database_path="${temp_dir}/schema-safety.sqlite3"
 sqlite_url="sqlite://${database_path}"
 mariadb_database=""
 mariadb_url=""
+mariadb_nullability_database=""
+mariadb_nullability_url=""
 mariadb_user=""
 mariadb_password=""
 mariadb_host=""
 mariadb_port=""
 
 cleanup() {
+    if [[ -n "${mariadb_nullability_database}" ]]; then
+        MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "DROP DATABASE IF EXISTS \`${mariadb_nullability_database}\`;" >/dev/null 2>&1 || true
+    fi
     if [[ -n "${mariadb_database}" ]]; then
         MYSQL_PWD="${mariadb_password}" mariadb \
             --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
@@ -326,12 +334,12 @@ assert_mariadb_safety() {
     local nullable_after nullable_plan
     nullable_after="${fixture_dir}/schema_safety_nullable_after_mariadb.zyl"
     nullable_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${nullable_after}")"
-    grep -Fq "[UNSUPPORTED] change nullability" <<<"${nullable_plan}"
-    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${nullable_after}" --allow-risky 2>&1)"; then
-        echo "error: MariaDB applied a schema change the planner marks unsupported" >&2
+    grep -Fq "[REVIEW] change nullability of safety_records.label" <<<"${nullable_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${nullable_after}" 2>&1)"; then
+        echo "error: MariaDB applied a nullability change without review approval" >&2
         exit 1
     fi
-    grep -Fq "error[E-DB-006]" <<<"${output}"
+    grep -Fq "error[E-DB-004]" <<<"${output}"
     [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
         --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
         --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
@@ -469,6 +477,82 @@ assert_mariadb_safety() {
         -e "SELECT CONCAT((SELECT COUNT(*) FROM metadata_records WHERE name='retained'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME IN ('active','name') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME='id' AND COLUMN_KEY='PRI' AND EXTRA LIKE '%auto_increment%'));" )"
     [[ "${metadata_state}" == "1:0:1" ]]
     echo "[MariaDB] default drift is review-gated; primary-key and auto-increment drift remain blocked"
+
+    local nullability_before nullability_tightened nullability_relaxed nullability_plan nullability_state
+    nullability_before="${fixture_dir}/schema_safety_nullability_before_mariadb.zyl"
+    nullability_tightened="${fixture_dir}/schema_safety_nullability_tightened_mariadb.zyl"
+    nullability_relaxed="${fixture_dir}/schema_safety_nullability_relaxed_mariadb.zyl"
+    mariadb_nullability_database="zelyra_null_safety_${$}"
+    mariadb_nullability_url="mariadb://${mariadb_user}:${mariadb_password}@${mariadb_host}:${mariadb_port}/${mariadb_nullability_database}"
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" --batch --skip-column-names \
+        -e "CREATE DATABASE \`${mariadb_nullability_database}\`;"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db bootstrap "${nullability_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "INSERT INTO nullability_records(value, retained) VALUES (NULL, 'preserved');"
+    nullability_plan="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db plan "${nullability_tightened}")"
+    grep -Fq "[PREFLIGHT] verify \`nullability_records.value\` has no NULL values" <<<"${nullability_plan}"
+    grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+    grep -Fq "[SAFE] add column nullability_records.marker" <<<"${nullability_plan}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" 2>&1)"; then
+        echo "error: MariaDB applied a nullability change without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB tightened nullability while a NULL value existed" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "existing rows contain NULL values; no schema SQL was applied" <<<"${output}"
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='marker'), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "1:0:preserved" ]]
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "UPDATE nullability_records SET value='repaired' WHERE id=1;"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky >/dev/null
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT marker FROM nullability_records WHERE id=1), ':', (SELECT value FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "NO:0:repaired" ]]
+    nullability_plan="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db plan "${nullability_relaxed}")"
+    grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" 2>&1)"; then
+        echo "error: MariaDB relaxed nullability without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" --allow-risky >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "INSERT INTO nullability_records(value, retained) VALUES (NULL, 'second');"
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "YES:1:preserved" ]]
+    if output="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES'); ALTER TABLE nullability_records MODIFY COLUMN value VARCHAR(80) NOT NULL;" 2>&1)"; then
+        echo "error: MariaDB strict mode allowed a NULL-to-NOT-NULL coercion" >&2
+        exit 1
+    fi
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "YES:1:preserved" ]]
+    echo "[MariaDB] nullability changes require review, preflight blocks NULL rows before all SQL, and strict DDL succeeds after repair"
 }
 
 assert_sqlite_safety

@@ -407,6 +407,45 @@ fn alter_column_default_sql(table: &Table, column: &Column, backend: Backend) ->
     }
 }
 
+fn alter_column_nullability_sql(table: &Table, column: &Column, backend: Backend) -> String {
+    let table_name = quote_identifier(&table.name, backend);
+    let column_name = quote_identifier(&column.name, backend);
+    match backend {
+        Backend::Postgres => format!(
+            "ALTER TABLE {table_name} ALTER COLUMN {column_name} {};",
+            if column.nullable {
+                "DROP NOT NULL"
+            } else {
+                "SET NOT NULL"
+            }
+        ),
+        Backend::MariaDb => {
+            let mut definition = format!("{column_name} {}", column.sql_type);
+            definition.push_str(if column.nullable { " NULL" } else { " NOT NULL" });
+            if column.auto {
+                definition.push_str(" AUTO_INCREMENT");
+            }
+            if let Some(default) = &column.default {
+                definition.push_str(" DEFAULT ");
+                definition.push_str(default);
+            }
+            format!("ALTER TABLE {table_name} MODIFY COLUMN {definition};")
+        }
+        Backend::Sqlite => format!(
+            "-- Changing nullability of {}.{} requires a SQLite table rebuild, which is not supported by the current schema planner.",
+            table.name, column.name
+        ),
+    }
+}
+
+fn nullability_count_sql(table: &str, column: &str, backend: Backend) -> String {
+    format!(
+        "SELECT COUNT(*) FROM {} WHERE {} IS NULL",
+        quote_identifier(table, backend),
+        quote_identifier(column, backend)
+    )
+}
+
 fn quote_string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -555,9 +594,16 @@ pub struct SchemaChange {
     pub risk: Risk,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NullabilityPreflight {
+    pub table: String,
+    pub column: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SchemaPlan {
     pub changes: Vec<SchemaChange>,
+    pub nullability_preflights: Vec<NullabilityPreflight>,
 }
 
 impl SchemaPlan {
@@ -616,11 +662,12 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             .collect::<HashMap<_, _>>();
         for desired_column in &desired_table.columns {
             if let Some(current_column) = current_columns.get(desired_column.name.as_str()) {
-                if !sql_types_equivalent(
+                let type_changed = !sql_types_equivalent(
                     &current_column.sql_type,
                     &desired_column.sql_type,
                     backend,
-                ) {
+                );
+                if type_changed {
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "change type of {}.{}",
@@ -635,17 +682,60 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                     });
                 }
                 if current_column.nullable != desired_column.nullable {
-                    plan.changes.push(SchemaChange {
-                        description: format!(
-                            "change nullability of {}.{}",
-                            desired_table.name, desired_column.name
-                        ),
-                        sql: format!(
-                            "-- Changing nullability of {}.{} is not supported by the current schema planner.",
-                            desired_table.name, desired_column.name
-                        ),
-                        risk: Risk::Unsupported,
-                    });
+                    if current_column.nullable
+                        && !desired_column.nullable
+                        && backend != Backend::Sqlite
+                    {
+                        plan.nullability_preflights.push(NullabilityPreflight {
+                            table: desired_table.name.clone(),
+                            column: desired_column.name.clone(),
+                        });
+                    }
+                    match backend {
+                        Backend::MariaDb | Backend::Postgres => {
+                            if backend == Backend::MariaDb && type_changed {
+                                if let Some(change) = plan.changes.iter_mut().find(|change| {
+                                    change.description
+                                        == format!(
+                                            "change type of {}.{}",
+                                            desired_table.name, desired_column.name
+                                        )
+                                }) {
+                                    change.description = format!(
+                                        "change type and nullability of {}.{}",
+                                        desired_table.name, desired_column.name
+                                    );
+                                    if change.risk == Risk::Safe {
+                                        change.risk = Risk::RequiresApproval;
+                                    }
+                                }
+                            } else {
+                                plan.changes.push(SchemaChange {
+                                    description: format!(
+                                        "change nullability of {}.{}",
+                                        desired_table.name, desired_column.name
+                                    ),
+                                    sql: alter_column_nullability_sql(
+                                        desired_table,
+                                        desired_column,
+                                        backend,
+                                    ),
+                                    risk: Risk::RequiresApproval,
+                                });
+                            }
+                        }
+                        Backend::Sqlite => plan.changes.push(SchemaChange {
+                            description: format!(
+                                "change nullability of {}.{}",
+                                desired_table.name, desired_column.name
+                            ),
+                            sql: format!(
+                                "-- Changing nullability of {}.{} requires a SQLite table rebuild, which is not supported by the current schema planner.",
+                                desired_table.name, desired_column.name
+                            ),
+                            risk: Risk::Unsupported,
+                        }),
+                    }
                 }
             } else {
                 plan.changes.push(SchemaChange {
@@ -869,6 +959,11 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
     // class (notably table creation order for foreign-key dependencies).
     plan.changes
         .sort_by_key(|change| change_order(&change.description));
+    plan.nullability_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.column.cmp(&right.column))
+    });
     plan
 }
 
@@ -1561,6 +1656,27 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
 
 pub fn apply_mariadb(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     run_mariadb_sql(database_url, sql, None)
+}
+
+pub fn count_null_values(
+    database_url: &str,
+    backend: Backend,
+    table: &str,
+    column: &str,
+) -> Result<u64, DatabaseError> {
+    let query = nullability_count_sql(table, column, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => {
+            return Err(DatabaseError {
+                message: "nullability preflight is not supported for SQLite schema changes".into(),
+            });
+        }
+    };
+    output.trim().parse().map_err(|_| DatabaseError {
+        message: "database returned an invalid NULL row count".into(),
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -2686,18 +2802,74 @@ mod tests {
     }
 
     #[test]
-    fn blocks_nullability_changes_until_supported_migration_exists() {
-        let desired = schema("table users { id: Id primary auto email: Email required }");
-        let current = schema("table users { id: Id primary auto email: Email? }");
-        let plan = diff(&desired, &current);
-        assert_eq!(plan.changes.len(), 1);
-        assert_eq!(plan.changes[0].risk, Risk::Unsupported);
-        assert!(plan.has_unsupported());
-        assert!(plan.changes[0].sql.starts_with("--"));
+    fn reviews_nullability_changes_and_only_preflights_tightening() {
+        for (engine, quote) in [("mariadb", '`'), ("postgres", '"')] {
+            let source = |required: bool| {
+                format!(
+                    "database main {{ engine: {engine} }} table users {{ id: Id primary auto email: Email{} }}",
+                    if required { " required" } else { "" }
+                )
+            };
+            let tighten = diff(&schema(&source(true)), &schema(&source(false)));
+            assert_eq!(tighten.changes.len(), 1);
+            assert_eq!(tighten.changes[0].risk, Risk::RequiresApproval);
+            assert!(!tighten.has_unsupported());
+            assert_eq!(
+                tighten.nullability_preflights,
+                [NullabilityPreflight {
+                    table: "users".into(),
+                    column: "email".into(),
+                }]
+            );
+            if engine == "postgres" {
+                assert_eq!(
+                    tighten.changes[0].sql,
+                    format!(
+                        "ALTER TABLE {quote}users{quote} ALTER COLUMN {quote}email{quote} SET NOT NULL;"
+                    )
+                );
+            } else {
+                assert_eq!(
+                    tighten.changes[0].sql,
+                    format!(
+                        "ALTER TABLE {quote}users{quote} MODIFY COLUMN {quote}email{quote} VARCHAR(255) NOT NULL;"
+                    )
+                );
+            }
+
+            let relax = diff(&schema(&source(false)), &schema(&source(true)));
+            assert_eq!(relax.changes.len(), 1);
+            assert_eq!(relax.changes[0].risk, Risk::RequiresApproval);
+            assert!(relax.nullability_preflights.is_empty());
+            assert!(
+                relax.changes[0].sql.contains("DROP NOT NULL")
+                    || relax.changes[0].sql.contains("VARCHAR(255) NULL")
+            );
+        }
+
+        let sqlite = diff(
+            &schema("database main { engine: sqlite } table users { id: Id primary auto email: Email required }"),
+            &schema("database main { engine: sqlite } table users { id: Id primary auto email: Email? }"),
+        );
+        assert_eq!(sqlite.changes[0].risk, Risk::Unsupported);
+        assert!(sqlite.has_unsupported());
+        assert!(sqlite.nullability_preflights.is_empty());
     }
 
     #[test]
-    fn type_widening_does_not_hide_unsupported_nullability_drift() {
+    fn nullability_preflight_queries_quote_backend_identifiers() {
+        assert_eq!(
+            nullability_count_sql("user`data", "e`mail", Backend::MariaDb),
+            "SELECT COUNT(*) FROM `user``data` WHERE `e``mail` IS NULL"
+        );
+        assert_eq!(
+            nullability_count_sql("user\"data", "e\"mail", Backend::Postgres),
+            "SELECT COUNT(*) FROM \"user\"\"data\" WHERE \"e\"\"mail\" IS NULL"
+        );
+    }
+
+    #[test]
+    fn type_widening_does_not_hide_reviewable_nullability_drift() {
         let desired = schema(
             "database main { engine: mariadb } table users { id: Id primary auto name: String(200) required }",
         );
@@ -2706,14 +2878,12 @@ mod tests {
         );
         current.tables[0].columns[1].nullable = true;
         let plan = diff(&desired, &current);
-        assert!(plan.has_unsupported());
+        assert!(!plan.has_unsupported());
         assert!(plan.changes.iter().any(|change| {
-            change.description == "change type of users.name" && change.risk == Risk::Safe
+            change.description == "change type and nullability of users.name"
+                && change.risk == Risk::RequiresApproval
         }));
-        assert!(plan.changes.iter().any(|change| {
-            change.description == "change nullability of users.name"
-                && change.risk == Risk::Unsupported
-        }));
+        assert_eq!(plan.nullability_preflights.len(), 1);
     }
 
     #[test]

@@ -560,10 +560,14 @@ zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
 `UNSUPPORTED` changes are refused even with approval. A required column without
-a default and a new unique constraint need review; nullability changes and
-SQLite type, foreign-key, and unique-constraint alterations are currently
-unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`; SQLite
-foreign-key alterations are refused. The schema-safety integration verifies
+a default and a new unique constraint need review. MariaDB and PostgreSQL
+nullability changes require `REVIEW`; tightening to `NOT NULL` runs a read-only
+preflight before any plan SQL. If existing rows contain `NULL`, the whole plan
+is refused without applying any of its changes. MariaDB also enables strict
+mode for the DDL so a concurrent NULL cannot be silently coerced. SQLite
+nullability and type, foreign-key, and unique-constraint alterations remain
+unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`;
+SQLite foreign-key alterations are refused. The schema-safety integration verifies
 that a failed unique-constraint creation leaves duplicate rows intact and
 invalid foreign-key relationships are retained. MariaDB and PostgreSQL default
 changes are marked `REVIEW`; tests cover setting, changing, and removing them,

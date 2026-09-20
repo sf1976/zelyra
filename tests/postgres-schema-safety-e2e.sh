@@ -53,8 +53,15 @@ database_created=false
 defaults_database="zelyra_schema_defaults_$$"
 defaults_url="${scheme}://${authority}/${defaults_database}"
 defaults_database_created=false
+nullability_database="zelyra_schema_nullability_$$"
+nullability_url="${scheme}://${authority}/${nullability_database}"
+nullability_database_created=false
 
 cleanup() {
+    if [[ "${nullability_database_created}" == true ]]; then
+        psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+            --command="DROP DATABASE IF EXISTS \"${nullability_database}\";" >/dev/null 2>&1 || true
+    fi
     if [[ "${defaults_database_created}" == true ]]; then
         psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
             --command="DROP DATABASE IF EXISTS \"${defaults_database}\";" >/dev/null 2>&1 || true
@@ -144,6 +151,72 @@ defaults_state="$(psql -X -At --dbname="${defaults_url}" --command="
 defaults_plan="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db plan "${defaults_before}")"
 grep -Fq "No schema changes." <<<"${defaults_plan}"
 echo "[PostgreSQL] adding, changing, and removing defaults requires review, retains rows, and is idempotent"
+
+nullability_before="${fixture_dir}/schema_safety_nullability_before_postgres.zyl"
+nullability_tightened="${fixture_dir}/schema_safety_nullability_tightened_postgres.zyl"
+nullability_relaxed="${fixture_dir}/schema_safety_nullability_relaxed_postgres.zyl"
+if ! psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+    --command="CREATE DATABASE \"${nullability_database}\";" >/dev/null 2>&1; then
+    echo "error: could not create the isolated PostgreSQL nullability test database" >&2
+    exit 1
+fi
+nullability_database_created=true
+DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_before}" >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${nullability_url}" \
+    --command="INSERT INTO public.nullability_records(value, retained) VALUES (NULL, 'preserved');" >/dev/null
+nullability_plan="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db plan "${nullability_tightened}")"
+grep -Fq "[PREFLIGHT] verify \`nullability_records.value\` has no NULL values" <<<"${nullability_plan}"
+grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+grep -Fq "[SAFE] add column nullability_records.marker" <<<"${nullability_plan}"
+if output="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" 2>&1)"; then
+    echo "error: PostgreSQL applied a nullability change without review approval" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-004]" <<<"${output}"
+if output="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky 2>&1)"; then
+    echo "error: PostgreSQL tightened nullability while a NULL value existed" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-005]" <<<"${output}"
+grep -Fq "existing rows contain NULL values; no schema SQL was applied" <<<"${output}"
+nullability_state="$(psql -X -At --dbname="${nullability_url}" --command="
+    SELECT
+        (SELECT count(*)::text FROM public.nullability_records WHERE value IS NULL) || ':' ||
+        (SELECT count(*)::text FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='nullability_records' AND column_name='marker') || ':' ||
+        (SELECT retained FROM public.nullability_records WHERE id=1);
+")"
+[[ "${nullability_state}" == "1:0:preserved" ]]
+psql -X -v ON_ERROR_STOP=1 --dbname="${nullability_url}" \
+    --command="UPDATE public.nullability_records SET value='repaired' WHERE id=1;" >/dev/null
+DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky >/dev/null
+nullability_state="$(psql -X -At --dbname="${nullability_url}" --command="
+    SELECT
+        (SELECT is_nullable FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='nullability_records' AND column_name='value') || ':' ||
+        (SELECT marker::text FROM public.nullability_records WHERE id=1) || ':' ||
+        (SELECT value FROM public.nullability_records WHERE id=1);
+")"
+[[ "${nullability_state}" == "NO:false:repaired" ]]
+nullability_plan="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db plan "${nullability_relaxed}")"
+grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+if output="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" 2>&1)"; then
+    echo "error: PostgreSQL relaxed nullability without review approval" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-004]" <<<"${output}"
+DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" --allow-risky >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${nullability_url}" \
+    --command="INSERT INTO public.nullability_records(value, retained) VALUES (NULL, 'second');" >/dev/null
+nullability_state="$(psql -X -At --dbname="${nullability_url}" --command="
+    SELECT
+        (SELECT is_nullable FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='nullability_records' AND column_name='value') || ':' ||
+        (SELECT count(*)::text FROM public.nullability_records WHERE value IS NULL) || ':' ||
+        (SELECT retained FROM public.nullability_records WHERE id=1);
+")"
+[[ "${nullability_state}" == "YES:1:preserved" ]]
+echo "[PostgreSQL] nullability changes require review, preflight blocks NULL rows before all SQL, and native DDL succeeds after repair"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
     --command="INSERT INTO public.pg_metadata_records(active, name) VALUES (false, 'retained');" >/dev/null

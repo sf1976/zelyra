@@ -42,8 +42,12 @@ can run the same scripts against a disposable MariaDB service:
   Tests verify that setting/changing/removing defaults requires approval,
   retains existing values, and produces an idempotent next plan. Duplicate
   rows survive a rejected unique-index creation and orphan rows survive a
-  rejected foreign-key addition; unsupported nullability changes and SQLite
-  type, foreign-key, unique-constraint, and default alterations are blocked by
+  rejected foreign-key addition. MariaDB and PostgreSQL nullability changes
+  require `REVIEW`; tightening runs a NULL-row preflight before any plan SQL,
+  refuses the whole plan when existing NULL rows need repair, and tests verify
+  loosening/tightening after approval. MariaDB's strict DDL guard is also
+  tested against silent NULL coercion. SQLite nullability and type,
+  foreign-key, unique-constraint, and default alterations are blocked by
   `E-DB-006` even with approval. MariaDB primary-key/auto-increment and SQLite
   key/explicit `AUTOINCREMENT` drift remain blocked.
 - `tests/postgres-schema-safety-e2e.sh` checks PostgreSQL default changes under

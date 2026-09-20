@@ -111,10 +111,15 @@ Indizes aus allen drei Backends.
 
 MariaDB ist das primäre Runtime-Referenz-Backend; PostgreSQL-Schema-Inspektion
 und -Planung sind verfügbar, aber nicht die Runtime-Parität. SQL Server ist
-noch nicht integriert. Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key-
-und Unique-Constraint-Änderungen werden derzeit als nicht unterstützt markiert
-und benötigen eine spezialisierte Migration. Hinzufügen und Entfernen von
-Foreign Keys benötigt bei MariaDB eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
+noch nicht integriert. Nullbarkeitsänderungen bei MariaDB und PostgreSQL
+erzeugen `REVIEW`-Pläne. Die Verschärfung auf `NOT NULL` benötigt Freigabe und
+einen lesenden Preflight; enthält eine vorhandene Zeile `NULL`, verweigert
+Zelyra den gesamten Plan, bevor Schema-SQL ausgeführt wird. MariaDB führt das
+DDL im Strict-Modus aus, damit NULL-Werte nicht stillschweigend in implizite
+Standardwerte umgewandelt werden. SQLite-Nullbarkeit sowie SQLite-Typ-,
+Foreign-Key- und Unique-Constraint-Änderungen bleiben nicht unterstützt und
+benötigen einen spezialisierten Tabellenumbau. Hinzufügen und Entfernen von
+MariaDB-Foreign-Keys benötigt eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
 Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
 Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
 nicht erraten, sondern blockiert. Das Setzen, Ändern und Entfernen von Defaults
@@ -125,5 +130,4 @@ bleiben `UNSUPPORTED`; das gilt ebenso für Primärschlüssel- und
 Auto-Increment-Änderungen bei MariaDB und PostgreSQL. Die PostgreSQL-
 Schemasicherheitsintegration läuft in CI mit PostgreSQL 16. Das belegt keine
 PostgreSQL-Runtime-Parität. Typ- und Nullbarkeitsänderungen werden unabhängig
-bewertet; eine sichere Typvergrößerung kann eine nicht unterstützte
-Nullbarkeitsänderung nicht verdecken.
+bewertet, damit eine Änderung die Risiken der jeweils anderen nicht verdeckt.
