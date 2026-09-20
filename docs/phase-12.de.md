@@ -20,7 +20,7 @@ Antworten enthalten diese sicheren Standard-Header:
 ~~~http
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Referrer-Policy: no-referrer
+Referrer-Policy: same-origin
 ~~~
 
 Die Defaults gelten für HTML, JSON, Weiterleitungen, Fehler und leere

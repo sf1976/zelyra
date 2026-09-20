@@ -56,6 +56,11 @@ Compiler verstandenen Deklarationen. Der Befehl verbindet sich nicht mit einer
 Datenbank, nutzt kein Netzwerk, führt keine E-Mail oder Jobs aus und gibt keine
 Secrets aus. Nicht unterstützte Details werden nicht erfunden.
 
+Für CRUD-Ressourcen enthält die Übersicht das ausgewählte äußere Layout sowie
+Namen und Source-Spans der gelieferten benannten Layout-Slots. Die
+HTML-Inhalte dieser Slots werden bewusst ausgelassen; der Projektkontext bleibt
+begrenzt und gibt beliebige Darstellungsinhalte nicht standardmäßig aus.
+
 ## Einfacher Standard und optionale Möglichkeiten
 
 Zelyra verwendet ein zweistufiges Konfigurationsmodell. `zelyra.toml`

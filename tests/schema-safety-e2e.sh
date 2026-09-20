@@ -1,0 +1,565 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd -- "${script_dir}/.." && pwd)"
+fixture_dir="${script_dir}/fixtures"
+zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
+
+if [[ ! -x "${zelyra_bin}" ]]; then
+    echo "error: Zelyra binary not found at ${zelyra_bin}; run cargo build -p zelyra-cli first" >&2
+    exit 1
+fi
+if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "error: sqlite3 is required for schema safety integration tests" >&2
+    exit 1
+fi
+
+temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-schema-safety.XXXXXX")"
+database_path="${temp_dir}/schema-safety.sqlite3"
+sqlite_url="sqlite://${database_path}"
+mariadb_database=""
+mariadb_url=""
+mariadb_nullability_database=""
+mariadb_nullability_url=""
+mariadb_user=""
+mariadb_password=""
+mariadb_host=""
+mariadb_port=""
+
+cleanup() {
+    if [[ -n "${mariadb_nullability_database}" ]]; then
+        MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "DROP DATABASE IF EXISTS \`${mariadb_nullability_database}\`;" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${mariadb_database}" ]]; then
+        MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "DROP DATABASE IF EXISTS \`${mariadb_database}\`;" >/dev/null 2>&1 || true
+    fi
+    rm -rf -- "${temp_dir}"
+}
+trap cleanup EXIT
+
+assert_sqlite_safety() {
+    local before="${fixture_dir}/schema_safety_before_sqlite.zyl"
+    local after="${fixture_dir}/schema_safety_after_sqlite.zyl"
+
+    echo "[SQLite] create isolated schema and retained test row"
+    DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db bootstrap "${before}"
+    sqlite3 "${database_path}" "INSERT INTO safety_records(label, archive_note) VALUES ('keep-row', 'keep-note');"
+
+    local plan
+    plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${after}")"
+    grep -Fq "[DESTRUCTIVE] drop column safety_records.archive_note" <<<"${plan}"
+
+    local output
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${after}" 2>&1)"; then
+        echo "error: SQLite db apply unexpectedly accepted a destructive change" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT label || ':' || archive_note FROM safety_records;")" == "keep-row:keep-note" ]]
+
+    DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${after}" --allow-destructive >/dev/null
+    [[ "$(sqlite3 "${database_path}" "SELECT label FROM safety_records;")" == "keep-row" ]]
+    [[ "$(sqlite3 "${database_path}" "PRAGMA table_info(safety_records);" | cut -d'|' -f2 | grep -cx archive_note || true)" == "0" ]]
+    echo "[SQLite] default refusal preserves data; explicit approval applies the change"
+
+    sqlite3 "${database_path}" "INSERT INTO safety_records(label) VALUES ('duplicate'), ('duplicate');"
+    local unique_plan unique_after
+    unique_after="${fixture_dir}/schema_safety_unique_after_sqlite.zyl"
+    unique_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${unique_after}")"
+    grep -Fq "[REVIEW] add unique index" <<<"${unique_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${unique_after}" 2>&1)"; then
+        echo "error: SQLite db apply unexpectedly accepted a unique constraint without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM safety_records WHERE label = 'duplicate';")" == "2" ]]
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${unique_after}" --allow-destructive 2>&1)"; then
+        echo "error: legacy destructive approval also approved a REVIEW change" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${unique_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite accepted a unique index over duplicate values" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM safety_records WHERE label = 'duplicate';")" == "2" ]]
+    echo "[SQLite] unique constraint requires review and preserves duplicate rows on failure"
+
+    local required_after required_plan
+    required_after="${fixture_dir}/schema_safety_required_after_sqlite.zyl"
+    required_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${required_after}")"
+    grep -Fq "[REVIEW] add required column safety_records.review_value without a default" <<<"${required_plan}"
+    grep -Fq "[PREFLIGHT] verify \`safety_records\` is empty before adding required column \`review_value\` without a default" <<<"${required_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${required_after}" 2>&1)"; then
+        echo "error: SQLite unexpectedly accepted a required column without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "PRAGMA table_info(safety_records);" | cut -d'|' -f2 | grep -cx review_value || true)" == "0" ]]
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${required_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite unexpectedly added a required column without a default to populated rows" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "table contains existing rows; no schema SQL was applied" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "PRAGMA table_info(safety_records);" | cut -d'|' -f2 | grep -cx review_value || true)" == "0" ]]
+    [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
+    echo "[SQLite] required-column preflight refuses non-empty tables before any plan SQL"
+
+    local nullable_after nullable_plan
+    nullable_after="${fixture_dir}/schema_safety_nullable_after_sqlite.zyl"
+    nullable_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${nullable_after}")"
+    grep -Fq "[UNSUPPORTED] change nullability" <<<"${nullable_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${nullable_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied a schema change the planner marks unsupported" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
+    echo "[SQLite] unsupported changes are refused even with explicit approval"
+
+    local fk_before fk_after fk_plan
+    fk_before="${fixture_dir}/schema_safety_fk_before_sqlite.zyl"
+    fk_after="${fixture_dir}/schema_safety_fk_after_sqlite.zyl"
+    DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db bootstrap "${fk_before}" >/dev/null
+    sqlite3 "${database_path}" "INSERT INTO machines(department_id) VALUES (999);"
+    fk_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${fk_after}")"
+    grep -Fq "[UNSUPPORTED] add foreign key machines.department_id" <<<"${fk_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${fk_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied an unsupported foreign-key addition" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM machines;")" == "1" ]]
+    [[ "$(sqlite3 "${database_path}" "PRAGMA foreign_key_list(machines);" | wc -l)" == "0" ]]
+    echo "[SQLite] foreign-key additions are refused without a supported table rebuild"
+
+    local metadata_before metadata_after metadata_plan metadata_defaults
+    metadata_before="${fixture_dir}/schema_safety_metadata_before_sqlite.zyl"
+    metadata_after="${fixture_dir}/schema_safety_metadata_after_sqlite.zyl"
+    DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db bootstrap "${metadata_before}" >/dev/null
+    sqlite3 "${database_path}" "INSERT INTO metadata_records(active, name) VALUES (0, 'retained');"
+    metadata_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${metadata_after}")"
+    grep -Fq "[UNSUPPORTED] change primary-key status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.active" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change default of metadata_records.name" <<<"${metadata_plan}"
+    if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${metadata_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied schema metadata drift marked unsupported" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "SELECT name FROM metadata_records;")" == "retained" ]]
+    metadata_defaults="$(sqlite3 "${database_path}" "PRAGMA table_info(metadata_records);" | awk -F'|' '($2 == "active" || $2 == "name") && $5 != "" { count++ } END { print count + 0 }')"
+    [[ "${metadata_defaults}" == "0" ]]
+    echo "[SQLite] default and primary-key drift are detected and fail closed"
+
+    local autoincrement_before autoincrement_after no_auto_path no_auto_url auto_path auto_url auto_plan
+    autoincrement_before="${fixture_dir}/schema_safety_autoincrement_before_sqlite.zyl"
+    autoincrement_after="${fixture_dir}/schema_safety_autoincrement_after_sqlite.zyl"
+    no_auto_path="${temp_dir}/schema-safety-no-autoincrement.sqlite3"
+    no_auto_url="sqlite://${no_auto_path}"
+    DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db bootstrap "${autoincrement_before}" >/dev/null
+    sqlite3 "${no_auto_path}" "INSERT INTO autoincrement_records(label) VALUES ('retained');"
+    auto_plan="$(DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db plan "${autoincrement_after}")"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of autoincrement_records.id" <<<"${auto_plan}"
+    if output="$(DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db apply "${autoincrement_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied unsupported AUTOINCREMENT drift" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${no_auto_path}" "SELECT label FROM autoincrement_records;")" == "retained" ]]
+    [[ "$(sqlite3 "${no_auto_path}" "SELECT instr(upper(sql), ' AUTOINCREMENT') FROM sqlite_master WHERE type='table' AND name='autoincrement_records';")" == "0" ]]
+
+    auto_path="${temp_dir}/schema-safety-autoincrement.sqlite3"
+    auto_url="sqlite://${auto_path}"
+    DATABASE_URL="${auto_url}" "${zelyra_bin}" db bootstrap "${autoincrement_after}" >/dev/null
+    auto_plan="$(DATABASE_URL="${auto_url}" "${zelyra_bin}" db plan "${autoincrement_before}")"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of autoincrement_records.id" <<<"${auto_plan}"
+    if output="$(DATABASE_URL="${auto_url}" "${zelyra_bin}" db apply "${autoincrement_before}" --allow-risky 2>&1)"; then
+        echo "error: SQLite removed explicit AUTOINCREMENT without planner refusal" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${auto_path}" "SELECT instr(upper(sql), ' AUTOINCREMENT') FROM sqlite_master WHERE type='table' AND name='autoincrement_records';")" != "0" ]]
+    echo "[SQLite] explicit AUTOINCREMENT drift in both directions is detected and refused"
+}
+
+assert_mariadb_safety() {
+    local configured_url="${ZELYRA_SCHEMA_SAFETY_MARIADB_URL:-}"
+    if [[ -z "${configured_url}" ]]; then
+        echo "[MariaDB] skipped (set ZELYRA_SCHEMA_SAFETY_MARIADB_URL to a local zelyra_ci or zelyra_test URL)"
+        return
+    fi
+    if ! command -v mariadb >/dev/null 2>&1; then
+        echo "error: mariadb client is required when MariaDB schema safety testing is enabled" >&2
+        exit 1
+    fi
+
+    local parts authority credentials location host_port base_database
+    parts="${configured_url#mariadb://}"
+    if [[ "${parts}" == "${configured_url}" ]]; then
+        parts="${configured_url#mysql://}"
+        [[ "${parts}" != "${configured_url}" ]] || {
+            echo "error: MariaDB safety URL must use mariadb:// or mysql://" >&2
+            exit 1
+        }
+    fi
+    authority="${parts%%/*}"
+    base_database="${parts#*/}"
+    credentials="${authority%@*}"
+    host_port="${authority#*@}"
+    mariadb_user="${credentials%%:*}"
+    mariadb_password="${credentials#*:}"
+    mariadb_host="${host_port%%:*}"
+    mariadb_port="${host_port##*:}"
+    [[ "${mariadb_host}" != "${host_port}" ]] || mariadb_port="3306"
+
+    if [[ "${base_database}" != "zelyra_ci" && "${base_database}" != "zelyra_test" ]] || \
+       [[ "${mariadb_host}" != "127.0.0.1" && "${mariadb_host}" != "localhost" && "${mariadb_host}" != "::1" ]]; then
+        echo "error: MariaDB safety test is restricted to a local server and a zelyra_ci or zelyra_test base database" >&2
+        exit 1
+    fi
+
+    mariadb_database="zelyra_schema_safety_${$}"
+    mariadb_url="mariadb://${mariadb_user}:${mariadb_password}@${mariadb_host}:${mariadb_port}/${mariadb_database}"
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" --batch --skip-column-names \
+        -e "CREATE DATABASE \`${mariadb_database}\`;"
+
+    local before="${fixture_dir}/schema_safety_before_mariadb.zyl"
+    local after="${fixture_dir}/schema_safety_after_mariadb.zyl"
+    echo "[MariaDB] create isolated schema and retained test row"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${before}"
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO safety_records(label, archive_note) VALUES ('keep-row', 'keep-note');"
+
+    local plan
+    plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${after}")"
+    grep -Fq "[DESTRUCTIVE] drop column safety_records.archive_note" <<<"${plan}"
+
+    local output
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${after}" 2>&1)"; then
+        echo "error: MariaDB db apply unexpectedly accepted a destructive change" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    local retained
+    retained="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(label, ':', archive_note) FROM safety_records;")"
+    [[ "${retained}" == "keep-row:keep-note" ]]
+
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${after}" --allow-destructive >/dev/null
+    local remaining_columns remaining_rows
+    remaining_columns="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${mariadb_database}' AND table_name='safety_records' AND column_name='archive_note';")"
+    remaining_rows="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(COUNT(*), ':', MIN(label)) FROM safety_records;")"
+    [[ "${remaining_columns}" == "0" && "${remaining_rows}" == "1:keep-row" ]]
+    echo "[MariaDB] default refusal preserves data; explicit approval applies the change"
+
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO safety_records(label) VALUES ('duplicate'), ('duplicate');"
+    local unique_plan unique_after
+    unique_after="${fixture_dir}/schema_safety_unique_after_mariadb.zyl"
+    unique_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${unique_after}")"
+    grep -Fq "[REVIEW] add unique index" <<<"${unique_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${unique_after}" 2>&1)"; then
+        echo "error: MariaDB db apply unexpectedly accepted a unique constraint without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${unique_after}" --allow-destructive 2>&1)"; then
+        echo "error: legacy destructive approval also approved a REVIEW change" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    local duplicate_count
+    duplicate_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM safety_records WHERE label='duplicate';")"
+    [[ "${duplicate_count}" == "2" ]]
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${unique_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB accepted a unique index over duplicate values" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    duplicate_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM safety_records WHERE label='duplicate';")"
+    [[ "${duplicate_count}" == "2" ]]
+    echo "[MariaDB] unique constraint requires review and preserves duplicate rows on failure"
+
+    local required_after required_plan
+    required_after="${fixture_dir}/schema_safety_required_after_mariadb.zyl"
+    required_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${required_after}")"
+    grep -Fq "[REVIEW] add required column safety_records.review_value without a default" <<<"${required_plan}"
+    grep -Fq "[PREFLIGHT] verify \`safety_records\` is empty before adding required column \`review_value\` without a default" <<<"${required_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${required_after}" 2>&1)"; then
+        echo "error: MariaDB unexpectedly accepted a required column without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${required_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB added a required no-default column to a non-empty table" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "table contains existing rows; no schema SQL was applied" <<<"${output}"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${mariadb_database}' AND table_name='safety_records' AND column_name='review_value';")" == "0" ]]
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
+    echo "[MariaDB] required-column preflight refuses non-empty tables before any plan SQL"
+
+    local nullable_after nullable_plan
+    nullable_after="${fixture_dir}/schema_safety_nullable_after_mariadb.zyl"
+    nullable_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${nullable_after}")"
+    grep -Fq "[REVIEW] change nullability of safety_records.label" <<<"${nullable_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${nullable_after}" 2>&1)"; then
+        echo "error: MariaDB applied a nullability change without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
+    echo "[MariaDB] unsupported changes are refused even with explicit approval"
+
+    local fk_before fk_after fk_removed fk_plan orphan_rows fk_count
+    fk_before="${fixture_dir}/schema_safety_fk_before_mariadb.zyl"
+    fk_after="${fixture_dir}/schema_safety_fk_after_mariadb.zyl"
+    fk_removed="${fixture_dir}/schema_safety_fk_removed_mariadb.zyl"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${fk_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO machines(department_id) VALUES (500);"
+    fk_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${fk_after}")"
+    grep -Fq "[REVIEW] add foreign key machines.department_id" <<<"${fk_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${fk_after}" 2>&1)"; then
+        echo "error: MariaDB accepted a foreign-key addition without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${fk_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB accepted a foreign key despite an orphan row" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    orphan_rows="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM machines WHERE department_id=500;")"
+    [[ "${orphan_rows}" == "1" ]]
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO departments(id, name) VALUES (500, 'reviewed');"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${fk_after}" --allow-risky >/dev/null
+    fk_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='machines' AND CONSTRAINT_NAME='fk_machines_department_id';")"
+    [[ "${fk_count}" == "1" ]]
+
+    fk_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${fk_removed}")"
+    grep -Fq "[REVIEW] drop foreign key machines.department_id" <<<"${fk_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${fk_removed}" 2>&1)"; then
+        echo "error: MariaDB accepted a foreign-key removal without approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${fk_removed}" --allow-risky >/dev/null
+    fk_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='machines' AND CONSTRAINT_NAME='fk_machines_department_id';")"
+    [[ "${fk_count}" == "0" ]]
+    echo "[MariaDB] foreign-key changes require review and retain data"
+
+    local defaults_before defaults_added defaults_changed defaults_plan defaults_state
+    defaults_before="${fixture_dir}/schema_safety_defaults_before_mariadb.zyl"
+    defaults_added="${fixture_dir}/schema_safety_defaults_added_mariadb.zyl"
+    defaults_changed="${fixture_dir}/schema_safety_defaults_changed_mariadb.zyl"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${defaults_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records(active, label) VALUES (0, 'existing');"
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_added}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_added}" 2>&1)"; then
+        echo "error: MariaDB applied changed defaults without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_added}" --allow-risky >/dev/null
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=1;")" == "0:existing" ]]
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records() VALUES ();"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=2;")" == "1:pending" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_changed}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_changed}" --allow-risky >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records() VALUES ();"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=3;")" == "0:reviewed" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_before}" --allow-risky >/dev/null
+    defaults_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM default_records), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='default_records' AND COLUMN_NAME IN ('active','label') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT label FROM default_records WHERE id=1));")"
+    [[ "${defaults_state}" == "3:0:existing" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+    grep -Fq "No schema changes." <<<"${defaults_plan}"
+    echo "[MariaDB] adding, changing, and removing defaults requires review, retains rows, and is idempotent"
+
+    local metadata_before metadata_after metadata_plan metadata_state
+    metadata_before="${fixture_dir}/schema_safety_metadata_before_mariadb.zyl"
+    metadata_after="${fixture_dir}/schema_safety_metadata_after_mariadb.zyl"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${metadata_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO metadata_records(active, name) VALUES (0, 'retained');"
+    metadata_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${metadata_after}")"
+    grep -Fq "[UNSUPPORTED] change primary-key status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of metadata_records.id" <<<"${metadata_plan}"
+    grep -Fq "[REVIEW] change default of metadata_records.active" <<<"${metadata_plan}"
+    grep -Fq "[REVIEW] change default of metadata_records.name" <<<"${metadata_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${metadata_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB applied schema metadata drift marked unsupported" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    metadata_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM metadata_records WHERE name='retained'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME IN ('active','name') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME='id' AND COLUMN_KEY='PRI' AND EXTRA LIKE '%auto_increment%'));" )"
+    [[ "${metadata_state}" == "1:0:1" ]]
+    echo "[MariaDB] default drift is review-gated; primary-key and auto-increment drift remain blocked"
+
+    local nullability_before nullability_tightened nullability_relaxed nullability_plan nullability_state
+    nullability_before="${fixture_dir}/schema_safety_nullability_before_mariadb.zyl"
+    nullability_tightened="${fixture_dir}/schema_safety_nullability_tightened_mariadb.zyl"
+    nullability_relaxed="${fixture_dir}/schema_safety_nullability_relaxed_mariadb.zyl"
+    mariadb_nullability_database="zelyra_null_safety_${$}"
+    mariadb_nullability_url="mariadb://${mariadb_user}:${mariadb_password}@${mariadb_host}:${mariadb_port}/${mariadb_nullability_database}"
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" --batch --skip-column-names \
+        -e "CREATE DATABASE \`${mariadb_nullability_database}\`;"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db bootstrap "${nullability_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "INSERT INTO nullability_records(value, retained) VALUES (NULL, 'preserved');"
+    nullability_plan="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db plan "${nullability_tightened}")"
+    grep -Fq "[PREFLIGHT] verify \`nullability_records.value\` has no NULL values" <<<"${nullability_plan}"
+    grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+    grep -Fq "[SAFE] add column nullability_records.marker" <<<"${nullability_plan}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" 2>&1)"; then
+        echo "error: MariaDB applied a nullability change without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB tightened nullability while a NULL value existed" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "existing rows contain NULL values; no schema SQL was applied" <<<"${output}"
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='marker'), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "1:0:preserved" ]]
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "UPDATE nullability_records SET value='repaired' WHERE id=1;"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_tightened}" --allow-risky >/dev/null
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT marker FROM nullability_records WHERE id=1), ':', (SELECT value FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "NO:0:repaired" ]]
+    nullability_plan="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db plan "${nullability_relaxed}")"
+    grep -Fq "[REVIEW] change nullability of nullability_records.value" <<<"${nullability_plan}"
+    if output="$(DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" 2>&1)"; then
+        echo "error: MariaDB relaxed nullability without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_nullability_url}" "${zelyra_bin}" db apply "${nullability_relaxed}" --allow-risky >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "INSERT INTO nullability_records(value, retained) VALUES (NULL, 'second');"
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "YES:1:preserved" ]]
+    if output="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES'); ALTER TABLE nullability_records MODIFY COLUMN value VARCHAR(80) NOT NULL;" 2>&1)"; then
+        echo "error: MariaDB strict mode allowed a NULL-to-NOT-NULL coercion" >&2
+        exit 1
+    fi
+    nullability_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_nullability_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
+    [[ "${nullability_state}" == "YES:1:preserved" ]]
+    echo "[MariaDB] nullability changes require review, preflight blocks NULL rows before all SQL, and strict DDL succeeds after repair"
+}
+
+assert_sqlite_safety
+assert_mariadb_safety
+echo "Database schema safety E2E passed"

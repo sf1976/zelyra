@@ -92,19 +92,40 @@ all three backends.
 database and is useful for reviewing initial DDL. `db apply` refuses to run
 without a live connection.
 
-Destructive changes are visible in the plan and are refused by default:
+Changes marked `REVIEW` or `DESTRUCTIVE` are visible in the plan and refused
+by default. Approve only after review:
 
 ```bash
-zelyra db apply examples/machine_management.zyl --allow-destructive
+zelyra db apply examples/machine_management.zyl --allow-risky
 ```
 
-The flag is required only after reviewing the generated plan. Connection
+`--allow-destructive` remains for destructive-only plans and does not approve
+`REVIEW` changes. `UNSUPPORTED` changes are never applied. Connection
 credentials are read from the environment and are never stored in the schema
 source.
 
 ## Current limitations
 
-PostgreSQL remains the primary reference backend. SQL Server is not integrated
-yet. SQLite requires a table rebuild for some destructive changes; those
-changes are marked destructive in the plan and need a future specialized
-migration implementation.
+MariaDB is the primary runtime reference backend; PostgreSQL schema inspection
+and planning are available, but runtime parity is not. SQL Server is not
+integrated yet. MariaDB and PostgreSQL nullability changes produce `REVIEW`
+plans. Tightening a column to `NOT NULL` requires approval and a read-only
+preflight; if existing rows contain NULL, Zelyra refuses the entire plan before
+executing any schema SQL. MariaDB applies protected DDL in strict mode to
+prevent implicit value coercion. SQLite nullability and type, foreign-key, and
+unique-constraint alterations remain unsupported. Adding or removing MariaDB
+foreign keys requires `REVIEW`; SQLite foreign-key alterations are blocked
+until table rebuilds are supported. Adding a required column without a default
+to an existing table requires `REVIEW` and an empty-table preflight; populated
+tables are refused before any plan SQL. The planner preserves unrecognized
+external indexes
+and refuses untracked foreign-key removals rather than guessing ownership.
+MariaDB and PostgreSQL default additions, changes, and removals produce
+`REVIEW` plans and require `--allow-risky`; integration tests verify that
+existing values survive and that replanning is idempotent. SQLite default
+changes and primary-key/auto-increment metadata changes, as well as
+primary-key/auto-increment changes on MariaDB and PostgreSQL, remain
+`UNSUPPORTED`. PostgreSQL schema-safety integration runs against PostgreSQL 16
+in CI; this does not establish PostgreSQL runtime parity. Type and nullability
+changes are classified independently so one change cannot hide the risk of the
+other.

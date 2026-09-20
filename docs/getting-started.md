@@ -164,7 +164,7 @@ tag. The installer downloads the matching archive over HTTPS and verifies its
 SHA-256 checksum before replacing the executable atomically:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 On Windows, use PowerShell from the repository directory:
@@ -187,7 +187,7 @@ directory and updates the user PATH. No administrator password is required.
 On Windows x86_64, use the matching PowerShell option:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 The script builds the CLI in locked release mode and installs it at:
@@ -307,11 +307,8 @@ For a ready local MariaDB and web-server template, use:
 ~~~bash
 zelyra new my-app --mariadb --web-port 8080 --host-port 18080 --db-host-port 3307
 cd my-app
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
+zelyra setup --all
 zelyra doctor main.zyl --env-file .env --port 18080
-zelyra db setup main.zyl
 ~~~
 
 The generated Compose file starts MariaDB and the Zelyra web server. The
@@ -325,11 +322,13 @@ host ports when the defaults are occupied. Explicit host-port flags are never
 silently changed.
 Open `http://127.0.0.1:18080` after the example above. The template is for
 local development; use a secret manager and TLS for production.
+`zelyra setup --all` starts MariaDB and the app, applies the initial schema,
+and prints the effective local URL so you do not need to derive it from ports.
 
-`zelyra setup .` creates `.env` from the generated template with random local
-MariaDB passwords and protects the file on Unix systems. It never overwrites
-an existing `.env` and never prints the credentials. Do not use generated
-local-development credentials as production secrets.
+`zelyra new --mariadb` creates `.env` with random local MariaDB passwords and
+protects it on Unix systems. `zelyra setup` remains an idempotent recovery
+command. It never overwrites an existing `.env` and never prints credentials.
+Do not use generated local-development credentials as production secrets.
 
 When setup creates a missing `.env`, it selects free published web and MariaDB
 ports if the template defaults are occupied. Use `zelyra setup . --host-port
@@ -343,14 +342,23 @@ MariaDB CRUD template:
 zelyra new machine-management --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd machine-management
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-It includes departments, machines, a relationship, schema-mapped forms, CRUD
-pages, search, filters, pagination, and custom actions.
+It includes a fictional workshop model with six production areas and 30
+machines, localized machine/department views, schema-mapped forms, CRUD pages,
+search, category/status/department filters, pagination, and custom actions.
+The generated `machine-management-demo.sql` contains only fictional records
+and is safe to import repeatedly. After `zelyra setup --all`, load it
+into the local MariaDB service with:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
+
+The import is explicit; setup never inserts sample records automatically.
 
 For an authentication starter with persistent sessions and permissions:
 
@@ -606,13 +614,23 @@ Apply a reviewed plan:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destructive changes are refused unless explicitly approved:
+`REVIEW` and `DESTRUCTIVE` changes are refused unless explicitly approved.
+Use `--allow-risky`; `--allow-destructive` remains limited to destructive-only
+plans and does not approve `REVIEW` changes.
+Unsupported operations are always refused:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
-Review destructive plans carefully. Never place real passwords in a committed
+Changes to defaults, primary keys, or MariaDB auto-increment settings are
+currently detected but not migrated automatically. The plan marks them
+`UNSUPPORTED`; approval flags cannot override that decision.
+
+Review the full plan carefully. In particular, required columns without a
+default may receive engine-specific values for existing rows after approval;
+verify those values before relying on them. Unique-constraint creation may fail
+if existing duplicates are present. Never place real passwords in a committed
 Zelyra file, documentation example, or shell script. Environment variables,
 secret managers, and restricted deployment configuration are preferred.
 
@@ -845,9 +863,11 @@ To also verify the generated Docker runtime, run:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-It builds the generated image, starts MariaDB and the web server on host ports
-3309 and 18082 by default, checks the welcome page and published mappings, and
-removes all temporary Docker resources afterwards.
+It creates a fresh CRUD project and runs `zelyra setup --all` twice. The test
+checks protected, unchanged credentials, the reported app URL, generated
+machine/department pages, and published mappings. MariaDB and the web server
+use isolated host ports 3309 and 18082 by default; all temporary Docker
+resources are removed afterwards.
 
 ## 12. Common problems
 
@@ -880,7 +900,11 @@ connection.
 ### A destructive schema change is refused
 
 This is intentional. Run db plan, inspect the affected rows and SQL, then
-repeat db apply with the explicit allow-destructive flag only after review.
+repeat db apply with `--allow-risky` only after review. The older
+`--allow-destructive` remains accepted for destructive-only plans. It does not
+approve `REVIEW` changes. Changes shown as unsupported
+cannot be applied by this version; resolve them with a supported schema plan or
+manual database work, then inspect again.
 
 ### A page starts but the browser shows 404
 

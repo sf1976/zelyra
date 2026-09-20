@@ -6,7 +6,7 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 23) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Zelyra 0.1.50 ist experimentell. Viele beschriebene Grundlagen sind implementiert, aber noch nicht für den Produktionseinsatz freigegeben.
+> **Projektstatus:** Compiler 0.2.0 implementiert einen geprüften, experimentellen Teil der Sprachlinie 0.1. Zelyra ist noch nicht für den Produktionseinsatz freigegeben.
 
 ## Statuszeichen
 
@@ -313,7 +313,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Systemvoraussetzungen für die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
 - Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder vorkompilierte Release-Archive (`--release v0.1.50`) installierst.
+- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder vorkompilierte Release-Archive (`--release v0.2.0`) installierst.
 - Vollständige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
 - Den integrierten, token-geschützten Web-Setup-Assistenten (`zelyra setup --web`).
 - Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
@@ -340,13 +340,13 @@ cd zelyra
 ```
 Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
 ```bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ```
 Unter Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ```
 
 **Schritt 2: Vollständige Version und Hilfe prüfen**
@@ -354,7 +354,7 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.1.50`).
+`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.2.0`). Die Sprachkompatibilitätslinie bleibt 0.1.
 
 **Schritt 3: Docker Compose prüfen (für MariaDB-Projekte)**
 ```bash
@@ -385,7 +385,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
 ### 6. Merksätze
 1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
-3. Releases können mit `--release v0.1.50` direkt ohne Rust-Compiler installiert werden.
+3. Releases können mit `--release v0.2.0` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
 
 ### 7. Übungsaufgaben
@@ -896,7 +896,7 @@ Ein Programm, das weder Daten empfangen noch Ergebnisse mitteilen kann, ist für
   4. **Web-Anfragen:** Formulare (`form`) und URLs (`page "/user/{id}"`) empfangen Benutzereingaben im Browser.
 
 > **Status-Hinweis zu interaktiver Konsoleneingabe:**
-> In Zelyra 0.1.50 gibt es bewusst noch keine blockierende `read_line()`-Funktion für die Terminal-Tastatur. Die Zelyra-Spezifikation konzentriert sich primär auf deklarative Web-Eingaben und deterministische Datenflüsse.
+> Im Compiler 0.2.0 gibt es bewusst noch keine blockierende `read_line()`-Funktion für die Terminal-Tastatur. Die Zelyra-Spezifikation konzentriert sich primär auf deklarative Web-Eingaben und deterministische Datenflüsse.
 > *(Roadmap-Platzhalter: `// [Platzhalter: Interaktives read_line() über Standard-Eingabe wird in Phase 11 spezifiziert]`)*.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
@@ -5626,7 +5626,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -5642,7 +5642,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 Danach:
@@ -6654,6 +6654,46 @@ Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
 Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
 rotiert das vorherige Session-Token dieses Browsers und entwertet es.
 
+Jedes schreibende Browserformular benötigt sein CSRF-Token sowie einen
+gleichursprünglichen `Origin`- oder `Referer`-Header, der zu `Host` und dem
+effektiven Schema der Anfrage passt. Fehlende, fehlerhafte oder fremde Angaben
+werden abgelehnt. Ein aus einem anderen Browser kopiertes Token reicht somit
+nicht für eine Website-übergreifende Formularanfrage. Schreibende API-Anfragen
+mit Browser-Origin-Angaben durchlaufen dieselbe Prüfung; Website-übergreifender
+API-Zugriff ist nur für einen exakt in der CORS-Richtlinie freigegebenen Origin
+möglich. API-Anfragen mit Browser-Origin-Angaben oder Browser-Session-Cookie
+durchlaufen diese Prüfung ebenfalls. Das gilt auch für `GET`, weil Handler
+noch nicht statisch auf schreibgeschütztes Verhalten beschränkt sind.
+Website-übergreifende API-Aufrufe sind nur für einen exakt in der CORS-Richtlinie
+freigegebenen Origin möglich; mit Session-Cookie muss CORS zusätzlich
+Credentials erlauben. Das aktuelle CSRF-Token gilt pro Prozess und wird noch
+nicht einzeln pro Session gespeichert; deshalb sind diese Origin-Prüfungen ein
+notwendiger Bestandteil des Schutzes.
+
+Der Zelyra-Server spricht derzeit ausschließlich unverschlüsseltes HTTP.
+Schalte ihm einen vertrauenswürdigen TLS-terminierenden Proxy vor, bevor die
+Anwendung außerhalb eines lokalen Entwicklungsrechners erreichbar ist. Der
+Proxy muss den öffentlichen `Host` erhalten, `X-Forwarded-Proto` mit dem
+tatsächlichen externen Schema überschreiben und direkten öffentlichen Zugriff
+auf den Anwendungsport verhindern. Zelyra verwendet den Header für die Prüfung
+des effektiven Origins und setzt bei HTTPS das Cookie-Attribut `Secure`.
+Vertraue an einer öffentlich erreichbaren Proxy-Grenze niemals ungeprüften,
+vom Client gelieferten Forwarded-Headern.
+
+Zusätzlich prüft der Server jeden vorhandenen `Host`-Header gegen
+`ZELYRA_ALLOWED_HOSTS`. Der Standard erlaubt nur `localhost`, `127.0.0.1` und
+`[::1]`; das verhindert unter anderem DNS-Rebinding über frei gewählte Hosts.
+Mehrfach vorhandene sicherheitsrelevante Request-Header wie `Host`, `Origin`,
+`Referer`, `Cookie` und `Authorization` werden abgelehnt, damit keine
+mehrdeutige Auswertung entsteht. Die Antwort-Policy `Referrer-Policy:
+same-origin` ermöglicht gleichursprünglichen API-GETs diesen Nachweis, sendet
+aber keine Referrer-Informationen an andere Origins.
+Für eine eigene Domain oder einen LAN-Host muss der tatsächliche Hostname
+explizit in der kommagetrennten `.env`-Einstellung ergänzt werden. Es werden
+keine Schemes, Ports oder Wildcards akzeptiert. Prozessumgebung hat Vorrang
+vor Projekt-`.env` und Standardwert. Die Allowlist ersetzt weder TLS noch die
+Origin-/CSRF-Prüfung.
+
 Einen Wert für die erforderliche Spalte `password_hash` mit der CLI erzeugen.
 Der interaktive Befehl schaltet die Passwortanzeige aus und verlangt eine
 Bestätigung:
@@ -6830,7 +6870,7 @@ sicheren Standard-Header:
 ~~~http
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Referrer-Policy: no-referrer
+Referrer-Policy: same-origin
 ~~~
 
 Diese Defaults ersetzen weder TLS noch Authentifizierung, Autorisierung,
@@ -7544,7 +7584,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra 0.1.50 ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra Compiler 0.2.0 ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter

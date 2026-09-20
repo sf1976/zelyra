@@ -1,0 +1,10 @@
+database main {
+    engine: sqlite
+    database: "schema_safety"
+}
+
+table metadata_records {
+    id: Id
+    active: Bool default true
+    name: String(80) default "pending"
+}

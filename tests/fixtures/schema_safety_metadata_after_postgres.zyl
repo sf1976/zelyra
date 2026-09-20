@@ -1,0 +1,18 @@
+database main {
+    engine: postgres
+    database: "zelyra_schema_safety"
+}
+
+table pg_metadata_records {
+    id: Id
+    active: Bool required default false
+    name: String(80) required default "pending"
+}
+
+table identity_records {
+    id: Id primary auto
+}
+
+table detached_sequence_records {
+    id: Id primary auto
+}

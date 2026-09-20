@@ -77,9 +77,8 @@ interaktiv oder über einen Secret-Manager gesetzt werden.
 
 ## Inspect, Plan und Apply
 
-Für Befehle, die auf eine laufende Datenbank zugreifen, muss eine explizite
-Für `inspect`, `plan` und `apply` muss eine passende Verbindungszeichenkette
-gesetzt werden:
+Für Befehle, die auf eine laufende Datenbank zugreifen, muss eine passende
+Verbindungszeichenkette über `DATABASE_URL` gesetzt werden:
 
 ```bash
 export DATABASE_URL='postgres://user:password@localhost/machine_management'
@@ -92,15 +91,17 @@ zelyra db apply examples/machine_management.zyl
 Datenbank geplant und die initiale DDL kann offline geprüft werden. `db apply`
 verweigert die Ausführung ohne echte Verbindung.
 
-Destruktive Änderungen werden im Plan sichtbar gemacht und standardmäßig
-abgelehnt:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden im Plan sichtbar gemacht und
+standardmäßig abgelehnt. Erst nach Prüfung freigeben:
 
 ```bash
-zelyra db apply examples/machine_management.zyl --allow-destructive
+zelyra db apply examples/machine_management.zyl --allow-risky
 ```
 
-Das Flag ist erst nach Prüfung des erzeugten Plans erforderlich. Zugangsdaten
-kommen aus der Umgebung und werden niemals im Schemaquelltext gespeichert.
+`--allow-destructive` bleibt für ausschließlich destruktive Pläne verfügbar
+und genehmigt keine `REVIEW`-Änderungen. `UNSUPPORTED`-Änderungen werden nie
+angewendet. Zugangsdaten kommen aus der Umgebung und werden niemals im
+Schemaquelltext gespeichert.
 
 MariaDB verwendet `mariadb://` oder `mysql://`; SQLite verwendet `sqlite://`
 mit einem Dateipfad. `db inspect` liest Tabellen, Spalten, Foreign Keys und
@@ -108,7 +109,27 @@ Indizes aus allen drei Backends.
 
 ## Aktuelle Grenzen
 
-PostgreSQL bleibt die primäre Referenzimplementierung. SQL Server ist noch
-nicht integriert. SQLite benötigt für manche destruktiven Änderungen einen
-Tabellenumbau; solche Änderungen werden im Plan als destruktiv markiert und
-benötigen eine spätere spezialisierte Migration.
+MariaDB ist das primäre Runtime-Referenz-Backend; PostgreSQL-Schema-Inspektion
+und -Planung sind verfügbar, aber nicht die Runtime-Parität. SQL Server ist
+noch nicht integriert. Nullbarkeitsänderungen bei MariaDB und PostgreSQL
+erzeugen `REVIEW`-Pläne. Die Verschärfung auf `NOT NULL` benötigt Freigabe und
+einen lesenden Preflight; enthält eine vorhandene Zeile `NULL`, verweigert
+Zelyra den gesamten Plan, bevor Schema-SQL ausgeführt wird. MariaDB führt
+geschütztes DDL im Strict-Modus aus, damit keine Werte stillschweigend in
+implizite Standardwerte umgewandelt werden. SQLite-Nullbarkeit sowie SQLite-Typ-,
+Foreign-Key- und Unique-Constraint-Änderungen bleiben nicht unterstützt und
+benötigen einen spezialisierten Tabellenumbau. Hinzufügen und Entfernen von
+MariaDB-Foreign-Keys benötigt eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
+Änderungen werden ohne Tabellenumbau blockiert. Eine Pflichtspalte ohne
+Standardwert benötigt bei einer bestehenden Tabelle `REVIEW`; ein lesender
+Preflight blockiert befüllte Tabellen, bevor Plan-SQL ausgeführt wird. Nicht
+zugeordnete externe Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
+nicht erraten, sondern blockiert. Das Setzen, Ändern und Entfernen von Defaults
+erzeugt für MariaDB und PostgreSQL `REVIEW`-Pläne und benötigt `--allow-risky`;
+Integrationstests prüfen Datenerhalt und idempotente Neuplanung. SQLite-
+Defaultänderungen sowie Primärschlüssel-/Auto-Increment-Metadatenänderungen
+bleiben `UNSUPPORTED`; das gilt ebenso für Primärschlüssel- und
+Auto-Increment-Änderungen bei MariaDB und PostgreSQL. Die PostgreSQL-
+Schemasicherheitsintegration läuft in CI mit PostgreSQL 16. Das belegt keine
+PostgreSQL-Runtime-Parität. Typ- und Nullbarkeitsänderungen werden unabhängig
+bewertet, damit eine Änderung die Risiken der jeweils anderen nicht verdeckt.

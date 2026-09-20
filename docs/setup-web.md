@@ -18,6 +18,9 @@ zelyra setup --host-port 18080 --db-host-port 3308
 generated MariaDB Compose project, `--schema` starts it and applies the
 `main.zyl` schema, and `--all` performs both operations. Existing `.env` files
 are never overwritten.
+After starting the application, console setup also prints its local URL. It
+uses the effective `ZELYRA_HOST_PORT`, including a port selected during
+scaffolding, and does not include database credentials in the message.
 
 When setup creates a missing `.env`, it automatically chooses free published
 web and MariaDB ports if the configured defaults are occupied. The optional

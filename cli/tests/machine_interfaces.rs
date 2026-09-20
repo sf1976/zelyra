@@ -99,6 +99,7 @@ fn valid_check_json_is_a_stable_machine_document() {
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -106,7 +107,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -122,19 +123,24 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
     assert!(env_example.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_example.contains("ZELYRA_LEVEL=learn"));
+    assert!(env_example.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(compose.contains("ZELYRA_LANGUAGE: ${ZELYRA_LANGUAGE:-de}"));
     assert!(compose.contains("ZELYRA_LEVEL: ${ZELYRA_LEVEL:-learn}"));
-    assert!(env_example.contains("ZELYRA_HOST_PORT=18080"));
+    assert!(compose.contains("${ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}"));
+    assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
+    assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
-    assert!(env_file.contains("# ZELYRA_HOST_PORT=18080"));
+    assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(!env_file.contains("change-me"));
-    assert!(compose.contains("127.0.0.1:${ZELYRA_HOST_PORT:-18080}:${ZELYRA_WEB_PORT:-8080}"));
+    assert!(compose.contains(&format!(
+        "127.0.0.1:${{ZELYRA_HOST_PORT:-{web_host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
+    )));
     assert!(compose.contains(&format!(
         "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
     )));
@@ -142,7 +148,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
 }
 
 #[test]
-fn serve_loads_and_serves_the_project_theme_stylesheet() {
+fn serve_loads_project_theme_and_locale_catalogs() {
     let directory = temporary_directory("serve-theme");
     fs::create_dir_all(&directory).unwrap();
     let source = directory.join("main.zyl");
@@ -150,7 +156,7 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
         &source,
         r#"page "/" {
     html {
-        <html><head></head><body><div class="zelyra-app"><main><h1>Theme test</h1></main></div></body></html>
+        <html><head></head><body><div class="zelyra-app"><main><h1 data-zelyra-i18n="app.home_title"></h1><p data-zelyra-i18n="project.greeting"></p></main></div></body></html>
     }
 }
 "#,
@@ -158,6 +164,12 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
     .unwrap();
     let theme = ":root { --zelyra-color-accent: #e04b67; }\n";
     fs::write(directory.join("zelyra.theme.css"), theme).unwrap();
+    fs::create_dir(directory.join("locales")).unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{"app.home_title":"Custom project title","project.greeting":"Welcome to our workshop"}"#,
+    )
+    .unwrap();
 
     let port = free_test_port();
     let address = format!("127.0.0.1:{port}");
@@ -208,6 +220,8 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
 
     let (page, stylesheet) = result.unwrap_or_else(|error| panic!("{error}"));
     assert!(page.starts_with("HTTP/1.1 200 OK"));
+    assert!(page.contains("Custom project title"));
+    assert!(page.contains("Welcome to our workshop"));
     let built_in = page.find("data-zelyra-theme=\"default\"").unwrap();
     let project = page.find("href=\"/__zelyra/theme.css\"").unwrap();
     assert!(built_in < project);
@@ -216,6 +230,267 @@ fn serve_loads_and_serves_the_project_theme_stylesheet() {
     assert!(stylesheet.contains("X-Content-Type-Options: nosniff\r\n"));
     assert!(stylesheet.contains("Cache-Control: no-cache\r\n"));
     assert!(stylesheet.ends_with(theme));
+}
+
+#[test]
+fn serve_generated_crud_forms_use_project_catalogs_in_german_and_english() {
+    let directory = temporary_directory("serve-crud-project-catalogs");
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(100) required
+}
+
+crud Customer -> customers {
+    list {
+        name
+    }
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{
+            "form.create_title": "Add {field} to the directory",
+            "form.create_submit": "Save English customer",
+            "identifier.name": "English display name"
+        }"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/de.json"),
+        r#"{
+            "form.create_title": "{field} zum Verzeichnis hinzufügen",
+            "form.create_submit": "Kunden speichern",
+            "identifier.name": "Deutscher Anzeigename"
+        }"#,
+    )
+    .unwrap();
+
+    let render_form = |language: &str| {
+        let port = free_test_port();
+        let address = format!("127.0.0.1:{port}");
+        let mut server = Command::new(binary())
+            .args(["serve", source.to_str().unwrap(), &address])
+            .env("ZELYRA_LANGUAGE", language)
+            .env("ZELYRA_LEVEL", "work")
+            .env_remove("DATABASE_URL")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("Zelyra server should start");
+
+        let response = (|| {
+            let socket_address: SocketAddr = address
+                .parse()
+                .map_err(|error| format!("invalid test server address: {error}"))?;
+            for _ in 0..50 {
+                if let Ok(mut stream) =
+                    TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .map_err(|error| error.to_string())?;
+                    stream
+                        .write_all(b"GET /customers/new HTTP/1.1\r\nHost: localhost\r\n\r\n")
+                        .map_err(|error| error.to_string())?;
+                    let mut response = String::new();
+                    stream
+                        .read_to_string(&mut response)
+                        .map_err(|error| error.to_string())?;
+                    if !response.is_empty() {
+                        return Ok(response);
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            Err("Zelyra server did not answer before the test timeout".to_owned())
+        })();
+        let _ = server.kill();
+        let _ = server.wait();
+        response.unwrap_or_else(|error| panic!("{error}"))
+    };
+
+    let english = render_form("en");
+    let german = render_form("de");
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert!(english.starts_with("HTTP/1.1 200 OK"), "{english}");
+    assert!(
+        english.contains("Add Customer to the directory"),
+        "{english}"
+    );
+    assert!(english.contains("English display name"), "{english}");
+    assert!(english.contains("Save English customer"), "{english}");
+    assert!(german.starts_with("HTTP/1.1 200 OK"), "{german}");
+    assert!(
+        german.contains("Kunde zum Verzeichnis hinzufügen"),
+        "{german}"
+    );
+    assert!(german.contains("Deutscher Anzeigename"), "{german}");
+    assert!(german.contains("Kunden speichern"), "{german}");
+}
+
+#[test]
+fn generated_mariadb_business_starter_localizes_and_protects_crud_without_database() {
+    const TEST_TOKEN: &str = "zelyra-business-e2e-test-token";
+
+    let directory = temporary_directory("business-starter-localized-auth");
+    let scaffold = run(&[
+        "new",
+        directory.to_str().unwrap(),
+        "--template",
+        "mariadb-business",
+    ]);
+    assert!(
+        scaffold.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&scaffold.stdout),
+        String::from_utf8_lossy(&scaffold.stderr)
+    );
+    let source = directory.join("main.zyl");
+    let check = run(&["check", source.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{
+            "form.create_title": "Add {field} to the workspace",
+            "form.create_submit": "Save customer profile",
+            "identifier.name": "Customer display label",
+            "error.authentication_required": "English access check required"
+        }"#,
+    )
+    .unwrap();
+    fs::write(
+        directory.join("locales/de.json"),
+        r#"{
+            "form.create_title": "{field} zum Arbeitsbereich hinzufügen",
+            "form.create_submit": "Kundenprofil speichern",
+            "identifier.name": "Anzeigename des Kunden",
+            "error.authentication_required": "Deutsche Anmeldung erforderlich"
+        }"#,
+    )
+    .unwrap();
+
+    let run_requests = |language: &str, requests: &[(&str, Option<&str>)]| {
+        let port = free_test_port();
+        let address = format!("127.0.0.1:{port}");
+        let mut server = Command::new(binary())
+            .args(["serve", source.to_str().unwrap(), &address])
+            .env("ZELYRA_LANGUAGE", language)
+            .env("ZELYRA_LEVEL", "work")
+            .env("ZELYRA_AUTH_TOKEN", TEST_TOKEN)
+            .env("ZELYRA_AUTH_PERMISSIONS", "customers.create")
+            .env_remove("DATABASE_URL")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("Zelyra business server should start");
+
+        let responses = (|| {
+            let socket_address: SocketAddr = address
+                .parse()
+                .map_err(|error| format!("invalid test server address: {error}"))?;
+            let mut responses = Vec::with_capacity(requests.len());
+            for (path, token) in requests {
+                let authorization = token
+                    .map(|token| format!("Authorization: Bearer {token}\r\n"))
+                    .unwrap_or_default();
+                let mut response = None;
+                for _ in 0..50 {
+                    if let Ok(mut stream) =
+                        TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                    {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .map_err(|error| error.to_string())?;
+                        let request = format!(
+                            "GET {path} HTTP/1.1\r\nHost: localhost\r\n{authorization}\r\n"
+                        );
+                        stream
+                            .write_all(request.as_bytes())
+                            .map_err(|error| error.to_string())?;
+                        let mut response_text = String::new();
+                        stream
+                            .read_to_string(&mut response_text)
+                            .map_err(|error| error.to_string())?;
+                        if !response_text.is_empty() {
+                            response = Some(response_text);
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(40));
+                }
+                responses.push(response.ok_or_else(|| {
+                    "Zelyra business server did not answer before the test timeout".to_owned()
+                })?);
+            }
+            Ok::<_, String>(responses)
+        })();
+        let _ = server.kill();
+        let _ = server.wait();
+        responses.unwrap_or_else(|error| panic!("{error}"))
+    };
+
+    let english = run_requests(
+        "en",
+        &[
+            ("/customers/new", None),
+            ("/customers/new", Some(TEST_TOKEN)),
+            ("/api/customers/1", Some(TEST_TOKEN)),
+        ],
+    );
+    let german = run_requests(
+        "de",
+        &[
+            ("/customers/new", None),
+            ("/customers/new", Some(TEST_TOKEN)),
+            ("/api/customers/1", Some(TEST_TOKEN)),
+        ],
+    );
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert!(english[0].starts_with("HTTP/1.1 401 "), "{}", english[0]);
+    assert!(english[0].contains("English access check required"));
+    assert!(english[1].starts_with("HTTP/1.1 200 "));
+    assert!(
+        english[1].contains("Add Customer to the workspace"),
+        "{}",
+        english[1]
+    );
+    assert!(english[1].contains("Customer display label"));
+    assert!(english[1].contains("Save customer profile"));
+    assert!(english[2].starts_with("HTTP/1.1 403 "));
+
+    assert!(german[0].starts_with("HTTP/1.1 401 "));
+    assert!(german[0].contains("Deutsche Anmeldung erforderlich"));
+    assert!(german[1].starts_with("HTTP/1.1 200 "));
+    assert!(
+        german[1].contains("Kunde zum Arbeitsbereich hinzufügen"),
+        "{}",
+        german[1]
+    );
+    assert!(german[1].contains("Anzeigename des Kunden"));
+    assert!(german[1].contains("Kundenprofil speichern"));
+    assert!(german[2].starts_with("HTTP/1.1 403 "));
+    for response in english.iter().chain(&german) {
+        assert!(!response.contains(TEST_TOKEN));
+    }
 }
 
 #[test]
@@ -249,6 +524,29 @@ fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
 }
 
 #[test]
+fn serve_reports_invalid_project_locale_catalog_without_echoing_contents() {
+    let directory = temporary_directory("serve-invalid-locale");
+    fs::create_dir_all(directory.join("locales")).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(&source, "fn main() { print(\"ok\") }\n").unwrap();
+    fs::write(
+        directory.join("locales/en.json"),
+        r#"{"custom.title":"PRIVATE_SENTINEL", bad-json}"#,
+    )
+    .unwrap();
+
+    let output = run(&["serve", source.to_str().unwrap(), "127.0.0.1:0"]);
+    fs::remove_dir_all(&directory).unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-I18N-001"));
+    assert!(stderr.contains("locales/en.json"));
+    assert!(!stderr.contains("PRIVATE_SENTINEL"));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
     let output = run(&[
         "db",
@@ -272,6 +570,7 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "init",
         directory.to_str().unwrap(),
@@ -279,7 +578,7 @@ fn init_creates_a_ready_commented_mariadb_env() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -309,6 +608,8 @@ fn init_creates_a_ready_commented_mariadb_env() {
         .any(|line| line == "ZELYRA_FEATURE_API=true"));
     assert!(!env_file.contains("change-me"));
     assert!(directory.join(".env.example").is_file());
+    assert!(directory.join("locales/de.json").is_file());
+    assert!(directory.join("locales/en.json").is_file());
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -349,6 +650,7 @@ fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
 fn new_mariadb_crud_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-crud-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -357,7 +659,7 @@ fn new_mariadb_crud_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -381,6 +683,7 @@ fn new_mariadb_crud_template_is_self_contained() {
 fn new_mariadb_auth_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-auth-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -389,7 +692,7 @@ fn new_mariadb_auth_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -414,6 +717,7 @@ fn new_mariadb_auth_template_is_self_contained() {
 fn new_mariadb_business_template_is_self_contained() {
     let directory = temporary_directory("new-mariadb-business-template");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let output = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -422,7 +726,7 @@ fn new_mariadb_business_template_is_self_contained() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -481,6 +785,7 @@ fn host_port_requires_the_mariadb_web_template() {
 fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let directory = temporary_directory("setup-env");
     let database_host_port = free_test_port();
+    let web_host_port = free_test_port();
     let scaffold = run(&[
         "new",
         directory.to_str().unwrap(),
@@ -488,7 +793,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
         "--web-port",
         "8080",
         "--host-port",
-        "18080",
+        &web_host_port,
         "--db-host-port",
         &database_host_port,
     ]);
@@ -509,7 +814,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let contents = fs::read_to_string(&env_file).unwrap();
     assert!(contents.contains("# ZELYRA_WEB_PORT=8080"));
-    assert!(contents.contains("# ZELYRA_HOST_PORT=18080"));
+    assert!(contents.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
     assert!(contents.contains(
         env_example
             .lines()
@@ -1122,6 +1427,52 @@ fn context_exposes_view_slot_structure_without_rendered_content() {
         ])
     );
     assert!(!String::from_utf8_lossy(&output.stdout).contains("Describe intent"));
+}
+
+#[test]
+fn context_exposes_crud_layout_slot_names_without_rendered_content() {
+    let path = example("view_showcase.zyl");
+    let output = run(&["context", path.to_str().unwrap(), "--format=json"]);
+    let repeated = run(&["context", path.to_str().unwrap(), "--format=json"]);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, repeated.stdout);
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let customer_crud = document["declarations"]["cruds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|crud| crud["name"] == "Customer")
+        .expect("Customer CRUD should be present");
+    assert_eq!(customer_crud["layout"], "CustomerShell");
+    assert_eq!(customer_crud["layout_slots"][0]["name"], "header");
+    assert_eq!(customer_crud["layout_slots"][1]["name"], "intro");
+    assert!(customer_crud["layout_slots"][0]["span"]["start"]["offset"]
+        .as_u64()
+        .is_some());
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Manage customer records"));
+}
+
+#[test]
+fn reports_unknown_crud_layout_slot_with_stable_json_diagnostic() {
+    let source = r#"
+        view Shell { html { <main><slot /></main> } }
+        table customers { id: Id primary auto }
+        crud Customer -> customers {
+            layout: Shell
+            slots { heading { html { <h1>Customers</h1> } } }
+        }
+    "#;
+    let (project_directory, source_path) =
+        temporary_project_source("invalid-crud-layout-slot", source);
+    let output = run(&["check", source_path.to_str().unwrap(), "--format=json"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["success"], false);
+    assert_eq!(document["diagnostics"][0]["code"], "E-VIEW-031");
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
 }
 
 #[test]

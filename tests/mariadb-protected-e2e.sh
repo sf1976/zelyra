@@ -183,7 +183,8 @@ extract_csrf() {
 request_status() {
     local output_file="$1"
     shift
-    curl --silent --show-error --output "${output_file}" --write-out '%{http_code}' "$@"
+    curl --silent --show-error --output "${output_file}" --write-out '%{http_code}' \
+        --header "Origin: ${base_url}" "$@"
 }
 
 echo "[4/10] rejecting anonymous CRUD, form, and API requests"

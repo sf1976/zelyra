@@ -37,19 +37,29 @@ principles; the roadmap below tracks what is actually implemented.
   APIs, OpenAPI, and TypeScript client generation.
 - [~] Reusable web views: named layouts, page composition, a validated content
   slot, and typed self-closing components with properties are available.
-  Named slots with fallback content and CRUD view overrides are available;
-  project-local CSS token overrides are implemented, while full theme authoring
-  and selection remain open.
+  Named slots with fallback content, CRUD view overrides, and per-resource
+  content for named CRUD-layout slots are available. Static slot markup may
+  use checked components; record-bound custom slot content remains open.
+  Project-local CSS token overrides are implemented, while full theme
+  authoring and selection remain open.
 - [~] Built-in German/English UI catalogs are selected by `ZELYRA_LANGUAGE`,
   and `ZELYRA_LEVEL=learn|work` controls the contextual learning guide. The
   minimal and machine-management MariaDB starters and generated CRUD, form,
   tableview, login, and authentication-admin pages have a responsive Zelyra
   application shell by default. Explicit CRUD layouts take precedence, and
-  authored pages remain untouched; project-local catalog overrides, wider
-  template coverage, and a full theme editor remain open. Project-local CSS
-  overrides for documented visual tokens are available.
-- [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
+  authored pages remain untouched. Project-local `locales/de.json` and
+  `locales/en.json` overlays can add or override all catalog-backed generated
+  shell, CRUD, form, tableview, login, authentication-admin, validation, and
+  learning-guide copy, as well as explicitly marked view/text references.
+  Parameterized labels and generated field identifiers are supported; resolved
+  values are escaped and German falls back through the project English catalog
+  to built-in translations. Business records and unmarked user-authored content
+  are not translated. Broader template coverage and a full theme editor remain
+  open. Project-local CSS overrides for documented visual tokens are available.
+- [x] Authentication, persistent sessions, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
+  Browser writes also require same-origin evidence; the 0.2.0 branch adds a
+  default loopback Host allowlist to reject forged hosts and DNS rebinding.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
   confirmed pruning are available. Tamper-evident chaining is available as an
   explicit opt-in; archival and retention remain.
@@ -107,8 +117,10 @@ architecture requirement for every phase, not a provider-specific feature.
   available with user-local, repeatable Bash/PowerShell installers; Rust-free
   release installation is available for published Linux/Windows x86_64 assets.
 - [~] Release archives with SHA-256 checksums are available for Linux and
-  Windows x86_64; signed binaries and checksums for every supported platform
-  remain.
+  Windows x86_64. The 0.2.0 candidate passed pinned Linux/Windows release
+  builds, byte-identical repeated binaries, and normalized archive tests in PR
+  CI; public 0.2.0 assets await the version tag. Signed binaries and checksums
+  for every supported platform remain.
 - [~] User-local install/check/update/uninstall scripts remain available.
   `zelyra update [--check]` also checks stable GitHub releases and verifies a
   SHA-256 checksum before replacing its own Linux/Windows x86_64 executable;
@@ -133,8 +145,13 @@ architecture requirement for every phase, not a provider-specific feature.
   intentionally outside the assistant.
 - [~] The generated Docker Compose template starts MariaDB and the internal
   web server with independently configurable web and MariaDB host ports plus
-  container ports; generated-project Docker runtime coverage is implemented,
-  while production hardening remains open.
+  container ports. `tests/generated-project-docker-e2e.sh` now creates a fresh
+  CRUD project and runs `zelyra setup --all` twice. It verifies schema-backed
+  machine/department pages, the reported local URL, owner-only `.env` mode,
+  secret-free output, unchanged credentials across recovery, port mappings,
+  and cleanup of only its uniquely named Compose project and volume. Clean-host
+  coverage beyond this isolated Docker workflow and production hardening remain
+  open.
 - [ ] Optional automatic reverse-proxy setup for Apache and Nginx, with safe
   defaults and generated configuration previews.
 - [~] `zelyra doctor` checks project validity, database connectivity, Docker
@@ -182,11 +199,34 @@ architecture requirement for every phase, not a provider-specific feature.
   and guarded `apply` are implemented with explicit backend behavior and
   destructive-change protection.
 - [ ] Complete PostgreSQL runtime parity.
-- [ ] MariaDB/MySQL compatibility matrix and version-specific diagnostics.
+- [~] MariaDB compatibility is explicitly tested against official image tags
+  `10.11.19`, `11.4.13`, `11.8.9`, and `12.3.3` for schema/CRUD HTTP and
+  destructive-change approval. This is not a MySQL compatibility claim;
+  version-specific diagnostics remain planned. See the [English
+  compatibility matrix](database-compatibility.en.md) and [German
+  compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
-- [ ] Better destructive-change analysis, row estimates, lock warnings, and
-  maintenance-window planning.
+- [~] Live schema inspection detects MariaDB default, primary-key, and
+  auto-increment drift; SQLite default, primary-key, and explicit
+  `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and
+  serial/identity drift. MariaDB and PostgreSQL default additions, changes,
+  and removals now generate `REVIEW` plans and require `--allow-risky`; E2E
+  tests verify retained rows and idempotent replanning. SQLite default changes
+  and key/auto-increment metadata changes remain `UNSUPPORTED`. MariaDB and
+  PostgreSQL key/auto-increment changes also remain `UNSUPPORTED`. PostgreSQL
+  schema safety is exercised against PostgreSQL 16 in CI, not as a
+  runtime-parity claim.
+- [~] The schema planner classifies required columns without defaults, unique
+  constraints, and generated-name-managed index/FK additions and removals;
+  unknown external indexes are preserved and untracked FK removals fail closed.
+  Adding a required no-default column to an existing table now runs a read-only
+  empty-table preflight; a populated table blocks the entire plan before SQL.
+  MariaDB and PostgreSQL nullability changes require `REVIEW`; tightening to
+  `NOT NULL` performs a read-only NULL-row preflight before any plan SQL and
+  fails closed if rows need repair. SQLite nullability and type/FK/unique-
+  constraint alterations remain unsupported. General row estimates, lock
+  warnings, data backfill plans, and maintenance-window planning remain planned.
 - [ ] Connection pooling, retry policies, timeouts, cancellation, and health
   checks.
 - [ ] Streaming large results and bounded memory behavior.
@@ -202,13 +242,19 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [~] The minimal and machine-management starters include a responsive branded
   shell and catalog-backed German/English copy; the machine starter uses the
-  learn-mode guide. Generated CRUD, standalone form, tableview, login, and
+  learn-mode guide. The `mariadb-crud` starter now defines richer machine and
+  department records, localized CRUD list/detail/form/delete states, card views,
+  and a repeatable optional fixture containing six fictional areas and 30
+  machines. Generated CRUD, standalone form, tableview, login, and
   authentication-admin pages now also receive that responsive default shell;
   explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
-  authentication, validation, and standard HTTP-error copy use the same
-  built-in locale catalogs. Project-local `zelyra.theme.css` token overrides
-  are available; broader theme replacement, remaining template coverage, and
-  project-local catalog extensions remain open.
+  authentication, validation, learning-guide, and standard HTTP-error copy use
+  the same catalogs. Project locale overlays can add or override every
+  catalog-backed generated label, including parameterized field labels and
+  generated identifier labels, in addition to explicitly marked view/text
+  entries. Business records and unmarked user-authored content remain
+  unchanged. Project-local `zelyra.theme.css` token overrides are available;
+  broader template coverage and full theme replacement remain open.
 
 - [~] Named views/layouts with a page-level `view: Name` assignment, a
   validated default `<slot />` content insertion point, and validated named
@@ -228,7 +274,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] CRUD resources can reuse a validated named view with `layout: ViewName`.
   The default slot receives generated lists, details, and generated CRUD forms
   without bypassing SQL, validation, CSRF, authorization, or escaping; named
-  slot customization for generated CRUD content remains open.
+  slots may be filled per resource with compile-checked static markup and
+  components. Generated CRUD content remains confined to the layout's default
+  slot; record-bound custom slot content remains open.
 - [~] View-local data loading supports explicit, schema-checked record and
   record-collection queries using `load name = sql<Type> { ... }`. Array
   results can be rendered with typed `for item in collection { ... }` blocks.
@@ -414,11 +462,89 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Public alpha, beta, and stable release criteria based on real business
   applications, not only language demonstrations.
 
+## 0.2.0 release milestone
+
+0.2.0 is a target, not a release date. Do not publish it until the
+database-to-business-application workflow is demonstrably usable on a clean
+supported machine and the release gates below pass.
+
+- [~] **Distinctive Views system:** reusable layouts/components, typed CRUD
+  presentation controls, and per-resource named layout slots are available.
+  Project-local German/English catalogs can add or override all
+  catalog-backed generated labels, including parameterized field labels and
+  generated identifier labels, as well as explicitly marked view/text
+  references. Business records and unmarked authored text remain unchanged;
+  deeper theme authoring and record-bound custom slots remain open.
+- [~] **Flagship business application:** the MariaDB business template and
+  generated-project integration path exist. A database-free CLI/HTTP test now
+  covers its generated CRUD form, missing-token and insufficient-API-permission
+  denials, authorized access, and project-local German/English copy overrides;
+  the MariaDB-backed path in `tests/generated-project-business-e2e.sh` has also
+  passed against an isolated test database with cleanup verified. The
+  MariaDB machine-management acceptance test now checks localized machine and
+  department views in all four German/English × Learn/Work combinations,
+  including presence/absence and localization of the learning guide. Novice-
+  tested onboarding and broader documented user acceptance remain release
+  work.
+- [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
+  protected `.env`, Docker Compose, free-port selection, actionable Docker
+  permission guidance, and a printed application URL exist. The generated
+  CRUD stack has passed an isolated first-run and repeat-setup test, including
+  schema-backed HTTP pages, unchanged credentials, secret-free setup output,
+  ports, and cleanup. Clean-host installation and recovery coverage across
+  supported platforms remain open.
+- [~] **Database safety:** MariaDB is the reference runtime and SQLite has
+  end-to-end paths. The schema-safety test exercises both backends: destructive
+  drops require approval; required columns without defaults, new unique
+  constraints, and MariaDB foreign-key additions/removals are marked `REVIEW`;
+  adding a required no-default column to a populated table is blocked by a
+  read-only preflight before any plan SQL;
+  MariaDB/PostgreSQL default drift is marked `REVIEW`; SQLite default changes
+  and primary-key/auto-increment changes without supported migrations remain
+  `UNSUPPORTED`;
+  duplicate rows and orphan rows remain intact when index/foreign-key changes
+  fail; unknown external indexes are preserved and untracked foreign-key
+  removals fail closed. Unsupported changes fail closed with `E-DB-006`.
+  The legacy `--allow-destructive` option does not approve `REVIEW` changes;
+  `--allow-risky` is required after reviewing them. MariaDB/PostgreSQL
+  nullability changes require review and tightening checks existing NULL rows
+  before any SQL; SQLite nullability and type, foreign-key, and unique-
+  constraint alterations remain unsupported. Type and nullability drift are
+  evaluated independently. The
+  generated MariaDB business acceptance test has passed. The [version
+  matrix](database-compatibility.en.md) lists four
+  MariaDB Community LTS patch images and the core database/CRUD paths they
+  test; this is not MySQL or full feature certification. PostgreSQL runtime
+  parity, general data backfills, row/lock risk estimates, and operational risk
+  analysis remain outside the 0.2.0 claim. PostgreSQL primary-key and
+  serial/identity metadata drift is
+  detected and refused; migrations for those metadata changes remain
+  unsupported.
+- [x] **Release evidence:** the bilingual quickstarts, internal security review,
+  full branch CI, workspace checks, four-version MariaDB compatibility matrix,
+  and database-backed integration tests pass. A fresh generated MariaDB CRUD
+  application passed first-run and repeat-setup acceptance in the isolated
+  Docker E2E test. Linux and Windows release binaries were rebuilt byte-for-byte
+  identically in their pinned CI toolchains, and both release packages passed
+  validation. This is technical acceptance for an experimental release, not a
+  novice-user study, Windows clean-host onboarding study, production approval,
+  or external security audit; those are not claimed.
+
+The 0.2.0 scope does not require a visual drag-and-drop editor, a model-provider
+integration, compiler self-hosting, full formal verification, or PostgreSQL
+runtime parity. Keep those as separate roadmap goals; do not blur planned
+capabilities into the 0.2.0 release claim.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template
-  and covered by generated-project integration tests; production hardening
-  remains open.
+  with localized machine/department views, search and category/status/area
+  filters, plus an optional 30-record fictional SQL fixture. Generated-project
+  MariaDB integration tests import the fixture twice and verify the records
+  through HTTP; the real application is also tested in all German/English and
+  Learn/Work combinations. Novice-tested clean-machine onboarding and
+  production hardening remain open. Native seed/fixture commands remain
+  optional roadmap work.
 - [ ] Customer/order application with complex joins, aggregates, forms, API,
   and custom views.
 - [ ] Multi-user inventory application with transactions and concurrent edits.

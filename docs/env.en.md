@@ -105,7 +105,9 @@ Affected commands and runtime surfaces: `zelyra serve`, the MariaDB project
 scaffolds `new`/`init`, and the generated Compose web service. Regression tests
 cover process-environment → `.env` → fallback precedence in the CLI, accepted
 values and catalog references in `web/src/i18n.rs`, and generated defaults and
-Compose forwarding in `cli/tests/machine_interfaces.rs`.
+Compose forwarding in `cli/tests/machine_interfaces.rs`. Project catalogs are
+also checked for UTF-8, valid JSON, size limits, and symbolic links; a CLI
+integration test verifies marker resolution and safe error output.
 
 New MariaDB projects activate `ZELYRA_LANGUAGE=de` and
 `ZELYRA_LEVEL=learn`; edit `.env` to change them. The Compose template passes
@@ -117,10 +119,49 @@ configurable Zelyra text can use `@i18n:app.home_title`. Missing German entries
 fall back to English. A key missing from both catalogs renders as
 `[missing translation]` to expose the incomplete catalog entry.
 
-These catalogs do not translate business records or arbitrary HTML text from a
+`zelyra new` and `zelyra init` also create optional project catalogs at
+`locales/de.json` and `locales/en.json`; the generated Dockerfile copies this
+directory into the runtime image. Add project UI keys or override text
+referenced by a view using `data-zelyra-i18n="custom.key"` or by a Zelyra text
+setting using `@i18n:custom.key`. The same catalogs add or override every
+catalog-backed generated label in the shell, CRUD, forms, tableviews, login,
+authentication administration, validation, and learning guide. Generated
+field identifiers use `identifier.<field>` keys; parameterized copy can use
+`{field}` and `{max}`. German lookup order is project German → project English
+→ built-in German → its English fallback. These files are optional UTF-8 JSON
+objects containing nonempty strings, limited to 256 KiB each. `zelyra serve`
+rejects invalid catalogs, symbolic links, and other file types with
+`E-I18N-001`. Catalog text is HTML-escaped when inserted. It is presentation
+content, not authorization or business-rule configuration; never put
+credentials or other secrets in a catalog.
+
+Catalogs do not translate business records or arbitrary HTML text from a
 project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
+
+## Web server host allowlist
+
+| Variable | Values | New MariaDB `.env` default / fallback | Precedence | Security classification and effect | Affected commands and tests |
+|---|---|---|---|---|---|
+| `ZELYRA_ALLOWED_HOSTS` | Comma-separated ASCII hostnames or IP addresses (IDNs in punycode); no scheme, port, wildcard, or empty item | `localhost,127.0.0.1,[::1]` | Process environment → project `.env` → loopback fallback | Not a secret, but a security-sensitive allowlist against forged `Host` headers and DNS rebinding. Add only hosts actually used. | `zelyra serve`, MariaDB scaffolds `new`/`init`, generated Compose; CLI, web, and scaffold regression tests |
+
+Every HTTP request containing `Host` must match an entry. Matching is
+case-insensitive; a request port is parsed separately and is not compared to
+the allowlist. Wildcards, URLs, ports, and invalid hostnames are rejected as
+configuration values. An empty or invalid list prevents server startup with
+`E-ENV-001`. Internationalized domain names must be entered as ASCII punycode.
+If the app is reachable through a reverse proxy or on a LAN under
+a custom hostname, configure that hostname explicitly. The proxy must preserve
+the public `Host`, overwrite `X-Forwarded-Proto`, and prevent direct access to
+the app port. This setting only extends the host allowlist; it does not disable
+CSRF or origin checks.
+
+## Integration-test only
+
+| Variable | Default | Precedence / source | Security classification | Affected commands and tests |
+|---|---|---|---|---|
+| `ZELYRA_SCHEMA_SAFETY_MARIADB_URL` | unset; SQLite test only | Process environment only; it is not loaded from a project `.env`. An explicit value enables the additional MariaDB test path. | May contain a username and password; use only a local test database, never print or commit it. | `bash tests/schema-safety-e2e.sh`; GitHub Actions sets a local `zelyra_ci` test URL. The test accepts only `localhost`/loopback and a `zelyra_ci` or `zelyra_test` base database; it creates and drops a separate database. |
 
 ## Project-local theme (not a `.env` variable)
 
@@ -240,6 +281,16 @@ diagnostics, context output, or logs.
 | `ZELYRA_TABLEVIEW_E2E_PROJECT`, `ZELYRA_TABLEVIEW_E2E_ADDRESS`, `ZELYRA_TABLEVIEW_E2E_DB_PASSWORD`, `ZELYRA_TABLEVIEW_E2E_KEEP_TEMP` | test/development tool | tableview E2E project, address, password, and temporary data |
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | test/development tool | audit-chain E2E project and test password |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | test/development tool | generated Docker E2E project and ports |
+| `ZELYRA_DOCKER_E2E_REF` | test/development tool; defaults to the local checkout branch (published Zelyra tag on detached HEAD) | Git branch or tag used to build the isolated Docker E2E application image |
+
+`ZELYRA_DOCKER_E2E_REF` applies only to
+`tests/generated-project-docker-e2e.sh`. When unset, the test uses the local
+checkout branch; on a detached HEAD it uses the published tag pinned in the
+generated Dockerfile. A process-environment value takes precedence; `.env` is
+not read for this setting. The value is not a secret, is restricted to a
+simple Git ref, and is built without reusing compiler build layers. The branch
+or tag must be available in the GitHub repository. CI sets the branch of the
+commit under test. The test covers ref selection, build, and runtime behavior.
 
 Variables beginning with `GENERATED_*`, `*_E2E_*`, and `ZELYRA_BIN` are not a
 public application API. They exist for reproducible CI and local integration

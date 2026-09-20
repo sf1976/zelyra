@@ -16,11 +16,16 @@ use zelyra_ast::{
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
 mod i18n;
-use i18n::{field_text, framework_text, identifier as locale_identifier, text as tr};
+#[cfg(test)]
+use i18n::framework_text;
+use i18n::{
+    field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
+    LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
+};
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
-pub use i18n::{UiLanguage, UiLevel};
+pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
@@ -198,7 +203,7 @@ impl Response {
 
     pub fn to_http(&self) -> String {
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
@@ -280,8 +285,9 @@ fn render_default_application_shell(
     }
 
     let localized_current_label = localize_user_text(language, &context.current_label);
-    let current_label = html_escape(&localized_current_label);
-    let page_title = html_escape(&format!("{localized_current_label} | Zelyra"));
+    let current_label = html_escape_preserving_locale_references(&localized_current_label);
+    let page_title =
+        html_escape_preserving_locale_references(&format!("{localized_current_label} | Zelyra"));
     let home_path = context
         .navigation
         .first()
@@ -295,7 +301,8 @@ fn render_default_application_shell(
     for (index, link) in context.navigation.iter().enumerate() {
         let active = navigation_link_is_active(&link.path, &context.current_path);
         let current = if active { " aria-current=\"page\"" } else { "" };
-        let label = html_escape(&localize_user_text(language, &link.label));
+        let label =
+            html_escape_preserving_locale_references(&localize_user_text(language, &link.label));
         navigation.push_str(&format!(
             "<a href=\"{}\" aria-label=\"{label}\"{current}><span class=\"zelyra-nav-icon\" aria-hidden=\"true\">{:02}</span><span class=\"zelyra-nav-label\">{label}</span></a>",
             html_escape(&link.path),
@@ -365,12 +372,25 @@ fn add_navigation_link(
     }
 }
 
+fn tr(_language: UiLanguage, key: &str) -> String {
+    i18n::reference(key)
+}
+
+#[cfg(test)]
 fn localize_html(source: &str, language: UiLanguage) -> String {
+    localize_html_with_catalog(source, language, &ProjectUiCatalogs::default())
+}
+
+fn localize_html_with_catalog(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
     let language_code = match language {
         UiLanguage::English => "en",
         UiLanguage::German => "de",
     };
-    let translated = localize_framework_markup(source, language);
+    let translated = localize_framework_markup_with_catalog(source, language, project_catalogs);
     let mut html = translated.replace("data-zelyra-language", &format!("lang=\"{language_code}\""));
     let marker = "data-zelyra-i18n=\"";
     let mut search_from = 0;
@@ -401,14 +421,18 @@ fn localize_html(source: &str, language: UiLanguage) -> String {
             break;
         };
         let content_end = content_start + content_end_relative;
-        let translated = html_escape(tr(language, &key));
+        let translated = html_escape(&project_catalogs.text(language, &key));
         html.replace_range(content_start..content_end, &translated);
         search_from = content_start + translated.len() + closing_tag.len();
     }
-    html
+    resolve_locale_references(&html, language, project_catalogs)
 }
 
-fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
+fn localize_framework_markup_with_catalog(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
     let mut html = source.to_owned();
     for tag in [
         "h1", "h2", "h3", "p", "button", "label", "legend", "th", "option",
@@ -436,7 +460,11 @@ fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
             };
             let content_end = content_start + content_end_relative;
             if !html[content_start..content_end].contains('<') {
-                if let Some(copy) = framework_text(language, &html[content_start..content_end]) {
+                if let Some(copy) = framework_text_with_catalog(
+                    language,
+                    &html[content_start..content_end],
+                    project_catalogs,
+                ) {
                     let translated = html_escape(&copy);
                     html.replace_range(content_start..content_end, &translated);
                     cursor = content_start + translated.len() + closing.len();
@@ -449,11 +477,95 @@ fn localize_framework_markup(source: &str, language: UiLanguage) -> String {
     html
 }
 
-fn localize_user_text(language: UiLanguage, source: &str) -> String {
-    source
-        .strip_prefix("@i18n:")
-        .map(|key| tr(language, key).to_owned())
-        .unwrap_or_else(|| source.to_owned())
+fn resolve_locale_references(
+    source: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+) -> String {
+    let mut output = String::with_capacity(source.len());
+    let mut remaining = source;
+    while let Some(start) = remaining.find(LOCALE_REFERENCE_START) {
+        output.push_str(&remaining[..start]);
+        let reference_start = start + LOCALE_REFERENCE_START.len();
+        let Some(end_relative) = remaining[reference_start..].find(LOCALE_REFERENCE_END) else {
+            output.push_str(&remaining[start..]);
+            return output;
+        };
+        let end = reference_start + end_relative;
+        let token_end = end + LOCALE_REFERENCE_END.len_utf8();
+        let reference = &remaining[reference_start..end];
+        if let Some(translated) = locale_reference_text(reference, language, project_catalogs, 0) {
+            output.push_str(&html_escape(&translated));
+        } else {
+            output.push_str(&remaining[start..token_end]);
+        }
+        remaining = &remaining[token_end..];
+    }
+    output.push_str(remaining);
+    output
+}
+
+fn locale_reference_text(
+    reference: &str,
+    language: UiLanguage,
+    project_catalogs: &ProjectUiCatalogs,
+    depth: usize,
+) -> Option<String> {
+    if depth > 8 {
+        return None;
+    }
+    let (key, encoded_field) = reference
+        .split_once(LOCALE_REFERENCE_PARAMETER)
+        .map_or((reference, None), |(key, value)| (key, Some(value)));
+    if !i18n::valid_catalog_key(key) {
+        return None;
+    }
+    let mut translated = project_catalogs.text(language, key).into_owned();
+    if let Some(encoded_parameter) = encoded_field {
+        let (parameter, encoded_value) = encoded_parameter.split_once('=')?;
+        if !i18n::valid_catalog_key(parameter) {
+            return None;
+        }
+        let mut value = decode_locale_parameter(encoded_value)?;
+        if parameter == "field" {
+            if let Some(nested) = value
+                .strip_prefix(LOCALE_REFERENCE_START)
+                .and_then(|value| value.strip_suffix(LOCALE_REFERENCE_END))
+            {
+                value = locale_reference_text(nested, language, project_catalogs, depth + 1)?;
+            }
+        }
+        translated = translated.replace(&format!("{{{parameter}}}"), &value);
+    }
+    Some(translated)
+}
+
+fn decode_locale_parameter(value: &str) -> Option<String> {
+    if value.len() & 1 != 0 {
+        return None;
+    }
+    let bytes = value
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            let pair: &[u8; 2] = pair.try_into().ok()?;
+            let digits = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(digits, 16).ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
+fn localize_user_text(_language: UiLanguage, source: &str) -> String {
+    source.strip_prefix("@i18n:").map_or_else(
+        || {
+            source
+                .replace(LOCALE_REFERENCE_START, "&#xe000;zelyra-locale:")
+                .replace(LOCALE_REFERENCE_PARAMETER, "&#xe002;")
+                .replace(LOCALE_REFERENCE_END, "&#xe001;")
+        },
+        i18n::reference,
+    )
 }
 
 fn inject_design_system(source: &str, has_project_theme: bool) -> String {
@@ -507,12 +619,12 @@ fn append_learning_assistant(
     let heading = tr(language, &format!("learning.{section}.heading"));
     let example = tr(language, &format!("learning.{section}.example"));
     let guidance = tr(language, &format!("learning.{section}.guidance"));
-    let title = html_escape(title);
-    let introduction = html_escape(introduction);
-    let heading = html_escape(heading);
-    let example = html_escape(example);
-    let guidance = html_escape(guidance);
-    let button_label = html_escape(tr(language, "learning.button"));
+    let title = html_escape_preserving_locale_references(&title);
+    let introduction = html_escape_preserving_locale_references(&introduction);
+    let heading = html_escape_preserving_locale_references(&heading);
+    let example = html_escape_preserving_locale_references(&example);
+    let guidance = html_escape_preserving_locale_references(&guidance);
+    let button_label = html_escape_preserving_locale_references(&tr(language, "learning.button"));
     let style = r#"<style>
 .zelyra-learning-assistant{position:fixed;right:24px;bottom:24px;z-index:2147483000;font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#17243b}
 .zelyra-learning-assistant summary{display:flex;align-items:center;gap:9px;list-style:none;cursor:pointer;padding:10px 16px 10px 10px;border:1px solid #dce3f2;border-radius:999px;background:linear-gradient(135deg,#fff 5%,#f2f5ff 100%);box-shadow:0 10px 34px #17243b2b;color:#27375a;font-weight:700}
@@ -729,6 +841,8 @@ pub struct WebApp {
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
     pub project_theme_css: Option<String>,
+    allowed_hosts: Vec<String>,
+    project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
 }
@@ -750,6 +864,8 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            allowed_hosts: default_allowed_hosts(),
+            project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -775,6 +891,8 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            allowed_hosts: default_allowed_hosts(),
+            project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -805,6 +923,31 @@ impl WebApp {
         self
     }
 
+    pub fn with_allowed_hosts(
+        mut self,
+        allowed_hosts: impl IntoIterator<Item = String>,
+    ) -> Result<Self, HttpError> {
+        let mut normalized = Vec::new();
+        for host in allowed_hosts {
+            let Some(host) = normalize_configured_host(&host) else {
+                return Err(HttpError {
+                    message: "ZELYRA_ALLOWED_HOSTS contains an invalid hostname or IP address"
+                        .into(),
+                });
+            };
+            if !normalized.contains(&host) {
+                normalized.push(host);
+            }
+        }
+        if normalized.is_empty() {
+            return Err(HttpError {
+                message: "at least one allowed host must be configured".into(),
+            });
+        }
+        self.allowed_hosts = normalized;
+        Ok(self)
+    }
+
     pub fn with_auth(mut self, token: Option<String>, permissions: Vec<String>) -> Self {
         self.auth_token = token;
         self.auth_permissions = permissions;
@@ -824,6 +967,11 @@ impl WebApp {
 
     pub fn with_project_theme_css(mut self, css: Option<String>) -> Self {
         self.project_theme_css = css;
+        self
+    }
+
+    pub fn with_project_ui_catalogs(mut self, catalogs: ProjectUiCatalogs) -> Self {
+        self.project_ui_catalogs = catalogs;
         self
     }
 
@@ -852,8 +1000,8 @@ impl WebApp {
             let label = form
                 .table
                 .as_ref()
-                .map(|table| localized_identifier(self.ui_language, &table.name))
-                .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+                .map(|table| localized_identifier_marker(self.ui_language, &table.name))
+                .unwrap_or_else(|| localized_identifier_marker(self.ui_language, &form.form.name));
             DefaultUiContext {
                 current_path: form.path.clone(),
                 current_label: label,
@@ -917,8 +1065,10 @@ impl WebApp {
                 let label = form
                     .table
                     .as_ref()
-                    .map(|table| localized_identifier(self.ui_language, &table.name))
-                    .unwrap_or_else(|| localized_identifier(self.ui_language, &form.form.name));
+                    .map(|table| localized_identifier_marker(self.ui_language, &table.name))
+                    .unwrap_or_else(|| {
+                        localized_identifier_marker(self.ui_language, &form.form.name)
+                    });
                 add_navigation_link(&mut context.navigation, form.path.clone(), label);
             }
             if let Some(auth) = &self.auth_route {
@@ -942,6 +1092,30 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
+        if (request.headers.contains_key("host") || request_has_browser_origin_or_session(request))
+            && !request_host_is_allowed(request, &self.allowed_hosts)
+        {
+            let title = framework_text_with_catalog(
+                self.ui_language,
+                "400 Bad Request",
+                &self.project_ui_catalogs,
+            )
+            .unwrap_or_default();
+            let message = framework_text_with_catalog(
+                self.ui_language,
+                "This request host is not allowed.",
+                &self.project_ui_catalogs,
+            )
+            .unwrap_or_default();
+            return Response::html(
+                400,
+                format!(
+                    "<h1>{}</h1><p>{}</p>",
+                    html_escape(&title),
+                    html_escape(&message)
+                ),
+            );
+        }
         let mut response = self.dispatch_inner(request);
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
@@ -954,7 +1128,6 @@ impl WebApp {
                 }
             }
             response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
-            response.body = localize_html(&response.body, self.ui_language);
         }
         if self.ui_level == UiLevel::Learn
             && request.method == "GET"
@@ -970,6 +1143,13 @@ impl WebApp {
                 &request.path,
                 self.ui_language,
                 generated_crud,
+            );
+        }
+        if response.content_type.starts_with("text/html") {
+            response.body = localize_html_with_catalog(
+                &response.body,
+                self.ui_language,
+                &self.project_ui_catalogs,
             );
         }
         response
@@ -1014,6 +1194,17 @@ impl WebApp {
                 }
                 if api.method != request.method {
                     continue;
+                }
+                if api_request_requires_origin_check(request)
+                    && !self.api_request_origin_is_allowed(request)
+                {
+                    return self.apply_api_cors(
+                        request,
+                        Response::json(
+                            403,
+                            "{\"error\":{\"code\":\"Forbidden\",\"message\":\"request origin is not allowed\"}}",
+                        ),
+                    );
                 }
                 if let Some(response) = authorize_api(
                     api.requires_auth,
@@ -1250,11 +1441,12 @@ impl WebApp {
                 break;
             }
         }
-        Router::new(self.routes.clone()).dispatch_with_database_and_language(
+        Router::new(self.routes.clone()).dispatch_with_database_language_and_catalogs(
             &request.method,
             &request.target,
             self.database_url.as_deref(),
             self.ui_language,
+            &self.project_ui_catalogs,
         )
     }
 
@@ -1341,6 +1533,21 @@ impl WebApp {
             }
         }
         response
+    }
+
+    fn api_request_origin_is_allowed(&self, request: &Request) -> bool {
+        if request_origin_matches_host(request) {
+            return true;
+        }
+        request
+            .headers
+            .get("origin")
+            .zip(self.cors_policy.as_ref())
+            .is_some_and(|(origin, policy)| {
+                policy.allows(origin)
+                    && (cookie_value(request, "zelyra_session").is_none()
+                        || policy.allow_credentials)
+            })
     }
 }
 
@@ -1435,6 +1642,195 @@ fn json_escape(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
+fn default_allowed_hosts() -> Vec<String> {
+    vec!["localhost".into(), "127.0.0.1".into(), "[::1]".into()]
+}
+
+fn request_has_browser_origin_or_session(request: &Request) -> bool {
+    request.headers.contains_key("origin")
+        || request.headers.contains_key("referer")
+        || cookie_value(request, "zelyra_session").is_some()
+}
+
+fn request_host_is_allowed(request: &Request, allowed_hosts: &[String]) -> bool {
+    request
+        .headers
+        .get("host")
+        .and_then(|authority| host_name_from_authority(authority))
+        .is_some_and(|host| allowed_hosts.iter().any(|allowed| allowed == &host))
+}
+
+fn normalize_configured_host(value: &str) -> Option<String> {
+    if value.starts_with('[') && value.ends_with(']') {
+        let address = value[1..value.len() - 1]
+            .parse::<std::net::Ipv6Addr>()
+            .ok()?;
+        return Some(format!("[{address}]"));
+    }
+    let value = value.strip_suffix('.').unwrap_or(value);
+    if value.is_empty() || value.len() > 253 {
+        return None;
+    }
+    for label in value.split('.') {
+        if label.is_empty()
+            || label.len() > 63
+            || !label.as_bytes()[0].is_ascii_alphanumeric()
+            || !label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return None;
+        }
+    }
+    Some(value.to_ascii_lowercase())
+}
+
+fn host_name_from_authority(authority: &str) -> Option<String> {
+    let hostname = if authority.starts_with('[') {
+        let bracket_end = authority.find(']')?;
+        let hostname = &authority[..=bracket_end];
+        let suffix = &authority[bracket_end + 1..];
+        if !suffix.is_empty() {
+            let port = suffix.strip_prefix(':')?.parse::<u16>().ok()?;
+            if port == 0 {
+                return None;
+            }
+        }
+        hostname
+    } else {
+        match authority.matches(':').count() {
+            0 => authority,
+            1 => {
+                let (hostname, port) = authority.rsplit_once(':')?;
+                port.parse::<u16>().ok().filter(|port| *port != 0)?;
+                hostname
+            }
+            _ => return None,
+        }
+    };
+    normalize_configured_host(hostname)
+}
+
+fn api_request_requires_origin_check(request: &Request) -> bool {
+    request.method != "OPTIONS"
+        && (request.headers.contains_key("origin")
+            || request.headers.contains_key("referer")
+            || cookie_value(request, "zelyra_session").is_some())
+}
+
+fn verify_csrf_request(request: &Request, csrf: &CsrfProtection, candidate: Option<&str>) -> bool {
+    csrf.verify(candidate) && request_origin_matches_host(request)
+}
+
+fn request_origin_matches_host(request: &Request) -> bool {
+    let Some(host) = request.headers.get("host") else {
+        return false;
+    };
+    let scheme = match request.headers.get("x-forwarded-proto") {
+        Some(value) => value.split(',').next().unwrap_or_default().trim(),
+        None => "http",
+    };
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+    let Some(expected_authority) = normalize_authority(host, scheme) else {
+        return false;
+    };
+
+    let mut saw_origin = false;
+    for (header, allow_path) in [("origin", false), ("referer", true)] {
+        let Some(value) = request.headers.get(header) else {
+            continue;
+        };
+        saw_origin = true;
+        let Some((actual_scheme, actual_authority)) = parse_request_origin(value, allow_path)
+        else {
+            return false;
+        };
+        if actual_scheme != scheme || actual_authority != expected_authority {
+            return false;
+        }
+    }
+    saw_origin
+}
+
+fn parse_request_origin(value: &str, allow_path: bool) -> Option<(&str, String)> {
+    let (scheme, remainder) = value.split_once("://")?;
+    if !matches!(scheme, "http" | "https") || value.trim() != value {
+        return None;
+    }
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+    let authority = &remainder[..authority_end];
+    if authority.is_empty() || (!allow_path && authority_end != remainder.len()) {
+        return None;
+    }
+    Some((scheme, normalize_authority(authority, scheme)?))
+}
+
+fn normalize_authority(authority: &str, scheme: &str) -> Option<String> {
+    if authority.is_empty() || authority.contains(['@', '/', '?', '#', '\\', ' ', '\t', '\r', '\n'])
+    {
+        return None;
+    }
+    let (host, port) = if let Some(bracket_end) = authority
+        .strip_prefix('[')
+        .and_then(|_| authority.find(']'))
+    {
+        let host = &authority[..=bracket_end];
+        let suffix = &authority[bracket_end + 1..];
+        let address = host[1..host.len() - 1].parse::<std::net::Ipv6Addr>().ok()?;
+        let port = if suffix.is_empty() {
+            None
+        } else {
+            let port = suffix.strip_prefix(':')?.parse::<u16>().ok()?;
+            if port == 0 {
+                return None;
+            }
+            Some(port)
+        };
+        (format!("[{address}]"), port)
+    } else {
+        if authority.matches(':').count() > 1 {
+            return None;
+        }
+        let (host, port) = match authority.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port.parse::<u16>().ok()?)),
+            None => (authority, None),
+        };
+        if host.is_empty()
+            || !host
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+        {
+            return None;
+        }
+        (host.to_ascii_lowercase(), port)
+    };
+    let default_port = match scheme {
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => return None,
+    };
+    Some(match port {
+        Some(port) if Some(port) != default_port => format!("{host}:{port}"),
+        _ => host,
+    })
+}
+
+fn secure_cookie_attribute(request: &Request) -> &'static str {
+    if request
+        .headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.split(',').next())
+        .is_some_and(|scheme| scheme.trim() == "https")
+    {
+        "; Secure"
+    } else {
+        ""
+    }
+}
+
 fn dispatch_login(
     app: &WebApp,
     auth: &AuthRoute,
@@ -1459,10 +1855,11 @@ fn dispatch_login(
                     return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
                 }
             };
-            if !auth
-                .csrf
-                .verify(input.get("_zelyra_csrf").map(String::as_str))
-            {
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
                 return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
             }
             let email = input.get("email").cloned().unwrap_or_default();
@@ -1615,7 +2012,10 @@ fn dispatch_login(
             }
             Response::redirect("/").with_header(
                 "Set-Cookie",
-                format!("zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax"),
+                format!(
+                    "zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax{}",
+                    secure_cookie_attribute(request)
+                ),
             )
         }
         _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
@@ -1719,10 +2119,11 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !auth
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &auth.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     if app.database_capability_granted == Some(false) && auth.session_table.is_some() {
@@ -1762,7 +2163,10 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     }
     Response::redirect("/login").with_header(
         "Set-Cookie",
-        "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+        format!(
+            "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+            secure_cookie_attribute(request)
+        ),
     )
 }
 
@@ -2094,10 +2498,11 @@ fn dispatch_auth_admin_post(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !auth
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &auth.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let operation = input
@@ -2597,25 +3002,25 @@ fn render_auth_admin(
         }
     }
     html.push_str("</table><h2>");
-    html.push_str(tr(language, "auth.assign_role"));
+    html.push_str(&tr(language, "auth.assign_role"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
     html.push_str(&csrf);
     html.push_str("\"><input type=\"hidden\" name=\"operation\" value=\"grant_role\"><label>");
-    html.push_str(tr(language, "auth.user_id"));
+    html.push_str(&tr(language, "auth.user_id"));
     html.push_str("</label><input name=\"user_id\" type=\"number\" required><label>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</label><input name=\"role\" required><button type=\"submit\">");
-    html.push_str(tr(language, "auth.grant_role"));
+    html.push_str(&tr(language, "auth.grant_role"));
     html.push_str("</button></form><h2>");
-    html.push_str(tr(language, "auth.role_assignments"));
+    html.push_str(&tr(language, "auth.role_assignments"));
     html.push_str("</h2><table><tr><th>");
-    html.push_str(tr(language, "auth.user"));
+    html.push_str(&tr(language, "auth.user"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.action"));
+    html.push_str(&tr(language, "auth.action"));
     html.push_str("</th></tr>");
     for row in assignments {
         if let (Some(user_id), Some(email), Some(role)) = (row.first(), row.get(1), row.get(2)) {
@@ -2632,7 +3037,7 @@ fn render_auth_admin(
         }
     }
     html.push_str("</table><h2>");
-    html.push_str(tr(language, "auth.role_permissions"));
+    html.push_str(&tr(language, "auth.role_permissions"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
     html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
@@ -2640,17 +3045,17 @@ fn render_auth_admin(
     html.push_str(
         "\"><input type=\"hidden\" name=\"operation\" value=\"grant_permission\"><label>",
     );
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</label><input name=\"role\" required><label>");
-    html.push_str(tr(language, "auth.permission"));
+    html.push_str(&tr(language, "auth.permission"));
     html.push_str("</label><input name=\"permission\" required><button type=\"submit\">");
-    html.push_str(tr(language, "auth.grant_permission"));
+    html.push_str(&tr(language, "auth.grant_permission"));
     html.push_str("</button></form><table><tr><th>");
-    html.push_str(tr(language, "auth.role"));
+    html.push_str(&tr(language, "auth.role"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.permission"));
+    html.push_str(&tr(language, "auth.permission"));
     html.push_str("</th><th>");
-    html.push_str(tr(language, "auth.action"));
+    html.push_str(&tr(language, "auth.action"));
     html.push_str("</th></tr>");
     for row in permissions {
         if let (Some(role), Some(permission)) = (row.first(), row.get(1)) {
@@ -2668,19 +3073,19 @@ fn render_auth_admin(
     }
     if auth.audit_table.is_some() {
         html.push_str("</table><h2>");
-        html.push_str(tr(language, "auth.audit_log"));
+        html.push_str(&tr(language, "auth.audit_log"));
         html.push_str("</h2><p>");
-        html.push_str(tr(language, "auth.audit_latest"));
+        html.push_str(&tr(language, "auth.audit_latest"));
         html.push_str("</p><table><tr><th>");
-        html.push_str(tr(language, "auth.actor"));
+        html.push_str(&tr(language, "auth.actor"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.action"));
+        html.push_str(&tr(language, "auth.action"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.target"));
+        html.push_str(&tr(language, "auth.target"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.details"));
+        html.push_str(&tr(language, "auth.details"));
         html.push_str("</th><th>");
-        html.push_str(tr(language, "auth.created"));
+        html.push_str(&tr(language, "auth.created"));
         html.push_str("</th></tr>");
         for row in audit {
             let cells = row
@@ -2860,6 +3265,23 @@ impl Router {
         database_url: Option<&str>,
         language: UiLanguage,
     ) -> Response {
+        self.dispatch_with_database_language_and_catalogs(
+            method,
+            path,
+            database_url,
+            language,
+            &ProjectUiCatalogs::default(),
+        )
+    }
+
+    fn dispatch_with_database_language_and_catalogs(
+        &self,
+        method: &str,
+        path: &str,
+        database_url: Option<&str>,
+        language: UiLanguage,
+        project_catalogs: &ProjectUiCatalogs,
+    ) -> Response {
         if method != "GET" {
             return Response::html(405, "<h1>405 Method Not Allowed</h1>");
         }
@@ -2904,9 +3326,11 @@ impl Router {
                         );
                     }
                 };
+                let html =
+                    render_page_with_language(route, path, &params, &query_values, &data, language);
                 return Response::html(
                     200,
-                    render_page_with_language(route, path, &params, &query_values, &data, language),
+                    localize_html_with_catalog(&html, language, project_catalogs),
                 );
             }
         }
@@ -2961,7 +3385,17 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         let (name, value) = line.split_once(':').ok_or_else(|| HttpError {
             message: "malformed HTTP header".into(),
         })?;
-        headers.insert(name.trim().to_ascii_lowercase(), value.trim().into());
+        let name = name.trim().to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "host" | "origin" | "referer" | "x-forwarded-proto" | "cookie" | "authorization"
+        ) && headers.contains_key(&name)
+        {
+            return Err(HttpError {
+                message: "request contains a duplicate security-sensitive header".into(),
+            });
+        }
+        headers.insert(name, value.trim().into());
     }
     if let Some(content_length) = headers.get("content-length") {
         let content_length = content_length.parse::<usize>().map_err(|_| HttpError {
@@ -3113,31 +3547,46 @@ pub fn html_escape(value: &str) -> String {
             '>' => escaped.push_str("&gt;"),
             '"' => escaped.push_str("&quot;"),
             '\'' => escaped.push_str("&#39;"),
+            '\u{e000}' => escaped.push_str("&#xe000;"),
+            '\u{e001}' => escaped.push_str("&#xe001;"),
+            '\u{e002}' => escaped.push_str("&#xe002;"),
             _ => escaped.push(character),
         }
     }
     escaped
 }
 
-fn javascript_string_literal(value: &str) -> String {
-    let mut literal = String::from("'");
-    for character in value.chars() {
-        match character {
-            '\\' => literal.push_str("\\\\"),
-            '\'' => literal.push_str("\\'"),
-            '\n' => literal.push_str("\\n"),
-            '\r' => literal.push_str("\\r"),
-            '\t' => literal.push_str("\\t"),
-            '\u{2028}' => literal.push_str("\\u2028"),
-            '\u{2029}' => literal.push_str("\\u2029"),
-            character if character.is_control() => {
-                literal.push_str(&format!("\\u{:04x}", character as u32));
-            }
-            character => literal.push(character),
+fn html_escape_preserving_locale_references(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(start) = remaining.find(LOCALE_REFERENCE_START) {
+        escaped.push_str(&html_escape(&remaining[..start]));
+        let reference_start = start + LOCALE_REFERENCE_START.len();
+        let Some(end_relative) = remaining[reference_start..].find(LOCALE_REFERENCE_END) else {
+            escaped.push_str(&html_escape(&remaining[start..]));
+            return escaped;
+        };
+        let end = reference_start + end_relative;
+        let token_end = end + LOCALE_REFERENCE_END.len_utf8();
+        let reference = &remaining[reference_start..end];
+        let (key, parameter) = reference
+            .split_once(LOCALE_REFERENCE_PARAMETER)
+            .map_or((reference, None), |(key, value)| (key, Some(value)));
+        let valid_parameter = match parameter {
+            None => true,
+            Some(value) => value.split_once('=').is_some_and(|(name, encoded)| {
+                i18n::valid_catalog_key(name) && decode_locale_parameter(encoded).is_some()
+            }),
+        };
+        if i18n::valid_catalog_key(key) && valid_parameter {
+            escaped.push_str(&remaining[start..token_end]);
+        } else {
+            escaped.push_str(&html_escape(&remaining[start..token_end]));
         }
+        remaining = &remaining[token_end..];
     }
-    literal.push('\'');
-    literal
+    escaped.push_str(&html_escape(remaining));
+    escaped
 }
 
 fn form_authorization(form: &FormRoute) -> (bool, Vec<String>) {
@@ -3228,10 +3677,11 @@ fn dispatch_form_with_language(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !form
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &form.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let mut values = input;
@@ -3262,7 +3712,7 @@ fn dispatch_form_with_language(
                 &rendered_form,
                 &values,
                 &errors,
-                Some(tr(language, "form.correct_errors")),
+                Some("@i18n:form.correct_errors"),
                 &relation_options,
                 language,
             ),
@@ -3308,16 +3758,16 @@ fn dispatch_form_with_language(
         }
         let mut redirect = action.redirect.as_deref().unwrap_or("/").to_owned();
         if let Some(success) = action_success_message(action) {
-            let success = localize_user_text(language, success);
-            redirect = append_query_parameter(&redirect, "zelyra_success", &success);
+            // Keep catalog keys intact across the redirect. The destination
+            // resolves them with the active project catalog when it renders.
+            redirect = append_query_parameter(&redirect, "zelyra_success", success);
         }
         if let Some(title) = action
             .success_page
             .as_ref()
             .and_then(|page| page.title.as_deref())
         {
-            let title = localize_user_text(language, title);
-            redirect = append_query_parameter(&redirect, "zelyra_success_title", &title);
+            redirect = append_query_parameter(&redirect, "zelyra_success_title", title);
         }
         return Response::redirect(redirect);
     }
@@ -3327,7 +3777,7 @@ fn dispatch_form_with_language(
             &rendered_form,
             &values,
             &[],
-            Some(tr(language, "form.validated_not_enabled")),
+            Some("@i18n:form.validated_not_enabled"),
             &relation_options,
             language,
         ),
@@ -3348,31 +3798,27 @@ fn render_action_confirmation(
     relation_options: &HashMap<String, Vec<SelectOption>>,
     language: UiLanguage,
 ) -> String {
-    let title = localize_user_text(
-        language,
-        view.title
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.title")),
-    );
-    let message = localize_user_text(
-        language,
-        view.message
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.message")),
-    );
-    let submit = localize_user_text(
-        language,
-        view.submit
-            .as_deref()
-            .unwrap_or(tr(language, "confirm.submit")),
-    );
+    let title = view
+        .title
+        .as_deref()
+        .map(|title| localize_user_text(language, title))
+        .unwrap_or_else(|| tr(language, "confirm.title"));
+    let message = view
+        .message
+        .as_deref()
+        .map(|message| localize_user_text(language, message))
+        .unwrap_or_else(|| tr(language, "confirm.message"));
+    let submit = view
+        .submit
+        .clone()
+        .unwrap_or_else(|| "@i18n:confirm.submit".to_owned());
     let mut confirmation_form = route.clone();
     confirmation_form.form_view.title = None;
-    confirmation_form.form_view.submit = Some(submit.to_owned());
+    confirmation_form.form_view.submit = Some(submit);
     format!(
         "<main class=\"zelyra-action-confirmation\"><h1>{}</h1><p>{}</p>{}</main>",
-        html_escape(&title),
-        html_escape(&message),
+        html_escape_preserving_locale_references(&title),
+        html_escape_preserving_locale_references(&message),
         render_form_with_language(
             &confirmation_form,
             &HashMap::new(),
@@ -3574,12 +4020,15 @@ fn crud_column_label(
     column: &str,
 ) -> String {
     let Some(table) = schema.tables.iter().find(|table| table.name == table_name) else {
-        return localized_identifier(language, column);
+        return localized_identifier_reference(language, column);
     };
     if crud_foreign_key(table, column).is_some() {
-        return localized_identifier(language, column.strip_suffix("_id").unwrap_or(column));
+        return localized_identifier_reference(
+            language,
+            column.strip_suffix("_id").unwrap_or(column),
+        );
     }
-    localized_identifier(language, column)
+    localized_identifier_reference(language, column)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -4349,22 +4798,24 @@ fn render_tableview(
     html.push_str("</h1><form method=\"get\" action=\"");
     html.push_str(&html_escape(&tableview.path));
     html.push_str("><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend>");
     if tableview.searchable {
         html.push_str("<label for=\"search\">");
-        html.push_str(tr(language, "query.search"));
+        html.push_str(&tr(language, "query.search"));
         html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if tableview.sortable {
         html.push_str("<label for=\"sort\">");
-        html.push_str(tr(language, "query.sort"));
+        html.push_str(&tr(language, "query.sort"));
         html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &tableview.columns {
             html.push_str("<option value=\"");
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push('"');
             if column == sort {
                 html.push_str(" selected");
@@ -4374,7 +4825,7 @@ fn render_tableview(
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"order\">");
-        html.push_str(tr(language, "query.order"));
+        html.push_str(&tr(language, "query.order"));
         html.push_str("</label><select id=\"order\" name=\"order\">");
         for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
@@ -4384,7 +4835,7 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(tr(language, key));
+            html.push_str(&tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -4394,10 +4845,10 @@ fn render_tableview(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -4412,16 +4863,16 @@ fn render_tableview(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label(language));
+            html.push_str(&operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -4437,17 +4888,19 @@ fn render_tableview(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
-        html.push_str(tr(language, "table.empty"));
+        html.push_str(&tr(language, "table.empty"));
         html.push_str("</p>");
     } else {
         html.push_str("<table><thead><tr>");
         for column in &tableview.columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -4478,7 +4931,7 @@ fn render_tableview(
         html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
     html.push_str("<span>");
-    html.push_str(tr(language, "pagination.page"));
+    html.push_str(&tr(language, "pagination.page"));
     html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
@@ -4662,10 +5115,11 @@ fn dispatch_crud_delete(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !crud
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &crud.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
@@ -4765,10 +5219,11 @@ fn dispatch_crud_restore(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !crud
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &crud.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let query = format!(
@@ -4874,7 +5329,7 @@ impl FilterOperator {
         }
     }
 
-    fn label(self, language: UiLanguage) -> &'static str {
+    fn label(self, language: UiLanguage) -> String {
         let key = match self {
             Self::Equal => "operator.equal",
             Self::Contains => "operator.contains",
@@ -5211,7 +5666,9 @@ fn render_crud_list_with_actions(
     let mut html = String::from("<main");
     html.push_str(&crud_loading_attribute(crud));
     html.push_str("><h1>");
-    html.push_str(&html_escape(&localize_user_text(language, &crud.title)));
+    html.push_str(&html_escape_preserving_locale_references(
+        &localize_user_text(language, &crud.title),
+    ));
     html.push_str("</h1>");
     if crud.soft_delete.is_some() {
         html.push_str("<p class=\"zelyra-archive-toggle\"><a href=\"");
@@ -5235,11 +5692,15 @@ fn render_crud_list_with_actions(
         html.push_str("<section class=\"zelyra-success\" role=\"status\">");
         if let Some(title) = success_title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(&localize_user_text(language, title)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, title),
+            ));
             html.push_str("</h2>");
         }
         html.push_str("<p>");
-        html.push_str(&html_escape(&localize_user_text(language, success)));
+        html.push_str(&html_escape_preserving_locale_references(
+            &localize_user_text(language, success),
+        ));
         html.push_str("</p></section>");
     }
     if ui_actions.create {
@@ -5250,13 +5711,13 @@ fn render_crud_list_with_actions(
     html.push_str("<form method=\"get\" action=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str("\"><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend><label for=\"search\">");
-    html.push_str(tr(language, "query.search"));
+    html.push_str(&tr(language, "query.search"));
     html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
     html.push_str(&html_escape(search));
     html.push_str("\"><label for=\"sort\">");
-    html.push_str(tr(language, "query.sort"));
+    html.push_str(&tr(language, "query.sort"));
     html.push_str("</label><select id=\"sort\" name=\"sort\">");
     for column in sort_columns {
         html.push_str("<option value=\"");
@@ -5266,16 +5727,13 @@ fn render_crud_list_with_actions(
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(&html_escape(&crud_column_label(
-            language,
-            &crud.schema,
-            &crud.table,
-            column,
-        )));
+        html.push_str(&html_escape_preserving_locale_references(
+            &crud_column_label(language, &crud.schema, &crud.table, column),
+        ));
         html.push_str("</option>");
     }
     html.push_str("</select><label for=\"order\">");
-    html.push_str(tr(language, "query.order"));
+    html.push_str(&tr(language, "query.order"));
     html.push_str("</label><select id=\"order\" name=\"order\">");
     for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
         html.push_str("<option value=\"");
@@ -5285,7 +5743,7 @@ fn render_crud_list_with_actions(
             html.push_str(" selected");
         }
         html.push('>');
-        html.push_str(tr(language, key));
+        html.push_str(&tr(language, key));
         html.push_str("</option>");
     }
     html.push_str("</select>");
@@ -5309,7 +5767,7 @@ fn render_crud_list_with_actions(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
             &crud_column_label(language, &crud.schema, &crud.table, column),
@@ -5328,18 +5786,18 @@ fn render_crud_list_with_actions(
                     html.push_str(" selected");
                 }
                 html.push('>');
-                html.push_str(operator.label(language));
+                html.push_str(&operator.label(language));
                 html.push_str("</option>");
             }
         } else {
             html.push_str("<option value=\"eq\" selected>");
-            html.push_str(tr(language, "query.operator_equal"));
+            html.push_str(&tr(language, "query.operator_equal"));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(column));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
             &crud_column_label(language, &crud.schema, &crud.table, column),
@@ -5358,16 +5816,17 @@ fn render_crud_list_with_actions(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if rows.is_empty() {
         html.push_str("<p>");
-        html.push_str(&html_escape(
-            crud.list_view
-                .empty
-                .as_deref()
-                .unwrap_or(tr(language, "table.empty")),
-        ));
+        let empty_label = crud
+            .list_view
+            .empty
+            .as_deref()
+            .map(str::to_owned)
+            .unwrap_or_else(|| tr(language, "table.empty"));
+        html.push_str(&html_escape_preserving_locale_references(&empty_label));
         html.push_str("</p>");
     } else if crud.list_view.mode == CrudListViewMode::Cards {
         html.push_str("<section class=\"zelyra-crud-cards\">");
@@ -5381,12 +5840,9 @@ fn render_crud_list_with_actions(
                     .map(String::as_str)
                     .unwrap_or("");
                 html.push_str("<dl><dt>");
-                html.push_str(&html_escape(&crud_column_label(
-                    language,
-                    &crud.schema,
-                    &crud.table,
-                    column,
-                )));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &crud_column_label(language, &crud.schema, &crud.table, column),
+                ));
                 html.push_str("</dt><dd>");
                 if let Some(href) =
                     crud_list_detail_href(crud, query_columns, display_columns, row, column, value)
@@ -5408,12 +5864,9 @@ fn render_crud_list_with_actions(
         html.push_str("<table><thead><tr>");
         for column in display_columns {
             html.push_str("<th>");
-            html.push_str(&html_escape(&crud_column_label(
-                language,
-                &crud.schema,
-                &crud.table,
-                column,
-            )));
+            html.push_str(&html_escape_preserving_locale_references(
+                &crud_column_label(language, &crud.schema, &crud.table, column),
+            ));
             html.push_str("</th>");
         }
         html.push_str("</tr></thead><tbody>");
@@ -5459,7 +5912,7 @@ fn render_crud_list_with_actions(
         html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
     }
     html.push_str("<span>");
-    html.push_str(tr(language, "pagination.page"));
+    html.push_str(&tr(language, "pagination.page"));
     html.push(' ');
     html.push_str(&page.to_string());
     html.push_str("</span>");
@@ -5541,7 +5994,7 @@ fn render_crud_detail_with_actions(
     html.push_str("><p><a href=\"");
     html.push_str(&html_escape(&crud.path));
     html.push_str(&format!("\">{}</a></p><h1>", tr(language, "detail.back")));
-    html.push_str(&html_escape(&title));
+    html.push_str(&html_escape_preserving_locale_references(&title));
     html.push_str("</h1>");
     if cards {
         html.push_str("<article class=\"zelyra-crud-detail-card\">");
@@ -5549,12 +6002,9 @@ fn render_crud_detail_with_actions(
     html.push_str("<dl>");
     for (column, value) in columns.iter().zip(row) {
         html.push_str("<dt>");
-        html.push_str(&html_escape(&crud_column_label(
-            language,
-            &crud.schema,
-            &crud.table,
-            column,
-        )));
+        html.push_str(&html_escape_preserving_locale_references(
+            &crud_column_label(language, &crud.schema, &crud.table, column),
+        ));
         html.push_str("</dt><dd>");
         html.push_str(&html_escape(value));
         html.push_str("</dd>");
@@ -5591,7 +6041,9 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, &action.label),
+            ));
             html.push_str("</a></p>");
         } else {
             html.push_str("<form method=\"post\" action=\"");
@@ -5599,12 +6051,9 @@ fn render_crud_detail_with_actions(
             html.push('"');
             if let Some(confirm) = &action.confirm {
                 let confirm = localize_user_text(language, confirm);
-                html.push_str(" onsubmit=\"");
-                html.push_str(&html_escape(&format!(
-                    "return confirm({})",
-                    javascript_string_literal(&confirm)
-                )));
-                html.push('"');
+                html.push_str(" data-confirm=\"");
+                html.push_str(&html_escape_preserving_locale_references(&confirm));
+                html.push_str("\" onsubmit=\"return confirm(this.dataset.confirm)\"");
             }
             html.push_str("><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
             html.push_str(&html_escape(&action.csrf));
@@ -5613,7 +6062,9 @@ fn render_crud_detail_with_actions(
                 html.push_str("<label for=\"");
                 html.push_str(&html_escape(&field.name));
                 html.push_str("\">");
-                html.push_str(&html_escape(&localize_user_text(language, &field.label)));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &localize_user_text(language, &field.label),
+                ));
                 html.push_str("</label>");
                 if field.relation {
                     html.push_str("<select id=\"");
@@ -5669,7 +6120,9 @@ fn render_crud_detail_with_actions(
                 html.push_str(&html_escape(icon));
                 html.push_str("\" aria-hidden=\"true\"></span>");
             }
-            html.push_str(&html_escape(&localize_user_text(language, &action.label)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, &action.label),
+            ));
             html.push_str("</button></form>");
         }
     }
@@ -5679,17 +6132,21 @@ fn render_crud_detail_with_actions(
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
         html.push_str("\"><button type=\"submit\">");
-        html.push_str(tr(language, "action.restore"));
+        html.push_str(&tr(language, "action.restore"));
         html.push_str("</button></form>");
     } else if ui_actions.delete {
         if let Some(title) = &crud.delete_view.title {
             html.push_str("<h2>");
-            html.push_str(&html_escape(&localize_user_text(language, title)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, title),
+            ));
             html.push_str("</h2>");
         }
         if let Some(message) = &crud.delete_view.message {
             html.push_str("<p class=\"zelyra-delete-message\">");
-            html.push_str(&html_escape(&localize_user_text(language, message)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localize_user_text(language, message),
+            ));
             html.push_str("</p>");
         }
         html.push_str("<form method=\"post\" action=\"");
@@ -5697,13 +6154,13 @@ fn render_crud_detail_with_actions(
         html.push_str("\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
         html.push_str(&html_escape(crud.csrf.token()));
         html.push_str("\"><button type=\"submit\">");
-        html.push_str(&html_escape(&localize_user_text(
-            language,
-            crud.delete_view
-                .submit
-                .as_deref()
-                .unwrap_or(tr(language, "action.delete")),
-        )));
+        let submit = crud
+            .delete_view
+            .submit
+            .as_deref()
+            .map(|submit| localize_user_text(language, submit))
+            .unwrap_or_else(|| tr(language, "action.delete"));
+        html.push_str(&html_escape_preserving_locale_references(&submit));
         html.push_str("</button></form>");
     }
     if cards {
@@ -6069,7 +6526,7 @@ fn render_form_with_language(
             field_text(
                 language,
                 title_key,
-                &localized_identifier(language, resource),
+                &localized_identifier_reference(language, resource),
             )
         });
     if let Some(title) = route
@@ -6080,7 +6537,7 @@ fn render_form_with_language(
         .or(generated_title)
     {
         html.push_str("<h1>");
-        html.push_str(&html_escape(&title));
+        html.push_str(&html_escape_preserving_locale_references(&title));
         html.push_str("</h1>");
     }
     let cards = route.form_view.mode == CrudFormViewMode::Cards;
@@ -6095,7 +6552,9 @@ fn render_form_with_language(
     html.push_str("\">");
     if let Some(notice) = notice {
         html.push_str("<p class=\"zelyra-notice\">");
-        html.push_str(&html_escape(&localize_user_text(language, notice)));
+        html.push_str(&html_escape_preserving_locale_references(
+            &localize_user_text(language, notice),
+        ));
         html.push_str("</p>");
     }
     for field in &route.form.fields {
@@ -6103,7 +6562,7 @@ fn render_form_with_language(
             .label
             .as_deref()
             .map(|label| localize_user_text(language, label))
-            .unwrap_or_else(|| localized_identifier(language, &field.name));
+            .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
         let value = values.get(&field.name).map(String::as_str).unwrap_or("");
         let field_errors = errors
             .iter()
@@ -6115,7 +6574,7 @@ fn render_form_with_language(
         html.push_str("<label for=\"");
         html.push_str(&html_escape(&field.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&label));
+        html.push_str(&html_escape_preserving_locale_references(&label));
         html.push_str("</label>");
         if let Some(options) = relation_options.get(&field.name) {
             html.push_str("<select id=\"");
@@ -6174,7 +6633,9 @@ fn render_form_with_language(
             }
             if let Some(placeholder) = &field.placeholder {
                 html.push_str(" placeholder=\"");
-                html.push_str(&html_escape(&localize_user_text(language, placeholder)));
+                html.push_str(&html_escape_preserving_locale_references(
+                    &localize_user_text(language, placeholder),
+                ));
                 html.push('"');
             }
             if field.readonly {
@@ -6184,10 +6645,9 @@ fn render_form_with_language(
         }
         for error in field_errors {
             html.push_str("<p class=\"zelyra-error\">");
-            html.push_str(&html_escape(&localized_validation_message(
-                language,
-                &error.message,
-            )));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_validation_message(language, &error.message),
+            ));
             html.push_str("</p>");
         }
         html.push_str("</div>");
@@ -6196,10 +6656,13 @@ fn render_form_with_language(
     let default_submit = form_kind
         .map(|(_, submit_key)| tr(language, submit_key))
         .unwrap_or(tr(language, "form.submit"));
-    html.push_str(&html_escape(&localize_user_text(
-        language,
-        route.form_view.submit.as_deref().unwrap_or(default_submit),
-    )));
+    let submit = route
+        .form_view
+        .submit
+        .as_deref()
+        .map(|submit| localize_user_text(language, submit))
+        .unwrap_or(default_submit);
+    html.push_str(&html_escape_preserving_locale_references(&submit));
     html.push_str("</button></form>");
     if cards {
         html.push_str("</section>");
@@ -6222,7 +6685,7 @@ fn localized_validation_message(language: UiLanguage, message: &str) -> String {
         "must be a UUID" => "validation.uuid",
         _ => {
             if let Some(maximum) = message.strip_prefix("value exceeds maximum length of ") {
-                return tr(language, "validation.max_length").replace("{max}", maximum);
+                return i18n::parameterized_reference("validation.max_length", "max", maximum);
             }
             return message.to_owned();
         }
@@ -6326,6 +6789,24 @@ pub fn localized_identifier(language: UiLanguage, name: &str) -> String {
     characters.next().map_or(words.clone(), |first| {
         first.to_uppercase().collect::<String>() + characters.as_str()
     })
+}
+
+fn localized_identifier_reference(language: UiLanguage, name: &str) -> String {
+    let key = format!("identifier.{}", name.to_ascii_lowercase());
+    if i18n::valid_catalog_key(&key) {
+        i18n::reference(&key)
+    } else {
+        localized_identifier(language, name)
+    }
+}
+
+fn localized_identifier_marker(language: UiLanguage, name: &str) -> String {
+    let key = format!("identifier.{}", name.to_ascii_lowercase());
+    if i18n::valid_catalog_key(&key) {
+        format!("@i18n:{key}")
+    } else {
+        localized_identifier(language, name)
+    }
 }
 
 pub fn parse_urlencoded(body: &str) -> Result<HashMap<String, String>, HttpError> {
@@ -7028,18 +7509,18 @@ fn render_page_query_controls(
         .unwrap_or(1);
     let mut html =
         String::from("<form method=\"get\"><fieldset class=\"zelyra-query-controls\"><legend>");
-    html.push_str(tr(language, "query.legend"));
+    html.push_str(&tr(language, "query.legend"));
     html.push_str("</legend>");
     if !route.search_columns.is_empty() {
         html.push_str("<label for=\"search\">");
-        html.push_str(tr(language, "query.search"));
+        html.push_str(&tr(language, "query.search"));
         html.push_str("</label><input id=\"search\" name=\"search\" value=\"");
         html.push_str(&html_escape(search));
         html.push_str("\">");
     }
     if !route.sort_columns.is_empty() {
         html.push_str("<label for=\"sort\">");
-        html.push_str(tr(language, "query.sort"));
+        html.push_str(&tr(language, "query.sort"));
         html.push_str("</label><select id=\"sort\" name=\"sort\">");
         for column in &route.sort_columns {
             html.push_str("<option value=\"");
@@ -7049,11 +7530,13 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(&html_escape(&localized_identifier(language, column)));
+            html.push_str(&html_escape_preserving_locale_references(
+                &localized_identifier_reference(language, column),
+            ));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"order\">");
-        html.push_str(tr(language, "query.order"));
+        html.push_str(&tr(language, "query.order"));
         html.push_str("</label><select id=\"order\" name=\"order\">");
         for (value, key) in [("asc", "query.ascending"), ("desc", "query.descending")] {
             html.push_str("<option value=\"");
@@ -7063,7 +7546,7 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(tr(language, key));
+            html.push_str(&tr(language, key));
             html.push_str("</option>");
         }
         html.push_str("</select>");
@@ -7073,10 +7556,10 @@ fn render_page_query_controls(
         html.push_str("<label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("__operator\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_operator",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><select id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -7091,16 +7574,16 @@ fn render_page_query_controls(
                 html.push_str(" selected");
             }
             html.push('>');
-            html.push_str(operator.label(language));
+            html.push_str(&operator.label(language));
             html.push_str("</option>");
         }
         html.push_str("</select><label for=\"filter_");
         html.push_str(&html_escape(&filter.name));
         html.push_str("\">");
-        html.push_str(&html_escape(&field_text(
+        html.push_str(&html_escape_preserving_locale_references(&field_text(
             language,
             "query.filter_value",
-            &localized_identifier(language, &filter.name),
+            &localized_identifier_reference(language, &filter.name),
         )));
         html.push_str("</label><input id=\"filter_");
         html.push_str(&html_escape(&filter.name));
@@ -7116,7 +7599,7 @@ fn render_page_query_controls(
         html.push_str("\">");
     }
     html.push_str("<button type=\"submit\">");
-    html.push_str(tr(language, "query.apply"));
+    html.push_str(&tr(language, "query.apply"));
     html.push_str("</button></fieldset></form>");
     if route.page_size.is_some() {
         let page_count = data
@@ -7131,12 +7614,12 @@ fn render_page_query_controls(
             html.push_str(&format!("\">{}</a> ", tr(language, "pagination.previous")));
         }
         html.push_str("<span>");
-        html.push_str(tr(language, "pagination.page"));
+        html.push_str(&tr(language, "pagination.page"));
         html.push(' ');
         html.push_str(&page.to_string());
         if page_count > 0 {
             html.push(' ');
-            html.push_str(tr(language, "pagination.of"));
+            html.push_str(&tr(language, "pagination.of"));
             html.push(' ');
             html.push_str(&page_count.to_string());
         }
@@ -7486,6 +7969,7 @@ mod tests {
             UiLanguage::German,
             true,
         );
+        let html = localize_html(&html, UiLanguage::German);
         assert!(html.contains("Deine Zelyra-CRUD-Lernhilfe"));
         assert!(html.contains("Ein Feld in der Verwaltung ergänzen"));
         assert!(html.contains("list, search, filter oder form"));
@@ -7823,6 +8307,111 @@ mod tests {
     }
 
     #[test]
+    fn project_catalogs_override_markers_escape_html_and_fall_back_to_english() {
+        let action_label = localize_user_text(UiLanguage::German, "@i18n:custom.action");
+        let route = Route {
+            path: "/".into(),
+            html: format!(
+                r#"<main><h1 data-zelyra-i18n="custom.title"></h1><p data-zelyra-i18n="app.home_title"></p><strong>{action_label}</strong></main>"#
+            ),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let mut catalogs = ProjectUiCatalogs::default();
+        catalogs
+            .set_json(
+                UiLanguage::English,
+                r#"{"custom.title":"Project title","custom.action":"<script>alert(1)</script>","app.home_title":"Project home"}"#,
+            )
+            .unwrap();
+        catalogs
+            .set_json(UiLanguage::German, r#"{"custom.title":"Projekttitel"}"#)
+            .unwrap();
+
+        let app = WebApp::new(vec![route], Vec::new())
+            .with_ui_settings(UiLanguage::German, UiLevel::Work)
+            .with_project_ui_catalogs(catalogs);
+        let response = app.dispatch(&request);
+        assert!(response.body.contains(">Projekttitel</h1>"));
+        assert!(response.body.contains(">Project home</p>"));
+        assert!(response
+            .body
+            .contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!response.body.contains("<script>alert(1)</script>"));
+    }
+
+    #[test]
+    fn project_catalogs_override_generated_ui_and_parameterized_labels() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("catalog-csrf"),
+        };
+        let mut catalogs = ProjectUiCatalogs::default();
+        catalogs
+            .set_json(
+                UiLanguage::German,
+                r#"{"shell.brand_descriptor":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
+            )
+            .unwrap();
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth_route(auth)
+            .with_ui_settings(UiLanguage::German, UiLevel::Learn)
+            .with_project_ui_catalogs(catalogs.clone());
+        let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let response = app.dispatch(&request);
+
+        assert!(response.body.contains("Eigene Oberfläche"));
+        assert!(response.body.contains("<h1>Projektanmeldung</h1>"));
+        assert!(response
+            .body
+            .contains("<label for=\"email\">E-Mail-Adresse</label>"));
+        assert!(response.body.contains("Projekt-Hilfe öffnen"));
+        assert!(!response.body.contains(LOCALE_REFERENCE_START));
+
+        let filter_label = field_text(
+            UiLanguage::German,
+            "query.filter_value",
+            &localized_identifier_reference(UiLanguage::German, "department"),
+        );
+        assert_eq!(
+            resolve_locale_references(&filter_label, UiLanguage::German, &catalogs),
+            "Wert für Kostenstelle"
+        );
+    }
+
+    #[test]
+    fn html_escaped_user_text_cannot_forge_a_locale_reference() {
+        let forged_reference =
+            format!("{LOCALE_REFERENCE_START}shell.brand_descriptor{LOCALE_REFERENCE_END}");
+        let escaped = html_escape(&forged_reference);
+        let resolved =
+            resolve_locale_references(&escaped, UiLanguage::German, &ProjectUiCatalogs::default());
+
+        assert_eq!(resolved, escaped);
+        assert!(!resolved.contains("Zuverlässige Business-Anwendungen"));
+    }
+
+    #[test]
     fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
         let error = localize_html(
             "<main><h1>403 Forbidden</h1><p>The Database capability is not granted.</p></main>",
@@ -7855,17 +8444,26 @@ mod tests {
             },
             csrf: CsrfProtection::new("csrf-token"),
         };
-        let login = render_login(&auth, UiLanguage::German);
+        let login = localize_html(&render_login(&auth, UiLanguage::German), UiLanguage::German);
         assert!(login.contains("<h1>Anmelden</h1>"));
         assert!(login.contains("<label for=\"email\">E-Mail</label>"));
         assert!(!login.contains(">Login<"));
 
         assert_eq!(
-            localized_validation_message(UiLanguage::German, "value is required"),
+            localize_html(
+                &localized_validation_message(UiLanguage::German, "value is required"),
+                UiLanguage::German,
+            ),
             "Ein Wert ist erforderlich."
         );
         assert_eq!(
-            localized_validation_message(UiLanguage::German, "value exceeds maximum length of 80"),
+            localize_html(
+                &localized_validation_message(
+                    UiLanguage::German,
+                    "value exceeds maximum length of 80",
+                ),
+                UiLanguage::German,
+            ),
             "Der Wert überschreitet die maximale Länge von 80 Zeichen."
         );
     }
@@ -7882,6 +8480,7 @@ mod tests {
             &HashMap::new(),
             UiLanguage::German,
         );
+        let html = localize_html(&html, UiLanguage::German);
         assert!(html.contains("<h1>Kunde anlegen</h1>"));
         assert!(html.contains("<label for=\"name\">Name</label>"));
         assert!(html.contains(">Anlegen</button>"));
@@ -7898,11 +8497,17 @@ mod tests {
             "Abteilung"
         );
         assert_eq!(
-            FilterOperator::Contains.label(UiLanguage::German),
+            localize_html(
+                &FilterOperator::Contains.label(UiLanguage::German),
+                UiLanguage::German,
+            ),
             "enthält"
         );
         assert_eq!(
-            field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
+            localize_html(
+                &field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
+                UiLanguage::German,
+            ),
             "Wert für Aktiv"
         );
     }
@@ -7949,8 +8554,10 @@ mod tests {
                 Response::json(200, "{}")
             })])
             .with_cors(policy);
-        let request =
-            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost:5173\r\n\r\n").unwrap();
+        let request = parse_request(
+            "GET /health HTTP/1.1\r\nHost: localhost:3000\r\nOrigin: http://localhost:5173\r\n\r\n",
+        )
+        .unwrap();
         let response = app.dispatch(&request);
         assert_eq!(response.status, 200);
         assert!(response.headers.contains(&(
@@ -7969,7 +8576,7 @@ mod tests {
             })])
             .with_cors(policy);
         let request = parse_request(
-            "OPTIONS /customers HTTP/1.1\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
+            "OPTIONS /customers HTTP/1.1\r\nHost: localhost\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -7995,7 +8602,7 @@ mod tests {
             })])
             .with_cors(policy);
         let request = parse_request(
-            "OPTIONS /health HTTP/1.1\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
+            "OPTIONS /health HTTP/1.1\r\nHost: localhost\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -8007,6 +8614,231 @@ mod tests {
     fn rejects_invalid_cors_origins() {
         assert!(CorsPolicy::new(vec!["*".into()], false).is_err());
         assert!(CorsPolicy::new(vec!["https://app.example/path".into()], false).is_err());
+    }
+
+    #[test]
+    fn csrf_requires_a_same_origin_browser_request() {
+        let csrf = CsrfProtection::new("known-form-token");
+        let same_origin = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &same_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+
+        let cross_origin = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(!verify_csrf_request(
+            &cross_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+
+        let forwarded_https = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &forwarded_https,
+            &csrf,
+            Some("known-form-token")
+        ));
+        assert!(secure_cookie_attribute(&forwarded_https).contains("Secure"));
+
+        let missing_origin =
+            parse_request("POST /save HTTP/1.1\r\nHost: example.test\r\n\r\n").unwrap();
+        assert!(!verify_csrf_request(
+            &missing_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+    }
+
+    #[test]
+    fn csrf_rejects_mismatched_scheme_and_malformed_origins() {
+        let csrf = CsrfProtection::new("known-form-token");
+        for origin in [
+            "http://example.test",
+            "https://example.test.evil.test",
+            "null",
+            "https://user@example.test",
+            "https://example.test/path",
+        ] {
+            let request = parse_request(&format!(
+                "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: {origin}\r\n\r\n"
+            ))
+            .unwrap();
+            assert!(
+                !verify_csrf_request(&request, &csrf, Some("known-form-token")),
+                "accepted unexpected origin {origin}"
+            );
+        }
+
+        let referer = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test:443\r\nX-Forwarded-Proto: https\r\nReferer: https://EXAMPLE.test/path?x=1\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &referer,
+            &csrf,
+            Some("known-form-token")
+        ));
+    }
+
+    #[test]
+    fn host_allowlist_blocks_dns_rebinding_and_accepts_configured_hosts() {
+        let health = Route {
+            path: "/health".into(),
+            html: "ok".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(vec![health], Vec::new());
+        let rebinding = parse_request(
+            "GET /health HTTP/1.1\r\nHost: attacker.example:3000\r\nOrigin: http://attacker.example:3000\r\n\r\n",
+        )
+        .unwrap();
+        let response = app.dispatch(&rebinding);
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("This request host is not allowed."));
+
+        let german_app = WebApp::new(
+            vec![Route {
+                path: "/health".into(),
+                html: "ok".into(),
+                query: Vec::new(),
+                page_size: None,
+                sort_columns: Vec::new(),
+                search_columns: Vec::new(),
+                filters: Vec::new(),
+                data: Vec::new(),
+                requires_auth: false,
+                permissions: Vec::new(),
+            }],
+            Vec::new(),
+        )
+        .with_ui_settings(UiLanguage::German, UiLevel::Work);
+        let german_response = german_app.dispatch(&rebinding);
+        assert_eq!(german_response.status, 400);
+        assert!(german_response
+            .body
+            .contains("Der Hostname dieser Anfrage ist nicht freigegeben."));
+
+        let configured = app
+            .with_allowed_hosts(vec!["APP.Example".to_owned()])
+            .unwrap();
+        let request = parse_request(
+            "GET /health HTTP/1.1\r\nHost: app.example:8080\r\nOrigin: http://app.example:8080\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(configured.dispatch(&request).status, 200);
+    }
+
+    #[test]
+    fn host_allowlist_normalizes_equivalent_ipv6_literals() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let request = parse_request("GET / HTTP/1.1\r\nHost: [0:0:0:0:0:0:0:1]\r\n\r\n").unwrap();
+
+        assert_eq!(app.dispatch(&request).status, 404);
+    }
+
+    #[test]
+    fn host_allowlist_rejects_missing_host_for_browser_requests_and_invalid_config() {
+        let health = Route {
+            path: "/health".into(),
+            html: "ok".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(vec![health], Vec::new());
+        let missing_host =
+            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&missing_host).status, 400);
+
+        assert!(app
+            .clone()
+            .with_allowed_hosts(Vec::<String>::new())
+            .is_err());
+        assert!(app
+            .clone()
+            .with_allowed_hosts(vec!["https://app.example".to_owned()])
+            .is_err());
+        assert!(app
+            .clone()
+            .with_allowed_hosts(vec!["app.example:8080".to_owned()])
+            .is_err());
+        assert!(app
+            .with_allowed_hosts(vec!["bad..example".to_owned()])
+            .is_err());
+    }
+
+    #[test]
+    fn secure_session_cookie_is_set_when_tls_terminates_at_a_proxy() {
+        let request = parse_request(
+            "POST /login HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(secure_cookie_attribute(&request), "; Secure");
+
+        let local_request =
+            parse_request("POST /login HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n").unwrap();
+        assert_eq!(secure_cookie_attribute(&local_request), "");
+    }
+
+    #[test]
+    fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth_route(auth)
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let request = parse_request(
+            "POST /logout HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\nCookie: zelyra_session=old-token\r\n\r\n_zelyra_csrf=csrf-token",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 303);
+        let cookie = response
+            .headers
+            .iter()
+            .find(|(name, _)| name == "Set-Cookie")
+            .map(|(_, value)| value.as_str())
+            .unwrap();
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("; Secure"));
     }
 
     #[test]
@@ -8258,7 +9090,10 @@ mod tests {
             ]),
             collections: HashMap::new(),
         };
-        let html = render_page(&route, "/customers", &HashMap::new(), &query_values, &data);
+        let html = localize_html(
+            &render_page(&route, "/customers", &HashMap::new(), &query_values, &data),
+            UiLanguage::English,
+        );
         assert!(html.contains("<body><form method=\"get\">"));
         assert!(html.contains("name=\"filter_name\" value=\"Ada\""));
         assert!(html.contains("Page 2 of 3"));
@@ -8283,6 +9118,27 @@ mod tests {
         assert_eq!(request.path, "/hello/Ada");
         assert_eq!(request.target, "/hello/Ada?active=true");
         assert_eq!(request.headers["host"], "localhost");
+    }
+
+    #[test]
+    fn rejects_duplicate_security_sensitive_request_headers() {
+        for header in [
+            "Host",
+            "Origin",
+            "Referer",
+            "X-Forwarded-Proto",
+            "Cookie",
+            "Authorization",
+        ] {
+            let raw = format!("GET / HTTP/1.1\r\n{header}: first\r\n{header}: second\r\n\r\n");
+            let error = parse_request(&raw).unwrap_err();
+            assert!(
+                error
+                    .message
+                    .contains("duplicate security-sensitive header"),
+                "did not reject duplicate {header}"
+            );
+        }
     }
 
     #[test]
@@ -8349,7 +9205,7 @@ mod tests {
         assert!(wire.contains("Content-Length: 2\r\n"));
         assert!(wire.contains("X-Content-Type-Options: nosniff\r\n"));
         assert!(wire.contains("X-Frame-Options: DENY\r\n"));
-        assert!(wire.contains("Referrer-Policy: no-referrer\r\n"));
+        assert!(wire.contains("Referrer-Policy: same-origin\r\n"));
         assert!(wire.ends_with("\r\n\r\nok"));
     }
 
@@ -8611,6 +9467,7 @@ mod tests {
             },
             UiLanguage::English,
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains("value=\"CNC machine\""));
         assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
@@ -8651,6 +9508,7 @@ mod tests {
             },
             UiLanguage::English,
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains(
             "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
         ));
@@ -8757,6 +9615,7 @@ mod tests {
                 success_title: Some("Completed"),
             },
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("&lt;unsafe&gt;"));
         assert!(html.contains(
             "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
@@ -8953,6 +9812,7 @@ mod tests {
                         },
                     ],
                     foreign_keys: vec![zelyra_database::ForeignKey {
+                        name: None,
                         column: "department_id".into(),
                         referenced_table: "departments".into(),
                         referenced_column: "id".into(),
@@ -9006,6 +9866,7 @@ mod tests {
                 success_title: None,
             },
         );
+        let html = localize_html(&html, UiLanguage::English);
         assert!(html.contains("<th>Department</th>"));
         assert!(html.contains("<td>Production</td>"));
         assert!(html.contains("Filter Department"));
@@ -9294,6 +10155,61 @@ mod tests {
     }
 
     #[test]
+    fn mutating_api_rejects_cross_origin_browser_requests_unless_cors_allows_them() {
+        let route = ApiRoute::new("POST", "/mutate", |_request, _| {
+            Response::json(200, "{\"ok\":true}")
+        });
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![route.clone()])
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let cross_origin = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin).status, 403);
+
+        let same_origin = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&same_origin).status, 200);
+
+        let policy = CorsPolicy::new(vec!["https://attacker.test".into()], true).unwrap();
+        let explicitly_allowed = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![route])
+            .with_cors(policy)
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        assert_eq!(explicitly_allowed.dispatch(&cross_origin).status, 200);
+
+        let cookie_only = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cookie_only).status, 403);
+
+        let get_route = ApiRoute::new("GET", "/possibly-stateful", |_request, _| {
+            Response::json(200, "{\"ok\":true}")
+        });
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![get_route])
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let cross_origin_get = parse_request(
+            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin_get).status, 403);
+
+        let same_origin_get = parse_request(
+            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nReferer: http://example.test/customers\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&same_origin_get).status, 200);
+    }
+
+    #[test]
     fn crud_delete_requires_csrf() {
         let app = WebApp::with_database_url(
             Vec::new(),
@@ -9361,7 +10277,10 @@ mod tests {
                 tables: Vec::new(),
             },
         };
-        let html = render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1");
+        let html = localize_html(
+            &render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1"),
+            UiLanguage::English,
+        );
         assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
         assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
         assert!(html.contains(">Delete</button>"));
@@ -9437,7 +10356,7 @@ mod tests {
         assert!(action_html.contains("<select id=\"department\" name=\"department\" required>"));
         assert!(action_html.contains("<option value=\"2\">Production &lt;unsafe&gt;</option>"));
         assert!(action_html.contains(
-            "onsubmit=\"return confirm(&#39;Deactivate &lt;unsafe&gt; customer?&#39;)\""
+            "data-confirm=\"Deactivate &lt;unsafe&gt; customer?\" onsubmit=\"return confirm(this.dataset.confirm)\""
         ));
 
         let mut custom_route = route.clone();
@@ -9507,24 +10426,31 @@ mod tests {
     fn form_post_requires_csrf_and_reports_validation_errors() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let invalid_csrf = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
         )
         .unwrap();
         assert_eq!(app.dispatch(&invalid_csrf).status, 403);
 
-        let missing_name =
-            parse_request("POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token")
-                .unwrap();
+        let missing_name = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token",
+        )
+        .unwrap();
         let response = app.dispatch(&missing_name);
         assert_eq!(response.status, 422);
         assert!(response.body.contains("value is required"));
+
+        let cross_origin = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: https://attacker.test\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin).status, 403);
     }
 
     #[test]
     fn form_post_returns_accepted_after_validating_input() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -9612,7 +10538,7 @@ mod tests {
         });
         let app = WebApp::new(Vec::new(), vec![route]);
         let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
         )
         .unwrap();
         assert_eq!(app.dispatch(&request).status, 503);

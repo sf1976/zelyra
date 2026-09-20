@@ -20,7 +20,7 @@ Responses include these secure defaults:
 ~~~http
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-Referrer-Policy: no-referrer
+Referrer-Policy: same-origin
 ~~~
 
 The defaults apply to HTML, JSON, redirects, errors, and empty preflight

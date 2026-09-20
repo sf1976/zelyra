@@ -62,12 +62,51 @@ layout is selected. The shell provides labeled navigation, keyboard focus
 styles, and a localized skip-to-content link. Authored page HTML remains under
 the page author's control.
 
-Missing German entries fall back to English. A key missing from both catalogs
-renders `[missing translation]`; a consistency test checks literal references
-against both catalogs. Project-specific catalog overlays are not implemented
-yet. Business records and arbitrary project-authored HTML are content, not
-automatically translated UI copy. API and compiler machine contracts are not
-localized by these settings.
+Missing German entries fall back to English. A key missing from both built-in
+catalogs renders `[missing translation]`; a consistency test checks literal
+references against both catalogs. `zelyra new` and `zelyra init` create
+optional `locales/de.json` and `locales/en.json` project catalogs. These can
+add keys or override built-in keys when referenced by
+`data-zelyra-i18n="key"`, `@i18n:key` text settings, or catalog-backed standard
+HTTP errors. The same project catalogs can override every catalog-backed
+generated shell, CRUD, form, tableview, login, authentication-admin,
+validation, and learning-guide label. Generated field identifiers and
+parameterized labels (for example, a filter label containing a field name) are
+also resolved through the catalogs. German lookup uses the project German
+catalog, then project English, then the built-in German catalog and its English
+fallback. Files must be UTF-8 JSON objects with nonempty string values and are
+limited to 256 KiB each; invalid files and symbolic links are rejected by
+`serve`. Resolved text is HTML-escaped. Business records and unmarked
+project-authored content are not automatically translated. API and compiler
+machine contracts are not localized by these settings.
+
+### Browser request origins and allowed hosts
+
+Every supplied HTTP `Host` header must match the server's configured
+`ZELYRA_ALLOWED_HOSTS`. The default is `localhost,127.0.0.1,[::1]`; configure
+additional actual hostnames or IP addresses explicitly for a LAN or reverse
+proxy. Values are comma-separated ASCII hostnames or IP addresses (IDNs use
+punycode) and must not contain schemes, ports, wildcards, or empty entries.
+Precedence is process environment, project `.env`, then the
+loopback-only default. Invalid or empty settings prevent server startup. This
+allowlist rejects forged hosts and DNS-rebinding requests; it does not provide
+TLS or replace origin checks. Duplicate `Host`, `Origin`, `Referer`,
+`X-Forwarded-Proto`, `Cookie`, and `Authorization` request headers are rejected
+to avoid ambiguous security decisions. Responses use
+`Referrer-Policy: same-origin`, allowing same-origin API GETs to provide a
+`Referer` while not sending referrer information to other origins.
+
+State-changing browser forms require both a valid CSRF token and a same-origin
+`Origin` or `Referer` matching the request host and effective scheme. API
+requests carrying browser-origin headers or the Zelyra session cookie receive
+the origin check for routed API methods, including `GET`, because handlers are
+not yet statically restricted to read-only behavior. `OPTIONS` preflight is
+handled separately by the CORS policy. Cross-origin API requests are allowed
+only when their exact origin is configured in the CORS policy; a session cookie
+additionally requires credentialed CORS. Behind a TLS-terminating
+proxy, preserve the public `Host`, overwrite `X-Forwarded-Proto`, and block
+direct access to the application port. The built-in server does not terminate
+TLS.
 
 ### Project-local theme overrides
 
@@ -151,6 +190,40 @@ Generated CRUD, form, and tableview pages use the built-in Zelyra application
 shell by default. A CRUD's explicit `layout: ViewName` replaces that default
 shell with the checked project view. Authored pages are never silently
 rewritten and may choose their own page-level view.
+
+A CRUD may supply content for declared named slots in that outer layout:
+
+~~~zelyra
+view BusinessShell {
+    html {
+        <html><body>
+            <header><slot name="resource_heading"><h1>Business data</h1></slot></header>
+            <main><slot /></main>
+            <aside><slot name="resource_help"><p>Resource help</p></slot></aside>
+        </body></html>
+    }
+}
+
+crud Machine -> machines {
+    layout: BusinessShell
+    slots {
+        resource_heading {
+            html { <h1>Machine register</h1> }
+        }
+        resource_help {
+            html { <p>Use search and filters to find a machine.</p> }
+        }
+    }
+}
+~~~
+
+The compiler rejects an unknown layout, an undeclared slot, duplicate slot
+content, or slot content without a layout (diagnostic E-VIEW-031). Omitted
+named slots keep the layout's fallback. The layout's default slot remains
+reserved for generated CRUD output; custom slot markup can use checked
+components but has no record, request, or CRUD-action bindings. The generated
+CRUD continues to own its SQL, validation, CSRF, authorization, and escaping
+boundaries.
 
 CRUD resources may reuse a project-defined application shell with
 `layout: ViewName`:

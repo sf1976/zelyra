@@ -110,7 +110,10 @@ Betroffene Befehle und Laufzeitbereiche: `zelyra serve`, die MariaDB-Projekt-
 Scaffolds `new`/`init` sowie der erzeugte Compose-Webdienst. Regressionstests
 prüfen die Priorität Prozessumgebung → `.env` → Fallback im CLI, die gültigen
 Werte und Katalogschlüssel in `web/src/i18n.rs` sowie die erzeugten Defaults
-und Compose-Weitergabe in `cli/tests/machine_interfaces.rs`.
+und Compose-Weitergabe in `cli/tests/machine_interfaces.rs`. Projektkataloge
+werden zusätzlich auf UTF-8, JSON-Form, Größenlimit und Symlinks geprüft; ein
+CLI-Integrationstest kontrolliert die Verwendung der Marker und die sichere
+Fehlerausgabe.
 
 Neue MariaDB-Projekte aktivieren `ZELYRA_LANGUAGE=de` und
 `ZELYRA_LEVEL=learn`; beide Werte können in `.env` geändert werden. Die
@@ -124,10 +127,53 @@ und Lernhilfetexte. Beispiel-Views referenzieren Einträge mit
 englischen Katalog zurück. Ein auch dort unbekannter Schlüssel erscheint als
 `[missing translation]` und weist auf einen fehlenden Katalogeintrag hin.
 
+`zelyra new` und `zelyra init` erzeugen zusätzlich optionale Projektkataloge
+`locales/de.json` und `locales/en.json`; das erzeugte Dockerfile übernimmt den
+Ordner ebenfalls in das Laufzeitimage. Darin können eigene UI-Schlüssel
+hinzugefügt und Texte überschrieben werden, auf die eine View mit
+`data-zelyra-i18n="eigener.schluessel"` oder eine Zelyra-Texteinstellung mit
+`@i18n:eigener.schluessel` verweist. Dieselben Kataloge ergänzen oder
+überschreiben alle kataloggebundenen generierten Beschriftungen in
+Anwendungsrahmen, CRUD, Formularen, Tableviews, Login,
+Authentifizierungsverwaltung, Validierung und Lernhilfe. Generierte
+Feldnamen verwenden Schlüssel nach dem Muster `identifier.<feld>`;
+parametrisierte Texte können `{field}` und `{max}` enthalten. Für Deutsch gilt
+die Auflösung: Projektkatalog Deutsch → Projektkatalog Englisch → eingebauter
+deutscher Katalog → dessen englischer Fallback. Die Dateien sind optionale
+UTF-8-JSON-Objekte mit nichtleeren Zeichenketten; pro Datei gelten maximal
+256 KiB. Ungültige Dateien, Symlinks und andere Dateitypen werden von
+`zelyra serve` mit `E-I18N-001` abgewiesen. Katalogtexte werden beim Einfügen in
+HTML escaped. Sie sind Anzeigeinhalt, keine Konfiguration für Berechtigungen
+oder Geschäftsregeln; Zugangsdaten und andere Secrets gehören nicht hinein.
+
 Diese Kataloge übersetzen keine fachlichen Datensätze oder beliebige HTML-Texte
 aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
+
+## Host-Allowlist des Webservers
+
+| Variable | Werte | Standard in neuer MariaDB-`.env` / Fallback | Vorrang | Sicherheitsklasse und Wirkung | Betroffene Befehle und Tests |
+|---|---|---|---|---|---|
+| `ZELYRA_ALLOWED_HOSTS` | Kommagetrennte ASCII-Hostnamen oder IP-Adressen (IDNs als Punycode); ohne Schema, Port, Wildcard oder leere Listeneinträge | `localhost,127.0.0.1,[::1]` | Prozessumgebung → Projekt-`.env` → Loopback-Fallback | Kein Secret, aber sicherheitsrelevante Allowlist gegen manipulierte `Host`-Header und DNS-Rebinding. Nur tatsächlich verwendete Hosts ergänzen. | `zelyra serve`, MariaDB-Scaffolds `new`/`init`, erzeugtes Compose; CLI-, Web- und Scaffold-Regressionstests |
+
+Jede HTTP-Anfrage mit `Host` muss zu einem Eintrag passen. Der Vergleich ist
+ohne Beachtung der Groß-/Kleinschreibung; ein angehängter Port wird separat
+geprüft und nicht mit der Allowlist abgeglichen. Wildcards, URLs, Ports und
+ungültige Hostnamen sind als Konfigurationswerte unzulässig. Eine leere oder
+ungültige Liste verhindert den Serverstart mit `E-ENV-001`. Internationalisierte
+Domainnamen müssen als ASCII-Punycode eingetragen werden. Wenn eine
+Anwendung über einen Reverse-Proxy oder im LAN mit einem eigenen Hostnamen
+erreichbar sein soll, diesen Host ausdrücklich konfigurieren. Der Proxy muss
+den öffentlichen `Host` erhalten, `X-Forwarded-Proto` überschreiben und den
+direkten Zugriff auf den App-Port verhindern. Die Einstellung erweitert nur
+die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
+
+## Nur für den Integrationstest
+
+| Variable | Standard | Vorrang / Herkunft | Sicherheitsklasse | Betroffene Befehle und Tests |
+|---|---|---|---|---|
+| `ZELYRA_SCHEMA_SAFETY_MARIADB_URL` | nicht gesetzt; nur SQLite-Test | Nur Prozessumgebung; wird nicht aus Projekt-`.env` geladen. Ein expliziter Wert schaltet den zusätzlichen MariaDB-Testpfad ein. | Kann Benutzername und Passwort enthalten; nur lokale Testdatenbank verwenden, niemals ausgeben oder committen. | `bash tests/schema-safety-e2e.sh`; GitHub Actions setzt eine lokale `zelyra_ci`-Test-URL. Der Test akzeptiert ausschließlich `localhost`/Loopback und eine Basisdatenbank `zelyra_ci` oder `zelyra_test`; er erstellt und entfernt eine isolierte Datenbank. |
 
 ## Projektlokales Theme (keine `.env`-Variable)
 
@@ -250,6 +296,17 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | `ZELYRA_TABLEVIEW_E2E_PROJECT`, `ZELYRA_TABLEVIEW_E2E_ADDRESS`, `ZELYRA_TABLEVIEW_E2E_DB_PASSWORD`, `ZELYRA_TABLEVIEW_E2E_KEEP_TEMP` | Test-/Entwicklungswerkzeug | Tableview-E2E-Projekt, Adresse, Testpasswort und temporäre Daten |
 | `ZELYRA_AUDIT_CHAIN_E2E_PROJECT`, `ZELYRA_AUDIT_CHAIN_E2E_DB_PASSWORD` | Test-/Entwicklungswerkzeug | Audit-Chain-E2E-Projekt und Testpasswort |
 | `ZELYRA_DOCKER_E2E_WEB_PORT`, `ZELYRA_DOCKER_E2E_HOST_PORT`, `ZELYRA_DOCKER_E2E_DB_HOST_PORT`, `ZELYRA_DOCKER_E2E_ADDRESS` | Test-/Entwicklungswerkzeug | erzeugtes Docker-E2E-Projekt und Portwahl |
+| `ZELYRA_DOCKER_E2E_REF` | Test-/Entwicklungswerkzeug; Standard ist der lokale Checkout-Branch (bei detached HEAD der veröffentlichte Zelyra-Tag) | Git-Branch oder Tag für das isolierte Docker-E2E-Anwendungsimage |
+
+`ZELYRA_DOCKER_E2E_REF` betrifft ausschließlich
+`tests/generated-project-docker-e2e.sh`. Ist die Variable nicht gesetzt,
+verwendet der Test den Branch des lokalen Checkouts; bei detached HEAD gilt der
+im erzeugten Dockerfile festgelegte veröffentlichte Tag. Ein gesetzter
+Prozess-Umgebungswert hat Vorrang; `.env` wird dafür nicht ausgewertet. Der
+Wert ist kein Secret, wird auf einen einfachen Git-Ref beschränkt und ohne
+wiederverwendete Compiler-Build-Schichten gebaut. Der Branch oder Tag muss im
+GitHub-Repository verfügbar sein. CI setzt den Branch des geprüften Commits.
+Der Test deckt Ref-Auswahl, Build und Laufzeit ab.
 
 Die Testvariablen mit `GENERATED_*`, `*_E2E_*` und `ZELYRA_BIN` sind keine
 öffentliche Anwendungsschnittstelle. Sie dienen reproduzierbaren CI- und

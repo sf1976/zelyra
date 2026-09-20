@@ -200,13 +200,13 @@ passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
 ausgetauscht:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
 Unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.1.50
+.\install.ps1 -Release v0.2.0
 ~~~
 
 Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS
@@ -322,11 +322,8 @@ Für eine fertige lokale MariaDB- und Webserver-Vorlage verwenden:
 ~~~bash
 zelyra new meine-app --mariadb --web-port 8080 --host-port 18080 --db-host-port 3307
 cd meine-app
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
+zelyra setup --all
 zelyra doctor main.zyl --env-file .env --port 18080
-zelyra db setup main.zyl
 ~~~
 
 Die erzeugte Compose-Datei startet MariaDB und den Zelyra-Webserver. Die mit
@@ -340,11 +337,14 @@ fehlen, wählen neue Projekte bei belegten Standardports automatisch freie
 Host-Ports. Ausdrücklich gesetzte Host-Port-Optionen werden niemals still
 geändert. Die Vorlage ist für lokale
 Entwicklung gedacht; für Produktion Secret-Manager und TLS verwenden.
+`zelyra setup --all` startet MariaDB und App, richtet das Anfangsschema ein
+und gibt die wirksame lokale Adresse aus, sodass der Port nicht selbst
+ermittelt werden muss.
 
-`zelyra setup .` erzeugt aus der Vorlage eine geschützte `.env` mit zufälligen
-lokalen MariaDB-Passwörtern und schützt die Datei unter Unix. Eine vorhandene
-`.env` wird nicht überschrieben, und Zugangsdaten werden nicht ausgegeben. Die
-lokalen Zugangsdaten nicht als Produktions-Secrets verwenden.
+`zelyra new --mariadb` erzeugt eine geschützte `.env` mit zufälligen lokalen
+MariaDB-Passwörtern. `zelyra setup` bleibt ein idempotenter Nachholbefehl.
+Eine vorhandene `.env` wird nicht überschrieben, und Zugangsdaten werden nicht
+ausgegeben. Lokale Zugangsdaten nicht als Produktions-Secrets verwenden.
 
 Muss Setup eine fehlende `.env` erzeugen, wählt es freie veröffentlichte Web-
 und MariaDB-Ports, wenn die Vorlagen-Standardports belegt sind. Mit
@@ -359,14 +359,25 @@ MariaDB-CRUD-Template verwenden:
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-zelyra setup .
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-Es enthält Abteilungen, Maschinen, eine Beziehung, schemaabhängige Formulare,
-CRUD-Seiten, Suche, Filter, Pagination und eigene Aktionen.
+Es enthält ein vollständig fiktionales Werkstattmodell mit sechs
+Produktionsbereichen und 30 Maschinen, lokalisierte Maschinen-/Bereichs-Views,
+schemaabhängige Formulare, CRUD-Seiten, Suche, Kategorie-/Status-/Bereichsfilter,
+Pagination und eigene Aktionen. Die erzeugte Datei
+`machine-management-demo.sql` enthält ausschließlich Fantasiedaten und kann
+wiederholt importiert werden. Nach `zelyra setup --all` lassen sie sich
+ausdrücklich in den lokalen MariaDB-Dienst laden:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
+
+Der Import ist bewusst ein eigener Schritt; Setup fügt niemals ungefragt
+Beispieldatensätze ein.
 
 Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und
 Berechtigungen:
@@ -630,13 +641,25 @@ Geprüften Plan anwenden:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destruktive Änderungen werden ohne ausdrückliche Freigabe abgelehnt:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden ohne ausdrückliche Freigabe
+abgelehnt. Verwende `--allow-risky`; `--allow-destructive` bleibt auf
+ausschließlich destruktive Pläne beschränkt und gibt keine `REVIEW`-Änderungen
+frei. Nicht unterstützte Operationen werden immer
+abgelehnt:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
-Destruktive Pläne sorgfältig prüfen. Niemals echte Passwörter in eine
+Änderungen an Defaults, Primärschlüsseln oder MariaDB-Auto-Increment werden
+derzeit erkannt, aber nicht automatisch migriert. Der Plan markiert sie als
+`UNSUPPORTED`; Freigabe-Flags können diese Einstufung nicht übergehen.
+
+Den vollständigen Plan sorgfältig prüfen. Pflichtspalten ohne Standardwert
+können nach Freigabe engineabhängige Werte für vorhandene Zeilen erhalten;
+diese Werte müssen vor der Nutzung durch die Anwendung geprüft werden. Das
+Anlegen eines Unique-Constraints kann an vorhandenen Duplikaten scheitern.
+Niemals echte Passwörter in eine
 committete Zelyra-Datei, Dokumentation oder ein Shell-Script schreiben.
 Umgebungsvariablen, Secret-Manager und geschützte Deployment-Konfiguration
 sind vorzuziehen.
@@ -877,9 +900,11 @@ Zusätzlich kann die erzeugte Docker-Laufzeit geprüft werden:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-Der Test baut das erzeugte Image, startet MariaDB und Webserver standardmäßig
-auf den Host-Ports 3309 und 18082, prüft Willkommensseite und Port-Zuordnung
-und entfernt alle temporären Docker-Ressourcen anschließend wieder.
+Der Test erzeugt ein frisches CRUD-Projekt und führt `zelyra setup --all`
+zweimal aus. Er prüft geschützte, unveränderte Zugangsdaten, die ausgegebene
+App-Adresse, Maschinen-/Abteilungsseiten und Portzuordnungen. MariaDB und
+Webserver nutzen standardmäßig isolierte Host-Ports 3309 und 18082; alle
+temporären Docker-Ressourcen werden anschließend entfernt.
 
 ## 12. Häufige Probleme
 
@@ -911,7 +936,12 @@ Formularvalidierung und Sprachbeispiele benötigen keine Datenbankverbindung.
 ### Destruktive Schemaänderung wird abgelehnt
 
 Das ist beabsichtigt. db plan ausführen, betroffene Zeilen und SQL prüfen und
-db apply erst danach mit dem ausdrücklichen Flag allow-destructive wiederholen.
+db apply erst nach Prüfung mit `--allow-risky` wiederholen. Die ältere
+`--allow-destructive` wird für ausschließlich destruktive Pläne weiterhin
+akzeptiert und genehmigt keine `REVIEW`-Änderungen. Als nicht
+unterstützt markierte Änderungen lassen sich mit dieser Version nicht
+anwenden; löse sie über einen unterstützten Schema-Plan oder manuelle
+Datenbankarbeit und inspiziere danach erneut.
 
 ### Eine Seite startet, aber der Browser zeigt 404
 

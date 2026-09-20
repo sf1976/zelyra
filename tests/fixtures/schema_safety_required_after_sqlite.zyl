@@ -1,0 +1,10 @@
+database main {
+    engine: sqlite
+    database: "schema_safety"
+}
+
+table safety_records {
+    id: Id primary auto
+    label: String(80) required
+    review_value: String(30) required
+}

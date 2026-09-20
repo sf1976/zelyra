@@ -71,6 +71,11 @@ network traffic, executes email/jobs, renders confidential data, or returns
 secrets. Unsupported semantic details are omitted or represented as empty
 arrays rather than invented.
 
+For CRUD resources the summary includes the selected outer layout and the
+names and source spans of supplied named layout slots. It deliberately omits
+the slot HTML bodies; source context remains bounded and avoids exposing
+arbitrary presentation content by default.
+
 The context is intentionally a bounded snapshot, not a replacement for type
 checking. An invalid source produces diagnostics and a non-zero exit status.
 

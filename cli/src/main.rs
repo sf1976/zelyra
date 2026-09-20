@@ -16,9 +16,10 @@ use std::{
 };
 use zelyra_ast::Type;
 use zelyra_database::{
-    apply_mariadb, apply_postgres, apply_sqlite, build_schema, create_mariadb_database, diff,
-    inspect_mariadb, inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program,
-    Backend, Query, QueryResult, QueryValue, Risk, Schema,
+    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_null_values,
+    create_mariadb_database, diff, inspect_mariadb, inspect_postgres, inspect_sqlite,
+    sql::check_program as check_sql_program, table_has_rows, Backend, Query, QueryResult,
+    QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -33,9 +34,9 @@ use zelyra_runtime::{
 };
 use zelyra_web::{
     audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
-    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, Response, Route, RouteData,
-    RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage, UiLevel, WebApp,
-    PROJECT_THEME_CSS_PATH,
+    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, ProjectUiCatalogs, Response,
+    Route, RouteData, RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage,
+    UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
 };
 
 mod edit;
@@ -48,6 +49,8 @@ use holes::collect_typed_holes;
 use impact::{build_impact, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
+const MACHINE_MANAGEMENT_DEMO_DATA: &str =
+    include_str!("../../examples/machine_management_demo.sql");
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
@@ -99,7 +102,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
     );
 }
 
@@ -108,6 +111,8 @@ const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
 const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
 const PROJECT_THEME_CSS_FILE: &str = "zelyra.theme.css";
 const PROJECT_THEME_CSS_MAX_BYTES: u64 = 128 * 1024;
+const PROJECT_LOCALE_DIRECTORY: &str = "locales";
+const PROJECT_LOCALE_MAX_BYTES: u64 = 256 * 1024;
 
 struct ProjectOptions {
     allow_current_directory: bool,
@@ -240,6 +245,7 @@ fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) 
 ZELYRA_DB_HOST_PORT={database_host_port}
 ZELYRA_LANGUAGE=de
 ZELYRA_LEVEL=learn
+ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -250,6 +256,10 @@ MARIADB_ROOT_PASSWORD=change-me-root
 # the selected defaults below, so these lines can remain commented out.
 # ZELYRA_WEB_PORT={web_port}
 # ZELYRA_HOST_PORT={host_port}
+
+# Optional public hostnames or IP addresses, comma-separated. Add the host
+# used in your browser when serving through a LAN address or reverse proxy.
+# ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],app.example.com
 
 # Optional feature switches. They default to true and are normally not needed.
 # ZELYRA_FEATURE_WEB=true
@@ -520,30 +530,26 @@ fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
         eprintln!("error[E-INIT-002]: cannot create `{path}`: {error}");
         return ExitCode::from(1);
     }
-    let project_config = if options.with_mariadb {
-        r#"[project]
-name = "zelyra-app"
-version = "0.1.50"
-zelyra = "0.1"
-
-[database.main]
-engine = "mariadb"
-
-[capabilities]
-database = true
-network = false
-"#
+    let database_section = if options.with_mariadb {
+        "[database.main]\nengine = \"mariadb\"\n"
     } else {
+        ""
+    };
+    let project_config = format!(
         r#"[project]
 name = "zelyra-app"
-version = "0.1.50"
+version = "{version}"
 zelyra = "0.1"
+
+{database_section}
 
 [capabilities]
 database = true
 network = false
-"#
-    };
+"#,
+        version = env!("CARGO_PKG_VERSION"),
+        database_section = database_section
+    );
     let main_source = if options.business_template {
         MARIADB_BUSINESS_TEMPLATE
     } else if options.crud_template {
@@ -562,7 +568,15 @@ network = false
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source.to_owned()),
         (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
+        ("locales/de.json", "{}\n".to_owned()),
+        ("locales/en.json", "{}\n".to_owned()),
     ];
+    if options.crud_template {
+        files.push((
+            "machine-management-demo.sql",
+            MACHINE_MANAGEMENT_DEMO_DATA.to_owned(),
+        ));
+    }
     if options.with_mariadb {
         let env_value = |name: &str| format!("{}{{{name}}}", '$');
         let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{}}}", '$', options.web_port);
@@ -608,6 +622,7 @@ network = false
       DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
+      ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -626,6 +641,13 @@ volumes:
                     &format!("{}{{ZELYRA_LANGUAGE:-de}}", '$'),
                 )
                 .replace("__ZELYRA_LEVEL__", &format!("{}{{ZELYRA_LEVEL:-learn}}", '$'))
+                .replace(
+                    "__ZELYRA_ALLOWED_HOSTS__",
+                    &format!(
+                        "{}{{ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}}",
+                        '$'
+                    ),
+                )
                 .replace("__WEB_PORT__", &web_port_value)
                 .replace("__HOST_PORT__", &host_port_value)
                 .replace("__DATABASE_HOST_PORT__", &database_host_port_value),
@@ -633,7 +655,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.50
+ARG ZELYRA_REF=__ZELYRA_DEFAULT_REF__
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -646,10 +668,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 COPY main.zyl zelyra.toml zelyra.theme.css ./
+COPY locales ./locales
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
                 .replace("__ZELYRA_REF__", &env_value("ZELYRA_REF"))
+                .replace(
+                    "__ZELYRA_DEFAULT_REF__",
+                    &format!("v{}", env!("CARGO_PKG_VERSION")),
+                )
                 .replace("__WEB_PORT__", &options.web_port.to_string()),
             ),
             (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
@@ -660,6 +687,15 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
         let file = directory.join(name);
         if file.exists() && options.allow_current_directory {
             continue;
+        }
+        if let Some(parent) = file.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                eprintln!(
+                    "error[E-INIT-003]: cannot create `{}`: {error}",
+                    parent.display()
+                );
+                return ExitCode::from(1);
+            }
         }
         let contents = contents.to_owned();
         if let Err(error) = fs::write(&file, contents) {
@@ -1176,7 +1212,28 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     }
     for crud in &program.cruds {
         if let Some(layout) = &crud.layout {
-            if program.views.iter().all(|view| view.name != *layout) {
+            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
+                if let Err((slot_index, message)) =
+                    validate_crud_layout_slots(view, &crud.layout_slots)
+                {
+                    let span = crud
+                        .layout_slots
+                        .get(slot_index)
+                        .map(|slot| slot.span)
+                        .unwrap_or(crud.span);
+                    diagnostic(
+                        path,
+                        "E-VIEW-031",
+                        &format!(
+                            "CRUD `{}` has invalid content for layout `{layout}`: {message}",
+                            crud.name
+                        ),
+                        span.line,
+                        span.column,
+                    );
+                    valid = false;
+                }
+            } else {
                 diagnostic(
                     path,
                     "E-VIEW-030",
@@ -1189,6 +1246,19 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
                 );
                 valid = false;
             }
+        } else if !crud.layout_slots.is_empty() {
+            let slot = &crud.layout_slots[0];
+            diagnostic(
+                path,
+                "E-VIEW-031",
+                &format!(
+                    "CRUD `{}` supplies layout slots but has no `layout: ...` reference",
+                    crud.name
+                ),
+                slot.span.line,
+                slot.span.column,
+            );
+            valid = false;
         }
     }
     valid
@@ -2192,6 +2262,10 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
                 "name": crud.name,
                 "table": crud.table,
                 "layout": crud.layout,
+                "layout_slots": crud.layout_slots.iter().map(|slot| json!({
+                    "name": slot.name,
+                    "span": context_span(source, slot.span)
+                })).collect::<Vec<_>>(),
                 "view_fields": crud.view.fields,
                 "span": context_span(source, crud.span)
             })
@@ -2808,6 +2882,26 @@ fn validate_view_content_slots(view: &zelyra_ast::ViewDef, body: &str) -> Result
     Ok(())
 }
 
+fn validate_crud_layout_slots(
+    view: &zelyra_ast::ViewDef,
+    supplied_slots: &[zelyra_ast::CrudLayoutSlotDef],
+) -> Result<(), (usize, String)> {
+    let (_, declared_slots) = declared_view_slots(view).map_err(|message| (0, message))?;
+    let mut supplied_names = HashSet::new();
+    for (index, slot) in supplied_slots.iter().enumerate() {
+        if !declared_slots.contains(&slot.name) {
+            return Err((index, format!("view has no named slot `{}`", slot.name)));
+        }
+        if !supplied_names.insert(slot.name.as_str()) {
+            return Err((
+                index,
+                format!("named slot `{}` is supplied more than once", slot.name),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
     if value.starts_with('{') && value.ends_with('}') {
         return value.len() > 2;
@@ -3346,6 +3440,30 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             }
         }
     }
+    for crud in &program.cruds {
+        if let Some(layout_name) = &crud.layout {
+            if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &layout.html,
+                    layout.span.line,
+                    layout.span.column,
+                    &HashMap::new(),
+                );
+            }
+            for slot in &crud.layout_slots {
+                valid &= validate_component_template(
+                    path,
+                    program,
+                    &slot.html,
+                    slot.span.line,
+                    slot.span.column,
+                    &HashMap::new(),
+                );
+            }
+        }
+    }
     valid
 }
 
@@ -3477,6 +3595,21 @@ fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
     Ok((language, level))
 }
 
+fn project_allowed_hosts(path: &str) -> Result<Vec<String>, String> {
+    let configured = project_ui_setting(path, "ZELYRA_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")?;
+    let hosts = configured
+        .split(',')
+        .map(str::trim)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if hosts.is_empty() || hosts.iter().any(String::is_empty) {
+        return Err(
+            "ZELYRA_ALLOWED_HOSTS must contain comma-separated, non-empty hostnames or IP addresses".into(),
+        );
+    }
+    Ok(hosts)
+}
+
 fn project_theme_css(path: &str) -> Result<Option<String>, String> {
     let source_path = std::path::Path::new(path);
     let project_directory = source_path
@@ -3514,6 +3647,61 @@ fn project_theme_css(path: &str) -> Result<Option<String>, String> {
     String::from_utf8(bytes)
         .map(Some)
         .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))
+}
+
+fn project_ui_catalogs(path: &str) -> Result<ProjectUiCatalogs, String> {
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let locale_directory = project_directory.join(PROJECT_LOCALE_DIRECTORY);
+    let directory_metadata = match fs::symlink_metadata(&locale_directory) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ProjectUiCatalogs::default());
+        }
+        Err(_) => return Err("cannot inspect project locale directory".to_owned()),
+    };
+    if directory_metadata.file_type().is_symlink() || !directory_metadata.is_dir() {
+        return Err("project `locales` must be a regular directory and not a symbolic link".into());
+    }
+
+    let mut catalogs = ProjectUiCatalogs::default();
+    for language in [UiLanguage::German, UiLanguage::English] {
+        let file_name = format!("{}.json", language.code());
+        let display_name = format!("{PROJECT_LOCALE_DIRECTORY}/{file_name}");
+        let catalog_path = locale_directory.join(&file_name);
+        let metadata = match fs::symlink_metadata(&catalog_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(format!("cannot inspect `{display_name}`")),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(format!(
+                "`{display_name}` must be a regular file, not a symbolic link"
+            ));
+        }
+        if metadata.len() > PROJECT_LOCALE_MAX_BYTES {
+            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
+        }
+
+        let file =
+            fs::File::open(&catalog_path).map_err(|_| format!("cannot read `{display_name}`"))?;
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.take(PROJECT_LOCALE_MAX_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| format!("cannot read `{display_name}`"))?;
+        if bytes.len() as u64 > PROJECT_LOCALE_MAX_BYTES {
+            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
+        }
+        let source = String::from_utf8(bytes)
+            .map_err(|_| format!("`{display_name}` must contain UTF-8 text"))?;
+        catalogs
+            .set_json(language, &source)
+            .map_err(|error| format!("invalid `{display_name}`: {error}"))?;
+    }
+    Ok(catalogs)
 }
 
 fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
@@ -3696,6 +3884,35 @@ fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> 
     Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
 }
 
+fn project_web_url(directory: &std::path::Path) -> Result<String, String> {
+    let env_path = directory.join(".env");
+    let env_path_string = env_path.to_string_lossy();
+    project_web_url_with_host_port(
+        directory,
+        env::var("ZELYRA_HOST_PORT").ok().as_deref(),
+        &env_path_string,
+    )
+}
+
+fn project_web_url_with_host_port(
+    directory: &std::path::Path,
+    host_port_override: Option<&str>,
+    env_path: &str,
+) -> Result<String, String> {
+    let port = match host_port_override.map(str::to_owned) {
+        Some(value) => Some(value),
+        None => read_env_value(env_path, "ZELYRA_HOST_PORT")?,
+    };
+    let port = match port {
+        Some(value) => parse_web_port(&value)?,
+        None => {
+            let template = local_mariadb_template(directory)?;
+            template_port(&template, "ZELYRA_HOST_PORT", DEFAULT_WEB_PORT)
+        }
+    };
+    Ok(format!("http://127.0.0.1:{port}"))
+}
+
 fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
     let database_url = expanded_database_url(directory)?;
     let executable =
@@ -3751,7 +3968,9 @@ fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<Stri
         "kept existing .env; credentials were not changed".to_owned()
     });
     if matches!(action, "database" | "schema" | "all") {
+        let web_url = project_web_url(directory)?;
         messages.push(start_mariadb_compose(directory)?);
+        messages.push(format!("open: {web_url}"));
     }
     if matches!(action, "schema" | "all") {
         let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
@@ -6334,10 +6553,24 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
         println!("No schema changes.");
         return;
     }
+    for check in &plan.nullability_preflights {
+        println!(
+            "[PREFLIGHT] verify `{}.{}` has no NULL values before applying any SQL",
+            check.table, check.column
+        );
+    }
+    for check in &plan.required_column_preflights {
+        println!(
+            "[PREFLIGHT] verify `{}` is empty before adding required column `{}` without a default",
+            check.table, check.column
+        );
+    }
     for change in &plan.changes {
         let risk = match change.risk {
             Risk::Safe => "SAFE",
+            Risk::RequiresApproval => "REVIEW",
             Risk::Destructive => "DESTRUCTIVE",
+            Risk::Unsupported => "UNSUPPORTED",
         };
         println!("[{risk}] {}\n{}\n", change.description, change.sql);
     }
@@ -6349,7 +6582,11 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(2);
     };
     let path = args.next().unwrap_or_else(|| "main.zyl".into());
-    let allow_destructive = args.any(|arg| arg == "--allow-destructive");
+    let remaining_args = args.collect::<Vec<_>>();
+    let allow_risky = remaining_args.iter().any(|arg| arg == "--allow-risky");
+    let allow_destructive = remaining_args
+        .iter()
+        .any(|arg| arg == "--allow-destructive");
     let schema = match load_schema(&path) {
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
@@ -6449,17 +6686,81 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             };
             let plan = diff(&schema, &current);
             print_plan(&plan);
-            if plan.is_destructive() && !allow_destructive {
-                eprintln!("error[E-DB-004]: destructive changes refused; use --allow-destructive after review");
+            if plan.has_unsupported() {
+                eprintln!(
+                    "error[E-DB-006]: schema plan contains unsupported changes; no SQL was applied"
+                );
+                return ExitCode::from(1);
+            }
+            let has_review_changes = plan
+                .changes
+                .iter()
+                .any(|change| change.risk == Risk::RequiresApproval);
+            let legacy_approval_is_sufficient = allow_destructive && !has_review_changes;
+            if plan.requires_approval() && !allow_risky && !legacy_approval_is_sufficient {
+                eprintln!("error[E-DB-004]: schema changes requiring review were refused; review the plan and use --allow-risky to approve it");
                 return ExitCode::from(1);
             }
             if plan.changes.is_empty() {
                 return ExitCode::SUCCESS;
             }
+            for check in &plan.nullability_preflights {
+                match count_null_values(&url, schema.backend(), &check.table, &check.column) {
+                    Ok(0) => {}
+                    Ok(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: cannot require `{}.{}` because existing rows contain NULL values; no schema SQL was applied",
+                            check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: could not verify that `{}.{}` contains no NULL values; no schema SQL was applied",
+                            check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
+            }
+            let mut table_row_presence = HashMap::new();
+            for check in &plan.required_column_preflights {
+                let has_rows = *table_row_presence
+                    .entry(check.table.as_str())
+                    .or_insert_with(|| {
+                        table_has_rows(&url, schema.backend(), &check.table).map_err(|_| ())
+                    });
+                match has_rows {
+                    Ok(false) => {}
+                    Ok(true) => {
+                        eprintln!(
+                            "error[E-DB-005]: cannot add required column `{}.{}` without a default because the table contains existing rows; no schema SQL was applied. Add a default or stage the change: add it as nullable, backfill the rows, then require it",
+                            check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: could not verify that table `{}` is empty before adding required column `{}.{}`; no schema SQL was applied",
+                            check.table, check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
+            }
+            let mut sql = plan.sql();
+            if schema.backend() == Backend::MariaDb
+                && (!plan.nullability_preflights.is_empty()
+                    || !plan.required_column_preflights.is_empty())
+            {
+                sql = format!(
+                    "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{sql}"
+                );
+            }
             let result = match schema.backend() {
-                Backend::Postgres => apply_postgres(&url, &plan.sql()),
-                Backend::MariaDb => apply_mariadb(&url, &plan.sql()),
-                Backend::Sqlite => apply_sqlite(&url, &plan.sql()),
+                Backend::Postgres => apply_postgres(&url, &sql),
+                Backend::MariaDb => apply_mariadb(&url, &sql),
+                Backend::Sqlite => apply_sqlite(&url, &sql),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -6504,10 +6805,24 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let allowed_hosts = match project_allowed_hosts(&path) {
+        Ok(hosts) => hosts,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let theme_css = match project_theme_css(&path) {
         Ok(theme_css) => theme_css,
         Err(error) => {
             diagnostic(&path, "E-THEME-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
+    let ui_catalogs = match project_ui_catalogs(&path) {
+        Ok(catalogs) => catalogs,
+        Err(error) => {
+            diagnostic(&path, "E-I18N-001", &error, 1, 1);
             return ExitCode::from(1);
         }
     };
@@ -6864,6 +7179,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
         .with_ui_settings(ui_language, ui_level)
         .with_project_theme_css(theme_css)
+        .with_project_ui_catalogs(ui_catalogs)
         .with_database_capability(database_capability_granted)
         .with_apis(api_routes)
         .with_auth(
@@ -6878,6 +7194,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         )
         .with_cruds(crud_routes)
         .with_tableviews(tableview_routes);
+    let app = match app.with_allowed_hosts(allowed_hosts) {
+        Ok(app) => app,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error.message, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let app = if let Some(cors_policy) = cors_policy {
         app.with_cors(cors_policy)
     } else {
@@ -7514,13 +7837,22 @@ fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
 const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
 
 fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
+    let (default_body, named_slots) =
+        split_view_content(content).expect("page view slots are validated before route generation");
+    compose_view_parts(program, view_name, &default_body, &named_slots)
+}
+
+fn compose_view_parts(
+    program: &zelyra_ast::Program,
+    view_name: &str,
+    default_body: &str,
+    named_slots: &HashMap<String, String>,
+) -> String {
     let view = program
         .views
         .iter()
         .find(|view| view.name == view_name)
-        .expect("page views are validated before route generation");
-    let (default_body, named_slots) =
-        split_view_content(content).expect("page view slots are validated before route generation");
+        .expect("page and CRUD views are validated before route generation");
     let slots = slot_invocations(&view.html).expect("view slots are validated");
     let mut composed = view.html.clone();
     for slot in slots.into_iter().rev() {
@@ -7531,7 +7863,7 @@ fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &s
             .map_or_else(
                 || match slot.name {
                     Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body.as_str(),
+                    None => default_body,
                 },
                 String::as_str,
             );
@@ -7549,9 +7881,14 @@ fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) 
 }
 
 fn crud_layout_html(program: &zelyra_ast::Program, crud: &zelyra_ast::CrudDef) -> Option<String> {
-    crud.layout
-        .as_deref()
-        .map(|layout| compose_view_html(program, layout, CRUD_LAYOUT_CONTENT_MARKER))
+    crud.layout.as_deref().map(|layout| {
+        let supplied_slots = crud
+            .layout_slots
+            .iter()
+            .map(|slot| (slot.name.clone(), slot.html.clone()))
+            .collect::<HashMap<_, _>>();
+        compose_view_parts(program, layout, CRUD_LAYOUT_CONTENT_MARKER, &supplied_slots)
+    })
 }
 
 fn page_data_fields(program: &zelyra_ast::Program, ty: &Type) -> Vec<String> {
@@ -8953,6 +9290,58 @@ mod tests {
     }
 
     #[test]
+    fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
+        let directory = std::env::temp_dir().join(format!(
+            "zelyra-allowed-hosts-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        fs::write(
+            directory.join(".env"),
+            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
+        )
+        .unwrap();
+
+        let previous = env::var_os("ZELYRA_ALLOWED_HOSTS");
+        env::remove_var("ZELYRA_ALLOWED_HOSTS");
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["localhost", "app.example"]
+        );
+        fs::remove_file(directory.join(".env")).unwrap();
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["localhost", "127.0.0.1", "[::1]"]
+        );
+        fs::write(
+            directory.join(".env"),
+            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
+        )
+        .unwrap();
+        env::set_var("ZELYRA_ALLOWED_HOSTS", "override.example, localhost");
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["override.example", "localhost"]
+        );
+        env::set_var("ZELYRA_ALLOWED_HOSTS", " , ");
+        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
+        env::set_var("ZELYRA_ALLOWED_HOSTS", "localhost, ");
+        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
+        if let Some(previous) = previous {
+            env::set_var("ZELYRA_ALLOWED_HOSTS", previous);
+        } else {
+            env::remove_var("ZELYRA_ALLOWED_HOSTS");
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn project_theme_css_is_optional_utf8_and_size_limited() {
         let directory = env::temp_dir().join(format!(
             "zelyra-project-theme-{}-{}",
@@ -9023,6 +9412,90 @@ mod tests {
         let error = project_theme_css(source_path.to_str().unwrap()).unwrap_err();
         assert!(error.contains("not a symbolic link"));
         assert!(!error.contains("private content"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn project_locale_catalogs_are_optional_validated_and_size_limited() {
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-locales-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
+
+        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
+        fs::create_dir(&locale_directory).unwrap();
+        fs::write(
+            locale_directory.join("de.json"),
+            r#"{"custom.title":"Titel"}"#,
+        )
+        .unwrap();
+        fs::write(
+            locale_directory.join("en.json"),
+            r#"{"custom.title":"Title"}"#,
+        )
+        .unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
+
+        fs::write(locale_directory.join("de.json"), r#"{"custom.title":true}"#).unwrap();
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales/de.json"));
+        assert!(error.contains("string values"));
+        assert!(!error.contains("true"));
+
+        fs::write(
+            locale_directory.join("de.json"),
+            vec![b'x'; PROJECT_LOCALE_MAX_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(project_ui_catalogs(source_path.to_str().unwrap())
+            .unwrap_err()
+            .contains("256 KiB size limit"));
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_locale_catalog_loader_does_not_follow_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let directory = env::temp_dir().join(format!(
+            "zelyra-project-locales-link-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        let outside_file = directory.join("outside.json");
+        fs::write(&outside_file, r#"{"title":"private"}"#).unwrap();
+        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
+        fs::create_dir(&locale_directory).unwrap();
+        symlink(&outside_file, locale_directory.join("de.json")).unwrap();
+
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales/de.json"));
+        assert!(error.contains("symbolic link"));
+        assert!(!error.contains("private"));
+
+        fs::remove_file(locale_directory.join("de.json")).unwrap();
+        fs::remove_dir(&locale_directory).unwrap();
+        let outside_directory = directory.join("outside-locales");
+        fs::create_dir(&outside_directory).unwrap();
+        symlink(&outside_directory, &locale_directory).unwrap();
+        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("locales"));
+        assert!(error.contains("symbolic link"));
         fs::remove_dir_all(directory).unwrap();
     }
 
@@ -9544,20 +10017,122 @@ mod tests {
     #[test]
     fn composes_crud_layout_with_generated_content_marker() {
         let source = r#"
+            component Badge {
+                props { label: String }
+                html { <strong>{label}</strong> }
+            }
             view Shell {
                 html {
-                    <html><body><header><h1>Customers</h1></header><main><slot /></main></body></html>
+                    <html><body>
+                        <header><slot name="heading"><h1>Customers</h1></slot></header>
+                        <main><slot /></main>
+                        <aside><slot name="help"><p>Default help</p></slot></aside>
+                        <footer><slot name="footer"><p>Default footer</p></slot></footer>
+                    </body></html>
                 }
             }
             table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers { layout: Shell }
+            crud Customer -> customers {
+                layout: Shell
+                slots {
+                    heading { html { <Badge label="Machine register" /> } }
+                    help { html { <p>Choose a machine to see its details.</p> } }
+                }
+            }
         "#;
         let program = parse(&lex(source).unwrap()).unwrap();
         assert!(validate_views("views.zyl", &program));
+        assert!(validate_components("views.zyl", &program));
         let layout = crud_layout_html(&program, &program.cruds[0]).unwrap();
-        assert!(layout.contains("<header><h1>Customers</h1></header>"));
+        assert!(layout.contains("<strong>Machine register</strong>"));
         assert!(layout.contains(CRUD_LAYOUT_CONTENT_MARKER));
+        assert!(layout.contains("<p>Choose a machine to see its details.</p>"));
+        assert!(!layout.contains("Default help"));
+        assert!(layout.contains("Default footer"));
         assert!(!layout.contains("<slot"));
+    }
+
+    #[test]
+    fn rejects_crud_layout_slots_without_a_matching_layout() {
+        let source = r#"
+            view Shell {
+                html { <header><slot name="heading" /></header><main><slot /></main> }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots { missing { html { <p>Custom content</p> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+
+        let source_without_layout = r#"
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                slots { heading { html { <h1>Customers</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source_without_layout).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+
+        let duplicate_slots = r#"
+            view Shell {
+                html {
+                    <header><slot name="heading" /></header><main><slot /></main>
+                }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots {
+                    heading { html { <h1>First heading</h1> } }
+                    heading { html { <h1>Second heading</h1> } }
+                }
+            }
+        "#;
+        let program = parse(&lex(duplicate_slots).unwrap()).unwrap();
+        assert!(!validate_views("views.zyl", &program));
+    }
+
+    #[test]
+    fn crud_layout_slot_content_cannot_read_crud_record_values() {
+        let source = r#"
+            view Shell {
+                html { <header><slot name="heading" /></header><main><slot /></main> }
+            }
+            table customers { id: Id primary auto name: String(100) }
+            crud Customer -> customers {
+                layout: Shell
+                slots { heading { html { <h1>{customer.name}</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
+    }
+
+    #[test]
+    fn crud_layout_components_are_checked_even_without_a_page_using_the_view() {
+        let source = r#"
+            component BrandMark {
+                props { label: String }
+                html { <strong>{label}</strong> }
+            }
+            view Shell {
+                html {
+                    <header><slot name="heading" /><BrandMark /></header><main><slot /></main>
+                }
+            }
+            table customers { id: Id primary auto }
+            crud Customer -> customers {
+                layout: Shell
+                slots { heading { html { <h1>Customers</h1> } } }
+            }
+        "#;
+        let program = parse(&lex(source).unwrap()).unwrap();
+        assert!(validate_views("views.zyl", &program));
+        assert!(!validate_components("views.zyl", &program));
     }
 
     #[test]
@@ -10282,10 +10857,50 @@ mod tests {
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
         let project_config = fs::read_to_string(path.join("zelyra.toml")).unwrap();
         let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.50"));
-        assert!(project_config.contains("version = \"0.1.50\""));
+        assert!(dockerfile.contains(&format!("ARG ZELYRA_REF=v{}", env!("CARGO_PKG_VERSION"))));
+        assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
+        assert!(dockerfile.contains("COPY locales ./locales"));
+        assert!(path.join("locales/de.json").is_file());
+        assert!(path.join("locales/en.json").is_file());
         assert!(project_theme.contains("--zelyra-color-accent"));
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-crud-demo-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let status = create_project(
+            path.to_str().unwrap(),
+            ProjectOptions {
+                allow_current_directory: false,
+                with_mariadb: true,
+                crud_template: true,
+                auth_template: false,
+                business_template: false,
+                web_port: DEFAULT_WEB_PORT,
+                host_port: DEFAULT_WEB_PORT,
+                database_host_port: DEFAULT_DATABASE_HOST_PORT,
+                host_port_given: false,
+                database_host_port_given: false,
+            },
+        );
+        assert_eq!(status, ExitCode::SUCCESS);
+
+        let fixture = fs::read_to_string(path.join("machine-management-demo.sql")).unwrap();
+        assert!(fixture.contains("ZLY-DEMO-030"));
+        assert!(fixture.contains("INSERT IGNORE INTO machines"));
+        let source = fs::read_to_string(path.join("main.zyl")).unwrap();
+        assert!(source.contains("machines.resources.title"));
+        assert!(source.contains("mode: cards"));
 
         fs::remove_dir_all(path).unwrap();
     }
@@ -10396,6 +11011,50 @@ mod tests {
         assert!(first.contains("created protected .env"));
         assert!(second.contains("kept existing .env"));
         assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
+
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn setup_web_url_uses_the_effective_host_port() {
+        let path = env::temp_dir().join(format!(
+            "zelyra-cli-setup-web-url-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        fs::write(
+            path.join("zelyra.toml"),
+            "[database.main]\nengine = \"mariadb\"\n",
+        )
+        .unwrap();
+        fs::write(
+            path.join(".env.example"),
+            "# ZELYRA_HOST_PORT=18080\nZELYRA_DB_HOST_PORT=3308\n",
+        )
+        .unwrap();
+        fs::write(path.join(".env"), "ZELYRA_HOST_PORT=18443\n").unwrap();
+
+        let env_path = path.join(".env");
+        let env_path = env_path.to_string_lossy();
+        assert_eq!(
+            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
+            "http://127.0.0.1:18443"
+        );
+
+        fs::write(path.join(".env"), "ZELYRA_DB_HOST_PORT=3308\n").unwrap();
+        assert_eq!(
+            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
+            "http://127.0.0.1:18080"
+        );
+
+        assert_eq!(
+            project_web_url_with_host_port(&path, Some("18444"), "unused.env").unwrap(),
+            "http://127.0.0.1:18444"
+        );
 
         fs::remove_dir_all(path).unwrap();
     }

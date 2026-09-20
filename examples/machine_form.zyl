@@ -4,14 +4,24 @@ database main {
 
 table departments {
     id: Id primary auto
+    code: String(20) required unique
     name: String(100) required unique
+    site: String(120) required
+    manager: String(100) required
 }
 
 table machines {
     id: Id primary auto
     number: String(30) required unique
-    name: String(100) required
+    name: String(120) required
+    manufacturer: String(80) required
+    model: String(80) required
+    serial_number: String(60) required unique
+    category: String(50) required
     department: Department required
+    commissioned_year: Int required
+    operating_hours: Int default 0
+    status: String(20) default "operational"
     active: Bool default true
     deleted_at: Timestamp?
 }
@@ -20,14 +30,27 @@ form MachineCreate -> machines {
     fields {
         number
         name
+        manufacturer
+        model
+        serial_number
+        category
         department
+        commissioned_year
+        operating_hours
+        status
         active
     }
 
     action save {
         sql {
-            INSERT INTO machines (number, name, department_id, active)
-            VALUES (:number, :name, :department, :active)
+            INSERT INTO machines (
+                number, name, manufacturer, model, serial_number, category,
+                department_id, commissioned_year, operating_hours, status, active
+            )
+            VALUES (
+                :number, :name, :manufacturer, :model, :serial_number, :category,
+                :department, :commissioned_year, :operating_hours, :status, :active
+            )
         }
 
         success "@i18n:machines.form.saved"
@@ -95,29 +118,115 @@ page "/" {
 
 crud Department -> departments {
     layout: ZelyraShell
+
+    title: "@i18n:machines.departments.title"
+
+    view {
+        fields { code name site manager }
+
+        list {
+            mode: cards
+            empty: "@i18n:machines.departments.empty"
+        }
+
+        detail {
+            mode: cards
+            title: "@i18n:machines.departments.detail"
+        }
+
+        form {
+            mode: cards
+            title: "@i18n:machines.departments.form"
+            submit: "@i18n:machines.departments.save"
+        }
+
+        delete {
+            title: "@i18n:machines.departments.delete_title"
+            message: "@i18n:machines.departments.delete_message"
+            submit: "@i18n:machines.departments.delete_submit"
+        }
+    }
+
+    search { code name site manager }
 }
 
 crud Machine -> machines {
     layout: ZelyraShell
+    title: "@i18n:machines.resources.title"
 
     soft_delete {
         column: deleted_at
     }
 
+    view {
+        fields {
+            number
+            name
+            manufacturer
+            model
+            serial_number
+            category
+            department
+            commissioned_year
+            operating_hours
+            status
+            active
+        }
+
+        list {
+            mode: cards
+            empty: "@i18n:machines.resources.empty"
+        }
+
+        detail {
+            mode: cards
+            title: "@i18n:machines.resources.detail"
+        }
+
+        form {
+            mode: cards
+            title: "@i18n:machines.resources.form"
+            submit: "@i18n:machines.resources.save"
+        }
+
+        delete {
+            title: "@i18n:machines.resources.delete_title"
+            message: "@i18n:machines.resources.delete_message"
+            submit: "@i18n:machines.resources.delete_submit"
+        }
+
+        loading { message: "@i18n:machines.resources.loading" }
+
+        error {
+            title: "@i18n:machines.resources.error_title"
+            message: "@i18n:machines.resources.error_message"
+        }
+    }
+
     list {
         number
         name
+        manufacturer
+        model
+        category
         department
+        status
+        operating_hours
         active
     }
 
     search {
         number
         name
+        manufacturer
+        model
+        serial_number
     }
 
     filter {
         department
+        category
+        status
         active
     }
 

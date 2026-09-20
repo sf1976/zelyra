@@ -59,6 +59,12 @@ jobs:
             exit 1
           fi
 
+          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [[ "${release_tag}" != "v${package_version}" ]]; then
+            echo "Release tag ${release_tag} does not match Cargo.toml version ${package_version}." >&2
+            exit 1
+          fi
+
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 
   build:
@@ -82,7 +88,18 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: ${{ matrix.target }}
+      - name: Install pinned Python for Linux packaging
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.11"
+      - name: Install pinned Python for Windows packaging
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
       - name: Validate Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -92,7 +109,40 @@ jobs:
           .\install.ps1 -DryRun -NoRustup -NoPath
           .\install.ps1 -DryRun -Release $env:RELEASE_TAG -NoPath
       - name: Build release binary
-        run: cargo build --release --package zelyra-cli --target ${{ matrix.target }}
+        if: runner.os == 'Windows'
+        env:
+          RUSTFLAGS: -C link-arg=/Brepro
+        run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
+      - name: Build release binary
+        if: runner.os == 'Linux'
+        run: cargo build --locked --release --package zelyra-cli --target ${{ matrix.target }}
+      - name: Verify repeated release binary build
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          CARGO_TARGET_DIR: ${{ runner.temp }}/zelyra-repeat-build
+        run: |
+          first_binary="target/${TARGET}/release/zelyra"
+          second_binary="${CARGO_TARGET_DIR}/${TARGET}/release/zelyra"
+          cargo build --locked --release --package zelyra-cli --target "${TARGET}"
+          cmp "${first_binary}" "${second_binary}"
+      - name: Verify repeated release binary build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          CARGO_TARGET_DIR: ${{ runner.temp }}/zelyra-repeat-build
+          RUSTFLAGS: -C link-arg=/Brepro
+        run: |
+          $firstBuild = "target/$env:TARGET/release/zelyra.exe"
+          $secondBuild = "$env:CARGO_TARGET_DIR/$env:TARGET/release/zelyra.exe"
+          cargo build --locked --release --package zelyra-cli --target $env:TARGET
+          $firstHash = (Get-FileHash $firstBuild -Algorithm SHA256).Hash
+          $secondHash = (Get-FileHash $secondBuild -Algorithm SHA256).Hash
+          if ($firstHash -ne $secondHash) {
+            throw "Release binary differs between repeated builds (first: $firstHash; second: $secondHash)."
+          }
       - name: Package Linux release
         if: runner.os == 'Linux'
         shell: bash
@@ -100,15 +150,15 @@ jobs:
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           TARGET: ${{ matrix.target }}
         run: |
-          package="zelyra-${RELEASE_TAG}-${TARGET}"
-          update_binary="zelyra-${RELEASE_TAG}-${TARGET}.bin"
-          mkdir "${package}"
-          cp "target/${TARGET}/release/zelyra" "${package}/zelyra"
-          cp "target/${TARGET}/release/zelyra" "${update_binary}"
-          sha256sum "${update_binary}" > "${update_binary}.sha256"
-          cp README.md README.de.md LICENSE LICENSE-MIT "${package}/"
-          tar -czf "${package}.tar.gz" "${package}"
-          sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256"
+          source_date_epoch="$(git log -1 --format=%ct)"
+          python3 scripts/package_release.py \
+            --project-root . \
+            --binary "target/${TARGET}/release/zelyra" \
+            --output-dir release-out \
+            --platform linux \
+            --tag "${RELEASE_TAG}" \
+            --target "${TARGET}" \
+            --source-date-epoch "${source_date_epoch}"
       - name: Package Windows release
         if: runner.os == 'Windows'
         shell: pwsh
@@ -116,30 +166,20 @@ jobs:
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           TARGET: ${{ matrix.target }}
         run: |
-          $package = "zelyra-$env:RELEASE_TAG-$env:TARGET"
-          $updateBinary = "$package.exe"
-          New-Item -ItemType Directory -Path $package | Out-Null
-          Copy-Item "target/$env:TARGET/release/zelyra.exe" "$package/zelyra.exe"
-          Copy-Item "target/$env:TARGET/release/zelyra.exe" $updateBinary
-          (Get-FileHash $updateBinary -Algorithm SHA256).Hash.ToLower() + "  $updateBinary" |
-            Set-Content -Encoding ascii "$updateBinary.sha256"
-          Copy-Item README.md, README.de.md, LICENSE, LICENSE-MIT $package
-          Compress-Archive -Path $package -DestinationPath "$package.zip"
-          (Get-FileHash "$package.zip" -Algorithm SHA256).Hash.ToLower() + "  $package.zip" |
-            Set-Content "$package.zip.sha256"
+          $sourceDateEpoch = [long](git log -1 --format=%ct)
+          python scripts/package_release.py `
+            --project-root . `
+            --binary "target/$env:TARGET/release/zelyra.exe" `
+            --output-dir release-out `
+            --platform windows `
+            --tag $env:RELEASE_TAG `
+            --target $env:TARGET `
+            --source-date-epoch $sourceDateEpoch
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
           name: zelyra-${{ matrix.target }}
-          path: |
-            zelyra-*.tar.gz
-            zelyra-*.tar.gz.sha256
-            zelyra-*.zip
-            zelyra-*.zip.sha256
-            zelyra-*-x86_64-unknown-linux-gnu.bin
-            zelyra-*-x86_64-unknown-linux-gnu.bin.sha256
-            zelyra-*-x86_64-pc-windows-msvc.exe
-            zelyra-*-x86_64-pc-windows-msvc.exe.sha256
+          path: release-out/*
 
   publish:
     name: Publish GitHub release
@@ -161,11 +201,11 @@ jobs:
           prerelease: ${{ contains(needs.validate.outputs.release_tag, '-') }}
           generate_release_notes: true
           body: |
-            ## Zelyra 0.1 Alpha
+            ## Zelyra ${{ needs.validate.outputs.release_tag }}
 
-            This is an early alpha release. Do not use it for production.
+            This is an experimental release. Do not use it for production.
 
-            ## Zelyra 0.1 Alpha (Deutsch)
+            ## Zelyra ${{ needs.validate.outputs.release_tag }} (Deutsch)
 
-            Dies ist eine frühe Alpha-Version. Nicht für Produktivsysteme verwenden.
+            Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.
           files: release-assets/*

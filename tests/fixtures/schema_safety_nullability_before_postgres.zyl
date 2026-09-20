@@ -1,0 +1,14 @@
+database main {
+    engine: postgres
+    database: "zelyra_schema_safety"
+}
+
+table nullability_records {
+    id: Id primary auto
+    value: String(80)
+    retained: String(80) required
+}
+
+table empty_required_records {
+    id: Id primary auto
+}

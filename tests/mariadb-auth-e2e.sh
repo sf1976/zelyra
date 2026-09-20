@@ -109,7 +109,8 @@ extract_csrf() {
 request_status() {
     local output_file="$1"
     shift
-    curl --silent --show-error --output "${output_file}" --write-out '%{http_code}' "$@"
+    curl --silent --show-error --output "${output_file}" --write-out '%{http_code}' \
+        --header "Origin: ${base_url}" "$@"
 }
 
 echo "[4/8] rejecting anonymous and invalid login requests"
@@ -117,6 +118,13 @@ anonymous_status="$(request_status "${temp_dir}/anonymous.html" "${base_url}/adm
 [[ "${anonymous_status}" == "401" ]]
 csrf="$(extract_csrf "${temp_dir}/login.html")"
 [[ -n "${csrf}" ]]
+cross_origin_status="$(curl --silent --show-error --output "${temp_dir}/cross-origin-login.html" --write-out '%{http_code}' \
+    --header "Origin: https://attacker.example" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${primary_email}" \
+    --data-urlencode "password=${test_password}" \
+    "${base_url}/login")"
+[[ "${cross_origin_status}" == "403" ]]
 invalid_status="$(request_status "${temp_dir}/invalid-login.html" \
     --data-urlencode "_zelyra_csrf=${csrf}" \
     --data-urlencode "email=${primary_email}" \

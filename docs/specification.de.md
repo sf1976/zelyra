@@ -68,12 +68,25 @@ lokalisierten Sprunglink zum Inhalt. Selbst verfasste Seiten bleiben vollständi
 unter Kontrolle ihrer Autoren.
 
 Fehlende deutsche Einträge fallen auf Englisch zurück. Fehlt ein Schlüssel in
-beiden Katalogen, wird `[missing translation]` ausgegeben; ein Konsistenztest
-prüft literale Referenzen gegen beide Dateien. Projektspezifische
-Katalogüberschreibungen sind noch nicht implementiert. Fachliche Datensätze und
-beliebiges, im Projekt verfasstes HTML sind Inhalte und werden nicht automatisch
-übersetzt. API- und Compiler-Maschinenschnittstellen werden von diesen
-Einstellungen nicht lokalisiert.
+beiden eingebauten Katalogen, wird `[missing translation]` ausgegeben; ein
+Konsistenztest prüft literale Referenzen gegen beide Dateien. `zelyra new` und
+`zelyra init` erzeugen optionale Projektkataloge `locales/de.json` und
+`locales/en.json`. Sie können Schlüssel ergänzen oder eingebaute Einträge
+überschreiben, wenn diese mit `data-zelyra-i18n="schluessel"`, einer
+`@i18n:schluessel`-Texteinstellung oder einem kataloggebundenen Standard-HTTP-
+Fehler referenziert werden. Dieselben Projektkataloge können alle
+kataloggebundenen generierten Texte für Anwendungsrahmen, CRUD, Formulare,
+Tableviews, Login, Authentifizierungsverwaltung, Validierung und Lernhilfe
+überschreiben. Auch generierte Feldnamen und parametrisierte Beschriftungen
+(zum Beispiel ein Filtertext mit Feldnamen) werden über Kataloge aufgelöst.
+Für Deutsch gilt die Reihenfolge: Projekt Deutsch, Projekt Englisch,
+eingebautes Deutsch und dessen englischer Fallback. Dateien müssen
+UTF-8-kodierte JSON-Objekte mit nichtleeren Stringwerten sein und dürfen
+jeweils höchstens 256 KiB groß sein; ungültige Dateien und Symlinks weist
+`serve` zurück. Eingefügte Texte werden für HTML escaped. Fachliche Datensätze
+und unmarkierte eigene Inhalte werden nicht automatisch übersetzt. API- und
+Compiler-Maschinenschnittstellen werden von diesen Einstellungen nicht
+lokalisiert.
 
 ### Projektlokale Theme-Anpassungen
 

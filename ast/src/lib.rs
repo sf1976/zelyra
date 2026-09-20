@@ -225,6 +225,8 @@ pub struct CrudDef {
     pub title: Option<String>,
     /// Optional named view used as the outer layout for generated CRUD pages.
     pub layout: Option<String>,
+    /// Static/custom content supplied to named slots of the outer CRUD layout.
+    pub layout_slots: Vec<CrudLayoutSlotDef>,
     pub list: Vec<String>,
     pub search: Vec<String>,
     pub filters: Vec<String>,
@@ -238,6 +240,13 @@ pub struct CrudDef {
     pub edit_permissions: Vec<String>,
     pub delete_permissions: Vec<String>,
     pub actions: Vec<FormAction>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrudLayoutSlotDef {
+    pub name: String,
+    pub html: String,
     pub span: Span,
 }
 

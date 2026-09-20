@@ -19,9 +19,10 @@ möglich.
 
 ## Aktueller Stand
 
-Zelyra 0.1 ist eine aktive frühe Implementierung. Das Repository enthält echten,
-kompilierbaren und getesteten Rust-Code. Die vollständige langfristige
-Sprachspezifikation ist jedoch noch nicht vollständig umgesetzt.
+Der Zelyra-Compiler 0.2.0 ist ein frühes experimentelles Release und
+implementiert einen geprüften Teil der Zelyra-Sprachspezifikation 0.1. Die
+vollständige langfristige Sprachspezifikation ist noch nicht umgesetzt; dieses
+Release ist nicht für den Produktiveinsatz freigegeben.
 
 Die gepflegte [Roadmap](docs/ROADMAP.de.md) enthält alle geplanten Pflicht- und
 optionalen Arbeiten, einschließlich Views-System, KI-nativer
@@ -169,6 +170,9 @@ Heute implementiert:
   einschließlich `error.details`, OpenAPI-Schemas und TypeScript-Payload-Typen;
 - exakte CORS-Origin-Konfiguration für Browser-APIs mit automatischer
   `OPTIONS`-Preflight-Verarbeitung, standardmäßig deaktiviert;
+- Same-Origin-Prüfungen für Browser-Schreibzugriffe und eine explizite
+  Host-Allowlist mit sicheren Loopback-Standards, konfigurierbar über die
+  Projekt-`.env`;
 - Array-Literale, Indexzugriff, `len`, `append`, `contains`, `first`, `last`
   und Array-Verkettung mit `+`; `first` und `last` liefern bei leeren Arrays
   sicher ein `Option`-Ergebnis;
@@ -348,6 +352,12 @@ Authentifizierung und Escaping bleiben dadurch in der bestehenden sicheren
 Web-Pipeline. Ein vollständiges Beispiel steht in
 `examples/view_composition.zyl`.
 
+CRUD-Ressourcen können zusätzlich benannte Slots ihres äußeren Layouts mit
+statischem, komponentengeprüftem Inhalt befüllen. Der Default-Slot bleibt
+ausschließlich dem generierten CRUD vorbehalten; SQL, Validierung, CSRF,
+Berechtigungen und Escaping bleiben dadurch erhalten. Siehe
+`examples/view_showcase.zyl`.
+
 ~~~zelyra
 view AppShell {
     html {
@@ -504,9 +514,10 @@ Aufrufer können sie explizit überschreiben. Siehe
 
 Das zusammengefasste Beispiel `examples/view_showcase.zyl` zeigt den
 vorgesehenen Release-Pfad in einem kleinen Programm: einen benannten
-Seitenrahmen, typisierte Komponenten, Default- und benannte Slots sowie eine
-schemabasierte CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-,
-Formular- und Ladeansichten. Prüfung:
+Seitenrahmen, typisierte Komponenten, Default- und benannte Slots,
+ressourcenspezifische CRUD-Layout-Slots sowie eine schemabasierte
+CRUD-Ressource mit unabhängig anpassbaren Listen-, Detail-, Formular- und
+Ladeansichten. Prüfung:
 
 ~~~bash
 zelyra check examples/view_showcase.zyl --format=json
@@ -863,6 +874,8 @@ Seiten, APIs und CRUD
 MariaDB ist das Standard-Backend für neue Zelyra-Definitionen und die primäre
 Runtime-Referenz. SQLite steht für kleine lokale Anwendungen und Tests zur
 Verfügung. PostgreSQL gehört ebenfalls zum Database Core.
+Die exakt getesteten MariaDB-Versionen und die Grenzen der Abdeckung stehen in
+der [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md).
 
 Beispiel:
 
@@ -901,14 +914,35 @@ erstellt eine temporäre Datenbank, inspiziert das Schema, prüft einen
 idempotenten Plan und kontrolliert die erzeugten Foreign Keys. Es verwendet
 keine Anwendungsdaten oder Zugangsdaten aus der Host-Umgebung.
 
+`tests/schema-safety-e2e.sh` prüft Änderungen mit einer isolierten SQLite-Datei
+und optional mit einer eindeutig benannten MariaDB-Testdatenbank. Der Test
+prüft Freigaben für destruktive Löschungen, die Prüfung neuer Pflichtspalten
+ohne Standardwert, neuer Unique-Constraints und MariaDB-Foreign-Keys sowie den
+Erhalt doppelter beziehungsweise verwaister Zeilen, wenn Index- oder
+Foreign-Key-Änderungen scheitern. MariaDB-Drift bei Defaults, Primärschlüsseln
+und Auto-Increment sowie SQLite-Drift bei Defaults, Primärschlüsseln und
+explizitem `AUTOINCREMENT` werden erkannt und fail-closed behandelt. Vom Planner
+noch nicht unterstützte Änderungen werden mit `E-DB-006` auch bei erteilter
+Freigabe abgelehnt.
+
 Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt nur
 compilergeprüftes DDL aus und verbindet sich nie; `setup` legt bei Bedarf eine
 MariaDB-Datenbank an und wendet das Anfangsschema an; `bootstrap` wendet ein
 Anfangsschema auf MariaDB oder SQLite an; `inspect` liest das Ist-Schema;
 `plan` zeigt den deterministischen Diff; und `apply` führt ihn aus, nachdem
-destruktive Änderungen ohne `--allow-destructive` abgelehnt wurden. `setup`,
-`bootstrap`, `inspect` und `apply` benötigen `DATABASE_URL`; `plan` kann ohne
-Variable auch gegen eine leere Datenbank planen.
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` ohne `--allow-risky` abgelehnt
+wurden. `--allow-destructive` gibt als Kompatibilitätsoption nur Pläne ohne
+`REVIEW`-Änderungen frei.
+`UNSUPPORTED`-Änderungen werden nie angewendet. Der Schema-Sicherheitstest
+prüft diese Grenzen für SQLite und MariaDB. `setup`, `bootstrap`, `inspect`
+und `apply` benötigen `DATABASE_URL`; `plan` kann ohne Variable auch gegen eine
+leere Datenbank planen.
+
+Pläne kennzeichnen Änderungen als `SAFE`, `REVIEW`, `DESTRUCTIVE` oder
+`UNSUPPORTED`. Pflichtspalten ohne Standardwert können nach Freigabe
+engineabhängige Werte für vorhandene Zeilen erhalten; prüfe die Werte, bevor
+die Anwendung sich darauf verlässt. Nicht erkannte externe Indizes bleiben
+erhalten; nicht zugeordnete Foreign-Key-Entfernungen blockieren `apply`.
 
 Keine echten Zugangsdaten committen. Umgebungsvariablen oder einen
 Secret-Manager verwenden. Die Beispiele verwenden zuerst MariaDB, weil dies
@@ -981,7 +1015,7 @@ zelyra db setup <file.zyl>
 zelyra db bootstrap <file.zyl>
 zelyra db inspect <file.zyl>
 zelyra db plan <file.zyl>
-zelyra db apply <file.zyl> [--allow-destructive]
+zelyra db apply <file.zyl> [--allow-risky]
 ~~~
 
 Die Befehle sind bewusst klein und ausdrücklich. Apache, PHP, ein ORM und ein
@@ -1043,20 +1077,28 @@ CRUD-Starterprojekt verwenden:
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
-`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`
-verwenden. `zelyra setup .` bleibt als idempotenter Nachholbefehl für
-bestehende Projekte verfügbar.
+`zelyra setup --all` erzeugt fehlende lokale Konfiguration, startet MariaDB
+und die Webanwendung, wendet das Schema an und gibt die lokale App-Adresse aus.
+Der Befehl kann sicher wiederholt werden: Eine vorhandene `.env` und ihre
+Zugangsdaten bleiben unverändert.
 
-Das Starterprojekt enthält Abteilungen und Maschinen, eine Foreign-Key-
-Beziehung, schemaabhängige Formulare, CRUD-Seiten, Suche, Filterung,
-Pagination und eigene Aktionen. Das Standardprojekt bleibt das kleinere
-Willkommensseiten-Scaffolding.
+Das Starterprojekt enthält sechs fiktionale Produktionsbereiche und 30
+Maschinen, eine Foreign-Key-Beziehung, deutsche/englische Maschinen- und
+Bereichs-Views, schemaabhängige Formulare, CRUD-Seiten, Suche, Kategorie-,
+Status- und Bereichsfilter, Pagination sowie eigene Aktionen. Eine optionale,
+wiederholt ausführbare `machine-management-demo.sql` wird erzeugt; Setup fügt
+keine Beispieldaten automatisch ein. Das Standardprojekt bleibt das kleinere
+Willkommensseiten-Scaffolding. Nach `zelyra setup --all` (oder
+`zelyra db setup main.zyl`) lassen sich die Fantasiedatensätze laden:
+
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
 
 ### Sprache der Oberfläche und Lernmodus
 
@@ -1078,6 +1120,19 @@ Oberflächentexte liegen in den versionierten Katalogen
 verweist auf Katalogeinträge, statt die Texte einer zweiten Sprache direkt
 einzubetten. Details zu Priorität und Grenzen stehen in
 [`docs/env.md`](docs/env.md).
+
+Neue Projekte enthalten außerdem bearbeitbare Dateien `locales/de.json` und
+`locales/en.json`. Dort kannst du Texte für View-Marker wie
+`data-zelyra-i18n="werkstatt.titel"` und Texteinstellungen wie
+`@i18n:werkstatt.gespeichert` eintragen. Dieselben Kataloge können alle
+kataloggebundenen generierten Texte in Anwendungsrahmen, CRUD, Formularen,
+Tableviews, Login, Auth-Verwaltung, Validierung und Lernhilfe ergänzen oder
+überschreiben. Für generierte Feldbeschriftungen gibt es Schlüssel wie
+`identifier.department`; parametrisierte Texte können `{field}` oder `{max}`
+verwenden. Fachdatensätze und nicht markierte eigene Texte werden nicht
+automatisch übersetzt. Fehlt ein deutscher Eintrag, wird zuerst der englische
+Projektkatalog und anschließend der eingebaute Katalog verwendet. Das
+[Handbuch](docs/handbook/de/README.md) zeigt Umfang und Beispiele.
 
 Erzeugte CRUD-Seiten können denselben wiederverwendbaren Rahmen wie normale
 Seiten verwenden:
@@ -1218,10 +1273,15 @@ Die erzeugte Docker-Laufzeit kann separat geprüft werden:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-Dabei wird der erzeugte Dockerfile gegen den veröffentlichten Zelyra-Tag
-gebaut, MariaDB und Webserver werden standardmäßig auf den eigenen Ports 3309
-und 18082 gestartet, die Willkommensseite und Port-Zuordnungen werden geprüft
-und Container, Netzwerk sowie Volume anschließend automatisch entfernt.
+Dabei wird ein frisches CRUD-Projekt erzeugt und `zelyra setup --all` zweimal
+ausgeführt. Der Test prüft die geschützte und unveränderte `.env`, die
+ausgegebene App-Adresse, Maschinen- und Abteilungsseiten sowie die
+Port-Zuordnungen. MariaDB und Webserver laufen standardmäßig auf den isolierten
+Ports 3309 und 18082; Container, Netzwerk und Volume werden anschließend
+automatisch entfernt. Standardmäßig baut der Test den aktuellen Checkout-Branch
+(bei detached HEAD den festgelegten Release-Tag). Mit
+`ZELYRA_DOCKER_E2E_REF` lässt sich ein anderer Branch oder Tag wählen, der im
+GitHub-Repository verfügbar sein muss.
 
 ## Mitwirken
 

@@ -142,10 +142,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.1.50
+./install.sh --release v0.2.0
 ~~~
 
-Unter Windows in PowerShell `-Release v0.1.50` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.2.0` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:
@@ -244,7 +244,9 @@ Wenn ein bestehendes Projekt in `zelyra.toml` MariaDB definiert, aber keine
 `.env.example` besitzt, verwendet der Setup-Befehl dieselben sicheren
 eingebauten Standardwerte. Ohne MariaDB-Konfiguration nennt der Fehler den
 konkreten Weg über `zelyra new --mariadb`.
-Für ein konsolenbasiertes Setup ohne Rückfragen `zelyra setup --all` verwenden.
+Für den ersten Konsolenstart `zelyra setup --all` verwenden. Der Befehl startet
+MariaDB und App, wendet das Schema an und gibt die lokale App-Adresse aus. Er
+kann wiederholt werden, ohne `.env` oder Zugangsdaten zu überschreiben.
 Dieselben Aktionen stehen lokal im Browser mit `zelyra setup --web` bereit; die
 CLI gibt eine URL mit Token auf `127.0.0.1` aus. Siehe
 [`docs/setup-web.de.md`](../../setup-web.de.md).
@@ -262,17 +264,26 @@ Für ein vollständiges CRUD-Starterprojekt statt der minimalen Willkommensseite
 zelyra new maschinenverwaltung --template mariadb-crud \
     --web-port 8080 --host-port 18080 --db-host-port 3307
 cd maschinenverwaltung
-docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
-set -a; . ./.env; set +a
-zelyra db setup main.zyl
+zelyra setup --all
 ~~~
 
-Wenn `docker compose` nicht verfügbar ist, den Legacy-Befehl
-`docker-compose --env-file .env -f docker-compose.mariadb.yml up -d --build`
-verwenden.
+Das Starterprojekt enthält ein fiktionales Werkstattmodell mit sechs
+Produktionsbereichen und 30 Maschinen, lokalisierte Maschinen-/Bereichs-Views,
+schemaabhängige Formulare, CRUD-Seiten, Suche, Kategorie-/Status-/Bereichsfilter,
+Pagination und eigene Aktionen. Die erzeugte Datei
+`machine-management-demo.sql` enthält ausschließlich Fantasiedaten und kann
+wiederholt importiert werden. Nach `zelyra setup --all` (oder
+`zelyra db setup main.zyl`) lassen sie sich
+ausdrücklich in den lokalen MariaDB-Dienst laden:
 
-Das Starterprojekt enthält verbundene Abteilungen und Maschinen, Formulare,
-CRUD-Seiten, Suche, Filterung, Pagination und eigene Aktionen.
+~~~bash
+docker compose --env-file .env -f docker-compose.mariadb.yml exec -T mariadb \
+    sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" exec mariadb --user="$MARIADB_USER" "$MARIADB_DATABASE"' \
+    < machine-management-demo.sql
+~~~
+
+Dieser Import ist optional und ausdrücklich; Setup fügt niemals selbsttätig
+Beispieldatensätze ein.
 
 ### Oberflächensprache und Lernhilfe
 
@@ -292,6 +303,51 @@ bereitgestellten Oberflächentexte stehen in `web/locales/de.json` und
 Steuerungen verwenden diese Kataloge. Die Lernhilfe erklärt lediglich die
 Sprache und erweitert keine Capabilities oder Berechtigungen. Details stehen
 in der [Umgebungsvariablen-Referenz](../../env.md).
+
+#### Eigene Anwendungstexte
+
+Jedes neue Projekt enthält die optionalen Dateien `locales/de.json` und
+`locales/en.json`. Anwendungstexte kommen dort hinein und werden aus einer View
+oder einer unterstützten Zelyra-Texteinstellung ausdrücklich referenziert:
+
+~~~json
+{
+  "werkstatt.titel": "Maschinenwerkstatt",
+  "werkstatt.gespeichert": "Maschine wurde gespeichert."
+}
+~~~
+
+~~~zelyra
+page "/" {
+    html { <h1 data-zelyra-i18n="werkstatt.titel"></h1> }
+}
+~~~
+
+Für unterstützte Beschriftungen, Meldungen und Aktionen kann
+`@i18n:werkstatt.gespeichert` verwendet werden. Projektkataloge können außerdem
+alle kataloggebundenen generierten Beschriftungen in Anwendungsrahmen, CRUD,
+Formularen, Tableviews, Login, Auth-Verwaltung, Validierung und Lernhilfe
+überschreiben. Einträge wie `auth.login_title` und `identifier.department`
+ersetzen generierte UI-Texte; parametrisierte Texte wie `query.filter_value`
+können `{field}` enthalten. Alle verfügbaren Schlüssel stehen in
+`web/locales/de.json` und `web/locales/en.json`. Zum Beispiel passt dieser
+Eintrag in `locales/de.json` den Login- und Abteilungsfilter an:
+
+~~~json
+{
+  "auth.login_title": "Werkstatt-Anmeldung",
+  "identifier.department": "Kostenstelle",
+  "query.filter_value": "Wert für {field}"
+}
+~~~
+
+Bei Deutsch prüft Zelyra zuerst den deutschen und dann den englischen
+Projektkatalog, danach die eingebauten deutschen und englischen Kataloge.
+Fachdatensätze und nicht markierte, anwendungseigene Texte bleiben unverändert.
+Kataloge ändern nur die Darstellung; aufgelöste Werte werden für HTML escaped
+und können weder Berechtigungen erteilen noch Geschäftsregeln ändern. Keine
+Secrets oder Kundendaten darin ablegen. Größenlimit und Prüfregeln stehen in der
+[Umgebungsvariablen-Referenz](../../env.md).
 
 Für ein Authentifizierungs-Starterprojekt mit persistenten Sessions und
 Berechtigungen:
@@ -329,6 +385,18 @@ Sie verwendet den Container `zelyra-mariadb-tests` und ein eigenes Volume.
 MariaDB wird auf Host-Port `3308` veröffentlicht, ohne eine andere
 Datenbankinstallation zu verändern.
 
+Destruktiven Schema-Schutz für SQLite und MariaDB prüfen:
+
+~~~bash
+ZELYRA_SCHEMA_SAFETY_MARIADB_URL='mariadb://root:<test-passwort>@127.0.0.1:3308/zelyra_test' \
+    bash ./tests/schema-safety-e2e.sh
+~~~
+
+Der Test verwendet immer eine wegwerfbare SQLite-Datei und erstellt/löscht
+eine separate MariaDB-Datenbank. Er ist auf lokale Server und die
+Basisdatenbank `zelyra_test` oder `zelyra_ci` beschränkt; niemals Produktion
+angeben.
+
 Den vollständigen Weg eines erzeugten Projekts gegen eine frische Datenbank
 prüfen:
 
@@ -349,10 +417,11 @@ Auch die erzeugte Docker-Laufzeit kann geprüft werden:
 ./tests/generated-project-docker-e2e.sh
 ~~~
 
-Dabei wird das erzeugte Image aus dem veröffentlichten Zelyra-Tag gebaut,
-MariaDB und Webserver werden standardmäßig auf Host-Port 3309 und 18082
-gestartet, Willkommensseite und Port-Zuordnungen werden geprüft und alle
-temporären Docker-Ressourcen anschließend entfernt.
+Dabei wird ein frisches CRUD-Projekt erzeugt und `zelyra setup --all` zweimal
+ausgeführt. Der Test prüft geschützte, unveränderte Zugangsdaten, die gemeldete
+App-Adresse, Maschinen- und Abteilungsseiten sowie Port-Zuordnungen. MariaDB
+und Webserver nutzen standardmäßig isolierte Host-Ports 3309 und 18082; alle
+temporären Docker-Ressourcen werden anschließend entfernt.
 
 Nutzer, die Rust nicht installieren möchten, können das vorgefertigte Linux-
 oder Windows-Archiv von der [GitHub-Releases-Seite](https://github.com/sf1976/zelyra/releases)
@@ -477,6 +546,9 @@ fn load_machine(id: MachineId)
 ## 7. MariaDB und Tabellen
 
 ✅ MariaDB ist das Standardbackend und die primäre Runtime-Referenz.
+Die [Kompatibilitätsmatrix](../../database-compatibility.de.md) führt die exakten
+MariaDB-Server-Images auf, mit denen Zelyras Datenbank- und CRUD-Integration
+getestet werden. MySQL Server ist nicht Teil dieser Matrix.
 
 ~~~zelyra
 database main {
@@ -543,20 +615,53 @@ Danach anwenden:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destruktive Änderungen werden abgelehnt, bis sie ausdrücklich freigegeben
-werden:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden ohne ausdrückliche Freigabe
+abgelehnt. Bevorzugt wird `--allow-risky`; `--allow-destructive` bleibt auf
+ausschließlich destruktive Pläne beschränkt und genehmigt keine `REVIEW`-
+Änderungen:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
+
+`UNSUPPORTED`-Änderungen werden auch mit Freigabe abgelehnt. Neue Pflichtspalten
+ohne Standardwert und neue Unique-Constraints müssen geprüft werden. Beim
+Hinzufügen einer Pflichtspalte ohne Standardwert prüft Zelyra, ob die
+bestehende Tabelle leer ist, bevor irgendein Plan-SQL ausgeführt wird; befüllte
+Tabellen werden auch mit `--allow-risky` abgelehnt. Zum Erhalt vorhandener Daten
+ist ein gestuftes Vorgehen nötig: Spalte optional hinzufügen, Daten auffüllen,
+danach zur Pflichtspalte machen.
+Nullbarkeitsänderungen bei MariaDB und PostgreSQL benötigen `REVIEW`; vor einer
+Verschärfung auf `NOT NULL` prüft Zelyra lesend, ob NULL-Werte vorhanden sind.
+Ist das der Fall, wird der gesamte Plan ohne Schemaänderung abgelehnt.
+MariaDB führt geschütztes DDL zusätzlich im Strict-Modus aus, damit Werte nicht
+stillschweigend umgewandelt werden. SQLite-
+Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-Änderungen
+bleiben nicht unterstützt. Neue und entfernte MariaDB-Foreign-Keys benötigen
+`REVIEW`; SQLite-Foreign-Key-Umbauten
+werden abgelehnt. Die Integrationstests prüfen, dass bei einem fehlgeschlagenen
+Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
+Foreign-Key-Beziehungen erhalten bleiben. Defaultänderungen bei MariaDB und
+PostgreSQL erscheinen als `REVIEW`; Tests decken Setzen, Ändern und Entfernen,
+den Erhalt bestehender Werte und idempotente Neuplanung ab. SQLite-
+Defaultänderungen sowie Primärschlüssel-/Auto-Increment-Drift bleiben auf allen
+Backends `UNSUPPORTED`; CI prüft die PostgreSQL-Schemasicherheit mit Version
+16, jedoch keine Runtime-Parität. Der Preflight verhindert bei diesem Vorgang
+auch engineabhängige implizite MariaDB-Werte für vorhandene Zeilen. Nicht
+erkannte externe Indizes bleiben erhalten; nicht verfolgte Foreign-Key-
+Entfernungen werden blockiert.
 
 Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt geprüftes DDL
 ohne Verbindung aus; `setup` legt bei Bedarf eine MariaDB-Datenbank an und
 wendet das Anfangsschema an; `bootstrap` wendet ein Anfangsschema auf MariaDB
 oder SQLite an; `inspect` liest das Ist-Schema; `plan` zeigt den deterministischen
-Diff; und `apply` führt ihn aus, nachdem destruktive Änderungen ohne
-`--allow-destructive` abgelehnt wurden. Die Live-Befehle benötigen
+Diff; und `apply` führt ihn aus, nachdem prüfpflichtige oder destruktive
+Änderungen ohne ausdrückliche Freigabe abgelehnt wurden. Die Live-Befehle benötigen
 `DATABASE_URL`.
+
+Dieses Freigabeverhalten wird für die MariaDB-Versionen der Kompatibilitätsmatrix
+getestet. Das ist ein Testnachweis für diese Pfade, aber keine Garantie, dass
+beliebige Datenbankänderungen automatisch sicher sind.
 
 Dieses Flag bedeutet nicht „wird schon gutgehen“. Es bedeutet „ich habe den
 Plan gelesen, ein Backup und einen vernünftigen Puls“.
@@ -721,6 +826,37 @@ eigenen Aktionsformular-Inhalt. Der ausgewählte View muss existieren und wird
 zur Compile-Zeit geprüft. SQL, Validierung, CSRF, Autorisierung und Escaping
 bleiben erzeugt und aktiv; Redirects werden nicht als HTML umschlossen. Siehe
 `examples/view_showcase.zyl`.
+
+Benannte Slots des äußeren CRUD-Layouts können pro Ressource angepasst werden.
+Der Default-Slot bleibt ausschließlich für den sicher erzeugten CRUD-Inhalt
+reserviert:
+
+~~~zelyra
+view BusinessShell {
+    html {
+        <html><body>
+            <header><slot name="resource_heading"><h1>Businessdaten</h1></slot></header>
+            <main><slot /></main>
+            <aside><slot name="resource_help"><p>Hilfe zur Ressource</p></slot></aside>
+        </body></html>
+    }
+}
+
+crud Machine -> machines {
+    layout: BusinessShell
+    slots {
+        resource_heading { html { <h1>Maschinen</h1> } }
+        resource_help { html { <p>Nutze Suche und Filter.</p> } }
+    }
+}
+~~~
+
+Der Compiler prüft, ob Layout und benannte Slots existieren und nicht mehrfach
+belegt werden. Nicht angegebene Slots behalten ihren Fallback. Der statische
+Slotinhalt darf geprüfte Komponenten verwenden, hat aber keinen Zugriff auf
+Datensätze, Request-Werte oder CRUD-Aktionen. SQL, Validierung, CSRF,
+Berechtigungen und Escaping bleiben beim generierten CRUD. Ungültige
+CRUD-Slotkonfigurationen melden E-VIEW-031.
 
 Komponenten können außerdem über einen Default-Slot oder benannte Slots
 HTML-Kindelemente aufnehmen:
@@ -2088,4 +2224,3 @@ Du hast die 20 Kern-Kapitel des Zelyra-Praxistutorials durchlaufen!
 Für alle weiteren Sprachkonstrukte, vollständige Typgarantien, Compiler-Interna und die vollständige Standardbibliothek:
 - **[Vollständiges Zelyra-Handbuch (75 Kapitel)](handbuch.md)**
 - **[Online-Ausgabe mit Suche und dunklem Modus auf siedelmann.com/handbuch](https://siedelmann.com/handbuch)**
-

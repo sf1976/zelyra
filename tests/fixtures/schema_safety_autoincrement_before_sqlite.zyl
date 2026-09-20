@@ -1,0 +1,9 @@
+database main {
+    engine: sqlite
+    database: "schema_safety_autoincrement"
+}
+
+table autoincrement_records {
+    id: Id primary
+    label: String(40) required
+}

@@ -34,6 +34,19 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: zelyra_ci
+          POSTGRES_USER: zelyra_ci
+          POSTGRES_PASSWORD: zelyra_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U zelyra_ci -d zelyra_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
 
     steps:
       - name: Check out repository
@@ -43,14 +56,16 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Install database clients and curl
-        run: sudo apt-get update && sudo apt-get install --yes mariadb-client sqlite3 curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client postgresql-client sqlite3 curl
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate source installer
         run: |
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          ./install.sh --release v0.1.45 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+          ./install.sh --release v0.2.0 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+      - name: Test deterministic release packaging
+        run: python3 scripts/test_package_release.py
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy
@@ -127,6 +142,16 @@ jobs:
         env:
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/sqlite-e2e.sh
+      - name: Run database schema safety integration test
+        env:
+          ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/schema-safety-e2e.sh
+      - name: Run PostgreSQL schema safety integration test
+        env:
+          DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/postgres-schema-safety-e2e.sh
       - name: Create isolated tableview test database
         env:
           MYSQL_PWD: root
@@ -151,6 +176,59 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
         run: ./tests/mariadb-protected-e2e.sh
+  mariadb-compatibility:
+    name: MariaDB ${{ matrix.version }} compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.version }}
+        env:
+          MARIADB_DATABASE: zelyra_ci
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install MariaDB client and curl
+        run: sudo apt-get update && sudo apt-get install --yes mariadb-client curl
+      - name: Build Zelyra CLI
+        run: cargo build -p zelyra-cli
+      - name: Verify MariaDB server version
+        env:
+          MYSQL_PWD: root
+        run: |
+          expected_version='${{ matrix.version }}'
+          server_version="$(mariadb --protocol=tcp --host=127.0.0.1 --port=3306 --user=root --batch --skip-column-names -e 'SELECT VERSION()')"
+          case "${server_version}" in
+            "${expected_version}"*) ;;
+            *) echo "Expected MariaDB ${expected_version}, got ${server_version}" >&2; exit 1 ;;
+          esac
+          echo "Testing MariaDB ${server_version}"
+          docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Run MariaDB database and CRUD HTTP integration
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_E2E_DB_PASSWORD: root
+          ZELYRA_BIN: target/debug/zelyra
+          ZELYRA_E2E_ADDRESS: 127.0.0.1:38500
+        run: ./tests/mariadb-e2e.sh
+      - name: Run destructive schema approval integration
+        env:
+          ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/schema-safety-e2e.sh
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py
-
