@@ -118,10 +118,10 @@ Foreign Keys benötigt bei MariaDB eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
 Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
 Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
 nicht erraten, sondern blockiert. MariaDB-Drift bei Defaults, Primärschlüsseln
-und Auto-Increment sowie SQLite-Drift bei Defaults und Primärschlüsseln wird
-erkannt, aber bis zur Implementierung sicherer backend-spezifischer
-Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-Default-/Identity-/
-Schlüssel-Metadaten und die explizite SQLite-`AUTOINCREMENT`-Unterscheidung
-werden noch nicht zuverlässig inspiziert. Typ- und Nullbarkeitsänderungen
-werden unabhängig bewertet; eine sichere Typvergrößerung kann eine nicht
-unterstützte Nullbarkeitsänderung nicht verdecken.
+und Auto-Increment sowie SQLite-Drift bei Defaults, Primärschlüsseln und
+explizitem `AUTOINCREMENT` werden erkannt, aber bis zur Implementierung sicherer
+backend-spezifischer Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-
+Default-/Identity-/Schlüssel-Metadaten werden noch nicht zuverlässig
+inspiziert. Typ- und Nullbarkeitsänderungen werden unabhängig bewertet; eine
+sichere Typvergrößerung kann eine nicht unterstützte Nullbarkeitsänderung
+nicht verdecken.

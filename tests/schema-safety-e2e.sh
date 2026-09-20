@@ -149,6 +149,36 @@ assert_sqlite_safety() {
     metadata_defaults="$(sqlite3 "${database_path}" "PRAGMA table_info(metadata_records);" | awk -F'|' '($2 == "active" || $2 == "name") && $5 != "" { count++ } END { print count + 0 }')"
     [[ "${metadata_defaults}" == "0" ]]
     echo "[SQLite] default and primary-key drift are detected and fail closed"
+
+    local autoincrement_before autoincrement_after no_auto_path no_auto_url auto_path auto_url auto_plan
+    autoincrement_before="${fixture_dir}/schema_safety_autoincrement_before_sqlite.zyl"
+    autoincrement_after="${fixture_dir}/schema_safety_autoincrement_after_sqlite.zyl"
+    no_auto_path="${temp_dir}/schema-safety-no-autoincrement.sqlite3"
+    no_auto_url="sqlite://${no_auto_path}"
+    DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db bootstrap "${autoincrement_before}" >/dev/null
+    sqlite3 "${no_auto_path}" "INSERT INTO autoincrement_records(label) VALUES ('retained');"
+    auto_plan="$(DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db plan "${autoincrement_after}")"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of autoincrement_records.id" <<<"${auto_plan}"
+    if output="$(DATABASE_URL="${no_auto_url}" "${zelyra_bin}" db apply "${autoincrement_after}" --allow-risky 2>&1)"; then
+        echo "error: SQLite applied unsupported AUTOINCREMENT drift" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${no_auto_path}" "SELECT label FROM autoincrement_records;")" == "retained" ]]
+    [[ "$(sqlite3 "${no_auto_path}" "SELECT instr(upper(sql), ' AUTOINCREMENT') FROM sqlite_master WHERE type='table' AND name='autoincrement_records';")" == "0" ]]
+
+    auto_path="${temp_dir}/schema-safety-autoincrement.sqlite3"
+    auto_url="sqlite://${auto_path}"
+    DATABASE_URL="${auto_url}" "${zelyra_bin}" db bootstrap "${autoincrement_after}" >/dev/null
+    auto_plan="$(DATABASE_URL="${auto_url}" "${zelyra_bin}" db plan "${autoincrement_before}")"
+    grep -Fq "[UNSUPPORTED] change auto-increment status of autoincrement_records.id" <<<"${auto_plan}"
+    if output="$(DATABASE_URL="${auto_url}" "${zelyra_bin}" db apply "${autoincrement_before}" --allow-risky 2>&1)"; then
+        echo "error: SQLite removed explicit AUTOINCREMENT without planner refusal" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-006]" <<<"${output}"
+    [[ "$(sqlite3 "${auto_path}" "SELECT instr(upper(sql), ' AUTOINCREMENT') FROM sqlite_master WHERE type='table' AND name='autoincrement_records';")" != "0" ]]
+    echo "[SQLite] explicit AUTOINCREMENT drift in both directions is detected and refused"
 }
 
 assert_mariadb_safety() {

@@ -214,12 +214,12 @@ Feature eines bestimmten Anbieters.
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
-- [~] Die Live-Inspektion erkennt jetzt Drift bei Defaults und Primärschlüsseln
-  für MariaDB und SQLite sowie bei MariaDB-Auto-Increment. Diese Änderungen
-  werden als `UNSUPPORTED` fail-closed abgelehnt. SQLite unterscheidet
-  explizites `AUTOINCREMENT` noch nicht zuverlässig; Default-, Identity- und
-  Primärschlüssel-Metadaten von PostgreSQL werden ebenfalls noch nicht sicher
-  inspiziert. Sichere backend-spezifische Migrationen bleiben geplant.
+- [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
+  Auto-Increment für MariaDB sowie bei Defaults, Primärschlüsseln und
+  explizitem `AUTOINCREMENT` für SQLite. Diese Änderungen werden als
+  `UNSUPPORTED` fail-closed abgelehnt. Default-, Identity- und
+  Primärschlüssel-Metadaten von PostgreSQL werden noch nicht sicher inspiziert.
+  Sichere backend-spezifische Migrationen bleiben geplant.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
@@ -527,8 +527,8 @@ Freigabekriterien bestanden sind.
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
   PostgreSQL-Runtime-Parität, Nullbarkeitsmigrationen, sichere Backfills und
   betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-
-  Default-/Identity-/Schlüssel-Metadaten und explizites SQLite-`AUTOINCREMENT`
-  werden noch nicht zuverlässig erkannt.
+  Default-/Identity-/Schlüssel-Metadaten werden noch nicht zuverlässig
+  erkannt.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

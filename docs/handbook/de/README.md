@@ -631,10 +631,10 @@ entfernte MariaDB-Foreign-Keys benötigen `REVIEW`; SQLite-Foreign-Key-Umbauten
 werden abgelehnt. Die Integrationstests prüfen, dass bei einem fehlgeschlagenen
 Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
 Foreign-Key-Beziehungen erhalten bleiben. MariaDB-Drift bei Defaults,
-Primärschlüsseln und Auto-Increment sowie SQLite-Drift bei Defaults und
-Primärschlüsseln wird erkannt und als `UNSUPPORTED` markiert; die PostgreSQL-
-Inspektion von Defaults, Schlüsseln und Identity sowie die explizite SQLite-
-`AUTOINCREMENT`-Unterscheidung sind noch unvollständig. MariaDB kann
+Primärschlüsseln und Auto-Increment sowie SQLite-Drift bei Defaults,
+Primärschlüsseln und explizitem `AUTOINCREMENT` werden erkannt und als
+`UNSUPPORTED` markiert; die PostgreSQL-Inspektion von Defaults, Schlüsseln und
+Identity ist noch unvollständig. MariaDB kann
 vorhandenen Zeilen beim ausdrücklich freigegebenen Hinzufügen einer
 Pflichtspalte ohne Standardwert
 engineabhängige implizite Werte geben; prüfe die Daten vor ihrer Nutzung. Nicht

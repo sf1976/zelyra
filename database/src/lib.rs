@@ -669,7 +669,9 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                             risk: Risk::Unsupported,
                         });
                     }
-                    if backend == Backend::MariaDb && current_column.auto != desired_column.auto {
+                    if matches!(backend, Backend::MariaDb | Backend::Sqlite)
+                        && current_column.auto != desired_column.auto
+                    {
                         plan.changes.push(SchemaChange {
                             description: format!(
                                 "change auto-increment status of {}.{}",
@@ -1549,12 +1551,20 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
         tables: Vec::new(),
     };
     for table_name in tables_output.lines().filter(|line| !line.is_empty()) {
+        let create_sql = run_sqlite(
+            &path,
+            &format!(
+                "SELECT CASE WHEN sql IS NULL THEN 'N' ELSE 'V' || hex(CAST(sql AS BLOB)) END FROM sqlite_master WHERE type = 'table' AND name = {};",
+                quote_string(table_name)
+            ),
+        )?;
+        let has_autoincrement = sqlite_table_has_autoincrement(&create_sql)?;
         let pragma = format!(
             "SELECT cid, name, type, \"notnull\", CASE WHEN dflt_value IS NULL THEN 'N' ELSE 'V' || hex(CAST(dflt_value AS BLOB)) END, pk FROM pragma_table_info({}) ORDER BY cid;",
             quote_string(table_name)
         );
         let output = run_sqlite(&path, &pragma)?;
-        let columns = parse_sqlite_columns(&output)?;
+        let columns = parse_sqlite_columns(&output, has_autoincrement)?;
         schema.tables.push(Table {
             name: table_name.into(),
             columns,
@@ -1947,7 +1957,10 @@ fn run_sqlite_sql(path: &str, sql: &str) -> Result<(), DatabaseError> {
     }
 }
 
-fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
+fn parse_sqlite_columns(
+    output: &str,
+    table_has_autoincrement: bool,
+) -> Result<Vec<Column>, DatabaseError> {
     output
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -1978,12 +1991,88 @@ fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
                 // although the primary key itself cannot be null.
                 nullable: fields[3] != "1" && fields[5] == "0",
                 primary_key: fields[5] != "0",
-                auto: fields[5] != "0" && fields[2].eq_ignore_ascii_case("INTEGER"),
+                auto: table_has_autoincrement
+                    && fields[5] != "0"
+                    && fields[2].eq_ignore_ascii_case("INTEGER"),
                 unique: false,
                 default,
             })
         })
         .collect()
+}
+
+fn sqlite_table_has_autoincrement(encoded_sql: &str) -> Result<bool, DatabaseError> {
+    let Some(hex) = encoded_sql.trim().strip_prefix('V') else {
+        if encoded_sql.trim() == "N" {
+            return Ok(false);
+        }
+        return Err(DatabaseError {
+            message: "unexpected SQLite table metadata marker".into(),
+        });
+    };
+    let sql = decode_hex_metadata(hex)?;
+    Ok(sql_contains_keyword(&sql, "AUTOINCREMENT"))
+}
+
+fn sql_contains_keyword(sql: &str, expected: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' | b'"' | b'`' => {
+                let quote = bytes[index];
+                index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == quote {
+                        if bytes.get(index + 1) == Some(&quote) {
+                            index += 2;
+                        } else {
+                            index += 1;
+                            break;
+                        }
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
+            b'[' => {
+                index += 1;
+                while index < bytes.len() && bytes[index] != b']' {
+                    index += 1;
+                }
+                index = (index + 1).min(bytes.len());
+            }
+            b'-' if bytes.get(index + 1) == Some(&b'-') => {
+                index += 2;
+                while index < bytes.len() && bytes[index] != b'\n' {
+                    index += 1;
+                }
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                index += 2;
+                while index + 1 < bytes.len() && &bytes[index..index + 2] != b"*/" {
+                    index += 1;
+                }
+                index = (index + 2).min(bytes.len());
+            }
+            byte if is_sql_identifier_byte(byte) => {
+                let start = index;
+                index += 1;
+                while index < bytes.len() && is_sql_identifier_byte(bytes[index]) {
+                    index += 1;
+                }
+                if sql[start..index].eq_ignore_ascii_case(expected) {
+                    return true;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    false
+}
+
+fn is_sql_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$') || byte >= 0x80
 }
 
 fn parse_sqlite_indexes(table: &mut Table, path: &str, output: &str) -> Result<(), DatabaseError> {
@@ -2172,7 +2261,7 @@ mod tests {
     }
 
     #[test]
-    fn detects_sqlite_default_and_primary_key_drift_but_not_unobservable_autoincrement() {
+    fn detects_sqlite_default_primary_key_and_autoincrement_drift() {
         let desired = schema(
             "database main { engine: sqlite } table users { id: Id active: Bool default true }",
         );
@@ -2190,11 +2279,16 @@ mod tests {
             .changes
             .iter()
             .any(|change| change.description == "change default of users.active"));
-        assert!(!plan.changes.iter().any(|change| {
-            change
-                .description
-                .starts_with("change auto-increment status of")
-        }));
+        current.tables[0].columns[0].auto = false;
+        let plan = diff(
+            &schema("database main { engine: sqlite } table users { id: Id primary auto }"),
+            &current,
+        );
+        assert!(plan.has_unsupported());
+        assert!(plan
+            .changes
+            .iter()
+            .any(|change| { change.description == "change auto-increment status of users.id" }));
     }
 
     #[test]
@@ -2523,9 +2617,11 @@ mod tests {
 
     #[test]
     fn parses_sqlite_columns_foreign_keys_and_indexes() {
-        let columns =
-            parse_sqlite_columns("0\tid\tINTEGER\t1\tN\t1\n1\tdepartment_id\tINTEGER\t1\tN\t0\n")
-                .unwrap();
+        let columns = parse_sqlite_columns(
+            "0\tid\tINTEGER\t1\tN\t1\n1\tdepartment_id\tINTEGER\t1\tN\t0\n",
+            true,
+        )
+        .unwrap();
         let mut table = Table {
             name: "machines".into(),
             columns,
@@ -2546,14 +2642,51 @@ mod tests {
     fn parses_sqlite_default_metadata() {
         let columns = parse_sqlite_columns(
             "0\tid\tINTEGER\t1\tN\t1\n1\tname\tTEXT\t0\tV2768656c6c6f27\t0\n2\tactive\tINTEGER\t1\tV54525545\t0\n",
+            false,
         )
         .unwrap();
         assert_eq!(columns[0].default, None);
+        assert!(!columns[0].auto);
         assert_eq!(columns[1].default.as_deref(), Some("'hello'"));
         assert_eq!(columns[2].default.as_deref(), Some("TRUE"));
         assert_eq!(decode_hex_metadata("276109620a6327").unwrap(), "'a\tb\nc'");
-        let error = parse_sqlite_columns("secret-default-metadata").unwrap_err();
+        let error = parse_sqlite_columns("secret-default-metadata", false).unwrap_err();
         assert!(!error.message.contains("secret-default-metadata"));
+    }
+
+    #[test]
+    fn recognizes_sqlite_autoincrement_as_a_sql_keyword_only() {
+        assert!(sql_contains_keyword(
+            "CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT)",
+            "AUTOINCREMENT"
+        ));
+        assert!(sql_contains_keyword(
+            "CREATE TABLE items (id INTEGER PRIMARY KEY /* marker */ AUTOINCREMENT)",
+            "AUTOINCREMENT"
+        ));
+        for sql in [
+            "CREATE TABLE items (id INTEGER PRIMARY KEY)",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, note TEXT DEFAULT 'AUTOINCREMENT')",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY) -- AUTOINCREMENT\n",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY /* AUTOINCREMENT */)",
+            "CREATE TABLE items (\"AUTOINCREMENT\" TEXT, id INTEGER PRIMARY KEY)",
+            "CREATE TABLE items ([AUTOINCREMENT] TEXT, id INTEGER PRIMARY KEY)",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, autoincrement_note TEXT)",
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, note TEXT DEFAULT 'xAUTOINCREMENT')",
+        ] {
+            assert!(
+                !sql_contains_keyword(sql, "AUTOINCREMENT"),
+                "unexpected keyword in {sql}"
+            );
+        }
+    }
+
+    #[test]
+    fn parses_sqlite_autoincrement_metadata_without_exposing_table_sql() {
+        assert!(sqlite_table_has_autoincrement("V435245415445205441424c45206974656d732028696420494e5445474552205052494d415259204b4559204155544f494e4352454d454e5429").unwrap());
+        assert!(!sqlite_table_has_autoincrement("N").unwrap());
+        let error = sqlite_table_has_autoincrement("private-table-definition").unwrap_err();
+        assert!(!error.message.contains("private-table-definition"));
     }
 
     #[test]

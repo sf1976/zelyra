@@ -200,11 +200,11 @@ architecture requirement for every phase, not a provider-specific feature.
   compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
-- [~] Live schema inspection now detects MariaDB default, primary-key, and
-  auto-increment drift, plus SQLite default and primary-key drift. These
-  changes fail closed as `UNSUPPORTED`; SQLite's explicit `AUTOINCREMENT`
-  distinction and PostgreSQL default/identity/primary-key metadata are not yet
-  reliably inspected. Safe backend-specific migrations remain planned.
+- [~] Live schema inspection detects MariaDB default, primary-key, and
+  auto-increment drift, plus SQLite default, primary-key, and explicit
+  `AUTOINCREMENT` drift. These changes fail closed as `UNSUPPORTED`;
+  PostgreSQL default/identity/primary-key metadata is not yet reliably
+  inspected. Safe backend-specific migrations remain planned.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
@@ -493,7 +493,7 @@ supported machine and the release gates below pass.
   test; this is not MySQL or full feature certification. PostgreSQL runtime
   parity, nullability migration support, backfill safety, and operational risk
   analysis remain outside the 0.2.0 claim. PostgreSQL default/identity/key
-  metadata and SQLite's explicit `AUTOINCREMENT` property remain undetected.
+  metadata remains undetected.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.

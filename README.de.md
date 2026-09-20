@@ -916,9 +916,10 @@ prüft Freigaben für destruktive Löschungen, die Prüfung neuer Pflichtspalten
 ohne Standardwert, neuer Unique-Constraints und MariaDB-Foreign-Keys sowie den
 Erhalt doppelter beziehungsweise verwaister Zeilen, wenn Index- oder
 Foreign-Key-Änderungen scheitern. MariaDB-Drift bei Defaults, Primärschlüsseln
-und Auto-Increment sowie SQLite-Drift bei Defaults und Primärschlüsseln wird
-erkannt und fail-closed behandelt. Vom Planner noch nicht unterstützte
-Änderungen werden mit `E-DB-006` auch bei erteilter Freigabe abgelehnt.
+und Auto-Increment sowie SQLite-Drift bei Defaults, Primärschlüsseln und
+explizitem `AUTOINCREMENT` werden erkannt und fail-closed behandelt. Vom Planner
+noch nicht unterstützte Änderungen werden mit `E-DB-006` auch bei erteilter
+Freigabe abgelehnt.
 
 Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt nur
 compilergeprüftes DDL aus und verbindet sich nie; `setup` legt bei Bedarf eine
