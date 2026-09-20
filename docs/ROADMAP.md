@@ -58,7 +58,7 @@ principles; the roadmap below tracks what is actually implemented.
   open. Project-local CSS overrides for documented visual tokens are available.
 - [x] Authentication, persistent sessions, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
-  Browser writes also require same-origin evidence; the 0.2.0 branch adds a
+  Browser writes also require same-origin evidence; the 0.2.0 release adds a
   default loopback Host allowlist to reject forged hosts and DNS rebinding.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
   confirmed pruning are available. Tamper-evident chaining is available as an
@@ -117,10 +117,12 @@ architecture requirement for every phase, not a provider-specific feature.
   available with user-local, repeatable Bash/PowerShell installers; Rust-free
   release installation is available for published Linux/Windows x86_64 assets.
 - [~] Release archives with SHA-256 checksums are available for Linux and
-  Windows x86_64. The 0.2.0 candidate passed pinned Linux/Windows release
-  builds, byte-identical repeated binaries, and normalized archive tests in PR
-  CI; public 0.2.0 assets await the version tag. Signed binaries and checksums
-  for every supported platform remain.
+  Windows x86_64. The public [0.2.0 release][release-020] includes pinned
+  Linux/Windows builds, byte-identical repeated binaries, normalized archives,
+  and SHA-256 sidecars. Signed binaries and checksums for every supported
+  platform remain.
+
+[release-020]: https://github.com/sf1976/zelyra/releases/tag/v0.2.0
 - [~] User-local install/check/update/uninstall scripts remain available.
   `zelyra update [--check]` also checks stable GitHub releases and verifies a
   SHA-256 checksum before replacing its own Linux/Windows x86_64 executable;
@@ -464,9 +466,10 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 0.2.0 release milestone
 
-0.2.0 is a target, not a release date. Do not publish it until the
-database-to-business-application workflow is demonstrably usable on a clean
-supported machine and the release gates below pass.
+Zelyra 0.2.0 was published on 2026-09-20. This section records its delivered
+scope and release evidence; the release is experimental and is not approved
+for production use. The release-gate results do not imply completion of the
+remaining roadmap items below.
 
 - [~] **Distinctive Views system:** reusable layouts/components, typed CRUD
   presentation controls, and per-resource named layout slots are available.
