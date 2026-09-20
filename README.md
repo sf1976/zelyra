@@ -78,6 +78,7 @@ other settings.
 | If you want to… | Read |
 | --- | --- |
 | Learn Zelyra step by step | [Getting started](docs/getting-started.md) · [English handbook](docs/handbook/en/handbook.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) |
+| See what works in compiler 0.2.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
