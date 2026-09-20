@@ -81,6 +81,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
+| sehen möchtest, was Compiler 0.2.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md) · [English](docs/database-compatibility.en.md) |
