@@ -471,19 +471,21 @@ Freigabekriterien bestanden sind.
   Integrationstestpfad für erzeugte Projekte existieren. Ein datenbankfreier
   CLI-/HTTP-Test deckt jetzt das generierte CRUD-Formular, Ablehnungen ohne
   Token und ohne ausreichende API-Berechtigung, autorisierten Zugriff sowie
-  projektlokale deutsche/englische Texte ab; der separate MariaDB-gestützte
-  Abnahmepfad bleibt bestehen. Einsteigergeprüfter Einstieg, angepasste
-  Maschinen-/Abteilungs-Views, Deutsch/Englisch mit Learn-/Work-Modus und
-  dokumentierte Abdeckung bleiben Release-Arbeiten.
+  projektlokale deutsche/englische Texte ab. Zusätzlich wurde der
+  MariaDB-gestützte Pfad aus `tests/generated-project-business-e2e.sh` mit einer
+  isolierten Testdatenbank erfolgreich ausgeführt und die Bereinigung geprüft.
+  Einsteigergeprüfter Einstieg, angepasste Maschinen-/Abteilungs-Views,
+  Deutsch/Englisch mit Learn-/Work-Modus und dokumentierte Abdeckung bleiben
+  Release-Arbeiten.
 - [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
   erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
   Docker-Berechtigungen sind verfügbar. Prüfungen auf frischen Systemen sowie
   Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
-  gibt es einen End-to-End-Pfad. PostgreSQL-Runtime-Parität wird nicht
-  versprochen. Vor dem Release sind eine klare Kompatibilitätsmatrix sowie
-  sichere Planung, Freigabe destruktiver Änderungen und Datenbanktests des
-  erzeugten Projekts nachzuweisen.
+  gibt es einen End-to-End-Pfad; der MariaDB-Abnahmetest des erzeugten
+  Business-Projekts ist erfolgreich. PostgreSQL-Runtime-Parität wird nicht
+  versprochen. Vor dem Release sind eine klare Kompatibilitätsmatrix, sichere
+  Planung und die Freigabe destruktiver Änderungen nachzuweisen.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

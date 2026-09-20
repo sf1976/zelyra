@@ -444,18 +444,20 @@ supported machine and the release gates below pass.
   generated-project integration path exist. A database-free CLI/HTTP test now
   covers its generated CRUD form, missing-token and insufficient-API-permission
   denials, authorized access, and project-local German/English copy overrides;
-  the separate MariaDB-backed acceptance path remains. Complete novice-tested
-  onboarding, customized machine/department Views, German/English Learn/Work
-  behavior, and documented acceptance coverage remain release work.
+  the MariaDB-backed path in `tests/generated-project-business-e2e.sh` has also
+  passed against an isolated test database with cleanup verified. Complete
+  novice-tested onboarding, customized machine/department Views, German/English
+  Learn/Work behavior, and documented acceptance coverage remain release work.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
   .env, Docker Compose, free-port selection, and actionable Docker permission
   guidance exist.
   Clean-machine installation verification and recovery coverage across
   supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has an
-  end-to-end path; PostgreSQL runtime parity is not promised. Publish an
-  explicit compatibility matrix and verify safe planning, destructive-change
-  approval, and generated-project database tests before release.
+  end-to-end path; the generated MariaDB business acceptance test has passed;
+  PostgreSQL runtime parity is not promised. Publish an explicit compatibility
+  matrix, then verify safe planning and destructive-change approval before
+  release.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.
