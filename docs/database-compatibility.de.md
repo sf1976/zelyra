@@ -34,19 +34,30 @@ veröffentlicht.
 
 ## Was die Matrix testet
 
-Für jedes aufgeführte Server-Image laufen in CI und bei der lokalen Prüfung
-dieser Matrix:
+Die CI-Matrix führt diese Integrationen für jedes aufgeführte Image aus. Lokal
+können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
 
 - `tests/mariadb-e2e.sh`: Schema-Setup, Inspektion, idempotente Planung,
   beziehungsbasiertes CRUD über HTTP sowie Suche, Filter, Sortierung und
   Paginierung.
-- `tests/schema-safety-e2e.sh`: Ein geplanter Spalten-Drop wird als destruktiv
-  markiert, standardmäßig mit `E-DB-004` abgelehnt, ohne die Testzeile zu
-  verändern, und erst mit ausdrücklichem `--allow-destructive` angewendet.
+- `tests/schema-safety-e2e.sh`: Destruktive Spalten-Drops benötigen Freigabe;
+  Pflichtspalten ohne Standardwert, neue Unique-Constraints sowie MariaDB-
+  Foreign-Key-Ergänzungen und -Entfernungen erscheinen als `REVIEW`; doppelte
+  Zeilen bleiben bei einem abgelehnten Unique-Index erhalten, verwaiste Zeilen
+  bei einem abgelehnten Foreign-Key nicht verloren; nicht unterstützte
+  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
+  Unique-Constraint-Änderungen werden auch mit Freigabe durch `E-DB-006`
+  blockiert.
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine
-eindeutig benannte Testdatenbank.
+eindeutig benannte Testdatenbank. Der Sicherheitstest prüft außerdem, dass
+MariaDBs Verhalten beim Hinzufügen einer Pflichtspalte ohne Standardwert nie
+ohne ausdrückliche Freigabe ausgelöst wird; nach Freigabe müssen vorhandene
+Werte geprüft werden, bevor Anwendungscode sich darauf verlässt. Zelyra-Indizes
+werden anhand ihrer generierten Namen als verwaltet erkannt; unbekannte Indizes
+bleiben erhalten. `--allow-destructive` genehmigt keine `REVIEW`-Änderungen;
+dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.
 
 ## Was damit nicht nachgewiesen wird
 

@@ -101,7 +101,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-destructive]\n\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
     );
 }
 
@@ -6496,7 +6496,9 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
     for change in &plan.changes {
         let risk = match change.risk {
             Risk::Safe => "SAFE",
+            Risk::RequiresApproval => "REVIEW",
             Risk::Destructive => "DESTRUCTIVE",
+            Risk::Unsupported => "UNSUPPORTED",
         };
         println!("[{risk}] {}\n{}\n", change.description, change.sql);
     }
@@ -6508,7 +6510,11 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         return ExitCode::from(2);
     };
     let path = args.next().unwrap_or_else(|| "main.zyl".into());
-    let allow_destructive = args.any(|arg| arg == "--allow-destructive");
+    let remaining_args = args.collect::<Vec<_>>();
+    let allow_risky = remaining_args.iter().any(|arg| arg == "--allow-risky");
+    let allow_destructive = remaining_args
+        .iter()
+        .any(|arg| arg == "--allow-destructive");
     let schema = match load_schema(&path) {
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
@@ -6608,8 +6614,19 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             };
             let plan = diff(&schema, &current);
             print_plan(&plan);
-            if plan.is_destructive() && !allow_destructive {
-                eprintln!("error[E-DB-004]: destructive changes refused; use --allow-destructive after review");
+            if plan.has_unsupported() {
+                eprintln!(
+                    "error[E-DB-006]: schema plan contains unsupported changes; no SQL was applied"
+                );
+                return ExitCode::from(1);
+            }
+            let has_review_changes = plan
+                .changes
+                .iter()
+                .any(|change| change.risk == Risk::RequiresApproval);
+            let legacy_approval_is_sufficient = allow_destructive && !has_review_changes;
+            if plan.requires_approval() && !allow_risky && !legacy_approval_is_sufficient {
+                eprintln!("error[E-DB-004]: schema changes requiring review were refused; review the plan and use --allow-risky to approve it");
                 return ExitCode::from(1);
             }
             if plan.changes.is_empty() {

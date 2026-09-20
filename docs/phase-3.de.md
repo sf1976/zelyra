@@ -92,15 +92,17 @@ zelyra db apply examples/machine_management.zyl
 Datenbank geplant und die initiale DDL kann offline geprüft werden. `db apply`
 verweigert die Ausführung ohne echte Verbindung.
 
-Destruktive Änderungen werden im Plan sichtbar gemacht und standardmäßig
-abgelehnt:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden im Plan sichtbar gemacht und
+standardmäßig abgelehnt. Erst nach Prüfung freigeben:
 
 ```bash
-zelyra db apply examples/machine_management.zyl --allow-destructive
+zelyra db apply examples/machine_management.zyl --allow-risky
 ```
 
-Das Flag ist erst nach Prüfung des erzeugten Plans erforderlich. Zugangsdaten
-kommen aus der Umgebung und werden niemals im Schemaquelltext gespeichert.
+`--allow-destructive` bleibt für ausschließlich destruktive Pläne verfügbar
+und genehmigt keine `REVIEW`-Änderungen. `UNSUPPORTED`-Änderungen werden nie
+angewendet. Zugangsdaten kommen aus der Umgebung und werden niemals im
+Schemaquelltext gespeichert.
 
 MariaDB verwendet `mariadb://` oder `mysql://`; SQLite verwendet `sqlite://`
 mit einem Dateipfad. `db inspect` liest Tabellen, Spalten, Foreign Keys und
@@ -108,7 +110,12 @@ Indizes aus allen drei Backends.
 
 ## Aktuelle Grenzen
 
-PostgreSQL bleibt die primäre Referenzimplementierung. SQL Server ist noch
-nicht integriert. SQLite benötigt für manche destruktiven Änderungen einen
-Tabellenumbau; solche Änderungen werden im Plan als destruktiv markiert und
-benötigen eine spätere spezialisierte Migration.
+MariaDB ist das primäre Runtime-Referenz-Backend; PostgreSQL-Schema-Inspektion
+und -Planung sind verfügbar, aber nicht die Runtime-Parität. SQL Server ist
+noch nicht integriert. Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key-
+und Unique-Constraint-Änderungen werden derzeit als nicht unterstützt markiert
+und benötigen eine spezialisierte Migration. Hinzufügen und Entfernen von
+Foreign Keys benötigt bei MariaDB eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
+Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
+Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
+nicht erraten, sondern blockiert.

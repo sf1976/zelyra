@@ -41,6 +41,7 @@ pub struct Column {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForeignKey {
+    pub name: Option<String>,
     pub column: String,
     pub referenced_table: String,
     pub referenced_column: String,
@@ -51,6 +52,7 @@ pub struct Index {
     pub name: String,
     pub columns: Vec<String>,
     pub unique: bool,
+    pub constraint_owned: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,6 +139,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
                     });
                 } else {
                     foreign_keys.push(ForeignKey {
+                        name: Some(format!("fk_{}_{}", table.name, storage_name)),
                         column: storage_name.clone(),
                         referenced_table: relation,
                         referenced_column: "id".into(),
@@ -230,6 +233,7 @@ fn build_index(
         name: format!("{}_{}_{}", prefix, table.name, storage_columns.join("_")),
         columns: storage_columns,
         unique,
+        constraint_owned: unique,
     })
 }
 
@@ -399,14 +403,11 @@ fn quote_string(value: &str) -> String {
 impl Schema {
     pub fn create_sql(&self) -> String {
         let backend = self.backend();
-        let mut statements = Vec::new();
-        for table in &self.tables {
-            statements.push(table_create_sql(table, backend));
-            for index in &table.indexes {
-                statements.push(index_sql(table, index, backend));
-            }
-        }
-        statements.join("\n\n")
+        self.tables
+            .iter()
+            .map(|table| table_create_with_indexes_sql(table, backend))
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 
     pub fn summary(&self) -> String {
@@ -454,12 +455,13 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
         )
     }));
     definitions.extend(table.foreign_keys.iter().map(|foreign_key| {
+        let name = foreign_key
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
         format!(
             "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
-            quote_identifier(
-                &format!("fk_{}_{}", table.name, foreign_key.column),
-                backend
-            ),
+            quote_identifier(&name, backend),
             quote_identifier(&foreign_key.column, backend),
             quote_identifier(&foreign_key.referenced_table, backend),
             quote_identifier(&foreign_key.referenced_column, backend)
@@ -470,6 +472,17 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
         quote_identifier(&table.name, backend),
         definitions.join(",\n    ")
     )
+}
+
+fn table_create_with_indexes_sql(table: &Table, backend: Backend) -> String {
+    let mut statements = vec![table_create_sql(table, backend)];
+    statements.extend(
+        table
+            .indexes
+            .iter()
+            .map(|index| index_sql(table, index, backend)),
+    );
+    statements.join("\n\n")
 }
 
 fn index_sql(table: &Table, index: &Index, backend: Backend) -> String {
@@ -519,7 +532,9 @@ fn column_sql(column: &Column, backend: Backend) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Risk {
     Safe,
+    RequiresApproval,
     Destructive,
+    Unsupported,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -535,6 +550,18 @@ pub struct SchemaPlan {
 }
 
 impl SchemaPlan {
+    pub fn requires_approval(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| matches!(change.risk, Risk::RequiresApproval | Risk::Destructive))
+    }
+
+    pub fn has_unsupported(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| change.risk == Risk::Unsupported)
+    }
+
     pub fn is_destructive(&self) -> bool {
         self.changes
             .iter()
@@ -561,7 +588,7 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
         let Some(current_table) = current_tables.get(desired_table.name.as_str()) else {
             plan.changes.push(SchemaChange {
                 description: format!("create table {}", desired_table.name),
-                sql: table_create_sql(desired_table, backend),
+                sql: table_create_with_indexes_sql(desired_table, backend),
                 risk: Risk::Safe,
             });
             continue;
@@ -579,16 +606,27 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
         for desired_column in &desired_table.columns {
             match current_columns.get(desired_column.name.as_str()) {
                 None => plan.changes.push(SchemaChange {
-                    description: format!(
-                        "add column {}.{}",
-                        desired_table.name, desired_column.name
-                    ),
+                    description: if !desired_column.nullable && desired_column.default.is_none() {
+                        format!(
+                            "add required column {}.{} without a default; review existing rows",
+                            desired_table.name, desired_column.name
+                        )
+                    } else {
+                        format!(
+                            "add column {}.{}",
+                            desired_table.name, desired_column.name
+                        )
+                    },
                     sql: format!(
                         "ALTER TABLE {} ADD COLUMN {};",
                         quote_identifier(&desired_table.name, backend),
                         column_sql(desired_column, backend)
                     ),
-                    risk: Risk::Safe,
+                    risk: if !desired_column.nullable && desired_column.default.is_none() {
+                        Risk::RequiresApproval
+                    } else {
+                        Risk::Safe
+                    },
                 }),
                 Some(current_column) if current_column.sql_type != desired_column.sql_type => {
                     plan.changes.push(SchemaChange {
@@ -597,7 +635,24 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                             desired_table.name, desired_column.name
                         ),
                         sql: alter_column_sql(desired_table, desired_column, backend),
-                        risk: type_change_risk(&current_column.sql_type, &desired_column.sql_type),
+                        risk: type_change_risk(
+                            &current_column.sql_type,
+                            &desired_column.sql_type,
+                            backend,
+                        ),
+                    })
+                }
+                Some(current_column) if current_column.nullable != desired_column.nullable => {
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "change nullability of {}.{}",
+                            desired_table.name, desired_column.name
+                        ),
+                        sql: format!(
+                            "-- Changing nullability of {}.{} is not supported by the current schema planner.",
+                            desired_table.name, desired_column.name
+                        ),
+                        risk: Risk::Unsupported,
                     })
                 }
                 _ => {}
@@ -619,22 +674,103 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 });
             }
         }
-        let current_indexes = current_table
-            .indexes
-            .iter()
-            .chain(current_table.uniques.iter())
-            .map(|index| index.name.as_str())
-            .collect::<HashSet<_>>();
-        for index in desired_table
-            .indexes
-            .iter()
-            .chain(desired_table.uniques.iter())
-        {
-            if !current_indexes.contains(index.name.as_str()) {
+        let current_indexes = table_indexes(current_table);
+        let desired_indexes = table_indexes(desired_table);
+        for index in &desired_indexes {
+            if !current_indexes
+                .iter()
+                .any(|current| same_index(current, index))
+            {
                 plan.changes.push(SchemaChange {
-                    description: format!("add index {}", index.name),
+                    description: if index.unique {
+                        format!(
+                            "add unique index {} on {}; existing duplicates may block it",
+                            index.name,
+                            index.columns.join(", ")
+                        )
+                    } else {
+                        format!("add index {}", index.name)
+                    },
                     sql: index_sql(desired_table, index, backend),
-                    risk: Risk::Safe,
+                    risk: if index.unique {
+                        Risk::RequiresApproval
+                    } else {
+                        Risk::Safe
+                    },
+                });
+            }
+        }
+        for index in &current_indexes {
+            if !desired_indexes
+                .iter()
+                .any(|desired| same_index(index, desired))
+            {
+                if !is_zelyra_managed_index(desired_table, index, backend) {
+                    continue;
+                }
+                let (sql, risk) = drop_index_sql(desired_table, index, backend);
+                plan.changes.push(SchemaChange {
+                    description: format!(
+                        "drop {}index {}",
+                        if index.unique { "unique " } else { "" },
+                        index.name
+                    ),
+                    sql,
+                    risk,
+                });
+            }
+        }
+
+        for foreign_key in &desired_table.foreign_keys {
+            if !current_table
+                .foreign_keys
+                .iter()
+                .any(|current| same_foreign_key(current, foreign_key))
+            {
+                let sql = add_foreign_key_sql(desired_table, foreign_key, backend);
+                let risk = if backend == Backend::Sqlite {
+                    Risk::Unsupported
+                } else {
+                    Risk::RequiresApproval
+                };
+                plan.changes.push(SchemaChange {
+                    description: format!(
+                        "add foreign key {}.{}; existing rows must satisfy it",
+                        desired_table.name, foreign_key.column
+                    ),
+                    sql,
+                    risk,
+                });
+            }
+        }
+        for foreign_key in &current_table.foreign_keys {
+            if !desired_table
+                .foreign_keys
+                .iter()
+                .any(|desired| same_foreign_key(foreign_key, desired))
+            {
+                if !is_zelyra_managed_foreign_key(desired_table, foreign_key) {
+                    plan.changes.push(SchemaChange {
+                        description: format!(
+                            "remove untracked foreign key {}.{}",
+                            desired_table.name, foreign_key.column
+                        ),
+                        sql: format!(
+                            "-- Cannot safely remove the untracked foreign key on {}.{}.",
+                            desired_table.name, foreign_key.column
+                        ),
+                        risk: Risk::Unsupported,
+                    });
+                    continue;
+                }
+                let (sql, risk) = drop_foreign_key_sql(desired_table, foreign_key, backend);
+                plan.changes.push(SchemaChange {
+                    description: format!(
+                        "drop foreign key {}.{}",
+                        desired_table.name, foreign_key.column
+                    ),
+                    sql,
+                    risk,
                 });
             }
         }
@@ -655,10 +791,17 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
             });
         }
     }
+    // Stable ordering preserves source/database order within each operation
+    // class (notably table creation order for foreign-key dependencies).
+    plan.changes
+        .sort_by_key(|change| change_order(&change.description));
     plan
 }
 
-fn type_change_risk(current: &str, desired: &str) -> Risk {
+fn type_change_risk(current: &str, desired: &str, backend: Backend) -> Risk {
+    if backend == Backend::Sqlite {
+        return Risk::Unsupported;
+    }
     let parse_varchar = |value: &str| {
         value
             .strip_prefix("VARCHAR(")
@@ -668,6 +811,182 @@ fn type_change_risk(current: &str, desired: &str) -> Risk {
     match (parse_varchar(current), parse_varchar(desired)) {
         (Some(current), Some(desired)) if desired >= current => Risk::Safe,
         _ => Risk::Destructive,
+    }
+}
+
+fn table_indexes(table: &Table) -> Vec<Index> {
+    let mut indexes = table
+        .indexes
+        .iter()
+        .chain(table.uniques.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    for column in table.columns.iter().filter(|column| column.unique) {
+        if !indexes
+            .iter()
+            .any(|index| index.unique && index.columns.as_slice() == [column.name.as_str()])
+        {
+            indexes.push(Index {
+                name: format!("ux_{}_{}", table.name, column.name),
+                columns: vec![column.name.clone()],
+                unique: true,
+                constraint_owned: true,
+            });
+        }
+    }
+    indexes.sort_by(|left, right| {
+        left.unique
+            .cmp(&right.unique)
+            .then_with(|| left.columns.cmp(&right.columns))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    indexes.dedup_by(|left, right| same_index(left, right));
+    indexes
+}
+
+fn same_index(left: &Index, right: &Index) -> bool {
+    left.unique == right.unique && left.columns == right.columns
+}
+
+fn is_zelyra_managed_index(table: &Table, index: &Index, backend: Backend) -> bool {
+    if backend == Backend::Sqlite && index.name.starts_with("sqlite_autoindex") {
+        return index.unique;
+    }
+    let columns = index.columns.join("_");
+    let mut generated_names = vec![
+        format!("idx_{}_{}", table.name, columns),
+        format!("uq_{}_{}", table.name, columns),
+    ];
+    if index.unique && index.columns.len() == 1 {
+        let column = &index.columns[0];
+        generated_names.push(format!("ux_{}_{}", table.name, column));
+        // MariaDB and PostgreSQL generate these names for inline UNIQUE
+        // declarations created by Zelyra's initial CREATE TABLE statement.
+        generated_names.push(column.clone());
+        generated_names.push(format!("{}_{}_key", table.name, column));
+    }
+    generated_names.iter().any(|name| name == &index.name)
+}
+
+fn is_zelyra_managed_foreign_key(table: &Table, foreign_key: &ForeignKey) -> bool {
+    let expected = format!("fk_{}_{}", table.name, foreign_key.column);
+    foreign_key.name.as_deref() == Some(expected.as_str())
+}
+
+fn drop_index_sql(table: &Table, index: &Index, backend: Backend) -> (String, Risk) {
+    if backend == Backend::Sqlite && index.name.starts_with("sqlite_autoindex") {
+        return (
+            format!(
+                "-- SQLite does not support dropping the automatically-created unique index {}.",
+                index.name
+            ),
+            Risk::Unsupported,
+        );
+    }
+    let index_name = quote_identifier(&index.name, backend);
+    if backend == Backend::Postgres && index.constraint_owned {
+        return (
+            format!(
+                "ALTER TABLE {} DROP CONSTRAINT {};",
+                quote_identifier(&table.name, backend),
+                index_name
+            ),
+            Risk::RequiresApproval,
+        );
+    }
+    let sql = match backend {
+        Backend::MariaDb => format!(
+            "ALTER TABLE {} DROP INDEX {};",
+            quote_identifier(&table.name, backend),
+            index_name
+        ),
+        Backend::Postgres | Backend::Sqlite => {
+            format!("DROP INDEX IF EXISTS {index_name};")
+        }
+    };
+    (sql, Risk::RequiresApproval)
+}
+
+fn same_foreign_key(left: &ForeignKey, right: &ForeignKey) -> bool {
+    left.column == right.column
+        && left.referenced_table == right.referenced_table
+        && left.referenced_column == right.referenced_column
+}
+
+fn add_foreign_key_sql(table: &Table, foreign_key: &ForeignKey, backend: Backend) -> String {
+    let name = foreign_key
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("fk_{}_{}", table.name, foreign_key.column));
+    format!(
+        "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({});",
+        quote_identifier(&table.name, backend),
+        quote_identifier(&name, backend),
+        quote_identifier(&foreign_key.column, backend),
+        quote_identifier(&foreign_key.referenced_table, backend),
+        quote_identifier(&foreign_key.referenced_column, backend)
+    )
+}
+
+fn drop_foreign_key_sql(
+    table: &Table,
+    foreign_key: &ForeignKey,
+    backend: Backend,
+) -> (String, Risk) {
+    let Some(name) = &foreign_key.name else {
+        return (
+            format!(
+                "-- Cannot safely drop the foreign key on {}.{} because its database name is unknown.",
+                table.name, foreign_key.column
+            ),
+            Risk::Unsupported,
+        );
+    };
+    let sql = match backend {
+        Backend::MariaDb => format!(
+            "ALTER TABLE {} DROP FOREIGN KEY {};",
+            quote_identifier(&table.name, backend),
+            quote_identifier(name, backend)
+        ),
+        Backend::Postgres => format!(
+            "ALTER TABLE {} DROP CONSTRAINT {};",
+            quote_identifier(&table.name, backend),
+            quote_identifier(name, backend)
+        ),
+        Backend::Sqlite => {
+            return (
+                format!(
+                    "-- SQLite cannot drop foreign key {} without rebuilding table {}.",
+                    name, table.name
+                ),
+                Risk::Unsupported,
+            );
+        }
+    };
+    (sql, Risk::RequiresApproval)
+}
+
+fn change_order(description: &str) -> u8 {
+    if description.starts_with("create table ") {
+        0
+    } else if description.starts_with("drop foreign key ") {
+        1
+    } else if description.starts_with("drop ") && description.contains("index ") {
+        2
+    } else if description.starts_with("add column ")
+        || description.starts_with("add required column ")
+    {
+        3
+    } else if description.starts_with("change ") {
+        4
+    } else if description.starts_with("add ") && description.contains("index ") {
+        5
+    } else if description.starts_with("add foreign key ") {
+        6
+    } else if description.starts_with("drop column ") {
+        7
+    } else {
+        8
     }
 }
 
@@ -747,9 +1066,14 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
     let mut schema = parse_inspection_output(&output)?;
     let index_output = run_psql(
         database_url,
-        "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' ORDER BY tablename, indexname",
+        "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'u') FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'p') ORDER BY t.relname, i.relname",
     )?;
     parse_index_output(&mut schema, &index_output)?;
+    let foreign_keys = run_psql(
+        database_url,
+        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' ORDER BY child.relname, constraint_row.conname, child_key.position",
+    )?;
+    parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
 }
 
@@ -824,7 +1148,7 @@ fn inspected_sql_type(data_type: &str, _udt_name: &str, length: &str) -> String 
 fn parse_index_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 3 {
+        if fields.len() < 3 {
             return Err(DatabaseError {
                 message: format!("unexpected psql index row: {line}"),
             });
@@ -852,6 +1176,7 @@ fn parse_index_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseE
                 name: fields[1].to_string(),
                 columns,
                 unique: definition.starts_with("CREATE UNIQUE INDEX"),
+                constraint_owned: fields.get(3) == Some(&"t"),
             });
         }
     }
@@ -903,10 +1228,10 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     parse_mariadb_indexes(&mut schema, &indexes)?;
     let foreign_keys = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
         None,
     )?;
-    parse_mariadb_foreign_keys(&mut schema, &foreign_keys)?;
+    parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
 }
 
@@ -1391,6 +1716,7 @@ fn parse_mariadb_indexes(schema: &mut Schema, output: &str) -> Result<(), Databa
                 name: index_name,
                 columns,
                 unique,
+                constraint_owned: unique,
             };
             if unique {
                 table.uniques.push(index);
@@ -1402,12 +1728,12 @@ fn parse_mariadb_indexes(schema: &mut Schema, output: &str) -> Result<(), Databa
     Ok(())
 }
 
-fn parse_mariadb_foreign_keys(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
+fn parse_foreign_key_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseError> {
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 4 {
+        if fields.len() != 5 {
             return Err(DatabaseError {
-                message: format!("unexpected MariaDB foreign-key row: {line}"),
+                message: format!("unexpected foreign-key inspection row: {line}"),
             });
         }
         if let Some(table) = schema
@@ -1416,6 +1742,7 @@ fn parse_mariadb_foreign_keys(schema: &mut Schema, output: &str) -> Result<(), D
             .find(|table| table.name == fields[0])
         {
             table.foreign_keys.push(ForeignKey {
+                name: Some(fields[4].into()),
                 column: fields[1].into(),
                 referenced_table: fields[2].into(),
                 referenced_column: fields[3].into(),
@@ -1500,7 +1827,9 @@ fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
             Ok(Column {
                 name: fields[1].into(),
                 sql_type: fields[2].to_ascii_uppercase(),
-                nullable: fields[3] != "1",
+                // SQLite reports `notnull = 0` for `INTEGER PRIMARY KEY`,
+                // although the primary key itself cannot be null.
+                nullable: fields[3] != "1" && fields[5] == "0",
                 primary_key: fields[5] != "0",
                 auto: fields[5] != "0" && fields[2].eq_ignore_ascii_case("INTEGER"),
                 unique: false,
@@ -1513,7 +1842,7 @@ fn parse_sqlite_columns(output: &str) -> Result<Vec<Column>, DatabaseError> {
 fn parse_sqlite_indexes(table: &mut Table, path: &str, output: &str) -> Result<(), DatabaseError> {
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() < 3 || fields[1].starts_with("sqlite_autoindex") {
+        if fields.len() < 3 || fields.get(3) == Some(&"pk") {
             continue;
         }
         let index_name = fields[1];
@@ -1533,6 +1862,7 @@ fn parse_sqlite_indexes(table: &mut Table, path: &str, output: &str) -> Result<(
             name: index_name.into(),
             columns,
             unique: fields[2] == "1",
+            constraint_owned: fields.get(3) == Some(&"u"),
         };
         if index.unique {
             table.uniques.push(index);
@@ -1552,6 +1882,7 @@ fn parse_sqlite_foreign_keys(table: &mut Table, output: &str) -> Result<(), Data
             });
         }
         table.foreign_keys.push(ForeignKey {
+            name: None,
             column: fields[3].into(),
             referenced_table: fields[2].into(),
             referenced_column: fields[4].into(),
@@ -1641,6 +1972,204 @@ mod tests {
         assert_eq!(plan.changes.len(), 1);
         assert_eq!(plan.changes[0].risk, Risk::Safe);
         assert!(plan.changes[0].sql.contains("CREATE INDEX"));
+    }
+
+    #[test]
+    fn requires_review_for_required_column_without_default() {
+        let desired = schema(
+            "table users { id: Id primary auto name: String required active: Bool required }",
+        );
+        let current = schema("table users { id: Id primary auto name: String required }");
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.changes[0].risk, Risk::RequiresApproval);
+        assert!(plan.requires_approval());
+        assert!(!plan.has_unsupported());
+    }
+
+    #[test]
+    fn blocks_nullability_changes_until_supported_migration_exists() {
+        let desired = schema("table users { id: Id primary auto email: Email required }");
+        let current = schema("table users { id: Id primary auto email: Email? }");
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.changes[0].risk, Risk::Unsupported);
+        assert!(plan.has_unsupported());
+        assert!(plan.changes[0].sql.starts_with("--"));
+    }
+
+    #[test]
+    fn detects_unique_index_addition_and_removal_by_semantics() {
+        let desired = schema("table users { id: Id primary auto email: Email unique }");
+        let current = schema("table users { id: Id primary auto email: Email }");
+        let addition = diff(&desired, &current);
+        assert_eq!(addition.changes.len(), 1);
+        assert_eq!(addition.changes[0].risk, Risk::RequiresApproval);
+        assert!(addition.changes[0].sql.contains("CREATE UNIQUE INDEX"));
+
+        let removal = diff(&current, &desired);
+        assert_eq!(removal.changes.len(), 1);
+        assert_eq!(removal.changes[0].risk, Risk::RequiresApproval);
+        assert!(removal.changes[0].sql.contains("DROP INDEX"));
+    }
+
+    #[test]
+    fn detects_removed_indexes_and_keeps_output_deterministic() {
+        let desired = schema("table users { id: Id primary auto name: String }");
+        let current = schema("table users { id: Id primary auto name: String index { name } }");
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.changes[0].risk, Risk::RequiresApproval);
+        assert!(plan.changes[0].sql.contains("DROP INDEX"));
+        assert_eq!(plan, diff(&desired, &current));
+    }
+
+    #[test]
+    fn preserves_indexes_not_owned_by_zelyra() {
+        let desired = schema("table users { id: Id primary auto name: String }");
+        let mut current = schema("table users { id: Id primary auto name: String index { name } }");
+        current.tables[0].indexes[0].name = "externally_managed_name_idx".into();
+        assert!(diff(&desired, &current).changes.is_empty());
+    }
+
+    #[test]
+    fn refuses_sqlite_unique_constraint_removal_without_table_rebuild() {
+        let desired = schema(
+            "database main { engine: sqlite } table users { id: Id primary auto email: Email }",
+        );
+        let mut current = desired.clone();
+        current.tables[0].uniques.push(Index {
+            name: "sqlite_autoindex_users_1".into(),
+            columns: vec!["email".into()],
+            unique: true,
+            constraint_owned: true,
+        });
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.changes[0].risk, Risk::Unsupported);
+        assert!(plan.has_unsupported());
+    }
+
+    #[test]
+    fn detects_foreign_key_addition_and_removal() {
+        let desired = schema(
+            "table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let current = schema(
+            "table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let addition = diff(&desired, &current);
+        let foreign_key_add = addition
+            .changes
+            .iter()
+            .find(|change| change.description.starts_with("add foreign key"))
+            .unwrap();
+        assert_eq!(foreign_key_add.risk, Risk::RequiresApproval);
+        assert!(foreign_key_add
+            .sql
+            .contains("ADD CONSTRAINT `fk_machines_department_id`"));
+
+        let mut current = Schema {
+            tables: desired
+                .tables
+                .iter()
+                .cloned()
+                .map(|mut table| {
+                    if table.name == "machines" {
+                        table.foreign_keys[0].name = Some("fk_machines_department_id".into());
+                    }
+                    table
+                })
+                .collect(),
+            database: desired.database.clone(),
+        };
+        let empty_fk_schema = schema(
+            "table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let removal = diff(&empty_fk_schema, &current);
+        let foreign_key_drop = removal
+            .changes
+            .iter()
+            .find(|change| change.description.starts_with("drop foreign key"))
+            .unwrap();
+        assert_eq!(foreign_key_drop.risk, Risk::RequiresApproval);
+        assert!(foreign_key_drop
+            .sql
+            .contains("DROP FOREIGN KEY `fk_machines_department_id`"));
+
+        current.tables[1].foreign_keys[0].name = Some("custom_department_fk".into());
+        let untracked_removal = diff(&empty_fk_schema, &current);
+        assert!(untracked_removal.has_unsupported());
+        assert!(untracked_removal.changes[0]
+            .description
+            .starts_with("remove untracked foreign key"));
+    }
+
+    #[test]
+    fn refuses_to_apply_unidentified_or_sqlite_foreign_key_changes() {
+        let mut current = schema(
+            "database main { engine: mariadb } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        current.tables[1].foreign_keys[0].name = None;
+        let desired = schema(
+            "database main { engine: mariadb } table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        assert!(diff(&desired, &current).has_unsupported());
+
+        let sqlite_current = schema(
+            "database main { engine: sqlite } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let sqlite_desired = schema(
+            "database main { engine: sqlite } table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let plan = diff(&sqlite_desired, &sqlite_current);
+        assert!(plan.has_unsupported());
+    }
+
+    #[test]
+    fn sqlite_type_changes_are_explicitly_unsupported() {
+        let desired = schema(
+            "database main { engine: sqlite } table users { id: Id primary auto name: String(200) }",
+        );
+        let current = schema(
+            "database main { engine: sqlite } table users { id: Id primary auto name: String(100) }",
+        );
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(plan.changes[0].risk, Risk::Unsupported);
+        assert!(plan.has_unsupported());
+    }
+
+    #[test]
+    fn includes_declared_indexes_when_planning_a_new_table() {
+        let desired = schema("table users { id: Id primary auto name: String index { name } }");
+        let current = Schema {
+            database: desired.database.clone(),
+            tables: Vec::new(),
+        };
+        let plan = diff(&desired, &current);
+        assert_eq!(plan.changes.len(), 1);
+        assert!(plan.changes[0].sql.contains("CREATE INDEX IF NOT EXISTS"));
+    }
+
+    #[test]
+    fn drops_postgres_constraint_owned_unique_indexes_as_constraints() {
+        let table = Table {
+            name: "users".into(),
+            columns: Vec::new(),
+            foreign_keys: Vec::new(),
+            indexes: Vec::new(),
+            uniques: Vec::new(),
+        };
+        let index = Index {
+            name: "users_email_key".into(),
+            columns: vec!["email".into()],
+            unique: true,
+            constraint_owned: true,
+        };
+        let (sql, risk) = drop_index_sql(&table, &index, Backend::Postgres);
+        assert_eq!(risk, Risk::RequiresApproval);
+        assert!(sql.contains("ALTER TABLE \"users\" DROP CONSTRAINT \"users_email_key\""));
     }
 
     #[test]
@@ -1746,8 +2275,11 @@ mod tests {
     fn parses_mariadb_foreign_keys() {
         let mut schema =
             parse_mariadb_columns("machines\tid\tbigint\tNO\tPRI\tauto_increment\t\t\t\n").unwrap();
-        parse_mariadb_foreign_keys(&mut schema, "machines\tdepartment_id\tdepartments\tid\n")
-            .unwrap();
+        parse_foreign_key_output(
+            &mut schema,
+            "machines\tdepartment_id\tdepartments\tid\tfk_machines_department_id\n",
+        )
+        .unwrap();
         assert_eq!(schema.tables[0].foreign_keys[0].column, "department_id");
     }
 

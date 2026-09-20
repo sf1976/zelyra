@@ -31,17 +31,26 @@ lists the patch releases used here. The exact tags are published in the
 
 ## What the matrix tests
 
-For every listed server image, CI and the local verification for this matrix
-run:
+The CI matrix runs these integrations for every listed image. Local checks
+can run the same scripts against a disposable MariaDB service:
 
 - `tests/mariadb-e2e.sh`: schema setup, inspection, idempotent planning,
   relationship-backed CRUD over HTTP, and search/filter/sort/pagination.
-- `tests/schema-safety-e2e.sh`: a planned column drop is labeled destructive,
-  rejected by default with `E-DB-004` without changing the test row, and only
-  applied when `--allow-destructive` is explicitly supplied.
+- `tests/schema-safety-e2e.sh`: destructive column drops require approval;
+  required columns without defaults, new unique constraints, and MariaDB
+  foreign-key additions/removals are marked `REVIEW`; duplicate rows survive a
+  rejected unique-index creation and orphan rows survive a rejected foreign-key
+  addition; unsupported nullability changes and SQLite type, foreign-key, and
+  unique-constraint alterations are blocked by `E-DB-006` even with approval.
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
-schema-safety test creates and drops only a uniquely named test database.
+schema-safety test creates and drops only a uniquely named test database. It
+also checks that MariaDB's behavior when adding a required column without a
+default is never invoked without explicit approval; after approval, existing
+values must be reviewed before application code relies on them. Zelyra-created
+indexes are identified by generated names for managed removal; unrecognized
+indexes are preserved. The legacy `--allow-destructive` option does not
+approve `REVIEW` changes; use `--allow-risky` after reviewing the plan.
 
 ## What this does not establish
 

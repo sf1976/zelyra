@@ -644,13 +644,21 @@ Geprüften Plan anwenden:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destruktive Änderungen werden ohne ausdrückliche Freigabe abgelehnt:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden ohne ausdrückliche Freigabe
+abgelehnt. Verwende `--allow-risky`; `--allow-destructive` bleibt auf
+ausschließlich destruktive Pläne beschränkt und gibt keine `REVIEW`-Änderungen
+frei. Nicht unterstützte Operationen werden immer
+abgelehnt:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
-Destruktive Pläne sorgfältig prüfen. Niemals echte Passwörter in eine
+Den vollständigen Plan sorgfältig prüfen. Pflichtspalten ohne Standardwert
+können nach Freigabe engineabhängige Werte für vorhandene Zeilen erhalten;
+diese Werte müssen vor der Nutzung durch die Anwendung geprüft werden. Das
+Anlegen eines Unique-Constraints kann an vorhandenen Duplikaten scheitern.
+Niemals echte Passwörter in eine
 committete Zelyra-Datei, Dokumentation oder ein Shell-Script schreiben.
 Umgebungsvariablen, Secret-Manager und geschützte Deployment-Konfiguration
 sind vorzuziehen.
@@ -925,7 +933,12 @@ Formularvalidierung und Sprachbeispiele benötigen keine Datenbankverbindung.
 ### Destruktive Schemaänderung wird abgelehnt
 
 Das ist beabsichtigt. db plan ausführen, betroffene Zeilen und SQL prüfen und
-db apply erst danach mit dem ausdrücklichen Flag allow-destructive wiederholen.
+db apply erst nach Prüfung mit `--allow-risky` wiederholen. Die ältere
+`--allow-destructive` wird für ausschließlich destruktive Pläne weiterhin
+akzeptiert und genehmigt keine `REVIEW`-Änderungen. Als nicht
+unterstützt markierte Änderungen lassen sich mit dieser Version nicht
+anwenden; löse sie über einen unterstützten Schema-Plan oder manuelle
+Datenbankarbeit und inspiziere danach erneut.
 
 ### Eine Seite startet, aber der Browser zeigt 404
 

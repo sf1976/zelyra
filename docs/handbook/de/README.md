@@ -614,19 +614,34 @@ Danach anwenden:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destruktive Änderungen werden abgelehnt, bis sie ausdrücklich freigegeben
-werden:
+Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden ohne ausdrückliche Freigabe
+abgelehnt. Bevorzugt wird `--allow-risky`; `--allow-destructive` bleibt auf
+ausschließlich destruktive Pläne beschränkt und genehmigt keine `REVIEW`-
+Änderungen:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
+
+`UNSUPPORTED`-Änderungen werden auch mit Freigabe abgelehnt. Neue Pflichtspalten
+ohne Standardwert und neue Unique-Constraints müssen geprüft werden;
+Nullbarkeitsänderungen und SQLite-Typ-, Foreign-Key- sowie
+Unique-Constraint-Änderungen werden derzeit nicht unterstützt. Neue und
+entfernte MariaDB-Foreign-Keys benötigen `REVIEW`; SQLite-Foreign-Key-Umbauten
+werden abgelehnt. Die Integrationstests prüfen, dass bei einem fehlgeschlagenen
+Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
+Foreign-Key-Beziehungen erhalten bleiben. MariaDB kann vorhandenen Zeilen beim
+ausdrücklich freigegebenen Hinzufügen einer Pflichtspalte ohne Standardwert
+engineabhängige implizite Werte geben; prüfe die Daten vor ihrer Nutzung. Nicht
+erkannte externe Indizes bleiben erhalten; nicht verfolgte Foreign-Key-
+Entfernungen werden blockiert.
 
 Der Vertrag der Datenbankbefehle ist ausdrücklich: `create` gibt geprüftes DDL
 ohne Verbindung aus; `setup` legt bei Bedarf eine MariaDB-Datenbank an und
 wendet das Anfangsschema an; `bootstrap` wendet ein Anfangsschema auf MariaDB
 oder SQLite an; `inspect` liest das Ist-Schema; `plan` zeigt den deterministischen
-Diff; und `apply` führt ihn aus, nachdem destruktive Änderungen ohne
-`--allow-destructive` abgelehnt wurden. Die Live-Befehle benötigen
+Diff; und `apply` führt ihn aus, nachdem prüfpflichtige oder destruktive
+Änderungen ohne ausdrückliche Freigabe abgelehnt wurden. Die Live-Befehle benötigen
 `DATABASE_URL`.
 
 Dieses Freigabeverhalten wird für die MariaDB-Versionen der Kompatibilitätsmatrix

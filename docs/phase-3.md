@@ -92,19 +92,25 @@ all three backends.
 database and is useful for reviewing initial DDL. `db apply` refuses to run
 without a live connection.
 
-Destructive changes are visible in the plan and are refused by default:
+Changes marked `REVIEW` or `DESTRUCTIVE` are visible in the plan and refused
+by default. Approve only after review:
 
 ```bash
-zelyra db apply examples/machine_management.zyl --allow-destructive
+zelyra db apply examples/machine_management.zyl --allow-risky
 ```
 
-The flag is required only after reviewing the generated plan. Connection
+`--allow-destructive` remains for destructive-only plans and does not approve
+`REVIEW` changes. `UNSUPPORTED` changes are never applied. Connection
 credentials are read from the environment and are never stored in the schema
 source.
 
 ## Current limitations
 
-PostgreSQL remains the primary reference backend. SQL Server is not integrated
-yet. SQLite requires a table rebuild for some destructive changes; those
-changes are marked destructive in the plan and need a future specialized
-migration implementation.
+MariaDB is the primary runtime reference backend; PostgreSQL schema inspection
+and planning are available, but runtime parity is not. SQL Server is not
+integrated yet. Nullability changes and SQLite type, foreign-key, and
+unique-constraint alterations are marked unsupported and require a future
+specialized migration implementation. Adding or removing MariaDB foreign keys
+requires `REVIEW`; SQLite foreign-key alterations are blocked until table
+rebuilds are supported. The planner preserves unrecognized external indexes
+and refuses untracked foreign-key removals rather than guessing ownership.

@@ -551,18 +551,32 @@ Apply an approved plan:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destructive changes require explicit permission:
+Changes marked `REVIEW` or `DESTRUCTIVE` require explicit approval. Prefer
+`--allow-risky`; `--allow-destructive` remains limited to destructive-only
+plans and does not approve `REVIEW` changes:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
+
+`UNSUPPORTED` changes are refused even with approval. A required column without
+a default and a new unique constraint need review; nullability changes and
+SQLite type, foreign-key, and unique-constraint alterations are currently
+unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`; SQLite
+foreign-key alterations are refused. The schema-safety integration verifies
+that a failed unique-constraint creation leaves duplicate rows intact and
+invalid foreign-key relationships are retained. MariaDB may assign
+engine-specific implicit values to existing rows when an approved required
+column has no default, so verify the resulting data before using it.
+Unrecognized external indexes are preserved; untracked foreign-key removals
+are blocked instead of guessed.
 
 The database command contract is explicit: `create` emits checked DDL without
 connecting; `setup` creates a MariaDB database when needed and applies the
 initial schema; `bootstrap` applies an initial MariaDB or SQLite schema;
 `inspect` reads the live schema; `plan` displays the deterministic diff; and
-`apply` executes it after refusing destructive changes unless
-`--allow-destructive` is supplied. The live commands require `DATABASE_URL`.
+`apply` executes it after refusing review-required or destructive changes
+unless explicitly approved. The live commands require `DATABASE_URL`.
 
 That approval behavior is exercised on the MariaDB versions listed in the
 compatibility matrix; this is test evidence for those paths, not a promise that

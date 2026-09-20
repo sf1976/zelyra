@@ -876,23 +876,31 @@ temporary database, inspects the schema, verifies an idempotent plan, and
 checks the generated foreign-key metadata. It never uses application data or
 credentials from the host environment.
 
-`tests/schema-safety-e2e.sh` additionally proves that a destructive column
-drop is shown in the plan, refused by default without changing the test row,
-and applied only when `--allow-destructive` is supplied. It always uses an
-isolated temporary SQLite file. To include MariaDB, set
-`ZELYRA_SCHEMA_SAFETY_MARIADB_URL` to a local `zelyra_ci` or `zelyra_test`
-database URL; the script creates and removes a uniquely named test database.
+`tests/schema-safety-e2e.sh` tests schema changes against an isolated SQLite
+file and, optionally, a uniquely named MariaDB database. It verifies approval
+for destructive drops, review of required columns without defaults and new
+unique constraints, MariaDB foreign-key add/remove review, and preservation of
+duplicate or orphan rows when index/foreign-key changes fail. Changes currently
+unsupported by the planner return `E-DB-006` and are refused even when approval
+is supplied.
 
 The database command contract is explicit: `create` only emits compiler-checked
 DDL and never connects; `setup` creates a MariaDB database when needed and
 applies the initial schema; `bootstrap` applies an initial schema to MariaDB or
 SQLite; `inspect` reads the live schema; `plan` displays the deterministic diff;
-and `apply` executes that diff after refusing destructive changes unless
-`--allow-destructive` is supplied. The schema safety end-to-end test exercises
-the refusal and explicit-approval boundary on SQLite and MariaDB. `setup`,
-`bootstrap`, `inspect`, and `apply`
-require `DATABASE_URL`; `plan` can also plan against an empty database when it
-is absent.
+and `apply` executes that diff after refusing changes marked `REVIEW` or
+`DESTRUCTIVE` unless `--allow-risky` is supplied. The legacy
+`--allow-destructive` option approves destructive-only plans; it cannot
+approve `REVIEW` changes. `UNSUPPORTED` changes are never applied. The schema
+safety end-to-end test exercises these boundaries on SQLite and MariaDB.
+`setup`, `bootstrap`, `inspect`, and `apply` require `DATABASE_URL`; `plan` can
+also plan against an empty database when it is absent.
+
+Plans label changes `SAFE`, `REVIEW`, `DESTRUCTIVE`, or `UNSUPPORTED`.
+Required columns without defaults may receive engine-specific values for
+existing rows after approval, so inspect resulting values before relying on
+them. Zelyra preserves unrecognized external indexes and blocks untracked
+foreign-key removals rather than guessing object ownership.
 
 Do not commit real credentials. Use environment variables or a secret manager.
 The examples use MariaDB first because it is the default project backend.
@@ -962,7 +970,7 @@ zelyra db setup <file.zyl>
 zelyra db bootstrap <file.zyl>
 zelyra db inspect <file.zyl>
 zelyra db plan <file.zyl>
-zelyra db apply <file.zyl> [--allow-destructive]
+zelyra db apply <file.zyl> [--allow-risky]
 ~~~
 
 The commands are intentionally small and explicit. Apache, PHP, an ORM, and a

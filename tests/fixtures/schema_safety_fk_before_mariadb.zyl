@@ -1,0 +1,20 @@
+database main {
+    engine: mariadb
+    database: "schema_safety"
+}
+
+table safety_records {
+    id: Id primary auto
+    label: String(80) required
+    review_value: String(30) required
+}
+
+table departments {
+    id: Id primary auto
+    name: String(80) required
+}
+
+table machines {
+    id: Id primary auto
+    department_id: Id required
+}

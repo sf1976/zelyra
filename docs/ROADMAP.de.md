@@ -214,8 +214,15 @@ Feature eines bestimmten Anbieters.
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
-- [ ] Bessere Analyse destruktiver Änderungen, Zeilenschätzungen,
-  Lock-Warnungen und Planung von Wartungsfenstern.
+- [ ] Änderungen an Defaults, Primärschlüsseln und Auto-Increment-Werten anhand
+  inspizierter Ist-Schemata erkennen und planen.
+- [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
+  Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
+  Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
+  Foreign-Key-Entfernungen werden blockiert. Nullbarkeitsänderungen sowie
+  nicht unterstützte SQLite-Typ-, Foreign-Key- und Unique-Constraint-
+  Änderungen werden ebenfalls blockiert. Zeilenschätzungen, Lock-Warnungen,
+  Backfill-Pläne und Wartungsfenster bleiben geplant.
 - [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
@@ -497,14 +504,23 @@ Freigabekriterien bestanden sind.
   Wiederherstellungsfälle für unterstützte Plattformen sind noch offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
   gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
-  Backends, dass ein Spalten-Drop als destruktiv geplant, standardmäßig mit
-  `E-DB-004` abgelehnt und ohne Datenverlust zurückgelassen wird; erst
-  `--allow-destructive` wendet die Änderung in einer isolierten Testdatenbank
-  an. Die [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
+  Backends: destruktive Löschungen benötigen Freigabe; Pflichtspalten ohne
+  Standardwert, neue Unique-Constraints sowie MariaDB-Foreign-Key-Ergänzungen
+  und -Entfernungen erscheinen als `REVIEW`; doppelte beziehungsweise
+  verwaiste Zeilen bleiben erhalten, wenn Index- oder Foreign-Key-Änderungen
+  scheitern. Unbekannte externe Indizes bleiben bestehen, nicht verfolgte
+  Foreign-Key-Entfernungen werden fail-closed blockiert. Nicht unterstützte
+  Änderungen werden mit `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
+  keine `REVIEW`-Änderungen; diese benötigen nach Prüfung `--allow-risky`.
+  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
+  Unique-Constraint-Änderungen werden noch nicht unterstützt. Die
+  [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
   Community-LTS-Patch-Images und die getesteten Datenbank-/CRUD-Pfade auf;
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
-  PostgreSQL-Runtime-Parität und weitergehende Migrationsrisikoanalyse bleiben
-  außerhalb der 0.2.0-Aussage.
+  PostgreSQL-Runtime-Parität, Nullbarkeitsmigrationen, sichere Backfills und
+  betriebliche Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. Drift bei
+  Defaults, Primärschlüsseln und Auto-Increment wird durch die Live-Inspektion
+  noch nicht vollständig erkannt.
 - [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
   vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
   vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor

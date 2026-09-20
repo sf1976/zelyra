@@ -618,13 +618,19 @@ Apply a reviewed plan:
 zelyra db apply examples/machine_management_mariadb.zyl
 ~~~
 
-Destructive changes are refused unless explicitly approved:
+`REVIEW` and `DESTRUCTIVE` changes are refused unless explicitly approved.
+Use `--allow-risky`; `--allow-destructive` remains limited to destructive-only
+plans and does not approve `REVIEW` changes.
+Unsupported operations are always refused:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl --allow-destructive
+zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
-Review destructive plans carefully. Never place real passwords in a committed
+Review the full plan carefully. In particular, required columns without a
+default may receive engine-specific values for existing rows after approval;
+verify those values before relying on them. Unique-constraint creation may fail
+if existing duplicates are present. Never place real passwords in a committed
 Zelyra file, documentation example, or shell script. Environment variables,
 secret managers, and restricted deployment configuration are preferred.
 
@@ -892,7 +898,11 @@ connection.
 ### A destructive schema change is refused
 
 This is intentional. Run db plan, inspect the affected rows and SQL, then
-repeat db apply with the explicit allow-destructive flag only after review.
+repeat db apply with `--allow-risky` only after review. The older
+`--allow-destructive` remains accepted for destructive-only plans. It does not
+approve `REVIEW` changes. Changes shown as unsupported
+cannot be applied by this version; resolve them with a supported schema plan or
+manual database work, then inspect again.
 
 ### A page starts but the browser shows 404
 

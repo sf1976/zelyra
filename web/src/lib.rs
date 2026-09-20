@@ -9275,6 +9275,7 @@ mod tests {
                         },
                     ],
                     foreign_keys: vec![zelyra_database::ForeignKey {
+                        name: None,
                         column: "department_id".into(),
                         referenced_table: "departments".into(),
                         referenced_column: "id".into(),

@@ -200,8 +200,14 @@ architecture requirement for every phase, not a provider-specific feature.
   compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
-- [ ] Better destructive-change analysis, row estimates, lock warnings, and
-  maintenance-window planning.
+- [ ] Detect and plan default, primary-key, and auto-increment changes from
+  inspected live schemas.
+- [~] The schema planner classifies required columns without defaults, unique
+  constraints, and generated-name-managed index/FK additions and removals;
+  unknown external indexes are preserved and untracked FK removals fail closed.
+  It also fails closed for unsupported nullability changes and SQLite
+  type/FK/unique-constraint alterations. Row estimates, lock warnings,
+  backfill plans, and maintenance-window planning remain planned.
 - [ ] Connection pooling, retry policies, timeouts, cancellation, and health
   checks.
 - [ ] Streaming large results and bounded memory behavior.
@@ -465,14 +471,23 @@ supported machine and the release gates below pass.
   Clean-machine installation verification and recovery coverage across
   supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has
-  end-to-end paths. The schema-safety test exercises both backends: a column
-  drop is planned as destructive, refused by default with `E-DB-004` while
-  preserving the test row, and applied only with `--allow-destructive` in an
-  isolated test database. The generated MariaDB business acceptance test has
-  passed. The [version matrix](database-compatibility.en.md) lists four
+  end-to-end paths. The schema-safety test exercises both backends: destructive
+  drops require approval; required columns without defaults, new unique
+  constraints, and MariaDB foreign-key additions/removals are marked `REVIEW`;
+  duplicate rows and orphan rows remain intact when index/foreign-key changes
+  fail; unknown external indexes are preserved and untracked foreign-key
+  removals fail closed. Unsupported changes fail closed with `E-DB-006`.
+  The legacy `--allow-destructive` option does not approve `REVIEW` changes;
+  `--allow-risky` is required after reviewing them. Nullability changes and
+  SQLite type, foreign-key, and unique-constraint alterations remain
+  unsupported. The generated
+  MariaDB business acceptance test has passed. The [version
+  matrix](database-compatibility.en.md) lists four
   MariaDB Community LTS patch images and the core database/CRUD paths they
   test; this is not MySQL or full feature certification. PostgreSQL runtime
-  parity and broader migration risk analysis remain outside the 0.2.0 claim.
+  parity, nullability migration support, backfill safety, and operational risk
+  analysis remain outside the 0.2.0 claim. Default, primary-key, and
+  auto-increment drift are not fully detected by live schema inspection.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
   complete automated tests, security review of the shipped vertical slice, and
   reproducible release artifacts must pass before tagging 0.2.0.
