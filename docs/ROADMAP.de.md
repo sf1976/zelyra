@@ -507,9 +507,11 @@ Freigabekriterien bestanden sind.
   projektlokale deutsche/englische Texte ab. Zusätzlich wurde der
   MariaDB-gestützte Pfad aus `tests/generated-project-business-e2e.sh` mit einer
   isolierten Testdatenbank erfolgreich ausgeführt und die Bereinigung geprüft.
-  Einsteigergeprüfter Einstieg, angepasste Maschinen-/Abteilungs-Views,
-  Deutsch/Englisch mit Learn-/Work-Modus und dokumentierte Abdeckung bleiben
-  Release-Arbeiten.
+  Der MariaDB-Akzeptanztest für die Maschinenverwaltung prüft jetzt die
+  lokalisierten Maschinen- und Abteilungsansichten in allen vier Kombinationen
+  aus Deutsch/Englisch und Learn/Work – einschließlich Anzeige, Ausblendung und
+  Übersetzung der Lernhilfe. Einsteigergeprüfter Einstieg und eine umfassendere
+  dokumentierte Nutzerabnahme bleiben Release-Arbeiten.
 - [~] **Einfacher Erststart:** Die Befehle zelyra new und zelyra setup,
   erzeugte .env, Docker Compose, freie Portwahl und konkrete Hinweise zu
   Docker-Berechtigungen sind verfügbar. Der erzeugte Docker-Stack bestand auf
@@ -562,9 +564,10 @@ werden.
   Maschinen-/Bereichs-Views, Suche, Kategorie-/Status-/Bereichsfiltern und
   einer optionalen SQL-Fixture mit 30 fiktionalen Datensätzen. Der
   MariaDB-Integrationstest importiert die Fixture zweimal und prüft die Daten
-  über HTTP; einsteigergeprüfter Erststart auf sauberen Systemen und
-  Produktionshärtung bleiben offen. Native Seed-/Fixture-Befehle bleiben
-  optionale Roadmap-Arbeit.
+  über HTTP; die echte Anwendung wird außerdem in allen Deutsch/Englisch- und
+  Learn/Work-Kombinationen geprüft. Einsteigergeprüfter Erststart auf sauberen
+  Systemen und Produktionshärtung bleiben offen. Native Seed-/Fixture-Befehle
+  bleiben optionale Roadmap-Arbeit.
 - [ ] Kunden-/Auftragsanwendung mit komplexen Joins, Aggregaten, Formularen,
   API und individuellen Views.
 - [ ] Mehrbenutzer-Inventar mit Transaktionen und parallelen Änderungen.

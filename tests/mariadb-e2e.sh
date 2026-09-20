@@ -384,35 +384,87 @@ curl --silent --show-error --fail --get \
 grep -Fq "${machine_name}" "${temp_dir}/relationship-action-result.html"
 ! grep -Fq "${machine_two_name}" "${temp_dir}/relationship-action-result.html"
 
-if [[ -n "${demo_fixture}" ]]; then
-    echo "[9e/11] verifying the German machine and department views"
-    ZELYRA_LANGUAGE=de "${zelyra_bin}" serve "${project_file}" "${german_address}" \
-        >"${temp_dir}/german-server.log" 2>&1 &
+echo "[9e/11] verifying German/English views in learn/work modes"
+assert_ui_contains() {
+    local mode="$1"
+    local file="$2"
+    local expected="$3"
+    local description="$4"
+    if ! grep -Fq -- "${expected}" "${file}"; then
+        echo "error: ${mode} ${description} is missing from ${file}" >&2
+        return 1
+    fi
+}
+
+assert_ui_absent() {
+    local mode="$1"
+    local file="$2"
+    local unexpected="$3"
+    local description="$4"
+    if grep -Fq -- "${unexpected}" "${file}"; then
+        echo "error: ${mode} ${description} unexpectedly appears in ${file}" >&2
+        return 1
+    fi
+}
+
+verify_ui_mode() {
+    local language="$1"
+    local level="$2"
+    local machines_title="$3"
+    local departments_title="$4"
+    local learning_button="$5"
+    local machine_learning_title="$6"
+    local department_learning_title="$7"
+    local mode="${language}-${level}"
+    local mode_url="http://${german_address}"
+    local machines_file="${temp_dir}/${mode}-machines.html"
+    local departments_file="${temp_dir}/${mode}-departments.html"
+    local server_log="${temp_dir}/${mode}-server.log"
+
+    ZELYRA_LANGUAGE="${language}" ZELYRA_LEVEL="${level}" \
+        "${zelyra_bin}" serve "${project_file}" "${german_address}" \
+        >"${server_log}" 2>&1 &
     german_server_pid=$!
-    german_base_url="http://${german_address}"
     for _ in $(seq 1 30); do
-        if curl --silent --show-error --fail --get \
-            --data-urlencode "search=ZLY-DEMO-001" \
-            "${german_base_url}/machines" -o "${temp_dir}/german-machines.html"; then
+        if curl --silent --show-error --fail "${mode_url}/machines" -o "${machines_file}"; then
             break
         fi
         sleep 1
     done
-    curl --silent --show-error --fail --get \
-        --data-urlencode "search=ZLY-DEMO-001" \
-        "${german_base_url}/machines" -o "${temp_dir}/german-machines.html"
-    grep -Fq '<h1>Maschinenpark</h1>' "${temp_dir}/german-machines.html"
-    grep -Fq '<dt>Hersteller</dt>' "${temp_dir}/german-machines.html"
-    grep -Fq 'ZLY-DEMO-001' "${temp_dir}/german-machines.html"
-    curl --silent --show-error --fail "${german_base_url}/departments" \
-        -o "${temp_dir}/german-departments.html"
-    grep -Fq '<h1>Produktionsbereiche</h1>' "${temp_dir}/german-departments.html"
-    grep -Fq '<dt>Standort</dt>' "${temp_dir}/german-departments.html"
-    grep -Fq 'Precision Workshop' "${temp_dir}/german-departments.html"
+    if ! curl --silent --show-error --fail "${mode_url}/machines" -o "${machines_file}"; then
+        echo "error: ${mode} Zelyra web server did not become ready" >&2
+        cat "${server_log}" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${mode_url}/departments" -o "${departments_file}"
+    assert_ui_contains "${mode}" "${machines_file}" "<h1>${machines_title}</h1>" "machine view title"
+    assert_ui_contains "${mode}" "${departments_file}" "<h1>${departments_title}</h1>" "department view title"
+    if [[ "${level}" == "learn" ]]; then
+        assert_ui_contains "${mode}" "${machines_file}" "${learning_button}" "learning button on machine view"
+        assert_ui_contains "${mode}" "${machines_file}" "${machine_learning_title}" "localized learning guide on machine view"
+        assert_ui_contains "${mode}" "${departments_file}" "${learning_button}" "learning button on department view"
+        assert_ui_contains "${mode}" "${departments_file}" "${department_learning_title}" "localized learning guide on department view"
+    else
+        assert_ui_absent "${mode}" "${machines_file}" 'class="zelyra-learning-assistant"' "learning guide on machine view"
+        assert_ui_absent "${mode}" "${departments_file}" 'class="zelyra-learning-assistant"' "learning guide on department view"
+    fi
+
+    if [[ "${language}" == "de" && -n "${demo_fixture}" ]]; then
+        assert_ui_contains "${mode}" "${machines_file}" '<dt>Hersteller</dt>' "localized manufacturer field"
+        assert_ui_contains "${mode}" "${machines_file}" 'ZLY-DEMO-001' "demo machine record"
+        assert_ui_contains "${mode}" "${departments_file}" '<dt>Standort</dt>' "localized department site field"
+        assert_ui_contains "${mode}" "${departments_file}" 'Precision Workshop' "demo department record"
+    fi
+
     kill "${german_server_pid}" 2>/dev/null || true
     wait "${german_server_pid}" 2>/dev/null || true
     german_server_pid=""
-fi
+}
+
+verify_ui_mode en work 'Machine fleet' 'Production areas' 'Learning guide' 'Your Zelyra learning guide' 'Your Zelyra CRUD learning guide'
+verify_ui_mode en learn 'Machine fleet' 'Production areas' 'Learning guide' 'Your Zelyra learning guide' 'Your Zelyra CRUD learning guide'
+verify_ui_mode de work 'Maschinenpark' 'Produktionsbereiche' 'Lernhilfe' 'Deine Zelyra-Lernhilfe' 'Deine Zelyra-CRUD-Lernhilfe'
+verify_ui_mode de learn 'Maschinenpark' 'Produktionsbereiche' 'Lernhilfe' 'Deine Zelyra-Lernhilfe' 'Deine Zelyra-CRUD-Lernhilfe'
 
 echo "[10/11] editing and deleting through CSRF-protected CRUD"
 curl --silent --show-error --fail "${base_url}/machines/${machine_id}/edit" -o "${temp_dir}/machine-edit.html"

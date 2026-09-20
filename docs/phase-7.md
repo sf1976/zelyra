@@ -282,3 +282,9 @@ vertical slice against MariaDB: schema setup and inspection, related CRUD
 creation, search, exact relationship and boolean filters, allowlisted sorting,
 pagination, validation of unknown query fields, editing, CSRF-protected
 deletion, and cleanup.
+
+The same test starts the real application in all four combinations of
+`ZELYRA_LANGUAGE=en|de` and `ZELYRA_LEVEL=learn|work`. It checks localized
+machine and department views and verifies that the contextual learning guide
+appears in `learn` and is absent in `work`. When the fictional demo fixture is
+enabled, the German views are also checked against its example records.

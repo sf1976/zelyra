@@ -297,3 +297,10 @@ Schnitt gegen MariaDB: Schema-Setup und Inspektion, verbundene CRUD-Erstellung,
 Suche, exakte Beziehungs- und Boolean-Filter, erlaubte Sortierung, Pagination,
 die Ablehnung unbekannter Query-Felder, Bearbeiten, CSRF-geschütztes Löschen
 und Bereinigung.
+
+Derselbe Test startet die echte Anwendung mit allen vier Kombinationen aus
+`ZELYRA_LANGUAGE=en|de` und `ZELYRA_LEVEL=learn|work`. Er prüft die lokalisierten
+Maschinen- und Abteilungsansichten sowie, dass die kontextbezogene Lernhilfe im
+Modus `learn` erscheint und im Modus `work` fehlt. Ist die fiktionale Demo-
+Fixture aktiviert, werden zusätzlich die deutschen Ansichten anhand ihrer
+Beispieldatensätze geprüft.

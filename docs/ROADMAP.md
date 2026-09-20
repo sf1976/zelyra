@@ -473,9 +473,12 @@ supported machine and the release gates below pass.
   covers its generated CRUD form, missing-token and insufficient-API-permission
   denials, authorized access, and project-local German/English copy overrides;
   the MariaDB-backed path in `tests/generated-project-business-e2e.sh` has also
-  passed against an isolated test database with cleanup verified. Complete
-  novice-tested onboarding, customized machine/department Views, German/English
-  Learn/Work behavior, and documented acceptance coverage remain release work.
+  passed against an isolated test database with cleanup verified. The
+  MariaDB machine-management acceptance test now checks localized machine and
+  department views in all four German/English × Learn/Work combinations,
+  including presence/absence and localization of the learning guide. Novice-
+  tested onboarding and broader documented user acceptance remain release
+  work.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
   .env, Docker Compose, free-port selection, and actionable Docker permission
   guidance exist. The generated Docker stack also passed an isolated build,
@@ -524,9 +527,10 @@ capabilities into the 0.2.0 release claim.
   with localized machine/department views, search and category/status/area
   filters, plus an optional 30-record fictional SQL fixture. Generated-project
   MariaDB integration tests import the fixture twice and verify the records
-  through HTTP; novice-tested clean-machine onboarding and production
-  hardening remain open. Native seed/fixture commands remain optional roadmap
-  work.
+  through HTTP; the real application is also tested in all German/English and
+  Learn/Work combinations. Novice-tested clean-machine onboarding and
+  production hardening remain open. Native seed/fixture commands remain
+  optional roadmap work.
 - [ ] Customer/order application with complex joins, aggregates, forms, API,
   and custom views.
 - [ ] Multi-user inventory application with transactions and concurrent edits.
