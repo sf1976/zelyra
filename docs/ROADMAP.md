@@ -538,6 +538,15 @@ integration, compiler self-hosting, full formal verification, or PostgreSQL
 runtime parity. Keep those as separate roadmap goals; do not blur planned
 capabilities into the 0.2.0 release claim.
 
+## Proposed release milestone 0.3.0
+
+The separate [0.3.0 release plan](release-plans/0.3.0.en.md) is a working
+proposal, not a release promise. It prioritizes beginner onboarding, an
+extensible distinctive Views/template system, MariaDB/schema safety, a
+reproducible real-application acceptance path, dependable compiler interfaces,
+and honest release evidence. Scope and status must be reviewed as work proceeds;
+the plan does not make all long-term roadmap items 0.3.0 requirements.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template
