@@ -23,9 +23,10 @@ der Release-Workflow die Linux- und Windows-Artefakte bereits im Pull Request.
 Das sind ausschließlich Prüf-Artefakte; der Veröffentlichungsjob läuft bei
 Pull Requests nicht.
 
-Release-Builds verwenden festgelegte Rust- und Python-Toolchains sowie
-`Cargo.lock`. Jeder Plattformjob baut die CLI zweimal in getrennten
-Target-Verzeichnissen und verlangt byte-identische Binärdateien. Das
+Release-Builds verwenden Rust 1.98.1 und festgelegte, auf der jeweiligen
+Plattform verfügbare Python-Patchversionen (3.12.11 unter Linux und 3.12.10
+unter Windows) sowie `Cargo.lock`. Jeder Plattformjob baut die CLI zweimal in
+getrennten Target-Verzeichnissen und verlangt byte-identische Binärdateien. Das
 Packaging-Skript vereinheitlicht
 Archivsortierung, Eigentümer, Rechte und Zeitstempel. Seine Tests verlangen bei
 wiederholtem Packaging byte-identische Archive und SHA-256-Dateien. Das prüft

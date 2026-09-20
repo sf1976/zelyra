@@ -90,10 +90,16 @@ jobs:
         with:
           toolchain: 1.98.1
           targets: ${{ matrix.target }}
-      - name: Install Python for deterministic packaging
+      - name: Install pinned Python for Linux packaging
+        if: runner.os == 'Linux'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12.11"
+      - name: Install pinned Python for Windows packaging
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
       - name: Validate Windows installer
         if: runner.os == 'Windows'
         shell: pwsh

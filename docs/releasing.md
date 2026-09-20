@@ -21,7 +21,8 @@ release workflow builds the Linux and Windows artifacts on the pull request.
 These are validation artifacts only; the publish job does not run for pull
 requests.
 
-Release builds use the pinned Rust and Python toolchains and `Cargo.lock`.
+Release builds use Rust 1.98.1 and pinned, platform-available Python patch
+versions (3.12.11 on Linux and 3.12.10 on Windows), plus `Cargo.lock`.
 Each platform job builds the CLI twice in separate target directories and
 requires byte-identical binaries.
 The packaging script normalizes archive ordering, ownership, permissions, and
