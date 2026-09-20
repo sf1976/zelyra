@@ -65,6 +65,7 @@
   "error.authentication_required": "Authentication is required.",
   "error.missing_permission": "Missing permission: {permission}",
   "error.invalid_csrf": "Invalid CSRF token.",
+  "error.host_not_allowed": "This request host is not allowed.",
   "error.email_password_required": "Email and password are required.",
   "error.login_throttled": "Too many failed login attempts. Try again later.",
   "error.invalid_credentials": "Invalid credentials.",

@@ -140,6 +140,23 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Web server host allowlist
+
+| Variable | Values | New MariaDB `.env` default / fallback | Precedence | Security classification and effect | Affected commands and tests |
+|---|---|---|---|---|---|
+| `ZELYRA_ALLOWED_HOSTS` | Comma-separated ASCII hostnames or IP addresses (IDNs in punycode); no scheme, port, wildcard, or empty item | `localhost,127.0.0.1,[::1]` | Process environment → project `.env` → loopback fallback | Not a secret, but a security-sensitive allowlist against forged `Host` headers and DNS rebinding. Add only hosts actually used. | `zelyra serve`, MariaDB scaffolds `new`/`init`, generated Compose; CLI, web, and scaffold regression tests |
+
+Every HTTP request containing `Host` must match an entry. Matching is
+case-insensitive; a request port is parsed separately and is not compared to
+the allowlist. Wildcards, URLs, ports, and invalid hostnames are rejected as
+configuration values. An empty or invalid list prevents server startup with
+`E-ENV-001`. Internationalized domain names must be entered as ASCII punycode.
+If the app is reachable through a reverse proxy or on a LAN under
+a custom hostname, configure that hostname explicitly. The proxy must preserve
+the public `Host`, overwrite `X-Forwarded-Proto`, and prevent direct access to
+the app port. This setting only extends the host allowlist; it does not disable
+CSRF or origin checks.
+
 ## Integration-test only
 
 | Variable | Default | Precedence / source | Security classification | Affected commands and tests |

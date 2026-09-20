@@ -151,6 +151,24 @@ aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
 
+## Host-Allowlist des Webservers
+
+| Variable | Werte | Standard in neuer MariaDB-`.env` / Fallback | Vorrang | Sicherheitsklasse und Wirkung | Betroffene Befehle und Tests |
+|---|---|---|---|---|---|
+| `ZELYRA_ALLOWED_HOSTS` | Kommagetrennte ASCII-Hostnamen oder IP-Adressen (IDNs als Punycode); ohne Schema, Port, Wildcard oder leere Listeneinträge | `localhost,127.0.0.1,[::1]` | Prozessumgebung → Projekt-`.env` → Loopback-Fallback | Kein Secret, aber sicherheitsrelevante Allowlist gegen manipulierte `Host`-Header und DNS-Rebinding. Nur tatsächlich verwendete Hosts ergänzen. | `zelyra serve`, MariaDB-Scaffolds `new`/`init`, erzeugtes Compose; CLI-, Web- und Scaffold-Regressionstests |
+
+Jede HTTP-Anfrage mit `Host` muss zu einem Eintrag passen. Der Vergleich ist
+ohne Beachtung der Groß-/Kleinschreibung; ein angehängter Port wird separat
+geprüft und nicht mit der Allowlist abgeglichen. Wildcards, URLs, Ports und
+ungültige Hostnamen sind als Konfigurationswerte unzulässig. Eine leere oder
+ungültige Liste verhindert den Serverstart mit `E-ENV-001`. Internationalisierte
+Domainnamen müssen als ASCII-Punycode eingetragen werden. Wenn eine
+Anwendung über einen Reverse-Proxy oder im LAN mit einem eigenen Hostnamen
+erreichbar sein soll, diesen Host ausdrücklich konfigurieren. Der Proxy muss
+den öffentlichen `Host` erhalten, `X-Forwarded-Proto` überschreiben und den
+direkten Zugriff auf den App-Port verhindern. Die Einstellung erweitert nur
+die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
+
 ## Nur für den Integrationstest
 
 | Variable | Standard | Vorrang / Herkunft | Sicherheitsklasse | Betroffene Befehle und Tests |

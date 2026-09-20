@@ -193,6 +193,7 @@ pub(crate) fn framework_text_key(value: &str) -> Option<&'static str> {
         "Service Unavailable" => "http.503_short",
         "Internal Server Error" => "http.500_short",
         "400 Bad Request" => "http.400",
+        "This request host is not allowed." => "error.host_not_allowed",
         "401 Unauthorized" => "http.401",
         "403 Forbidden" => "http.403",
         "404 Not Found" => "http.404",

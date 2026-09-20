@@ -245,6 +245,7 @@ fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) 
 ZELYRA_DB_HOST_PORT={database_host_port}
 ZELYRA_LANGUAGE=de
 ZELYRA_LEVEL=learn
+ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -255,6 +256,10 @@ MARIADB_ROOT_PASSWORD=change-me-root
 # the selected defaults below, so these lines can remain commented out.
 # ZELYRA_WEB_PORT={web_port}
 # ZELYRA_HOST_PORT={host_port}
+
+# Optional public hostnames or IP addresses, comma-separated. Add the host
+# used in your browser when serving through a LAN address or reverse proxy.
+# ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],app.example.com
 
 # Optional feature switches. They default to true and are normally not needed.
 # ZELYRA_FEATURE_WEB=true
@@ -525,30 +530,26 @@ fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
         eprintln!("error[E-INIT-002]: cannot create `{path}`: {error}");
         return ExitCode::from(1);
     }
-    let project_config = if options.with_mariadb {
-        r#"[project]
-name = "zelyra-app"
-version = "0.1.50"
-zelyra = "0.1"
-
-[database.main]
-engine = "mariadb"
-
-[capabilities]
-database = true
-network = false
-"#
+    let database_section = if options.with_mariadb {
+        "[database.main]\nengine = \"mariadb\"\n"
     } else {
+        ""
+    };
+    let project_config = format!(
         r#"[project]
 name = "zelyra-app"
-version = "0.1.50"
+version = "{version}"
 zelyra = "0.1"
+
+{database_section}
 
 [capabilities]
 database = true
 network = false
-"#
-    };
+"#,
+        version = env!("CARGO_PKG_VERSION"),
+        database_section = database_section
+    );
     let main_source = if options.business_template {
         MARIADB_BUSINESS_TEMPLATE
     } else if options.crud_template {
@@ -621,6 +622,7 @@ network = false
       DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
+      ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -639,6 +641,13 @@ volumes:
                     &format!("{}{{ZELYRA_LANGUAGE:-de}}", '$'),
                 )
                 .replace("__ZELYRA_LEVEL__", &format!("{}{{ZELYRA_LEVEL:-learn}}", '$'))
+                .replace(
+                    "__ZELYRA_ALLOWED_HOSTS__",
+                    &format!(
+                        "{}{{ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}}",
+                        '$'
+                    ),
+                )
                 .replace("__WEB_PORT__", &web_port_value)
                 .replace("__HOST_PORT__", &host_port_value)
                 .replace("__DATABASE_HOST_PORT__", &database_host_port_value),
@@ -646,7 +655,7 @@ volumes:
             (
                 "Dockerfile",
                 r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=v0.1.50
+ARG ZELYRA_REF=__ZELYRA_DEFAULT_REF__
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -664,6 +673,10 @@ EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 "#
                 .replace("__ZELYRA_REF__", &env_value("ZELYRA_REF"))
+                .replace(
+                    "__ZELYRA_DEFAULT_REF__",
+                    &format!("v{}", env!("CARGO_PKG_VERSION")),
+                )
                 .replace("__WEB_PORT__", &options.web_port.to_string()),
             ),
             (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
@@ -3580,6 +3593,21 @@ fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
     let level = UiLevel::parse(&level.to_ascii_lowercase())
         .ok_or_else(|| "ZELYRA_LEVEL must be `learn` or `work`".to_owned())?;
     Ok((language, level))
+}
+
+fn project_allowed_hosts(path: &str) -> Result<Vec<String>, String> {
+    let configured = project_ui_setting(path, "ZELYRA_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")?;
+    let hosts = configured
+        .split(',')
+        .map(str::trim)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if hosts.is_empty() || hosts.iter().any(String::is_empty) {
+        return Err(
+            "ZELYRA_ALLOWED_HOSTS must contain comma-separated, non-empty hostnames or IP addresses".into(),
+        );
+    }
+    Ok(hosts)
 }
 
 fn project_theme_css(path: &str) -> Result<Option<String>, String> {
@@ -6777,6 +6805,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let allowed_hosts = match project_allowed_hosts(&path) {
+        Ok(hosts) => hosts,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let theme_css = match project_theme_css(&path) {
         Ok(theme_css) => theme_css,
         Err(error) => {
@@ -7159,6 +7194,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         )
         .with_cruds(crud_routes)
         .with_tableviews(tableview_routes);
+    let app = match app.with_allowed_hosts(allowed_hosts) {
+        Ok(app) => app,
+        Err(error) => {
+            diagnostic(&path, "E-ENV-001", &error.message, 1, 1);
+            return ExitCode::from(1);
+        }
+    };
     let app = if let Some(cors_policy) = cors_policy {
         app.with_cors(cors_policy)
     } else {
@@ -9248,6 +9290,58 @@ mod tests {
     }
 
     #[test]
+    fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
+        let directory = std::env::temp_dir().join(format!(
+            "zelyra-allowed-hosts-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source_path = directory.join("main.zyl");
+        fs::write(&source_path, "").unwrap();
+        fs::write(
+            directory.join(".env"),
+            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
+        )
+        .unwrap();
+
+        let previous = env::var_os("ZELYRA_ALLOWED_HOSTS");
+        env::remove_var("ZELYRA_ALLOWED_HOSTS");
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["localhost", "app.example"]
+        );
+        fs::remove_file(directory.join(".env")).unwrap();
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["localhost", "127.0.0.1", "[::1]"]
+        );
+        fs::write(
+            directory.join(".env"),
+            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
+        )
+        .unwrap();
+        env::set_var("ZELYRA_ALLOWED_HOSTS", "override.example, localhost");
+        assert_eq!(
+            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
+            ["override.example", "localhost"]
+        );
+        env::set_var("ZELYRA_ALLOWED_HOSTS", " , ");
+        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
+        env::set_var("ZELYRA_ALLOWED_HOSTS", "localhost, ");
+        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
+        if let Some(previous) = previous {
+            env::set_var("ZELYRA_ALLOWED_HOSTS", previous);
+        } else {
+            env::remove_var("ZELYRA_ALLOWED_HOSTS");
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn project_theme_css_is_optional_utf8_and_size_limited() {
         let directory = env::temp_dir().join(format!(
             "zelyra-project-theme-{}-{}",
@@ -10763,8 +10857,8 @@ mod tests {
         let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
         let project_config = fs::read_to_string(path.join("zelyra.toml")).unwrap();
         let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
-        assert!(dockerfile.contains("ARG ZELYRA_REF=v0.1.50"));
-        assert!(project_config.contains("version = \"0.1.50\""));
+        assert!(dockerfile.contains(&format!("ARG ZELYRA_REF=v{}", env!("CARGO_PKG_VERSION"))));
+        assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
         assert!(dockerfile.contains("COPY locales ./locales"));
         assert!(path.join("locales/de.json").is_file());

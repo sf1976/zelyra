@@ -139,7 +139,8 @@ extract_csrf() {
 post_form() {
     local response_file="$1"
     shift
-    curl --silent --show-error --fail --output "${response_file}" --write-out '%{http_code}' "$@"
+    curl --silent --show-error --fail --output "${response_file}" --write-out '%{http_code}' \
+        --header "Origin: ${base_url}" "$@"
 }
 
 extract_option_id() {
@@ -338,11 +339,13 @@ grep -Fq "href=\"/machines/${machine_id}/move_department\"" "${temp_dir}/machine
 action_csrf="$(extract_csrf "${temp_dir}/machine-action-detail.html")"
 echo "[9b/11] checking action validation and localized success response"
 invalid_action_status="$(curl --silent --show-error --output "${temp_dir}/invalid-action.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${action_csrf}" \
     --data-urlencode "active=not-a-boolean" \
     "${base_url}/machines/${machine_id}/set_active")"
 [[ "${invalid_action_status}" == "422" ]]
 action_status="$(curl --silent --show-error --fail --output "${temp_dir}/machine-action-response.html" --dump-header "${temp_dir}/machine-action-headers.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${action_csrf}" \
     --data-urlencode "active=false" \
     "${base_url}/machines/${machine_id}/set_active")"
@@ -367,6 +370,7 @@ grep -Fq "name=\"department\"" "${temp_dir}/department-confirmation.html"
 grep -Fq "value=\"${secondary_department_id}\">${secondary_department_name}" "${temp_dir}/department-confirmation.html"
 department_csrf="$(extract_csrf "${temp_dir}/department-confirmation.html")"
 invalid_department_status="$(curl --silent --show-error --output "${temp_dir}/invalid-department-action.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${department_csrf}" \
     --data-urlencode "department=999999" \
     "${base_url}/machines/${machine_id}/move_department")"

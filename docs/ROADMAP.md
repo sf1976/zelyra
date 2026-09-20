@@ -56,8 +56,10 @@ principles; the roadmap below tracks what is actually implemented.
   to built-in translations. Business records and unmarked user-authored content
   are not translated. Broader template coverage and a full theme editor remain
   open. Project-local CSS overrides for documented visual tokens are available.
-- [x] Authentication, persistent sessions, CSRF, Argon2 passwords, direct and
+- [x] Authentication, persistent sessions, Argon2 passwords, direct and
   role-based permissions, browser administration, and MariaDB audit logging.
+  Browser writes also require same-origin evidence; the 0.2.0 branch adds a
+  default loopback Host allowlist to reject forged hosts and DNS rebinding.
 - [~] Audit operations: inspect, JSON/CSV export, structural verification, and
   confirmed pruning are available. Tamper-evident chaining is available as an
   explicit opt-in; archival and retention remain.
@@ -115,8 +117,10 @@ architecture requirement for every phase, not a provider-specific feature.
   available with user-local, repeatable Bash/PowerShell installers; Rust-free
   release installation is available for published Linux/Windows x86_64 assets.
 - [~] Release archives with SHA-256 checksums are available for Linux and
-  Windows x86_64; signed binaries and checksums for every supported platform
-  remain.
+  Windows x86_64. The 0.2.0 branch adds pinned build tools, repeated binary
+  builds, and normalized archives with byte-for-byte packaging tests; branch CI
+  still has to verify the final release candidate. Signed binaries and
+  checksums for every supported platform remain.
 - [~] User-local install/check/update/uninstall scripts remain available.
   `zelyra update [--check]` also checks stable GitHub releases and verifies a
   SHA-256 checksum before replacing its own Linux/Windows x86_64 executable;
@@ -516,9 +520,12 @@ supported machine and the release gates below pass.
   serial/identity metadata drift is
   detected and refused; migrations for those metadata changes remain
   unsupported.
-- [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,
-  complete automated tests, security review of the shipped vertical slice, and
-  reproducible release artifacts must pass before tagging 0.2.0.
+- [~] **Release evidence:** the bilingual quickstarts and supported-platform
+  validation are in place. This branch adds an internal security review of the
+  shipped vertical slice and pinned, repeatable release packaging. Final
+  branch CI, full-workspace and database-backed checks, and a clean-machine
+  first-run acceptance on the release candidate remain required before the
+  `0.2.0` tag; no external security audit is claimed.
 
 The 0.2.0 scope does not require a visual drag-and-drop editor, a model-provider
 integration, compiler self-hosting, full formal verification, or PostgreSQL

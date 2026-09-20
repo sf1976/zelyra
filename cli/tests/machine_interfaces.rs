@@ -123,14 +123,17 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
     assert!(env_example.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_example.contains("ZELYRA_LEVEL=learn"));
+    assert!(env_example.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
     assert!(compose.contains("ZELYRA_LANGUAGE: ${ZELYRA_LANGUAGE:-de}"));
     assert!(compose.contains("ZELYRA_LEVEL: ${ZELYRA_LEVEL:-learn}"));
+    assert!(compose.contains("${ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}"));
     assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
     assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
+    assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
     assert!(env_file.contains("# ZELYRA_WEB_PORT=8080"));
     assert!(env_file.contains(&format!("# ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_file.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));

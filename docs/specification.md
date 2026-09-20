@@ -80,6 +80,34 @@ limited to 256 KiB each; invalid files and symbolic links are rejected by
 project-authored content are not automatically translated. API and compiler
 machine contracts are not localized by these settings.
 
+### Browser request origins and allowed hosts
+
+Every supplied HTTP `Host` header must match the server's configured
+`ZELYRA_ALLOWED_HOSTS`. The default is `localhost,127.0.0.1,[::1]`; configure
+additional actual hostnames or IP addresses explicitly for a LAN or reverse
+proxy. Values are comma-separated ASCII hostnames or IP addresses (IDNs use
+punycode) and must not contain schemes, ports, wildcards, or empty entries.
+Precedence is process environment, project `.env`, then the
+loopback-only default. Invalid or empty settings prevent server startup. This
+allowlist rejects forged hosts and DNS-rebinding requests; it does not provide
+TLS or replace origin checks. Duplicate `Host`, `Origin`, `Referer`,
+`X-Forwarded-Proto`, `Cookie`, and `Authorization` request headers are rejected
+to avoid ambiguous security decisions. Responses use
+`Referrer-Policy: same-origin`, allowing same-origin API GETs to provide a
+`Referer` while not sending referrer information to other origins.
+
+State-changing browser forms require both a valid CSRF token and a same-origin
+`Origin` or `Referer` matching the request host and effective scheme. API
+requests carrying browser-origin headers or the Zelyra session cookie receive
+the origin check for routed API methods, including `GET`, because handlers are
+not yet statically restricted to read-only behavior. `OPTIONS` preflight is
+handled separately by the CORS policy. Cross-origin API requests are allowed
+only when their exact origin is configured in the CORS policy; a session cookie
+additionally requires credentialed CORS. Behind a TLS-terminating
+proxy, preserve the public `Host`, overwrite `X-Forwarded-Proto`, and block
+direct access to the application port. The built-in server does not terminate
+TLS.
+
 ### Project-local theme overrides
 
 Projects may customize the built-in visual design with a root-level

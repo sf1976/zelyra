@@ -203,7 +203,7 @@ impl Response {
 
     pub fn to_http(&self) -> String {
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n{}{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             self.reason,
             self.content_type,
@@ -841,6 +841,7 @@ pub struct WebApp {
     pub ui_language: UiLanguage,
     pub ui_level: UiLevel,
     pub project_theme_css: Option<String>,
+    allowed_hosts: Vec<String>,
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
@@ -863,6 +864,7 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
@@ -889,6 +891,7 @@ impl WebApp {
             ui_language: UiLanguage::default(),
             ui_level: UiLevel::default(),
             project_theme_css: None,
+            allowed_hosts: default_allowed_hosts(),
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
@@ -918,6 +921,31 @@ impl WebApp {
     pub fn with_cors(mut self, policy: CorsPolicy) -> Self {
         self.cors_policy = Some(policy);
         self
+    }
+
+    pub fn with_allowed_hosts(
+        mut self,
+        allowed_hosts: impl IntoIterator<Item = String>,
+    ) -> Result<Self, HttpError> {
+        let mut normalized = Vec::new();
+        for host in allowed_hosts {
+            let Some(host) = normalize_configured_host(&host) else {
+                return Err(HttpError {
+                    message: "ZELYRA_ALLOWED_HOSTS contains an invalid hostname or IP address"
+                        .into(),
+                });
+            };
+            if !normalized.contains(&host) {
+                normalized.push(host);
+            }
+        }
+        if normalized.is_empty() {
+            return Err(HttpError {
+                message: "at least one allowed host must be configured".into(),
+            });
+        }
+        self.allowed_hosts = normalized;
+        Ok(self)
     }
 
     pub fn with_auth(mut self, token: Option<String>, permissions: Vec<String>) -> Self {
@@ -1064,6 +1092,30 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
+        if (request.headers.contains_key("host") || request_has_browser_origin_or_session(request))
+            && !request_host_is_allowed(request, &self.allowed_hosts)
+        {
+            let title = framework_text_with_catalog(
+                self.ui_language,
+                "400 Bad Request",
+                &self.project_ui_catalogs,
+            )
+            .unwrap_or_default();
+            let message = framework_text_with_catalog(
+                self.ui_language,
+                "This request host is not allowed.",
+                &self.project_ui_catalogs,
+            )
+            .unwrap_or_default();
+            return Response::html(
+                400,
+                format!(
+                    "<h1>{}</h1><p>{}</p>",
+                    html_escape(&title),
+                    html_escape(&message)
+                ),
+            );
+        }
         let mut response = self.dispatch_inner(request);
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
@@ -1142,6 +1194,17 @@ impl WebApp {
                 }
                 if api.method != request.method {
                     continue;
+                }
+                if api_request_requires_origin_check(request)
+                    && !self.api_request_origin_is_allowed(request)
+                {
+                    return self.apply_api_cors(
+                        request,
+                        Response::json(
+                            403,
+                            "{\"error\":{\"code\":\"Forbidden\",\"message\":\"request origin is not allowed\"}}",
+                        ),
+                    );
                 }
                 if let Some(response) = authorize_api(
                     api.requires_auth,
@@ -1471,6 +1534,21 @@ impl WebApp {
         }
         response
     }
+
+    fn api_request_origin_is_allowed(&self, request: &Request) -> bool {
+        if request_origin_matches_host(request) {
+            return true;
+        }
+        request
+            .headers
+            .get("origin")
+            .zip(self.cors_policy.as_ref())
+            .is_some_and(|(origin, policy)| {
+                policy.allows(origin)
+                    && (cookie_value(request, "zelyra_session").is_none()
+                        || policy.allow_credentials)
+            })
+    }
 }
 
 fn authenticated_permissions(
@@ -1564,6 +1642,195 @@ fn json_escape(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
+fn default_allowed_hosts() -> Vec<String> {
+    vec!["localhost".into(), "127.0.0.1".into(), "[::1]".into()]
+}
+
+fn request_has_browser_origin_or_session(request: &Request) -> bool {
+    request.headers.contains_key("origin")
+        || request.headers.contains_key("referer")
+        || cookie_value(request, "zelyra_session").is_some()
+}
+
+fn request_host_is_allowed(request: &Request, allowed_hosts: &[String]) -> bool {
+    request
+        .headers
+        .get("host")
+        .and_then(|authority| host_name_from_authority(authority))
+        .is_some_and(|host| allowed_hosts.iter().any(|allowed| allowed == &host))
+}
+
+fn normalize_configured_host(value: &str) -> Option<String> {
+    if value.starts_with('[') && value.ends_with(']') {
+        let address = value[1..value.len() - 1]
+            .parse::<std::net::Ipv6Addr>()
+            .ok()?;
+        return Some(format!("[{address}]"));
+    }
+    let value = value.strip_suffix('.').unwrap_or(value);
+    if value.is_empty() || value.len() > 253 {
+        return None;
+    }
+    for label in value.split('.') {
+        if label.is_empty()
+            || label.len() > 63
+            || !label.as_bytes()[0].is_ascii_alphanumeric()
+            || !label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return None;
+        }
+    }
+    Some(value.to_ascii_lowercase())
+}
+
+fn host_name_from_authority(authority: &str) -> Option<String> {
+    let hostname = if authority.starts_with('[') {
+        let bracket_end = authority.find(']')?;
+        let hostname = &authority[..=bracket_end];
+        let suffix = &authority[bracket_end + 1..];
+        if !suffix.is_empty() {
+            let port = suffix.strip_prefix(':')?.parse::<u16>().ok()?;
+            if port == 0 {
+                return None;
+            }
+        }
+        hostname
+    } else {
+        match authority.matches(':').count() {
+            0 => authority,
+            1 => {
+                let (hostname, port) = authority.rsplit_once(':')?;
+                port.parse::<u16>().ok().filter(|port| *port != 0)?;
+                hostname
+            }
+            _ => return None,
+        }
+    };
+    normalize_configured_host(hostname)
+}
+
+fn api_request_requires_origin_check(request: &Request) -> bool {
+    request.method != "OPTIONS"
+        && (request.headers.contains_key("origin")
+            || request.headers.contains_key("referer")
+            || cookie_value(request, "zelyra_session").is_some())
+}
+
+fn verify_csrf_request(request: &Request, csrf: &CsrfProtection, candidate: Option<&str>) -> bool {
+    csrf.verify(candidate) && request_origin_matches_host(request)
+}
+
+fn request_origin_matches_host(request: &Request) -> bool {
+    let Some(host) = request.headers.get("host") else {
+        return false;
+    };
+    let scheme = match request.headers.get("x-forwarded-proto") {
+        Some(value) => value.split(',').next().unwrap_or_default().trim(),
+        None => "http",
+    };
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+    let Some(expected_authority) = normalize_authority(host, scheme) else {
+        return false;
+    };
+
+    let mut saw_origin = false;
+    for (header, allow_path) in [("origin", false), ("referer", true)] {
+        let Some(value) = request.headers.get(header) else {
+            continue;
+        };
+        saw_origin = true;
+        let Some((actual_scheme, actual_authority)) = parse_request_origin(value, allow_path)
+        else {
+            return false;
+        };
+        if actual_scheme != scheme || actual_authority != expected_authority {
+            return false;
+        }
+    }
+    saw_origin
+}
+
+fn parse_request_origin(value: &str, allow_path: bool) -> Option<(&str, String)> {
+    let (scheme, remainder) = value.split_once("://")?;
+    if !matches!(scheme, "http" | "https") || value.trim() != value {
+        return None;
+    }
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+    let authority = &remainder[..authority_end];
+    if authority.is_empty() || (!allow_path && authority_end != remainder.len()) {
+        return None;
+    }
+    Some((scheme, normalize_authority(authority, scheme)?))
+}
+
+fn normalize_authority(authority: &str, scheme: &str) -> Option<String> {
+    if authority.is_empty() || authority.contains(['@', '/', '?', '#', '\\', ' ', '\t', '\r', '\n'])
+    {
+        return None;
+    }
+    let (host, port) = if let Some(bracket_end) = authority
+        .strip_prefix('[')
+        .and_then(|_| authority.find(']'))
+    {
+        let host = &authority[..=bracket_end];
+        let suffix = &authority[bracket_end + 1..];
+        let address = host[1..host.len() - 1].parse::<std::net::Ipv6Addr>().ok()?;
+        let port = if suffix.is_empty() {
+            None
+        } else {
+            let port = suffix.strip_prefix(':')?.parse::<u16>().ok()?;
+            if port == 0 {
+                return None;
+            }
+            Some(port)
+        };
+        (format!("[{address}]"), port)
+    } else {
+        if authority.matches(':').count() > 1 {
+            return None;
+        }
+        let (host, port) = match authority.rsplit_once(':') {
+            Some((host, port)) => (host, Some(port.parse::<u16>().ok()?)),
+            None => (authority, None),
+        };
+        if host.is_empty()
+            || !host
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+        {
+            return None;
+        }
+        (host.to_ascii_lowercase(), port)
+    };
+    let default_port = match scheme {
+        "http" => Some(80),
+        "https" => Some(443),
+        _ => return None,
+    };
+    Some(match port {
+        Some(port) if Some(port) != default_port => format!("{host}:{port}"),
+        _ => host,
+    })
+}
+
+fn secure_cookie_attribute(request: &Request) -> &'static str {
+    if request
+        .headers
+        .get("x-forwarded-proto")
+        .and_then(|value| value.split(',').next())
+        .is_some_and(|scheme| scheme.trim() == "https")
+    {
+        "; Secure"
+    } else {
+        ""
+    }
+}
+
 fn dispatch_login(
     app: &WebApp,
     auth: &AuthRoute,
@@ -1588,10 +1855,11 @@ fn dispatch_login(
                     return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
                 }
             };
-            if !auth
-                .csrf
-                .verify(input.get("_zelyra_csrf").map(String::as_str))
-            {
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
                 return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
             }
             let email = input.get("email").cloned().unwrap_or_default();
@@ -1744,7 +2012,10 @@ fn dispatch_login(
             }
             Response::redirect("/").with_header(
                 "Set-Cookie",
-                format!("zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax"),
+                format!(
+                    "zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax{}",
+                    secure_cookie_attribute(request)
+                ),
             )
         }
         _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
@@ -1848,10 +2119,11 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !auth
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &auth.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     if app.database_capability_granted == Some(false) && auth.session_table.is_some() {
@@ -1891,7 +2163,10 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     }
     Response::redirect("/login").with_header(
         "Set-Cookie",
-        "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+        format!(
+            "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+            secure_cookie_attribute(request)
+        ),
     )
 }
 
@@ -2223,10 +2498,11 @@ fn dispatch_auth_admin_post(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !auth
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &auth.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let operation = input
@@ -3109,7 +3385,17 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         let (name, value) = line.split_once(':').ok_or_else(|| HttpError {
             message: "malformed HTTP header".into(),
         })?;
-        headers.insert(name.trim().to_ascii_lowercase(), value.trim().into());
+        let name = name.trim().to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "host" | "origin" | "referer" | "x-forwarded-proto" | "cookie" | "authorization"
+        ) && headers.contains_key(&name)
+        {
+            return Err(HttpError {
+                message: "request contains a duplicate security-sensitive header".into(),
+            });
+        }
+        headers.insert(name, value.trim().into());
     }
     if let Some(content_length) = headers.get("content-length") {
         let content_length = content_length.parse::<usize>().map_err(|_| HttpError {
@@ -3391,10 +3677,11 @@ fn dispatch_form_with_language(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !form
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &form.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let mut values = input;
@@ -4828,10 +5115,11 @@ fn dispatch_crud_delete(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !crud
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &crud.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
@@ -4931,10 +5219,11 @@ fn dispatch_crud_restore(
             return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
         }
     };
-    if !crud
-        .csrf
-        .verify(input.get("_zelyra_csrf").map(String::as_str))
-    {
+    if !verify_csrf_request(
+        request,
+        &crud.csrf,
+        input.get("_zelyra_csrf").map(String::as_str),
+    ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
     let query = format!(
@@ -8265,8 +8554,10 @@ mod tests {
                 Response::json(200, "{}")
             })])
             .with_cors(policy);
-        let request =
-            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost:5173\r\n\r\n").unwrap();
+        let request = parse_request(
+            "GET /health HTTP/1.1\r\nHost: localhost:3000\r\nOrigin: http://localhost:5173\r\n\r\n",
+        )
+        .unwrap();
         let response = app.dispatch(&request);
         assert_eq!(response.status, 200);
         assert!(response.headers.contains(&(
@@ -8285,7 +8576,7 @@ mod tests {
             })])
             .with_cors(policy);
         let request = parse_request(
-            "OPTIONS /customers HTTP/1.1\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
+            "OPTIONS /customers HTTP/1.1\r\nHost: localhost\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -8311,7 +8602,7 @@ mod tests {
             })])
             .with_cors(policy);
         let request = parse_request(
-            "OPTIONS /health HTTP/1.1\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
+            "OPTIONS /health HTTP/1.1\r\nHost: localhost\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -8323,6 +8614,231 @@ mod tests {
     fn rejects_invalid_cors_origins() {
         assert!(CorsPolicy::new(vec!["*".into()], false).is_err());
         assert!(CorsPolicy::new(vec!["https://app.example/path".into()], false).is_err());
+    }
+
+    #[test]
+    fn csrf_requires_a_same_origin_browser_request() {
+        let csrf = CsrfProtection::new("known-form-token");
+        let same_origin = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &same_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+
+        let cross_origin = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(!verify_csrf_request(
+            &cross_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+
+        let forwarded_https = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &forwarded_https,
+            &csrf,
+            Some("known-form-token")
+        ));
+        assert!(secure_cookie_attribute(&forwarded_https).contains("Secure"));
+
+        let missing_origin =
+            parse_request("POST /save HTTP/1.1\r\nHost: example.test\r\n\r\n").unwrap();
+        assert!(!verify_csrf_request(
+            &missing_origin,
+            &csrf,
+            Some("known-form-token")
+        ));
+    }
+
+    #[test]
+    fn csrf_rejects_mismatched_scheme_and_malformed_origins() {
+        let csrf = CsrfProtection::new("known-form-token");
+        for origin in [
+            "http://example.test",
+            "https://example.test.evil.test",
+            "null",
+            "https://user@example.test",
+            "https://example.test/path",
+        ] {
+            let request = parse_request(&format!(
+                "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: {origin}\r\n\r\n"
+            ))
+            .unwrap();
+            assert!(
+                !verify_csrf_request(&request, &csrf, Some("known-form-token")),
+                "accepted unexpected origin {origin}"
+            );
+        }
+
+        let referer = parse_request(
+            "POST /save HTTP/1.1\r\nHost: example.test:443\r\nX-Forwarded-Proto: https\r\nReferer: https://EXAMPLE.test/path?x=1\r\n\r\n",
+        )
+        .unwrap();
+        assert!(verify_csrf_request(
+            &referer,
+            &csrf,
+            Some("known-form-token")
+        ));
+    }
+
+    #[test]
+    fn host_allowlist_blocks_dns_rebinding_and_accepts_configured_hosts() {
+        let health = Route {
+            path: "/health".into(),
+            html: "ok".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(vec![health], Vec::new());
+        let rebinding = parse_request(
+            "GET /health HTTP/1.1\r\nHost: attacker.example:3000\r\nOrigin: http://attacker.example:3000\r\n\r\n",
+        )
+        .unwrap();
+        let response = app.dispatch(&rebinding);
+        assert_eq!(response.status, 400);
+        assert!(response.body.contains("This request host is not allowed."));
+
+        let german_app = WebApp::new(
+            vec![Route {
+                path: "/health".into(),
+                html: "ok".into(),
+                query: Vec::new(),
+                page_size: None,
+                sort_columns: Vec::new(),
+                search_columns: Vec::new(),
+                filters: Vec::new(),
+                data: Vec::new(),
+                requires_auth: false,
+                permissions: Vec::new(),
+            }],
+            Vec::new(),
+        )
+        .with_ui_settings(UiLanguage::German, UiLevel::Work);
+        let german_response = german_app.dispatch(&rebinding);
+        assert_eq!(german_response.status, 400);
+        assert!(german_response
+            .body
+            .contains("Der Hostname dieser Anfrage ist nicht freigegeben."));
+
+        let configured = app
+            .with_allowed_hosts(vec!["APP.Example".to_owned()])
+            .unwrap();
+        let request = parse_request(
+            "GET /health HTTP/1.1\r\nHost: app.example:8080\r\nOrigin: http://app.example:8080\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(configured.dispatch(&request).status, 200);
+    }
+
+    #[test]
+    fn host_allowlist_normalizes_equivalent_ipv6_literals() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let request = parse_request("GET / HTTP/1.1\r\nHost: [0:0:0:0:0:0:0:1]\r\n\r\n").unwrap();
+
+        assert_eq!(app.dispatch(&request).status, 404);
+    }
+
+    #[test]
+    fn host_allowlist_rejects_missing_host_for_browser_requests_and_invalid_config() {
+        let health = Route {
+            path: "/health".into(),
+            html: "ok".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        };
+        let app = WebApp::new(vec![health], Vec::new());
+        let missing_host =
+            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost\r\n\r\n").unwrap();
+        assert_eq!(app.dispatch(&missing_host).status, 400);
+
+        assert!(app
+            .clone()
+            .with_allowed_hosts(Vec::<String>::new())
+            .is_err());
+        assert!(app
+            .clone()
+            .with_allowed_hosts(vec!["https://app.example".to_owned()])
+            .is_err());
+        assert!(app
+            .clone()
+            .with_allowed_hosts(vec!["app.example:8080".to_owned()])
+            .is_err());
+        assert!(app
+            .with_allowed_hosts(vec!["bad..example".to_owned()])
+            .is_err());
+    }
+
+    #[test]
+    fn secure_session_cookie_is_set_when_tls_terminates_at_a_proxy() {
+        let request = parse_request(
+            "POST /login HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(secure_cookie_attribute(&request), "; Secure");
+
+        let local_request =
+            parse_request("POST /login HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n").unwrap();
+        assert_eq!(secure_cookie_attribute(&local_request), "");
+    }
+
+    #[test]
+    fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
+        let auth = AuthRoute {
+            table: "users".into(),
+            session_table: None,
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: None,
+            admin_permission: None,
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: Vec::new(),
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_auth_route(auth)
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let request = parse_request(
+            "POST /logout HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\nCookie: zelyra_session=old-token\r\n\r\n_zelyra_csrf=csrf-token",
+        )
+        .unwrap();
+        let response = app.dispatch(&request);
+        assert_eq!(response.status, 303);
+        let cookie = response
+            .headers
+            .iter()
+            .find(|(name, _)| name == "Set-Cookie")
+            .map(|(_, value)| value.as_str())
+            .unwrap();
+        assert!(cookie.contains("Max-Age=0"));
+        assert!(cookie.contains("; Secure"));
     }
 
     #[test]
@@ -8605,6 +9121,27 @@ mod tests {
     }
 
     #[test]
+    fn rejects_duplicate_security_sensitive_request_headers() {
+        for header in [
+            "Host",
+            "Origin",
+            "Referer",
+            "X-Forwarded-Proto",
+            "Cookie",
+            "Authorization",
+        ] {
+            let raw = format!("GET / HTTP/1.1\r\n{header}: first\r\n{header}: second\r\n\r\n");
+            let error = parse_request(&raw).unwrap_err();
+            assert!(
+                error
+                    .message
+                    .contains("duplicate security-sensitive header"),
+                "did not reject duplicate {header}"
+            );
+        }
+    }
+
+    #[test]
     fn validates_declared_request_body_length() {
         assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 2\r\n\r\nok").is_ok());
         assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 3\r\n\r\nok").is_err());
@@ -8668,7 +9205,7 @@ mod tests {
         assert!(wire.contains("Content-Length: 2\r\n"));
         assert!(wire.contains("X-Content-Type-Options: nosniff\r\n"));
         assert!(wire.contains("X-Frame-Options: DENY\r\n"));
-        assert!(wire.contains("Referrer-Policy: no-referrer\r\n"));
+        assert!(wire.contains("Referrer-Policy: same-origin\r\n"));
         assert!(wire.ends_with("\r\n\r\nok"));
     }
 
@@ -9618,6 +10155,61 @@ mod tests {
     }
 
     #[test]
+    fn mutating_api_rejects_cross_origin_browser_requests_unless_cors_allows_them() {
+        let route = ApiRoute::new("POST", "/mutate", |_request, _| {
+            Response::json(200, "{\"ok\":true}")
+        });
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![route.clone()])
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let cross_origin = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin).status, 403);
+
+        let same_origin = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&same_origin).status, 200);
+
+        let policy = CorsPolicy::new(vec!["https://attacker.test".into()], true).unwrap();
+        let explicitly_allowed = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![route])
+            .with_cors(policy)
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        assert_eq!(explicitly_allowed.dispatch(&cross_origin).status, 200);
+
+        let cookie_only = parse_request(
+            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cookie_only).status, 403);
+
+        let get_route = ApiRoute::new("GET", "/possibly-stateful", |_request, _| {
+            Response::json(200, "{\"ok\":true}")
+        });
+        let app = WebApp::new(Vec::new(), Vec::new())
+            .with_apis(vec![get_route])
+            .with_allowed_hosts(vec!["example.test".into()])
+            .unwrap();
+        let cross_origin_get = parse_request(
+            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin_get).status, 403);
+
+        let same_origin_get = parse_request(
+            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nReferer: http://example.test/customers\r\nCookie: zelyra_session=session-token\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&same_origin_get).status, 200);
+    }
+
+    #[test]
     fn crud_delete_requires_csrf() {
         let app = WebApp::with_database_url(
             Vec::new(),
@@ -9834,24 +10426,31 @@ mod tests {
     fn form_post_requires_csrf_and_reports_validation_errors() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let invalid_csrf = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
         )
         .unwrap();
         assert_eq!(app.dispatch(&invalid_csrf).status, 403);
 
-        let missing_name =
-            parse_request("POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token")
-                .unwrap();
+        let missing_name = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token",
+        )
+        .unwrap();
         let response = app.dispatch(&missing_name);
         assert_eq!(response.status, 422);
         assert!(response.body.contains("value is required"));
+
+        let cross_origin = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: https://attacker.test\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+        )
+        .unwrap();
+        assert_eq!(app.dispatch(&cross_origin).status, 403);
     }
 
     #[test]
     fn form_post_returns_accepted_after_validating_input() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
         )
         .unwrap();
         let response = app.dispatch(&request);
@@ -9939,7 +10538,7 @@ mod tests {
         });
         let app = WebApp::new(Vec::new(), vec![route]);
         let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
         )
         .unwrap();
         assert_eq!(app.dispatch(&request).status, 503);

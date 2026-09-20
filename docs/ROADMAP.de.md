@@ -61,8 +61,11 @@ den tatsächlich implementierten Stand.
   und englischer Fallback bleiben aktiv. Fachdatensätze und unmarkierte eigene
   Texte werden nicht übersetzt. Umfassendere Vorlagenabdeckung und ein
   vollständiger Theme-Editor bleiben offen.
-- [x] Authentifizierung, persistente Sessions, CSRF, Argon2-Passwörter, direkte
-  und rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
+- [x] Authentifizierung, persistente Sessions, Argon2-Passwörter, direkte und
+  rollenbasierte Berechtigungen, Browserverwaltung und MariaDB-Audit.
+  Schreibende Browseranfragen benötigen zusätzlich gleichursprüngliche
+  Nachweise; der 0.2.0-Branch ergänzt eine Loopback-Host-Allowlist gegen
+  manipulierte Hosts und DNS-Rebinding.
 - [~] Audit-Befehle: Anzeige, JSON/CSV-Export, strukturelle Prüfung und
   bestätigtes Bereinigen sind verfügbar. Manipulationssichere Verkettung ist
   optional verfügbar; Archivierung und Aufbewahrung bleiben offen.
@@ -126,9 +129,11 @@ Feature eines bestimmten Anbieters.
   mit benutzerlokalen, wiederholbaren Bash-/PowerShell-Installern verfügbar;
   eine Rust-freie Release-Installation ist für veröffentlichte Linux-/Windows-
   x86_64-Assets verfügbar.
-- [~] Release-Archive mit SHA-256-Checksums sind für Linux und Windows x86_64
-  verfügbar; signierte Binaries und Checksums für jede unterstützte Plattform
-  bleiben offen.
+- [~] Release-Archive mit SHA-256-Prüfsummen sind für Linux und Windows x86_64
+  verfügbar. Der 0.2.0-Branch ergänzt festgelegte Build-Werkzeuge, wiederholte
+  Binär-Builds und normalisierte Archive mit Byte-für-Byte-Packagingtests;
+  die Branch-CI muss den finalen Release-Kandidaten noch prüfen. Signierte
+  Binärdateien und Prüfsummen für alle unterstützten Plattformen fehlen noch.
 - [~] Benutzerlokale Installations-, Prüf-, Update- und Deinstallationswege mit
   Dry-Run und sicheren Diagnosen sind verfügbar. Zusätzlich prüft
   `zelyra update [--check]` stabile GitHub-Releases und verifiziert eine
@@ -551,10 +556,13 @@ Freigabekriterien bestanden sind.
   Primärschlüsseln und Serial-/Identity-Eigenschaften wird erkannt und
   abgelehnt; Migrationen dieser Metadatenänderungen werden noch nicht
   unterstützt.
-- [ ] **Release-Nachweise:** Zweisprachige Quickstarts, Plattformprüfungen,
-  vollständige automatisierte Tests, Sicherheitsreview des ausgelieferten
-  vertikalen Anwendungswegs und reproduzierbare Release-Artefakte müssen vor
-  dem Tag 0.2.0 bestanden sein.
+- [~] **Release-Nachweise:** Zweisprachige Quickstarts und
+  Plattformvalidierung liegen vor. Dieser Branch ergänzt ein internes
+  Sicherheitsreview des ausgelieferten vertikalen Anwendungswegs sowie
+  festgelegte, wiederholbare Release-Pakete. Branch-CI, vollständige Workspace-
+  und datenbankgestützte Prüfungen sowie eine Ersteinstiegsabnahme des
+  Release-Kandidaten auf einem sauberen System müssen vor dem Tag `0.2.0` noch
+  erfolgreich sein; ein externes Sicherheitsaudit wird nicht behauptet.
 
 Für 0.2.0 sind weder ein visueller Drag-and-drop-Editor noch eine Anbindung an
 einen KI-Anbieter, Compiler-Self-Hosting, vollständige formale Verifikation

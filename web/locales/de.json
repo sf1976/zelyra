@@ -65,6 +65,7 @@
   "error.authentication_required": "Eine Anmeldung ist erforderlich.",
   "error.missing_permission": "Die erforderliche Berechtigung fehlt: {permission}",
   "error.invalid_csrf": "Das CSRF-Token ist ungültig.",
+  "error.host_not_allowed": "Der Hostname dieser Anfrage ist nicht freigegeben.",
   "error.email_password_required": "E-Mail-Adresse und Passwort sind erforderlich.",
   "error.login_throttled": "Zu viele fehlgeschlagene Anmeldeversuche. Bitte versuchen Sie es später erneut.",
   "error.invalid_credentials": "Die Anmeldedaten sind ungültig.",
