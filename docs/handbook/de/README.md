@@ -630,12 +630,12 @@ Unique-Constraint-Änderungen werden derzeit nicht unterstützt. Neue und
 entfernte MariaDB-Foreign-Keys benötigen `REVIEW`; SQLite-Foreign-Key-Umbauten
 werden abgelehnt. Die Integrationstests prüfen, dass bei einem fehlgeschlagenen
 Unique-Constraint keine doppelten Zeilen verloren gehen und ungültige
-Foreign-Key-Beziehungen erhalten bleiben. MariaDB-Drift bei Defaults,
-Primärschlüsseln und Auto-Increment sowie SQLite-Drift bei Defaults,
-Primärschlüsseln und explizitem `AUTOINCREMENT` werden erkannt und als
-`UNSUPPORTED` markiert. PostgreSQL-Drift bei Defaults, Primärschlüsseln sowie
-Serial-/Identity-Eigenschaften wird ebenfalls erkannt und blockiert; CI prüft
-die Schemasicherheit mit Version 16, jedoch keine Runtime-Parität. MariaDB kann
+Foreign-Key-Beziehungen erhalten bleiben. Defaultänderungen bei MariaDB und
+PostgreSQL erscheinen als `REVIEW`; Tests decken Setzen, Ändern und Entfernen,
+den Erhalt bestehender Werte und idempotente Neuplanung ab. SQLite-
+Defaultänderungen sowie Primärschlüssel-/Auto-Increment-Drift bleiben auf allen
+Backends `UNSUPPORTED`; CI prüft die PostgreSQL-Schemasicherheit mit Version
+16, jedoch keine Runtime-Parität. MariaDB kann
 vorhandenen Zeilen beim ausdrücklich freigegebenen Hinzufügen einer
 Pflichtspalte ohne Standardwert
 engineabhängige implizite Werte geben; prüfe die Daten vor ihrer Nutzung. Nicht

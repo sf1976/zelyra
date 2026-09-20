@@ -114,11 +114,12 @@ specialized migration implementation. Adding or removing MariaDB foreign keys
 requires `REVIEW`; SQLite foreign-key alterations are blocked until table
 rebuilds are supported. The planner preserves unrecognized external indexes
 and refuses untracked foreign-key removals rather than guessing ownership.
-MariaDB default, primary-key, and auto-increment drift plus SQLite default,
-primary-key, and explicit `AUTOINCREMENT` drift are detected but blocked as
-`UNSUPPORTED` until safe backend-specific migrations are implemented.
-PostgreSQL default, primary-key, and serial/identity drift is also detected and
-blocked; its schema-safety integration runs against PostgreSQL 16 in CI. This
-does not establish PostgreSQL runtime parity. Type changes and nullability
-changes are classified independently, preventing a safe type widening from
-masking unsupported nullability drift.
+MariaDB and PostgreSQL default additions, changes, and removals produce
+`REVIEW` plans and require `--allow-risky`; integration tests verify that
+existing values survive and that replanning is idempotent. SQLite default
+changes and primary-key/auto-increment metadata changes, as well as
+primary-key/auto-increment changes on MariaDB and PostgreSQL, remain
+`UNSUPPORTED`. PostgreSQL schema-safety integration runs against PostgreSQL 16
+in CI; this does not establish PostgreSQL runtime parity. Type changes and
+nullability changes are classified independently, preventing a safe type
+widening from masking unsupported nullability drift.

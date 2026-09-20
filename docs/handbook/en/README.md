@@ -565,11 +565,12 @@ SQLite type, foreign-key, and unique-constraint alterations are currently
 unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`; SQLite
 foreign-key alterations are refused. The schema-safety integration verifies
 that a failed unique-constraint creation leaves duplicate rows intact and
-invalid foreign-key relationships are retained. MariaDB default, primary-key,
-and auto-increment drift plus SQLite default, primary-key, and explicit
-`AUTOINCREMENT` drift and PostgreSQL default, key, and serial/identity drift
-are detected and marked `UNSUPPORTED`; PostgreSQL schema-safety tests run on
-version 16 in CI, not as a runtime-parity guarantee. MariaDB may
+invalid foreign-key relationships are retained. MariaDB and PostgreSQL default
+changes are marked `REVIEW`; tests cover setting, changing, and removing them,
+verify retained values, and check that replanning is idempotent. SQLite default
+changes and primary-key/auto-increment drift on all backends remain
+`UNSUPPORTED`; PostgreSQL schema-safety tests run on version 16 in CI, not as a
+runtime-parity guarantee. MariaDB may
 assign engine-specific implicit values to existing rows when an approved
 required column has no default, so verify the resulting data before using it.
 Unrecognized external indexes are preserved; untracked foreign-key removals

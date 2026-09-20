@@ -37,16 +37,19 @@ can run the same scripts against a disposable MariaDB service:
 - `tests/mariadb-e2e.sh`: schema setup, inspection, idempotent planning,
   relationship-backed CRUD over HTTP, and search/filter/sort/pagination.
 - `tests/schema-safety-e2e.sh`: destructive column drops require approval;
-  required columns without defaults, new unique constraints, and MariaDB
-  foreign-key additions/removals are marked `REVIEW`; duplicate rows survive a
-  rejected unique-index creation and orphan rows survive a rejected foreign-key
-  addition; unsupported nullability changes and SQLite type, foreign-key, and
-  unique-constraint alterations are blocked by `E-DB-006` even with approval;
-  MariaDB default/key/auto-increment and SQLite default/key/explicit
-  `AUTOINCREMENT` drift are detected and refused rather than silently ignored.
-- `tests/postgres-schema-safety-e2e.sh` checks PostgreSQL default, primary-key,
-  serial, and identity metadata drift against PostgreSQL 16. It is a schema
-  safety check, not a PostgreSQL runtime compatibility claim.
+  required columns without defaults, new unique constraints, MariaDB foreign-
+  key additions/removals, and MariaDB default changes are marked `REVIEW`.
+  Tests verify that setting/changing/removing defaults requires approval,
+  retains existing values, and produces an idempotent next plan. Duplicate
+  rows survive a rejected unique-index creation and orphan rows survive a
+  rejected foreign-key addition; unsupported nullability changes and SQLite
+  type, foreign-key, unique-constraint, and default alterations are blocked by
+  `E-DB-006` even with approval. MariaDB primary-key/auto-increment and SQLite
+  key/explicit `AUTOINCREMENT` drift remain blocked.
+- `tests/postgres-schema-safety-e2e.sh` checks PostgreSQL default changes under
+  `REVIEW` approval and primary-key, serial, and identity metadata drift against
+  PostgreSQL 16. It is a schema safety check, not a PostgreSQL runtime
+  compatibility claim.
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
 schema-safety test creates and drops only a uniquely named test database. It

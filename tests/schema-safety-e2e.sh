@@ -390,6 +390,61 @@ assert_mariadb_safety() {
     [[ "${fk_count}" == "0" ]]
     echo "[MariaDB] foreign-key changes require review and retain data"
 
+    local defaults_before defaults_added defaults_changed defaults_plan defaults_state
+    defaults_before="${fixture_dir}/schema_safety_defaults_before_mariadb.zyl"
+    defaults_added="${fixture_dir}/schema_safety_defaults_added_mariadb.zyl"
+    defaults_changed="${fixture_dir}/schema_safety_defaults_changed_mariadb.zyl"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db bootstrap "${defaults_before}" >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records(active, label) VALUES (0, 'existing');"
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_added}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_added}" 2>&1)"; then
+        echo "error: MariaDB applied changed defaults without review approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_added}" --allow-risky >/dev/null
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=1;")" == "0:existing" ]]
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records() VALUES ();"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=2;")" == "1:pending" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_changed}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_changed}" --allow-risky >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "INSERT INTO default_records() VALUES ();"
+    [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT(active, ':', label) FROM default_records WHERE id=3;")" == "0:reviewed" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+    grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+    grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+    DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${defaults_before}" --allow-risky >/dev/null
+    defaults_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM default_records), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='default_records' AND COLUMN_NAME IN ('active','label') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT label FROM default_records WHERE id=1));")"
+    [[ "${defaults_state}" == "3:0:existing" ]]
+    defaults_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+    grep -Fq "No schema changes." <<<"${defaults_plan}"
+    echo "[MariaDB] adding, changing, and removing defaults requires review, retains rows, and is idempotent"
+
     local metadata_before metadata_after metadata_plan metadata_state
     metadata_before="${fixture_dir}/schema_safety_metadata_before_mariadb.zyl"
     metadata_after="${fixture_dir}/schema_safety_metadata_after_mariadb.zyl"
@@ -401,8 +456,8 @@ assert_mariadb_safety() {
     metadata_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${metadata_after}")"
     grep -Fq "[UNSUPPORTED] change primary-key status of metadata_records.id" <<<"${metadata_plan}"
     grep -Fq "[UNSUPPORTED] change auto-increment status of metadata_records.id" <<<"${metadata_plan}"
-    grep -Fq "[UNSUPPORTED] change default of metadata_records.active" <<<"${metadata_plan}"
-    grep -Fq "[UNSUPPORTED] change default of metadata_records.name" <<<"${metadata_plan}"
+    grep -Fq "[REVIEW] change default of metadata_records.active" <<<"${metadata_plan}"
+    grep -Fq "[REVIEW] change default of metadata_records.name" <<<"${metadata_plan}"
     if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${metadata_after}" --allow-risky 2>&1)"; then
         echo "error: MariaDB applied schema metadata drift marked unsupported" >&2
         exit 1
@@ -413,7 +468,7 @@ assert_mariadb_safety() {
         --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
         -e "SELECT CONCAT((SELECT COUNT(*) FROM metadata_records WHERE name='retained'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME IN ('active','name') AND COLUMN_DEFAULT IS NOT NULL), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_database}' AND TABLE_NAME='metadata_records' AND COLUMN_NAME='id' AND COLUMN_KEY='PRI' AND EXTRA LIKE '%auto_increment%'));" )"
     [[ "${metadata_state}" == "1:0:1" ]]
-    echo "[MariaDB] default, primary-key, and auto-increment drift are detected and fail closed"
+    echo "[MariaDB] default drift is review-gated; primary-key and auto-increment drift remain blocked"
 }
 
 assert_sqlite_safety

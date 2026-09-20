@@ -41,18 +41,20 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
   beziehungsbasiertes CRUD über HTTP sowie Suche, Filter, Sortierung und
   Paginierung.
 - `tests/schema-safety-e2e.sh`: Destruktive Spalten-Drops benötigen Freigabe;
-  Pflichtspalten ohne Standardwert, neue Unique-Constraints sowie MariaDB-
-  Foreign-Key-Ergänzungen und -Entfernungen erscheinen als `REVIEW`; doppelte
-  Zeilen bleiben bei einem abgelehnten Unique-Index erhalten, verwaiste Zeilen
-  bei einem abgelehnten Foreign-Key nicht verloren; nicht unterstützte
-  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
-  Unique-Constraint-Änderungen werden auch mit Freigabe durch `E-DB-006`
-  blockiert; MariaDB-Default-/Schlüssel-/Auto-Increment-Drift sowie SQLite-
-  Default-/Schlüssel-/expliziter `AUTOINCREMENT`-Drift werden erkannt und
-  statt stillschweigend ignoriert abgelehnt.
-- `tests/postgres-schema-safety-e2e.sh` prüft PostgreSQL-Drift bei Defaults,
-  Primärschlüsseln sowie Serial- und Identity-Metadaten mit PostgreSQL 16. Das
-  ist ein Schemasicherheitstest, keine PostgreSQL-Runtime-Kompatibilitätszusage.
+  Pflichtspalten ohne Standardwert, neue Unique-Constraints, MariaDB-Foreign-
+  Key-Ergänzungen/-Entfernungen und MariaDB-Defaultänderungen erscheinen als
+  `REVIEW`. Tests prüfen, dass Setzen/Ändern/Entfernen von Defaults Freigabe
+  erfordert, bestehende Werte erhält und danach idempotent geplant wird.
+  Doppelte Zeilen bleiben bei einem abgelehnten Unique-Index erhalten,
+  verwaiste Zeilen bei einem abgelehnten Foreign Key; nicht unterstützte
+  Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key-, Unique-Constraint-
+  und Defaultänderungen werden auch mit Freigabe durch `E-DB-006` blockiert.
+  MariaDB-Primärschlüssel-/Auto-Increment- und SQLite-Schlüssel-/explizite
+  `AUTOINCREMENT`-Drift bleiben blockiert.
+- `tests/postgres-schema-safety-e2e.sh` prüft PostgreSQL-Defaultänderungen mit
+  `REVIEW`-Freigabe sowie Primärschlüssel-, Serial- und Identity-Metadaten-Drift
+  mit PostgreSQL 16. Das ist ein Schemasicherheitstest, keine
+  PostgreSQL-Runtime-Kompatibilitätszusage.
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine

@@ -215,12 +215,15 @@ Feature eines bestimmten Anbieters.
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
-  Auto-Increment für MariaDB sowie bei Defaults, Primärschlüsseln und
-  explizitem `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln
-  und Serial-/Identity-Eigenschaften für PostgreSQL. Diese Änderungen werden
-  als `UNSUPPORTED` fail-closed abgelehnt; sichere backend-spezifische
-  Migrationen bleiben geplant. PostgreSQL-Schemasicherheit wird in CI mit
-  PostgreSQL 16 geprüft; das ist keine Runtime-Paritätsaussage.
+  Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
+  `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und
+  Serial-/Identity-Eigenschaften für PostgreSQL. Das Setzen, Ändern und
+  Entfernen von Defaults erzeugt für MariaDB und PostgreSQL nun `REVIEW`-Pläne
+  und benötigt `--allow-risky`; E2E-Tests prüfen Datenerhalt und idempotente
+  Neuplanung. SQLite-Defaultänderungen sowie Schlüssel-/Auto-Increment-Drift
+  bleiben `UNSUPPORTED`. Schlüssel-/Auto-Increment-Änderungen bleiben auch
+  für MariaDB und PostgreSQL `UNSUPPORTED`. PostgreSQL-Schemasicherheit wird
+  in CI mit PostgreSQL 16 geprüft; das ist keine Runtime-Paritätsaussage.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
@@ -514,9 +517,10 @@ Freigabekriterien bestanden sind.
   und -Entfernungen erscheinen als `REVIEW`; doppelte beziehungsweise
   verwaiste Zeilen bleiben erhalten, wenn Index- oder Foreign-Key-Änderungen
   scheitern. Unbekannte externe Indizes bleiben bestehen, nicht verfolgte
-  Foreign-Key-Entfernungen werden fail-closed blockiert. Nicht unterstützte
-  Default-, Schlüssel- und Auto-Increment-Änderungen werden erkannt und mit
-  `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
+  Foreign-Key-Entfernungen werden fail-closed blockiert. Default-Drift bei
+  MariaDB und PostgreSQL wird als `REVIEW` geführt; SQLite-Defaultänderungen
+  sowie Primärschlüssel-/Auto-Increment-Änderungen ohne unterstützte Migration
+  werden mit `E-DB-006` abgelehnt. `--allow-destructive` genehmigt
   keine `REVIEW`-Änderungen; diese benötigen nach Prüfung `--allow-risky`.
   Nullbarkeitsänderungen sowie SQLite-Typ-, Foreign-Key- und
   Unique-Constraint-Änderungen werden noch nicht unterstützt. Typ- und

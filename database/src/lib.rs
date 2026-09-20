@@ -396,6 +396,17 @@ fn quote_identifier(value: &str, backend: Backend) -> String {
     }
 }
 
+fn alter_column_default_sql(table: &Table, column: &Column, backend: Backend) -> String {
+    let table_name = quote_identifier(&table.name, backend);
+    let column_name = quote_identifier(&column.name, backend);
+    match &column.default {
+        Some(default) => {
+            format!("ALTER TABLE {table_name} ALTER COLUMN {column_name} SET DEFAULT {default};")
+        }
+        None => format!("ALTER TABLE {table_name} ALTER COLUMN {column_name} DROP DEFAULT;"),
+    }
+}
+
 fn quote_string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -697,16 +708,26 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                     )
                 };
                 if !defaults_match {
+                    let (sql, risk) = match backend {
+                        Backend::MariaDb | Backend::Postgres => (
+                            alter_column_default_sql(desired_table, desired_column, backend),
+                            Risk::RequiresApproval,
+                        ),
+                        Backend::Sqlite => (
+                            format!(
+                                "-- Changing the default of {}.{} requires a SQLite table rebuild, which is not supported by the current schema planner.",
+                                desired_table.name, desired_column.name
+                            ),
+                            Risk::Unsupported,
+                        ),
+                    };
                     plan.changes.push(SchemaChange {
                         description: format!(
                             "change default of {}.{}",
                             desired_table.name, desired_column.name
                         ),
-                        sql: format!(
-                            "-- Changing the default of {}.{} is not supported by the current schema planner.",
-                            desired_table.name, desired_column.name
-                        ),
-                        risk: Risk::Unsupported,
+                        sql,
+                        risk,
                     });
                 }
             }
@@ -2465,14 +2486,16 @@ mod tests {
             .changes
             .iter()
             .any(|change| change.description == "change auto-increment status of users.id"));
-        assert!(plan
-            .changes
-            .iter()
-            .any(|change| change.description == "change default of users.active"));
-        assert!(plan
-            .changes
-            .iter()
-            .any(|change| change.description == "change default of users.name"));
+        assert!(plan.changes.iter().any(|change| {
+            change.description == "change default of users.active"
+                && change.risk == Risk::RequiresApproval
+                && change.sql.contains("SET DEFAULT TRUE")
+        }));
+        assert!(plan.changes.iter().any(|change| {
+            change.description == "change default of users.name"
+                && change.risk == Risk::RequiresApproval
+                && change.sql.contains("SET DEFAULT 'new'")
+        }));
 
         let current = schema(
             "database main { engine: mariadb } table users { id: Id primary auto active: Bool default true name: String default \"new\" }",
@@ -2486,6 +2509,58 @@ mod tests {
             .changes
             .iter()
             .any(|change| change.description == "change primary-key status of users.id"));
+    }
+
+    #[test]
+    fn plans_reviewable_default_set_change_and_drop_for_mariadb_and_postgres() {
+        for (engine, quote) in [("mariadb", '`'), ("postgres", '"')] {
+            let source = |active_default: &str, name_default: &str| {
+                format!(
+                    "database main {{ engine: {engine} }} table users {{ id: Id primary auto active: Bool required{active_default} name: String(80) required{name_default} }}"
+                )
+            };
+            let identifier = |name: &str| format!("{quote}{name}{quote}");
+            let no_defaults = source("", "");
+            let initial_defaults = source(" default true", " default \"first\"");
+            let changed_defaults = source(" default false", " default \"O'Reilly\"");
+
+            let add = diff(&schema(&initial_defaults), &schema(&no_defaults));
+            assert_eq!(add.changes.len(), 2);
+            assert!(add
+                .changes
+                .iter()
+                .all(|change| change.risk == Risk::RequiresApproval));
+            assert!(add.changes[0].sql.contains(&format!(
+                "ALTER TABLE {} ALTER COLUMN {} SET DEFAULT TRUE;",
+                identifier("users"),
+                identifier("active")
+            )));
+            assert!(add.changes[1].sql.contains(&format!(
+                "ALTER TABLE {} ALTER COLUMN {} SET DEFAULT 'first';",
+                identifier("users"),
+                identifier("name")
+            )));
+
+            let change = diff(&schema(&changed_defaults), &schema(&initial_defaults));
+            assert_eq!(change.changes.len(), 2);
+            assert!(change
+                .changes
+                .iter()
+                .all(|change| change.risk == Risk::RequiresApproval));
+            assert!(change.changes[0].sql.contains("SET DEFAULT FALSE"));
+            assert!(change.changes[1].sql.contains("SET DEFAULT 'O''Reilly'"));
+
+            let drop = diff(&schema(&no_defaults), &schema(&initial_defaults));
+            assert_eq!(drop.changes.len(), 2);
+            assert!(drop
+                .changes
+                .iter()
+                .all(|change| change.risk == Risk::RequiresApproval));
+            assert!(drop
+                .changes
+                .iter()
+                .all(|change| change.sql.contains("DROP DEFAULT;")));
+        }
     }
 
     #[test]

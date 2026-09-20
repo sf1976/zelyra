@@ -201,11 +201,15 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
-  auto-increment drift, plus SQLite default, primary-key, and explicit
-  `AUTOINCREMENT` drift, plus PostgreSQL default, primary-key, and
-  serial/identity drift. These changes fail closed as `UNSUPPORTED`; safe
-  backend-specific migrations remain planned. PostgreSQL schema safety is
-  exercised against PostgreSQL 16 in CI, not as a runtime-parity claim.
+  auto-increment drift; SQLite default, primary-key, and explicit
+  `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and
+  serial/identity drift. MariaDB and PostgreSQL default additions, changes,
+  and removals now generate `REVIEW` plans and require `--allow-risky`; E2E
+  tests verify retained rows and idempotent replanning. SQLite default changes
+  and key/auto-increment metadata changes remain `UNSUPPORTED`. MariaDB and
+  PostgreSQL key/auto-increment changes also remain `UNSUPPORTED`. PostgreSQL
+  schema safety is exercised against PostgreSQL 16 in CI, not as a
+  runtime-parity claim.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
@@ -478,8 +482,9 @@ supported machine and the release gates below pass.
   end-to-end paths. The schema-safety test exercises both backends: destructive
   drops require approval; required columns without defaults, new unique
   constraints, and MariaDB foreign-key additions/removals are marked `REVIEW`;
-  default/primary-key/auto-increment drift detected by the current inspectors
-  is marked `UNSUPPORTED`;
+  MariaDB/PostgreSQL default drift is marked `REVIEW`; SQLite default changes
+  and primary-key/auto-increment changes without supported migrations remain
+  `UNSUPPORTED`;
   duplicate rows and orphan rows remain intact when index/foreign-key changes
   fail; unknown external indexes are preserved and untracked foreign-key
   removals fail closed. Unsupported changes fail closed with `E-DB-006`.

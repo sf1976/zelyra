@@ -117,12 +117,13 @@ und benötigen eine spezialisierte Migration. Hinzufügen und Entfernen von
 Foreign Keys benötigt bei MariaDB eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
 Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
 Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
-nicht erraten, sondern blockiert. MariaDB-Drift bei Defaults, Primärschlüsseln
-und Auto-Increment sowie SQLite-Drift bei Defaults, Primärschlüsseln und
-explizitem `AUTOINCREMENT` werden erkannt, aber bis zur Implementierung sicherer
-backend-spezifischer Migrationen als `UNSUPPORTED` blockiert. PostgreSQL-Drift
-bei Defaults, Primärschlüsseln und Serial-/Identity-Eigenschaften wird ebenfalls
-erkannt und blockiert; die Schemasicherheitsintegration läuft in CI mit
-PostgreSQL 16. Das belegt keine PostgreSQL-Runtime-Parität. Typ- und
-Nullbarkeitsänderungen werden unabhängig bewertet; eine sichere Typvergrößerung
-kann eine nicht unterstützte Nullbarkeitsänderung nicht verdecken.
+nicht erraten, sondern blockiert. Das Setzen, Ändern und Entfernen von Defaults
+erzeugt für MariaDB und PostgreSQL `REVIEW`-Pläne und benötigt `--allow-risky`;
+Integrationstests prüfen Datenerhalt und idempotente Neuplanung. SQLite-
+Defaultänderungen sowie Primärschlüssel-/Auto-Increment-Metadatenänderungen
+bleiben `UNSUPPORTED`; das gilt ebenso für Primärschlüssel- und
+Auto-Increment-Änderungen bei MariaDB und PostgreSQL. Die PostgreSQL-
+Schemasicherheitsintegration läuft in CI mit PostgreSQL 16. Das belegt keine
+PostgreSQL-Runtime-Parität. Typ- und Nullbarkeitsänderungen werden unabhängig
+bewertet; eine sichere Typvergrößerung kann eine nicht unterstützte
+Nullbarkeitsänderung nicht verdecken.

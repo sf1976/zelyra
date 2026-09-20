@@ -1,0 +1,10 @@
+database main {
+    engine: postgres
+    database: "zelyra_schema_safety"
+}
+
+table default_records {
+    id: Id primary auto
+    active: Bool required
+    label: String(80) required
+}

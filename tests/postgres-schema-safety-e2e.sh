@@ -50,8 +50,15 @@ base_url="${scheme}://${authority}/${base_database}"
 test_database="zelyra_schema_safety_$$"
 test_url="${scheme}://${authority}/${test_database}"
 database_created=false
+defaults_database="zelyra_schema_defaults_$$"
+defaults_url="${scheme}://${authority}/${defaults_database}"
+defaults_database_created=false
 
 cleanup() {
+    if [[ "${defaults_database_created}" == true ]]; then
+        psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+            --command="DROP DATABASE IF EXISTS \"${defaults_database}\";" >/dev/null 2>&1 || true
+    fi
     if [[ "${database_created}" == true ]]; then
         psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
             --command="DROP DATABASE IF EXISTS \"${test_database}\";" >/dev/null 2>&1 || true
@@ -86,6 +93,58 @@ psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
 orphaned_sequence_plan="$(DATABASE_URL="${test_url}" "${zelyra_bin}" db plan "${before}")"
 grep -Fq "[UNSUPPORTED] change auto-increment status of detached_sequence_records.id" <<<"${orphaned_sequence_plan}"
 
+defaults_before="${fixture_dir}/schema_safety_defaults_before_postgres.zyl"
+defaults_added="${fixture_dir}/schema_safety_defaults_added_postgres.zyl"
+defaults_changed="${fixture_dir}/schema_safety_defaults_changed_postgres.zyl"
+if ! psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+    --command="CREATE DATABASE \"${defaults_database}\";" >/dev/null 2>&1; then
+    echo "error: could not create the isolated PostgreSQL defaults test database" >&2
+    exit 1
+fi
+defaults_database_created=true
+DATABASE_URL="${defaults_url}" "${zelyra_bin}" db apply "${defaults_before}" >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${defaults_url}" \
+    --command="INSERT INTO public.default_records(active, label) VALUES (false, 'existing');" >/dev/null
+defaults_plan="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db plan "${defaults_added}")"
+grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+if output="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db apply "${defaults_added}" 2>&1)"; then
+    echo "error: PostgreSQL applied changed defaults without review approval" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-004]" <<<"${output}"
+DATABASE_URL="${defaults_url}" "${zelyra_bin}" db apply "${defaults_added}" --allow-risky >/dev/null
+[[ "$(psql -X -At --dbname="${defaults_url}" \
+    --command="SELECT active::text || ':' || label FROM public.default_records WHERE id=1;")" == "false:existing" ]]
+psql -X -v ON_ERROR_STOP=1 --dbname="${defaults_url}" \
+    --command="INSERT INTO public.default_records DEFAULT VALUES;" >/dev/null
+[[ "$(psql -X -At --dbname="${defaults_url}" \
+    --command="SELECT active::text || ':' || label FROM public.default_records WHERE id=2;")" == "true:pending" ]]
+defaults_plan="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db plan "${defaults_changed}")"
+grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+DATABASE_URL="${defaults_url}" "${zelyra_bin}" db apply "${defaults_changed}" --allow-risky >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${defaults_url}" \
+    --command="INSERT INTO public.default_records DEFAULT VALUES;" >/dev/null
+[[ "$(psql -X -At --dbname="${defaults_url}" \
+    --command="SELECT active::text || ':' || label FROM public.default_records WHERE id=3;")" == "false:reviewed" ]]
+defaults_plan="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+grep -Fq "[REVIEW] change default of default_records.active" <<<"${defaults_plan}"
+grep -Fq "[REVIEW] change default of default_records.label" <<<"${defaults_plan}"
+DATABASE_URL="${defaults_url}" "${zelyra_bin}" db apply "${defaults_before}" --allow-risky >/dev/null
+defaults_state="$(psql -X -At --dbname="${defaults_url}" --command="
+    SELECT
+        (SELECT count(*)::text FROM public.default_records) || ':' ||
+        (SELECT count(*)::text FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='default_records'
+              AND column_name IN ('active','label') AND column_default IS NOT NULL) || ':' ||
+        (SELECT label FROM public.default_records WHERE id=1);
+")"
+[[ "${defaults_state}" == "3:0:existing" ]]
+defaults_plan="$(DATABASE_URL="${defaults_url}" "${zelyra_bin}" db plan "${defaults_before}")"
+grep -Fq "No schema changes." <<<"${defaults_plan}"
+echo "[PostgreSQL] adding, changing, and removing defaults requires review, retains rows, and is idempotent"
+
 psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
     --command="INSERT INTO public.pg_metadata_records(active, name) VALUES (false, 'retained');" >/dev/null
 
@@ -94,8 +153,8 @@ for expected_change in \
     "[UNSUPPORTED] change primary-key status of pg_metadata_records.id" \
     "[UNSUPPORTED] change auto-increment status of pg_metadata_records.id" \
     "[UNSUPPORTED] change auto-increment status of detached_sequence_records.id" \
-    "[UNSUPPORTED] change default of pg_metadata_records.active" \
-    "[UNSUPPORTED] change default of pg_metadata_records.name"; do
+    "[REVIEW] change default of pg_metadata_records.active" \
+    "[REVIEW] change default of pg_metadata_records.name"; do
     if ! grep -Fq "${expected_change}" <<<"${metadata_plan}"; then
         echo "error: expected PostgreSQL plan entry was missing: ${expected_change}" >&2
         printf '%s\n' "${metadata_plan}" >&2
@@ -139,4 +198,4 @@ if [[ "${metadata_state}" != "1:1:true:false:false:true:true" ]]; then
     echo "error: PostgreSQL schema or retained data changed after refusal (state ${metadata_state})" >&2
     exit 1
 fi
-echo "[PostgreSQL] default, primary-key, and identity drift is detected and refused"
+echo "[PostgreSQL] default changes require review and apply; unsupported key and identity drift is refused"
