@@ -111,11 +111,14 @@ and planning are available, but runtime parity is not. SQL Server is not
 integrated yet. MariaDB and PostgreSQL nullability changes produce `REVIEW`
 plans. Tightening a column to `NOT NULL` requires approval and a read-only
 preflight; if existing rows contain NULL, Zelyra refuses the entire plan before
-executing any schema SQL. MariaDB applies the DDL in strict mode to prevent
-implicit NULL-to-default coercion. SQLite nullability and type, foreign-key,
-and unique-constraint alterations remain unsupported. Adding or removing
-MariaDB foreign keys requires `REVIEW`; SQLite foreign-key alterations are blocked until table
-rebuilds are supported. The planner preserves unrecognized external indexes
+executing any schema SQL. MariaDB applies protected DDL in strict mode to
+prevent implicit value coercion. SQLite nullability and type, foreign-key, and
+unique-constraint alterations remain unsupported. Adding or removing MariaDB
+foreign keys requires `REVIEW`; SQLite foreign-key alterations are blocked
+until table rebuilds are supported. Adding a required column without a default
+to an existing table requires `REVIEW` and an empty-table preflight; populated
+tables are refused before any plan SQL. The planner preserves unrecognized
+external indexes
 and refuses untracked foreign-key removals rather than guessing ownership.
 MariaDB and PostgreSQL default additions, changes, and removals produce
 `REVIEW` plans and require `--allow-risky`; integration tests verify that

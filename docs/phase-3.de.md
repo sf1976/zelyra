@@ -114,14 +114,16 @@ und -Planung sind verfügbar, aber nicht die Runtime-Parität. SQL Server ist
 noch nicht integriert. Nullbarkeitsänderungen bei MariaDB und PostgreSQL
 erzeugen `REVIEW`-Pläne. Die Verschärfung auf `NOT NULL` benötigt Freigabe und
 einen lesenden Preflight; enthält eine vorhandene Zeile `NULL`, verweigert
-Zelyra den gesamten Plan, bevor Schema-SQL ausgeführt wird. MariaDB führt das
-DDL im Strict-Modus aus, damit NULL-Werte nicht stillschweigend in implizite
-Standardwerte umgewandelt werden. SQLite-Nullbarkeit sowie SQLite-Typ-,
+Zelyra den gesamten Plan, bevor Schema-SQL ausgeführt wird. MariaDB führt
+geschütztes DDL im Strict-Modus aus, damit keine Werte stillschweigend in
+implizite Standardwerte umgewandelt werden. SQLite-Nullbarkeit sowie SQLite-Typ-,
 Foreign-Key- und Unique-Constraint-Änderungen bleiben nicht unterstützt und
 benötigen einen spezialisierten Tabellenumbau. Hinzufügen und Entfernen von
 MariaDB-Foreign-Keys benötigt eine `REVIEW`-Freigabe; SQLite-Foreign-Key-
-Änderungen werden ohne Tabellenumbau blockiert. Nicht zugeordnete externe
-Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
+Änderungen werden ohne Tabellenumbau blockiert. Eine Pflichtspalte ohne
+Standardwert benötigt bei einer bestehenden Tabelle `REVIEW`; ein lesender
+Preflight blockiert befüllte Tabellen, bevor Plan-SQL ausgeführt wird. Nicht
+zugeordnete externe Indizes bleiben erhalten; nicht verfolgte Foreign-Key-Entfernungen werden
 nicht erraten, sondern blockiert. Das Setzen, Ändern und Entfernen von Defaults
 erzeugt für MariaDB und PostgreSQL `REVIEW`-Pläne und benötigt `--allow-risky`;
 Integrationstests prüfen Datenerhalt und idempotente Neuplanung. SQLite-

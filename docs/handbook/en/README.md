@@ -560,11 +560,15 @@ zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
 `UNSUPPORTED` changes are refused even with approval. A required column without
-a default and a new unique constraint need review. MariaDB and PostgreSQL
+a default and a new unique constraint need review. When adding a required
+no-default column to an existing table, Zelyra checks that the table is empty
+before applying any plan SQL; a populated table is refused even with
+`--allow-risky`. To preserve existing data, stage the change: add the column as
+nullable, backfill it, then make it required. MariaDB and PostgreSQL
 nullability changes require `REVIEW`; tightening to `NOT NULL` runs a read-only
 preflight before any plan SQL. If existing rows contain `NULL`, the whole plan
 is refused without applying any of its changes. MariaDB also enables strict
-mode for the DDL so a concurrent NULL cannot be silently coerced. SQLite
+mode for protected DDL so values cannot be silently coerced. SQLite
 nullability and type, foreign-key, and unique-constraint alterations remain
 unsupported. Adding or removing MariaDB foreign keys requires `REVIEW`;
 SQLite foreign-key alterations are refused. The schema-safety integration verifies
@@ -574,9 +578,8 @@ changes are marked `REVIEW`; tests cover setting, changing, and removing them,
 verify retained values, and check that replanning is idempotent. SQLite default
 changes and primary-key/auto-increment drift on all backends remain
 `UNSUPPORTED`; PostgreSQL schema-safety tests run on version 16 in CI, not as a
-runtime-parity guarantee. MariaDB may
-assign engine-specific implicit values to existing rows when an approved
-required column has no default, so verify the resulting data before using it.
+runtime-parity guarantee. The preflight also prevents MariaDB from assigning
+engine-specific implicit values to existing rows for this operation.
 Unrecognized external indexes are preserved; untracked foreign-key removals
 are blocked instead of guessed.
 

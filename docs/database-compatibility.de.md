@@ -63,10 +63,12 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine
-eindeutig benannte Testdatenbank. Der Sicherheitstest prüft außerdem, dass
-MariaDBs Verhalten beim Hinzufügen einer Pflichtspalte ohne Standardwert nie
-ohne ausdrückliche Freigabe ausgelöst wird; nach Freigabe müssen vorhandene
-Werte geprüft werden, bevor Anwendungscode sich darauf verlässt. Zelyra-Indizes
+eindeutig benannte Testdatenbank. Eine Pflichtspalte ohne Standardwert in einer
+bestehenden Tabelle benötigt `REVIEW`; nach der Freigabe blockiert eine lesende
+Existenzprüfung befüllte Tabellen, bevor irgendein Plan-SQL läuft. Leere
+Tabellen können fortfahren. Für befüllte Tabellen ist ein gestuftes Vorgehen
+vorgesehen: Spalte zunächst optional hinzufügen, Daten auffüllen, danach zur
+Pflichtspalte machen. Zelyra-Indizes
 werden anhand ihrer generierten Namen als verwaltet erkannt; unbekannte Indizes
 bleiben erhalten. `--allow-destructive` genehmigt keine `REVIEW`-Änderungen;
 dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.

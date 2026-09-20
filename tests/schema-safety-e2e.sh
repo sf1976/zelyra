@@ -97,6 +97,7 @@ assert_sqlite_safety() {
     required_after="${fixture_dir}/schema_safety_required_after_sqlite.zyl"
     required_plan="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db plan "${required_after}")"
     grep -Fq "[REVIEW] add required column safety_records.review_value without a default" <<<"${required_plan}"
+    grep -Fq "[PREFLIGHT] verify \`safety_records\` is empty before adding required column \`review_value\` without a default" <<<"${required_plan}"
     if output="$(DATABASE_URL="${sqlite_url}" "${zelyra_bin}" db apply "${required_after}" 2>&1)"; then
         echo "error: SQLite unexpectedly accepted a required column without approval" >&2
         exit 1
@@ -108,8 +109,10 @@ assert_sqlite_safety() {
         exit 1
     fi
     grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "table contains existing rows; no schema SQL was applied" <<<"${output}"
+    [[ "$(sqlite3 "${database_path}" "PRAGMA table_info(safety_records);" | cut -d'|' -f2 | grep -cx review_value || true)" == "0" ]]
     [[ "$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
-    echo "[SQLite] required column requires review; failed backfill attempt preserves rows"
+    echo "[SQLite] required-column preflight refuses non-empty tables before any plan SQL"
 
     local nullable_after nullable_plan
     nullable_after="${fixture_dir}/schema_safety_nullable_after_sqlite.zyl"
@@ -311,25 +314,27 @@ assert_mariadb_safety() {
     required_after="${fixture_dir}/schema_safety_required_after_mariadb.zyl"
     required_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${required_after}")"
     grep -Fq "[REVIEW] add required column safety_records.review_value without a default" <<<"${required_plan}"
+    grep -Fq "[PREFLIGHT] verify \`safety_records\` is empty before adding required column \`review_value\` without a default" <<<"${required_plan}"
     if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${required_after}" 2>&1)"; then
         echo "error: MariaDB unexpectedly accepted a required column without approval" >&2
         exit 1
     fi
     grep -Fq "error[E-DB-004]" <<<"${output}"
+    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${required_after}" --allow-risky 2>&1)"; then
+        echo "error: MariaDB added a required no-default column to a non-empty table" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "table contains existing rows; no schema SQL was applied" <<<"${output}"
     [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
         --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
         --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
         -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${mariadb_database}' AND table_name='safety_records' AND column_name='review_value';")" == "0" ]]
-    if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${required_after}" --allow-risky 2>&1)"; then
-        echo "[MariaDB] explicitly approved required column was applied; verify values before relying on the backfill"
-    else
-        grep -Fq "error[E-DB-005]" <<<"${output}"
-    fi
     [[ "$(MYSQL_PWD="${mariadb_password}" mariadb \
         --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
         --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
         -e "SELECT COUNT(*) FROM safety_records;")" == "3" ]]
-    echo "[MariaDB] required column requires review; default refusal preserves rows"
+    echo "[MariaDB] required-column preflight refuses non-empty tables before any plan SQL"
 
     local nullable_after nullable_plan
     nullable_after="${fixture_dir}/schema_safety_nullable_after_mariadb.zyl"

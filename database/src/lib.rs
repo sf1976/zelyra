@@ -446,6 +446,13 @@ fn nullability_count_sql(table: &str, column: &str, backend: Backend) -> String 
     )
 }
 
+fn table_has_rows_sql(table: &str, backend: Backend) -> String {
+    format!(
+        "SELECT CASE WHEN EXISTS (SELECT 1 FROM {} LIMIT 1) THEN 1 ELSE 0 END",
+        quote_identifier(table, backend)
+    )
+}
+
 fn quote_string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -600,10 +607,17 @@ pub struct NullabilityPreflight {
     pub column: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequiredColumnPreflight {
+    pub table: String,
+    pub column: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SchemaPlan {
     pub changes: Vec<SchemaChange>,
     pub nullability_preflights: Vec<NullabilityPreflight>,
+    pub required_column_preflights: Vec<RequiredColumnPreflight>,
 }
 
 impl SchemaPlan {
@@ -738,6 +752,13 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                     }
                 }
             } else {
+                if !desired_column.nullable && desired_column.default.is_none() {
+                    plan.required_column_preflights
+                        .push(RequiredColumnPreflight {
+                            table: desired_table.name.clone(),
+                            column: desired_column.name.clone(),
+                        });
+                }
                 plan.changes.push(SchemaChange {
                     description: if !desired_column.nullable && desired_column.default.is_none() {
                         format!(
@@ -960,6 +981,11 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
     plan.changes
         .sort_by_key(|change| change_order(&change.description));
     plan.nullability_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.column.cmp(&right.column))
+    });
+    plan.required_column_preflights.sort_by(|left, right| {
         left.table
             .cmp(&right.table)
             .then_with(|| left.column.cmp(&right.column))
@@ -1677,6 +1703,26 @@ pub fn count_null_values(
     output.trim().parse().map_err(|_| DatabaseError {
         message: "database returned an invalid NULL row count".into(),
     })
+}
+
+pub fn table_has_rows(
+    database_url: &str,
+    backend: Backend,
+    table: &str,
+) -> Result<bool, DatabaseError> {
+    let query = table_has_rows_sql(table, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => run_sqlite(&sqlite_path(database_url)?, &query)?,
+    };
+    match output.trim().parse::<u8>() {
+        Ok(0) => Ok(false),
+        Ok(1) => Ok(true),
+        _ => Err(DatabaseError {
+            message: "database returned an invalid table row-presence result".into(),
+        }),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -2865,6 +2911,65 @@ mod tests {
         assert_eq!(
             nullability_count_sql("user\"data", "e\"mail", Backend::Postgres),
             "SELECT COUNT(*) FROM \"user\"\"data\" WHERE \"e\"\"mail\" IS NULL"
+        );
+    }
+
+    #[test]
+    fn required_column_additions_to_existing_tables_require_an_empty_table_preflight() {
+        for engine in ["mariadb", "postgres", "sqlite"] {
+            let desired = schema(&format!(
+                "database main {{ engine: {engine} }} table users {{ id: Id primary auto name: String(80) required }}"
+            ));
+            let current = schema(&format!(
+                "database main {{ engine: {engine} }} table users {{ id: Id primary auto }}"
+            ));
+            let plan = diff(&desired, &current);
+            assert_eq!(plan.changes.len(), 1, "{engine}");
+            assert_eq!(plan.changes[0].risk, Risk::RequiresApproval, "{engine}");
+            assert_eq!(
+                plan.required_column_preflights,
+                [RequiredColumnPreflight {
+                    table: "users".into(),
+                    column: "name".into(),
+                }],
+                "{engine}"
+            );
+        }
+    }
+
+    #[test]
+    fn defaults_and_new_tables_do_not_require_required_column_preflights() {
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto name: String(80) required default \"new\" }",
+        );
+        let current =
+            schema("database main { engine: mariadb } table users { id: Id primary auto }");
+        assert!(diff(&desired, &current)
+            .required_column_preflights
+            .is_empty());
+
+        let new_table = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto name: String(80) required }",
+        );
+        let empty_schema = schema("database main { engine: mariadb }");
+        assert!(diff(&new_table, &empty_schema)
+            .required_column_preflights
+            .is_empty());
+    }
+
+    #[test]
+    fn table_presence_queries_quote_backend_identifiers() {
+        assert_eq!(
+            table_has_rows_sql("user`data", Backend::MariaDb),
+            "SELECT CASE WHEN EXISTS (SELECT 1 FROM `user``data` LIMIT 1) THEN 1 ELSE 0 END"
+        );
+        assert_eq!(
+            table_has_rows_sql("user\"data", Backend::Postgres),
+            "SELECT CASE WHEN EXISTS (SELECT 1 FROM \"user\"\"data\" LIMIT 1) THEN 1 ELSE 0 END"
+        );
+        assert_eq!(
+            table_has_rows_sql("user\"data", Backend::Sqlite),
+            "SELECT CASE WHEN EXISTS (SELECT 1 FROM \"user\"\"data\" LIMIT 1) THEN 1 ELSE 0 END"
         );
     }
 

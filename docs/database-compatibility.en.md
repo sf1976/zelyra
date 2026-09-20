@@ -56,10 +56,13 @@ can run the same scripts against a disposable MariaDB service:
   compatibility claim.
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
-schema-safety test creates and drops only a uniquely named test database. It
-also checks that MariaDB's behavior when adding a required column without a
-default is never invoked without explicit approval; after approval, existing
-values must be reviewed before application code relies on them. Zelyra-created
+schema-safety test creates and drops only a uniquely named test database.
+Adding a required column without a default to an existing table requires
+`REVIEW`; after approval, a read-only row-presence preflight refuses populated
+tables before any plan SQL using an existence check rather than a full row
+count. Empty tables can proceed. For populated tables, use a staged change:
+add the column as nullable, backfill it, then require it.
+Zelyra-created
 indexes are identified by generated names for managed removal; unrecognized
 indexes are preserved. The legacy `--allow-destructive` option does not
 approve `REVIEW` changes; use `--allow-risky` after reviewing the plan.

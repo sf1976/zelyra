@@ -18,7 +18,8 @@ use zelyra_ast::Type;
 use zelyra_database::{
     apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_null_values,
     create_mariadb_database, diff, inspect_mariadb, inspect_postgres, inspect_sqlite,
-    sql::check_program as check_sql_program, Backend, Query, QueryResult, QueryValue, Risk, Schema,
+    sql::check_program as check_sql_program, table_has_rows, Backend, Query, QueryResult,
+    QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -6499,6 +6500,12 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
             check.table, check.column
         );
     }
+    for check in &plan.required_column_preflights {
+        println!(
+            "[PREFLIGHT] verify `{}` is empty before adding required column `{}` without a default",
+            check.table, check.column
+        );
+    }
     for change in &plan.changes {
         let risk = match change.risk {
             Risk::Safe => "SAFE",
@@ -6657,8 +6664,36 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     }
                 }
             }
+            let mut table_row_presence = HashMap::new();
+            for check in &plan.required_column_preflights {
+                let has_rows = *table_row_presence
+                    .entry(check.table.as_str())
+                    .or_insert_with(|| {
+                        table_has_rows(&url, schema.backend(), &check.table).map_err(|_| ())
+                    });
+                match has_rows {
+                    Ok(false) => {}
+                    Ok(true) => {
+                        eprintln!(
+                            "error[E-DB-005]: cannot add required column `{}.{}` without a default because the table contains existing rows; no schema SQL was applied. Add a default or stage the change: add it as nullable, backfill the rows, then require it",
+                            check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: could not verify that table `{}` is empty before adding required column `{}.{}`; no schema SQL was applied",
+                            check.table, check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
+            }
             let mut sql = plan.sql();
-            if schema.backend() == Backend::MariaDb && !plan.nullability_preflights.is_empty() {
+            if schema.backend() == Backend::MariaDb
+                && (!plan.nullability_preflights.is_empty()
+                    || !plan.required_column_preflights.is_empty())
+            {
                 sql = format!(
                     "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{sql}"
                 );

@@ -216,7 +216,38 @@ nullability_state="$(psql -X -At --dbname="${nullability_url}" --command="
         (SELECT retained FROM public.nullability_records WHERE id=1);
 ")"
 [[ "${nullability_state}" == "YES:1:preserved" ]]
-echo "[PostgreSQL] nullability changes require review, preflight blocks NULL rows before all SQL, and native DDL succeeds after repair"
+
+required_column_fixture="${fixture_dir}/schema_safety_required_column_postgres.zyl"
+required_column_plan="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db plan "${required_column_fixture}")"
+grep -Fq "[PREFLIGHT] verify \`nullability_records\` is empty before adding required column \`backfill_value\` without a default" <<<"${required_column_plan}"
+grep -Fq "[SAFE] add column nullability_records.safe_note" <<<"${required_column_plan}"
+if output="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${required_column_fixture}" --allow-risky 2>&1)"; then
+    echo "error: PostgreSQL added a required no-default column to a non-empty table" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-005]" <<<"${output}"
+grep -Fq "table contains existing rows; no schema SQL was applied" <<<"${output}"
+required_column_state="$(psql -X -At --dbname="${nullability_url}" --command="
+    SELECT
+        (SELECT count(*)::text FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='nullability_records'
+              AND column_name IN ('backfill_value', 'safe_note')) || ':' ||
+        (SELECT count(*)::text FROM public.nullability_records);
+")"
+[[ "${required_column_state}" == "0:2" ]]
+required_empty_fixture="${fixture_dir}/schema_safety_required_empty_postgres.zyl"
+required_empty_plan="$(DATABASE_URL="${nullability_url}" "${zelyra_bin}" db plan "${required_empty_fixture}")"
+grep -Fq "[PREFLIGHT] verify \`empty_required_records\` is empty before adding required column \`name\` without a default" <<<"${required_empty_plan}"
+DATABASE_URL="${nullability_url}" "${zelyra_bin}" db apply "${required_empty_fixture}" --allow-risky >/dev/null
+required_empty_state="$(psql -X -At --dbname="${nullability_url}" --command="
+    SELECT
+        (SELECT is_nullable FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='empty_required_records'
+              AND column_name='name') || ':' ||
+        (SELECT count(*)::text FROM public.empty_required_records);
+")"
+[[ "${required_empty_state}" == "NO:0" ]]
+echo "[PostgreSQL] nullability and required-column preflights refuse unsafe plans before any SQL"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
     --command="INSERT INTO public.pg_metadata_records(active, name) VALUES (false, 'retained');" >/dev/null

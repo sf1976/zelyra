@@ -213,11 +213,13 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] The schema planner classifies required columns without defaults, unique
   constraints, and generated-name-managed index/FK additions and removals;
   unknown external indexes are preserved and untracked FK removals fail closed.
+  Adding a required no-default column to an existing table now runs a read-only
+  empty-table preflight; a populated table blocks the entire plan before SQL.
   MariaDB and PostgreSQL nullability changes require `REVIEW`; tightening to
   `NOT NULL` performs a read-only NULL-row preflight before any plan SQL and
   fails closed if rows need repair. SQLite nullability and type/FK/unique-
-  constraint alterations remain unsupported. Row estimates, lock warnings,
-  backfill plans, and maintenance-window planning remain planned.
+  constraint alterations remain unsupported. General row estimates, lock
+  warnings, data backfill plans, and maintenance-window planning remain planned.
 - [ ] Connection pooling, retry policies, timeouts, cancellation, and health
   checks.
 - [ ] Streaming large results and bounded memory behavior.
@@ -484,6 +486,8 @@ supported machine and the release gates below pass.
   end-to-end paths. The schema-safety test exercises both backends: destructive
   drops require approval; required columns without defaults, new unique
   constraints, and MariaDB foreign-key additions/removals are marked `REVIEW`;
+  adding a required no-default column to a populated table is blocked by a
+  read-only preflight before any plan SQL;
   MariaDB/PostgreSQL default drift is marked `REVIEW`; SQLite default changes
   and primary-key/auto-increment changes without supported migrations remain
   `UNSUPPORTED`;
@@ -500,8 +504,9 @@ supported machine and the release gates below pass.
   matrix](database-compatibility.en.md) lists four
   MariaDB Community LTS patch images and the core database/CRUD paths they
   test; this is not MySQL or full feature certification. PostgreSQL runtime
-  parity, general backfill safety, and operational risk analysis remain outside
-  the 0.2.0 claim. PostgreSQL primary-key and serial/identity metadata drift is
+  parity, general data backfills, row/lock risk estimates, and operational risk
+  analysis remain outside the 0.2.0 claim. PostgreSQL primary-key and
+  serial/identity metadata drift is
   detected and refused; migrations for those metadata changes remain
   unsupported.
 - [ ] **Release evidence:** bilingual quickstarts, supported-platform checks,

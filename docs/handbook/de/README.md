@@ -624,12 +624,17 @@ zelyra db apply examples/machine_management_mariadb.zyl --allow-risky
 ~~~
 
 `UNSUPPORTED`-Änderungen werden auch mit Freigabe abgelehnt. Neue Pflichtspalten
-ohne Standardwert und neue Unique-Constraints müssen geprüft werden.
+ohne Standardwert und neue Unique-Constraints müssen geprüft werden. Beim
+Hinzufügen einer Pflichtspalte ohne Standardwert prüft Zelyra, ob die
+bestehende Tabelle leer ist, bevor irgendein Plan-SQL ausgeführt wird; befüllte
+Tabellen werden auch mit `--allow-risky` abgelehnt. Zum Erhalt vorhandener Daten
+ist ein gestuftes Vorgehen nötig: Spalte optional hinzufügen, Daten auffüllen,
+danach zur Pflichtspalte machen.
 Nullbarkeitsänderungen bei MariaDB und PostgreSQL benötigen `REVIEW`; vor einer
 Verschärfung auf `NOT NULL` prüft Zelyra lesend, ob NULL-Werte vorhanden sind.
 Ist das der Fall, wird der gesamte Plan ohne Schemaänderung abgelehnt.
-MariaDB führt dieses DDL zusätzlich im Strict-Modus aus, damit ein gleichzeitig
-entstandener NULL-Wert nicht stillschweigend umgewandelt wird. SQLite-
+MariaDB führt geschütztes DDL zusätzlich im Strict-Modus aus, damit Werte nicht
+stillschweigend umgewandelt werden. SQLite-
 Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-Änderungen
 bleiben nicht unterstützt. Neue und entfernte MariaDB-Foreign-Keys benötigen
 `REVIEW`; SQLite-Foreign-Key-Umbauten
@@ -640,10 +645,8 @@ PostgreSQL erscheinen als `REVIEW`; Tests decken Setzen, Ändern und Entfernen,
 den Erhalt bestehender Werte und idempotente Neuplanung ab. SQLite-
 Defaultänderungen sowie Primärschlüssel-/Auto-Increment-Drift bleiben auf allen
 Backends `UNSUPPORTED`; CI prüft die PostgreSQL-Schemasicherheit mit Version
-16, jedoch keine Runtime-Parität. MariaDB kann
-vorhandenen Zeilen beim ausdrücklich freigegebenen Hinzufügen einer
-Pflichtspalte ohne Standardwert
-engineabhängige implizite Werte geben; prüfe die Daten vor ihrer Nutzung. Nicht
+16, jedoch keine Runtime-Parität. Der Preflight verhindert bei diesem Vorgang
+auch engineabhängige implizite MariaDB-Werte für vorhandene Zeilen. Nicht
 erkannte externe Indizes bleiben erhalten; nicht verfolgte Foreign-Key-
 Entfernungen werden blockiert.
 

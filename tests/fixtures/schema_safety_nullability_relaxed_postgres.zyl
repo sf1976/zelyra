@@ -9,3 +9,7 @@ table nullability_records {
     retained: String(80) required
     marker: Bool required default false
 }
+
+table empty_required_records {
+    id: Id primary auto
+}

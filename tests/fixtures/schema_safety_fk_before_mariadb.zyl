@@ -6,7 +6,6 @@ database main {
 table safety_records {
     id: Id primary auto
     label: String(80) required
-    review_value: String(30) required
 }
 
 table departments {

@@ -227,13 +227,16 @@ Feature eines bestimmten Anbieters.
 - [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
   Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
   Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
-  Foreign-Key-Entfernungen werden blockiert. Nullbarkeitsänderungen bei
+  Foreign-Key-Entfernungen werden blockiert. Vor dem Hinzufügen einer
+  Pflichtspalte ohne Standardwert prüft ein lesender Preflight, ob die
+  vorhandene Tabelle leer ist; andernfalls wird der gesamte Plan vor jeglichem
+  SQL blockiert. Nullbarkeitsänderungen bei
   MariaDB und PostgreSQL benötigen `REVIEW`; vor einer Verschärfung auf
   `NOT NULL` prüft ein lesender NULL-Zeilen-Preflight den gesamten Plan und
   blockiert ihn vor jeglichem SQL, wenn Daten korrigiert werden müssen.
   SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
-  Änderungen bleiben nicht unterstützt. Zeilenschätzungen, Lock-Warnungen,
-  Backfill-Pläne und Wartungsfenster bleiben geplant.
+  Änderungen bleiben nicht unterstützt. Allgemeine Zeilenschätzungen,
+  Lock-Warnungen, Daten-Backfill-Pläne und Wartungsfenster bleiben geplant.
 - [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
@@ -517,7 +520,10 @@ Freigabekriterien bestanden sind.
   gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
   Backends: destruktive Löschungen benötigen Freigabe; Pflichtspalten ohne
   Standardwert, neue Unique-Constraints sowie MariaDB-Foreign-Key-Ergänzungen
-  und -Entfernungen erscheinen als `REVIEW`; doppelte beziehungsweise
+  und -Entfernungen erscheinen als `REVIEW`. Eine Pflichtspalte ohne
+  Standardwert kann einer befüllten Tabelle erst nach einem lesenden Preflight
+  hinzugefügt werden; bei vorhandenen Zeilen wird der gesamte Plan vor
+  jeglichem SQL abgelehnt. Doppelte beziehungsweise
   verwaiste Zeilen bleiben erhalten, wenn Index- oder Foreign-Key-Änderungen
   scheitern. Unbekannte externe Indizes bleiben bestehen, nicht verfolgte
   Foreign-Key-Entfernungen werden fail-closed blockiert. Default-Drift bei
@@ -533,8 +539,9 @@ Freigabekriterien bestanden sind.
   [Versionsmatrix](database-compatibility.de.md) führt vier MariaDB-
   Community-LTS-Patch-Images und die getesteten Datenbank-/CRUD-Pfade auf;
   sie ist keine MySQL-Kompatibilitäts- oder vollständige Funktionsgarantie.
-  PostgreSQL-Runtime-Parität, allgemeine sichere Backfills und betriebliche
-  Risikoanalyse bleiben außerhalb der 0.2.0-Aussage. PostgreSQL-Drift bei
+  PostgreSQL-Runtime-Parität, allgemeine Daten-Backfills, Zeilen-/Lock-
+  Risikoeinschätzungen und betriebliche Risikoanalyse bleiben außerhalb der
+  0.2.0-Aussage. PostgreSQL-Drift bei
   Primärschlüsseln und Serial-/Identity-Eigenschaften wird erkannt und
   abgelehnt; Migrationen dieser Metadatenänderungen werden noch nicht
   unterstützt.

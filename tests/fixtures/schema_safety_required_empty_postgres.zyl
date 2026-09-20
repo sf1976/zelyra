@@ -7,8 +7,10 @@ table nullability_records {
     id: Id primary auto
     value: String(80)
     retained: String(80) required
+    marker: Bool required default false
 }
 
 table empty_required_records {
     id: Id primary auto
+    name: String(30) required
 }

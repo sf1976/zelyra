@@ -7,6 +7,9 @@ table nullability_records {
     id: Id primary auto
     value: String(80)
     retained: String(80) required
+    marker: Bool required default false
+    backfill_value: String(30) required
+    safe_note: String(30)
 }
 
 table empty_required_records {
