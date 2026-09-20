@@ -1,12 +1,20 @@
 # Zelyra Handbook
 
-The handbook is available in two synchronized editions:
+The handbook is available in synchronized editions and formats:
 
-- [Deutsch](de/README.md)
-- [English](en/README.md)
+### 1. Complete Master Edition (Lehrbuch & Technische Referenz)
+The comprehensive 75-chapter textbook, technical reference, and complete appendices:
+- **[Deutsch: Vollständiges Zelyra-Handbuch (de/handbuch.md)](de/handbuch.md)**
+- **[English: Complete Zelyra Handbook (en/handbook.md)](en/handbook.md)**
+- **Online (Interactive with search):** [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch) · [https://siedelmann.com/handbook](https://siedelmann.com/handbook)
+
+### 2. Guided Introductory Edition
+A concise, step-by-step introduction building a machine-management application:
+- [Deutsch (Einstieg)](de/README.md)
+- [English (Intro)](en/README.md)
 
 Both editions document Zelyra 0.1 as it exists today and clearly label roadmap
-features. Examples build a small machine-management application step by step.
+features.
 
 The [digital sovereignty manifesto](../MANIFESTO.md) is the binding product
 compass; read it alongside the implementation status rather than as a claim of

@@ -1,0 +1,67 @@
+%YAML 1.2
+---
+name: Zelyra
+file_extensions:
+  - zyl
+scope: source.zyl
+
+contexts:
+  main:
+    - match: '//.*$'
+      scope: comment.line.double-slash.zyl
+
+    - match: '/\*'
+      scope: comment.block.zyl
+      push:
+        - match: '\*/'
+          scope: comment.block.zyl
+          pop: true
+
+    - match: '"'
+      scope: punctuation.definition.string.begin.zyl
+      push: string_double
+
+    - match: '\b(fn|page|schema|let|mut|const|type|struct|enum|impl|use|mod|html|sql|route|form)\b'
+      scope: keyword.declaration.zyl
+
+    - match: '\b(if|else|match|return|for|in|while|break|continue)\b'
+      scope: keyword.control.zyl
+
+    - match: '\b(true|false|null|none|Ok|Err|Some|None)\b'
+      scope: constant.language.zyl
+
+    - match: '\b(Int|Float|Text|String|Bool|List|Map|Option|Result|Email|Date|DateTime|Void)\b'
+      scope: storage.type.zyl
+
+    - match: '\b[A-Z][a-zA-Z0-9_]*\b'
+      scope: entity.name.type.zyl
+
+    - match: '@[a-zA-Z_][a-zA-Z0-9_]*'
+      scope: entity.other.attribute-name.zyl
+
+    - match: '\b(fn)\s+([a-zA-Z_][a-zA-Z0-9_]*)'
+      captures:
+        1: keyword.declaration.zyl
+        2: entity.name.function.zyl
+
+    - match: '\b\d+(\.\d+)?\b'
+      scope: constant.numeric.zyl
+
+    - match: '->|=>|==|!=|<=|>=|&&|\|\||=|\+|-|\*|/|%'
+      scope: keyword.operator.zyl
+
+  string_double:
+    - match: '"'
+      scope: punctuation.definition.string.end.zyl
+      pop: true
+    - match: '\\.'
+      scope: constant.character.escape.zyl
+    - match: '\{'
+      scope: punctuation.section.embedded.begin.zyl
+      push:
+        - match: '\}'
+          scope: punctuation.section.embedded.end.zyl
+          pop: true
+        - include: main
+    - match: '[^"\\{]+'
+      scope: string.quoted.double.zyl

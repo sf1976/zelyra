@@ -1,0 +1,35 @@
+name: Zelyra CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  verify:
+    name: Verify & Test Zelyra Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zelyra CLI
+        run: |
+          git clone --depth 1 https://github.com/sf1976/zelyra.git /tmp/zelyra
+          cd /tmp/zelyra && ./install.sh
+          echo "$HOME/.zelyra/bin" >> $GITHUB_PATH
+
+      - name: Verify Environment
+        run: zelyra doctor
+
+      - name: Syntax & Invariant Check
+        run: |
+          find . -name "*.zyl" -exec zelyra check {} +
+
+      - name: Run Test Suite & Invariants
+        run: zelyra test

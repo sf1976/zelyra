@@ -174,7 +174,6 @@ jobs:
           ZELYRA_BIN: target/debug/zelyra
           ZELYRA_PROTECTED_E2E_ADDRESS: 127.0.0.1:38510
         run: ./tests/mariadb-protected-e2e.sh
-
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
@@ -229,3 +228,5 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Validate Handbook Code Snippets
+        run: python3 scripts/validate_handbook.py
