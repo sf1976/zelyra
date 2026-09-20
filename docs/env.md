@@ -327,6 +327,7 @@ database = true
 network = false
 clock = true
 environment = true
+console = false
 
 [filesystem]
 read_roots = ["."]
@@ -350,6 +351,19 @@ allow_credentials = false
 Diese Bereiche sind keine bequeme Umgehung von Sicherheit: Capabilities,
 Allowlisten, SQL-Prüfungen, CSRF und destruktive Datenbankfreigaben bleiben
 explizit und werden nicht durch `.env` abgeschaltet.
+
+`console = false` ist die standardmäßige Projektfreigabe für interaktive
+Terminaleingabe. Programme, die `read_console(prompt)` verwenden, müssen
+außerdem in der aufrufenden Funktion `uses Console` deklarieren. Setze die
+Freigabe nur für CLI-Programme auf `true`; sie ändert weder Webformulare noch
+Browser-Routen. Terminaleingaben werden nicht verborgen und eignen sich nicht
+für Passwörter oder andere Geheimnisse. Ohne `[capabilities]`-Abschnitt gibt es
+keine zusätzliche Projekt-Allowlist, die Funktionsdeklaration `uses Console`
+bleibt trotzdem Pflicht. Prozessvariablen und `.env` können diese Capability
+nicht erteilen.
+Betroffene Prüfungen und Befehle: `zelyra check`, `zelyra build` und
+`zelyra run`; Compiler- und CLI-Integrationstests decken Typ, Capability,
+Prompt, Zeilenende und EOF ab. Die Einstellung ist kein Secret.
 
 ## Pflegepflicht für neue Einstellungen
 

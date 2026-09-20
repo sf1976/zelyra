@@ -194,8 +194,10 @@ Feature eines bestimmten Anbieters.
 - [ ] Typisierte Literale und Konversionen für Decimal, Money, Date, Time,
   UUID, URL, Email, Bytes und Duration.
 - [~] Ein erstes Capability-/Effect-Modell für Database, Network, FileSystem,
-  Environment, Process, Clock und Random ist vorhanden; feinere Effekte wie
-  `Database(read)` und `Database(write)` bleiben geplant.
+  Environment, Process, Clock, Random und Console ist vorhanden; interaktive
+  Terminaleingabe mit `read_console(prompt) -> String?` ist für `zelyra run`
+  umgesetzt und an `uses Console` sowie die Projektfreigabe gebunden. Feinere
+  Effekte wie `Database(read)` und `Database(write)` bleiben geplant.
 - [ ] Strukturierte Fehlerweitergabe und eigene Fehlertypen.
 - [ ] Deterministischer Build-Graph, inkrementelle und parallele Kompilierung.
 - [~] Der deterministische Formatter ist umgesetzt; Language Server,

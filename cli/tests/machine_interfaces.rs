@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     time::Duration,
 };
 
@@ -71,6 +71,74 @@ fn free_test_port() -> String {
         .expect("test listener should have an address")
         .port()
         .to_string()
+}
+
+#[test]
+fn run_reads_console_input_and_handles_eof_and_capability_denial() {
+    let directory = temporary_directory("console-input");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"console-input\"\nversion = \"0.2.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nconsole = true\ndatabase = false\nnetwork = false\n",
+    )
+    .unwrap();
+    let source = directory.join("main.zyl");
+    fs::copy(example("console_input.zyl"), &source).unwrap();
+
+    let run_with_input = |input: Option<&[u8]>| {
+        let mut child = Command::new(binary())
+            .args(["run", source.to_str().unwrap()])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Zelyra process should start");
+        if let Some(input) = input {
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(input)
+                .expect("test input should be written");
+        } else {
+            drop(child.stdin.take());
+        }
+        child.wait_with_output().unwrap()
+    };
+
+    let output = run_with_input(Some(b"2026-09-20\r\n"));
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"Datum: Eingegeben: 2026-09-20\n");
+    assert!(output.stderr.is_empty());
+
+    let empty_line = run_with_input(Some(b"\n"));
+    assert!(empty_line.status.success());
+    assert_eq!(empty_line.stdout, b"Datum: Eingegeben: \n");
+    assert!(empty_line.stderr.is_empty());
+
+    let eof = run_with_input(None);
+    assert!(eof.status.success());
+    assert_eq!(eof.stdout, b"Datum: Keine Eingabe.\n");
+    assert!(eof.stderr.is_empty());
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"console-input\"\nversion = \"0.2.0\"\nzelyra = \"0.1\"\n\n[capabilities]\nconsole = false\ndatabase = false\nnetwork = false\n",
+    )
+    .unwrap();
+    let denied = run_with_input(None);
+    assert!(!denied.status.success());
+    assert!(denied.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert!(stderr.contains("E-CAP-001"), "unexpected stderr: {stderr}");
+    assert!(stderr.contains("Console"), "unexpected stderr: {stderr}");
+
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

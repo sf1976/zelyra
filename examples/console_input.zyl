@@ -1,0 +1,12 @@
+fn main() uses Console {
+    eingabe = read_console("Datum: ")
+
+    match eingabe {
+        Some(datum) => {
+            print("Eingegeben: " + datum)
+        }
+        None => {
+            print("Keine Eingabe.")
+        }
+    }
+}

@@ -48,6 +48,12 @@ Expected output: `55`. Published Linux and Windows x86_64 binaries can also be
 installed without a Rust toolchain; see the [release downloads](https://github.com/sf1976/zelyra/releases)
 and the installation guide.
 
+For an interactive CLI example, run `zelyra run examples/console_input.zyl`.
+It uses the explicit `Console` capability; the example's project grant is
+enabled in the repository's `zelyra.toml`. See the [I/O chapter in the
+handbook](docs/handbook/en/handbook.md#chapter-8-input-and-output) for new
+projects.
+
 ### Start a MariaDB CRUD application
 
 ~~~bash

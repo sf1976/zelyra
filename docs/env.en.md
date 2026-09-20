@@ -307,6 +307,18 @@ sections include `[capabilities]`, `[filesystem]`, `[network]`, `[process]`,
 security: capabilities, allowlists, SQL checks, CSRF, and destructive database
 approval cannot be disabled through `.env`.
 
+`console = false` is the default project grant for interactive terminal input.
+Programs that call `read_console(prompt)` must also declare `uses Console` on
+the enclosing function. Set the grant to `true` only for CLI programs; it does
+not change web forms or browser routes. When a project has no `[capabilities]`
+section, there is no additional project allowlist, but the `uses Console`
+function declaration is still required. Process environment variables and
+`.env` cannot grant this capability. Terminal input is echoed and must not be
+used for passwords or other secrets. Affected checks and commands are
+`zelyra check`, `zelyra build`, and `zelyra run`; compiler and CLI integration
+tests cover typing, capabilities, prompt output, line endings, and EOF. This
+setting is not a secret.
+
 ## Maintenance rule for new settings
 
 Every new environment variable or project switch must be added here before its

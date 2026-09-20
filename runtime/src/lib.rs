@@ -1,9 +1,10 @@
 use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::io::Read;
+use std::io::{self, BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zelyra_ast::*;
 
@@ -51,6 +52,7 @@ pub const KNOWN_CAPABILITIES: &[&str] = &[
     "Process",
     "Clock",
     "Random",
+    "Console",
 ];
 
 pub fn check_apis(program: &Program) -> Result<(), Vec<ApiDiagnostic>> {
@@ -3156,7 +3158,16 @@ fn check_capability_expr(
             errors,
         ),
         ExprKind::Call { name, args, .. } => {
-            if name == "now" {
+            if name == "read_console" {
+                require_capability(
+                    "Console",
+                    "console input",
+                    expression.span,
+                    function,
+                    declared,
+                    errors,
+                );
+            } else if name == "now" {
                 require_capability(
                     "Clock",
                     "clock access",
@@ -4018,7 +4029,15 @@ impl<'a> Checker<'a> {
                 type_args,
                 args,
             } => {
-                if name == "print" {
+                if name == "read_console" {
+                    if args.len() != 1 {
+                        self.error(expr.span, "read_console expects exactly one String prompt");
+                        return Type::Unknown;
+                    }
+                    let prompt = self.check_expr(&args[0], scopes);
+                    self.expect_type(&Type::String, &prompt, args[0].span);
+                    Type::Option(Box::new(Type::String))
+                } else if name == "print" {
                     if args.len() != 1 {
                         self.error(expr.span, "`print` expects exactly one argument");
                     }
@@ -5092,6 +5111,29 @@ struct Interpreter {
     record_definitions: HashMap<String, RecordDef>,
     type_aliases: HashMap<String, Type>,
     active_capabilities: Vec<HashSet<String>>,
+}
+
+fn read_console_line(prompt: &str) -> io::Result<Option<String>> {
+    static CONSOLE_INPUT_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = CONSOLE_INPUT_LOCK
+        .lock()
+        .map_err(|_| io::Error::other("console input lock is unavailable"))?;
+
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(prompt.as_bytes())?;
+    stdout.flush()?;
+
+    let mut input = String::new();
+    if io::stdin().lock().read_line(&mut input)? == 0 {
+        return Ok(None);
+    }
+    if input.ends_with('\n') {
+        input.pop();
+        if input.ends_with('\r') {
+            input.pop();
+        }
+    }
+    Ok(Some(input))
 }
 
 impl Interpreter {
@@ -6273,7 +6315,27 @@ impl Interpreter {
                 type_args,
                 args,
             } => {
-                if name == "print" {
+                if name == "read_console" {
+                    if args.len() != 1 {
+                        return Err(self.runtime_error(
+                            expr.span,
+                            "read_console expects exactly one String prompt",
+                        ));
+                    }
+                    self.require_runtime_capability("Console", "console input", expr.span)?;
+                    let prompt = self.eval(&args[0], env)?;
+                    let Value::String(prompt) = prompt else {
+                        return Err(self
+                            .runtime_error(args[0].span, "read_console expects a String prompt"));
+                    };
+                    read_console_line(&prompt)
+                        .map(|value| {
+                            Value::Option(value.map(|value| Box::new(Value::String(value))))
+                        })
+                        .map_err(|error| {
+                            self.runtime_error(expr.span, format!("console input failed: {error}"))
+                        })
+                } else if name == "print" {
                     let value = self.eval(
                         args.first().ok_or_else(|| {
                             self.runtime_error(expr.span, "`print` expects one argument")
@@ -8098,6 +8160,40 @@ mod tests {
             error.message.contains("does not declare capability")
                 && error.message.contains("Environment")
         }));
+    }
+
+    #[test]
+    fn read_console_is_typed_and_requires_its_capability() {
+        let program = parse(
+            &lex(
+                "fn main() uses Console { value = read_console(\"Date: \") match value { Some(date) => { print(date) } None => { print(\"No input\") } } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        check(&program).unwrap();
+        check_capabilities(&program).unwrap();
+
+        let denied_at_runtime =
+            execute_with_capabilities(&program, Some(&HashSet::new())).unwrap_err();
+        assert!(denied_at_runtime.message.contains("Console"));
+        assert!(denied_at_runtime
+            .message
+            .contains("runtime capability denied"));
+
+        let missing_capability =
+            parse(&lex("fn main() { value = read_console(\"Date: \") }").unwrap()).unwrap();
+        let errors = check_capabilities(&missing_capability).unwrap_err();
+        assert!(errors.iter().any(|error| {
+            error.message.contains("Console") && error.message.contains("console input")
+        }));
+
+        let invalid_prompt =
+            parse(&lex("fn main() uses Console { value = read_console(42) }").unwrap()).unwrap();
+        assert!(check(&invalid_prompt)
+            .unwrap_err()
+            .iter()
+            .any(|error| error.message.contains("expected `String`, found `Int`")));
     }
 
     #[test]

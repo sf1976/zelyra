@@ -77,6 +77,8 @@ Das aktuelle Repository enthält:
   Funktionsdeklaration und Projektfreigabe;
 - sichere Zufallszahlen mit random_int(min, max) über die Random-Capability;
   die Grenzen sind inklusiv, ein ungültiger Bereich ist ein Runtime-Fehler;
+- interaktive CLI-Eingabe mit read_console(prompt) -> String? über `Console`;
+  Capability und Projektfreigabe müssen ausdrücklich gesetzt sein;
 - read_text(path), write_text(path, content), delete_file(path) und
   list_dir(path) über FileSystem mit Projektpfadgrenzen;
 - http_get(url) über Network mit ausdrücklicher Host-Allowlist sowie

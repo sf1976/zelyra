@@ -72,6 +72,8 @@ The current repository contains:
   declaration and a project grant;
 - secure random_int(min, max) through the Random capability; its bounds are
   inclusive and an invalid range is a runtime error;
+- interactive CLI input with read_console(prompt) -> String? through `Console`;
+  both the function capability and project grant must be explicit;
 - read_text(path), write_text(path, content), delete_file(path), and
   list_dir(path) through FileSystem with project path roots;
 - http_get(url) through Network with an explicit host allowlist and bounded

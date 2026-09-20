@@ -884,10 +884,10 @@ fn main() {
 ### 1. What will I learn in this chapter?
 In this chapter, you will learn:
 - How to display information reliably on the console using `print()`.
+- How to read a line interactively from the terminal with `read_console()`.
 - How text and variables are formatted via string concatenation.
-- How Zelyra 0.1 receives input from the outside world (parameters, environment variables, files, web routes).
+- How Zelyra receives input through parameters, environment variables, files, the terminal, and web routes.
 - Why Zelyra requires explicit `Capabilities` for external system interactions.
-- The current status and technical roadmap for interactive terminal input.
 
 ### 2. Why is this topic important?
 A program that cannot receive input or communicate output is useless to users. Input and output (I/O) connect the computational logic of your code with the real world. Because interactions with the keyboard, filesystem, or network introduce security risks, Zelyra regulates these operations far more strictly than older languages.
@@ -895,16 +895,40 @@ A program that cannot receive input or communicate output is useless to users. I
 ### 3. Understandable explanation without unnecessary jargon
 - **Output:** The built-in `print(value)` instruction accepts numbers, booleans, strings, and structured objects, printing them directly to standard output (`stdout`).
 - **Formatting:** Multiple strings and values can be combined using the plus operator `+`.
-- **Input in Zelyra 0.1:**
-  In modern software architectures, the vast majority of programs execute on servers, inside container clusters, or as background microservices. They rarely prompt a terminal user with "Please enter your name:". Instead, they receive structured input through four dependable channels:
+- **Input in Zelyra:**
+  Programs receive input through parameters, environment variables, files, web requests, or interactively from the terminal:
   1. **Function Parameters:** Input data is passed directly during invocation.
   2. **Environment Variables:** `env("MY_KEY")` reads configuration parameters from the operating system.
   3. **Files:** `read_text("input.txt")` ingests persisted data.
   4. **Web Requests:** Form declarations (`form`) and route endpoints (`page "/user/{id}"`) process browser input.
+  5. **Terminal:** `read_console("Prompt: ")` displays a prompt and reads one line. It returns `String?`: `None` means end of input, while an empty line is `Some("")`.
 
-> **Status Note on Interactive Console Input:**
-> In compiler 0.2.0, there is deliberately no blocking `read_line()` function for terminal keyboard prompts. The language design emphasizes declarative web forms, structured payloads, and deterministic data flow.
-> *(Roadmap placeholder: `// [Placeholder: Interactive read_line() via standard input will be specified in Phase 11]`)*.
+Terminal access is a capability. The calling function must declare `uses
+Console`. Projects with a `[capabilities]` section must also set
+`console = true`; new project templates leave this grant disabled by default.
+Console input is intended for `zelyra run`. Web applications should use typed
+requests and forms instead.
+Input is not hidden; do not use `read_console()` for passwords or other
+secrets.
+
+```zelyra
+fn main() uses Console {
+    date = read_console("Date: ")
+    match date {
+        Some(value) => {
+            print("Entered: " + value)
+        }
+        None => {
+            print("No input.")
+        }
+    }
+}
+```
+
+```toml
+[capabilities]
+console = true
+```
 
 ### 4. Small, progressive examples
 
@@ -942,13 +966,13 @@ fn main() uses Environment {
 
 ### 6. Key takeaways
 1. `print()` reliably outputs values and text to the console.
-2. Inputs enter Zelyra programs via parameters, environment variables, files, or web routes.
+2. Inputs enter Zelyra programs via parameters, environment variables, files, the terminal, or web routes.
 3. External system access requires declaring the corresponding capability (such as `uses Environment`).
 
 ### 7. Exercises
 - **Level 1 (Easy):** Print a formatted contact card (name, job title, email address) using multiple `print()` statements.
 - **Level 2 (Medium):** Write a function `print_task_entry(id: Int, task_name: String, is_done: Bool)` that prints all three fields cleanly formatted.
-- **Level 3 (Challenging):** Explain why interactive terminal prompts (`read_line`) are rarely utilized in modern containerized and cloud architectures and how structured APIs supersede them.
+- **Level 3 (Challenging):** Write a CLI program using `read_console()` and explain when terminal input is useful and when structured web requests are a better fit.
 
 ### 8. Practical project task: Task Management
 Construct an output formatting utility for our Task Management application:
@@ -982,7 +1006,7 @@ fn main() {
 ### 9. Summary
 - Console output is performed cleanly and reliably using `print()`.
 - External environment interactions are protected by explicit capabilities.
-- Inputs are strongly typed and received via parameters, files, environment variables, or web requests.
+- Inputs are received through parameters, files, environment variables, `read_console()`, or web requests.
 
 ### 10. Self-check review questions
 1. Which built-in function is used in Zelyra for console text output?
@@ -4457,7 +4481,7 @@ fn main() {
 ### 1. What will I learn in this chapter?
 In this chapter, you will learn:
 - What the capability security model is and why it is superior to conventional permission architectures.
-- The core system capabilities: `FileSystem`, `Database`, `Network`, `Process`, and `Environment`.
+- System capabilities such as `Console`, `Database`, `Network`, `FileSystem`, `Process`, `Environment`, `Clock`, and `Random`.
 - How capabilities are declared on functions, propagated through call graphs, and constrained in `zelyra.toml`.
 - Why Zelyra is naturally immune to supply chain attacks and rogue dependencies.
 
@@ -4564,7 +4588,7 @@ fn main() uses FileSystem {
 - Applications become secure by design through explicit permission declaration and static enforcement.
 
 ### 10. Self-check review questions
-1. What are the five core system capabilities provided by Zelyra?
+1. Name three system capabilities provided by Zelyra.
 2. Why must caller functions declare the capabilities required by the sub-functions they invoke?
 3. How does Zelyra prevent supply chain attacks originating from third-party libraries?
 
@@ -6932,7 +6956,7 @@ fn load_machines() -> Machine[]
 Known capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random
+Database Network FileSystem Environment Process Clock Random Console
 ~~~
 
 Calling functions must propagate required capabilities. Projects grant them
@@ -7798,7 +7822,7 @@ fn load_customers() -> Customer[] uses Database {
 ~~~
 
 `uses` makes allowed side effects visible in a signature. `Database`, `Network`,
-`FileSystem`, `Environment`, `Process`, `Clock`, and `Random` are known
+`FileSystem`, `Environment`, `Process`, `Clock`, `Random`, and `Console` are known
 capabilities in the current runtime code. Rust has no identical built-in
 capability system; access is usually organized through types, values, and
 library APIs. `Email` is not a Zelyra capability.
@@ -8252,6 +8276,8 @@ page "/items" {
 - `json_decode<T>(text)` -> `Result<T, String>`: Safely parses JSON into a typed data structure.
 
 ### Capability-Guarded Functions
+- `uses Console`:
+  - `read_console(prompt: String)` -> `String?`: Displays the prompt and reads one line; `None` represents EOF.
 - `uses Clock`:
   - `now()` -> `Timestamp`: Returns current system timestamp.
 - `uses Random`:
@@ -8426,7 +8452,7 @@ fn main() {
 *Answer:* In version 0.1, the Zelyra compiler analyzes all `.zyl` source files within the project context as a single unified compilation unit. A fine-grained module and import system is scheduled for Phase 11 of the development roadmap.
 
 **Question: Can I build command-line applications with Zelyra?**
-*Answer:* Yes! You can print output with `print()` and receive input via command arguments or `env()`. Interactive terminal streams (`read_line`) will be introduced in subsequent roadmap phases.
+*Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.
 
 **Question: Why does Zelyra emphasize MariaDB as its primary database engine?**
 *Answer:* MariaDB provides exceptional transactional performance, open-source licensing, robust cloud compatibility, and rock-solid reliability for enterprise web applications.

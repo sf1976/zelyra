@@ -385,6 +385,7 @@ fn visible_functions(program: &zelyra_ast::Program) -> Vec<String> {
         "now",
         "env",
         "random_int",
+        "read_console",
         "read_text",
         "write_text",
         "delete_file",
@@ -467,6 +468,10 @@ mod tests {
             .visible_functions
             .iter()
             .any(|function| function == "greet"));
+        assert!(holes[0]
+            .visible_functions
+            .iter()
+            .any(|function| function == "read_console"));
         assert_eq!(holes[0].capabilities, Vec::<String>::new());
         assert_eq!(holes[0].contract_spans.len(), 2);
     }

@@ -1507,7 +1507,7 @@ fn load_machines() -> Machine[]
 Known capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random
+Database Network FileSystem Environment Process Clock Random Console
 ~~~
 
 Calling functions must propagate required capabilities. Projects grant them

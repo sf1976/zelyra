@@ -576,6 +576,7 @@ impl<'a> Resolver<'a> {
                             | "now"
                             | "env"
                             | "random_int"
+                            | "read_console"
                             | "http_get"
                             | "http_request"
                             | "json_encode"
@@ -827,6 +828,23 @@ mod tests {
                 },
                 ..
             } if name == "read_text"
+        ));
+    }
+
+    #[test]
+    fn resolves_console_input_builtin() {
+        let program =
+            parse(&lex("fn main() { answer = read_console(\"Prompt: \") }").unwrap()).unwrap();
+        let hir = lower(&program).unwrap();
+        assert!(matches!(
+            hir.functions[0].body.statements[0],
+            HirStmt::Let {
+                value: HirExpr {
+                    kind: HirExprKind::Call { ref name, .. },
+                    ..
+                },
+                ..
+            } if name == "read_console"
         ));
     }
 }

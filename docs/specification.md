@@ -41,6 +41,35 @@ declaration-context holes, complete
 runtime/schema impact, richer edit operations, granular effects, and
 benchmarks remain roadmap work.
 
+## Interactive console input
+
+CLI programs read one line with `read_console(prompt: String) -> String?`.
+The function writes the prompt to `stdout` and flushes it before waiting on
+`stdin`. It removes a line ending (`LF` or `CRLF`) and preserves all other
+whitespace. An empty line is `Some("")`; end of input is `None`. An I/O
+failure is reported as a runtime error. Terminal input is not hidden, so do
+not use `read_console` for passwords or other secrets.
+
+Access is explicit: the enclosing function must declare `uses Console`, and a
+project with a `[capabilities]` section must set `console = true`. New project
+templates leave this project grant disabled. `.env` cannot grant a capability.
+Interactive input is intended for `zelyra run`; web applications receive input
+through typed requests and forms.
+
+~~~zelyra
+fn main() uses Console {
+    input = read_console("Date: ")
+    match input {
+        Some(date) => {
+            print("Entered: " + date)
+        }
+        None => {
+            print("No input.")
+        }
+    }
+}
+~~~
+
 ## Localized web interface and learning level
 
 The built-in web UI is catalog-driven. German and English UI copy is maintained

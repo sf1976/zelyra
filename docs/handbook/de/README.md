@@ -1620,7 +1620,7 @@ fn load_machines() -> Machine[]
 Bekannte Capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random
+Database Network FileSystem Environment Process Clock Random Console
 ~~~
 
 Aufrufende Funktionen müssen benötigte Capabilities weiterführen. Projekte

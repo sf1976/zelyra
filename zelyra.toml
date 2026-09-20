@@ -13,3 +13,4 @@ clock = true
 environment = true
 random = true
 filesystem = true
+console = true

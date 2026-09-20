@@ -546,6 +546,7 @@ zelyra = "0.1"
 [capabilities]
 database = true
 network = false
+console = false
 "#,
         version = env!("CARGO_PKG_VERSION"),
         database_section = database_section
@@ -10793,6 +10794,7 @@ mod tests {
             .unwrap();
         assert!(grants.contains("Database"));
         assert!(grants.contains("Network"));
+        assert!(grants.contains("Console"));
     }
 
     #[test]
@@ -10859,6 +10861,7 @@ mod tests {
         let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
         assert!(dockerfile.contains(&format!("ARG ZELYRA_REF=v{}", env!("CARGO_PKG_VERSION"))));
         assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
+        assert!(project_config.contains("console = false"));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
         assert!(dockerfile.contains("COPY locales ./locales"));
         assert!(path.join("locales/de.json").is_file());

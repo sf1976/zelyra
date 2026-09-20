@@ -4,6 +4,15 @@ All notable changes to the Zelyra compiler and runtime are documented here.
 The language compatibility line remains `0.1`. Compiler and repository
 releases follow Semantic Versioning independently of the language line.
 
+## Unreleased
+
+- Added `read_console(prompt)` for interactive CLI input. It returns
+  `String?`, reports EOF as `None`, and requires both `uses Console` and an
+  explicit project grant when a capabilities allowlist is configured.
+- `read_console(prompt)` ergänzt interaktive CLI-Eingabe. Die Funktion liefert
+  `String?`, meldet EOF als `None` und erfordert `uses Console` sowie bei
+  konfigurierter Capability-Allowlist eine ausdrückliche Projektfreigabe.
+
 ## 0.2.0 — 2026-09-20
 
 This release adds reusable view layouts and named component slots, project-local

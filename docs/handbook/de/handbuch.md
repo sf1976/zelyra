@@ -877,10 +877,10 @@ fn main() {
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Wie man Informationen mit `print()` zuverlässig auf der Konsole ausgibt.
+- Wie `read_console()` eine Zeile interaktiv vom Terminal einliest.
 - Wie Text und Variablen durch Verkettung formatiert werden.
-- Wie Zelyra in Version 0.1 Daten aus der Umwelt empfängt (Parameter, Dateien, Umgebungsvariablen, Web-Routen).
+- Wie Zelyra Eingaben über Parameter, Dateien, Umgebungsvariablen, Terminal und Web-Routen empfängt.
 - Warum Zelyra für sensible Außeninteraktionen ausdrückliche Berechtigungen (`Capabilities`) verlangt.
-- Der aktuelle Status und Ausblick für interaktive Konsoleneingaben.
 
 ### 2. Warum ist das Thema wichtig?
 Ein Programm, das weder Daten empfangen noch Ergebnisse mitteilen kann, ist für den Anwender nutzlos. Ein- und Ausgaben (I/O) verbinden die Logik deines Codes mit der Außenwelt. Weil Zugriffe auf Tastatur, Festplatte oder Netzwerk aber auch Sicherheitsrisiken darstellen, regelt Zelyra diese Zugriffe viel kontrollierter als ältere Sprachen.
@@ -888,16 +888,40 @@ Ein Programm, das weder Daten empfangen noch Ergebnisse mitteilen kann, ist für
 ### 3. Verständliche Erklärung
 - **Ausgabe:** Der eingebaute Befehl `print(wert)` nimmt Zahlen, Wahrheitswerte, Zeichenketten oder zusammengesetzte Objekte entgegen und gibt sie auf dem Standard-Ausgabekanal (`stdout`) aus.
 - **Formatierung:** Mehrere Texte und Werte verbindest du mit dem Plus-Operator `+`.
-- **Eingabe in Zelyra 0.1:**
-  Im modernen Softwarebau laufen die allermeisten Programme auf Servern, in Containern oder als Hintergrunddienste. Sie fragen selten interaktiv den Benutzer an der Tastatur („Geben Sie Ihren Namen ein:“). Stattdessen empfangen sie Eingaben über vier sichere Wege:
+- **Eingabe in Zelyra:**
+  Programme empfangen Eingaben über Parameter, Umgebungsvariablen, Dateien, Web-Anfragen oder interaktiv im Terminal:
   1. **Funktionsparameter:** Daten werden beim Aufruf übergeben.
   2. **Umgebungsvariablen:** `env("MEIN_KEY")` liest Konfigurationswerte aus dem System.
   3. **Dateien:** `read_text("eingabe.txt")` liest gespeicherte Daten ein.
   4. **Web-Anfragen:** Formulare (`form`) und URLs (`page "/user/{id}"`) empfangen Benutzereingaben im Browser.
+  5. **Terminal:** `read_console("Prompt: ")` zeigt eine Eingabeaufforderung und liest eine Zeile. Das Ergebnis ist `String?`: `None` bedeutet Dateiende, eine leere Zeile ist `Some("")`.
 
-> **Status-Hinweis zu interaktiver Konsoleneingabe:**
-> Im Compiler 0.2.0 gibt es bewusst noch keine blockierende `read_line()`-Funktion für die Terminal-Tastatur. Die Zelyra-Spezifikation konzentriert sich primär auf deklarative Web-Eingaben und deterministische Datenflüsse.
-> *(Roadmap-Platzhalter: `// [Platzhalter: Interaktives read_line() über Standard-Eingabe wird in Phase 11 spezifiziert]`)*.
+Terminalzugriff ist eine Capability. Die aufrufende Funktion muss `uses
+Console` deklarieren. In Projekten mit einer `[capabilities]`-Sektion muss
+zusätzlich `console = true` gesetzt werden; neue Projektvorlagen lassen die
+Freigabe standardmäßig aus. Konsoleneingabe ist für `zelyra run` gedacht.
+Webanwendungen verwenden stattdessen typisierte Requests und Formulare.
+Die Eingabe wird nicht verborgen; nutze `read_console()` daher nicht für
+Passwörter oder andere Geheimnisse.
+
+```zelyra
+fn main() uses Console {
+    datum = read_console("Datum: ")
+    match datum {
+        Some(wert) => {
+            print("Eingegeben: " + wert)
+        }
+        None => {
+            print("Keine Eingabe.")
+        }
+    }
+}
+```
+
+```toml
+[capabilities]
+console = true
+```
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -935,13 +959,13 @@ fn main() uses Environment {
 
 ### 6. Merksätze
 1. `print()` gibt Werte verlässlich auf der Konsole aus.
-2. Eingaben fließen in Zelyra über Parameter, Umgebungsvariablen, Dateien oder Web-Routen.
+2. Eingaben fließen über Parameter, Umgebungsvariablen, Dateien, Terminal oder Web-Routen.
 3. Systemzugriffe benötigen die passende Capability (z. B. `uses Environment`).
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Gib eine formatierte Visitenkarte (Name, Beruf, E-Mail) mit mehreren `print()`-Befehlen aus.
 - **Stufe 2 (Mittel):** Schreibe eine Funktion `drucke_aufgabe(id: Int, name: String, erledigt: Bool)`, die alle Details sauber untereinander darstellt.
-- **Stufe 3 (Anspruchsvoll):** Begründe, warum interaktive Terminal-Eingaben (`read_line`) in modernen Cloud- und Docker-Umgebungen kaum noch eine Rolle spielen und durch strukturierte APIs ersetzt wurden.
+- **Stufe 3 (Anspruchsvoll):** Schreibe ein CLI-Programm mit `read_console()` und erkläre, wann Terminaleingabe sinnvoll ist und wann strukturierte Web-Requests besser passen.
 
 ### 8. Praxisaufgabe: Ausgabeformatierung für den TaskManager
 Erstelle eine Ausgabefunktion für unsere Aufgabenverwaltung:
@@ -975,7 +999,7 @@ fn main() {
 ### 9. Zusammenfassung
 - Ausgaben erfolgen klar und unmissverständlich über `print()`.
 - Externe Zugriffe sind durch Capabilities geschützt.
-- Eingaben werden typisiert über Parameter, Dateien, Umgebungsvariablen oder Web-Anfragen entgegengenommen.
+- Eingaben werden über Parameter, Dateien, Umgebungsvariablen, `read_console()` oder Web-Anfragen entgegengenommen.
 
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Welche Funktion nutzt man in Zelyra für Textausgaben?
@@ -4430,7 +4454,7 @@ fn main() {
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Was das Capability-Sicherheitsmodell ist und warum es herkömmlichen Berechtigungskonzepten überlegen ist.
-- Die fünf Kernfähigkeiten: `FileSystem`, `Database`, `Network`, `Process`, `Environment`.
+- System-Capabilities wie `Console`, `Database`, `Network`, `FileSystem`, `Process`, `Environment`, `Clock` und `Random`.
 - Wie Capabilities deklariert, vererbt und in `zelyra.toml` beschränkt werden.
 - Warum Zelyra gegen Supply-Chain-Angriffe (bösartige Pakete) immun ist.
 
@@ -4537,7 +4561,7 @@ fn main() uses FileSystem {
 - Software wird durch explizite Rechtevergabe von Grund auf sicher (*Secure by Design*).
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche fünf Systemfähigkeiten kennt Zelyra?
+1. Nenne drei System-Capabilities von Zelyra.
 2. Warum müssen auch übergeordnete Aufrufer-Funktionen Capabilities deklarieren?
 3. Wie schützt Zelyra vor schadhaftem Fremdcode aus Paketmanagern?
 
@@ -6958,7 +6982,7 @@ fn load_machines() -> Machine[]
 Bekannte Capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random
+Database Network FileSystem Environment Process Clock Random Console
 ~~~
 
 Aufrufende Funktionen müssen benötigte Capabilities weiterführen. Projekte
@@ -7866,7 +7890,8 @@ fn load_customers() -> Customer[] uses Database {
 ~~~
 
 `uses` macht erlaubte Seiteneffekte in der Signatur sichtbar. `Database`,
-`Network`, `FileSystem`, `Environment`, `Process`, `Clock` und `Random` sind im
+`Network`, `FileSystem`, `Environment`, `Process`, `Clock`, `Random` und
+`Console` sind im
 aktuellen Runtime-Code bekannte Capabilities. Rust besitzt kein identisches
 eingebautes Capability-System; dort werden Zugriffe typischerweise über Typen,
 Werte und Bibliotheks-APIs organisiert. `Email` ist keine Zelyra-Capability.
@@ -8342,6 +8367,8 @@ page "/items" {
 - `json_decode<T>(text)` -> `Result<T, String>`: Parst typisiertes JSON.
 
 ### Funktionen mit Capabilities
+- `uses Console`:
+  - `read_console(prompt: String)` -> `String?`: Zeigt den Prompt an und liest eine Zeile; `None` bedeutet EOF.
 - `uses Clock`:
   - `now()` -> `Timestamp`: Aktueller Systemzeitstempel.
 - `uses Random`:
@@ -8516,7 +8543,7 @@ fn main() {
 *Antwort:* In Version 0.1 übersetzt der Zelyra-Compiler alle `.zyl`-Quelldateien im Projektkontext als ein einheitliches System. Ein feingranulares Modul- und Import-System befindet sich laut Entwicklungsplan in Phase 11.
 
 **Frage: Kann ich mit Zelyra auch reine Konsolenprogramme schreiben?**
-*Antwort:* Ja! Mit `print()` kannst du Ausgaben erzeugen und über Parameter oder `env()` Eingaben entgegennehmen. Interaktive Terminal-Eingaben (`read_line`) folgen in späteren Phasen.
+*Antwort:* Ja. `print()` gibt Werte aus. `read_console("Prompt: ")` liest eine Zeile und liefert `String?`; dafür braucht die Funktion `uses Console` und das Projekt gegebenenfalls `console = true`.
 
 **Frage: Warum unterstützt Zelyra MariaDB als bevorzugte Engine?**
 *Antwort:* MariaDB bietet herausragende Performance, Open-Source-Freiheit, Stabilität und breite Cloud-Unterstützung für professionelle Webanwendungen.

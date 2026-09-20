@@ -43,6 +43,36 @@ implementiert. Typed Holes in
 Deklarationskontexten, vollständige Laufzeit-/Schema-Wirkungsanalyse,
 umfangreichere Edit-Operationen, feinere Effekte und Benchmarks bleiben geplant.
 
+## Interaktive Konsoleneingabe
+
+CLI-Programme lesen eine Zeile mit `read_console(prompt: String) -> String?`.
+Die Funktion schreibt den Prompt nach `stdout` und leert den Ausgabepuffer,
+bevor sie auf `stdin` wartet. Ein Zeilenende (`LF` oder `CRLF`) wird entfernt;
+sonstige Leerzeichen bleiben erhalten. Eine leere Zeile ist `Some("")`, das
+Ende der Eingabe ist `None`. Ein I/O-Fehler wird als Laufzeitfehler gemeldet.
+Die Eingabe wird nicht verborgen; `read_console` ist daher nicht für
+Passwörter oder andere Geheimnisse geeignet.
+
+Der Zugriff ist ausdrücklich: Die aufrufende Funktion benötigt `uses
+Console`, und ein Projekt mit `[capabilities]` muss `console = true` setzen.
+Neue Projektvorlagen lassen diese Projektfreigabe standardmäßig aus. `.env`
+erteilt keine Capability. Interaktive Eingabe ist für `zelyra run` gedacht;
+Webanwendungen empfangen Eingaben über ihre typisierten Requests und Formulare.
+
+~~~zelyra
+fn main() uses Console {
+    eingabe = read_console("Datum: ")
+    match eingabe {
+        Some(datum) => {
+            print("Eingegeben: " + datum)
+        }
+        None => {
+            print("Keine Eingabe.")
+        }
+    }
+}
+~~~
+
 ## Lokalisierte Weboberfläche und Lernmodus
 
 Die eingebaute Weboberfläche bezieht ihre Texte aus Sprachkatalogen. Deutsche

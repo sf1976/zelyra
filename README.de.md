@@ -50,6 +50,13 @@ können auch ohne Rust-Toolchain installiert werden. Details stehen bei den
 [Releases](https://github.com/sf1976/zelyra/releases) und in der
 Installationsanleitung.
 
+Ein interaktives CLI-Beispiel startest du mit
+`zelyra run examples/console_input.zyl`. Es verwendet die ausdrückliche
+Capability `Console`; die Projektfreigabe ist in der Repository-
+`zelyra.toml` aktiviert. Für neue Projekte erklärt das
+[I/O-Kapitel im Handbuch](docs/handbook/de/handbuch.md#kapitel-8-ein--und-ausgaben)
+die nötige Einrichtung.
+
 ### Eine MariaDB-CRUD-Anwendung starten
 
 ~~~bash

@@ -177,8 +177,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Typed literals and conversions for Decimal, Money, Date, Time, UUID,
   URL, Email, Bytes, and Duration.
 - [~] An initial capability/effect model for Database, Network, FileSystem,
-  Environment, Process, Clock, and Random exists; granular effects such as
-  `Database(read)` and `Database(write)` remain planned.
+  Environment, Process, Clock, Random, and Console exists; interactive
+  terminal input through `read_console(prompt) -> String?` is implemented for
+  `zelyra run` and is gated by `uses Console` plus the project grant. Granular
+  effects such as `Database(read)` and `Database(write)` remain planned.
 - [ ] Structured error propagation and user-defined error types.
 - [ ] Deterministic build graph, incremental compilation, caching, and parallel
   compilation.
