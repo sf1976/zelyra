@@ -8,6 +8,9 @@ Der aktuelle zweisprachige [Entwurf der 0.3.0-Release-Notizen](release-notes/0.3
 führt Umfang, Supportgrenzen, Installations-/Upgrade-Checkliste und bekannte
 Einschränkungen auf. Die englische Fassung ist
 [hier verfügbar](release-notes/0.3.0.en.md). Er ist keine Release-Ankündigung.
+Das ergänzende [Risiko- und Abnahmeregister](release-readiness/0.3.0-risikoregister.de.md)
+ordnet jede öffentliche Aussage einem Nachweis zu und benennt die verbleibenden
+Kandidatengates.
 
 ## Vor dem Release
 

@@ -8,6 +8,8 @@ The current bilingual [0.3.0 release-notes draft](release-notes/0.3.0.en.md)
 records the intended scope, support boundaries, installation/upgrade checklist,
 and known limitations. Its German counterpart is
 [available here](release-notes/0.3.0.de.md). It is not a release announcement.
+The companion [risk and acceptance register](release-readiness/0.3.0-risk-register.en.md)
+maps each public claim to evidence and identifies the remaining candidate gates.
 
 ## Before release
 
