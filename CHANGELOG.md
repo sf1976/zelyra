@@ -6,6 +6,11 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- The published-release installer now accepts only SemVer release tags and
+  verifies that the downloaded executable reports the requested stable version
+  (including prerelease tags). / Der Installer für veröffentlichte Releases
+  akzeptiert nun nur SemVer-Releasetags und prüft, dass die geladene Binärdatei
+  die angeforderte stabile Version meldet (einschließlich Kandidatentags).
 - Prerelease candidate tags such as `v0.3.0-rc.1` now use the same metadata,
   packaging, checksum, and artifact verification path as stable releases; the
   final `v0.3.0` tag is blocked while mandatory bilingual release-plan gates

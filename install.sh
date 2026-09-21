@@ -155,8 +155,13 @@ validate_checkout() {
 
 validate_release_tag() {
     [[ -n "$release_tag" ]] || return 0
-    [[ "$release_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] ||
-        die "release tag contains unsupported characters: ${release_tag}"
+    [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
+        die "release tag must use vMAJOR.MINOR.PATCH with an optional prerelease suffix: ${release_tag}"
+}
+
+release_version() {
+    local version="${release_tag#v}"
+    printf '%s\n' "${version%%-*}"
 }
 
 release_target() {
@@ -183,7 +188,7 @@ verify_checksum() {
 
 install_release() {
     local target archive_name checksum_name base_url temp_dir archive checksum extract_dir
-    local binary_count binary temp_binary
+    local binary_count binary temp_binary reported_version expected_version
     local -a binaries=()
     target="$(release_target)"
     archive_name="zelyra-${release_tag}-${target}.tar.gz"
@@ -225,6 +230,12 @@ install_release() {
     binary_count="${#binaries[@]}"
     [[ "$binary_count" -eq 1 ]] || die "release archive must contain exactly one executable named zelyra (found ${binary_count})"
     binary="${binaries[0]}"
+
+    expected_version="zelyra $(release_version)"
+    reported_version="$("$binary" --version)" ||
+        die "release binary failed its --version check"
+    [[ "$reported_version" == "$expected_version" ]] ||
+        die "release binary reports ${reported_version@Q}; expected ${expected_version@Q}"
 
     mkdir -p "${install_root}/bin"
     temp_binary="${install_root}/bin/.zelyra.tmp.$$"

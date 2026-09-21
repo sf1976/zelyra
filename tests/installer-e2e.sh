@@ -13,22 +13,29 @@ trap cleanup EXIT
 
 cd -- "${repo_dir}"
 
-echo "[1/4] installing the source checkout into an isolated prefix"
+echo "[1/5] rejecting malformed release tags before network access"
+if ./install.sh --release "release/0.3.0" --dry-run --no-path --root "${install_root}"; then
+    echo "error: installer accepted a malformed release tag" >&2
+    exit 1
+fi
+./install.sh --release "v0.3.0-rc.1" --dry-run --no-path --root "${install_root}" >/dev/null
+
+echo "[2/5] installing the source checkout into an isolated prefix"
 ./install.sh --no-rustup --no-path --root "${install_root}"
 
 installed_binary="${install_root}/bin/zelyra"
 [[ -x "${installed_binary}" ]]
 
-echo "[2/4] checking the installed executable"
+echo "[3/5] checking the installed executable"
 ./install.sh --check --no-path --root "${install_root}"
 version_output="$(${installed_binary} --version)"
 [[ -n "${version_output}" ]]
 
-echo "[3/4] checking repeatable installation"
+echo "[4/5] checking repeatable installation"
 ./install.sh --no-rustup --no-path --root "${install_root}"
 ./install.sh --check --no-path --root "${install_root}"
 
-echo "[4/4] uninstalling only the installed executable"
+echo "[5/5] uninstalling only the installed executable"
 ./install.sh --uninstall --no-path --root "${install_root}"
 if ./install.sh --check --no-path --root "${install_root}"; then
     echo "error: installer check unexpectedly succeeded after uninstall" >&2
