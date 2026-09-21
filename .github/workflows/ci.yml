@@ -69,6 +69,14 @@ jobs:
         env:
           CARGO_TERM_COLOR: always
         run: ./tests/installer-e2e.sh
+      - name: Run clean onboarding end-to-end test
+        env:
+          ZELYRA_CLEAN_ONBOARDING_ROOT_PASSWORD: root
+          ZELYRA_CLEAN_ONBOARDING_DB_PORT: 3308
+          ZELYRA_CLEAN_ONBOARDING_HOST_PORT: 18083
+          ZELYRA_CLEAN_ONBOARDING_GENERATED_DB_HOST_PORT: 3311
+          ZELYRA_CLEAN_ONBOARDING_ADDRESS: 127.0.0.1:38521
+        run: ./tests/clean-onboarding-e2e.sh
       - name: Verify missing cargo installer error
         run: |
           set +e

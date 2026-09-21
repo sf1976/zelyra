@@ -909,6 +909,11 @@ Der Test erzeugt ein temporäres Projekt, führt `zelyra setup` aus, prüft die
 erzeugte Compose- und `doctor`-Konfiguration und entfernt temporäre Datenbank
 und Projekt nach dem CRUD-HTTP-Test wieder.
 
+Für den vollständigen Ersteinstieg führt CI `tests/clean-onboarding-e2e.sh` aus.
+Das Skript installiert die CLI in ein isoliertes Verzeichnis, prüft den
+generierten Quellcode, führt Setup und `doctor` aus, startet die erzeugte
+Anwendung und prüft ihren MariaDB-CRUD-Ablauf.
+
 Zusätzlich kann die erzeugte Docker-Laufzeit geprüft werden:
 
 ~~~bash

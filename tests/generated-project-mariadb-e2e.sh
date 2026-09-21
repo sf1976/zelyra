@@ -55,6 +55,16 @@ echo "[1/4] generating a fresh MariaDB project"
 echo "[2/4] validating generated Compose and doctor configuration"
 docker compose --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" config >/dev/null
+check_json="$("${zelyra_bin}" check "${project_dir}/main.zyl" --format=json)"
+printf '%s' "${check_json}" | python3 -c '
+import json
+import sys
+
+document = json.load(sys.stdin)
+if document.get("success") is not True:
+    raise SystemExit("generated project check did not report success")
+print("generated project check: success")
+'
 TEST_DATABASE_URL="${test_database_url}" awk '
     BEGIN { updated = 0 }
     /^DATABASE_URL=/ {
