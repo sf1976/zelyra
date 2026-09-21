@@ -18,6 +18,13 @@ releases follow Semantic Versioning independently of the language line.
   run 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419). /
   Der erfolgreiche Nachweis ist der [CI-Lauf
   35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419).
+- `zelyra doctor` onboarding guidance now has an explicit bilingual
+  troubleshooting path for Docker/Compose, permissions, ports, invalid
+  configuration, and unreachable MariaDB; the negative database test verifies
+  credential redaction. / Die zweisprachige `zelyra doctor`-Einsteigerhilfe
+  beschreibt nun Docker/Compose, Berechtigungen, Ports, ungültige Konfiguration
+  und nicht erreichbare MariaDB; der negative Datenbanktest prüft die
+  Geheimnisbereinigung.
 - The 0.3.0 database release audit is green in [CI run 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858): schema safety, the four-version MariaDB matrix, SQLite regression coverage, generated applications, and the isolated customer/order workflow pass. / Das 0.3.0-Datenbank-Release-Audit ist im [CI-Lauf 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858) grün: Schema-Sicherheit, die MariaDB-Matrix mit vier Versionen, SQLite-Regression, erzeugte Anwendungen und der isolierte Kunden-/Auftragsworkflow bestehen.
 - MariaDB-`db create`- und `db setup`-DDL erzeugt Tabellen jetzt ausdrücklich
   mit InnoDB sowie utf8mb4/utf8mb4_unicode_ci; SQLite- und PostgreSQL-DDL bleibt

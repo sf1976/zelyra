@@ -1008,6 +1008,53 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
 }
 
 #[test]
+fn doctor_reports_unreachable_database_without_exposing_credentials() {
+    let directory = temporary_directory("doctor-unreachable-database");
+    fs::create_dir_all(&directory).unwrap();
+    let secret = "doctor-secret-redaction";
+    let env_file = directory.join(".env");
+    fs::write(
+        &env_file,
+        format!("DATABASE_URL=mariadb://doctor:{secret}@127.0.0.1:1/doctor_db\n"),
+    )
+    .unwrap();
+
+    let output = run(&[
+        "doctor",
+        example("machine_form.zyl").to_str().unwrap(),
+        "--env-file",
+        env_file.to_str().unwrap(),
+        "--port",
+        &free_test_port(),
+        "--json",
+    ]);
+    assert!(
+        !output.status.success(),
+        "doctor unexpectedly accepted an unavailable database"
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["status"], "failed");
+    let database_check = document["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|check| check["name"] == "database")
+        .expect("doctor should report a database check");
+    assert_eq!(database_check["status"], "fail");
+    assert!(database_check["message"]
+        .as_str()
+        .unwrap()
+        .contains("mariadb"));
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!combined.contains(secret));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn setup_selects_free_ports_for_a_new_local_environment() {
     let directory = temporary_directory("setup-free-ports");
     fs::create_dir_all(&directory).unwrap();

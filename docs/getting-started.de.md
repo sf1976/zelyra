@@ -942,6 +942,22 @@ Der Quellcode-Installer benötigt curl nur, wenn Rust fehlt. curl mit dem
 Paketmanager des Betriebssystems installieren und install.sh erneut ausführen.
 Alternativ Rust zuerst über den offiziellen rustup-Weg installieren.
 
+### Docker, Compose oder MariaDB ist nicht verfügbar
+
+Die schreibgeschützte Diagnose für das erzeugte Projekt ausführen:
+
+~~~bash
+zelyra doctor main.zyl --env-file .env --json
+~~~
+
+Sie meldet fehlendes Docker Compose, fehlende Docker-Socket-Berechtigung,
+belegte Web-Ports, ungültige Projektkonfiguration und eine nicht erreichbare
+MariaDB mit einem konkreten nächsten Schritt. Die Mitgliedschaft in der
+Docker-Gruppe gewährt weitreichende, praktisch root-äquivalente Rechte; diese
+Folge vor einer solchen Maßnahme verstehen und die Einrichtung der eigenen
+Distribution beachten. Datenbankdiagnosen geben Zugangsdaten aus `.env` nie
+aus.
+
 ### DATABASE_URL wird benötigt
 
 Datenbank-Inspektion, Bootstrap, Planung gegen eine laufende Datenbank und

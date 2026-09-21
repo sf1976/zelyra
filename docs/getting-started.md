@@ -905,6 +905,21 @@ The source installer needs curl only when Rust is missing. Install curl using
 the operating system package manager, then run install.sh again. Alternatively,
 install Rust through the official rustup process first.
 
+### Docker, Compose, or MariaDB is unavailable
+
+Run the read-only diagnostic against the generated project:
+
+~~~bash
+zelyra doctor main.zyl --env-file .env --json
+~~~
+
+It reports missing Docker Compose, Docker socket permission failures, occupied
+web ports, invalid project configuration, and unreachable MariaDB with an
+actionable next step. Docker-group membership grants extensive,
+effectively root-equivalent privileges; use the documented distribution setup
+and understand that consequence before applying it. Database diagnostics never
+echo the credentials from `.env`.
+
 ### DATABASE_URL is required
 
 Database inspection, bootstrap, plan against a live database, and apply need a
