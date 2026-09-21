@@ -603,6 +603,21 @@ Workflow waren erfolgreich.
 Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419) grün.
 
+## Vorgeschlagener Release-Meilenstein 0.4.0
+
+Der separate [Releaseplan 0.4.0](release-plans/0.4.0.de.md) ist ein
+Arbeitsvorschlag für den nächsten Meilenstein nach dem finalen 0.3.0-Release.
+Er priorisiert Module und deterministische Mehrdateiprojekte, einen
+zuverlässigen Datenbank-/Runtime-Lebenszyklus, sicherere Konto- und
+API-Lebenszyklen, granulare AI-native Effekte sowie Nachweise für Lieferkette
+und Barrierefreiheit. PostgreSQL-Runtime-Parität, Multi-Tenancy,
+Hintergrundjobs, MFA, OIDC oder ein visueller Editor werden dadurch bewusst
+nicht automatisch zu 0.4.0-Versprechen.
+
+Der 0.4.0-Plan gilt erst als begonnen, wenn 0.3.0 final veröffentlicht und
+der menschliche Onboarding-Nachweis festgehalten wurde. Umfang und Status
+bleiben dem Risikoregister und den Abnahme-Gates des Plans unterstellt.
+
 ## Akzeptanzanwendungen aus der Praxis
 
 - [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten

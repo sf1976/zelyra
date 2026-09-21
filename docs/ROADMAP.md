@@ -560,6 +560,20 @@ generated applications, and isolated customer/order workflow all passed.
 The clean installed-CLI onboarding path is also green in [CI run
 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419).
 
+## Proposed release milestone 0.4.0
+
+The separate [0.4.0 release plan](release-plans/0.4.0.en.md) is a working
+proposal for the next milestone after the final 0.3.0 release. It prioritizes
+modules and deterministic multi-file projects, reliable database/runtime
+lifecycle management, safer account and API lifecycle controls, granular
+AI-native effects, and supply-chain/accessibility evidence. It deliberately
+does not turn PostgreSQL runtime parity, multi-tenancy, background jobs, MFA,
+OIDC, or a visual editor into automatic 0.4.0 promises.
+
+The 0.4.0 plan must not be treated as started until 0.3.0 has a final release
+and its human onboarding evidence is recorded. Scope and status remain subject
+to the plan's risk register and acceptance gates.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template
