@@ -10487,6 +10487,42 @@ mod tests {
     }
 
     #[test]
+    fn custom_form_layout_cannot_bypass_csrf_validation_or_authorization() {
+        let mut route = form_route();
+        route.layout_html = Some(format!(
+            "<div class=\"custom-form-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"
+        ));
+        let app = WebApp::new(Vec::new(), vec![route.clone()]);
+
+        let invalid_csrf = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=wrong",
+        )
+        .unwrap();
+        let csrf_response = app.dispatch(&invalid_csrf);
+        assert_eq!(csrf_response.status, 403);
+        assert!(csrf_response.body.contains("custom-form-shell"));
+
+        let missing_name = parse_request(
+            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token",
+        )
+        .unwrap();
+        let validation_response = app.dispatch(&missing_name);
+        assert_eq!(validation_response.status, 422);
+        assert!(validation_response.body.contains("custom-form-shell"));
+        assert!(validation_response.body.contains("value is required"));
+
+        let mut protected_route = route;
+        protected_route.requires_auth = true;
+        protected_route.permissions = vec!["customers.view".into()];
+        let protected_app = WebApp::new(Vec::new(), vec![protected_route]);
+        let get_request =
+            parse_request("GET /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let authorization_response = protected_app.dispatch(&get_request);
+        assert_eq!(authorization_response.status, 401);
+        assert!(!authorization_response.body.contains("custom-form-shell"));
+    }
+
+    #[test]
     fn form_post_returns_accepted_after_validating_input() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let request = parse_request(
