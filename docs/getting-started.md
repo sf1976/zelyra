@@ -151,7 +151,8 @@ Use `--no-rustup` to fail clearly instead of installing Rust automatically,
 `ZELYRA_INSTALL_ROOT` environment variable to choose another user-owned
 installation directory. Use `--offline` when the required Rust dependencies
 are already cached. A broken or stale `cargo` PATH entry is detected and never
-executed as if it were a real compiler.
+executed as if it were a real compiler. CI also exercises this missing-`cargo`
+path without a Rust toolchain.
 
 `zelyra update --check` checks for a newer stable release without modifying
 files. `zelyra update` downloads the standalone Linux or Windows x86_64 binary,

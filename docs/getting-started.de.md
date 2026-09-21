@@ -159,7 +159,8 @@ Umgebungsvariable `ZELYRA_INSTALL_ROOT` lässt sich ein anderes
 benutzerbezogenes Installationsverzeichnis wählen. Mit `--offline` werden nur
 bereits gecachte Rust-Abhängigkeiten verwendet. Ein veralteter oder defekter
 `cargo`-PATH-Eintrag wird erkannt und niemals als ausführbarer Compiler
-verwendet.
+verwendet. Dieser fehlende-`cargo`-Pfad wird zusätzlich in CI ohne
+Rust-Toolchain geprüft.
 
 `zelyra update --check` prüft ohne Dateiänderungen, ob ein neueres stabiles
 Release verfügbar ist. `zelyra update` lädt die eigenständige Linux- oder
