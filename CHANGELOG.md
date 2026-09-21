@@ -6,6 +6,10 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Release artifact verification now compares prerelease binaries with their
+  stable workspace version while retaining the prerelease tag in filenames. /
+  Die Release-Artefaktprüfung vergleicht Prerelease-Binärdateien nun mit ihrer
+  stabilen Workspace-Version und behält das Kandidatentag in Dateinamen bei.
 - The published-release installer now accepts only SemVer release tags and
   verifies that the downloaded executable reports the requested stable version
   (including prerelease tags). / Der Installer für veröffentlichte Releases
@@ -131,11 +135,11 @@ releases follow Semantic Versioning independently of the language line.
   Unicode-Text erhalten bleibt; ein Konsolenbeispiel schreibt die Ziffern
   einer vorzeichenbehafteten Ganzzahl einzeln aus.
 
-## 0.3.0-rc.1 — 2026-09-21
+## 0.3.0-rc.2 — 2026-09-21
 
-- First 0.3.0 release candidate for published artifact, installer/update, and
+- Second 0.3.0 release candidate for published artifact, installer/update, and
   independent onboarding evidence. This is still experimental and is not the
-  final `v0.3.0` release. / Erster 0.3.0-Releasekandidat für Nachweise zu
+  final `v0.3.0` release. / Zweiter 0.3.0-Releasekandidat für Nachweise zu
   veröffentlichten Artefakten, Installation/Update und unabhängigem Onboarding.
   Er bleibt experimentell und ist nicht das endgültige `v0.3.0`-Release.
 
