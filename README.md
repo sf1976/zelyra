@@ -31,6 +31,9 @@ See the [0.2.0 changelog](CHANGELOG.md) for release notes and the
 links are the source of detail; this README is intended as a project overview,
 not a second handbook or changelog.
 
+The [0.3.0 release-notes draft](docs/release-notes/0.3.0.en.md) records the
+planned scope and limitations; it is not a published release announcement.
+
 ## Start here
 
 ### Try the language

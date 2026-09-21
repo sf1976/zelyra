@@ -32,6 +32,10 @@ die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
 Diese Quellen enthalten die Details. Das README ist ein Projektüberblick und
 soll kein zweites Handbuch oder Changelog sein.
 
+Der [Entwurf der 0.3.0-Release-Notizen](docs/release-notes/0.3.0.de.md) führt
+geplanten Umfang und Grenzen auf; er ist keine veröffentlichte Release-
+Ankündigung.
+
 ## Schnellstart
 
 ### Die Sprache ausprobieren

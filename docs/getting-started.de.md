@@ -120,8 +120,8 @@ Für die einfachste Installation aus dem Quellcode werden benötigt:
 Die Installer bauen Zelyra für den aktuellen Benutzer und verwenden weder sudo
 noch Administratorrechte. Falls Rust fehlt, wird es automatisch installiert.
 Die Quellcode-Installer benötigen für die erste Toolchain-Installation eine
-Internetverbindung. Ein eigenständiger Release-Installer ohne Rust bleibt
-geplant.
+Internetverbindung. Veröffentlichte Linux-x86_64- und Windows-x86_64-Releases
+können ohne Rust oder Cargo installiert werden.
 
 Apache ist nicht erforderlich. Für Sprachkern-, Web- und lokale
 Formularbeispiele wird kein Datenbankserver benötigt. MariaDB wird nur

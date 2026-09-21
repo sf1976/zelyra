@@ -38,6 +38,10 @@ releases follow Semantic Versioning independently of the language line.
   Maschinenverwaltungs-Abnahmefixture und ein Generated-Project-E2E prüfen
   anonyme Ablehnung, Viewer-Zugriff, Ablehnung von Erstellen/Bearbeiten,
   autorisierte CRUD-Formulare, Suche und Löschen.
+- Add bilingual 0.3.0 draft release notes with explicit support boundaries,
+  upgrade guidance, known limitations, and candidate-gate status. / Zweisprachige
+  0.3.0-Release-Notizen als Entwurf mit Supportgrenzen, Upgrade-Hinweisen,
+  bekannten Einschränkungen und Kandidaten-Gatestatus ergänzt.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

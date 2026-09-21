@@ -4,6 +4,11 @@ This guide describes the repository's release checks. A manual rehearsal builds
 the same Linux and Windows packages as a release but cannot publish a GitHub
 release.
 
+The current bilingual [0.3.0 release-notes draft](release-notes/0.3.0.en.md)
+records the intended scope, support boundaries, installation/upgrade checklist,
+and known limitations. Its German counterpart is
+[available here](release-notes/0.3.0.de.md). It is not a release announcement.
+
 ## Before release
 
 1. Set the workspace version in `Cargo.toml` and refresh `Cargo.lock`.

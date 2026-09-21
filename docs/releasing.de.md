@@ -4,6 +4,11 @@ Diese Anleitung beschreibt die Release-Prüfungen des Repositorys. Eine manuelle
 Probe baut dieselben Linux- und Windows-Pakete wie ein Release, kann aber kein
 GitHub-Release veröffentlichen.
 
+Der aktuelle zweisprachige [Entwurf der 0.3.0-Release-Notizen](release-notes/0.3.0.de.md)
+führt Umfang, Supportgrenzen, Installations-/Upgrade-Checkliste und bekannte
+Einschränkungen auf. Die englische Fassung ist
+[hier verfügbar](release-notes/0.3.0.en.md). Er ist keine Release-Ankündigung.
+
 ## Vor dem Release
 
 1. Die Workspace-Version in `Cargo.toml` setzen und `Cargo.lock` aktualisieren.
