@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from package_release import RELEASE_FILES, package_release
+from verify_release_artifacts import verify_release_artifacts
 
 
 class ReleasePackageTests(unittest.TestCase):
@@ -113,6 +114,24 @@ class ReleasePackageTests(unittest.TestCase):
         binary = next(path for path in outputs if path.suffix == ".bin")
         sidecar = binary.with_name(binary.name + ".sha256").read_text(encoding="ascii")
         self.assertEqual(sidecar.split()[0], hashlib.sha256(binary.read_bytes()).hexdigest())
+
+    def test_linux_artifacts_pass_release_verifier(self) -> None:
+        outputs, _ = self.package_twice("linux")
+        verify_release_artifacts(
+            directory=outputs[0].parent,
+            platform="linux",
+            tag=self.tag,
+            target="x86_64-unknown-linux-gnu",
+        )
+
+    def test_windows_artifacts_pass_release_verifier(self) -> None:
+        outputs, _ = self.package_twice("windows")
+        verify_release_artifacts(
+            directory=outputs[0].parent,
+            platform="windows",
+            tag=self.tag,
+            target="x86_64-pc-windows-msvc",
+        )
 
     def test_invalid_target_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not match platform"):

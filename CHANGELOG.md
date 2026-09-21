@@ -25,6 +25,10 @@ releases follow Semantic Versioning independently of the language line.
   archive safety, packaged CLI execution, and installer dry-run. / Ein Linux-
   Release-Artefakt-Smoke-Test prüft Packaging, Prüfsummen, Archiv-Sicherheit,
   die paketierte CLI und den Installer-Dry-Run.
+- Verify Linux and Windows release outputs in the release workflow, including
+  exact artifact names, SHA-256 sidecars, archive safety, and CLI versions. /
+  Der Release-Workflow prüft Linux- und Windows-Ausgaben nun auf exakte
+  Artefaktnamen, SHA-256-Sidecars, Archiv-Sicherheit und CLI-Versionen.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

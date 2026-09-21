@@ -21,6 +21,11 @@ creates the archive and SHA-256 sidecars, verifies the checksums and archive
 paths, runs the packaged binary, and checks the installer dry-run. The release
 workflow remains authoritative for the Windows artifact.
 
+The release workflow also runs `scripts/verify_release_artifacts.py` on both
+platforms. It requires exactly the expected binary and archive files, verifies
+each SHA-256 sidecar, rejects unsafe or unexpected archive paths, and checks the
+target artifact's CLI version.
+
 The release tag must exactly match the workspace package version in
 `Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). The workflow rejects
 a mismatched tag instead of publishing archives whose names and embedded CLI

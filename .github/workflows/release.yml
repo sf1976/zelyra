@@ -65,6 +65,7 @@ jobs:
             exit 1
           fi
 
+          python3 scripts/check_release_metadata.py --tag "${release_tag}"
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 
   build:
@@ -159,6 +160,18 @@ jobs:
             --tag "${RELEASE_TAG}" \
             --target "${TARGET}" \
             --source-date-epoch "${source_date_epoch}"
+      - name: Verify Linux release artifacts
+        if: runner.os == 'Linux'
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          python3 scripts/verify_release_artifacts.py \
+            --directory release-out \
+            --platform linux \
+            --tag "${RELEASE_TAG}" \
+            --target "${TARGET}" \
+            --run-binary
       - name: Package Windows release
         if: runner.os == 'Windows'
         shell: pwsh
@@ -175,6 +188,19 @@ jobs:
             --tag $env:RELEASE_TAG `
             --target $env:TARGET `
             --source-date-epoch $sourceDateEpoch
+      - name: Verify Windows release artifacts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          python scripts/verify_release_artifacts.py `
+            --directory release-out `
+            --platform windows `
+            --tag $env:RELEASE_TAG `
+            --target $env:TARGET `
+            --run-binary
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:

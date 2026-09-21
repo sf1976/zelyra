@@ -25,6 +25,11 @@ prüft Prüfsummen und Archivpfade, startet die paketierte CLI und prüft den
 Installer-Dry-Run. Für das Windows-Artefakt bleibt der Release-Workflow
 maßgeblich.
 
+Der Release-Workflow führt zusätzlich `scripts/verify_release_artifacts.py` auf
+beiden Plattformen aus. Dieser Check verlangt genau die erwarteten Binär- und
+Archivdateien, verifiziert jedes SHA-256-Sidecar, lehnt unsichere oder unerwartete
+Archivpfade ab und prüft die CLI-Version des Zielartefakts.
+
 Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
 (zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
 Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter
