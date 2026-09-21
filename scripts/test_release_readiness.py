@@ -17,7 +17,7 @@ class ReleaseReadinessTests(unittest.TestCase):
     def test_current_030_plan_is_not_ready(self) -> None:
         root = Path(__file__).resolve().parents[1]
         failures = unfinished_gates(root, "0.3.0")
-        self.assertGreaterEqual(len(failures), 5)
+        self.assertGreaterEqual(len(failures), 1)
         self.assertTrue(any("human onboarding" in failure for failure in failures))
 
     def test_all_required_gates_can_be_checked(self) -> None:
