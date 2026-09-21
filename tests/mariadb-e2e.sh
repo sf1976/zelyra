@@ -83,7 +83,12 @@ if [[ ! -x "${zelyra_bin}" ]]; then
     exit 1
 fi
 
-echo "[1/11] setting up MariaDB schema"
+echo "[1/11] rendering MariaDB baseline DDL"
+create_output="$("${zelyra_bin}" db create "${project_file}")"
+grep -Fq "ENGINE=InnoDB" <<<"${create_output}"
+grep -Fq "DEFAULT CHARACTER SET=utf8mb4" <<<"${create_output}"
+
+echo "[1a/11] setting up MariaDB schema"
 "${zelyra_bin}" db setup "${project_file}"
 if [[ -n "${demo_fixture}" ]]; then
     if [[ ! -f "${demo_fixture}" ]]; then
@@ -108,14 +113,20 @@ if [[ -n "${demo_fixture}" ]]; then
     [[ "${demo_department_count}" == "6" ]]
 fi
 
-echo "[2/11] inspecting MariaDB schema"
+echo "[2/11] repeating MariaDB bootstrap"
+"${zelyra_bin}" db bootstrap "${project_file}"
+
+echo "[3/11] inspecting MariaDB schema"
 inspect_output="$("${zelyra_bin}" db inspect "${project_file}")"
 grep -Fq "2 tables" <<<"${inspect_output}"
 grep -Fq "1 foreign keys" <<<"${inspect_output}"
 
-echo "[3/11] checking schema plan"
+echo "[4/11] checking schema plan"
 plan_output="$("${zelyra_bin}" db plan "${project_file}")"
 grep -Fq "No schema changes." <<<"${plan_output}"
+echo "[4a/11] applying the idempotent schema plan"
+apply_output="$("${zelyra_bin}" db apply "${project_file}")"
+grep -Fq "No schema changes." <<<"${apply_output}"
 
 echo "[4/11] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &

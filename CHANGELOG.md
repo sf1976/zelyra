@@ -35,6 +35,11 @@ releases follow Semantic Versioning independently of the language line.
   customer/order workflow. / Der vollständige CI-Nachweis umfasst nun Windows,
   die ausgewiesene MariaDB-Kompatibilitätsmatrix, Workspace-Tests, Clippy,
   erzeugte Anwendungen und den isolierten Kunden-/Auftragsworkflow.
+- MariaDB CRUD E2E now covers the complete database CLI sequence: `create`,
+  `setup`, repeated `bootstrap`, `inspect`, `plan`, and idempotent `apply`.
+  / Der MariaDB-CRUD-E2E-Test deckt nun die vollständige Datenbank-CLI-Sequenz
+  mit `create`, `setup`, wiederholtem `bootstrap`, `inspect`, `plan` und
+  idempotentem `apply` ab.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an
