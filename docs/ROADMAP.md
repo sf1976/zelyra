@@ -201,7 +201,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] PostgreSQL schema and planning support.
 - [x] Database CLI flow: `create`, `setup`, `bootstrap`, `inspect`, `plan`,
   and guarded `apply` are implemented with explicit backend behavior and
-  destructive-change protection.
+  destructive-change protection. MariaDB `create` and `setup` DDL explicitly
+  use InnoDB with utf8mb4/utf8mb4_unicode_ci; SQLite and PostgreSQL output keep
+  their backend-specific behavior.
 - [ ] Complete PostgreSQL runtime parity.
 - [~] MariaDB compatibility is explicitly tested against official image tags
   `10.11.19`, `11.4.13`, `11.8.9`, and `12.3.3` for schema/CRUD HTTP and

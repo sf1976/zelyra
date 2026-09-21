@@ -6,6 +6,12 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- MariaDB-`db create`- und `db setup`-DDL erzeugt Tabellen jetzt ausdrücklich
+  mit InnoDB sowie utf8mb4/utf8mb4_unicode_ci; SQLite- und PostgreSQL-DDL bleibt
+  unverändert.
+- MariaDB `db create` and `db setup` DDL now explicitly creates tables with
+  InnoDB and utf8mb4/utf8mb4_unicode_ci; SQLite and PostgreSQL DDL is unchanged.
+
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an
   explicit project grant when a capabilities allowlist is configured.

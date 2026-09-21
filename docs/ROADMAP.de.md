@@ -216,7 +216,9 @@ Feature eines bestimmten Anbieters.
 - [x] PostgreSQL für Schema und Planung.
 - [x] Datenbank-CLI: `create`, `setup`, `bootstrap`, `inspect`, `plan` und das
   geschützte `apply` sind mit ausdrücklichem Backend-Verhalten und Schutz vor
-  destruktiven Änderungen umgesetzt.
+  destruktiven Änderungen umgesetzt. MariaDB-DDL aus `create` und `setup`
+  verwendet ausdrücklich InnoDB mit utf8mb4/utf8mb4_unicode_ci; SQLite- und
+  PostgreSQL-Ausgaben behalten ihr backend-spezifisches Verhalten.
 - [ ] Vollständige PostgreSQL-Runtime-Parität.
 - [~] MariaDB-Kompatibilität wird für die offiziellen Image-Tags `10.11.19`,
   `11.4.13`, `11.8.9` und `12.3.3` hinsichtlich Schema-/CRUD-HTTP-Pfad und

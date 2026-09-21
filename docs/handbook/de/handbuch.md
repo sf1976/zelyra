@@ -6043,16 +6043,14 @@ CREATE TABLE IF NOT EXISTS `addresses` (
     `postal_code` VARCHAR(10) NOT NULL,
     `city` VARCHAR(100) NOT NULL,
     `email` VARCHAR(255)
-);
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ~~~
 
-⚠️ Diese Ausgabe ist aktuell **nicht vollständig MariaDB-spezifisch**: Der
-Generator hängt weder `ENGINE=InnoDB` noch
-`DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci` an. Übernimm sie
-deshalb nicht als fertige, organisationsweite MariaDB-DDL. Zeige das SQL
-zuerst an, prüfe es, ergänze die gewünschten MariaDB-Tabellenoptionen manuell
-und wende es erst dann kontrolliert an. Die Datenbankerzeugung in `db setup`
-verwendet für `CREATE DATABASE` bereits `utf8mb4` und `utf8mb4_unicode_ci`.
+Für MariaDB enthalten die erzeugten Tabellenaussagen
+`ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
+Damit sind sie für die dokumentierte MariaDB-Basis vollständig; sie bleiben
+dennoch ein zu prüfender Schema-Vorschlag. Vor Änderungen an einer bestehenden
+Datenbank weiterhin `db plan` lesen und das Risiko ausdrücklich bewerten.
 
 ### Weitere Datenbank-Backends
 

@@ -524,10 +524,17 @@ fn table_create_sql(table: &Table, backend: Backend) -> String {
             quote_identifier(&foreign_key.referenced_column, backend)
         )
     }));
+    let table_options = match backend {
+        Backend::MariaDb => {
+            " ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        }
+        Backend::Sqlite | Backend::Postgres => "",
+    };
     format!(
-        "CREATE TABLE IF NOT EXISTS {} (\n    {}\n);",
+        "CREATE TABLE IF NOT EXISTS {} (\n    {}\n){};",
         quote_identifier(&table.name, backend),
-        definitions.join(",\n    ")
+        definitions.join(",\n    "),
+        table_options
     )
 }
 
@@ -3230,6 +3237,8 @@ mod tests {
         let mariadb_sql = mariadb.create_sql();
         assert!(mariadb_sql.contains("`id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT"));
         assert!(mariadb_sql.contains("`active` BOOLEAN DEFAULT TRUE"));
+        assert!(mariadb_sql
+            .contains(") ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"));
 
         let sqlite = schema(
             r#"
@@ -3240,6 +3249,7 @@ mod tests {
         let sqlite_sql = sqlite.create_sql();
         assert!(sqlite_sql.contains("\"id\" INTEGER PRIMARY KEY AUTOINCREMENT"));
         assert!(sqlite_sql.contains("\"active\" INTEGER DEFAULT TRUE"));
+        assert!(!sqlite_sql.contains("ENGINE=InnoDB"));
     }
 
     #[test]
