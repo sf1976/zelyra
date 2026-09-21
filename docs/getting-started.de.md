@@ -162,6 +162,11 @@ bereits gecachte Rust-Abhängigkeiten verwendet. Ein veralteter oder defekter
 verwendet. Dieser fehlende-`cargo`-Pfad wird zusätzlich in CI ohne
 Rust-Toolchain geprüft.
 
+Zusätzlich führt CI `tests/installer-e2e.sh` gegen ein isoliertes
+Installationsverzeichnis aus. Dabei werden Quellcode-Installation, Prüfung der
+installierten Version, wiederholte Installation und `--uninstall` tatsächlich
+ausgeführt; entfernt wird dabei ausschließlich die installierte Binärdatei.
+
 `zelyra update --check` prüft ohne Dateiänderungen, ob ein neueres stabiles
 Release verfügbar ist. `zelyra update` lädt die eigenständige Linux- oder
 Windows-x86_64-Binärdatei, prüft ihre SHA-256-Checksumme und ersetzt nur das

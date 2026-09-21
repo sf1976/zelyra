@@ -154,6 +154,11 @@ are already cached. A broken or stale `cargo` PATH entry is detected and never
 executed as if it were a real compiler. CI also exercises this missing-`cargo`
 path without a Rust toolchain.
 
+CI additionally runs `tests/installer-e2e.sh` against an isolated installation
+prefix. It performs a real source install, checks the installed version,
+repeats the installation, and verifies that `--uninstall` removes only the
+installed executable.
+
 `zelyra update --check` checks for a newer stable release without modifying
 files. `zelyra update` downloads the standalone Linux or Windows x86_64 binary,
 verifies its SHA-256 checksum, and replaces only the executable that was

@@ -65,6 +65,10 @@ jobs:
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
           ./install.sh --release v0.2.0 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+      - name: Run source installer end-to-end test
+        env:
+          CARGO_TERM_COLOR: always
+        run: ./tests/installer-e2e.sh
       - name: Verify missing cargo installer error
         run: |
           set +e
