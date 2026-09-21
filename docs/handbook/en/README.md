@@ -16,8 +16,10 @@ web pages, forms, CRUD, authentication, capabilities, and contracts. This
 handbook builds a small machine-management application, starting with the first
 program and ending with a database-backed web application.
 
-> **Project status:** Zelyra 0.1 is experimental. Many foundations described
-> here are implemented, but the project is not ready for production use.
+> **Project status:** Zelyra 0.2.0 is experimental. The foundations described
+> here are implemented in a tested scope, but the project is not approved for
+> production use. The proposed 0.3.0 work is tracked in the [release
+> plan](../../release-plans/0.3.0.en.md).
 
 The binding product goals for digital sovereignty and evidence-based
 correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).

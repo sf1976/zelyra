@@ -69,7 +69,7 @@ Welcome to the complete Zelyra Handbook. It includes both the introductory textb
   - [Chapter 39: Deployment and Operations](#chapter-39-deployment-and-operations)
 - **[PART X – CAPSTONE PROJECT AND LOOKING AHEAD](#part-x-capstone-project-and-looking-ahead)**
   - [Chapter 40: The Grand Capstone Project: Complete Task Management](#chapter-40-the-grand-capstone-project-complete-task-management)
-  - [Chapter 41: The Zelyra Roadmap (From 0.1 to 1.0)](#chapter-41-the-zelyra-roadmap-from-01-to-10)
+  - [Chapter 41: The Zelyra Roadmap (From 0.2.0 to 1.0)](#chapter-41-the-zelyra-roadmap-from-020-to-10)
   - [Chapter 42: Your Journey as a Zelyra Developer](#chapter-42-your-journey-as-a-zelyra-developer)
 
 ### Technical Reference Manual
@@ -5523,40 +5523,54 @@ Navigate to `http://localhost:8080` in your browser—your own live Zelyra appli
 
 ---
 
-## Chapter 41: The Zelyra Roadmap (From 0.1 to 1.0)
+## Chapter 41: The Zelyra Roadmap (From 0.2.0 to 1.0)
 
 ### 1. What will I learn in this chapter?
 In this chapter, you will learn:
-- The developmental lifecycle of Zelyra: Where the language stands today (Phases 1 through 9) and what comes next.
-- Planned features for Phases 10 through 12: Advanced module imports, package management, and WebAssembly compilation.
+- The developmental lifecycle of Zelyra: what the experimental 0.2.0 release delivers and what comes next.
+- Planned features for the next milestones: module imports, package management, and WebAssembly compilation.
 - How backward compatibility and stability guarantees are maintained through version 1.0.
 
 ### 2. Why is this topic important?
 A programming language is a living ecosystem. When you invest time into mastering Zelyra, you want assurance that the language has a clear strategic roadmap, professional stewardship, and that existing code remains compatible in future releases.
 
 ### 3. Understandable explanation without unnecessary jargon: Roadmap Overview
-Zelyra's roadmap is structured across 12 precisely planned phases:
+Zelyra's roadmap is structured across implementation phases and release
+milestones:
 - **Phases 1 to 3 (Foundations):** Lexer, parser, AST, static type checker, control flow, functions, and formal contracts (`requires`, `ensures`). *(Completed)*
 - **Phases 4 to 6 (Database & Data):** MariaDB and SQLite engines, type-checked `sql<T[]>`, migrations, transactions, FileSystem and Clock capabilities. *(Completed)*
 - **Phases 7 to 9 (Web & Security):** `page`, `html`, `form` with CSRF/XSS protection, `crud` views, `auth` with Argon2, `api` with automated OpenAPI schema generation, Typed Holes, and structured JSON diagnostics. *(Completed)*
-- **Phase 10 (Implemented in version 0.1.50):** Typed `Map<Key, Value>` dictionaries, declarative page collections with automated search, filtering, and pagination, reusable view layouts with named slots, `layout: ViewName` for CRUD resources with automatic detail linking, `zelyra setup` with tokenized browser assistant (`zelyra setup --web`), automatic port selection, CSRF-protected permission revocation, and platform-specific Docker install guidance.
-- **Phase 11 (Upcoming 0.9 Milestone):** Fine-grained modularization and import syntax (`import`), integrated test runner `zelyra test`.
-- **Phase 12 (Path to 1.0):** Official package manager, WebAssembly compilation (running Zelyra client-side in browsers), and Long-Term Support (LTS) stability commitments.
+- **0.2.0 (current experimental release):** Typed maps, declarative search,
+  filtering and pagination, reusable views and slots, generated CRUD,
+  authentication and permissions, audit support, setup/doctor tooling,
+  machine-readable compiler interfaces, and tested Linux/Windows x86_64
+  distribution paths.
+- **0.3.0 (proposed):** Better beginner onboarding, release evidence, schema
+  safety, and a reproducible real-application acceptance path. See the [release
+  plan](../../release-plans/0.3.0.en.md); it is not a release promise.
+- **Later milestones:** Fine-grained modules/imports, a package manager,
+  WebAssembly compilation, and any LTS commitment remain future work.
 
 ### 4. Small, progressive examples: Zelyra's Guarantees to Developers
 - **No breaking changes without deprecation cycles:** Syntax changes are introduced with generous transition periods and explicit compiler hints.
 - **Formal language specification:** Every language construct is grounded in an unambiguous formal grammar.
 
 ### 5. Typical errors and their causes: Common Misconceptions
-- **Misconception:** "Zelyra 0.1 is merely an experimental prototype."
-  *Correction:* Zelyra 0.1 is a robust, fully functional compiler, type checker, MariaDB query engine, HTTP server, and OpenAPI generator.
+- **Misconception:** "Zelyra 0.2.0 is production-ready because its core paths work."
+  *Correction:* Zelyra 0.2.0 is an experimental, tested scope. The repository
+  documents its supported paths and residual risks; production approval is not
+  claimed.
 - **Misconception:** Blindly assuming syntax conventions from other languages exist today.
   *Correction:* Zelyra is intentionally independent. Unimplemented features (such as dynamic `import` or custom enum types) are explicitly slated for Phases 11 and 12 on the roadmap.
 
 ### 6. Key takeaways
-1. Zelyra follows a disciplined, transparent development roadmap from version 0.1 to 1.0.
-2. The core platform (database integration, web framework, static safety, and AI tooling) is fully functional and ready for production today.
-3. Fine-grained module imports and decentralized package distribution are scheduled for Phases 11 and 12.
+1. Zelyra follows a disciplined, transparent roadmap from the current 0.2.0
+   release toward later milestones.
+2. The core platform has tested experimental paths for database integration,
+   web applications, static safety, and AI-native tooling; it is not approved
+   for production today.
+3. Fine-grained module imports, package distribution, and WebAssembly remain
+   future work.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
@@ -5575,9 +5589,9 @@ zelyra doctor
 - The modular phased development methodology guarantees predictable, rock-solid evolution without breaking developer workflows.
 
 ### 10. Self-check review questions
-1. Which core capabilities and language features are fully implemented in version 0.1?
-2. In which phase of the roadmap will granular `import` statements be introduced?
-3. What does Zelyra's backward stability guarantee mean for existing production code?
+1. Which core capabilities are implemented in the tested 0.2.0 scope?
+2. Which future milestone is planned for granular `import` statements?
+3. Why does the experimental status matter before deploying Zelyra to production?
 
 ---
 
@@ -8447,8 +8461,10 @@ fn main() {
 
 ## Appendix I: Frequently Asked Questions (FAQ)
 
-**Question: Why is there no `import` statement in Zelyra 0.1?**
-*Answer:* In version 0.1, the Zelyra compiler analyzes all `.zyl` source files within the project context as a single unified compilation unit. A fine-grained module and import system is scheduled for Phase 11 of the development roadmap.
+**Question: Why is there no `import` statement in Zelyra 0.2.0?**
+*Answer:* In version 0.2.0, the Zelyra compiler analyzes all `.zyl` source
+files within the project context as a single unified compilation unit. A
+fine-grained module and import system remains future roadmap work.
 
 **Question: Can I build command-line applications with Zelyra?**
 *Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.

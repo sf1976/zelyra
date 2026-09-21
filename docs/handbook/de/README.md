@@ -16,8 +16,10 @@ geprüftem SQL, Webseiten, Formularen, CRUD, Authentifizierung, Capabilities und
 Verträgen. Dieses Handbuch führt anhand einer kleinen Maschinenverwaltung vom
 ersten Programm bis zur datenbankgestützten Webanwendung.
 
-> **Projektstatus:** Zelyra 0.1 ist experimentell. Viele beschriebene Grundlagen
-> sind implementiert, aber noch nicht für den Produktionseinsatz freigegeben.
+> **Projektstatus:** Zelyra 0.2.0 ist experimentell. Die hier beschriebenen
+> Grundlagen sind in einem getesteten Umfang implementiert, aber noch nicht für
+> den Produktionseinsatz freigegeben. Die geplanten 0.3.0-Arbeiten stehen im
+> [Releaseplan](../../release-plans/0.3.0.de.md).
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
 Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).
