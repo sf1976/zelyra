@@ -14,7 +14,10 @@ releases follow Semantic Versioning independently of the language line.
 - The clean onboarding E2E now uses the installed CLI for `new`, `check`,
   `setup`, `doctor`, application startup, and MariaDB CRUD. / Der Clean-
   Onboarding-E2E nutzt nun die installierte CLI für `new`, `check`, `setup`,
-  `doctor`, Anwendungsstart und MariaDB-CRUD.
+  `doctor`, Anwendungsstart und MariaDB-CRUD. The successful evidence is [CI
+  run 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419). /
+  Der erfolgreiche Nachweis ist der [CI-Lauf
+  35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419).
 - The 0.3.0 database release audit is green in [CI run 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858): schema safety, the four-version MariaDB matrix, SQLite regression coverage, generated applications, and the isolated customer/order workflow pass. / Das 0.3.0-Datenbank-Release-Audit ist im [CI-Lauf 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858) grün: Schema-Sicherheit, die MariaDB-Matrix mit vier Versionen, SQLite-Regression, erzeugte Anwendungen und der isolierte Kunden-/Auftragsworkflow bestehen.
 - MariaDB-`db create`- und `db setup`-DDL erzeugt Tabellen jetzt ausdrücklich
   mit InnoDB sowie utf8mb4/utf8mb4_unicode_ci; SQLite- und PostgreSQL-DDL bleibt

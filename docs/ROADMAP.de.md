@@ -597,6 +597,8 @@ Der aktuelle Datenbank-Abnahmenachweis ist im [CI-Lauf
 Die MariaDB-Matrix mit vier Versionen, Schema-Sicherheitsprüfungen, der
 SQLite-Regressionstest, erzeugte Anwendungen und der isolierte Kunden-/Auftrags-
 Workflow waren erfolgreich.
+Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
+35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419) grün.
 
 ## Akzeptanzanwendungen aus der Praxis
 

@@ -555,6 +555,8 @@ The current database acceptance evidence is green in [CI run
 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858): the
 four-version MariaDB matrix, schema-safety checks, SQLite regression path,
 generated applications, and isolated customer/order workflow all passed.
+The clean installed-CLI onboarding path is also green in [CI run
+35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419).
 
 ## Real-world acceptance applications
 
