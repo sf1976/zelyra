@@ -570,7 +570,7 @@ The clean installed-CLI onboarding path is also green in [CI run
   Learn/Work combinations. Novice-tested clean-machine onboarding and
   production hardening remain open. Native seed/fixture commands remain
   optional roadmap work.
-- [x] Customer/order acceptance application with joins, aggregates, CRUD
+- [~] Customer/order acceptance application with joins, aggregates, CRUD
   forms, and a custom project shell is included and passes the reusable
   MariaDB tableview E2E path; permissions and clean CI evidence for the
   primary application remain open.

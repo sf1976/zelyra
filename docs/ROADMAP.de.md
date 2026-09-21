@@ -613,7 +613,7 @@ Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
   Learn/Work-Kombinationen geprüft. Einsteigergeprüfter Erststart auf sauberen
   Systemen und Produktionshärtung bleiben offen. Native Seed-/Fixture-Befehle
   bleiben optionale Roadmap-Arbeit.
-- [x] Kunden-/Auftrags-Akzeptanzanwendung mit Joins, Aggregaten, CRUD-Formularen
+- [~] Kunden-/Auftrags-Akzeptanzanwendung mit Joins, Aggregaten, CRUD-Formularen
   und eigener Projekt-Shell ist enthalten und besteht den wiederverwendbaren
   MariaDB-Tableview-E2E-Pfad; Berechtigungen und der saubere CI-Nachweis für
   die primäre Anwendung bleiben offen.
