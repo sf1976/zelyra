@@ -26,6 +26,10 @@ releases follow Semantic Versioning independently of the language line.
   example's required unique order numbers. / Der gemeinsame MariaDB-
   Tableview-Akzeptanzfixture berücksichtigt nun die erforderlichen eindeutigen
   Auftragsnummern der Kunden-/Auftragsanwendung.
+- The customer/order CI acceptance test now uses its own database, so its
+  schema cannot collide with the baseline tableview example. / Der
+  Kunden-/Auftrags-CI-Akzeptanztest verwendet nun eine eigene Datenbank, sodass
+  sein Schema nicht mit dem Basisszenario kollidiert.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an
