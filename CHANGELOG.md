@@ -11,6 +11,7 @@ releases follow Semantic Versioning independently of the language line.
   (including prerelease tags). / Der Installer für veröffentlichte Releases
   akzeptiert nun nur SemVer-Releasetags und prüft, dass die geladene Binärdatei
   die angeforderte stabile Version meldet (einschließlich Kandidatentags).
+
 - Prerelease candidate tags such as `v0.3.0-rc.1` now use the same metadata,
   packaging, checksum, and artifact verification path as stable releases; the
   final `v0.3.0` tag is blocked while mandatory bilingual release-plan gates
@@ -129,6 +130,14 @@ releases follow Semantic Versioning independently of the language line.
 - UTF-8-Verarbeitung in String- und Zeichenliteralen korrigiert, damit
   Unicode-Text erhalten bleibt; ein Konsolenbeispiel schreibt die Ziffern
   einer vorzeichenbehafteten Ganzzahl einzeln aus.
+
+## 0.3.0-rc.1 — 2026-09-21
+
+- First 0.3.0 release candidate for published artifact, installer/update, and
+  independent onboarding evidence. This is still experimental and is not the
+  final `v0.3.0` release. / Erster 0.3.0-Releasekandidat für Nachweise zu
+  veröffentlichten Artefakten, Installation/Update und unabhängigem Onboarding.
+  Er bleibt experimentell und ist nicht das endgültige `v0.3.0`-Release.
 
 ## 0.2.0 — 2026-09-20
 
