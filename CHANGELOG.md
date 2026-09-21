@@ -6,6 +6,13 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Prerelease candidate tags such as `v0.3.0-rc.1` now use the same metadata,
+  packaging, checksum, and artifact verification path as stable releases; the
+  final `v0.3.0` tag is blocked while mandatory bilingual release-plan gates
+  remain open. / Prerelease-Kandidatentags wie `v0.3.0-rc.1` verwenden nun
+  denselben Metadaten-, Packaging-, Prüfsummen- und Artefaktprüfpfad wie stabile
+  Releases; das endgültige `v0.3.0`-Tag wird blockiert, solange verpflichtende
+  zweisprachige Releaseplan-Gates offen sind.
 - Complete the generated project theme token template and document the CSS
   versus Zelyra view/component boundary. / Die generierte Theme-Vorlage
   enthält nun den vollständigen Token-Vertrag; die Grenze zwischen CSS sowie
