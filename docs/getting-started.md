@@ -4,7 +4,9 @@
 
 This guide takes a new user from a repository checkout to the first Zelyra
 program, web page, schema, SQL block, and form validation. It describes the
-current Zelyra 0.1 implementation, not only the long-term language vision.
+current Zelyra 0.3 development line, including the published `v0.3.0-rc.2`
+candidate, not only the long-term language vision. The latest stable release
+remains the experimental `v0.2.0` until the 0.3.0 release gates are complete.
 
 ## What is Zelyra?
 
@@ -31,7 +33,7 @@ Zelyra is not a low-code editor and not an ORM-only language. A complete
 programming language remains available. Developers can write functions, native
 SQL, custom pages, actions, and business rules.
 
-## What works in 0.1?
+## What works in the current development line?
 
 The current repository contains:
 
@@ -519,7 +521,7 @@ zelyra verify examples/loop_control.zyl --json
 
 ## 6. Start a web page without Apache
 
-Zelyra 0.1 includes an initial built-in HTTP server. The example is:
+Zelyra includes a built-in HTTP server. The example is:
 
 ~~~zelyra
 page "/hello/{name}" {

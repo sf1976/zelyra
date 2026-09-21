@@ -4,8 +4,10 @@ Deutsch · [English](getting-started.md)
 
 Dieser Leitfaden führt vom Repository-Checkout zum ersten Zelyra-Programm,
 zur ersten Web-Seite, zum ersten Schema, zu nativem SQL und zur ersten
-Formularvalidierung. Er beschreibt die aktuelle Implementierung von Zelyra
-0.1 und nicht nur die langfristige Sprachvision.
+Formularvalidierung. Er beschreibt die aktuelle Zelyra-Entwicklungslinie 0.3,
+einschließlich des veröffentlichten Kandidaten `v0.3.0-rc.2`, und nicht nur
+die langfristige Sprachvision. Das neueste stabile Release bleibt bis zum
+Abschluss der 0.3.0-Gates das experimentelle `v0.2.0`.
 
 ## Was ist Zelyra?
 
@@ -32,7 +34,7 @@ Zelyra ist weder ein Low-Code-Editor noch eine reine ORM-Sprache. Es bleibt
 eine vollständige Programmiersprache. Entwickler können Funktionen, natives
 SQL, eigene Seiten, Aktionen und Geschäftsregeln schreiben.
 
-## Was funktioniert in 0.1?
+## Was funktioniert in der aktuellen Entwicklungslinie?
 
 Das aktuelle Repository enthält:
 
@@ -545,7 +547,7 @@ zelyra verify examples/loop_control.zyl --json
 
 ## 6. Web-Seite ohne Apache starten
 
-Zelyra 0.1 enthält einen ersten eingebauten HTTP-Server. Das Beispiel:
+Zelyra enthält einen eingebauten HTTP-Server. Das Beispiel:
 
 ~~~zelyra
 page "/hello/{name}" {
