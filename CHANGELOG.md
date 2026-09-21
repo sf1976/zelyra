@@ -6,6 +6,10 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- The published-release smoke test now compares prerelease installs with the
+  stable CLI version reported by the binary. / Der Published-Release-
+  Smoke-Test vergleicht Prerelease-Installationen nun mit der stabilen,
+  von der Binärdatei gemeldeten CLI-Version.
 - Release artifact verification now compares prerelease binaries with their
   stable workspace version while retaining the prerelease tag in filenames. /
   Die Release-Artefaktprüfung vergleicht Prerelease-Binärdateien nun mit ihrer

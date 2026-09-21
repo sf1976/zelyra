@@ -20,7 +20,9 @@ temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-published-smoke.XXXXXX")"
 trap 'rm -rf -- "${temp_dir:-}"' EXIT
 install_root="${temp_dir}/install"
 binary="${install_root}/bin/zelyra"
-expected_version="zelyra ${release_tag#v}"
+release_version="${release_tag#v}"
+release_version="${release_version%%-*}"
+expected_version="zelyra ${release_version}"
 
 echo "[1/4] installing published ${release_tag}"
 "${repo_dir}/install.sh" \
