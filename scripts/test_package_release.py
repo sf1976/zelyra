@@ -135,6 +135,27 @@ class ReleasePackageTests(unittest.TestCase):
             target="x86_64-pc-windows-msvc",
         )
 
+    def test_prerelease_linux_artifacts_pass_release_verifier(self) -> None:
+        candidate_tag = f"{self.tag}-rc.1"
+        outputs = package_release(
+            project_root=self.project,
+            binary=self.binary,
+            output_dir=self.root / "prerelease-linux",
+            platform="linux",
+            tag=candidate_tag,
+            target="x86_64-unknown-linux-gnu",
+            source_date_epoch=1_800_000_000,
+        )
+        verify_release_artifacts(
+            directory=outputs[0].parent,
+            platform="linux",
+            tag=candidate_tag,
+            target="x86_64-unknown-linux-gnu",
+        )
+        self.assertTrue(
+            (outputs[0].parent / f"zelyra-{candidate_tag}-x86_64-unknown-linux-gnu.tar.gz").is_file()
+        )
+
     def test_invalid_target_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not match platform"):
             package_release(
