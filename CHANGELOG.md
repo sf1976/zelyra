@@ -21,6 +21,10 @@ releases follow Semantic Versioning independently of the language line.
   CLI version, and packaging checks aligned. / Ein Release-Metadaten-Gate hält
   Workspace-Pakete, Lockfile, Tags, CLI-Version und Packaging-Prüfungen
   konsistent.
+- Add a Linux release-artifact smoke test covering packaging, checksums,
+  archive safety, packaged CLI execution, and installer dry-run. / Ein Linux-
+  Release-Artefakt-Smoke-Test prüft Packaging, Prüfsummen, Archiv-Sicherheit,
+  die paketierte CLI und den Installer-Dry-Run.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

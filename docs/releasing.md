@@ -16,6 +16,11 @@ checks the workspace version against every local package in `Cargo.lock`, the
 `Unreleased` changelog section, and an optional built CLI via `--binary`. Use
 `--print-tag` when another check needs the exact matching tag.
 
+On Linux, `./tests/release-artifact-smoke.sh` builds or accepts a release CLI,
+creates the archive and SHA-256 sidecars, verifies the checksums and archive
+paths, runs the packaged binary, and checks the installer dry-run. The release
+workflow remains authoritative for the Windows artifact.
+
 The release tag must exactly match the workspace package version in
 `Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). The workflow rejects
 a mismatched tag instead of publishing archives whose names and embedded CLI

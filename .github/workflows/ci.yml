@@ -99,6 +99,10 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Run Linux release artifact smoke test
+        env:
+          ZELYRA_RELEASE_BINARY: target/release/zelyra
+        run: ./tests/release-artifact-smoke.sh
       - name: Validate combined view showcase
         run: |
           target/debug/zelyra check examples/view_showcase.zyl --format=json > /tmp/zelyra-view-showcase.json

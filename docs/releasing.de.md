@@ -19,6 +19,12 @@ Skript vergleicht die Workspace-Version mit allen lokalen Paketen in
 Version des gebauten CLI prüfen. `--print-tag` liefert das exakt passende Tag
 für nachgelagerte Checks.
 
+Unter Linux führt `./tests/release-artifact-smoke.sh` einen echten Smoke-Test
+aus: Es baut oder verwendet die Release-CLI, erzeugt Archiv und SHA-256-Dateien,
+prüft Prüfsummen und Archivpfade, startet die paketierte CLI und prüft den
+Installer-Dry-Run. Für das Windows-Artefakt bleibt der Release-Workflow
+maßgeblich.
+
 Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
 (zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
 Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter
