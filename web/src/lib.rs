@@ -8194,6 +8194,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn default_design_system_covers_all_generated_state_families_responsively() {
+        for selector in [
+            ".zelyra-crud-cards",
+            ".zelyra-crud-card",
+            ".zelyra-crud-detail-card",
+            ".zelyra-crud-form-card",
+            ".zelyra-action-confirmation",
+            ".zelyra-action-error",
+            ".zelyra-crud-error",
+            ".zelyra-delete-message",
+            ".zelyra-query-controls",
+            ".zelyra-pagination",
+            "main[data-loading-message]",
+        ] {
+            assert!(
+                ZELYRA_DESIGN_SYSTEM_CSS.contains(selector),
+                "default design system misses generated state selector {selector}"
+            );
+        }
+        assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:700px)"));
+        assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:560px)"));
+    }
+
     fn relation_form_route() -> FormRoute {
         let mut route = form_route();
         route.form.fields.push(zelyra_ast::FormField {

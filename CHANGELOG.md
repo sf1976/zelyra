@@ -10,6 +10,10 @@ releases follow Semantic Versioning independently of the language line.
   versus Zelyra view/component boundary. / Die generierte Theme-Vorlage
   enthält nun den vollständigen Token-Vertrag; die Grenze zwischen CSS sowie
   Zelyra-Views und -Komponenten ist dokumentiert.
+- Unify generated CRUD, form, tableview, confirmation, loading, and error
+  states with responsive design-system styles. / Erzeugte CRUD-, Formular-,
+  Tableview-, Bestätigungs-, Lade- und Fehlerzustände verwenden nun ein
+  einheitliches responsives Design-System.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt
