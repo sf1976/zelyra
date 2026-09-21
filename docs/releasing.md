@@ -10,6 +10,8 @@ and known limitations. Its German counterpart is
 [available here](release-notes/0.3.0.de.md). It is not a release announcement.
 The companion [risk and acceptance register](release-readiness/0.3.0-risk-register.en.md)
 maps each public claim to evidence and identifies the remaining candidate gates.
+The [0.3.0 security-boundary review](security-review-0.3.0.md) records the
+experimental security decision and residual deployment risks.
 
 ## Before release
 

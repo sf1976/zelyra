@@ -11,6 +11,8 @@ Einschränkungen auf. Die englische Fassung ist
 Das ergänzende [Risiko- und Abnahmeregister](release-readiness/0.3.0-risikoregister.de.md)
 ordnet jede öffentliche Aussage einem Nachweis zu und benennt die verbleibenden
 Kandidatengates.
+Das [Sicherheitsgrenzen-Review 0.3.0](security-review-0.3.0.md) dokumentiert
+die experimentelle Sicherheitsentscheidung und verbleibende Deploymentrisiken.
 
 ## Vor dem Release
 
