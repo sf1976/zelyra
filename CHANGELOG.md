@@ -30,6 +30,11 @@ releases follow Semantic Versioning independently of the language line.
   schema cannot collide with the baseline tableview example. / Der
   Kunden-/Auftrags-CI-Akzeptanztest verwendet nun eine eigene Datenbank, sodass
   sein Schema nicht mit dem Basisszenario kollidiert.
+- Full CI evidence now covers Windows, the declared MariaDB compatibility
+  matrix, workspace tests, Clippy, generated applications, and the isolated
+  customer/order workflow. / Der vollständige CI-Nachweis umfasst nun Windows,
+  die ausgewiesene MariaDB-Kompatibilitätsmatrix, Workspace-Tests, Clippy,
+  erzeugte Anwendungen und den isolierten Kunden-/Auftragsworkflow.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an
