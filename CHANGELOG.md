@@ -14,6 +14,9 @@ releases follow Semantic Versioning independently of the language line.
   states with responsive design-system styles. / Erzeugte CRUD-, Formular-,
   Tableview-, Bestätigungs-, Lade- und Fehlerzustände verwenden nun ein
   einheitliches responsives Design-System.
+- Verify that custom layouts preserve escaping, CSRF, authorization, and form
+  validation boundaries. / Benutzerdefinierte Layouts bewahren Escaping-,
+  CSRF-, Autorisierungs- und Formularvalidierungsgrenzen.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

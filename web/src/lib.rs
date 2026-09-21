@@ -10547,6 +10547,28 @@ mod tests {
     }
 
     #[test]
+    fn custom_crud_layout_preserves_escaping_for_loaded_record_values() {
+        let route = default_shell_crud(Some(format!(
+            "<div class=\"custom-record-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"
+        )));
+        let content = render_crud_detail(
+            &route,
+            &["id", "name"],
+            &["7".into(), "<script>alert(1)</script>".into()],
+            "7",
+        );
+        let response =
+            apply_generated_layout(Response::html(200, content), route.layout_html.as_deref());
+
+        assert_eq!(response.status, 200);
+        assert!(response.body.contains("custom-record-shell"));
+        assert!(response
+            .body
+            .contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!response.body.contains("<script>alert(1)</script>"));
+    }
+
+    #[test]
     fn form_post_returns_accepted_after_validating_input() {
         let app = WebApp::new(Vec::new(), vec![form_route()]);
         let request = parse_request(
