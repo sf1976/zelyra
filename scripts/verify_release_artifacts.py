@@ -27,6 +27,10 @@ def _expected_names(platform: str, tag: str, target: str) -> tuple[str, str, str
     return standalone, f"{standalone}.sha256", archive, f"{archive}.sha256"
 
 
+def _stable_version_from_tag(tag: str) -> str:
+    return tag[1:].split("-", 1)[0]
+
+
 def _verify_checksum(path: Path) -> None:
     sidecar = path.with_name(path.name + ".sha256")
     if not sidecar.is_file():
@@ -90,7 +94,7 @@ def verify_release_artifacts(
         result = subprocess.run(
             [str(standalone), "--version"], capture_output=True, text=True, check=False
         )
-        expected_version = f"zelyra {tag[1:]}"
+        expected_version = f"zelyra {_stable_version_from_tag(tag)}"
         if result.returncode != 0 or result.stdout.strip() != expected_version:
             raise ValueError(
                 f"{standalone.name} --version did not return {expected_version!r}"

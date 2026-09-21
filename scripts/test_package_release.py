@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from package_release import RELEASE_FILES, package_release
-from verify_release_artifacts import verify_release_artifacts
+from verify_release_artifacts import _stable_version_from_tag, verify_release_artifacts
 
 
 class ReleasePackageTests(unittest.TestCase):
@@ -155,6 +155,32 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertTrue(
             (outputs[0].parent / f"zelyra-{candidate_tag}-x86_64-unknown-linux-gnu.tar.gz").is_file()
         )
+
+    def test_prerelease_binary_reports_stable_workspace_version(self) -> None:
+        candidate_tag = f"{self.tag}-rc.1"
+        versioned_binary = self.root / "versioned-binary"
+        versioned_binary.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' 'zelyra {self.version}'\n",
+            encoding="utf-8",
+        )
+        versioned_binary.chmod(0o755)
+        outputs = package_release(
+            project_root=self.project,
+            binary=versioned_binary,
+            output_dir=self.root / "prerelease-versioned-linux",
+            platform="linux",
+            tag=candidate_tag,
+            target="x86_64-unknown-linux-gnu",
+            source_date_epoch=1_800_000_000,
+        )
+        verify_release_artifacts(
+            directory=outputs[0].parent,
+            platform="linux",
+            tag=candidate_tag,
+            target="x86_64-unknown-linux-gnu",
+            run_binary=True,
+        )
+        self.assertEqual(_stable_version_from_tag(candidate_tag), self.version)
 
     def test_invalid_target_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not match platform"):
