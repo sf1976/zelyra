@@ -41,6 +41,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
+echo "waiting for MariaDB test service"
+for _ in $(seq 1 60); do
+    if MYSQL_PWD="${root_password}" mariadb \
+        --protocol=tcp --host="${database_host}" --port="${database_port}" \
+        --user=root --batch --skip-column-names \
+        -e "SELECT 1" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+if ! MYSQL_PWD="${root_password}" mariadb \
+    --protocol=tcp --host="${database_host}" --port="${database_port}" \
+    --user=root --batch --skip-column-names \
+    -e "SELECT 1" >/dev/null 2>&1; then
+    echo "error: MariaDB test service did not become ready on ${database_host}:${database_port}" >&2
+    exit 1
+fi
+
 MYSQL_PWD="${root_password}" mariadb \
     --protocol=tcp --host="${database_host}" --port="${database_port}" \
     --user=root --batch --skip-column-names \
