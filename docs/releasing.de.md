@@ -30,6 +30,15 @@ beiden Plattformen aus. Dieser Check verlangt genau die erwarteten Binär- und
 Archivdateien, verifiziert jedes SHA-256-Sidecar, lehnt unsichere oder unerwartete
 Archivpfade ab und prüft die CLI-Version des Zielartefakts.
 
+Für ein veröffentlichtes Release kann auf einem Linux-x86_64-System
+`./tests/published-release-smoke.sh v0.2.0` ausgeführt werden. Der Test lädt das
+veröffentlichte Archiv über den echten Installer, prüft die installierte
+Version, wiederholt die Installation und führt `zelyra update --check` mit der
+installierten Binärdatei aus. Für die abschließende Abnahme ist das Kandidaten-
+Tag einzusetzen; ein erfolgreicher Quellcode-/Packaging-Test beweist allein
+noch nicht, dass die veröffentlichten GitHub-Artefakte erreichbar und nutzbar
+sind.
+
 Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
 (zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
 Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter

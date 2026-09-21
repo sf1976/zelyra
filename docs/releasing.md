@@ -26,6 +26,13 @@ platforms. It requires exactly the expected binary and archive files, verifies
 each SHA-256 sidecar, rejects unsafe or unexpected archive paths, and checks the
 target artifact's CLI version.
 
+For a published release, run `./tests/published-release-smoke.sh v0.2.0` on a
+Linux x86_64 host. The test downloads the published archive through the real
+installer, verifies the installed version, repeats the installation, and runs
+`zelyra update --check` from the installed binary. Use the candidate tag for
+the final release gate; a successful source/package test alone does not prove
+that GitHub's published assets are reachable and usable.
+
 The release tag must exactly match the workspace package version in
 `Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). The workflow rejects
 a mismatched tag instead of publishing archives whose names and embedded CLI

@@ -29,6 +29,9 @@ releases follow Semantic Versioning independently of the language line.
   exact artifact names, SHA-256 sidecars, archive safety, and CLI versions. /
   Der Release-Workflow prüft Linux- und Windows-Ausgaben nun auf exakte
   Artefaktnamen, SHA-256-Sidecars, Archiv-Sicherheit und CLI-Versionen.
+- Add a published-release smoke test for real installer, repeat-install, and
+  update-check paths. / Ein Smoke-Test für veröffentlichte Releases prüft den
+  echten Installer, die wiederholte Installation und den Update-Check.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt
