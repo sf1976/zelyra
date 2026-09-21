@@ -64,7 +64,8 @@ jobs:
         run: |
           bash -n install.sh
           ./install.sh --dry-run --no-rustup --no-path --root "$RUNNER_TEMP/zelyra-install"
-          ./install.sh --release v0.2.0 --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
+          release_tag="$(python3 scripts/check_release_metadata.py --print-tag)"
+          ./install.sh --release "$release_tag" --dry-run --no-path --root "$RUNNER_TEMP/zelyra-release-install"
       - name: Run source installer end-to-end test
         env:
           CARGO_TERM_COLOR: always
@@ -87,13 +88,17 @@ jobs:
           grep -Fq "cargo is missing" "$RUNNER_TEMP/zelyra-no-cargo.log"
           ! grep -Fq "No such file or directory" "$RUNNER_TEMP/zelyra-no-cargo.log"
       - name: Test deterministic release packaging
-        run: python3 scripts/test_package_release.py
+        run: |
+          python3 scripts/check_release_metadata.py
+          python3 scripts/test_package_release.py
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build CLI for integration test
-        run: cargo build -p zelyra-cli
+        run: |
+          cargo build -p zelyra-cli
+          python3 scripts/check_release_metadata.py --binary target/debug/zelyra
       - name: Validate combined view showcase
         run: |
           target/debug/zelyra check examples/view_showcase.zyl --format=json > /tmp/zelyra-view-showcase.json

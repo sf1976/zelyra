@@ -11,6 +11,11 @@ release.
 3. Run formatting, workspace checks, Clippy, and the complete test suite.
 4. Push the release-preparation branch and open a pull request to `main`.
 
+Run `python3 scripts/check_release_metadata.py` before building artifacts. It
+checks the workspace version against every local package in `Cargo.lock`, the
+`Unreleased` changelog section, and an optional built CLI via `--binary`. Use
+`--print-tag` when another check needs the exact matching tag.
+
 The release tag must exactly match the workspace package version in
 `Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). The workflow rejects
 a mismatched tag instead of publishing archives whose names and embedded CLI

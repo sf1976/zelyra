@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tarfile
 import tempfile
 import unittest
@@ -23,6 +24,14 @@ class ReleasePackageTests(unittest.TestCase):
         self.project.mkdir()
         self.binary = self.root / "zelyra-binary"
         self.binary.write_bytes(b"reproducible test executable\x00\x01")
+        manifest = Path(__file__).resolve().parents[1] / "Cargo.toml"
+        match = re.search(
+            r'(?ms)^\[workspace\.package\].*?^version\s*=\s*"([^"]+)"\s*$',
+            manifest.read_text(encoding="utf-8"),
+        )
+        assert match is not None
+        self.version = match.group(1)
+        self.tag = f"v{self.version}"
         for name in RELEASE_FILES:
             (self.project / name).write_text(f"fixture: {name}\n", encoding="utf-8")
 
@@ -39,7 +48,7 @@ class ReleasePackageTests(unittest.TestCase):
             binary=self.binary,
             output_dir=self.root / f"{platform}-first",
             platform=platform,
-            tag="v0.2.0",
+            tag=self.tag,
             target=target,
             source_date_epoch=1_800_000_000,
         )
@@ -50,7 +59,7 @@ class ReleasePackageTests(unittest.TestCase):
             binary=self.binary,
             output_dir=self.root / f"{platform}-second",
             platform=platform,
-            tag="v0.2.0",
+            tag=self.tag,
             target=target,
             source_date_epoch=1_800_000_000,
         )
@@ -65,15 +74,16 @@ class ReleasePackageTests(unittest.TestCase):
         first, second = self.package_twice("linux")
         self.assert_outputs_identical(first, second)
         archive = next(path for path in first if path.name.endswith(".tar.gz"))
+        package_name = f"zelyra-{self.tag}-x86_64-unknown-linux-gnu"
         with tarfile.open(archive, "r:gz") as tar:
             self.assertEqual(
                 tar.getnames(),
                 [
-                    "zelyra-v0.2.0-x86_64-unknown-linux-gnu/LICENSE",
-                    "zelyra-v0.2.0-x86_64-unknown-linux-gnu/LICENSE-MIT",
-                    "zelyra-v0.2.0-x86_64-unknown-linux-gnu/README.de.md",
-                    "zelyra-v0.2.0-x86_64-unknown-linux-gnu/README.md",
-                    "zelyra-v0.2.0-x86_64-unknown-linux-gnu/zelyra",
+                    f"{package_name}/LICENSE",
+                    f"{package_name}/LICENSE-MIT",
+                    f"{package_name}/README.de.md",
+                    f"{package_name}/README.md",
+                    f"{package_name}/zelyra",
                 ],
             )
             for member in tar.getmembers():
@@ -111,7 +121,7 @@ class ReleasePackageTests(unittest.TestCase):
                 binary=self.binary,
                 output_dir=self.root / "invalid",
                 platform="linux",
-                tag="v0.2.0",
+                tag=self.tag,
                 target="x86_64-pc-windows-msvc",
                 source_date_epoch=1_800_000_000,
             )

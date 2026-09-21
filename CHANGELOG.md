@@ -17,6 +17,10 @@ releases follow Semantic Versioning independently of the language line.
 - Verify that custom layouts preserve escaping, CSRF, authorization, and form
   validation boundaries. / Benutzerdefinierte Layouts bewahren Escaping-,
   CSRF-, Autorisierungs- und Formularvalidierungsgrenzen.
+- Add a release metadata gate that keeps workspace packages, lockfile, tags,
+  CLI version, and packaging checks aligned. / Ein Release-Metadaten-Gate hält
+  Workspace-Pakete, Lockfile, Tags, CLI-Version und Packaging-Prüfungen
+  konsistent.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

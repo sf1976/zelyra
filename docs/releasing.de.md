@@ -13,6 +13,12 @@ GitHub-Release veröffentlichen.
 4. Den Release-Vorbereitungsbranch pushen und einen Pull Request nach `main`
    öffnen.
 
+Vor dem Artefaktbau `python3 scripts/check_release_metadata.py` ausführen. Das
+Skript vergleicht die Workspace-Version mit allen lokalen Paketen in
+`Cargo.lock`, prüft den `Unreleased`-Abschnitt und kann mit `--binary` auch die
+Version des gebauten CLI prüfen. `--print-tag` liefert das exakt passende Tag
+für nachgelagerte Checks.
+
 Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
 (zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
 Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter
