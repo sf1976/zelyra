@@ -1294,6 +1294,11 @@ sie ins Image. CSS ist öffentlicher Browserinhalt und wird nicht typgeprüft.
 Verfügbare Tokens und Sicherheitsgrenzen stehen in der
 [Theme- und Umgebungskonfiguration](../../env.md).
 
+Das vollständige Akzeptanzbeispiel `examples/customer_orders.zyl` zeigt dieses
+Erweiterungsmodell zusammenhängend: eine projektlokale Shell, erzeugte Kunden-
+und Auftrags-CRUD-Seiten sowie eine geprüfte Aggregat-Tableview bleiben in einer
+Quelldatei.
+
 Beispiele für URLs:
 
 ~~~text

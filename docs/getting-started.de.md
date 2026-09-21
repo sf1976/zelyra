@@ -830,6 +830,13 @@ Für ein kompaktes gemeinsames View-Profil genügt `view { fields { ... } }`
 innerhalb eines CRUDs. Es steuert erzeugte Liste, Detailansicht und Formulare;
 ein explizites `list { ... }` überschreibt nur die Auswahl für Liste/Detail.
 
+Als vollständiges relationales Geschäftsbeispiel dient
+`examples/customer_orders.zyl`. Es verbindet Kunden, Aufträge, eine eigene
+Projekt-Shell, erzeugte CRUD-Seiten und eine geprüfte Aggregat-Tableview. Der
+MariaDB-Tableview-Integrationstest kann dieselbe Anwendung mit
+`ZELYRA_TABLEVIEW_E2E_PROJECT=examples/customer_orders.zyl` und
+`ZELYRA_TABLEVIEW_E2E_PATH=/views/customerorderoverview` ausführen.
+
 ## 11. Nützliche Befehle
 
 ~~~text

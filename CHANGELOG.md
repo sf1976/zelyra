@@ -11,6 +11,12 @@ releases follow Semantic Versioning independently of the language line.
   unverändert.
 - MariaDB `db create` and `db setup` DDL now explicitly creates tables with
   InnoDB and utf8mb4/utf8mb4_unicode_ci; SQLite and PostgreSQL DDL is unchanged.
+- Added a customer/order acceptance application with a project-local shell,
+  generated CRUD pages, and a checked aggregate tableview; the MariaDB E2E
+  path can execute the same source as a release candidate workflow.
+- Eine Kunden-/Auftrags-Akzeptanzanwendung mit projektlokaler Shell, erzeugten
+  CRUD-Seiten und geprüfter Aggregat-Tableview ist enthalten; der MariaDB-E2E-
+  Pfad kann denselben Quellcode als Releasekandidaten prüfen.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an

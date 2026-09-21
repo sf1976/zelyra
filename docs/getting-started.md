@@ -794,6 +794,13 @@ For a compact shared view profile, use `view { fields { ... } }` inside a CRUD.
 It drives the generated list, detail, and forms; an explicit `list { ... }`
 overrides only the list/detail selection.
 
+For a complete relational business example, inspect
+`examples/customer_orders.zyl`. It combines customers, orders, a custom
+project shell, generated CRUD pages, and a checked aggregate tableview. The
+MariaDB tableview integration path can run the same application by setting
+`ZELYRA_TABLEVIEW_E2E_PROJECT=examples/customer_orders.zyl` and
+`ZELYRA_TABLEVIEW_E2E_PATH=/views/customerorderoverview`.
+
 ## 11. Useful commands
 
 ~~~text

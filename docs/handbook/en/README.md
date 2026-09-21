@@ -1197,6 +1197,10 @@ image. CSS is public browser content and is not type-checked; see the
 [theme and environment reference](../../env.en.md) for the available tokens
 and safety limits.
 
+The complete `examples/customer_orders.zyl` acceptance application shows the
+same extension model in context: a project-local shell, generated customer and
+order CRUD pages, and a checked aggregate tableview remain in one source file.
+
 Example URLs:
 
 ~~~text
