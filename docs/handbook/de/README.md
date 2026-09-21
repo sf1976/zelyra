@@ -1305,6 +1305,12 @@ Erweiterungsmodell zusammenhängend: eine projektlokale Shell, erzeugte Kunden-
 und Auftrags-CRUD-Seiten sowie eine geprüfte Aggregat-Tableview bleiben in einer
 Quelldatei.
 
+Für einen konzentrierten Anpassungspfad dient `examples/theme_customization/`.
+`zelyra.theme.css` ändert Palette und Typografie, `Customer` verwendet ein
+projektlokales Layout mit benannten Slots und `Ticket` behält absichtlich den
+Standardrahmen. Der Pfad `tests/theme-customization-e2e.sh` prüft Quellcode,
+gerenderte Seite und die reservierte projektlokale Stylesheet-Route.
+
 Beispiele für URLs:
 
 ~~~text

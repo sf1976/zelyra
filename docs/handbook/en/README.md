@@ -1206,6 +1206,13 @@ The complete `examples/customer_orders.zyl` acceptance application shows the
 same extension model in context: a project-local shell, generated customer and
 order CRUD pages, and a checked aggregate tableview remain in one source file.
 
+For a focused customization walkthrough, use
+`examples/theme_customization/`. Its `zelyra.theme.css` changes the shared
+palette and typography, `Customer` uses a project-local layout and named slots,
+and `Ticket` intentionally keeps the standard generated shell. The
+`tests/theme-customization-e2e.sh` path checks the source, rendered page, and
+reserved project stylesheet route.
+
 Example URLs:
 
 ~~~text

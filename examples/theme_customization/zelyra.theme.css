@@ -1,0 +1,19 @@
+/*
+Project-local theme customization example.
+This file is public browser content; never put secrets here.
+*/
+:root {
+    --zelyra-color-accent: #087f8c;
+    --zelyra-color-accent-strong: #066b76;
+    --zelyra-color-canvas: #f4faf9;
+    --zelyra-color-surface: #ffffff;
+    --zelyra-color-ink: #153238;
+    --zelyra-color-muted: #5f777b;
+    --zelyra-color-border: #cfe3e1;
+    --zelyra-radius-card: 22px;
+}
+
+body {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.01em;
+}

@@ -791,6 +791,13 @@ replaces the default shell; ordinary authored pages keep their own markup.
 Adjust the shared palette in the scaffolded `zelyra.theme.css`; no `.env`
 switch is required.
 
+The complete customization example in
+`examples/theme_customization/` changes the palette and typography, adapts a
+project-local layout with named slots, customizes the `Customer` resource, and
+keeps the `Ticket` resource on the standard generated shell. Validate it with
+`zelyra check examples/theme_customization/main.zyl`; CI also serves the page
+and verifies the project-local stylesheet.
+
 This exposes `GET /machines` with escaped output, search, exact filters,
 allowlisted sorting, pagination, linked detail pages, and generated Create/Edit
 forms at `/machines/new` and `/machines/<id>/edit`. Filters use

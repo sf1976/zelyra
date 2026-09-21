@@ -102,6 +102,16 @@ jobs:
         run: |
           target/debug/zelyra check examples/component_slots.zyl --format=json > /tmp/zelyra-component-slots.json
           python3 -c 'import json; data = json.load(open("/tmp/zelyra-component-slots.json")); assert data["success"] is True'
+      - name: Validate theme customization example
+        run: |
+          target/debug/zelyra check examples/theme_customization/main.zyl --format=json > /tmp/zelyra-theme-customization.json
+          python3 -c 'import json; data = json.load(open("/tmp/zelyra-theme-customization.json")); assert data["success"] is True'
+          test -s examples/theme_customization/zelyra.theme.css
+      - name: Run theme customization end-to-end test
+        env:
+          ZELYRA_THEME_E2E_ADDRESS: 127.0.0.1:38600
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/theme-customization-e2e.sh
       - name: Check deterministic impact output
         run: |
           target/debug/zelyra impact examples/auth_crud_api.zyl --format=json > /tmp/zelyra-impact.json

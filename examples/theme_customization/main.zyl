@@ -1,0 +1,91 @@
+database main {
+    engine: mariadb
+}
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    email: Email?
+    active: Bool default true
+}
+table tickets {
+    id: Id primary auto
+    customer: Customer required
+    subject: String(140) required
+    state: String(20) default "open"
+}
+view CustomerWorkspace {
+    html {
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <title>Customer workspace</title>
+            </head>
+            <body>
+                <header>
+                    <slot name="header"><h1>Customer workspace</h1></slot>
+                </header>
+                <main>
+                    <slot />
+                    <aside>
+                        <slot name="help"><p>Use the customer filters to find a record.</p></slot>
+                    </aside>
+                </main>
+            </body>
+        </html>
+    }
+}
+// This resource uses the project-local shell and a customized CRUD profile.
+crud Customer -> customers {
+    title: "Customers"
+    layout: CustomerWorkspace
+    slots {
+        header {
+            html {
+                <h1>Customer directory</h1>
+            }
+        }
+        help {
+            html {
+                <p>Customer data is rendered inside the adapted workspace layout.</p>
+            }
+        }
+    }
+    view {
+        fields {
+            name email active
+        }
+        list {
+            mode: cards
+            empty: "No customers found."
+        }
+        detail {
+            mode: cards
+        }
+        form {
+            mode: cards
+            submit: "Save customer"
+        }
+    }
+}
+// This resource intentionally keeps the standard generated application shell.
+crud Ticket -> tickets {
+    title: "Support tickets"
+    list {
+        subject customer state
+    }
+    search {
+        subject
+    }
+    filter {
+        state customer
+    }
+}
+page "/workspace" {
+    view: CustomerWorkspace
+    html {
+        <p>The project theme changes the shared palette and typography.</p>
+    }
+}
+fn main() {
+    print("Run: zelyra serve examples/theme_customization/main.zyl")
+}

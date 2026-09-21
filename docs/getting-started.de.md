@@ -826,6 +826,13 @@ Seiten behalten ihr eigenes Markup. Die gemeinsame Farbpalette lässt sich in
 der erzeugten Datei `zelyra.theme.css` anpassen; ein `.env`-Schalter ist nicht
 erforderlich.
 
+Das vollständige Anpassungsbeispiel in `examples/theme_customization/` ändert
+Palette und Typografie, passt ein projektlokales Layout mit benannten Slots an,
+konfiguriert die Ressource `Customer` und belässt `Ticket` absichtlich im
+Standardrahmen. Mit `zelyra check examples/theme_customization/main.zyl` lässt
+es sich prüfen; CI rendert zusätzlich die Seite und prüft das projektlokale
+Stylesheet.
+
 Damit wird `GET /machines` mit escaped Ausgabe, Suche, exakten Filtern,
 Allowlist-Sortierung, Pagination, verlinkten Detailseiten und automatisch
 erzeugten Create-/Edit-Formularen unter `/machines/new` und
