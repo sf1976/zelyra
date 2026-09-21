@@ -67,6 +67,9 @@ jobs:
           fi
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
+          if [[ "${release_tag}" == "v0.3.0" ]]; then
+            python3 scripts/check_release_readiness.py --version "${package_version}"
+          fi
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 
   build:

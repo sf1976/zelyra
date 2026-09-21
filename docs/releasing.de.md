@@ -40,6 +40,13 @@ beiden Plattformen aus. Dieser Check verlangt genau die erwarteten Binär- und
 Archivdateien, verifiziert jedes SHA-256-Sidecar, lehnt unsichere oder unerwartete
 Archivpfade ab und prüft die CLI-Version des Zielartefakts.
 
+Das endgültige `v0.3.0`-Tag führt zusätzlich
+`scripts/check_release_readiness.py` aus. Die Veröffentlichung wird abgelehnt,
+solange der zweisprachige Releaseplan ein verpflichtendes Gate für Onboarding,
+Kandidatenartefakte, veröffentlichten Updatepfad, P0-Entscheidungen oder
+Artefaktprüfung offen lässt. Prerelease-Tags wie `v0.3.0-rc.1` bleiben für das
+Sammeln dieser Kandidaten- und Published-Smoke-Nachweise möglich.
+
 Für ein veröffentlichtes Release kann auf einem Linux-x86_64-System
 `./tests/published-release-smoke.sh v0.2.0` ausgeführt werden. Der Test lädt das
 veröffentlichte Archiv über den echten Installer, prüft die installierte

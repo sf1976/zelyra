@@ -91,6 +91,7 @@ jobs:
         run: |
           python3 scripts/check_release_metadata.py
           python3 scripts/test_package_release.py
+          python3 scripts/test_release_readiness.py
       - name: Run workspace tests
         run: cargo test --workspace
       - name: Run Clippy

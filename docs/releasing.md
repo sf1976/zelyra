@@ -35,6 +35,12 @@ platforms. It requires exactly the expected binary and archive files, verifies
 each SHA-256 sidecar, rejects unsafe or unexpected archive paths, and checks the
 target artifact's CLI version.
 
+The final `v0.3.0` tag additionally runs `scripts/check_release_readiness.py`.
+It refuses publication while the bilingual release plan still has an
+unchecked mandatory onboarding, candidate-artifact, published-update, P0, or
+artifact-verification gate. Prerelease tags such as `v0.3.0-rc.1` remain
+available for collecting those candidate-artifact and published-smoke results.
+
 For a published release, run `./tests/published-release-smoke.sh v0.2.0` on a
 Linux x86_64 host. The test downloads the published archive through the real
 installer, verifies the installed version, repeats the installation, and runs
