@@ -115,12 +115,21 @@ SQL
 )"
 [[ -n "${alpha_id}" && -n "${beta_id}" && -n "${gamma_id}" ]]
 
-client --batch --skip-column-names <<SQL
+if [[ "${ZELYRA_TABLEVIEW_E2E_EXPECT_CUSTOM_APP:-0}" == "1" ]]; then
+    client --batch --skip-column-names <<SQL
+INSERT INTO orders (customer_id, order_number, total) VALUES
+    (${alpha_id}, 'E2E-${suffix}-001', 100.00),
+    (${alpha_id}, 'E2E-${suffix}-002', 50.00),
+    (${beta_id}, 'E2E-${suffix}-003', 75.00);
+SQL
+else
+    client --batch --skip-column-names <<SQL
 INSERT INTO orders (customer_id, total) VALUES
     (${alpha_id}, 100.00),
     (${alpha_id}, 50.00),
     (${beta_id}, 75.00);
 SQL
+fi
 
 for index in $(seq -w 1 26); do
     client --batch --skip-column-names <<SQL

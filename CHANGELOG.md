@@ -22,6 +22,10 @@ releases follow Semantic Versioning independently of the language line.
   locations. / JSON-Diagnosen und Impact-Dokumente geben für Projektdateien
   nun projektrelative Pfade aus und bleiben dadurch für Automatisierung und
   KI-Werkzeuge über verschiedene Checkout-Orte hinweg portabel.
+- Fixed the shared MariaDB tableview acceptance fixture for the customer/order
+  example's required unique order numbers. / Der gemeinsame MariaDB-
+  Tableview-Akzeptanzfixture berücksichtigt nun die erforderlichen eindeutigen
+  Auftragsnummern der Kunden-/Auftragsanwendung.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an

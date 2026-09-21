@@ -602,9 +602,10 @@ Roadmap-Punkte werden dadurch zu Anforderungen für 0.3.0.
   Learn/Work-Kombinationen geprüft. Einsteigergeprüfter Erststart auf sauberen
   Systemen und Produktionshärtung bleiben offen. Native Seed-/Fixture-Befehle
   bleiben optionale Roadmap-Arbeit.
-- [~] Kunden-/Auftrags-Akzeptanzanwendung mit Joins, Aggregaten, CRUD-Formularen
-  und eigener Projekt-Shell ist enthalten und in den MariaDB-Tableview-E2E-Pfad
-  eingebunden; Berechtigungen und der saubere CI-Nachweis bleiben offen.
+- [x] Kunden-/Auftrags-Akzeptanzanwendung mit Joins, Aggregaten, CRUD-Formularen
+  und eigener Projekt-Shell ist enthalten und besteht den wiederverwendbaren
+  MariaDB-Tableview-E2E-Pfad; Berechtigungen und der saubere CI-Nachweis für
+  die primäre Anwendung bleiben offen.
 - [ ] Mehrbenutzer-Inventar mit Transaktionen und parallelen Änderungen.
 - [~] Ein erzeugtes Docker-Compose-Deployment mit unabhängig konfigurierbarem
   Web-Port ist getestet; Produktionshärtung bleibt offen.

@@ -561,9 +561,10 @@ the plan does not make all long-term roadmap items 0.3.0 requirements.
   Learn/Work combinations. Novice-tested clean-machine onboarding and
   production hardening remain open. Native seed/fixture commands remain
   optional roadmap work.
-- [~] Customer/order acceptance application with joins, aggregates, CRUD
-  forms, and a custom project shell is included and wired into the MariaDB
-  tableview E2E path; permissions and clean CI evidence remain to be completed.
+- [x] Customer/order acceptance application with joins, aggregates, CRUD
+  forms, and a custom project shell is included and passes the reusable
+  MariaDB tableview E2E path; permissions and clean CI evidence for the
+  primary application remain open.
 - [ ] Multi-user inventory application with transactions and concurrent edits.
 - [~] A generated Docker Compose deployment with an independently configurable
   web port is tested; production hardening remains open.
