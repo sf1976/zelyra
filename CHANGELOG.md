@@ -40,6 +40,9 @@ releases follow Semantic Versioning independently of the language line.
   / Der MariaDB-CRUD-E2E-Test deckt nun die vollständige Datenbank-CLI-Sequenz
   mit `create`, `setup`, wiederholtem `bootstrap`, `inspect`, `plan` und
   idempotentem `apply` ab.
+- The MariaDB CRUD E2E path also verifies unavailable-database diagnostics and
+  credential redaction. / Der MariaDB-CRUD-E2E-Pfad prüft zusätzlich
+  Verbindungsfehler und die Geheimnisbereinigung in Datenbankdiagnosen.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an

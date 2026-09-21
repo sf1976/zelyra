@@ -127,6 +127,14 @@ grep -Fq "No schema changes." <<<"${plan_output}"
 echo "[4a/11] applying the idempotent schema plan"
 apply_output="$("${zelyra_bin}" db apply "${project_file}")"
 grep -Fq "No schema changes." <<<"${apply_output}"
+echo "[4b/11] checking a failed database connection"
+invalid_database_url="mariadb://zelyra:e2e-secret-redaction@127.0.0.1:1/does_not_exist"
+if invalid_output="$(DATABASE_URL="${invalid_database_url}" "${zelyra_bin}" db inspect "${project_file}" 2>&1)"; then
+    echo "error: db inspect unexpectedly succeeded against an unavailable database" >&2
+    exit 1
+fi
+grep -Fq "error[E-DB-002]" <<<"${invalid_output}"
+! grep -Fq "e2e-secret-redaction" <<<"${invalid_output}"
 
 echo "[4/11] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
