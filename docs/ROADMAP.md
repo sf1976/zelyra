@@ -492,7 +492,9 @@ remaining roadmap items below.
   department views in all four German/English × Learn/Work combinations,
   including presence/absence and localization of the learning guide. Novice-
   tested onboarding and broader documented user acceptance remain release
-  work.
+  work. A protected machine-management fixture and generated-project E2E now
+  also cover anonymous denial, viewer access, create/edit denial, authorized
+  CRUD forms, search, and deletion.
 - [~] **Simple first run:** the zelyra new and zelyra setup commands, generated
   protected `.env`, Docker Compose, free-port selection, actionable Docker
   permission guidance, and a printed application URL exist. The generated

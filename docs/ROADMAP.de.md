@@ -527,7 +527,10 @@ Arbeiten abgeschlossen sind.
   lokalisierten Maschinen- und Abteilungsansichten in allen vier Kombinationen
   aus Deutsch/Englisch und Learn/Work – einschließlich Anzeige, Ausblendung und
   Übersetzung der Lernhilfe. Einsteigergeprüfter Einstieg und eine umfassendere
-  dokumentierte Nutzerabnahme bleiben Release-Arbeiten.
+  dokumentierte Nutzerabnahme bleiben Release-Arbeiten. Eine geschützte
+  Maschinenverwaltungs-Fixture und ein Generated-Project-E2E prüfen jetzt
+  zusätzlich anonyme Ablehnung, Viewer-Zugriff, Ablehnung von
+  Erstellen/Bearbeiten, autorisierte CRUD-Formulare, Suche und Löschen.
 - [~] **Einfacher Erststart:** zelyra new und zelyra setup, geschützte
   `.env`, Docker Compose, freie Portwahl, konkrete Docker-Berechtigungshinweise
   und die Ausgabe der App-Adresse sind vorhanden. Der erzeugte CRUD-Stack hat

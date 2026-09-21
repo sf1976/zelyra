@@ -32,6 +32,12 @@ releases follow Semantic Versioning independently of the language line.
 - Add a published-release smoke test for real installer, repeat-install, and
   update-check paths. / Ein Smoke-Test für veröffentlichte Releases prüft den
   echten Installer, die wiederholte Installation und den Update-Check.
+- Add a protected machine-management acceptance fixture and a generated-project
+  E2E covering anonymous denial, viewer access, create/edit denial, authorized
+  CRUD forms, search, and deletion. / Eine geschützte
+  Maschinenverwaltungs-Abnahmefixture und ein Generated-Project-E2E prüfen
+  anonyme Ablehnung, Viewer-Zugriff, Ablehnung von Erstellen/Bearbeiten,
+  autorisierte CRUD-Formulare, Suche und Löschen.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

@@ -165,6 +165,15 @@ jobs:
           ZELYRA_GENERATED_AUTH_ADDRESS: 127.0.0.1:38525
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-auth-e2e.sh
+      - name: Run generated machine authorization end-to-end test
+        env:
+          ZELYRA_MACHINE_AUTH_GENERATED_ROOT_PASSWORD: root
+          ZELYRA_MACHINE_AUTH_GENERATED_DB_PORT: 3306
+          ZELYRA_MACHINE_AUTH_GENERATED_DB_HOST_PORT: 3312
+          ZELYRA_MACHINE_AUTH_GENERATED_HOST_PORT: 18087
+          ZELYRA_MACHINE_AUTH_GENERATED_ADDRESS: 127.0.0.1:38531
+          ZELYRA_BIN: target/debug/zelyra
+        run: ./tests/generated-project-machine-auth-e2e.sh
       - name: Run generated business project end-to-end test
         env:
           ZELYRA_GENERATED_BUSINESS_ROOT_PASSWORD: root

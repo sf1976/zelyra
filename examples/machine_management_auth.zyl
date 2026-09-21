@@ -1,0 +1,115 @@
+database main {
+    engine: mariadb
+}
+
+auth users {
+    table: users
+    sessions: auth_sessions
+    permissions: user_permissions
+    roles: user_roles
+    role_permissions: role_permissions
+    audit: auth_audit_log
+    admin_path: "/admin/access"
+    admin_permission: "auth.manage"
+    admin_role: admin
+}
+
+table users {
+    id: Id primary auto
+    email: Email required unique
+    password_hash: String(255) required
+    active: Bool default true
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+}
+
+table user_permissions {
+    id: Id primary auto
+    user: User required
+    permission: String(100) required
+}
+
+table user_roles {
+    id: Id primary auto
+    user: User required
+    role: String(100) required
+}
+
+table role_permissions {
+    id: Id primary auto
+    role: String(100) required
+    permission: String(100) required
+}
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
+}
+
+table departments {
+    id: Id primary auto
+    code: String(20) required unique
+    name: String(100) required unique
+}
+
+table machines {
+    id: Id primary auto
+    number: String(30) required unique
+    name: String(120) required
+    category: String(50) required
+    department: Department required
+    status: String(20) default "operational"
+    active: Bool default true
+}
+
+crud Department -> departments {
+    list {
+        id
+        code
+        name
+    }
+}
+
+crud Machine -> machines {
+    requires auth
+    permits "machines.view"
+    permits create "machines.create"
+    permits edit "machines.edit"
+    permits delete "machines.delete"
+
+    list {
+        id
+        number
+        name
+        category
+        department
+        status
+        active
+    }
+
+    search {
+        number
+        name
+        category
+        status
+    }
+
+    filter {
+        department
+        category
+        status
+        active
+    }
+}
+
+fn main() {
+}
