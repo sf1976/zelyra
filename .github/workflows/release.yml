@@ -60,7 +60,8 @@ jobs:
           fi
 
           package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
-          if [[ "${release_tag}" != "v${package_version}" ]]; then
+          expected_tag="v${package_version}"
+          if [[ "${release_tag}" != "${expected_tag}" && "${release_tag}" != "${expected_tag}-"* ]]; then
             echo "Release tag ${release_tag} does not match Cargo.toml version ${package_version}." >&2
             exit 1
           fi

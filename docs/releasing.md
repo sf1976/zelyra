@@ -42,10 +42,11 @@ installer, verifies the installed version, repeats the installation, and runs
 the final release gate; a successful source/package test alone does not prove
 that GitHub's published assets are reachable and usable.
 
-The release tag must exactly match the workspace package version in
-`Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). The workflow rejects
-a mismatched tag instead of publishing archives whose names and embedded CLI
-version disagree.
+The stable part of the release tag must match the workspace package version in
+`Cargo.toml` (for example, `v0.2.0` for version `0.2.0`). A prerelease suffix
+such as `-rc.1` is allowed for a candidate and is published as a prerelease;
+an unrelated version is rejected instead of publishing archives whose names
+and embedded CLI version disagree.
 
 For changes to release automation, package manifests, or source code, the
 release workflow builds the Linux and Windows artifacts on the pull request.

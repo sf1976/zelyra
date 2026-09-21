@@ -49,10 +49,12 @@ Tag einzusetzen; ein erfolgreicher Quellcode-/Packaging-Test beweist allein
 noch nicht, dass die veröffentlichten GitHub-Artefakte erreichbar und nutzbar
 sind.
 
-Das Release-Tag muss exakt zur Workspace-Paketversion in `Cargo.toml` passen
-(zum Beispiel `v0.2.0` für Version `0.2.0`). Bei Abweichungen lehnt der
-Workflow das Tag ab, statt Archive mit widersprüchlichem Namen und eingebauter
-CLI-Version zu veröffentlichen.
+Der stabile Teil des Release-Tags muss zur Workspace-Paketversion in
+`Cargo.toml` passen (zum Beispiel `v0.2.0` für Version `0.2.0`). Ein
+Prerelease-Suffix wie `-rc.1` ist für einen Kandidaten erlaubt und wird als
+Prerelease veröffentlicht; eine fremde Version lehnt der Workflow ab, statt
+Archive mit widersprüchlichem Namen und eingebauter CLI-Version zu
+veröffentlichen.
 
 Bei Änderungen an Release-Automatisierung, Paketmanifesten oder Quellcode baut
 der Release-Workflow die Linux- und Windows-Artefakte bereits im Pull Request.

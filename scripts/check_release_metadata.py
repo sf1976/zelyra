@@ -22,7 +22,7 @@ WORKSPACE_PACKAGES = (
     "zelyra-web",
 )
 SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
-TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 
 
 def workspace_version(root: Path) -> str:
@@ -97,8 +97,10 @@ def main() -> int:
         if args.tag is not None:
             if not TAG.fullmatch(args.tag):
                 raise ValueError(f"invalid release tag: {args.tag}")
-            if args.tag != expected_tag:
-                raise ValueError(f"release tag {args.tag} does not match workspace version {version}")
+            if args.tag != expected_tag and not args.tag.startswith(expected_tag + "-"):
+                raise ValueError(
+                    f"release tag {args.tag} does not match workspace version {version}"
+                )
         if args.binary is not None:
             validate_binary(args.binary, version)
     except (OSError, ValueError, tomllib.TOMLDecodeError, subprocess.SubprocessError) as error:

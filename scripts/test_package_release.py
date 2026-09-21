@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -144,6 +146,29 @@ class ReleasePackageTests(unittest.TestCase):
                 target="x86_64-pc-windows-msvc",
                 source_date_epoch=1_800_000_000,
             )
+
+    def test_prerelease_tag_matches_workspace_version(self) -> None:
+        script = Path(__file__).with_name("check_release_metadata.py")
+        result = subprocess.run(
+            [sys.executable, str(script), "--root", str(Path(__file__).resolve().parents[1]),
+             "--tag", f"v{self.version}-rc.1"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_prerelease_tag_for_different_version_is_refused(self) -> None:
+        script = Path(__file__).with_name("check_release_metadata.py")
+        result = subprocess.run(
+            [sys.executable, str(script), "--root", str(Path(__file__).resolve().parents[1]),
+             "--tag", "v9.9.9-rc.1"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match workspace version", result.stderr)
 
 
 if __name__ == "__main__":
