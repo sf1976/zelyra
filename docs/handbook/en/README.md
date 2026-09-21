@@ -350,6 +350,11 @@ The test always uses a disposable SQLite file and creates/removes a separate
 MariaDB database. It is restricted to a local server and the `zelyra_test` or
 `zelyra_ci` base database; never point it at production.
 
+The release audit also checks repeated setup/bootstrap, populated existing
+schemas, unavailable-database diagnostics with redacted credentials, and both
+automatic free-port selection and explicit occupied-port rejection. These are
+covered by the MariaDB E2E and CLI machine-interface tests.
+
 To test the complete generated-project path against a fresh database:
 
 ~~~bash

@@ -397,6 +397,12 @@ eine separate MariaDB-Datenbank. Er ist auf lokale Server und die
 Basisdatenbank `zelyra_test` oder `zelyra_ci` beschränkt; niemals Produktion
 angeben.
 
+Das Release-Audit prüft zusätzlich wiederholtes Setup/Bootstrap, befüllte
+bestehende Schemata, nicht erreichbare Datenbankverbindungen mit bereinigten
+Zugangsdaten sowie automatische freie Portwahl und die ausdrückliche Ablehnung
+belegter Ports. Diese Fälle sind durch MariaDB-E2E- und
+CLI-Maschinenschnittstellentests abgedeckt.
+
 Den vollständigen Weg eines erzeugten Projekts gegen eine frische Datenbank
 prüfen:
 

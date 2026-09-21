@@ -1,6 +1,6 @@
 # MariaDB compatibility matrix
 
-**Scope:** Zelyra 0.2.0 database and CRUD runtime paths | **Matrix reviewed:** 2026-09-20 | **Evidence:** exact official MariaDB Docker image tags below; Linux x86_64
+**Scope:** Zelyra 0.3.0 database and CRUD runtime paths | **Matrix reviewed:** 2026-09-21 | **Evidence:** exact official MariaDB Docker image tags below; Linux x86_64
 
 This matrix records tested Zelyra behavior. It is not a MariaDB certification,
 a promise that every SQL feature works on every server, or a MySQL compatibility
@@ -11,10 +11,10 @@ and MySQL Server are outside this matrix.
 
 | MariaDB Community LTS line | Exact image tag used for tests | Zelyra test status | Community maintenance through* |
 |---|---|---|---|
-| 10.11 | `mariadb:10.11.19` | Locally verified; exact tag is in CI matrix | 2028-02-16 |
-| 11.4 | `mariadb:11.4.13` | Locally verified; exact tag is in CI matrix | 2029-05-29 |
-| 11.8 | `mariadb:11.8.9` | Locally verified; exact tag is in CI matrix | 2028-06-04 |
-| 12.3 | `mariadb:12.3.3` | Locally verified; exact tag is in CI matrix | 2029-06-12 |
+| 10.11 | `mariadb:10.11.19` | CI-verified; exact tag is in CI matrix | 2028-02-16 |
+| 11.4 | `mariadb:11.4.13` | CI-verified; exact tag is in CI matrix | 2029-05-29 |
+| 11.8 | `mariadb:11.8.9` | CI-verified; exact tag is in CI matrix | 2028-06-04 |
+| 12.3 | `mariadb:12.3.3` | CI-verified; exact tag is in CI matrix | 2029-06-12 |
 
 The GitHub Actions job `mariadb-compatibility` runs the same core integrations
 on each exact image tag. It checks the server-reported version and logs the
@@ -54,6 +54,12 @@ can run the same scripts against a disposable MariaDB service:
   `REVIEW` approval and primary-key, serial, and identity metadata drift against
   PostgreSQL 16. It is a schema safety check, not a PostgreSQL runtime
   compatibility claim.
+
+The 0.3.0 release audit also keeps these operational cases explicit: fresh
+generated-project setup, repeated setup/bootstrap, populated existing schemas,
+unavailable-database diagnostics with credential redaction, and automatic or
+explicitly conflicting host-port selection. The complete CI evidence is the
+[green run 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858).
 
 Each CI matrix job has its own ephemeral MariaDB service and database. The
 schema-safety test creates and drops only a uniquely named test database.

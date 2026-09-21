@@ -551,6 +551,11 @@ reproducible real-application acceptance path, dependable compiler interfaces,
 and honest release evidence. Scope and status must be reviewed as work proceeds;
 the plan does not make all long-term roadmap items 0.3.0 requirements.
 
+The current database acceptance evidence is green in [CI run
+35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858): the
+four-version MariaDB matrix, schema-safety checks, SQLite regression path,
+generated applications, and isolated customer/order workflow all passed.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template

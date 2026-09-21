@@ -592,6 +592,12 @@ Anwendung, verlässliche Compiler-Schnittstellen und ehrliche Release-Nachweise.
 Umfang und Status werden während der Arbeit überprüft; nicht alle langfristigen
 Roadmap-Punkte werden dadurch zu Anforderungen für 0.3.0.
 
+Der aktuelle Datenbank-Abnahmenachweis ist im [CI-Lauf
+35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858) grün:
+Die MariaDB-Matrix mit vier Versionen, Schema-Sicherheitsprüfungen, der
+SQLite-Regressionstest, erzeugte Anwendungen und der isolierte Kunden-/Auftrags-
+Workflow waren erfolgreich.
+
 ## Akzeptanzanwendungen aus der Praxis
 
 - [~] Die Maschinenverwaltung ist ein MariaDB-Template mit lokalisierten

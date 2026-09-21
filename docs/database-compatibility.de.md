@@ -1,6 +1,6 @@
 # MariaDB-Kompatibilitätsmatrix
 
-**Umfang:** Datenbank- und CRUD-Laufzeitpfade für Zelyra 0.2.0 | **Matrix geprüft:** 20.09.2026 | **Nachweis:** exakte offizielle MariaDB-Docker-Tags; Linux x86_64
+**Umfang:** Datenbank- und CRUD-Laufzeitpfade für Zelyra 0.3.0 | **Matrix geprüft:** 21.09.2026 | **Nachweis:** exakte offizielle MariaDB-Docker-Tags; Linux x86_64
 
 Diese Matrix dokumentiert getestetes Zelyra-Verhalten. Sie ist weder eine
 MariaDB-Zertifizierung noch ein Versprechen, dass jede SQL-Funktion auf jedem
@@ -12,10 +12,10 @@ sind nicht Teil dieser Matrix.
 
 | MariaDB-Community-LTS-Reihe | Exakter Test-Image-Tag | Zelyra-Teststatus | Community-Wartung bis* |
 |---|---|---|---|
-| 10.11 | `mariadb:10.11.19` | Lokal geprüft; exakter Tag in der CI-Matrix | 16.02.2028 |
-| 11.4 | `mariadb:11.4.13` | Lokal geprüft; exakter Tag in der CI-Matrix | 29.05.2029 |
-| 11.8 | `mariadb:11.8.9` | Lokal geprüft; exakter Tag in der CI-Matrix | 04.06.2028 |
-| 12.3 | `mariadb:12.3.3` | Lokal geprüft; exakter Tag in der CI-Matrix | 12.06.2029 |
+| 10.11 | `mariadb:10.11.19` | CI-geprüft; exakter Tag in der CI-Matrix | 16.02.2028 |
+| 11.4 | `mariadb:11.4.13` | CI-geprüft; exakter Tag in der CI-Matrix | 29.05.2029 |
+| 11.8 | `mariadb:11.8.9` | CI-geprüft; exakter Tag in der CI-Matrix | 04.06.2028 |
+| 12.3 | `mariadb:12.3.3` | CI-geprüft; exakter Tag in der CI-Matrix | 12.06.2029 |
 
 Der GitHub-Actions-Job `mariadb-compatibility` führt dieselben zentralen
 Integrationstests mit jedem exakten Image-Tag aus. Er prüft die vom Server
@@ -60,6 +60,12 @@ können dieselben Skripte gegen einen wegwerfbaren MariaDB-Dienst laufen:
   `REVIEW`-Freigabe sowie Primärschlüssel-, Serial- und Identity-Metadaten-Drift
   mit PostgreSQL 16. Das ist ein Schemasicherheitstest, keine
   PostgreSQL-Runtime-Kompatibilitätszusage.
+
+Das 0.3.0-Release-Audit hält außerdem diese Betriebsfälle ausdrücklich fest:
+frisches Setup eines generierten Projekts, wiederholtes Setup/Bootstrap,
+befüllte bestehende Schemata, nicht erreichbare Datenbank mit bereinigten
+Zugangsdaten sowie automatische oder ausdrücklich kollidierende Host-Portwahl.
+Der vollständige CI-Nachweis ist der [grüne Lauf 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858).
 
 Jeder CI-Matrixjob besitzt einen eigenen kurzlebigen MariaDB-Dienst und eine
 eigene Datenbank. Der Schema-Sicherheitstest erstellt und entfernt nur eine
