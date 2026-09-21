@@ -2095,10 +2095,11 @@ anbieterneutral, sodass auch lokale Werkzeuge sie verwenden können.
   `--check` für CI; Kommentare und opake SQL-/HTML-Blöcke bleiben erhalten;
 - ✅ **Implementiert:** menschenlesbare Ausgabe bleibt Standard;
 - 🧪 **Experimentell:** die aktuelle JSON-Schnittstelle hat Schema-Version `1`
-  und unterstützt `check` und `context`;
+  und unterstützt `check`, `context`, die quelltextbasierte Wirkungsanalyse
+  `impact` sowie die validierte Vorschau `edit`;
 - ✅ **Implementiert:** Ausdrucks-Typed-Holes mit `_` und
   Kontextdiagnosen; baubare Befehle lehnen unvollständigen Code ab;
-- 🗺️ **Geplant:** umfassendere Typed Holes, semantische Änderungen,
+- 🗺️ **Geplant:** umfassendere Typed Holes, vollständige Laufzeit-/Schema-
   Wirkungsanalyse und der reproduzierbare KI-Benchmark;
 - ❌ **Nicht verfügbar:** automatische Änderungen an Produktionssystemen,
   automatische Berechtigungserweiterungen oder an einen KI-Dienst delegierte
