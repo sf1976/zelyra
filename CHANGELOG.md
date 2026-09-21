@@ -6,6 +6,10 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Complete the generated project theme token template and document the CSS
+  versus Zelyra view/component boundary. / Die generierte Theme-Vorlage
+  enthält nun den vollständigen Token-Vertrag; die Grenze zwischen CSS sowie
+  Zelyra-Views und -Komponenten ist dokumentiert.
 - The installer CI path now performs a real isolated source install, version
   check, repeat install, and executable-only uninstall in addition to dry-run
   validation. / Der Installer-CI-Pfad führt neben der Dry-Run-Prüfung jetzt

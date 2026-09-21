@@ -8154,6 +8154,46 @@ mod tests {
         assert_eq!(no_theme.status, 404);
     }
 
+    #[test]
+    fn default_design_system_exposes_the_complete_public_theme_token_set() {
+        for token in [
+            "--zelyra-color-accent",
+            "--zelyra-color-accent-strong",
+            "--zelyra-color-accent-text",
+            "--zelyra-color-accent-soft",
+            "--zelyra-color-ink",
+            "--zelyra-color-muted",
+            "--zelyra-color-border",
+            "--zelyra-color-canvas",
+            "--zelyra-color-surface",
+            "--zelyra-color-surface-subtle",
+            "--zelyra-color-sidebar-start",
+            "--zelyra-color-sidebar-middle",
+            "--zelyra-color-sidebar-end",
+            "--zelyra-color-sidebar-foreground",
+            "--zelyra-color-sidebar-muted",
+            "--zelyra-color-hero-start",
+            "--zelyra-color-hero-middle",
+            "--zelyra-color-hero-end",
+            "--zelyra-color-success-background",
+            "--zelyra-color-success-border",
+            "--zelyra-color-success-ink",
+            "--zelyra-color-danger-background",
+            "--zelyra-color-danger-border",
+            "--zelyra-color-danger-ink",
+            "--zelyra-color-focus",
+            "--zelyra-font-body",
+            "--zelyra-radius-card",
+            "--zelyra-radius-control",
+            "--zelyra-content-max-width",
+        ] {
+            assert!(
+                ZELYRA_DESIGN_SYSTEM_CSS.contains(token),
+                "default design system misses {token}"
+            );
+        }
+    }
+
     fn relation_form_route() -> FormRoute {
         let mut route = form_route();
         route.form.fields.push(zelyra_ast::FormField {

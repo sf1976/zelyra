@@ -229,6 +229,15 @@ unter `/__zelyra/theme.css` ausgeliefert; diese Route ist bei vorhandener
 Theme-Datei reserviert. Der Zugriff ist auf GET beschränkt und erhält
 `X-Content-Type-Options: nosniff` sowie `Cache-Control: no-cache`.
 
+Die Grenze zwischen Theme-CSS und Zelyra-Views ist bewusst festgelegt: CSS-
+Tokens ändern ausschließlich visuelle Eigenschaften wie Farben, Typografie,
+Abstände und Rundungen. Layoutstruktur, Inhalte, CRUD-Felder, Slots,
+Navigation, Formulare, CSRF-Felder und Berechtigungen werden über deklarative
+Zelyra-Views beziehungsweise die generierten Komponenten gesteuert. Ein
+Theme kann deshalb keine Datenzugriffe oder Sicherheitsprüfungen ersetzen.
+Die erzeugte `zelyra.theme.css` enthält alle verfügbaren Tokens als
+auskommentierte, sichere Ausgangsbasis.
+
 Betroffen sind `zelyra serve`, `new`/`init` und der generierte Docker-Build.
 Die Dockerfile-Vorlage kopiert die Theme-Datei explizit ins Image. CLI-Tests
 prüfen fehlende und gültige Dateien, Größenlimit, UTF-8, Symlink-Ablehnung,

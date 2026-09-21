@@ -64,15 +64,33 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 :root {
     /* --zelyra-color-accent: #7557f6; */
     /* --zelyra-color-accent-strong: #665ce9; */
-    /* --zelyra-color-canvas: #f5f7fb; */
-    /* --zelyra-color-surface: #ffffff; */
+    /* --zelyra-color-accent-text: #634ce0; */
+    /* --zelyra-color-accent-soft: #f8f6ff; */
     /* --zelyra-color-ink: #172033; */
     /* --zelyra-color-muted: #738097; */
     /* --zelyra-color-border: #e8edf4; */
+    /* --zelyra-color-canvas: #f5f7fb; */
+    /* --zelyra-color-surface: #ffffff; */
+    /* --zelyra-color-surface-subtle: #f9faff; */
     /* --zelyra-color-sidebar-start: #171c32; */
     /* --zelyra-color-sidebar-middle: #202743; */
     /* --zelyra-color-sidebar-end: #263958; */
+    /* --zelyra-color-sidebar-foreground: #f6f7ff; */
+    /* --zelyra-color-sidebar-muted: #bac4d8; */
+    /* --zelyra-color-hero-start: #262f52; */
+    /* --zelyra-color-hero-middle: #3e4381; */
+    /* --zelyra-color-hero-end: #6258bb; */
+    /* --zelyra-color-success-background: #effbf7; */
+    /* --zelyra-color-success-border: #bcebdd; */
+    /* --zelyra-color-success-ink: #17654f; */
+    /* --zelyra-color-danger-background: #fff5f5; */
+    /* --zelyra-color-danger-border: #f2c8cc; */
+    /* --zelyra-color-danger-ink: #8b303c; */
+    /* --zelyra-color-focus: #8f7aff; */
+    /* --zelyra-font-body: Inter, system-ui, sans-serif; */
     /* --zelyra-radius-card: 16px; */
+    /* --zelyra-radius-control: 10px; */
+    /* --zelyra-content-max-width: 1180px; */
 }
 "#;
 
@@ -10866,7 +10884,42 @@ mod tests {
         assert!(dockerfile.contains("COPY locales ./locales"));
         assert!(path.join("locales/de.json").is_file());
         assert!(path.join("locales/en.json").is_file());
-        assert!(project_theme.contains("--zelyra-color-accent"));
+        for token in [
+            "--zelyra-color-accent",
+            "--zelyra-color-accent-strong",
+            "--zelyra-color-accent-text",
+            "--zelyra-color-accent-soft",
+            "--zelyra-color-ink",
+            "--zelyra-color-muted",
+            "--zelyra-color-border",
+            "--zelyra-color-canvas",
+            "--zelyra-color-surface",
+            "--zelyra-color-surface-subtle",
+            "--zelyra-color-sidebar-start",
+            "--zelyra-color-sidebar-middle",
+            "--zelyra-color-sidebar-end",
+            "--zelyra-color-sidebar-foreground",
+            "--zelyra-color-sidebar-muted",
+            "--zelyra-color-hero-start",
+            "--zelyra-color-hero-middle",
+            "--zelyra-color-hero-end",
+            "--zelyra-color-success-background",
+            "--zelyra-color-success-border",
+            "--zelyra-color-success-ink",
+            "--zelyra-color-danger-background",
+            "--zelyra-color-danger-border",
+            "--zelyra-color-danger-ink",
+            "--zelyra-color-focus",
+            "--zelyra-font-body",
+            "--zelyra-radius-card",
+            "--zelyra-radius-control",
+            "--zelyra-content-max-width",
+        ] {
+            assert!(
+                project_theme.contains(token),
+                "generated theme misses {token}"
+            );
+        }
 
         fs::remove_dir_all(path).unwrap();
     }
