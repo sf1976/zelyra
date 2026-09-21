@@ -1,0 +1,124 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(120) required
+    email: Email?
+}
+
+table orders {
+    id: Id primary auto
+    customer: Customer required
+    order_number: String(40) required unique
+    status: String(20) default "open"
+    total: Decimal required
+}
+
+struct CustomerOrderOverview {
+    id: Id
+    name: String
+    email: Email?
+    orders: Int
+    turnover: Decimal?
+}
+
+view CustomerOrderShell {
+    html {
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Customer Orders</title>
+            </head>
+            <body>
+                <header>
+                    <h1>Customer Orders</h1>
+                    <nav>
+                        <a href="/">Overview</a>
+                        <a href="/customers">Customers</a>
+                        <a href="/orders">Orders</a>
+                        <a href="/views/customerorderoverview">Customer summary</a>
+                    </nav>
+                </header>
+                <main><slot /></main>
+            </body>
+        </html>
+    }
+}
+
+page "/" {
+    view: CustomerOrderShell
+    html {
+        <section>
+            <h2>Customer order workspace</h2>
+            <p>Review customers, orders, and aggregated turnover in one local application.</p>
+            <p><a href="/customers">Manage customers</a> <a href="/orders">Manage orders</a></p>
+        </section>
+    }
+}
+
+crud Customer -> customers {
+    layout: CustomerOrderShell
+    title: "Customers"
+
+    view {
+        fields { name email }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+
+    list { name email }
+    search { name email }
+}
+
+crud Order -> orders {
+    layout: CustomerOrderShell
+    title: "Orders"
+
+    view {
+        fields { order_number customer status total }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+
+    list { order_number customer status total }
+    search { order_number status }
+    filter { status }
+}
+
+tableview CustomerOrderOverview {
+    source sql<CustomerOrderOverview[]> {
+        SELECT
+            c.id,
+            c.name,
+            c.email,
+            COUNT(o.id) AS orders,
+            SUM(o.total) AS turnover
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id
+        GROUP BY c.id, c.name, c.email
+    }
+
+    columns {
+        id
+        name
+        email
+        orders
+        turnover
+    }
+
+    filter {
+        name
+        orders
+        turnover
+    }
+
+    searchable
+    sortable
+    paginated 25
+}

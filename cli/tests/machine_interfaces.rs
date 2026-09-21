@@ -224,6 +224,18 @@ fn valid_check_json_is_a_stable_machine_document() {
 }
 
 #[test]
+fn customer_order_acceptance_example_is_valid() {
+    let output = run(&["check", example("customer_orders.zyl").to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();

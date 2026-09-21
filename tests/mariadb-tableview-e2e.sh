@@ -6,6 +6,7 @@ repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_TABLEVIEW_E2E_PROJECT:-${repo_dir}/examples/tableview.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
 address="${ZELYRA_TABLEVIEW_E2E_ADDRESS:-127.0.0.1:38515}"
+tableview_path="${ZELYRA_TABLEVIEW_E2E_PATH:-/views/customers}"
 base_url="http://${address}"
 database_url="${DATABASE_URL:-}"
 suffix="$(date +%s)"
@@ -132,15 +133,21 @@ echo "[4/7] starting Zelyra web server"
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
 for _ in $(seq 1 30); do
-    if curl --silent --show-error --fail "${base_url}/views/customers" -o "${temp_dir}/health.html"; then
+    if curl --silent --show-error --fail "${base_url}${tableview_path}" -o "${temp_dir}/health.html"; then
         break
     fi
     sleep 1
 done
-if ! curl --silent --show-error --fail "${base_url}/views/customers" -o "${temp_dir}/health.html"; then
+if ! curl --silent --show-error --fail "${base_url}${tableview_path}" -o "${temp_dir}/health.html"; then
     echo "error: Zelyra web server did not become ready" >&2
     cat "${temp_dir}/server.log" >&2
     exit 1
+fi
+if [[ "${ZELYRA_TABLEVIEW_E2E_EXPECT_CUSTOM_APP:-0}" == "1" ]]; then
+    curl --silent --show-error --fail "${base_url}/" -o "${temp_dir}/custom-home.html"
+    grep -Fq "Customer order workspace" "${temp_dir}/custom-home.html"
+    grep -Fq 'href="/customers"' "${temp_dir}/custom-home.html"
+    grep -Fq 'href="/orders"' "${temp_dir}/custom-home.html"
 fi
 
 echo "[5/7] checking struct projection, aggregates, and escaping"
@@ -154,14 +161,14 @@ grep -Fq "<td>150</td>" "${temp_dir}/health.html"
 
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${beta_name}" \
-    "${base_url}/views/customers" -o "${temp_dir}/search.html"
+    "${base_url}${tableview_path}" -o "${temp_dir}/search.html"
 grep -Fq "${escaped_beta_name}" "${temp_dir}/search.html"
 ! grep -Fq "${alpha_name}" "${temp_dir}/search.html"
 ! grep -Fq "${gamma_name}" "${temp_dir}/search.html"
 
 curl --silent --show-error --fail --get \
     --data-urlencode "filter_orders=2" \
-    "${base_url}/views/customers" -o "${temp_dir}/filter-equal.html"
+    "${base_url}${tableview_path}" -o "${temp_dir}/filter-equal.html"
 grep -Fq "${alpha_name}" "${temp_dir}/filter-equal.html"
 ! grep -Fq "${beta_name}" "${temp_dir}/filter-equal.html"
 ! grep -Fq "${gamma_name}" "${temp_dir}/filter-equal.html"
@@ -169,7 +176,7 @@ grep -Fq "${alpha_name}" "${temp_dir}/filter-equal.html"
 curl --silent --show-error --fail --get \
     --data-urlencode "filter_orders__operator=gte" \
     --data-urlencode "filter_orders=1" \
-    "${base_url}/views/customers" -o "${temp_dir}/filter-range.html"
+    "${base_url}${tableview_path}" -o "${temp_dir}/filter-range.html"
 grep -Fq "${alpha_name}" "${temp_dir}/filter-range.html"
 grep -Fq "${escaped_beta_name}" "${temp_dir}/filter-range.html"
 ! grep -Fq "${gamma_name}" "${temp_dir}/filter-range.html"
@@ -177,13 +184,13 @@ grep -Fq "${escaped_beta_name}" "${temp_dir}/filter-range.html"
 curl --silent --show-error --fail --get \
     --data-urlencode "filter_name__operator=contains" \
     --data-urlencode "filter_name=Beta" \
-    "${base_url}/views/customers" -o "${temp_dir}/filter-text.html"
+    "${base_url}${tableview_path}" -o "${temp_dir}/filter-text.html"
 grep -Fq "${escaped_beta_name}" "${temp_dir}/filter-text.html"
 ! grep -Fq "${alpha_name}" "${temp_dir}/filter-text.html"
 
-filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}/views/customers?filter_not_allowed=value")"
+filter_status="$(curl --silent --show-error --output "${temp_dir}/invalid-filter.html" --write-out '%{http_code}' "${base_url}${tableview_path}?filter_not_allowed=value")"
 [[ "${filter_status}" == "400" ]]
-unsupported_filter_status="$(curl --silent --show-error --output "${temp_dir}/unsupported-filter.html" --write-out '%{http_code}' "${base_url}/views/customers?filter_orders__operator=contains&filter_orders=2")"
+unsupported_filter_status="$(curl --silent --show-error --output "${temp_dir}/unsupported-filter.html" --write-out '%{http_code}' "${base_url}${tableview_path}?filter_orders__operator=contains&filter_orders=2")"
 [[ "${unsupported_filter_status}" == "400" ]]
 
 echo "[6/7] checking allowlisted sorting and pagination"
@@ -191,7 +198,7 @@ curl --silent --show-error --fail --get \
     --data-urlencode "search=${customer_prefix}" \
     --data-urlencode "sort=name" \
     --data-urlencode "order=desc" \
-    "${base_url}/views/customers" -o "${temp_dir}/sorted.html"
+    "${base_url}${tableview_path}" -o "${temp_dir}/sorted.html"
 gamma_offset="$(grep -b -o -m1 "${gamma_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
 beta_offset="$(grep -b -o -m1 "${escaped_beta_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
 alpha_offset="$(grep -b -o -m1 "${alpha_name}" "${temp_dir}/sorted.html" | cut -d: -f1)"
@@ -201,12 +208,12 @@ curl --silent --show-error --fail --get \
     --data-urlencode "search=${pagination_prefix}" \
     --data-urlencode "sort=name" \
     --data-urlencode "order=asc" \
-    "${base_url}/views/customers?page=1" -o "${temp_dir}/page-1.html"
+    "${base_url}${tableview_path}?page=1" -o "${temp_dir}/page-1.html"
 curl --silent --show-error --fail --get \
     --data-urlencode "search=${pagination_prefix}" \
     --data-urlencode "sort=name" \
     --data-urlencode "order=asc" \
-    "${base_url}/views/customers?page=2" -o "${temp_dir}/page-2.html"
+    "${base_url}${tableview_path}?page=2" -o "${temp_dir}/page-2.html"
 grep -Fq "${pagination_prefix}-01" "${temp_dir}/page-1.html"
 ! grep -Fq "${pagination_prefix}-26" "${temp_dir}/page-1.html"
 grep -Fq "${pagination_prefix}-26" "${temp_dir}/page-2.html"
@@ -215,7 +222,7 @@ grep -Fq "page=2" "${temp_dir}/page-1.html"
 grep -Fq "page=1" "${temp_dir}/page-2.html"
 
 echo "[7/7] rejecting unknown sort columns"
-sort_status="$(curl --silent --show-error --output "${temp_dir}/invalid-sort.html" --write-out '%{http_code}' "${base_url}/views/customers?sort=not_allowed")"
+sort_status="$(curl --silent --show-error --output "${temp_dir}/invalid-sort.html" --write-out '%{http_code}' "${base_url}${tableview_path}?sort=not_allowed")"
 [[ "${sort_status}" == "400" ]]
 
 echo "MariaDB tableview E2E passed"
