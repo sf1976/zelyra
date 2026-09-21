@@ -10918,24 +10918,32 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let database_host_port = find_free_port(34_000, &[]).unwrap();
-        let host_port = find_free_port(35_000, &[database_host_port]).unwrap();
-        let status = create_project(
-            path.to_str().unwrap(),
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb: true,
-                crud_template: false,
-                auth_template: false,
-                business_template: false,
-                web_port: 8080,
-                host_port,
-                database_host_port,
-                host_port_given: true,
-                database_host_port_given: true,
-            },
-        );
-        assert_eq!(status, ExitCode::SUCCESS);
+        let mut selected_ports = None;
+        for _ in 0..8 {
+            let database_host_port = find_free_port(34_000, &[]).unwrap();
+            let host_port = find_free_port(35_000, &[database_host_port]).unwrap();
+            let status = create_project(
+                path.to_str().unwrap(),
+                ProjectOptions {
+                    allow_current_directory: false,
+                    with_mariadb: true,
+                    crud_template: false,
+                    auth_template: false,
+                    business_template: false,
+                    web_port: 8080,
+                    host_port,
+                    database_host_port,
+                    host_port_given: true,
+                    database_host_port_given: true,
+                },
+            );
+            if status == ExitCode::SUCCESS {
+                selected_ports = Some((host_port, database_host_port));
+                break;
+            }
+        }
+        let (host_port, database_host_port) =
+            selected_ports.expect("template test should acquire two free host ports");
 
         let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
         let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
