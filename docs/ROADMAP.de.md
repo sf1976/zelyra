@@ -81,8 +81,9 @@ Feature eines bestimmten Anbieters.
 - [~] **Stufe A — Maschinenbasis:** Versionierte JSON-Diagnosen für
   `check --format=json`, stabile Codes, Source-Spans, deterministische
   Ausgabe, eine schreibgeschützte Projektübersicht mit
-  `context --format=json` und Format-Tests sind implementiert. Weitere
-  Befehle und eine vollständige Secret-Redaction bleiben offen.
+  `context --format=json` und Format-Tests sind implementiert. Projektdateien
+  verwenden projektrelative portable Pfade; weitere Befehle und eine
+  vollständige Secret-Redaction bleiben offen.
 - [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
   Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und

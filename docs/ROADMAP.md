@@ -74,8 +74,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [~] **Stage A — machine foundation:** versioned JSON diagnostics for
   `check --format=json`, stable codes, source spans, deterministic output, a
   read-only `context --format=json` project summary, and machine-format tests
-  are implemented. Other commands and complete secret-redaction coverage
-  remain.
+  are implemented. Project files use project-relative portable paths; other
+  commands and complete secret-redaction coverage remain.
 - [x] **Stage B — canonical source:** deterministic `zelyra fmt` formats
   parseable source, supports `--check` for CI, preserves comments and raw
   SQL/HTML bodies, and has idempotence and semantic-preservation coverage.

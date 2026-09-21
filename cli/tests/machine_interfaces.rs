@@ -1135,6 +1135,27 @@ fn invalid_check_json_keeps_human_logs_off_stdout() {
 }
 
 #[test]
+fn machine_diagnostics_use_project_relative_paths() {
+    let path = example("invalid_sql.zyl").canonicalize().unwrap();
+    let output = run(&["check", path.to_str().unwrap(), "--format=json"]);
+    assert_eq!(output.status.code(), Some(1));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        document["diagnostics"][0]["file"],
+        "examples/invalid_sql.zyl"
+    );
+}
+
+#[test]
+fn machine_impact_uses_project_relative_entry_paths() {
+    let path = example("auth_crud_api.zyl").canonicalize().unwrap();
+    let output = run(&["impact", path.to_str().unwrap(), "--format=json"]);
+    assert!(output.status.success());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["entry"], "examples/auth_crud_api.zyl");
+}
+
+#[test]
 fn lexer_and_parser_errors_have_versioned_json_diagnostics() {
     let lexer_path = temporary_source("lexer-error", "fn main() { @ }");
     let lexer_output = run(&["check", lexer_path.to_str().unwrap(), "--format=json"]);

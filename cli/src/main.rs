@@ -743,7 +743,7 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
 fn begin_json_diagnostics(path: &str, source: &str) {
     JSON_DIAGNOSTICS.with(|collector| {
         *collector.borrow_mut() = Some(JsonDiagnosticCollector {
-            path: path.into(),
+            path: context_entry(path),
             source: source.into(),
             diagnostics: Vec::new(),
         });
@@ -1916,7 +1916,7 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             "impact",
             success,
             diagnostics,
-            [("entry".to_owned(), Value::String(path))]
+            [("entry".to_owned(), Value::String(context_entry(&path)))]
                 .into_iter()
                 .chain([("impact".to_owned(), impact)]),
         ));

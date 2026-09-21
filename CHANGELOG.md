@@ -17,6 +17,11 @@ releases follow Semantic Versioning independently of the language line.
 - Eine Kunden-/Auftrags-Akzeptanzanwendung mit projektlokaler Shell, erzeugten
   CRUD-Seiten und geprüfter Aggregat-Tableview ist enthalten; der MariaDB-E2E-
   Pfad kann denselben Quellcode als Releasekandidaten prüfen.
+- JSON diagnostics and impact documents now use project-relative paths for
+  project files, keeping automation and AI tooling portable across checkout
+  locations. / JSON-Diagnosen und Impact-Dokumente geben für Projektdateien
+  nun projektrelative Pfade aus und bleiben dadurch für Automatisierung und
+  KI-Werkzeuge über verschiedene Checkout-Orte hinweg portabel.
 
 - Added `read_console(prompt)` for interactive CLI input. It returns
   `String?`, reports EOF as `None`, and requires both `uses Console` and an
