@@ -192,6 +192,7 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
 
     let manifest: Value =
         serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["format_version"], 1);
     assert_eq!(manifest["kind"], "experimental-source-bundle");
     assert_eq!(manifest["source_closure_complete"], false);
     assert_eq!(manifest["complete_deployment"], false);
@@ -381,6 +382,7 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
 
     let manifest: Value =
         serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["format_version"], 1);
     assert_eq!(manifest["kind"], "experimental-docker-source-package");
     assert_eq!(manifest["docker"]["compiler_commit"], compiler_ref);
     assert_eq!(manifest["source_closure_complete"], false);
