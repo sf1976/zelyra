@@ -585,15 +585,21 @@ oder PostgreSQL-Runtime-Parität erforderlich. Diese Ziele bleiben separat in
 der Roadmap; geplante Fähigkeiten dürfen nicht Teil des Releaseversprechens
 werden.
 
-## Vorgeschlagener Release-Meilenstein 0.3.0
+## Release-Meilenstein 0.3.0 (veröffentlicht)
 
-Der separate [Releaseplan 0.3.0](release-plans/0.3.0.de.md) ist ein
-Arbeitsvorschlag und kein Releaseversprechen. Er priorisiert den einfachen
-Einstieg, ein ausbaubares und eigenständiges Views-/Template-System,
-MariaDB-/Schema-Sicherheit, eine reproduzierbare Abnahme mit einer realen
-Anwendung, verlässliche Compiler-Schnittstellen und ehrliche Release-Nachweise.
-Umfang und Status werden während der Arbeit überprüft; nicht alle langfristigen
-Roadmap-Punkte werden dadurch zu Anforderungen für 0.3.0.
+Zelyra [`v0.3.0`](https://github.com/sf1976/zelyra/releases/tag/v0.3.0) wurde
+am 03.10.2026 als experimentelles Release veröffentlicht. Der abgeschlossene
+[Releaseplan](release-plans/0.3.0.de.md) dokumentiert Umfang, Prüfnachweise und
+bekannte Grenzen. Der Release-Workflow baute und prüfte Linux- und
+Windows-x86_64-Artefakte; der veröffentlichte Linux-Installer einschließlich
+Prüfsumme, Wiederholungsinstallation und Update-Check wurde anschließend
+erfolgreich smoke-getestet.
+
+Der unabhängige menschliche Einsteigertest fand für 0.3.0 nicht statt. Der
+Projektverantwortliche hat ihn ausdrücklich auf 0.4.0 verschoben. Das ist eine
+Risikoentscheidung, kein Nutzertestnachweis; die menschliche Abnahme ist vor
+dem finalen 0.4.0-Release verpflichtend. Siehe das
+[Entscheidungsprotokoll](release-readiness/0.3.0-human-gate-decision.de.md).
 
 Der aktuelle Datenbank-Abnahmenachweis ist im [CI-Lauf
 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858) grün:
@@ -614,9 +620,7 @@ und Barrierefreiheit. PostgreSQL-Runtime-Parität, Multi-Tenancy,
 Hintergrundjobs, MFA, OIDC oder ein visueller Editor werden dadurch bewusst
 nicht automatisch zu 0.4.0-Versprechen.
 
-Der geprüfte Upstream-Release-Stand vom 2026-10-03 ist das stabile `v0.2.0`
-und der Vorabkandidat `v0.3.0-rc.2`; der Workspace auf `main` meldet `0.3.0`,
-aber ein finales `v0.3.0` wurde nicht veröffentlicht. Der Projektverantwortliche
+Das stabile `v0.3.0` wurde am 03.10.2026 veröffentlicht. Der Projektverantwortliche
 hat den menschlichen Einsteigertest für 0.3.0 ausdrücklich auf 0.4.0 vertagt;
 dies ist eine Risikoakzeptanz, kein Testnachweis. Der 0.4.0-Plan verlangt diese
 unabhängige Abnahme vor seinem finalen Release. Umfang und Status bleiben dem

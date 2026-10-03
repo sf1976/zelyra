@@ -26,15 +26,14 @@ releases follow Semantic Versioning independently of the language line.
   die angeforderte stabile Version meldet (einschließlich Kandidatentags).
 
 - Prerelease candidate tags such as `v0.3.0-rc.1` now use the same metadata,
-  packaging, checksum, and artifact verification path as stable releases; the
-  final `v0.3.0` tag remains guarded by bilingual release-plan gates. The
-  human onboarding study may only be deferred through the documented owner
-  decision; it is not represented as passed. / Prerelease-Kandidatentags wie
-  `v0.3.0-rc.1` verwenden nun denselben Metadaten-, Packaging-, Prüfsummen- und
-  Artefaktprüfpfad wie stabile Releases. Das endgültige `v0.3.0`-Tag bleibt
-  durch zweisprachige Releaseplan-Gates geschützt. Die menschliche
-  Einsteigerstudie darf nur mit dokumentierter Projektentscheidung vertagt
-  werden und wird nicht als bestanden dargestellt.
+  packaging, checksum, and artifact verification path as stable releases. The
+  final `v0.3.0` was published after the technical gates passed; the human
+  onboarding study was explicitly deferred by the owner and is not represented
+  as passed. / Prerelease-Kandidatentags wie `v0.3.0-rc.1` verwenden denselben
+  Metadaten-, Packaging-, Prüfsummen- und Artefaktprüfpfad wie stabile Releases.
+  Das endgültige `v0.3.0` wurde nach bestandenen technischen Gates
+  veröffentlicht; die menschliche Einsteigerstudie wurde ausdrücklich durch
+  den Projektverantwortlichen vertagt und wird nicht als bestanden dargestellt.
 - Complete the generated project theme token template and document the CSS
   versus Zelyra view/component boundary. / Die generierte Theme-Vorlage
   enthält nun den vollständigen Token-Vertrag; die Grenze zwischen CSS sowie
@@ -146,6 +145,19 @@ releases follow Semantic Versioning independently of the language line.
 - UTF-8-Verarbeitung in String- und Zeichenliteralen korrigiert, damit
   Unicode-Text erhalten bleibt; ein Konsolenbeispiel schreibt die Ziffern
   einer vorzeichenbehafteten Ganzzahl einzeln aus.
+
+## 0.3.0 — 2026-10-03
+
+Published experimental release for Linux and Windows x86_64. The tagged
+workflow validated metadata and artifacts, and the published Linux
+installation/update smoke test passed. The independent human onboarding study
+was explicitly deferred to the mandatory 0.4.0 acceptance gate; this is not
+usability evidence. / Veröffentlichtes experimentelles Release für Linux und
+Windows x86_64. Der getaggte Workflow prüfte Metadaten und Artefakte; der
+Smoke-Test für Installation und Update des veröffentlichten Linux-Artefakts
+war erfolgreich. Die unabhängige menschliche Einsteigerstudie wurde ausdrücklich
+auf das verpflichtende Abnahme-Gate für 0.4.0 verschoben; dies ist kein
+Nutzerfreundlichkeitsnachweis.
 
 ## 0.3.0-rc.2 — 2026-09-21
 
