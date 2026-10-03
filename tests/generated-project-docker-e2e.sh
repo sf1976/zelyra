@@ -251,7 +251,7 @@ write_bundle_environment() {
     local password="$4"
     (
         umask 077
-        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/zelyra_app\n' \
+        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/zelyra_app\nZELYRA_DB_TLS_MODE=disabled\n' \
             "${port}" "${username}" "${password}" \
             > "${directory}/.env"
     )
@@ -277,6 +277,10 @@ fi
 if ! grep -Fq '"database_connection_scope": "per_exported_compose_project"' \
     "${bundle_dir}/zelyra.bundle.json"; then
     echo "error: invoice Docker bundle omitted its database configuration scope" >&2
+    exit 1
+fi
+if ! grep -Fq 'ZELYRA_DB_TLS_MODE=auto' "${bundle_dir}/.env.example"; then
+    echo "error: Docker bundle does not default remote MariaDB connections to verified TLS" >&2
     exit 1
 fi
 write_bundle_environment "${bundle_dir}" "${bundle_host_port}" \

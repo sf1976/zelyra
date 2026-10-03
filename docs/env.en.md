@@ -288,7 +288,11 @@ bundled public roots. An optional CA file must be an absolute PEM/DER path
 readable by the process. For schema inspection and DDL, the MariaDB client gets
 the same TLS policy through `--ssl` and `--ssl-verify-server-cert`, plus
 `--ssl-ca` when configured. With Docker, mount a private CA into the container
-and make it readable at the configured path.
+and make it readable at the configured path. The full MariaDB project template
+explicitly selects `disabled` for its own isolated Compose network. An exported
+Docker module connects to an external database and therefore defaults to
+`auto`; set its `.env` to `disabled` only for a deliberately isolated local
+database network.
 
 The MariaDB client also receives `--skip-reconnect`, so a lost connection
 cannot silently reconnect or replay a statement. The runtime SQL path in the

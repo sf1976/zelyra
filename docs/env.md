@@ -306,6 +306,11 @@ Für Schema-Inspektion und DDL erhält der MariaDB-Client dieselben TLS-Vorgaben
 mit `--ssl` und `--ssl-verify-server-cert` sowie optional `--ssl-ca`.
 In Docker muss eine private CA in den Container eingebunden und dort unter dem
 konfigurierten Pfad lesbar sein.
+Die vollständige MariaDB-Projektvorlage setzt `disabled` für ihr eigens
+erzeugtes, internes Compose-Netz explizit. Ein exportiertes Docker-Modul
+verbindet sich dagegen mit einer externen Datenbank und startet deshalb mit
+`auto`; nur ein bewusst isolierter lokaler Datenbankverbund sollte in dessen
+`.env` auf `disabled` umgestellt werden.
 
 Der MariaDB-Client erhält außerdem `--skip-reconnect`, damit ein
 Verbindungsverlust nicht unbemerkt zu einem Wiederverbinden oder automatischen

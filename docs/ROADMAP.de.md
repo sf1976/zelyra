@@ -326,8 +326,10 @@ Feature eines bestimmten Anbieters.
   `required` erzwingt TLS und `disabled` schaltet es ausdrücklich ab. Eine
   eigene CA-Datei ist unterstützt. Erfolgreicher Handshake, CLI-Inspektion und
   Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4;
-  der neue TLS-Integrationstest wird in jeden MariaDB-CI-Matrixeintrag
-  aufgenommen. Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
+  der TLS-Integrationstest läuft in jedem MariaDB-CI-Matrixeintrag. Exportierte
+  Docker-Module verwenden standardmäßig `auto`; nur die vollständige lokale
+  Compose-Vorlage schaltet TLS für ihr isoliertes internes Datenbanknetz ab.
+  Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
   Ergebnisübertragung ist nicht global begrenzt und automatische Retries gibt
   es nicht. Windows-TLS wurde noch nicht separat geprüft. Nicht Teil von 0.3.0.
   Antwortfristen und Health-Diagnostik bleiben offen.

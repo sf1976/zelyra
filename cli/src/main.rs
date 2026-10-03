@@ -3337,7 +3337,8 @@ ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
 ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 ZELYRA_DB_POOL_MAX_SIZE=8
 ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
-ZELYRA_DB_TLS_MODE=disabled
+# Remote database connections use verified TLS automatically.
+ZELYRA_DB_TLS_MODE=auto
 # ZELYRA_DB_TLS_CA_CERT_FILE=/absolute/path/to/your/database-ca.pem
 "#;
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
@@ -3392,7 +3393,7 @@ ZELYRA_DB_TLS_MODE=disabled
         )
         .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
         let readme = if docker {
-            "# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `DATABASE_URL` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Never commit `.env`.\n"
+            "# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `DATABASE_URL` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n"
         } else {
             "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n"
         };
