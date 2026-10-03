@@ -79,9 +79,13 @@ architecture requirement for every phase, not a provider-specific feature.
   development branch also includes import edges and the currently supported
   public functions, types, and records per file (`modules[].exports`) in its
   deterministic module context. `zelyra module plan` also provides a read-only
-  closure of explicit import edges; it does not resolve implicit global
-  resource references. This is neither a complete export manifest nor part of
-  published 0.3.0.
+  closure of explicit imports plus statically recognized references from the
+  impact graph. It includes known page-to-view/component, page-SQL-to-table,
+  table-relation, and database-configuration edges, and reports references it
+  cannot resolve. Dynamic or unmodeled dependencies, assets, runtime
+  configuration, external service contracts, and Docker packaging remain
+  outside this preview. `complete_deployment` remains `false`; it is neither a
+  complete export manifest nor part of published 0.3.0.
 - [x] **Stage B — canonical source:** deterministic `zelyra fmt` formats
   parseable source, supports `--check` for CI, preserves comments and raw
   SQL/HTML bodies, and has idempotence and semantic-preservation coverage.

@@ -87,9 +87,14 @@ Feature eines bestimmten Anbieters.
   0.4-Entwicklungszweig enthält der deterministische Modulkontext außerdem
   Importkanten und die derzeit unterstützten öffentlichen Funktionen, Typen
   und Records je Quelldatei (`modules[].exports`). `zelyra module plan` zeigt
-  zusätzlich schreibgeschützt den Abschluss expliziter Importkanten; implizite
-  globale Ressourcenverweise werden nicht aufgelöst. Das ist weder ein
-  vollständiges Exportmanifest noch Bestandteil des veröffentlichten 0.3.0.
+  zusätzlich schreibgeschützt den Abschluss expliziter Importe und statisch
+  erkannter Verweise aus dem Wirkungsgraphen. Enthalten sind bekannte Kanten
+  von Seiten zu Views/Komponenten, Page-SQL zu Tabellen, Tabellenrelationen
+  und Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
+  Dynamische oder nicht modellierte Abhängigkeiten, Assets,
+  Laufzeitkonfiguration, externe Dienstverträge und Docker-Paketierung bleiben
+  außerhalb dieser Vorschau. `complete_deployment` bleibt `false`; der Plan ist
+  weder ein vollständiges Exportmanifest noch Teil des veröffentlichten 0.3.0.
 - [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
   Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und

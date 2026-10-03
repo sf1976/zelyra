@@ -1,8627 +1,2202 @@
-# The Zelyra Handbook
-
-**From foundations to database-backed web applications. State intent. Prove correctness.**
-
-English Â· [Deutsche Ausgabe](/handbuch)
-
-Welcome to the complete Zelyra Handbook. It includes both the introductory textbook **"Learning Zelyra â€“ Understandable Programming from the Foundations to Your Own Application"** (Parts I to X, Chapters 1 to 42), the **Technical Reference Manual** (Chapters 1 to 23), and comprehensive **Appendices** (A to J).
-
-> **Project status:** Compiler 0.3.0 implements a tested, experimental subset of language line 0.1. Zelyra is not approved for production use.
-
-## Status marks
-
-- âœ… **Implemented and verified:** present in the current repository and successfully run in this pass.
-- ðŸ§ª **Experimental:** present, but early or constrained.
-- ðŸ—ºï¸ **Planned:** part of the language vision, not yet reliably available.
-- âŒ **Currently unavailable:** not present in the current CLI.
-
-## Table of Contents
-
-### Learning Zelyra â€“ The Textbook
-
-- **[PART I â€“ UNDERSTANDING ZELYRA AND PROGRAMMING](#part-i-understanding-zelyra-and-programming)**
-  - [Chapter 1: Welcome to Zelyra](#chapter-1-welcome-to-zelyra)
-  - [Chapter 2: How a Program Works](#chapter-2-how-a-program-works)
-  - [Chapter 3: Installing and Setting Up Zelyra](#chapter-3-installing-and-setting-up-zelyra)
-  - [Chapter 4: The First Zelyra Project](#chapter-4-the-first-zelyra-project)
-- **[PART II â€“ LANGUAGE FUNDAMENTALS](#part-ii-language-fundamentals)**
-  - [Chapter 5: Values and Data Types](#chapter-5-values-and-data-types)
-  - [Chapter 6: Variables and Immutability](#chapter-6-variables-and-immutability)
-  - [Chapter 7: Operators and Expressions](#chapter-7-operators-and-expressions)
-  - [Chapter 8: Input and Output](#chapter-8-input-and-output)
-  - [Chapter 9: Decisions with Conditions](#chapter-9-decisions-with-conditions)
-  - [Chapter 10: Repetition and Loops](#chapter-10-repetition-and-loops)
-- **[PART III â€“ STRUCTURING PROGRAMS](#part-iii-structuring-programs)**
-  - [Chapter 11: Functions and Procedures](#chapter-11-functions-and-procedures)
-  - [Chapter 12: Contracts and Preconditions (Design by Contract)](#chapter-12-contracts-and-preconditions-design-by-contract)
-  - [Chapter 13: Collections, Lists, and Dictionaries (Arrays & Maps)](#chapter-13-collections-lists-and-dictionaries-arrays-and-maps)
-  - [Chapter 14: Creating Custom Data Types (Records & Tables)](#chapter-14-creating-custom-data-types-records-tables)
-  - [Chapter 15: Modules and Code Organization](#chapter-15-modules-and-code-organization)
-- **[PART IV â€“ SAFETY AND ERROR HANDLING](#part-iv-safety-and-error-handling)**
-  - [Chapter 16: Error Types and Their Causes](#chapter-16-error-types-and-their-causes)
-  - [Chapter 17: Errors as Values â€“ The Result Pattern](#chapter-17-errors-as-values-the-result-pattern)
-  - [Chapter 18: Nothingness Does Not Exist â€“ Working Safely with Option](#chapter-18-nothingness-does-not-exist-working-safely-with-option)
-  - [Chapter 19: Testing and Quality Assurance](#chapter-19-testing-and-quality-assurance)
-- **[PART V â€“ PRACTICAL DATA PROCESSING](#part-v-practical-data-processing)**
-  - [Chapter 20: Working with Files](#chapter-20-working-with-files)
-  - [Chapter 21: Date, Time, Randomness, and Structured Data](#chapter-21-date-time-randomness-and-structured-data)
-  - [Chapter 22: Concurrency and Background Tasks](#chapter-22-concurrency-and-background-tasks)
-- **[PART VI â€“ DATABASES WITH ZELYRA](#part-vi-databases-with-zelyra)**
-  - [Chapter 23: Why Zelyra Understands Databases Directly](#chapter-23-why-zelyra-understands-databases-directly)
-  - [Chapter 24: Defining Tables and Data Modeling](#chapter-24-defining-tables-and-data-modeling)
-  - [Chapter 25: Querying and Modifying Data](#chapter-25-querying-and-modifying-data)
-- **[PART VII â€“ WEB APPLICATIONS AND FORMS](#part-vii-web-applications-and-forms)**
-  - [Chapter 26: Rendering Web Pages](#chapter-26-rendering-web-pages)
-  - [Chapter 27: Forms and User Inputs](#chapter-27-forms-and-user-inputs)
-  - [Chapter 28: The Complete CRUD Pattern](#chapter-28-the-complete-crud-pattern)
-  - [Chapter 29: Users, Passwords, and Sessions](#chapter-29-users-passwords-and-sessions)
-  - [Chapter 30: APIs and Data Exchange](#chapter-30-apis-and-data-exchange)
-- **[PART VIII â€“ THE DISTINCTIVE FEATURES OF ZELYRA](#part-viii-the-distinctive-features-of-zelyra)**
-  - [Chapter 31: Readability as the Highest Priority](#chapter-31-readability-as-the-highest-priority)
-  - [Chapter 32: AI-Nativity â€“ Why Zelyra Is Built for AI Assistants](#chapter-32-ai-nativity-why-zelyra-is-built-for-ai-assistants)
-  - [Chapter 33: Safety through Capabilities](#chapter-33-safety-through-capabilities)
-  - [Chapter 34: Zelyra in Comparison](#chapter-34-zelyra-in-comparison)
-- **[PART IX â€“ FROM DESIGN TO FINISHED APPLICATION](#part-ix-from-design-to-finished-application)**
-  - [Chapter 35: Planning Software â€“ From Idea to Design](#chapter-35-planning-software-from-idea-to-design)
-  - [Chapter 36: Architecture and Clean Code Structure](#chapter-36-architecture-and-clean-code-structure)
-  - [Chapter 37: Configuration and Environment Variables](#chapter-37-configuration-and-environment-variables)
-  - [Chapter 38: Debugging and Optimization](#chapter-38-debugging-and-optimization)
-  - [Chapter 39: Deployment and Operations](#chapter-39-deployment-and-operations)
-- **[PART X â€“ CAPSTONE PROJECT AND LOOKING AHEAD](#part-x-capstone-project-and-looking-ahead)**
-  - [Chapter 40: The Grand Capstone Project: Complete Task Management](#chapter-40-the-grand-capstone-project-complete-task-management)
-  - [Chapter 41: The Zelyra Roadmap (From 0.3.0 to 1.0)](#chapter-41-the-zelyra-roadmap-from-030-to-10)
-  - [Chapter 42: Your Journey as a Zelyra Developer](#chapter-42-your-journey-as-a-zelyra-developer)
-
-### Technical Reference Manual
-
-- [1. What makes Zelyra different](#1-what-makes-zelyra-different)
-- [2. Installation](#2-installation)
-- [3. Your first program](#3-your-first-program)
-- [4. Create a project and use the CLI](#4-create-a-project-and-use-the-cli)
-- [5. Variables, types, and functions](#5-variables-types-and-functions)
-- [6. Option, Result, and pattern matching](#6-option-result-and-pattern-matching)
-- [7. MariaDB and tables](#7-mariadb-and-tables)
-- [8. Inspecting and applying schemas](#8-inspecting-and-applying-schemas)
-- [9. Native SQL](#9-native-sql)
-- [10. Web pages](#10-web-pages)
-- [11. Forms](#11-forms)
-- [12. CRUD](#12-crud)
-- [13. Authentication and permissions](#13-authentication-and-permissions)
-- [14. Capabilities](#14-capabilities)
-- [15. Contracts and verification](#15-contracts-and-verification)
-- [16. Configuration and secrets](#16-configuration-and-secrets)
-- [17. Diagnostics and troubleshooting](#17-diagnostics-and-troubleshooting)
-- [18. Testing and contributing](#18-testing-and-contributing)
-- [19. What comes next](#19-what-comes-next)
-- [20. Zelyra compared with Rust](#20-zelyra-compared-with-rust)
-- [21. Positioning and current development status](#21-positioning-and-current-development-status)
-- [22. Roadmap from the current repository](#22-roadmap-from-the-current-repository)
-- [23. AI-native development](#23-ai-native-development)
-- [24. Authoritative Sources and Compiler Verification (Source Authority)](#24-authoritative-sources-and-compiler-verification-source-authority)
-
-### Appendices
-
-- [Appendix A: Quickstart / Cheat Sheet (Syntax Cheat Sheet)](#appendix-a-quickstart-cheat-sheet-syntax-cheat-sheet)
-- [Appendix B: Complete Zelyra Diagnostic & Error Code Reference](#appendix-b-complete-zelyra-diagnostic-error-code-reference)
-- [Appendix C: Zelyra CLI Command Reference](#appendix-c-zelyra-cli-command-reference)
-- [Appendix D: Standard Library Overview](#appendix-d-standard-library-overview)
-- [Appendix E: SQL Cheat Sheet for Zelyra Developers](#appendix-e-sql-cheat-sheet-for-zelyra-developers)
-- [Appendix F: HTML and Web Reference in Zelyra](#appendix-f-html-and-web-reference-in-zelyra)
-- [Appendix G: Glossary of Technical Terms](#appendix-g-glossary-of-technical-terms)
-- [Appendix H: Solutions to Chapter Exercises](#appendix-h-solutions-to-chapter-exercises)
-- [Appendix I: Frequently Asked Questions (FAQ)](#appendix-i-frequently-asked-questions-faq)
-- [Appendix J: Next Resources and Community](#appendix-j-next-resources-and-community)
-
-# PART I â€“ UNDERSTANDING ZELYRA AND PROGRAMMING
-
----
-
-## Chapter 1: Welcome to Zelyra
-
-### 1. What will I learn in this chapter?
-In this introductory chapter, you will learn:
-- What a programming language is at its core and what purpose it serves.
-- What makes Zelyra distinctive and why it was created as an independent programming language.
-- Which practical goals Zelyra pursues and what kinds of tasks it is specifically tailored for.
-- How Zelyra guarantees readability, reliability, and safety right from the start.
-- Why Zelyra was intentionally designed for both human software engineers and AI coding assistants.
-- How this textbook is structured and how you can work with it most effectively.
-
-### 2. Why is this topic important?
-Before you write your first line of code, you should understand the fundamental problem that Zelyra solves. Modern software engineeringâ€”especially when building data-intensive and web-driven applicationsâ€”frequently suffers from massive fragmentation: you design a database table schema in SQL, re-implement the exact same rules inside a backend framework (such as Laravel, Express, or Django), re-validate the same constraints a third time in the frontend (HTML/JavaScript), and then manually generate API schemas.
-Zelyra breaks through this fragmentation: you define your data models, business rules, and interfaces in one cohesive languageâ€”and Zelyra derives verified, secure application components from that single source of truth.
-
-### 3. Understandable explanation without unnecessary jargon
-A **programming language** is a precise set of rules and instructions. It allows you to give unambiguous commands to a computer. Computers are extraordinarily fast, but they have no innate common sense: if an instruction is ambiguous or an unhandled condition occurs, the application either crashes or produces critical bugs.
-
-**Zelyra** is a modern, statically typed language. "Statically typed" means that before a program ever runs, the Zelyra compiler rigorously inspects whether all components fit together correctly. If a function expects text but you accidentally pass it a number, Zelyra alerts you immediately at compile timeâ€”before your code ever reaches a server or end user.
-
-At the same time, Zelyra is **database- and web-centric**:
-- A table schema (`table`) is not an isolated SQL migration file, but a first-class language element.
-- Variables are **immutable by default**. As a result, values cannot change unexpectedly behind the scenes.
-- No null pointer surprises: missing or optional values must be declared explicitly as `Option`.
-
-### 4. Small, progressive examples
-
-Let us examine a first minimal Zelyra program:
-
-```zelyra
-// Our first Zelyra program: A greeting
-fn main() {
-    print("Welcome to Zelyra!")
-}
-```
-
-To give this program more modular structure, we can break the task down into a reusable function:
-
-```zelyra
-fn greet(name: String) -> String {
-    return "Hello, " + name + "! Welcome to the world of Zelyra."
-}
-
-fn main() {
-    message = greet("Developer")
-    print(message)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Placing a semicolon at the end of a line (as in Java, C++, or PHP).
-  *Cause:* In Zelyra, line breaks cleanly delimit statements. Redundant semicolons clutter the code.
-- **Error:** Assuming Zelyra is merely a library, framework, or lightweight scripting layer.
-  *Cause:* Zelyra is an independent compiled language with its own type system, static analysis, and verification pipeline.
-
-### 6. Key takeaways
-1. Zelyra unifies data models, business logic, and user interfaces within a single cohesive language.
-2. What you mean is explicitly written in the code: no hidden magic, no implicit null values.
-3. The compiler acts as your verification partner: it catches bugs early, before they can cause damage in production.
-
-### 7. Exercises
-- **Level 1 (Easy):** Modify the greeting program so that it prints your own first name and hometown.
-- **Level 2 (Medium):** Write a second function `farewell(name: String) -> String` that constructs a parting message, and call both functions within `main()`.
-- **Level 3 (Challenging):** Identify three common bugs that frequently occur in dynamically typed languages due to typos or type mismatches (such as passing a number where text is expected), and explain how a static compiler prevents them prior to deployment.
-
-### 8. Practical project task: Task Management
-Throughout this book, we will step-by-step construct a robust, real-world **Task Management** system. We begin by laying the foundation:
-Create a file named `tasks_start.zyl` that cleanly prints the system name and version number to the screen:
-
-```zelyra
-fn main() {
-    system_name = "Zelyra TaskManager"
-    version = "0.1.50"
-    print(system_name + " (Version " + version + ") started.")
-}
-```
-
-### 9. Summary
-- Zelyra is a statically typed, secure, and highly readable language designed for business logic, databases, and the web.
-- Zelyra eliminates redundancies between database schemas, validation layers, and API definitions.
-- Variables are immutable by default, enabling the compiler to guarantee stability and clarity.
-
-### 10. Self-check review questions
-1. What fundamentally distinguishes a statically typed language from a dynamically typed language?
-2. Why is it advantageous to declare database table schemas directly within the programming language itself?
-3. Why are immutable values by default safer than mutable variables?
-
----
-
-## Chapter 2: How a Program Works
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How your written source code is systematically transformed into an executing program.
-- The roles played by the Lexer, Parser, Type Checker, Verifier, and Interpreter in Zelyra.
-- What precisely takes place when a Zelyra program boots up.
-- The fundamental difference between syntax (form) and semantics (meaning).
-- What an algorithm is and how the IPO model (Input, Process, Output) operates.
-
-### 2. Why is this topic important?
-Diagnosing and fixing programming bugs becomes intuitive once you understand at which stage of the toolchain an issue is detected. A syntax error indicates malformed text; a type error indicates contradictory logic; a runtime error indicates an unforeseen condition encountered during execution. Understanding this processing pipeline eliminates fear when facing compiler diagnostics.
-
-### 3. Understandable explanation without unnecessary jargon
-A computer processor directly understands only binary zeros and ones (machine code). When we humans author a text file containing Zelyra code (e.g., `program.zyl`), that code traverses several distinct stages:
-
-```text
-Source Code (.zyl)
-   â”‚
-   â–¼
-[1. Lexer]: Breaks down raw text into words/tokens
-   â”‚
-   â–¼
-[2. Parser]: Builds an Abstract Syntax Tree (AST)
-   â”‚
-   â–¼
-[3. Type Checker]: Validates types, symbols, and capabilities
-   â”‚
-   â–¼
-[4. Verifier]: Formally checks loop invariants and contracts
-   â”‚
-   â–¼
-[5. Runtime / Interpreter]: Executes the verified instructions
-```
-
-- **Syntax** represents grammar and structure: Are brackets balanced? Are keywords spelled correctly?
-- **Semantics** represents meaning: Writing `age = "twenty-five"` is syntactically valid text, but if you attempt arithmetic operations with it, it is semantically meaningless.
-- **Algorithm**: A finite, step-by-step procedure designed to solve a specific problem.
-- **IPO Model**: Input is received, processed according to strict rules, and output is produced.
-
-### 4. Small, progressive examples
-
-A straightforward algorithm calculating remaining days until a deadline:
-
-```zelyra
-fn days_until_target(target_day: Int, current_day: Int) -> Int {
-    remaining = target_day - current_day
-    return remaining
-}
-
-fn main() {
-    today = 10
-    due_date = 24
-    days = days_until_target(due_date, today)
-    print(days)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Opening a curly brace `{` without providing a closing brace `}`.
-  *Cause:* This is a **syntax error** (`E-PARSE-001`). The parser halts immediately because the syntax tree cannot be completed.
-- **Error:** Assigning a string to an integer variable: `age: Int = "20"`.
-  *Cause:* This is a **type error** (`E-TYPE-001`). The parser understands the grammatical structure, but the type checker rejects the assignment.
-
-### 6. Key takeaways
-1. The lexer scans characters, the parser understands structure, and the type checker validates semantic meaning.
-2. The earlier an error is intercepted (at compile time rather than in production), the safer and more cost-effective the software is.
-3. Every program adheres to the IPO model: take input, process using unambiguous logic, and deliver output.
-
-### 7. Exercises
-- **Level 1 (Easy):** Draw a flowchart illustrating the execution steps of `main()` in the deadline example above.
-- **Level 2 (Medium):** Extend the `days_until_target` function with an `if` statement: if `current_day > target_day`, return `0`.
-- **Level 3 (Challenging):** Explain in your own words why Zelyra statically validates code (`zelyra check`) before running rather than blindly executing statements line by line.
-
-### 8. Practical project task: Task Management
-In our Task Management application, we must determine task urgency based on remaining days. If fewer than or equal to 3 days remain, the task is considered urgent:
-
-```zelyra
-fn is_urgent(remaining_days: Int) -> Bool {
-    return remaining_days <= 3
-}
-
-fn main() {
-    deadline_in_days = 2
-    urgent = is_urgent(deadline_in_days)
-    if urgent {
-        print("Warning: Task has high priority!")
-    } else {
-        print("Task is on schedule.")
-    }
-}
-```
-
-### 9. Summary
-- Code moves through a defined pipeline: lexing, parsing, type checking, verification, and execution.
-- Zelyra guarantees that syntax and types are thoroughly validated before any program runs.
-- Algorithms convert inputs into reliable outputs through clear, logical sequences.
-
-### 10. Self-check review questions
-1. At what point in the toolchain is an unclosed quotation mark detected?
-2. What does the IPO (Input, Process, Output) model describe?
-3. Why does a statically typed system refuse to execute when text and numbers are improperly combined?
-
----
-
-## Chapter 3: Installing and Setting Up Zelyra
-
-### 1. What will I learn in this chapter?
-- System requirements for the Zelyra development environment on Linux, macOS, and Windows.
-- Platform-specific Docker setup and verification with `docker compose version`.
-- How to install Zelyra from source (`./install.sh` / `install.ps1`) or the stable release archive (`--release v0.3.0`).
-- Complete compiler version query with `zelyra --version` and environment diagnosis with `zelyra doctor`.
-- The integrated, token-protected web setup assistant (`zelyra setup --web`).
-- Typical permission and port conflicts (such as Docker socket permissions and automatic port selection).
-
-### 2. Why is this topic important?
-A smooth toolchain is the foundation of every successful project. If commands are missing or environment variables misconfigured, valuable time is lost. Zelyra provides a lean, user-local installer that requires no third-party package managers or root privileges. Additionally, the new web setup assistant visually guides beginners through database and container initialization.
-
-### 3. Understandable explanation without unnecessary jargon
-Zelyra requires neither Apache nor heavy third-party runtimes for simple programs. The Zelyra CLI (`zelyra`) is a single, highly optimized binary executable.
-
-Choose the path that fits your operating system:
-1. **Linux / macOS:** Clone the official repository and execute `./install.sh` (or install a release binary). Zelyra is installed user-locally to `~/.local/bin`. For Docker, use the [official Linux engine instructions](https://docs.docker.com/engine/install/) on Linux and [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) on macOS.
-2. **Windows:** On Windows, `install.ps1` for PowerShell and `install.cmd` for the command prompt are provided. For complete MariaDB projects, [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/) with enabled Compose support is recommended.
-3. **Platform Docker Checks:** Zelyra deliberately does not install Docker itself or request root permissions. Before starting Compose services, verify your environment with `docker compose version`. If Compose is missing or socket access is denied, Zelyra outputs clear, platform-specific hints.
-
-### 4. Small, progressive examples
-
-**Step 1: Install Zelyra**
-From source (Linux / macOS):
-```bash
-git clone https://github.com/sf1976/zelyra.git
-cd zelyra
-./install.sh
-```
-Or directly as a precompiled release archive without Rust:
-```bash
-./install.sh --release v0.3.0
-```
-On Windows (PowerShell):
-```powershell
-git clone https://github.com/sf1976/zelyra.git
-Set-Location zelyra
-.\install.ps1 -Release v0.3.0
-```
-
-**Step 2: Verify version and help**
-```bash
-zelyra --version
-zelyra --help
-```
-`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.3.0`). The language compatibility line remains 0.1.
-
-**Step 3: Verify Docker Compose (for MariaDB projects)**
-```bash
-docker compose version
-```
-
-**Step 4: Run system diagnostics**
-```bash
-zelyra doctor
-```
-This command analyzes environment paths, ports, and tools. Use `zelyra doctor --json` for structured machine-readable output.
-
-**Step 5: Guided Web Setup Assistant (Optional)**
-In any MariaDB project directory, start the visual assistant:
-```bash
-zelyra setup --web
-```
-Zelyra opens a local HTTP server on `127.0.0.1:3030` with a random, single-use security token. There, you can generate your `.env` configuration, start the MariaDB container, and apply database schemas with one click.
-
-### 5. Typical errors and their causes
-- **Error:** `zelyra: command not found`
-  *Cause:* The directory `~/.local/bin` is not yet in your `$PATH` variable. Run `export PATH="$HOME/.local/bin:$PATH"` or restart your terminal.
-- **Error:** `permission denied while trying to connect to the Docker daemon socket`
-  *Cause:* On Linux systems, your user does not yet belong to the `docker` group. Run `sudo usermod -aG docker $USER` and log back in. Zelyra catches this and provides a clear hint.
-- **Error:** Default port 3000 or 3306 is occupied.
-  *Cause:* Another local service is using the port. `zelyra setup` and `zelyra new` automatically detect collisions and select the next free host port.
-
-### 6. Key takeaways
-1. The Zelyra CLI bundles compiler, runner, form checker, migrator, web server, and setup assistant in a single tool.
-2. `docker compose version` and `zelyra doctor` verify the health of your environment at any time.
-3. The stable release can be installed without Rust using `--release v0.3.0`.
-4. `zelyra setup --web` provides an intuitive, browser-based initial setup with a secure one-time token.
-
-### 7. Exercises
-- **Level 1 (Easy):** Run `zelyra --version` and `zelyra doctor` in your terminal and note the output.
-- **Level 2 (Medium):** Explore the help page with `zelyra check --help` and review the `--format json` option.
-- **Level 3 (Challenging):** Set up file association in your text editor so that `.zyl` files are highlighted cleanly.
-
-### 8. Practical project task: Prepare the task manager environment
-Create a directory on your machine and ensure the Zelyra toolchain runs properly:
-
-```bash
-mkdir my-taskmanager
-cd my-taskmanager
-echo 'fn main() { print("TaskManager environment ready.") }' > test.zyl
-zelyra check test.zyl
-zelyra run test.zyl
-```
-
-### 9. Summary
-- Zelyra is installed via `./install.sh`, Windows PowerShell script, or precompiled release archives.
-- The command-line tool `zelyra` contains all necessary functions.
-- `zelyra doctor` ensures everything is configured correctly.
-
-### 10. Self-check review questions
-1. Which command displays the full compiler and package version?
-2. Why does Zelyra require no external web server like Apache for web services?
-3. What does `zelyra doctor` check?
-
----
-
-## Chapter 4: The First Zelyra Project
-
-### 1. What will I learn in this chapter?
-- How to create a Zelyra project with `zelyra new` or `zelyra init` (including `--mariadb`).
-- How a standard project folder is structured (`main.zyl`, `zelyra.toml`, `.env`).
-- Automatic port selection (`ZELYRA_HOST_PORT` and `ZELYRA_DB_HOST_PORT`) when defaults are occupied.
-- How `zelyra setup --all` and `zelyra setup --web` automate the first-run workflow.
-- Optional feature switches (`[features]` in `zelyra.toml` or `.env`) and inspection with `zelyra config`.
-- When a program requires a `main()` function and how to check, run, and format code.
-
-### 2. Why is this topic important?
-As soon as programs exceed ten lines, they belong in a clean project structure. A standardized directory structure ensures that configurations, database models, web routes, and business logic have a predictable location.
-
-### 3. Understandable explanation without unnecessary jargon
-With `zelyra new <projectname>`, you create a turnkey project:
-
-- **`main.zyl`**: The entry file. Here you define either `fn main()` or declare tables, web pages, and APIs.
-- **`zelyra.toml`**: The durable project configuration (name, version, capabilities, and optional feature switches like `web`, `api`, `crud`, `auth`, `audit`).
-- **`.env`**: Local secrets and ports not committed to version control (`DATABASE_URL`, `ZELYRA_HOST_PORT`, `ZELYRA_DB_HOST_PORT`).
-- **Docker & MariaDB**: With `--mariadb`, Zelyra generates `Dockerfile`, `docker-compose.mariadb.yml`, and `.env.example`.
-
-**Automatic Port Selection:** If default ports 3000 (web) or 3306 (MariaDB) are already in use, Zelyra automatically scans and assigns free ports in the newly generated `.env`.
-
-**Optional Feature Switches:** You can enable or disable project surfaces in `zelyra.toml` or `.env`:
-```toml
-[features]
-web = true
-api = true
-crud = true
-auth = true
-audit = true
-```
-If source code uses a disabled surface, the compiler reports `E-FEATURE-001`. You can inspect the effective configuration at any time without exposing secrets:
-```bash
-zelyra config main.zyl
-zelyra config main.zyl --format=json
-```
-
-### 4. Small, progressive examples
-
-**Create a project (Minimal or MariaDB):**
-```bash
-# Minimal script project:
-zelyra new taskmanager --template minimal
-cd taskmanager
-
-# Or complete MariaDB web project:
-zelyra new taskmanager-web --mariadb
-cd taskmanager-web
-```
-
-**First-time setup in one command:**
-```bash
-zelyra setup --all
-```
-This creates a protected `.env`, starts the MariaDB containers, and applies the schema.
-
-**Inspect effective project configuration:**
-```bash
-zelyra config main.zyl
-```
-
-**Check and run project:**
-```bash
-zelyra check main.zyl
-zelyra run main.zyl
-```
-
-**Format project code:**
-```bash
-zelyra fmt main.zyl
-```
-
-### 5. Typical errors and their causes
-- **Error:** Creating files without the `.zyl` extension.
-  *Cause:* The compiler strictly expects files ending in `.zyl`.
-- **Error:** Running a CLI program without `fn main()`.
-  *Cause:* `zelyra run` looks for `fn main()`. In web services running with `zelyra serve`, `main()` is optional.
-
-### 6. Key takeaways
-1. `zelyra new` creates a standardized project structure.
-2. In `zelyra.toml`, name, version, capabilities, and feature switches are managed.
-3. `zelyra setup --all` and `zelyra setup --web` streamline MariaDB setup.
-4. `zelyra fmt` ensures consistent formatting across the team.
-
-### 7. Exercises
-- **Level 1 (Easy):** Create a project `my_first_project` with `zelyra new` and run it.
-- **Level 2 (Medium):** Run `zelyra config main.zyl` and inspect the active feature switches.
-- **Level 3 (Challenging):** Format an unformatted `.zyl` file using `zelyra fmt main.zyl`.
-
-### 8. Practical project task: Initialize the Task Management project
-Create the project that will accompany us throughout this book:
-
-```bash
-zelyra new zelyra-tasks --template minimal
-cd zelyra-tasks
-```
-
-Add a menu to `main.zyl`:
-```zelyra
-fn show_menu() {
-    print("=================================")
-    print("    ZELYRA TASK MANAGEMENT       ")
-    print("=================================")
-    print("1: List all tasks")
-    print("2: Create new task")
-    print("3: Exit")
-}
-
-fn main() {
-    show_menu()
-}
-```
-Check with `zelyra check main.zyl` and run with `zelyra run main.zyl`.
-
-### 9. Summary
-- Zelyra projects have a clean structure of source code (`.zyl`) and configuration (`zelyra.toml`).
-- `zelyra check` verifies correctness; `zelyra run` executes the program.
-- `zelyra fmt` formats code according to standard conventions.
-
-### 10. Self-check review questions
-1. What is the role of `zelyra.toml`?
-2. What happens if a default host port is occupied when creating a MariaDB project?
-3. When does a Zelyra program require a `main()` function?
-
----
-
-## Chapter 5: Values and Data Types
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What values and data types are and why they form the backbone of reliable software.
-- The fundamental numeric types: `Int`, `UInt`, `Float`, and `Decimal`.
-- Text and character types: `String` and `Char`.
-- Boolean truth values (`Bool`) and the empty type (`Unit`).
-- Date and time representations: `Timestamp`, `Date`, `Time`, and `Duration`.
-- The difference between automatic type inference and explicit type annotations.
-
-### 2. Why is this topic important?
-In the real world, you cannot add apples to oranges. Without a type system, however, a computer would do precisely that: it would happily attempt to multiply a postal code by a monetary price, or interpret arbitrary binary gibberish as a calendar date. In Zelyra, the type system prevents such absurdities before code ever runs. A data type specifies exactly which values are valid and which operations are permitted on them.
-
-### 3. Understandable explanation without unnecessary jargon
-Every value in Zelyra possesses a definite type. You can either specify the type explicitly or let Zelyra infer it automatically based on the assigned expression:
-
-```zelyra
-fn main() {
-    // Explicit type annotation: Name followed by colon and type
-    count: Int = 10
-
-    // Automatic type inference: Zelyra immediately detects that this is a String
-    task_name = "Important Meeting"
-
-    print(task_name)
-}
-```
-
-The core data types in Zelyra:
-- **`Int`**: 64-bit signed integers, e.g., `-5`, `0`, `42`.
-- **`UInt`**: Unsigned integers (`>= 0`), ideal for record IDs and positive counters.
-- **`Float`**: Floating-point numbers for scientific calculations, e.g., `3.1415`.
-- **`Decimal`**: Fixed-point numbers with guaranteed precisionâ€”indispensable for financial amounts to eliminate floating-point rounding artifacts!
-- **`Bool`**: Boolean values representing truth. Exactly two states exist: `true` or `false`.
-- **`String`**: UTF-8 character text enclosed in double quotation marks: `"Hello World"`.
-- **`Char`**: Individual characters enclosed in single quotation marks: `'A'`, `'z'`.
-- **`Unit`**: Represents "no meaningful value", analogous to `void` in other languages. When a function only performs side effects and returns nothing, its type is `Unit`.
-
-### 4. Small, progressive examples
-
-```zelyra
-fn main() {
-    task_id: Int = 101
-    task_name: String = "Update server"
-    is_done: Bool = false
-    estimated_hours: Float = 2.5
-    hourly_rate: Float = 85.50
-
-    print(task_name)
-    print(is_done)
-}
-```
-
-Zelyra strictly guards against type mismatches:
-If you attempt to write `task_id = "one hundred"`, the compiler rejects the assignment immediately with error `E-TYPE-001`.
-
-### 5. Typical errors and their causes
-- **Error:** Computing financial amounts using `Float`.
-  *Cause:* IEEE-754 floating-point numbers can introduce subtle inaccuracies such as `0.1 + 0.2 = 0.30000000000000004`. In Zelyra, always use `Decimal` for financial logic.
-- **Error:** Enclosing a single character in double quotes when a `Char` is expected.
-  *Cause:* `"A"` is a `String`, whereas `'A'` is a `Char`.
-
-### 6. Key takeaways
-1. Data types prevent invalid operations between incompatible kinds of information.
-2. For financial balances and currency: always use `Decimal`, never `Float`.
-3. Zelyra infers types accurately, but explicit type annotations clearly document design intent.
-
-### 7. Exercises
-- **Level 1 (Easy):** Declare three variables for your favorite book: title (`String`), publication year (`Int`), and whether you have finished reading it (`Bool`).
-- **Level 2 (Medium):** Compute the total cost of a task from `estimated_hours` and `hourly_rate`, and print the result.
-- **Level 3 (Challenging):** Explain why an entity ID is typically better modeled as an `Int` or a nominal type `type TaskId = Id` rather than an arbitrary `String`.
-
-### 8. Practical project task: Task Management
-Extend our Task Management project in `main.zyl` by defining the typed attributes of an individual task:
-
-```zelyra
-fn main() {
-    task_id: Int = 1
-    task_name: String = "Verify database schema"
-    is_done: Bool = false
-    priority: Int = 1 // 1 = high, 2 = medium, 3 = low
-
-    print("Task #" + "1" + ": " + task_name)
-    if is_done {
-        print("Status: Done")
-    } else {
-        print("Status: Open (Priority: high urgency)")
-    }
-}
-```
-
-### 9. Summary
-- Zelyra provides a rich palette of primitive data types for numbers, text, and logic.
-- Types can be explicitly annotated or automatically inferred by the compiler.
-- Strict compile-time type verification catches logical bugs during development.
-
-### 10. Self-check review questions
-1. Why should `Decimal` always be chosen over `Float` for currency calculations?
-2. What is the fundamental syntactic and semantic difference between `"Z"` and `'Z'`?
-3. Which two distinct values can a `Bool` hold?
-
----
-
-## Chapter 6: Variables and Immutability
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What a variable represents in computer memory.
-- Why variables in Zelyra are immutable by default.
-- How to declare mutable variables explicitly using the `mutable` keyword.
-- Variable scopes and lifetimes within code blocks.
-- Why immutability makes software dramatically more robust and predictable.
-
-### 2. Why is this topic important?
-One of the most frequent causes of subtle bugs in languages such as JavaScript, Python, or C++ is uncontrolled mutability: one function quietly mutates a shared variable, causing an entirely unrelated module to crash.
-Zelyra adheres to a clear principle: **Constants are the baseline.** If a value is intended to change during runtime execution, you must consciously signal that behavior using `mutable`.
-
-### 3. Understandable explanation without unnecessary jargon
-Think of a variable as a labeled box stored in computer memory:
-
-- **Immutable Binding (Default):**
-  ```zelyra
-  fn main() {
-      task_name = "Tax Return"
-      print(task_name)
-  }
-  ```
-  You place the text `"Tax Return"` into the box labeled `task_name` and seal it. Nobody is permitted to replace the content of that box. Any code reading the box can rely on its contents remaining invariant.
-
-- **Mutable Variable (`mutable`):**
-  ```zelyra
-  fn main() {
-      mutable counter = 0
-      counter = counter + 1
-      print(counter)
-  }
-  ```
-  Here, the box remains unsealed. You are allowed to remove the current value and replace it with a new one.
-
-**Scope and Lifetimes:**
-Variables exist exclusively within the block `{ ... }` in which they are declared. When execution exits that block, Zelyra automatically reclaims the variable. This frees memory and eliminates naming conflicts.
-
-### 4. Small, progressive examples
-
-**Example 1: Immutability prevents accidental overwrites**
-```zelyra
-fn main() {
-    project = "Zelyra Core"
-    // project = "New Project" // ERROR: Compiler blocks assignment to immutable variable!
-    print(project)
-}
-```
-
-**Example 2: When `mutable` is appropriate (counters and accumulators)**
-```zelyra
-fn main() {
-    mutable open_tasks = 5
-    print(open_tasks)
-
-    // One task has been completed:
-    open_tasks = open_tasks - 1
-    print(open_tasks)
-}
-```
-
-**Example 3: Variable Scopes**
-```zelyra
-fn main() {
-    scope_var = "Global in main"
-    if true {
-        local_var = "Only visible inside if"
-        print(local_var)
-        print(scope_var)
-    }
-    // print(local_var) // ERROR: `local_var` no longer exists outside the block!
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to reassign a variable declared without `mutable`.
-  *Cause:* Zelyra issues `cannot assign to immutable variable`. If a value must change over time, declare it as `mutable name = ...`.
-- **Error:** Declaring every variable as `mutable` out of habit.
-  *Cause:* Poor design style. Restrict `mutable` to locations where values truly need to evolve (e.g., loop counters or accumulators).
-
-### 6. Key takeaways
-1. In Zelyra, variables are immutable by default.
-2. When a value is intended to change, `mutable` must be explicitly declared.
-3. Variables exist exclusively within their declared block `{ ... }`.
-
-### 7. Exercises
-- **Level 1 (Easy):** Create an immutable variable holding your username and print it.
-- **Level 2 (Medium):** Create `mutable score = 100`, deduct 15 points, add 30 points, and print the intermediate values.
-- **Level 3 (Challenging):** Explain why immutability provides significant safety benefits in concurrent applications running multiple operations in parallel.
-
-### 8. Practical project task: Task Management
-In our Task Management application, we want to count how many tasks remain to be completed:
-
-```zelyra
-fn main() {
-    mutable open_count = 3
-    print("Start: Tasks to complete: ")
-    print(open_count)
-
-    // First task completed:
-    open_count = open_count - 1
-    print("Intermediate count: Still open:")
-    print(open_count)
-
-    // Second task completed:
-    open_count = open_count - 1
-    print("Final count: Still open:")
-    print(open_count)
-}
-```
-
-### 9. Summary
-- Immutability is Zelyra's default, preventing unintended side effects.
-- Mutable variables must be explicitly declared with `mutable`.
-- Curly braces define the scope and lifetime of all variables.
-
-### 10. Self-check review questions
-1. What occurs if you assign a new value to a variable declared without `mutable`?
-2. Why does immutability serve as a fundamental security and stability feature?
-3. Can a variable declared inside an inner block be accessed outside of that block?
-
----
-
-## Chapter 7: Operators and Expressions
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What an operator is and what constitutes an expression.
-- Arithmetic operators for numbers: `+`, `-`, `*`, `/`, `%`.
-- Comparison operators: `==`, `!=`, `<`, `<=`, `>`, `>=`.
-- Logical operators: `&&` (AND), `||` (OR), and `!` (NOT).
-- Operator precedence and clean expression grouping using parentheses.
-
-### 2. Why is this topic important?
-Software does not merely store static values; it computes results, compares facts, and combines logical conditions. An operator is the mechanism that transforms raw data into actionable knowledge. Mastering operators enables you to translate complex business rules into crisp, reliable expressions.
-
-### 3. Understandable explanation without unnecessary jargon
-- An **expression** is any segment of source code that evaluates to a concrete value. For instance, `5 + 3` is an expression that yields `8`.
-- An **operator** is the symbolic token that dictates the operation (such as `+` or `==`).
-
-**Arithmetic Operators:**
-- `+`: Addition (also used for string concatenation and array merging).
-- `-`: Subtraction (or numerical negation: `-x`).
-- `*`: Multiplication.
-- `/`: Division.
-- `%`: Modulo (remainder of integer division, e.g., `7 % 3 == 1`).
-
-**Comparison Operators (always evaluate to `Bool`):**
-- `==`: Is equal to?
-- `!=`: Is not equal to?
-- `<` / `<=`: Less than / Less than or equal to?
-- `>` / `>=`: Greater than / Greater than or equal to?
-
-**Logical Operators:**
-- `&&` (AND): Evaluates to `true` only if **both** sides are `true` (`true && true == true`).
-- `||` (OR): Evaluates to `true` if **at least one** side is `true`.
-- `!` (NOT): Inverts a truth value (`!true == false`).
-
-### 4. Small, progressive examples
-
-```zelyra
-fn main() {
-    // Arithmetic
-    base_time = 60
-    buffer_time = 15
-    total_time = base_time + buffer_time
-    print(total_time)
-
-    // Comparison
-    is_long = total_time > 60
-    print(is_long)
-
-    // Logical combination
-    has_buffer = buffer_time > 0
-    is_critical = total_time > 120 && !has_buffer
-    print(is_critical)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Using a single equals sign `=` inside a comparison check: `if x = 5`.
-  *Cause:* `=` is the assignment operator! Equality comparisons in Zelyra strictly require the double equals `==`.
-- **Error:** Division by zero (`x / 0`).
-  *Cause:* Results in a runtime abort. Always validate that the divisor is non-zero before dividing.
-
-### 6. Key takeaways
-1. Assign values using `=`, compare values using `==`.
-2. Arithmetic expressions respect operator precedence; use parentheses whenever clarity is needed.
-3. `&&` demands that both operands are true, while `||` succeeds when either operand is true.
-
-### 7. Exercises
-- **Level 1 (Easy):** Use `==` and `%` to verify whether `10 % 2` equals `0` (even-number check).
-- **Level 2 (Medium):** Write an expression testing whether an integer `age` falls within the range `18` to `65` (inclusive).
-- **Level 3 (Challenging):** Write an expression for a discount rule: a customer qualifies for a discount if they are a VIP (`is_vip == true`) OR if their order total exceeds 100 AND they are not a new customer.
-
-### 8. Practical project task: Task Management
-In our Task Management project, we need to determine whether a task is overdue and requires immediate attention:
-
-```zelyra
-fn main() {
-    days_remaining = -2
-    is_done = false
-    is_blocked = false
-
-    // A task is overdue if days < 0 and it is not yet completed
-    is_overdue = days_remaining < 0 && !is_done
-
-    // High urgency: Overdue and not blocked by other tasks
-    requires_attention = is_overdue && !is_blocked
-
-    print("Task overdue?")
-    print(is_overdue)
-    print("Needs immediate intervention?")
-    print(requires_attention)
-}
-```
-
-### 9. Summary
-- Operators combine individual values into expressive statements.
-- Comparison operators yield boolean values (`Bool`).
-- Logical operators (`&&`, `||`, `!`) allow the expression of intricate business rules.
-
-### 10. Self-check review questions
-1. What is the difference between `=` and `==`?
-2. What value does the expression `5 > 3 && 2 > 10` evaluate to?
-3. What does the `%` modulo operator compute?
-
----
-
-## Chapter 8: Input and Output
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to display information reliably on the console using `print()`.
-- How to read a line interactively from the terminal with `read_console()`.
-- How text and variables are formatted via string concatenation.
-- How Zelyra receives input through parameters, environment variables, files, the terminal, and web routes.
-- Why Zelyra requires explicit `Capabilities` for external system interactions.
-
-### 2. Why is this topic important?
-A program that cannot receive input or communicate output is useless to users. Input and output (I/O) connect the computational logic of your code with the real world. Because interactions with the keyboard, filesystem, or network introduce security risks, Zelyra regulates these operations far more strictly than older languages.
-
-### 3. Understandable explanation without unnecessary jargon
-- **Output:** The built-in `print(value)` instruction accepts numbers, booleans, strings, and structured objects, printing them directly to standard output (`stdout`).
-- **Formatting:** Multiple strings and values can be combined using the plus operator `+`.
-- **Input in Zelyra:**
-  Programs receive input through parameters, environment variables, files, web requests, or interactively from the terminal:
-  1. **Function Parameters:** Input data is passed directly during invocation.
-  2. **Environment Variables:** `env("MY_KEY")` reads configuration parameters from the operating system.
-  3. **Files:** `read_text("input.txt")` ingests persisted data.
-  4. **Web Requests:** Form declarations (`form`) and route endpoints (`page "/user/{id}"`) process browser input.
-  5. **Terminal:** `read_console("Prompt: ")` displays a prompt and reads one line. It returns `String?`: `None` means end of input, while an empty line is `Some("")`.
-
-Terminal access is a capability. The calling function must declare `uses
-Console`. Projects with a `[capabilities]` section must also set
-`console = true`; new project templates leave this grant disabled by default.
-Console input is intended for `zelyra run`. Web applications should use typed
-requests and forms instead.
-Input is not hidden; do not use `read_console()` for passwords or other
-secrets.
-
-```zelyra
-fn main() uses Console {
-    date = read_console("Date: ")
-    match date {
-        Some(value) => {
-            print("Entered: " + value)
-        }
-        None => {
-            print("No input.")
-        }
-    }
-}
-```
-
-```toml
-[capabilities]
-console = true
-```
-
-### 4. Small, progressive examples
-
-**Formatting Output:**
-```zelyra
-fn main() {
-    task_name = "Release 1.0"
-    percentage = 80
-    print("Progress for " + task_name + ":")
-    print(percentage)
-}
-```
-
-**Input via Function Parameters and Environment Variables:**
-```zelyra
-fn process_task(task_name: String, priority_level: Int) {
-    print("Processing: " + task_name)
-    print("Priority level:")
-    print(priority_level)
-}
-
-fn main() uses Environment {
-    mode = env("APP_MODE")
-    print("Current mode:")
-    print(mode)
-    process_task("Create backup", 1)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to concatenate an integer directly with a string using `+`: `"Value: " + 5`.
-  *Cause:* Zelyra requires type compatibility. `5` is an `Int`, not a `String`. Print the number separately via `print(5)` or use conversion helpers.
-- **Error:** Calling `env()` without declaring `uses Environment` on the enclosing function.
-  *Cause:* Zelyra's capability security model requires functions interacting with the host environment to declare their capabilities explicitly.
-
-### 6. Key takeaways
-1. `print()` reliably outputs values and text to the console.
-2. Inputs enter Zelyra programs via parameters, environment variables, files, the terminal, or web routes.
-3. External system access requires declaring the corresponding capability (such as `uses Environment`).
-
-### 7. Exercises
-- **Level 1 (Easy):** Print a formatted contact card (name, job title, email address) using multiple `print()` statements.
-- **Level 2 (Medium):** Write a function `print_task_entry(id: Int, task_name: String, is_done: Bool)` that prints all three fields cleanly formatted.
-- **Level 3 (Challenging):** Write a CLI program using `read_console()` and explain when terminal input is useful and when structured web requests are a better fit.
-
-### 8. Practical project task: Task Management
-Construct an output formatting utility for our Task Management application:
-
-```zelyra
-fn print_header(section_name: String) {
-    print("----------------------------------------")
-    print("SECTION: " + section_name)
-    print("----------------------------------------")
-}
-
-fn print_task_entry(entry_num: Int, task_name: String, is_done: Bool) {
-    print("Task No: ")
-    print(entry_num)
-    print("Name: " + task_name)
-    if is_done {
-        print("Status: [X] DONE")
-    } else {
-        print("Status: [ ] OPEN")
-    }
-    print("----------------------------------------")
-}
-
-fn main() {
-    print_header("TODAY'S TASKS")
-    print_task_entry(1, "Work through the handbook", true)
-    print_task_entry(2, "Practice Zelyra examples", false)
-}
-```
-
-### 9. Summary
-- Console output is performed cleanly and reliably using `print()`.
-- External environment interactions are protected by explicit capabilities.
-- Inputs are received through parameters, files, environment variables, `read_console()`, or web requests.
-
-### 10. Self-check review questions
-1. Which built-in function is used in Zelyra for console text output?
-2. Why does accessing `env()` mandate the `uses Environment` declaration?
-3. Which input channels are typical for server-based Zelyra software?
-
----
-
-## Chapter 9: Decisions with Conditions
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How programs execute conditional branches using `if` and `else`.
-- How to evaluate multi-way alternatives using `else if`.
-- How to combine multiple conditions logically.
-- How to author clean and exhaustive pattern matches with `match`.
-- Common logic pitfalls with nested conditions and how to structure code cleanly.
-
-### 2. Why is this topic important?
-Without conditional branching, software would be as rigid as a music box cylinder: it would replay the exact same steps every single time. Software becomes truly capable when it dynamically reacts to changing circumstances: Is the user authenticated? Has the deadline passed? Is the balance sufficient? With `if` and `match`, you grant your code the ability to make decisions.
-
-### 3. Understandable explanation without unnecessary jargon
-- **`if` / `else`:** Evaluates a boolean condition. If it evaluates to `true`, the first block executes; otherwise, the `else` block runs:
-  ```zelyra
-  fn check_result(score: Int) {
-      if score >= 50 {
-          print("Passed!")
-      } else {
-          print("Unfortunately failed.")
-      }
-  }
-
-  fn main() {
-      check_result(75)
-  }
-  ```
-- **`match`:** When evaluating a value against multiple known cases, `match` is far cleaner and more readable than sprawling `if / else if` cascades. In Zelyra, the compiler verifies that all possible cases are covered (exhaustiveness):
-  ```zelyra
-  fn show_status(status_code: Int) {
-      match status_code {
-          1 => { print("New") }
-          2 => { print("In Progress") }
-          3 => { print("Done") }
-          _ => { print("Unknown Status") }
-      }
-  }
-
-  fn main() {
-      show_status(2)
-  }
-  ```
-  The underscore `_` is the **wildcard pattern**: it matches all remaining values that were not explicitly listed.
-
-### 4. Small, progressive examples
-
-**Simple Branching:**
-```zelyra
-fn main() {
-    open_tasks = 0
-    if open_tasks == 0 {
-        print("Great! All tasks are completed.")
-    } else {
-        print("There are still open tasks.")
-    }
-}
-```
-
-**Multi-Branch Decision with `match`:**
-```zelyra
-fn evaluate_priority(level: Int) -> String {
-    match level {
-        1 => { return "VERY URGENT" }
-        2 => { return "NORMAL" }
-        3 => { return "LOW" }
-        _ => { return "UNKNOWN" }
-    }
-}
-
-fn main() {
-    print(evaluate_priority(1))
-    print(evaluate_priority(2))
-}
-```
-
-**Pattern Matching Status Codes:**
-```zelyra
-fn status_description(code: Int) -> String {
-    match code {
-        0 => { return "Draft" }
-        1 => { return "Active" }
-        2 => { return "Archived" }
-        _ => { return "Invalid" }
-    }
-}
-
-fn main() {
-    print(status_description(1))
-    print(status_description(99))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Omitting the wildcard `_` branch when matching over numbers.
-  *Cause:* Numbers can take virtually infinite values. If you only handle `1` and `2`, the compiler signals a `non-exhaustive match`.
-- **Error:** Excessive nesting (the arrow anti-pattern: `if { if { if { ... } } }`).
-  *Cause:* Hard to read and debug. Flatten deep nesting using early returns or `match`.
-
-### 6. Key takeaways
-1. `if` branches based on a boolean value (`Bool`).
-2. `match` checks values against patterns and enforces exhaustiveness.
-3. The wildcard `_` safely catches all unlisted cases.
-
-### 7. Exercises
-- **Level 1 (Easy):** Write a function `is_adult(age: Int) -> Bool` that checks if `age >= 18`.
-- **Level 2 (Medium):** Write a function `days_in_month(month: Int) -> Int` using `match` that returns the number of days for months 1 through 12 (standard 28 days for February).
-- **Level 3 (Challenging):** Build a validation function that checks whether a password meets length criteria (at least 8 characters) and is not equal to `"12345678"`.
-
-### 8. Practical project task: Task Management
-Implement automated traffic-light priority classification for our Task Management system:
-
-```zelyra
-fn calculate_traffic_light(remaining_days: Int, is_finished: Bool) -> String {
-    if is_finished {
-        return "GREEN: Task is completed"
-    } else {
-        if remaining_days < 0 {
-            return "RED: Deadline has passed!"
-        } else {
-            if remaining_days <= 2 {
-                return "YELLOW: Due soon, please handle"
-            } else {
-                return "BLUE: On schedule"
-            }
-        }
-    }
-}
-
-fn main() {
-    print(calculate_traffic_light(5, false))
-    print(calculate_traffic_light(1, false))
-    print(calculate_traffic_light(-1, false))
-    print(calculate_traffic_light(-1, true))
-}
-```
-
-### 9. Summary
-- `if` and `else` direct control flow based on boolean predicates.
-- `match` facilitates clean, compiler-verified pattern branching.
-- Well-structured conditional logic keeps business rules clear and maintainable.
-
-### 10. Self-check review questions
-1. When is `match` preferable to an `if / else if` chain?
-2. What role does the wildcard pattern `_` perform in `match`?
-3. Why does Zelyra mandate that pattern matches be exhaustive?
-
----
-
-## Chapter 10: Repetition and Loops
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- Why loops are indispensable in data processing and computation.
-- Counted and condition-driven loops: `while condition { ... }`.
-- Iteration across collections and arrays: `for element in array { ... }`.
-- Unconditional loops: `loop { ... }`.
-- Fine-grained loop control using `break` (exit) and `continue` (skip).
-- Loop invariants (`invariant`), enabling formal mathematical proof of loop correctness.
-
-### 2. Why is this topic important?
-Computers were invented to perform repetitive, tedious tasks swiftly and without human fatigue or error. If you need to retrieve, inspect, and render 1,000 records from a database, you never write the processing logic a thousand timesâ€”you write it once inside a loop. Zelyra provides robust looping constructs along with formal invariant verification.
-
-### 3. Understandable explanation without unnecessary jargon
-Zelyra supports three primary loop forms:
-
-1. **`for ... in`:** The safest and most concise way to traverse a collection of elements. The loop iterates over each element in sequence and halts automatically:
-   ```zelyra
-   fn main() {
-       for num in [1, 2, 3] {
-           print(num)
-       }
-   }
-   ```
-2. **`while condition`:** Continues execution as long as the condition evaluates to `true`. Useful when the exact number of iterations is not known in advance.
-3. **`loop`:** A continuous loop that runs indefinitely until an inner `break` statement is encountered.
-
-**Loop Control Commands:**
-- **`break`**: Terminates the loop immediately. Execution resumes after the loop block.
-- **`continue`**: Halts the current iteration and jumps directly to the next cycle.
-
-**Loop Invariants (`invariant`):**
-An invariant is a logical proposition that must remain `true` **before**, **during**, and **after** every single iteration of a loop (e.g., `invariant { counter >= 0 }`). The Zelyra verification engine (`zelyra verify`) checks loop invariants mathematically to prove that the loop cannot enter invalid states!
-
-### 4. Small, progressive examples
-
-**Example 1: `for ... in` across an Array**
-```zelyra
-fn main() {
-    tasks = ["Plan", "Program", "Test", "Deploy"]
-    for t in tasks {
-        print("Step: " + t)
-    }
-}
-```
-
-**Example 2: `while` with Counter and `invariant`**
-```zelyra
-fn main() {
-    mutable counter = 1
-    while counter <= 3
-        invariant { counter >= 1 }
-    {
-        print(counter)
-        counter = counter + 1
-    }
-}
-```
-
-**Example 3: Targeted use of `break` and `continue`**
-```zelyra
-fn main() {
-    for num in [1, 2, 3, 4, 5] {
-        if num == 2 {
-            // Skip the number 2:
-            continue
-        }
-        if num == 4 {
-            // Abort completely at 4:
-            break
-        }
-        print(num)
-    }
-}
-```
-*Output:* Prints `1` and `3`!
-
-### 5. Typical errors and their causes
-- **Error:** Forgetting to increment the loop counter inside a `while` loop (`counter = counter + 1`).
-  *Cause:* The loop condition remains permanently true, resulting in an **infinite loop** that freezes the program.
-- **Error:** Off-by-one boundary errors with manual index counters.
-  *Cause:* Whenever possible, use `for element in array` to avoid boundary mistakes completely.
-
-### 6. Key takeaways
-1. Prefer `for ... in` for collections and arrays.
-2. `break` exits the loop immediately; `continue` proceeds to the next iteration.
-3. Invariants document and mathematically prove the correctness and safety of loops.
-
-### 7. Exercises
-- **Level 1 (Easy):** Use a `while` loop to print numbers counting down from 10 to 1.
-- **Level 2 (Medium):** Compute the sum of all numbers in the array `[10, 20, 30, 40]` using a `for` loop.
-- **Level 3 (Challenging):** Search an array of numbers for the target value `42`. If found, print `"Found!"` and exit the loop immediately via `break`. If the number is not present, print `"Not found"` at the end.
-
-### 8. Practical project task: Task Management
-Let us apply loops to our Task Management project: we inspect the task list, mark completed tasks, and count total completions:
-
-```zelyra
-fn main() {
-    tasks = ["Write specification", "Setup database", "Write tests"]
-    mutable completed_count = 0
-
-    print("Reviewing task list:")
-    for t in tasks {
-        if t == "Write specification" {
-            print("[X] " + t)
-            completed_count = completed_count + 1
-        } else {
-            print("[ ] " + t)
-        }
-    }
-
-    print("Total completed tasks:")
-    print(completed_count)
-}
-```
-
-### 9. Summary
-- Loops automate monotonous, repetitive processing tasks.
-- `for ... in` safely iterates over arrays; `while` iterates conditionally.
-- `break` and `continue` provide exact control over iteration flow.
-- `invariant` enables formal mathematical verification with `zelyra verify`.
-
-### 10. Self-check review questions
-1. What is the difference between `break` and `continue`?
-2. Why is `for ... in` safer when iterating over arrays than a manual `while` loop?
-3. What role does an `invariant` play in program verification?
-
-# PART III â€“ STRUCTURING PROGRAMS
-
----
-
-## Chapter 11: Functions and Procedures
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What functions are and how they make programs structured, readable, and reusable.
-- How to pass parameters and declare return types using `-> Type`.
-- What pure functions (*functions without side effects*) are and why they are invaluable.
-- What procedures are (functions without a return value or with type `Unit`) that execute actions.
-- How Zelyra fosters clear naming conventions and clean programming style.
-
-### 2. Why is this topic important?
-If you repeat every calculation and console output ten times in different places across your codebase, the dreaded "spaghetti code" phenomenon quickly takes over. When a business rule changes (for example, how a task deadline is calculated), you would have to locate and adjust all ten placesâ€”inevitably introducing bugs. Functions group a logical operation under a descriptive name: you write it once, test it thoroughly, and reuse it anywhere as often as needed.
-
-### 3. Understandable explanation without unnecessary jargon
-Think of a function like a kitchen appliance:
-- You put ingredients in (**parameters**).
-- The appliance processes the ingredients according to a fixed recipe (**function body**).
-- At the end, a finished dish comes out (**return value**).
-
-In Zelyra, you define functions using the `fn` keyword:
-```zelyra
-fn add(a: Int, b: Int) -> Int {
-    return a + b
-}
-
-fn main() {
-    print(add(2, 3))
-}
-```
-If a function has no return value because it merely performs an action (such as printing a line of text to the console), its return type is `Unit` (and can simply be omitted):
-```zelyra
-fn print_separator() {
-    print("----------------------------------------")
-}
-
-fn main() {
-    print_separator()
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Calculation with a return value**
-```zelyra
-fn calculate_days_until_deadline(today_day: Int, deadline_day: Int) -> Int {
-    return deadline_day - today_day
-}
-
-fn main() {
-    days = calculate_days_until_deadline(10, 18)
-    print(days)
-}
-```
-
-**Example 2: Text formatting in a helper function**
-```zelyra
-fn format_task(id_text: String, text: String, done: Bool) -> String {
-    mutable status_mark = "[ ]"
-    if done {
-        status_mark = "[X]"
-    }
-    return status_mark + " #" + id_text + ": " + text
-}
-
-fn main() {
-    formatted = format_task("1", "Read documentation", true)
-    print(formatted)
-}
-```
-
-**Example 3: Procedure for header output**
-```zelyra
-fn show_header(user_name: String) {
-    print("Logged in as: " + user_name)
-    print("========================================")
-}
-
-fn main() {
-    show_header("Alice")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Forgetting a `return` statement when a return type was declared.
-  *Cause:* When a return type is specified, Zelyra strictly requires a matching value on every execution path.
-- **Error:** Wrong argument order during a function call.
-  *Cause:* Zelyra enforces strict parameter type checking. If the first parameter is an `Int`, you cannot pass a `String`.
-- **Error:** Attempting to concatenate `String` and `Int` directly with `+`.
-  *Cause:* In Zelyra, the `+` operator either concatenates two strings or adds two numbers of the same type. Convert or format values as strings or print them separately via `print()`.
-
-### 6. Key takeaways
-1. A function should fulfill exactly one single, clearly defined task.
-2. Pure functions always produce identical outputs for identical inputs and produce no side effects.
-3. Function names should be descriptive verbs or verb phrases (e.g., `calculate_difference`, `format_task`).
-
-### 7. Exercises
-- **Level 1 (Easy):** Write a function `double_val(num: Int) -> Int` that returns twice the given number.
-- **Level 2 (Medium):** Write a function `is_urgent(days: Int) -> Bool` that returns `true` if fewer than 3 days remain.
-- **Level 3 (Challenging):** Write a function `status_symbol(done: Bool) -> String` that returns `"[OK]"` if done and `"[OPEN]"` otherwise.
-
-### 8. Practical project task: Task Management â€“ Modularizing Task Display
-Write a Zelyra program that formats and displays three tasks with an ID string, task name, and completion status using a reusable formatting function:
-
-```zelyra
-fn format_entry(id_text: String, name: String, done: Bool) -> String {
-    mutable status_mark = "[OPEN]"
-    if done {
-        status_mark = "[OK]"
-    }
-    return status_mark + " Task " + id_text + ": " + name
-}
-
-fn main() {
-    print(format_entry("1", "Collect mail", true))
-    print(format_entry("2", "Pay invoice", false))
-    print(format_entry("3", "Create backup", false))
-}
-```
-
-### 9. Summary
-- Functions divide programs into logical, manageable building blocks.
-- Parameters and return types are strictly typed in Zelyra.
-- Pure functions keep code maintainable, testable, and resilient against unexpected bugs.
-
-### 10. Self-check review questions
-1. What type does a function have that does not return any value?
-2. Why are pure functions much easier to test than functions with global side effects?
-3. What does the Zelyra compiler check during every function call?
-
----
-
-## Chapter 12: Contracts and Preconditions (Design by Contract)
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What the concept of *Design by Contract* means.
-- How to define preconditions using `requires`.
-- How to formulate postconditions using `ensures` and the `result` keyword.
-- How loop invariants are established with `invariant`.
-- Why contracts are superior to defensive cascades of `if` statements.
-
-### 2. Why is this topic important?
-Bugs frequently occur because developers make unstated assumptions that are documented nowhere: "This function must never be called with a negative number!" When someone calls that function six months later with `-1`, the application fails unexpectedly. In traditional languages, developers either write endless defensive `if` checks or rely on wishful thinking and outdated comments. Zelyra elevates contracts to first-class language constructs: preconditions and postconditions are declared directly on function signatures and guaranteed to be enforced.
-
-### 3. Understandable explanation without unnecessary jargon
-A contract in Zelyra functions like a formal legal agreement between the caller and the function:
-- **`requires` (Precondition):** The caller promises to supply only arguments that satisfy the condition (e.g., `value > 0`).
-- **`ensures` (Postcondition):** In return, the function guarantees that its computed outcome (`result`) satisfies specific properties (e.g., `result >= 0`).
-
-If a contract is violated, Zelyra halts immediately with a clear contract error (`E-CONTRACT-*`), identifying exactly which party breached the agreement.
-
-### 4. Small, progressive examples
-
-**Example 1: Precondition with requires**
-```zelyra
-fn divide(numerator: Int, denominator: Int) -> Int
-    requires { denominator != 0 }
-{
-    return numerator / denominator
-}
-
-fn main() {
-    result_val = divide(100, 4)
-    print(result_val)
-}
-```
-
-**Example 2: Combining precondition and postcondition**
-```zelyra
-fn adjust_priority(current_level: Int, delta: Int) -> Int
-    requires { current_level >= 1 && delta >= 0 }
-    ensures { result >= 1 }
-{
-    new_level = current_level + delta
-    return new_level
-}
-
-fn main() {
-    p = adjust_priority(2, 1)
-    print(p)
-}
-```
-
-**Example 3: Loop invariant**
-```zelyra
-fn count_up_to(limit: Int) -> Int
-    requires { limit >= 0 }
-    ensures { result == limit }
-{
-    mutable i = 0
-    while i < limit
-        invariant { i >= 0 }
-    {
-        i = i + 1
-    }
-    return i
-}
-
-fn main() {
-    print(count_up_to(5))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to validate raw user input via `requires`.
-  *Cause:* Contracts are internal safeguards against programmer error and logic defects, not input sanitizers for untrusted user inputs. For user input, use form validation rules (`form`) or the `Result` type.
-- **Error:** Writing an `ensures` clause that the function implementation logically cannot satisfy.
-  *Cause:* If the function returns `-5` but the `ensures` clause demands `{ result >= 0 }`, the postcondition check will fail.
-
-### 6. Key takeaways
-1. `requires` protects the function against invalid inputs provided by the caller.
-2. `ensures` guarantees the caller a valid outcome referenced via `result`.
-3. Contracts transform implicit mental assumptions into verifiable, living specifications.
-
-### 7. Exercises
-- **Level 1 (Easy):** Write a function `naive_sqrt(x: Int) -> Int` with the precondition `requires { x >= 0 }`.
-- **Level 2 (Medium):** Write a function `clamp_val(val: Int, min_val: Int, max_val: Int) -> Int` with preconditions requiring `min_val <= max_val` and appropriate postconditions.
-- **Level 3 (Challenging):** Secure a function `percentage(part: Int, total_count: Int) -> Int` ensuring division by zero never occurs and the result is strictly between 0 and 100.
-
-### 8. Practical project task: Task Management â€“ Task Progress Calculator
-Write a contract-guaranteed function for task progress in task management:
-```zelyra
-fn calculate_progress(completed: Int, total_count: Int) -> Int
-    requires { total_count > 0 && completed >= 0 && completed <= total_count }
-    ensures { result >= 0 && result <= 100 }
-{
-    return (completed * 100) / total_count
-}
-
-fn main() {
-    ratio = calculate_progress(3, 4)
-    print(ratio)
-}
-```
-
-### 9. Summary
-- Contracts (`requires`, `ensures`) document and enforce programming assumptions at runtime.
-- `result` in `ensures` refers to the computed return value of the function.
-- Loop invariants verify the integrity of the loop state across every iteration.
-
-### 10. Self-check review questions
-1. When is a `requires` condition evaluated: before or after function execution?
-2. What does the keyword `result` refer to in a contract?
-3. Why does a contract not replace an HTML form validation pattern?
-
----
-
-## Chapter 13: Collections, Lists, and Dictionaries (Arrays & Maps)
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to store multiple homogeneous values in an array (`Type[]`).
-- The most important built-in collection functions: `len`, `append`, `contains`, `first`, `last`.
-- How to iterate through collections using `for .. in`.
-- How associative key-value collections are declared and used with `Map<Key, Value>`.
-- The most important map functions: `get`, `put`, `contains`, `keys`, `values`.
-- Why Zelyra's `get()` always returns a safe `Option` to eliminate null pointer crashes.
-
-### 2. Why is this topic important?
-An application capable of storing only isolated values would be practically useless. In real-world software, we almost always work with collections: lists of tasks, emails, or table rows fetched from a database.
-Sometimes we need to access items by sequential order (lists or arrays). Very often, however, we need to look up data directly using a unique keyâ€”such as user preferences by user ID, localized translation dictionaries, or telephone country codes. For these use cases, Zelyra provides typed dictionaries (`Map`).
-
-### 3. Understandable explanation without unnecessary jargon
-
-#### Part A: Arrays â€“ The Ordered List
-An array is like a compartmentalized organizer or a pillbox with numbered slots: every slot has a fixed position and holds exactly one element. In Zelyra, all elements within the same container must have the identical type (`Int[]`, `String[]`, etc.):
-
-```zelyra
-fn main() {
-    numbers: Int[] = [10, 20, 30, 40]
-    print(len(numbers))
-}
-```
-
-Zelyra provides powerful built-in functions for arrays:
-- `len(items)`: Returns the number of elements.
-- `append(items, value)`: Returns a new array with the element appended.
-- `first(items)`: Returns the first element as an `Option`.
-- `last(items)`: Returns the last element as an `Option`.
-- `contains(items, value)`: Checks whether an element is present (`Bool`).
-
-#### Part B: Maps â€“ Associative Key-Value Dictionaries
-A `Map` maps each unique key (*Key*) to exactly one corresponding value (*Value*).
-- **Type notation:** `Map<KeyType, ValueType>`, for example `Map<String, Int>` or `Map<String, String>`.
-- **Literal syntax:** `Map { "key": value }`
-- **Key types:** All scalar types (`String`, `Int`, `Id`, etc.) are permitted.
-
-```zelyra
-fn main() {
-    country_codes: Map<String, Int> = Map {
-        "de": 49
-        "at": 43
-        "ch": 41
-    }
-}
-```
-
-Key operations on maps:
-- **`get(map, key)`**: Looks up a key. Because a key might not exist, `get()` **always** returns a safe `Option<Value>` (`Some(val)` or `None`)â€”never a null pointer crash!
-- **`put(map, key, value)`**: Inserts a key-value pair or updates an existing key. Following Zelyra's functional immutability principles, `put()` returns a new, updated Map.
-- **`contains(map, key)`**: Returns `true` if the key exists in the map.
-- **`keys(map)`**: Returns all keys as a typed array (`KeyType[]`).
-- **`values(map)`**: Returns all values as a typed array (`ValueType[]`).
-
-### 4. Small, progressive examples
-
-**Example 1: Creating and iterating over an array**
-```zelyra
-fn main() {
-    task_ids: Int[] = [101, 102, 103, 104]
-    for id in task_ids {
-        print(id)
-    }
-}
-```
-
-**Example 2: Appending elements to an array**
-```zelyra
-fn main() {
-    mutable items: Int[] = [1, 2, 3]
-    items = append(items, 4)
-    print(len(items))
-}
-```
-
-**Example 3: Creating, updating, and querying a Map**
-```zelyra
-fn main() {
-    prices: Map<String, Int> = Map {
-        "Coffee": 3
-        "Tea": 2
-    }
-    
-    // Add a new item
-    mutable current_prices = put(prices, "Cake", 4)
-    // Update existing price
-    current_prices = put(current_prices, "Coffee", 4)
-    
-    // Safely query using match
-    match get(current_prices, "Coffee") {
-        Some(price) => {
-            print("Coffee price: " + str(price) + " Euro")
-        }
-        None => {
-            print("Item not found.")
-        }
-    }
-    
-    // Output all keys
-    print(keys(current_prices))
-}
-```
-
-**Example 4: Checking key existence in a Map**
-```zelyra
-fn main() {
-    settings: Map<String, Bool> = Map {
-        "dark_mode": true
-        "notifications": false
-    }
-    
-    if contains(settings, "dark_mode") {
-        print("Dark mode setting is explicitly configured.")
-    }
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to mix different types within a single array or map (e.g., `[1, "Hello"]`).
-  *Cause:* Zelyra is strictly homogeneous. All elements in an array, and all keys and values in a map, must conform to their declared types.
-- **Error:** Treating `map.get("key")` as a raw value without unwrapping the `Option`.
-  *Cause:* Zelyra guarantees compile-time safety. Because a key might not be in the dictionary, the compiler forces you to handle `Some` and `None` using `match` or default values.
-- **Error:** Using non-scalar types (such as arrays) as Map keys.
-  *Cause:* Map keys must be scalar types (`String`, `Int`, `Id`) to guarantee deterministic comparison and JSON serialization.
-
-### 6. Key takeaways
-1. Arrays in Zelyra are strictly homogeneous: `Int[]`, `String[]`, `Bool[]`.
-2. Iteration is performed safely and cleanly with `for element in collection { ... }`.
-3. `Map<Key, Value>` stores unique key-value associations.
-4. `get(map, key)` always returns an `Option` (`Some` or `None`), preventing runtime exceptions.
-5. `put(map, key, value)` functionally produces a new, updated dictionary.
-
-### 7. Exercises
-- **Level 1 (Easy):** Create an array containing three strings and print each element using a `for` loop.
-- **Level 2 (Medium):** Create a `Map<String, Int>` with three product names and their prices. Query both an existing and a non-existing item using `get()` and `match`.
-- **Level 3 (Challenging):** Write a function `count_words(words: String[]) -> Map<String, Int>` that counts how often each word occurs in a list and returns the result as a Map.
-
-### 8. Practical project task: Task Management â€“ Priority Registry
-Build a priority lookup table for our task management system:
-```zelyra
-fn show_priority(priorities: Map<String, Int>, task_name: String) {
-    match get(priorities, task_name) {
-        Some(level) => {
-            print("Priority for " + task_name + ": Level " + str(level))
-        }
-        None => {
-            print("No priority registered for: " + task_name)
-        }
-    }
-}
-
-fn main() {
-    prio_map: Map<String, Int> = Map {
-        "Database migration": 1
-        "Tweak CSS styles": 3
-        "Write documentation": 2
-    }
-    
-    show_priority(prio_map, "Database migration")
-    show_priority(prio_map, "Coffee break")
-}
-```
-
-### 9. Summary
-- Arrays (`Type[]`) store ordered sequences of homogeneous elements.
-- Maps (`Map<Key, Value>`) store key-value dictionaries with safe `get()`, `put()`, `contains()`, `keys()`, and `values()`.
-- Both collection types are fully type-safe and integrate seamlessly with Zelyra's `Option` type system.
-
-### 10. Self-check review questions
-1. What type does the expression `["A", "B", "C"]` evaluate to?
-2. Why does `append([1, 2], "Three")` fail at compile time?
-3. How do you efficiently check whether a value exists inside an array?
-
----
-
-## Chapter 14: Creating Custom Data Types (Records & Tables)
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to create your own domain-specific data types.
-- What nominal types (`type TaskId = Id`) are and how they prevent accidental ID confusion.
-- How records are defined in Zelyra as a `table` with attributes (`id: Id primary auto`).
-- Why strong typing fundamentally elevates software quality.
-
-### 2. Why is this topic important?
-In fragile software architectures, almost everything is represented as a primitive integer or string (an anti-pattern known as "Primitive Obsession"). If a function expects `verify(user_id: Int, task_id: Int)` and you accidentally swap the arguments, a compiler using raw `Int` types will never noticeâ€”and your application might assign sensitive records to the wrong user. With distinct custom types, Zelyra distinguishes between a `UserId` and a `TaskId` right at compile time.
-
-### 3. Understandable explanation without unnecessary jargon
-Custom data types allow you to model real-world concepts accurately:
-1. **Nominal Type Aliases:**
-   ```zelyra
-   type TaskId = Id
-
-   fn main() {
-       print("Type alias TaskId active")
-   }
-   ```
-   This gives `TaskId` its own distinct type identity.
-2. **Tables as Structured Data Types:**
-   ```zelyra
-   table tasks {
-       id: Id primary auto
-       description: String required
-       done: Bool
-   }
-
-   fn main() {
-       print("Table schema defined")
-   }
-   ```
-   This schema does not merely specify a database table; in Zelyra, it simultaneously declares the in-memory data type for a task!
-
-### 4. Small, progressive examples
-
-**Example 1: Defining a custom type alias for IDs**
-```zelyra
-type TaskId = Id
-
-fn main() {
-    print("Type alias defined successfully")
-}
-```
-
-**Example 2: Defining a data model as a table**
-```zelyra
-table tasks {
-    id: Id primary auto
-    description: String required
-    done: Bool
-}
-
-fn main() {
-    print("Table schema for tasks defined")
-}
-```
-
-**Example 3: Working with typed attributes in functions**
-```zelyra
-table projects {
-    id: Id primary auto
-    name: String required
-    active: Bool
-}
-
-fn show_project_status(p_name: String, p_active: Bool) {
-    mutable status_text = "Paused"
-    if p_active {
-        status_text = "Active"
-    }
-    print("Project: " + p_name + " [" + status_text + "]")
-}
-
-fn main() {
-    show_project_status("Web Portal", true)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Naming a table field with a reserved keyword such as `title`, `list`, or `detail`.
-  *Cause:* In Zelyra, these identifiers are reserved for queries and UI views. Use descriptive names like `name`, `description`, or `subject` instead.
-- **Error:** Declaring the primary key with `primary key` instead of `primary`.
-  *Cause:* In Zelyra, the standard column specification is `id: Id primary auto`.
-
-### 6. Key takeaways
-1. Custom data types reflect your business domain and eliminate accidental parameter swapping.
-2. `table` declarations in Zelyra act as both database schemas and native language types.
-3. Reserved words (`title`, `list`, `action`, `field`, etc.) must never be used as column or variable names.
-
-### 7. Exercises
-- **Level 1 (Easy):** Create a nominal type alias `type UserId = Id`.
-- **Level 2 (Medium):** Model a table `categories` with `id: Id primary auto` and `category_name: String required`.
-- **Level 3 (Challenging):** Model a table `notes` that links to a task via a field `task_id: Id`.
-
-### 8. Practical project task: Task Management â€“ Core Task Schema
-Define the complete core Zelyra schema for our task management system:
-
-```zelyra
-table tasks {
-    id: Id primary auto
-    name: String required
-    description: String
-    priority: Int
-    is_done: Bool
-}
-
-fn main() {
-    print("Core schema of task management active.")
-}
-```
-
-### 9. Summary
-- Custom types give raw data unambiguous meaning and context.
-- `table` seamlessly unifies schema declaration and static type modeling in the language.
-- Static typing catches logical mismatches while you write your code.
-
-### 10. Self-check review questions
-1. What advantage does `type TaskId = Id` offer compared to a simple `Int`?
-2. Why must table fields in Zelyra always possess an explicit type?
-3. Which words must be avoided when naming fields?
-
----
-
-## Chapter 15: Modules and Code Organization
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How a standard Zelyra project is structured on disk.
-- The central role of the `zelyra.toml` project configuration manifest.
-- How to separate code into logical concerns (schema, business logic, views).
-- How a project is organized and what the CLI currently does with multiple
-  source files.
-- The current development status and roadmap for modules and imports.
-
-### 2. Why is this topic important?
-When starting out, it is tempting to write an entire program in a single file. However, as your task management application expandsâ€”incorporating database tables, dozens of business functions, web forms, and validation rulesâ€”navigating a monolithic 2,000-line file becomes unmanageable. Professional software engineering demands structuring code so that every team member can locate schemas, business logic, and UI definitions instantly.
-
-### 3. Understandable explanation without unnecessary jargon
-A project has a clear directory layout. `zelyra.toml` contains project
-metadata and capability grants; `main.zyl` is the source file created by the
-starter template. You can create additional files and folders for your own
-organization. In the published 0.3.0 release, each CLI command processes only
-the source file explicitly passed to it; other `.zyl` files are not discovered
-or combined automatically.
-
-```toml
-[project]
-name = "task_planner"
-version = "0.3.0"
-zelyra = "0.1"
-
-[capabilities]
-database = true
-network = false
-console = false
-```
-
-**Published 0.3.0 status:** `import` and a module system are not implemented.
-`zelyra check main.zyl` checks `main.zyl`; another file such as
-`src/schema.zyl` is checked only if you invoke `zelyra check src/schema.zyl`
-separately. Names and types declared in one file are therefore not
-automatically available in the other. The published release contains no
-module imports. The current development branch has an experimental import slice;
-complete modules and deterministic multi-file projects remain work for 0.4.0.
-
-**ðŸ§ª Current unreleased development branch:** an experimental first project-module slice is implemented and tested. Its syntax is:
-
-~~~zelyra
-import "src/math.zyl" as math
-
-fn main() {
-    print(math::add(2, 3))
-}
-~~~
-
-The imported file must declare `pub fn add(...)`; functions are private by
-default. Paths are relative to the entry file's directory. The project loader
-rejects cycles and paths outside the project root,
-and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, tables, tableviews, pages,
-named views, typed components, and one
-project-wide database connection definition. Database configuration is
-composed into the application and is not accessed through the import alias;
-only one database definition is allowed in the complete project graph.
-Imported tables join the application's shared physical schema. Their names
-are global SQL identifiers, not module-qualified names, and duplicate table
-names are rejected. Tableviews, views, and components are composed from
-imported files
-under their declared, unqualified names; they do not yet have `pub` visibility
-syntax. Imported pages join the application's route set; overlapping page
-patterns are rejected with their source location. Forms, CRUD
-declarations, APIs, and authentication resources remain entry-file-only.
-Function, type, and
-record declarations are private by default; tables and the database
-definition are included by importing their file. Public records cannot expose
-private field types.
-The database module is ordinary project configuration, not a separately named
-database service: the current runtime supports only one configured database
-for the composed application. The runnable example is in
-`examples/modules/`.
-`check`, `build`, `run`, `serve`, `context`, `verify`, `impact`, and database
-commands load the project graph. Database commands build the schema from the
-composed declarations; some schema diagnostics still lack complete module
-source attribution. `serve` can compose imported pages, MariaDB-backed
-tableviews, views, and components into the application; the tableview query
-runtime does not yet execute against SQLite. `context --format=json` reports
-the deterministically sorted module graph, import edges, and the currently
-supported public functions, types, and records per file under
-`modules[].exports`. Module entries also include the import alias and
-project-relative source path. Imported tables, tableviews, pages, views, and
-components appear in declarations with their source path in `span.file`. This
-export list is an introspection aid, not a complete package or deployment
-manifest, and it does not make UI resources public.
-Some template diagnostics still need more complete per-module source
-attribution. `verify` also checks the linked graph, but
-does not yet attribute results to individual module source files. `impact`
-analyzes the linked graph and marks spans with their source file. `fmt` and
-`edit` still process only the explicitly named source file. This branch
-behavior is experimental and is not included in the published 0.3.0 binary.
-
-An experimental precursor for future module exports is:
-
-~~~sh
-zelyra module plan main.zyl src/invoices.zyl
-~~~
-
-The JSON preview lists the selected reachable module and follows only its
-explicit transitive import edges in stable order. It is read-only and
-explicitly sets `complete_deployment` to `false`: implicit globally composed
-resource references, assets, runtime configuration, external services, and
-Docker artifacts are not resolved. The command does not export or run an
-application.
-
-Imported UI resources can be used by a page in the entry file. The alias
-includes the file; view and component names are currently unqualified in HTML:
-
-~~~zelyra
-// src/ui.zyl
-component Banner {
-    props {
-        title: String
-    }
-    html {
-        <header><strong>{title}</strong></header>
-    }
-}
-
-view Shell {
-    html {
-        <html><body><Banner title="Invoices" /><main><slot /></main></body></html>
-    }
-}
-~~~
-
-~~~zelyra
-// main.zyl
-import "src/ui.zyl" as ui
-
-page "/" {
-    view: Shell
-    html {
-        <p>This page uses imported UI resources.</p>
-    }
-}
-~~~
-
-Run `zelyra serve main.zyl` to render the linked project. The complete example
-with logic and database modules is in `examples/modules/`.
-
-A module can export a domain record for another module to use in a function
-signature:
-
-~~~zelyra
-pub struct Money {
-    cents: Int
-}
-~~~
-
-~~~zelyra
-import "src/money.zyl" as money
-
-pub fn total() -> money::Money {
-    return money::Money { cents: 2500 }
-}
-~~~
-
-### 4. Small, progressive examples
-
-**Example 1: A clean main entry point**
-```zelyra
-fn main() {
-    print("Zelyra task system ready.")
-}
-```
-
-**Example 2: Separating logic functions**
-```zelyra
-fn format_system_status(status_text: String) -> String {
-    return "[STATUS] " + status_text
-}
-
-fn main() {
-    print(format_system_status("Database connected"))
-}
-```
-
-**Example 3: Declaring capabilities in the project manifest**
-In `zelyra.toml`, you explicitly configure which system resources the project is allowed to request. If your application accesses a database, `database = true` must be enabled under `[capabilities]`.
-
-### 5. Typical errors and their causes
-- **Error:** Using module imports with the published Zelyra 0.3.0 binary.
-  *Cause:* `import` is not part of that release. The development branch has
-  experimental imports for functions, type aliases, records, and one
-  project-wide database definition; these are not supported 0.3.0 features.
-- **Error:** Deleting `zelyra.toml` or executing CLI commands from outside the project root directory.
-  *Cause:* Commands like `zelyra run` look for `zelyra.toml` in the current working directory to configure capabilities and compilation paths.
-
-### 6. Key takeaways
-1. `zelyra.toml` governs project metadata, dependencies, and capability security policies.
-2. Maintain a clean separation of concerns: data models (`table`), business logic (`fn`), and UI views.
-3. A clean project layout prevents accidental coupling and speeds up teamwork.
-
-### 7. Exercises
-- **Level 1 (Easy):** Generate a new project skeleton using `zelyra new task_app` and explore the generated files.
-- **Level 2 (Medium):** Update `zelyra.toml` with a project description and increment the version number to `0.3.0`.
-- **Level 3 (Challenging):** Write an application structured into three separate functions handling initialization, business processing, and output reporting.
-
-### 8. Practical project task: Task Management â€“ Project Structure
-Establish the task management architecture with the following implementation in `main.zyl`:
-
-```zelyra
-table tasks {
-    id: Id primary auto
-    name: String required
-    done: Bool
-}
-
-fn start_system() {
-    print("========================================")
-    print("   TASK MANAGER SUCCESSFULLY STARTED")
-    print("========================================")
-}
-
-fn main() {
-    start_system()
-}
-```
-
-### 9. Summary
-- Projects are configured and secured via `zelyra.toml`.
-- The published 0.3.0 CLI checks the source file explicitly named in the command.
-- The unreleased development branch imports functions, type aliases, records,
-  and one project-wide database definition experimentally; it does not yet
-  provide a complete modular application model.
-- Organizing files into folders helps readers, but does not by itself connect modules.
-
-### 10. Self-check review questions
-1. Which file contains the metadata and capability definitions of a Zelyra project?
-2. Why is decoupling the data schema from execution logic recommended?
-3. Which commands currently follow experimental function imports in the development branch?
-
-# PART IV â€“ SAFETY AND ERROR HANDLING
-
----
-
-## Chapter 16: Error Types and Their Causes
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- The four primary categories of errors encountered in software development.
-- The differences between syntax errors, type errors, contract/capability errors, and logic errors.
-- How the Zelyra compiler guides you with precise diagnostics detailing line numbers, column locations, and actionable hints.
-- Why early compile-time error detection saves substantial time and prevents costly bugs in production.
-
-### 2. Why is this topic important?
-Errors are a natural, everyday part of programming. Even seasoned software engineers encounter dozens of compiler errors every day. The difference between struggling and proficient developers is not making zero mistakes, but being able to read and understand error diagnostics quickly. Zelyra was intentionally designed so that the vast majority of errors are caught right at compile time (`zelyra check`) long before your application ever reaches an end user.
-
-### 3. Understandable explanation without unnecessary jargon
-In software engineering, we distinguish between four fundamental classes of errors:
-1. **Syntax Errors (`E-LEX-*`, `E-PARSE-*`):** You violated the grammar of the programming languageâ€”analogous to a punctuation or spelling mistake in human language (such as forgetting a closing curly bracket).
-2. **Type Errors (`E-TYPE-*`):** The grammar is syntactically valid, but the data types do not fit together (such as attempting to add text to an integer).
-3. **Contract and Capability Errors (`E-CONTRACT-*`, `E-CAP-*`):** A pre-agreed precondition was breached, or a function attempted to access restricted system resources (such as reading the filesystem without permission).
-4. **Logic Errors:** The program compiles and executes without crashing, but produces incorrect results because the algorithm was wrong (e.g., adding a discount instead of subtracting it).
-
-### 4. Small, progressive examples
-
-**Example 1: Typical syntax error (and reading compiler output)**
-When you write clean, matching brackets:
-```zelyra
-// Syntactically correct:
-fn correct_brackets() {
-    print("All brackets are closed.")
-}
-
-fn main() {
-    correct_brackets()
-}
-```
-
-**Example 2: Capability error (Security capability verification)**
-If a function attempts to access restricted system resources without declaring the required permission, Zelyra stops immediately:
-```zelyra
-fn read_file(path: String) -> String
-    uses FileSystem
-{
-    return read_text(path)
-}
-
-fn main() {
-    print("File access properly declared.")
-}
-```
-
-**Example 3: Exposing logic errors through contracts**
-```zelyra
-fn calculate_discount_price(original: Int, discount: Int) -> Int
-    requires { original >= 0 && discount >= 0 && discount <= original }
-    ensures { result <= original }
-{
-    return original - discount
-}
-
-fn main() {
-    price = calculate_discount_price(100, 20)
-    print(price)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Ignoring compiler diagnostics without looking at the line and column indicators.
-  *Cause:* Zelyra points you directly to the exact source location where the issue originated.
-- **Error:** Using `+` between strings and numbers.
-  *Cause:* Zelyra strictly enforces static type safety. Format values as strings or print them as separate arguments.
-
-### 6. Key takeaways
-1. A compiler error is not a failureâ€”it is an automated, instant code review.
-2. The earlier an error is caught (compile time vs. runtime), the safer and cheaper your application is to maintain.
-3. Contracts (`requires`, `ensures`) turn subtle, creeping logic bugs into immediate, reproducible contract violations.
-
-### 7. Exercises
-- **Level 1 (Easy):** Intentionally trigger a syntax error (e.g., omitting a bracket) and examine the output of `zelyra check`.
-- **Level 2 (Medium):** Write a function with a type mismatch error and resolve it following the compiler's diagnostic hints.
-- **Level 3 (Challenging):** Write an age verification function equipped with contracts that immediately rejects invalid ages (e.g., negative numbers).
-
-### 8. Practical project task: Task Management â€“ Fault-Tolerant Task Duration Logging
-Write a verified function for task management that prevents negative hours from being recorded:
-```zelyra
-fn log_hours(previous_hours: Int, new_hours: Int) -> Int
-    requires { previous_hours >= 0 && new_hours >= 0 }
-    ensures { result >= previous_hours }
-{
-    return previous_hours + new_hours
-}
-
-fn main() {
-    total_hours = log_hours(5, 3)
-    print(total_hours)
-}
-```
-
-### 9. Summary
-- Zelyra categorizes errors into syntax, type, contract/capability, and logic categories.
-- Static checking and contract enforcement catch defects before code ever deploys.
-
-### 10. Self-check review questions
-1. What error code family (`E-...`) is generated when a keyword is misspelled or missing?
-2. Why can a program compile completely without errors and still calculate incorrect values?
-3. How do formal contracts help uncover hidden logical reasoning bugs?
-
----
-
-## Chapter 17: Errors as Values â€“ The Result Pattern
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What the `Result` pattern is and why Zelyra avoids uncontrolled exceptions.
-- The two variants: `Ok(value)` for success and `Err(message)` for failure.
-- How to deconstruct results safely using `match`.
-- Why treating errors as regular values makes your software transparent, predictable, and crash-proof.
-
-### 2. Why is this topic important?
-In many traditional languages (like Java, Python, or PHP), functions signal failure by throwing exceptions. If an exception goes uncaught anywhere in the call stack, the entire web request crashes with an HTTP 500 error. In Zelyra, there are no uncontrolled runtime exceptions: whenever an operation can fail (such as a missing record or an invalid input), it explicitly returns a `Result<T, E>`. The compiler guarantees that you handle both success and error outcomes before your code can run.
-
-### 3. Understandable explanation without unnecessary jargon
-Imagine receiving a delivery parcel:
-- If the courier delivers the package successfully, you open it and find the item inside: `Ok(content)`.
-- If the address does not exist, you receive a return slip stating the reason: `Err("Address unknown")`.
-
-A parcel never "explodes" in your faceâ€”you simply inspect what arrived:
-```zelyra
-fn divide_safe(a: Int, b: Int) -> Result<Int, String> {
-    if b == 0 {
-        return Err("Division by zero is not allowed")
-    }
-    return Ok(a / b)
-}
-
-fn main() {
-    print("Safe division defined.")
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Defining and handling a function with Result**
-```zelyra
-fn check_priority(level: Int) -> Result<Int, String> {
-    if level < 1 {
-        return Err("Priority too low (minimum 1)")
-    }
-    if level > 3 {
-        return Err("Priority too high (maximum 3)")
-    }
-    return Ok(level)
-}
-
-fn main() {
-    res = check_priority(2)
-    match res {
-        Ok(level) => {
-            print("Valid priority:")
-            print(level)
-        }
-        Err(err_msg) => {
-            print(err_msg)
-        }
-    }
-}
-```
-
-**Example 2: Handling the error case**
-```zelyra
-fn get_balance(pin: Int) -> Result<Int, String> {
-    if pin != 1234 {
-        return Err("Incorrect PIN!")
-    }
-    return Ok(500)
-}
-
-fn main() {
-    attempt = get_balance(9999)
-    match attempt {
-        Ok(amount) => {
-            print(amount)
-        }
-        Err(err_msg) => {
-            print("Denied: " + err_msg)
-        }
-    }
-}
-```
-
-**Example 3: Safe value validation**
-```zelyra
-fn check_task_name_length(task_name: String) -> Result<String, String> {
-    if task_name == "" {
-        return Err("Task name must not be empty.")
-    }
-    return Ok(task_name)
-}
-
-fn main() {
-    outcome = check_task_name_length("Project Report")
-    match outcome {
-        Ok(t) => {
-            print("Valid name: " + t)
-        }
-        Err(e) => {
-            print("Error: " + e)
-        }
-    }
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to access the inner value directly without unpacking it using `match`.
-  *Cause:* `Result<T, E>` is a container type. You must unwrap it through pattern matching.
-- **Error:** Omitting one of the two branches (`Ok` or `Err`) in a `match` expression.
-  *Cause:* Zelyra enforces exhaustive pattern matching to ensure unhandled failure paths are impossible.
-
-### 6. Key takeaways
-1. `Result<T, E>` makes error handling explicit by treating errors as regular return values.
-2. `Ok(v)` represents success carrying a value, while `Err(e)` represents an explained failure.
-3. Pattern matching with `match` requires handling all outcomes, preventing silent uncaught crashes.
-
-### 7. Exercises
-- **Level 1 (Easy):** Write a function `check_even(num: Int) -> Result<Int, String>` that returns `Ok(num)` if divisible by 2, or `Err("Odd")` otherwise.
-- **Level 2 (Medium):** Write a function `validate_username(name: String) -> Result<String, String>` that rejects empty strings or `"admin"`.
-- **Level 3 (Challenging):** Implement an arithmetic division function that validates inputs and returns twice the result on success.
-
-### 8. Practical project task: Task Management â€“ Validating Task Creation
-Create a robust validation function for adding new tasks:
-```zelyra
-fn create_task_checked(name: String, priority: Int) -> Result<String, String> {
-    if name == "" {
-        return Err("Name must not be empty!")
-    }
-    if priority < 1 {
-        return Err("Priority must be at least 1!")
-    }
-    return Ok("Task [" + name + "] created successfully.")
-}
-
-fn main() {
-    item1 = create_task_checked("Complete documentation", 1)
-    match item1 {
-        Ok(msg) => {
-            print(msg)
-        }
-        Err(err_msg) => {
-            print("Error: " + err_msg)
-        }
-    }
-
-    item2 = create_task_checked("", 0)
-    match item2 {
-        Ok(msg) => {
-            print(msg)
-        }
-        Err(err_msg) => {
-            print("Error: " + err_msg)
-        }
-    }
-}
-```
-
-### 9. Summary
-- The `Result` pattern replaces uncontrolled exceptions with strictly typed values.
-- Zelyra guarantees at compile time that failure cases cannot be silently ignored.
-
-### 10. Self-check review questions
-1. What do `T` and `E` represent in `Result<T, E>`?
-2. Why do unhandled errors in Zelyra never cause unexpected application crashes?
-3. How do you safely extract the payload from a `Result` value?
-
----
-
-## Chapter 18: Nothingness Does Not Exist â€“ Working Safely with Option
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- Why Tony Hoare described the invention of `null` as his "billion-dollar mistake."
-- How Zelyra completely eliminates `null` and replaces it with the type-safe `Option<T>` (shorthand `T?`).
-- How to wrap values in `Some(value)` and represent their absence with `None`.
-- How built-in collection operations like `first` and `last` leverage `Option`.
-
-### 2. Why is this topic important?
-In languages like JavaScript, Java, PHP, or C, the value `null` lurks everywhere. Whenever code inadvertently calls a method or reads an attribute on a `null` reference, the entire application crashes with a dreaded `NullPointerException` or `TypeError: Cannot read properties of null`. In Zelyra, `null` simply does not exist. Standard values are strictly guaranteed to exist. Whenever a value may legitimately be absent, it must be explicitly typed as an `Option`.
-
-### 3. Understandable explanation without unnecessary jargon
-Think of an `Option` as a gift box:
-- The box may contain a present: `Some("Smartphone")`.
-- Or the box is completely empty: `None`.
-
-You cannot accidentally use the gift without first unpacking the box using `match`:
-```zelyra
-fn find_task_by_id(id: Int) -> Option<String> {
-    if id == 42 {
-        return Some("Set up server")
-    }
-    return None
-}
-
-fn main() {
-    print("Task search defined.")
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Creating and matching an Option**
-```zelyra
-fn main() {
-    found: Option<String> = Some("Zelyra 0.1 Handbook")
-    match found {
-        Some(item_name) => {
-            print("Found: " + item_name)
-        }
-        None => {
-            print("No match found")
-        }
-    }
-}
-```
-
-**Example 2: Safe array inspection with first() and last()**
-Accessing an empty collection in Zelyra never crashes your softwareâ€”it cleanly returns `None`:
-```zelyra
-fn main() {
-    my_numbers: Int[] = [100, 200, 300]
-    first_item = first(my_numbers)
-    match first_item {
-        Some(val) => {
-            print("First value:")
-            print(val)
-        }
-        None => {
-            print("The list is empty!")
-        }
-    }
-}
-```
-
-**Example 3: Providing fallback defaults with Option**
-```zelyra
-fn task_name_or_default(opt_name: Option<String>) -> String {
-    match opt_name {
-        Some(t) => {
-            return t
-        }
-        None => {
-            return "Untitled"
-        }
-    }
-}
-
-fn main() {
-    print(task_name_or_default(Some("Important Meeting")))
-    print(task_name_or_default(None))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Assuming that an `Option<String>` can be used directly as a `String`.
-  *Cause:* The box is not the gift. You must unpack it using pattern matching (`match`).
-- **Error:** Attempting to assign `None` to a standard non-optional variable.
-  *Cause:* Regular variables are guaranteed to always contain a concrete value.
-
-### 6. Key takeaways
-1. Zelyra completely eliminates `null`, rendering `NullPointerException` crashes impossible.
-2. Whenever a value may be absent, declare it as `Option<T>` or `T?`.
-3. `Some(x)` wraps a present value, while `None` explicitly indicates absence.
-
-### 7. Exercises
-- **Level 1 (Easy):** Write a function `find_partner(name: String) -> Option<String>` that returns `Some("Juliet")` when given `"Romeo"`, and `None` otherwise.
-- **Level 2 (Medium):** Retrieve the last element of an integer array using `last()` and print its value or an empty-list notice.
-- **Level 3 (Challenging):** Write a search function that searches an array of IDs and returns the matching index position as `Option<Int>`.
-
-### 8. Practical project task: Task Management â€“ Safe Task Detail Lookup
-Implement safe task description retrieval for our task management system:
-```zelyra
-fn find_task_description(id: Int) -> Option<String> {
-    if id == 1 {
-        return Some("Create database schema for Zelyra")
-    }
-    if id == 2 {
-        return Some("Design web interface")
-    }
-    return None
-}
-
-fn main() {
-    lookup1 = find_task_description(1)
-    match lookup1 {
-        Some(text) => {
-            print("Task 1: " + text)
-        }
-        None => {
-            print("Task 1 not found!")
-        }
-    }
-
-    lookup99 = find_task_description(99)
-    match lookup99 {
-        Some(text) => {
-            print("Task 99: " + text)
-        }
-        None => {
-            print("Task 99 not found!")
-        }
-    }
-}
-```
-
-### 9. Summary
-- `Option<T>` shields applications from the disastrous errors caused by unexpected null references.
-- Zelyra statically enforces that every possible `None` condition is addressed before execution.
-
-### 10. Self-check review questions
-1. Why is there no `null` keyword or concept in Zelyra?
-2. What is the fundamental difference between `String` and `Option<String>`?
-3. Which two branches must always be present when pattern matching an `Option`?
-
----
-
-## Chapter 19: Testing and Quality Assurance
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- Why automated testing forms the indispensable backbone of reliable, sustainable software.
-- How Zelyra's verification tool (`zelyra verify`) formally proves function contracts.
-- How to design and structure assertion-based test suites.
-- The philosophy of *Test-Driven Development* (TDD).
-- An outlook on Zelyra's future integrated test framework.
-
-### 2. Why is this topic important?
-Manual testingâ€”clicking around in a browser or manually calling functionsâ€”is tedious, inconsistent, and error-prone. As software grows in complexity, even minor modifications in one subsystem inevitably introduce regressions in seemingly unrelated modules. Automated tests act as an automated safety net, proving that existing business logic continues to function according to specification days, months, and years into the future.
-
-### 3. Understandable explanation without unnecessary jargon
-Quality assurance in Zelyra rests on two powerful pillars:
-1. **Formal Contract Verification with `zelyra verify`:**
-   The compiler mathematically checks whether preconditions and postconditions (`requires`, `ensures`) hold under all possible valid inputs.
-2. **Automated Assertion Testing:**
-   You write concise test routines that supply sample inputs to your business functions and verify that the actual output matches the expected outcome.
-
-*Roadmap Note:* The built-in CLI test framework (`zelyra test`) is scheduled on the Zelyra roadmap for Phase 11/12. In Zelyra 0.1, automated quality assurance is conducted using `zelyra check`, `zelyra verify`, and structured test-runner entry points.
-`// [Placeholder: Zelyra Test Framework - realized in 0.1 via verify and test runners; see Roadmap Phase 11]`
-
-### 4. Small, progressive examples
-
-**Example 1: A lightweight assertion helper**
-```zelyra
-fn assert_test(test_name: String, condition: Bool) {
-    if condition {
-        print("[PASS] " + test_name)
-    } else {
-        print("[FAIL] " + test_name)
-    }
-}
-
-fn double_val(x: Int) -> Int {
-    return x * 2
-}
-
-fn main() {
-    assert_test("Double 5 is 10", double_val(5) == 10)
-    assert_test("Double 0 is 0", double_val(0) == 0)
-}
-```
-
-**Example 2: Testing Option return values**
-```zelyra
-fn is_adult(age: Int) -> Option<Bool> {
-    if age < 0 {
-        return None
-    }
-    return Some(age >= 18)
-}
-
-fn main() {
-    test1 = is_adult(20)
-    match test1 {
-        Some(ok) => {
-            if ok {
-                print("[PASS] 20 years is of age")
-            } else {
-                print("[FAIL] Unexpected state")
-            }
-        }
-        None => {
-            print("[FAIL] Invalid age")
-        }
-    }
-}
-```
-
-**Example 3: Protecting logic with formal contract verification**
-```zelyra
-fn calculate_overtime(hours: Int, regular_hours: Int) -> Int
-    requires { hours >= 0 && regular_hours >= 0 }
-    ensures { result >= 0 }
-{
-    if hours > regular_hours {
-        return hours - regular_hours
-    }
-    return 0
-}
-
-fn main() {
-    print(calculate_overtime(45, 40))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Testing only the "happy path" and ignoring boundary conditions (zero values, negative numbers, empty collections).
-  *Cause:* Most real-world regressions occur at the extreme boundaries of input ranges.
-- **Error:** Forgetting to run automated checks after refactoring code.
-  *Cause:* Always make `zelyra check` and your test suites an automatic habit whenever you edit source files.
-
-### 6. Key takeaways
-1. Untested code is broken code that has simply not failed in public yet.
-2. `zelyra verify` mathematically evaluates function contracts directly at the language level.
-3. High-value tests deliberately target edge cases, boundaries, and failure paths.
-
-### 7. Exercises
-- **Level 1 (Easy):** Write three test cases for a function `add(a: Int, b: Int) -> Int`.
-- **Level 2 (Medium):** Write assertion tests for the `Option`-based lookup function from Chapter 18.
-- **Level 3 (Challenging):** Implement a comprehensive test suite for a function that checks if a task name satisfies business rules (non-empty, minimum length).
-
-### 8. Practical project task: Task Management â€“ Test Runner for Task Business Logic
-Construct a lightweight test suite for the core business rules of the task management application:
-```zelyra
-fn test_case(description: String, ok: Bool) {
-    if ok {
-        print("OK: " + description)
-    } else {
-        print("ERROR: " + description)
-    }
-}
-
-fn matches_priority(p: Int) -> Bool {
-    return p == 1
-}
-
-fn main() {
-    print("Starting test suite: Task logic")
-    test_case("Priority 1 matches", matches_priority(1) == true)
-    test_case("Priority 2 is ignored", matches_priority(2) == false)
-    print("Test suite completed.")
-}
-```
-
-### 9. Summary
-- Automated verification safeguards software reliability across long development cycles.
-- Combining `zelyra verify` with assertion test suites provides comprehensive confidence in business logic.
-
-### 10. Self-check review questions
-1. What does the term "regression" mean in software development?
-2. What responsibility does the CLI command `zelyra verify` perform?
-3. Why are boundary values (e.g., 0 or maximum capacity) critical in test design?
-
-# PART V â€“ PRACTICAL DATA PROCESSING
-
----
-
-## Chapter 20: Working with Files
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to create, read, list, and delete text files using Zelyra.
-- Why file operations in Zelyra strictly require the `uses FileSystem` capability.
-- The most important standard library functions: `read_text`, `write_text`, `delete_file`, and `list_dir`.
-- How to persist task lists to disk as files.
-
-### 2. Why is this topic important?
-Variables in memory are volatile; they vanish the moment your program exits or the operating system restarts. To preserve data permanentlyâ€”such as export files, application settings, or audit logsâ€”it must be written to non-volatile storage. At the same time, arbitrary file system access represents a significant security liability. Zelyra protects your system by enforcing fine-grained capabilities: functions cannot touch the disk unless they explicitly declare the appropriate permissions upfront.
-
-### 3. Understandable explanation without unnecessary jargon
-Think of the file system as a secure document archive:
-- When you want to file a document, you write text into it (`write_text`).
-- When you want to inspect a file, you read its contents (`read_text`).
-- You can only enter the physical archive room if you hold the keycard: `uses FileSystem`.
-
-```zelyra
-fn save_note(path: String, content: String)
-    uses FileSystem
-{
-    write_text(path, content)
-}
-
-fn main() uses FileSystem {
-    save_note("note.txt", "Shopping list: Milk, Bread")
-    print("Note saved.")
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Writing and reading text files**
-```zelyra
-fn file_workflow() uses FileSystem {
-    path = "tasks_export.txt"
-    write_text(path, "Task 1: Learn Zelyra")
-    text = read_text(path)
-    print("Read content: " + text)
-}
-
-fn main() uses FileSystem {
-    file_workflow()
-}
-```
-
-**Example 2: Cleaning up files with delete_file**
-```zelyra
-fn cleanup_file(path: String) uses FileSystem {
-    delete_file(path)
-    print("File deleted.")
-}
-
-fn main() uses FileSystem {
-    write_text("temp.txt", "Short-lived")
-    cleanup_file("temp.txt")
-}
-```
-
-**Example 3: Listing directory contents**
-```zelyra
-fn show_files(dir_path: String) uses FileSystem {
-    files = list_dir(dir_path)
-    for file_name in files {
-        print("Found file: " + file_name)
-    }
-}
-
-fn main() uses FileSystem {
-    show_files(".")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Calling `read_text` or `write_text` without declaring `uses FileSystem`.
-  *Cause:* Zelyra's capability system (`E-CAP-001`) prevents any unauthorized access to secondary storage.
-- **Error:** Forgetting that `main()` must also declare `uses FileSystem` when calling functions that access the file system.
-  *Cause:* Capabilities propagate up the call stack; a caller cannot invoke an effectful function without having that permission itself.
-
-### 6. Key takeaways
-1. Any function interacting with the file system must declare `uses FileSystem`.
-2. `write_text` creates a new file or completely overwrites an existing one.
-3. `read_text` returns the entire contents of a file as a `String`.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Write a program that writes a greeting message into `hello.txt`.
-- **Level 2 (Medium):** Write a function that reads a file and displays its content on the console.
-- **Level 3 (Challenging):** Implement a simple logging function that appends status messages line by line and persists them to disk.
-
-### 8. Practical project task: Task Management
-Export the pending tasks of our application into a text file:
-```zelyra
-fn export_tasks(path: String) uses FileSystem {
-    content = "[ ] Complete documentation\n[OK] Install Zelyra compiler"
-    write_text(path, content)
-    print("Tasks successfully exported to " + path + ".")
-}
-
-fn main() uses FileSystem {
-    export_tasks("tasks_today.txt")
-}
-```
-
-### 9. Summary
-- Zelyra provides clean, safe, and efficient primitives for file input and output.
-- The capability-based security model prevents unauthorized file manipulation and data leaks.
-
-### 10. Self-check review questions
-1. Which capability must a function request before it can invoke `write_text`?
-2. Why does Zelyra require `uses FileSystem` on `main()` even if `main` only delegates to another function?
-3. Which standard library function returns a list of all filenames inside a directory?
-
----
-
-## Chapter 21: Date, Time, Randomness, and Structured Data
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to retrieve current timestamps with `now()` (`uses Clock`).
-- How to generate pseudo-random values using `random_int(min, max)` (`uses Random`).
-- How to serialize data structures into universal JSON with `json_encode`.
-- How to parse JSON strings back into strongly typed structures using `json_decode<T>`.
-
-### 2. Why is this topic important?
-Virtually every real-world application requires handling temporal events: When was a task created? When does a deadline expire? Similarly, structured formats such as JSON serve as the lingua franca across the webâ€”from REST APIs to configuration files. Zelyra incorporates time, randomness, and JSON natively into the language, providing strict type-safety without external dependencies.
-
-### 3. Understandable explanation without unnecessary jargon
-- **Timestamps:** Calling `now()` returns the precise current system time as a `Timestamp`. Because reading the system clock is an external, non-deterministic effect, your function must declare `uses Clock`.
-- **Random Numbers:** Calling `random_int(1, 10)` generates a pseudo-random integer between 1 and 10, requiring `uses Random`.
-- **JSON:** JSON is a lightweight text format easily parsed by machines and humans. With `json_encode`, you turn Zelyra arrays and records into a serialized string ready for network transfer or file storage.
-
-```zelyra
-fn show_time() uses Clock {
-    current_time = now()
-    print("Current system time recorded")
-}
-
-fn main() uses Clock {
-    show_time()
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Deadlines and time tracking with Clock**
-```zelyra
-fn log_creation(task_name: String) uses Clock {
-    created_at = now()
-    print("Task created: " + task_name)
-}
-
-fn main() uses Clock {
-    log_creation("Patch server")
-}
-```
-
-**Example 2: Generating random ticket numbers**
-```zelyra
-fn generate_ticket_number() -> Int uses Random {
-    return random_int(1000, 9999)
-}
-
-fn main() uses Random {
-    ticket = generate_ticket_number()
-    print("Your ticket code:")
-    print(ticket)
-}
-```
-
-**Example 3: Exporting data as JSON**
-```zelyra
-fn export_ids_as_json(ids: Int[]) -> String {
-    return json_encode(ids)
-}
-
-fn main() {
-    ids: Int[] = [101, 102, 103]
-    json_text = export_ids_as_json(ids)
-    print("JSON output: " + json_text)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Calling `now()` without declaring `uses Clock` in the function signature.
-  *Cause:* Clock queries are inherently non-deterministic; Zelyra requires explicit capability declarations.
-- **Error:** Passing malformed JSON text into `json_decode`.
-  *Cause:* Zelyra strictly validates JSON input; schema mismatches or syntax errors result in a `Result` failure.
-
-### 6. Key takeaways
-1. `now()` yields the current timestamp and requires `uses Clock`.
-2. `random_int` produces random integers and demands `uses Random`.
-3. `json_encode` converts Zelyra data structures into standard JSON strings.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Generate a random integer between 1 and 6 (simulating a dice roll) and print it.
-- **Level 2 (Medium):** Write a function that serializes an array of integer status codes into JSON.
-- **Level 3 (Challenging):** Combine `uses Clock` and `uses FileSystem` to write a timestamped log entry into `log.txt`.
-
-### 8. Practical project task: Task Management
-Create a JSON snapshot of current task IDs and persist it to disk:
-```zelyra
-fn save_snapshot(file_name: String, ids: Int[])
-    uses Clock, FileSystem
-{
-    json_data = json_encode(ids)
-    write_text(file_name, json_data)
-    print("Snapshot saved successfully.")
-}
-
-fn main() uses Clock, FileSystem {
-    current_ids: Int[] = [1, 2, 5, 8]
-    save_snapshot("tasks_snapshot.json", current_ids)
-}
-```
-
-### 9. Summary
-- Zelyra includes native, type-safe support for timestamps, randomness, and JSON data exchange.
-- Effect capabilities (`Clock`, `Random`) guarantee auditability and safety across your codebase.
-
-### 10. Self-check review questions
-1. Which capability must a function declare to call `now()`?
-2. Why does Zelyra enforce the `uses Random` permission for generating random numbers?
-3. What standard format does `json_encode` produce?
-
----
-
-## Chapter 22: Concurrency and Background Tasks
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What concurrency is and when tasks should be executed simultaneously.
-- How Zelyra's structured `parallel` block works: `parallel { a = await ...; b = await ... }`.
-- Why Zelyra avoids uncontrolled raw threads and callback hell.
-- How deterministic concurrency keeps your application performant and free of race conditions.
-
-### 2. Why is this topic important?
-Modern CPUs and servers feature multiple cores. When an application needs to generate independent reports or query several remote APIs, executing them sequentially one after another wastes time. Running tasks in parallel allows programs to complete in a fraction of the time. However, in many languages concurrency introduces insidious bugs such as race conditions and deadlocks. Zelyra eliminates these dangers through structured, deterministic concurrency.
-
-### 3. Understandable explanation without unnecessary jargon
-Imagine a commercial restaurant kitchen:
-- If the chef fries the steak first, then fries the potatoes, and finally washes the salad, the steak gets cold.
-- A skilled chef begins all three tasks simultaneously and waits until all three dishes are ready to be served.
-
-In Zelyra, you achieve this using the `parallel` block paired with `await`:
-```zelyra
-fn calculate_part_1() -> Int {
-    return 40
-}
-
-fn calculate_part_2() -> Int {
-    return 60
-}
-
-fn main() {
-    parallel {
-        result_1 = await calculate_part_1()
-        result_2 = await calculate_part_2()
-    }
-    print("Both subtasks completed in parallel.")
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Parallel sub-computations**
-```zelyra
-fn compute_statistics() -> String {
-    return "Statistics computed"
-}
-
-fn load_archive() -> String {
-    return "Archive loaded"
-}
-
-fn main() {
-    parallel {
-        stats = await compute_statistics()
-        archive = await load_archive()
-    }
-    print("Parallel loading successful.")
-}
-```
-
-**Example 2: Independent data retrieval**
-```zelyra
-fn fetch_sum_a() -> Int {
-    return 100
-}
-
-fn fetch_sum_b() -> Int {
-    return 250
-}
-
-fn main() {
-    parallel {
-        val_a = await fetch_sum_a()
-        val_b = await fetch_sum_b()
-    }
-    print("Sums calculated.")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Using `await` outside of a `parallel` block.
-  *Cause:* Zelyra strictly restricts `await` to the body of a `parallel { ... }` block.
-- **Error:** Placing general statements or complex branching inside a `parallel` block.
-  *Cause:* A `parallel` block is dedicated to concurrent evaluation; its statements must conform to the `identifier = await call()` assignment pattern.
-
-### 6. Key takeaways
-1. `parallel { ... }` executes independent operations concurrently.
-2. Every line in a `parallel` block adheres to `variable = await expression()`.
-3. Structured concurrency guarantees completion and prevents dangling background processes.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Define two simple arithmetic functions and execute them inside a `parallel` block.
-- **Level 2 (Medium):** Create two functions that each produce a string message, and evaluate both concurrently.
-- **Level 3 (Challenging):** Simulate checking two project validation conditions in parallel before initializing a workflow.
-
-### 8. Practical project task: Task Management
-Accelerate application startup by fetching user profiles and task lists simultaneously:
-```zelyra
-fn load_user_profile() -> String {
-    return "Profile: Developer"
-}
-
-fn load_task_list() -> String {
-    return "5 tasks loaded"
-}
-
-fn main() {
-    print("Starting parallel retrieval...")
-    parallel {
-        profile = await load_user_profile()
-        tasks = await load_task_list()
-    }
-    print("Dashboard ready.")
-}
-```
-
-### 9. Summary
-- Concurrency in Zelyra is structured, deterministic, and protected against race conditions.
-- The `parallel` construct neatly unifies asynchronous computations in a concise block.
-
-### 10. Self-check review questions
-1. Where in a Zelyra program is the `await` keyword permitted?
-2. What specific syntax must statements inside a `parallel` block follow?
-3. What is the primary benefit of parallel execution over sequential evaluation?
-
-# PART VI â€“ DATABASES WITH ZELYRA
-
----
-
-## Chapter 23: Why Zelyra Understands Databases Directly
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- Why the integration between programming languages and relational databases has traditionally been prone to subtle bugs.
-- What the object-relational impedance mismatch problem is and why ORMs struggle with it.
-- How Zelyra integrates relational databases as first-class citizens directly into the language.
-- How Zelyra verifies SQL statements for syntax and type correctness at compile time.
-
-### 2. Why is this topic important?
-In nearly all popular web frameworks (such as PHP/Laravel, Python/Django, or Node/TypeORM), an awkward divide exists: developers compose SQL strings or rely on heavyweight object-relational mapping (ORM) abstractions. Typos in column namesâ€”such as `user.emaiil`â€”often remain undetected until an end user encounters an HTTP 500 error in production. Zelyra eliminates this hazard at the root: if an SQL query does not match the declared table schema, the compiler rejects the build immediately.
-
-### 3. Understandable explanation without unnecessary jargon
-In Zelyra, you define your database configuration directly in your source code using the `database` keyword:
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-fn main() {
-    print("Database configuration initialized.")
-}
-```
-
-When querying data, you write authentic SQLâ€”yet the compiler knows every existing table and column:
-- Writing `SELECT id, description FROM tasks` is completely valid.
-- Writing `SELECT non_existent FROM tasks` causes Zelyra to report a compile-time error immediately: `unknown column non_existent`.
-
-### 4. Small, progressive examples
-
-**Example 1: Declaring database and table**
-```zelyra
-database main {
-    engine: mariadb
-    database: "test_db"
-}
-
-table tasks {
-    id: Id primary auto
-    description: String(255) required
-}
-
-fn main() {
-    print("Database and table checked.")
-}
-```
-
-**Example 2: Compile-time SQL validation**
-```zelyra
-database main {
-    engine: mariadb
-    database: "test_db"
-}
-
-table tasks {
-    id: Id primary auto
-    description: String(255) required
-}
-
-fn show_tasks() uses Database {
-    records = sql<Task[]> {
-        SELECT id, description
-        FROM tasks
-    }
-    print("SQL type-checked.")
-}
-
-fn main() uses Database {
-    show_tasks()
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Executing SQL queries without declaring `uses Database` on the enclosing function.
-  *Cause:* Zelyra's capability system protects against unauthorized database queries.
-- **Error:** Omitting the `database main` block.
-  *Cause:* Without a target engine declaration, Zelyra cannot verify SQL dialect semantics or the schema.
-
-### 6. Key takeaways
-1. Zelyra bridges the gap between application code and relational databases.
-2. SQL queries are type-checked at compile time.
-3. Database operations strictly require `uses Database`.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Create a `database` block for SQLite or MariaDB.
-- **Level 2 (Medium):** Model a `users` table and write an SQL query that selects all users.
-- **Level 3 (Challenging):** Deliberately introduce a typo into an SQL column name and observe how Zelyra pinpoints the error.
-
-### 8. Practical project task: Task Management
-Set up the database foundation for our task management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool
-}
-
-fn status_report() uses Database {
-    records = sql<Task[]> {
-        SELECT id, name, done
-        FROM tasks
-    }
-    print("Database for task management ready.")
-}
-
-fn main() uses Database {
-    status_report()
-}
-```
-
-### 9. Summary
-- Databases and schemas are native, integral components of Zelyra.
-- Typos in SQL statements are caught and prevented at compile time.
-
-### 10. Self-check review questions
-1. What problem do Zelyra's type-checked SQL blocks solve compared to ordinary SQL strings?
-2. Which capability must be declared by a function executing `sql`?
-3. How does Zelyra derive the type `Task` from the table `tasks`?
-
----
-
-## Chapter 24: Defining Tables and Data Modeling
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How relational tables are declared with `table`.
-- The syntax for primary keys: `id: Id primary auto`.
-- How column modifiers are defined: `required`, length constraints like `String(100)`, and default values.
-- How relationships between tables are modeled.
-
-### 2. Why is this topic important?
-The data model is the bedrock of any application. If schema design is neglected early on, technical debt, corrupt data, and performance bottlenecks will linger for years. Zelyra enforces mandatory constraints, explicit types, and referential integrity right from day one.
-
-### 3. Understandable explanation without unnecessary jargon
-A table (`table`) is like a structured filing cabinet for uniform record sheets:
-- Every sheet possesses a unique serial number: `id: Id primary auto`.
-- Certain attributes must never be omitted: `required`.
-- Text columns can have strict length bounds: `String(100)`.
-
-```zelyra
-table categories {
-    id: Id primary auto
-    name: String(50) required
-}
-```
-
-From the definition `table categories`, Zelyra automatically generates the strongly typed struct `Category` with corresponding fields.
-
-### 4. Small, progressive examples
-
-**Example 1: Simple table with required fields**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table projects {
-    id: Id primary auto
-    name: String(80) required
-    active: Bool
-}
-
-fn main() {
-    print("Table projects declared.")
-}
-```
-
-**Example 2: Table with date and numeric fields**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table time_entries {
-    id: Id primary auto
-    hours: Float
-    recorded_at: Timestamp
-}
-
-fn main() {
-    print("Table time_entries declared.")
-}
-```
-
-**Example 3: Linking two tables via IDs**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table tasks {
-    id: Id primary auto
-    description: String(200) required
-    project_id: Id
-}
-
-fn main() {
-    print("Relationship tasks -> project_id created.")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Omitting a required field during record creation.
-  *Cause:* Columns flagged with `required` must hold valid values in every record.
-- **Error:** Using reserved keywords such as `action`, `field`, `title`, or `list` as column names.
-  *Cause:* These identifiers are reserved language syntax elements in Zelyra.
-
-### 6. Key takeaways
-1. Every table must define a primary key `id: Id primary auto`.
-2. The `required` modifier prohibits null or absent values at both database and type levels.
-3. The singular name of a plural table (e.g., `Task` for `tasks`) becomes an automatic Zelyra data type.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Define a table `tags` with a mandatory column `name: String(30) required`.
-- **Level 2 (Medium):** Create a table `customers` with `email: Email` and `phone: String(30)`.
-- **Level 3 (Challenging):** Model a table `comments` linked via `task_id: Id` to a task and having a `created_at: Timestamp` column.
-
-### 8. Practical project task: Task Management
-Create the complete production data model for our task management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    description: String(500)
-    priority: Int
-    is_done: Bool
-}
-
-fn main() {
-    print("Complete task schema active.")
-}
-```
-
-### 9. Summary
-- `table` defines the structure, types, and constraints of data records.
-- Zelyra guarantees that database schemas and application types stay strictly in sync.
-
-### 10. Self-check review questions
-1. What is the purpose of the `auto` attribute on primary keys?
-2. What does the `required` keyword enforce on a table column?
-3. What type name is automatically synthesized from the table `projects`?
-
----
-
-## Chapter 25: Querying and Modifying Data
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to safely query records from the database using `sql<T[]>`.
-- How SQL injection is made impossible through parameterized queries (`:param`).
-- How to mutate data using `INSERT`, `UPDATE`, and `DELETE`.
-- Why modifications must be grouped into `transaction { ... }` blocks.
-- The CLI database migration commands (`zelyra db setup`, `zelyra db apply`).
-
-### 2. Why is this topic important?
-SQL injection has remained one of the top web security threats for over two decades: an attacker inputs malicious payloads into a form, extracting password hashes or destroying tables. Zelyra protects your software by construction: SQL parameters bound with a colon (`:name`) are strictly treated as data and securely escaped by the engine. Furthermore, transactions ensure that failures never leave half-committed, corrupted state in your database.
-
-### 3. Understandable explanation without unnecessary jargon
-- **Reading with sql<T[]>:**
-  ```zelyra
-  database main {
-      engine: mariadb
-      database: "tasks_db"
-  }
-  table tasks {
-      id: Id primary auto
-      name: String required
-      is_done: Bool
-  }
-  fn load_tasks(filter_val: Bool) uses Database {
-      my_tasks = sql<Task[]> {
-          SELECT id, name, is_done
-          FROM tasks
-          WHERE is_done = :filter_val
-      }
-      print("Tasks loaded")
-  }
-  fn main() uses Database { load_tasks(false) }
-  ```
-- **Writing inside a transaction:**
-  ```zelyra
-  database main {
-      engine: mariadb
-      database: "tasks_db"
-  }
-  table tasks {
-      id: Id primary auto
-      name: String required
-      is_done: Bool
-  }
-  fn create_task(new_name: String) uses Database {
-      done_flag = false
-      transaction {
-          sql {
-              INSERT INTO tasks (name, is_done)
-              VALUES (:new_name, :done_flag)
-          }
-      }
-  }
-  fn main() uses Database { create_task("Test") }
-  ```
-  If an error occurs during execution, the database automatically rolls back all intermediate operations.
-
-### 4. Small, progressive examples
-
-**Example 1: Inserting a new record**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool
-}
-
-fn add_task(task_text: String) uses Database {
-    done_status = false
-    transaction {
-        sql {
-            INSERT INTO tasks (name, done)
-            VALUES (:task_text, :done_status)
-        }
-    }
-    print("Task saved.")
-}
-
-fn main() uses Database {
-    add_task("Answer email")
-}
-```
-
-**Example 2: Querying typed records**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool
-}
-
-fn load_all() uses Database {
-    records = sql<Task[]> {
-        SELECT id, name, done
-        FROM tasks
-    }
-    print("Task list loaded.")
-}
-
-fn main() uses Database {
-    load_all()
-}
-```
-
-**Example 3: Updating a record**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool
-}
-
-fn mark_as_done(task_id: Int) uses Database {
-    transaction {
-        sql {
-            UPDATE tasks
-            SET done = true
-            WHERE id = :task_id
-        }
-    }
-    print("Status updated.")
-}
-
-fn main() uses Database {
-    mark_as_done(1)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting string concatenation in SQL queries (`"WHERE id = " + id`).
-  *Cause:* Zelyra forbids raw string concatenation in SQL blocks. Always use named parameters with a colon (`:id`).
-- **Error:** Forgetting that mutating operations must reside inside a `transaction { ... }` block.
-  *Cause:* Zelyra requires explicit transaction boundaries for any write operations.
-
-### 6. Key takeaways
-1. Always bind input values in SQL using `:parameter` to prevent SQL injection vulnerabilities.
-2. All write operations must be enclosed within `transaction { ... }`.
-3. `zelyra db apply` migrates the declared schema to the live database.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Write an SQL query selecting all uncompleted tasks (`done = false`).
-- **Level 2 (Medium):** Write a function to delete a task by its ID (`DELETE FROM tasks WHERE id = :id`).
-- **Level 3 (Challenging):** Implement a function that archives an old task and creates a successor task within a single transaction.
-
-### 8. Practical project task: Task Management
-Write complete database access routines for our task management application:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    is_done: Bool
-}
-
-fn create_task(task_name: String) uses Database {
-    initial_status = false
-    transaction {
-        sql {
-            INSERT INTO tasks (name, is_done)
-            VALUES (:task_name, :initial_status)
-        }
-    }
-    print("Task created.")
-}
-
-fn complete_task(target_id: Int) uses Database {
-    transaction {
-        sql {
-            UPDATE tasks
-            SET is_done = true
-            WHERE id = :target_id
-        }
-    }
-    print("Task completed.")
-}
-
-fn main() uses Database {
-    create_task("Launch first Zelyra project")
-    complete_task(1)
-}
-```
-
-### 9. Summary
-- SQL in Zelyra is native, type-safe, and automatically defended against injection attacks.
-- The `transaction` block guarantees database consistency across all mutations.
-
-### 10. Self-check review questions
-1. How does Zelyra prevent malicious SQL injection attacks?
-2. Why must mutating SQL statements be placed inside a `transaction` block?
-3. Which CLI command provisions and migrates database tables according to your code?
-
-# PART VII â€“ WEB APPLICATIONS AND FORMS
-
----
-
-## Chapter 26: Rendering Web Pages
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to create web pages and routes rapidly using the `page` keyword.
-- How to pass dynamic URL parameters (such as `/tasks/{id}`).
-- How HTML templates are declared directly within Zelyra code (`html { ... }`).
-- How Zelyra completely prevents Cross-Site Scripting (XSS) through automatic HTML escaping.
-
-### 2. Why is this topic important?
-Traditional web development forces you to coordinate multiple disjoint tools: web servers (like Nginx or Apache), URL routers, template engines (Blade, Jinja, Twig), and backend business logic. If a developer forgets to escape HTML special characters in just one place, attackers can inject malicious JavaScript (XSS) into users' browsers. In Zelyra, the HTTP server is built-in (`zelyra serve`), and context-aware HTML escaping is automatic and unavoidable.
-
-### 3. Understandable explanation without unnecessary jargon
-With the `page` keyword, you define both an HTTP route and its corresponding HTML markup in one unified block:
-
-```zelyra
-page "/welcome" {
-    html {
-        <h1>Welcome to Zelyra</h1>
-        <p>Your modern web application is running!</p>
-    }
-}
-```
-
-Whenever you want to render dynamic values, place them inside curly braces: `{name}`. Zelyra replaces the placeholder securely with properly escaped text.
-
-### 4. Small, progressive examples
-
-**Example 1: Simple static welcome page**
-```zelyra
-page "/hello" {
-    html {
-        <html>
-            <body>
-                <h1>Hello Zelyra World!</h1>
-            </body>
-        </html>
-    }
-}
-```
-
-**Example 2: Dynamic route with URL parameter**
-```zelyra
-page "/user/{name}" {
-    html {
-        <html>
-            <body>
-                <h1>Profile of {name}</h1>
-                <p>Welcome back to the dashboard.</p>
-            </body>
-        </html>
-    }
-}
-```
-
-**Example 3: Safe escaping against XSS attacks**
-If a malicious user submits `<script>alert('hack')</script>` as their name, Zelyra renders it in the browser as benign textâ€”the script will never execute:
-```zelyra
-page "/secure/{user_input}" {
-    html {
-        <div>Input: {user_input}</div>
-    }
-}
-```
-
-**Example 4: Reusable view layouts and named slots (from Zelyra 0.1.41)**
-Instead of repeating `<html>`, `<head>`, headers, and footers on every page, you declare reusable layout shells with `view`. A view defines exactly one default slot `<slot />` and optional named slots with safe fallback content:
-```zelyra
-view AppShell {
-    html {
-        <html lang="en">
-            <head><title>Zelyra Application</title></head>
-            <body>
-                <header>
-                    <slot name="header"><h1>Zelyra Portal</h1></slot>
-                </header>
-                <main>
-                    <slot />
-                </main>
-                <footer>
-                    <slot name="footer"><p>Built with Zelyra</p></slot>
-                </footer>
-            </body>
-        </html>
-    }
-}
-
-page "/dashboard" {
-    view: AppShell
-    html {
-        <slot name="header"><h1>My Dashboard</h1></slot>
-        <p>Specific page content is inserted into the default slot of the AppShell.</p>
-    }
-}
-```
-
-**Example 5: Declarative search, filtering, and pagination (from Zelyra 0.1.40)**
-For data-driven collection pages, Zelyra automatically generates semantic form controls for search, sorting, and pagination with full URL state preservation:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    title: String(100) required
-    done: Bool default false
-}
-
-page "/tasks" {
-    search { title }
-    filter { done }
-    sort { title }
-    paginated 25
-
-    load tasks = sql<Task[]> {
-        SELECT id, title, done
-        FROM tasks
-        ORDER BY title
-    }
-
-    html {
-        <h1>Tasks ({total} total, page {page} of {pages})</h1>
-        <ul>
-            for task in tasks {
-                <li>{task.title}</li>
-            }
-        </ul>
-    }
-}
-```
-Zelyra automatically runs the optimized `COUNT(*)` query in the background, binds `total` and `pages` as typed `UInt` variables, and renders semantic filter fieldsets.
-
-### 5. Typical errors and their causes
-- **Error:** Failing to properly close HTML tags (e.g., `<h1>` without `</h1>`).
-  *Cause:* Zelyra strictly parses the HTML tree for well-formedness at compile time.
-- **Error:** Inconsistent parameter names in curly braces.
-  *Cause:* The route placeholder (e.g., `{id}`) must match the variable identifier used in the HTML template.
-- **Errors `E-VIEW-010` to `E-VIEW-015`:** Undeclared variables or type mismatches in view interpolation.
-  *Cause:* The Zelyra compiler checks view bindings and component properties at compile time against declared routes, types, and SQL loads.
-- **Error:** Supplying undeclared or duplicate slots in a `page`.
-  *Cause:* A page may only provide content for named slots that its declared `view` explicitly defines.
-
-### 6. Key takeaways
-1. `page "/path"` defines a web route and serves verified, well-formed HTML.
-2. Variables in HTML templates are interpolated via `{variable}` and escaped automatically.
-3. `view Name { ... }` defines reusable master layout shells with `<slot />` and named slots (`<slot name="...">`).
-4. `search`, `filter`, and `paginated` automatically generate semantic query controls with URL state preservation.
-5. The command `zelyra serve` starts the built-in HTTP server without external web server configurations.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Create a `page "/about"` that displays an informative description of a company.
-- **Level 2 (Medium):** Create a dynamic route `/product/{item_id}` displaying a product detail view.
-- **Level 3 (Challenging):** Design an overview page containing headings, navigation links, and an ordered list inside the HTML block.
-
-### 8. Practical project task: Task Management
-Build the main landing page for our task management application:
-```zelyra
-page "/tasks" {
-    html {
-        <html>
-            <head>
-                <title>Zelyra Task Management</title>
-            </head>
-            <body>
-                <h1>My Tasks</h1>
-                <p>Welcome to your personal task manager.</p>
-                <a href="/tasks/new">Create New Task</a>
-            </body>
-        </html>
-    }
-}
-```
-
-Start the development server with `zelyra serve main.zyl` and navigate to `http://localhost:8080/tasks` in your browser!
-
-### 9. Summary
-- Web pages are declared directly and concisely using `page` and `html`.
-- Automatic context-aware escaping protects your users against web security threats.
-
-### 10. Self-check review questions
-1. Which keyword introduces a web page definition in Zelyra?
-2. How are dynamic values bound into HTML markup?
-3. Why are XSS vulnerabilities precluded by default in Zelyra HTML rendering?
-
----
-
-## Chapter 27: Forms and User Inputs
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to define secure input forms bound to database tables using `form`.
-- How automatic Cross-Site Request Forgery (CSRF) protection works behind the scenes.
-- How Zelyra validates input data against strong types (such as `Email` or length limits).
-- How to test and inspect forms prior to runtime using `zelyra form validate`.
-
-### 2. Why is this topic important?
-Untrusted user inputs represent the single largest vector for web vulnerabilities: attackers submit empty required values, spoofed foreign IDs, or trick authenticated users into unauthorized requests (CSRF attacks). In other frameworks, developers must manually stitch together input forms, validation rules, error feedback, and CSRF tokens. Zelyra's `form` construct derives the input mask directly from your database table schema, safeguarding all interactions automatically.
-
-### 3. Understandable explanation without unnecessary jargon
-A form directly connects an input mask with a target database table:
-
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    description: String(500)
-}
-
-form TaskCreate -> tasks {
-    fields {
-        name
-        description
-    }
-}
-```
-
-From this concise definition, Zelyra automatically produces:
-- HTML input elements matching the schema types (`<input type="text">`, etc.).
-- An invisible cryptographic CSRF token preventing unauthorized form submissions.
-- Server-side validation rules (e.g., `name` cannot exceed 100 characters and cannot be omitted).
-
-### 4. Small, progressive examples
-
-**Example 1: Basic form for customer data**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table customers {
-    id: Id primary auto
-    name: String(80) required
-    email: Email?
-}
-
-form CustomerForm -> customers {
-    fields {
-        name
-        email
-    }
-}
-```
-
-**Example 2: Minimal form with single field**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-}
-
-form NewTaskForm -> tasks {
-    fields {
-        name
-    }
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Listing a field inside `fields` that does not exist in the target table.
-  *Cause:* Zelyra strictly validates `fields` against columns declared on the underlying table.
-- **Error:** Attempting to disable CSRF protection.
-  *Cause:* In Zelyra, CSRF defense is an uncompromised, mandatory architectural standard.
-
-### 6. Key takeaways
-1. `form Name -> target_table` generates a strongly validated, secure input form.
-2. All table column constraints (lengths, required flags, types) are automatically enforced on input.
-3. CSRF and XSS protections are integral and active by default.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Define a form `CategoryCreate` for a `categories` table.
-- **Level 2 (Medium):** Test form validation rules on the command line using `zelyra form validate`.
-- **Level 3 (Challenging):** Add a priority column to the task form and test server-side validation against erroneous submissions.
-
-### 8. Practical project task: Task Management
-Define the creation form for new tasks:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    priority: Int
-}
-
-form TaskCreate -> tasks {
-    fields {
-        name
-        priority
-    }
-}
-
-fn main() {
-    print("Task form ready.")
-}
-```
-
-### 9. Summary
-- Forms bridge database tables directly with secure web input masks.
-- Zelyra manages validation, CSRF tokens, and error handling with zero boilerplate.
-
-### 10. Self-check review questions
-1. What does the arrow `->` signify in `form TaskCreate -> tasks`?
-2. Why don't Zelyra developers need to manually insert CSRF tokens into templates?
-3. Which column validations are automatically enforced on the form?
-
----
-
-## Chapter 28: The Complete CRUD Pattern
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What CRUD (Create, Read, Update, Delete) means and why it forms the backbone of business software.
-- How Zelyra synthesizes a complete administrative web interface with a single `crud` block.
-- How to configure list, detail, form, and delete views.
-- How to attach custom operations using the `action` keyword.
-
-### 2. Why is this topic important?
-Over 80% of routine web development consists of the exact same repetitive pattern: listing records in a table, displaying details, editing fields, and deleting entries. Developers frequently spend weeks implementing controllers, routes, views, and confirmation dialogs. In Zelyra, you achieve all of this in a few declarative lines of codeâ€”bulletproof, secure, and uniform.
-
-### 3. Understandable explanation without unnecessary jargon
-The `crud` keyword encapsulates all foundational operations for an entity:
-- **C**reate: Add new records.
-- **R**ead: Browse lists and inspect detail views.
-- **U**pdate: Edit and persist existing records.
-- **D**elete: Remove records safely with an explicit confirmation step.
-
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool default false
-}
-
-crud Task -> tasks {
-    title: "Task Management"
-    view {
-        fields {
-            name
-            done
-        }
-        list {
-            mode: cards
-            empty: "No tasks available."
-        }
-    }
-}
-```
-
-> **Automatic Detail Linking with Hidden ID (from version 0.1.50):**
-> When the technical `id` column is omitted from the `fields` block (as shown here, where only `name` and `done` are visible), Zelyra automatically links the first displayed field (`name`) to the record detail page. This applies to both table (`table`) and card (`cards`) layouts.
-
-### 4. Small, progressive examples
-
-**Example 1: A complete CRUD module**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    active: Bool default true
-}
-
-crud Task -> tasks {
-    title: "Tasks"
-
-    view {
-        fields {
-            name
-            active
-        }
-
-        list {
-            mode: cards
-            empty: "No tasks available."
-        }
-
-        detail {
-            mode: cards
-            title: "Task Details"
-        }
-
-        form {
-            mode: cards
-            title: "Edit Task"
-            submit: "Save"
-        }
-
-        delete {
-            title: "Delete Task"
-            message: "This action cannot be undone."
-            submit: "Delete Now"
-        }
-    }
-}
-```
-
-**Example 2: Custom actions in the CRUD interface**
-You can add custom action buttonsâ€”for example, to mark a task as completed immediately:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    done: Bool default false
-}
-
-crud Task -> tasks {
-    title: "Tasks"
-    view {
-        fields {
-            name
-            done
-        }
-    }
-
-    action complete {
-        label: "Mark as completed"
-        confirm: "Do you want to complete this task?"
-
-        sql {
-            UPDATE tasks
-            SET done = true
-            WHERE id = :id
-        }
-
-        success "Task completed successfully."
-        redirect "/tasks"
-    }
-}
-```
-
-**Example 3: CRUD resources with reusable view layouts (from Zelyra 0.1.43)**
-With `layout: ViewName`, you automatically embed all generated CRUD screens (list, details, form, and delete dialogs) into an existing layout shell:
-```zelyra
-view AppShell {
-    html {
-        <html lang="en">
-            <body>
-                <nav><a href="/">Home</a> | <a href="/tasks">Tasks</a></nav>
-                <main>
-                    <slot />
-                </main>
-            </body>
-        </html>
-    }
-}
-
-crud Task -> tasks {
-    title: "Task Management"
-    layout: AppShell
-
-    view {
-        fields {
-            name
-            done
-        }
-    }
-}
-```
-The generated CRUD resource adopts the navigation and container structure of `AppShell`, while security checks, permissions, and CSRF protection remain fully active.
-
-### 5. Typical errors and their causes
-- **Error:** Omitting the `view` block or `fields` declaration inside a `crud` block.
-  *Cause:* Zelyra needs an explicit list of columns to display across the generated UI views.
-- **Error:** Writing an `UPDATE` statement in an `action` without `WHERE id = :id`.
-  *Cause:* CRUD actions always target the specific selected record identified by `:id`.
-
-### 6. Key takeaways
-1. `crud Name -> table` generates a complete, secure administration interface.
-2. Views (`list`, `detail`, `form`, `delete`) can be individually styled and tailored.
-3. Custom actions (`action`) extend basic CRUD functionality with specific business logic.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Create a CRUD interface for a `categories` table.
-- **Level 2 (Medium):** Customize the titles, button labels, and empty messages in a CRUD block.
-- **Level 3 (Challenging):** Implement a custom action `duplicate` that clones the selected task.
-
-### 8. Practical project task: Task Management
-Construct the full production CRUD interface for our task manager:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_app"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    done: Bool default false
-}
-
-crud Task -> tasks {
-    title: "My Task Manager"
-
-    view {
-        fields {
-            name
-            done
-        }
-
-        list {
-            mode: cards
-            empty: "Great job! All tasks are completed."
-        }
-
-        detail {
-            mode: cards
-            title: "View Task"
-        }
-
-        form {
-            mode: cards
-            title: "Create or Edit Task"
-            submit: "Save Task"
-        }
-
-        delete {
-            title: "Delete Task"
-            message: "Are you sure you want to permanently delete this task?"
-            submit: "Delete"
-        }
-    }
-}
-```
-
-### 9. Summary
-- The CRUD pattern dramatically accelerates web development for data-driven applications.
-- Zelyra automatically generates routes, forms, validation, and database operations.
-
-### 10. Self-check review questions
-1. What four core operations make up the acronym CRUD?
-2. How does Zelyra react if an invalid column name appears inside `fields`?
-3. What is the role of the `action` keyword in a CRUD declaration?
-
----
-
-## Chapter 29: Users, Passwords, and Sessions
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How Zelyra provides native authentication with the `auth` block.
-- How passwords are hashed using state-of-the-art Argon2.
-- How user sessions and role-based permissions are structured and secured.
-- How pages and actions are protected using `requires auth` and `permits`.
-
-### 2. Why is this topic important?
-Security cannot be treated as an optional plugin. Storing plaintext passwords or using outdated hashing algorithms (like MD5 or SHA1) leads to catastrophic security failures. In Zelyra, authentication is baked directly into the language design: passwords default to Argon2 hashing, session tokens are securely managed, and route permissions are verified declaratively.
-
-### 3. Understandable explanation without unnecessary jargon
-An authentication block ties together users, sessions, and permissions:
-
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-```
-
-To restrict a web page exclusively to authenticated users, annotate the route:
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/secret" {
-    requires auth
-    html {
-        <h1>Visible only to authenticated users!</h1>
-    }
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: The standard tables for authentication**
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-```
-
-**Example 2: Protected page with permissions check**
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/dashboard" {
-    requires auth
-    permits "tasks.view"
-
-    html {
-        <h1>Task Dashboard</h1>
-        <p>You are authorized.</p>
-    }
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Storing plaintext passwords inside the user table.
-  *Cause:* Zelyra expects a `password_hash` column and provides `zelyra auth hash-password` for hashing.
-- **Error:** Omitting the `auth_sessions` table.
-  *Cause:* Zelyra requires an explicit table for tracking session tokens cryptographically.
-
-### 6. Key takeaways
-1. `auth` declares user, session, and permission schemas at a single centralized location.
-2. Protected routes require `requires auth` and optional `permits "permission"`.
-3. Passwords are exclusively preserved as secure Argon2 hashes.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Generate a password hash using the CLI command `zelyra auth hash-password`.
-- **Level 2 (Medium):** Protect a `/settings` route using `requires auth`.
-- **Level 3 (Challenging):** Assign a specific permission to a user role using `zelyra auth role-permission`.
-
-### 8. Practical project task: Task Management
-Lock down the task management application against unauthorized access:
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/my-tasks" {
-    requires auth
-
-    html {
-        <h1>Protected Task Area</h1>
-        <p>Accessible only to authenticated users.</p>
-    }
-}
-```
-
-### 9. Summary
-- Authentication and authorization are native, first-class features in Zelyra.
-- Modern security standards (Argon2, session tokens, RBAC) work out of the box with no third-party libraries.
-
-### 10. Self-check review questions
-1. Which state-of-the-art algorithm does Zelyra use for hashing passwords?
-2. Which declaration restricts a web page to authenticated users?
-3. What is the responsibility of the `auth_sessions` table?
-
----
-
-## Chapter 30: APIs and Data Exchange
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to define typed REST API endpoints using the `api` keyword.
-- How to type HTTP methods (`GET`, `POST`, `PUT`, `DELETE`) alongside inputs and outputs.
-- How to declare standard error status codes (`404 NotFound`, `400 ValidationError`).
-- How Zelyra generates complete OpenAPI/Swagger documentation automatically (`zelyra doc --openapi`).
-
-### 2. Why is this topic important?
-Modern applications do not operate in a vacuum: mobile clients (iOS/Android), frontend frameworks (React, Vue), and external partner services must communicate with your backend. With conventional frameworks, API documentation falls out of sync almost immediately. In Zelyra, the API definition is the executable code itself: every route, payload parameter, and response code is strictly typedâ€”and the OpenAPI specification is derived directly from the code.
-
-### 3. Understandable explanation without unnecessary jargon
-With the `api` keyword, you declare an unambiguous API contract:
-- **Method and Path:** e.g., `GET "/tasks/{id}"`
-- **Input:** What parameters does the request require?
-- **Output:** What data type is returned as JSON?
-- **Errors:** What HTTP status codes can occur in error cases?
-
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String required
-}
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-fn main() {
-    print("API endpoint defined.")
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: A GET endpoint with return type**
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String required
-}
-
-api GET "/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-fn main() {
-    print("GET API checked.")
-}
-```
-
-**Example 2: A POST endpoint for creating resources**
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(100) required
-}
-
-api POST "/tasks" {
-    input {
-        name: String
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-fn main() {
-    print("POST API checked.")
-}
-```
-
-**Example 3: Generating OpenAPI documentation**
-Execute:
-```bash
-zelyra doc main.zyl --openapi
-```
-Zelyra generates a standards-compliant `openapi.json` file ready for import into Swagger UI, Postman, or API gateway catalogs.
-
-### 5. Typical errors and their causes
-- **Error:** Specifying an undefined type for `output`.
-  *Cause:* Zelyra verifies that the return type (e.g., `Task`) exists as a table or record declaration.
-- **Error:** Returning undeclared HTTP error codes.
-  *Cause:* Typed API contracts require all possible error responses to be explicitly declared.
-
-### 6. Key takeaways
-1. `api METHOD "/path"` declares a strongly typed REST endpoint.
-2. `input`, `output`, and `errors` define a comprehensive API contract.
-3. `zelyra doc --openapi` outputs OpenAPI specifications directly from source code.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Define an endpoint `GET "/api/version"` that returns a version string.
-- **Level 2 (Medium):** Create an endpoint `DELETE "/api/tasks/{id}"` declaring the `404 NotFound` error code.
-- **Level 3 (Challenging):** Generate an OpenAPI schema using `zelyra doc --openapi` and inspect the output JSON structure.
-
-### 8. Practical project task: Task Management
-Define the official REST API for our task management application:
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(120) required
-    done: Bool
-}
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-api POST "/api/tasks" {
-    input {
-        name: String
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-fn main() {
-    print("Task REST API ready.")
-}
-```
-
-### 9. Summary
-- APIs in Zelyra are type-safe, self-documenting, and standards-compliant.
-- With minimal declarative code, you create robust interfaces for web and mobile frontends.
-
-### 10. Self-check review questions
-1. Which four clauses make up a complete `api` declaration?
-2. Why is automated OpenAPI generation superior to manual documentation?
-3. What occurs when a client sends invalid data to an endpoint's `input` block?
-
-# PART VIII â€“ THE DISTINCTIVE FEATURES OF ZELYRA
-
----
-
-## Chapter 31: Readability as the Highest Priority
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- Why in real-world engineering code is read up to ten times more often than it is written.
-- Which deliberate design decisions Zelyra made to achieve maximum clarity.
-- Why Zelyra intentionally avoids unreadable syntax acrobatics and cryptic symbols.
-- How the built-in code formatter `zelyra fmt` enforces a uniform code standard across entire teams.
-
-### 2. Why is this topic important?
-Many programming languages allow the exact same logic to be expressed in ten disparate waysâ€”frequently in ultra-compact one-liners saturated with symbols that no one understands three months later. In large development teams and long-lived projects, this results in staggering maintenance overhead. Zelyra follows a core philosophy: There is exactly one obvious, readable way to solve any given problem.
-
-### 3. Understandable explanation without unnecessary jargon
-Readability in Zelyra means:
-- **Expressive names over obscure abbreviations:** Functions and variables speak clear language (`priority` instead of `prio_lvl_fn()`).
-- **Unambiguous blocks:** Every conditional branch, loop, and function declaration uses explicit curly braces `{}`.
-- **Automated formatting:** No team member ever needs to debate indentation, whitespace, or bracket placement. The command `zelyra fmt` aligns every single line strictly to the official Zelyra style guide.
-
-```zelyra
-fn calculate_total_duration(task_durations: Int[]) -> Int {
-    mutable sum = 0
-    for duration in task_durations {
-        sum = sum + duration
-    }
-    return sum
-}
-
-fn main() {
-    durations: Int[] = [15, 30, 45]
-    print(calculate_total_duration(durations))
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Self-documenting function signatures**
-```zelyra
-fn is_task_overdue(deadline_days: Int) -> Bool {
-    return deadline_days < 0
-}
-
-fn main() {
-    print(is_task_overdue(-2))
-}
-```
-
-**Example 2: Clear, readable control flow**
-```zelyra
-fn status_display(status_code: Int) -> String {
-    match status_code {
-        1 => {
-            return "New"
-        }
-        2 => {
-            return "In Progress"
-        }
-        3 => {
-            return "Completed"
-        }
-        _ => {
-            return "Unknown"
-        }
-    }
-}
-
-fn main() {
-    print(status_display(2))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Naming variables with arbitrary single letters (`a`, `x`, `tmp`) whose intent is obscure.
-  *Cause:* Zelyra code is intended to read like clear prose. Use descriptive names such as `task_index` or `elapsed_seconds`.
-- **Error:** Manually trying to fix inconsistent indentation.
-  *Cause:* Simply run `zelyra fmt main.zyl`â€”the compiler formats everything automatically and deterministically.
-
-### 6. Key takeaways
-1. Always write code for the developer who must maintain it six months from now.
-2. `zelyra fmt` guarantees a clean, uniform programming style across the entire codebase.
-3. Descriptive, expressive identifiers are the highest-value documentation you can write.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Format an unformatted or messy source file using `zelyra fmt`.
-- **Level 2 (Medium):** Refactor a function with cryptic variable names into clean, self-explanatory Zelyra code.
-- **Level 3 (Challenging):** Structure a multi-stage computation function so cleanly that no single line exceeds 80 characters, while retaining total clarity.
-
-### 8. Practical project task: Task Management
-Design the filter logic of our Task Management system with maximum readability:
-```zelyra
-fn is_urgent_and_open(priority: Int, completed: Bool) -> Bool {
-    is_priority_one = priority == 1
-    is_not_yet_completed = !completed
-    return is_priority_one && is_not_yet_completed
-}
-
-fn main() {
-    print(is_urgent_and_open(1, false))
-    print(is_urgent_and_open(2, false))
-}
-```
-
-### 9. Summary
-- Readability is your primary safeguard against software rot and maintenance friction.
-- Zelyra enforces clarity both by language design and through standard tooling.
-
-### 10. Self-check review questions
-1. Why does highly readable code save substantial time and money over the lifespan of a software project?
-2. Which Zelyra CLI command automatically reformats source files to the canonical standard?
-3. Why does Zelyra deliberately avoid having multiple redundant syntax options for the same logical operation?
-
----
-
-## Chapter 32: AI-Nativity â€“ Why Zelyra Is Built for AI Assistants
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What it means for a programming language to be truly "AI-native".
-- Why modern Large Language Models (such as Claude, GPT, and Gemini) hallucinate significantly less when generating Zelyra code.
-- How Typed Holes (`_`) assist both human developers and AI coding agents during iterative synthesis.
-- How CLI commands equipped with `--format json` expose rich, machine-readable interfaces for automated tooling.
-- How `zelyra impact` and `zelyra edit` safeguard automated refactoring workflows.
-
-### 2. Why is this topic important?
-Most existing programming languages were designed decades ago exclusively for human keyboard input. When modern AI assistants generate code in Python or JavaScript, they frequently invent nonexistent APIs, misjudge types, or fail to account for hidden side effects. Zelyra was engineered from inception so that human developers and AI assistants can collaborate with unprecedented precision and zero ambiguity.
-
-### 3. Understandable explanation without unnecessary jargon
-Zelyra accelerates and safeguards AI-assisted development through four key architectural strengths:
-1. **Unambiguous, context-free grammar:** The language contains no syntactic ambiguities, eliminating parse guesswork.
-2. **Machine-readable JSON diagnostics:** Nearly all compiler commands support `--format json` (for example, `zelyra check --format json`), enabling AI agents to ingest diagnostics directly as structured objects.
-3. **Typed Holes (`_`):** When you or an AI model are unsure how a specific value should be derived, you place an underscore `_`. The compiler immediately provides exact feedback: What type is expected? What variables are in scope? What contracts apply?
-4. **Impact Analysis (`zelyra impact`):** Zelyra computes ahead of time exactly which downstream components of a program are affected by a proposed code edit.
-
-### 4. Small, progressive examples
-
-**Example 1: Typed contracts guide AI generation without guesswork**
-Because contracts define explicit boundaries, AI agents can generate provably correct implementations:
-```zelyra
-fn normalize_scale(value: Int) -> Int
-    requires { value >= 0 && value <= 100 }
-    ensures { result >= 0 && result <= 10 }
-{
-    return value / 10
-}
-
-fn main() {
-    print(normalize_scale(85))
-}
-```
-
-**Example 2: Machine-readable error analysis**
-When an AI tool invokes:
-```bash
-zelyra check main.zyl --format json
-```
-it receives structured JSON with exact error codes, file paths, line numbers, column offsets, and actionable remediation hints.
-
-### 5. Typical errors and their causes
-- **Error:** Leaving Typed Holes (`_`) in production code.
-  *Cause:* Typed Holes are development scratchpads. Before final compilation, every `_` must be replaced with concrete code.
-- **Error:** Accepting AI-generated code blindly without running `zelyra check`.
-  *Cause:* Always use the Zelyra compiler as an incorruptible arbiter of correctness.
-
-### 6. Key takeaways
-1. Zelyra is an AI-native language: unambiguous, structured, and tool-friendly.
-2. Typed Holes `_` serve as precise design prompts for both the compiler and AI assistants.
-3. `--format json` enables seamless, zero-overhead integration into autonomous AI coding agents and modern IDEs.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Execute `zelyra check` with the `--format json` flag and inspect the structured JSON schema of the output.
-- **Level 2 (Medium):** Run `zelyra impact` against a file and analyze which dependents are flagged for recompilation.
-- **Level 3 (Challenging):** Insert a Typed Hole `_` into a calculation function and examine the compiler diagnostics to see all inferred type and scope data.
-
-### 8. Practical project task: Task Management
-Write a well-formed function signature with contracts, providing an optimal specification for an AI assistant to complete:
-```zelyra
-fn calculate_remaining_time(target_hour: Int, current_hour: Int) -> Int
-    requires { target_hour >= current_hour }
-    ensures { result >= 0 }
-{
-    return target_hour - current_hour
-}
-
-fn main() {
-    remaining = calculate_remaining_time(18, 14)
-    print(remaining)
-}
-```
-
-### 9. Summary
-- Zelyra eliminates lexical and semantic ambiguities that historically confuse language models.
-- Typed Holes and structured JSON outputs make pair programming with AI agents exceptionally reliable and deterministic.
-
-### 10. Self-check review questions
-1. What does the concept of "Typed Holes" signify in Zelyra?
-2. Why do AI coding systems benefit substantially from the compiler's `--format json` option?
-3. How do formal contracts (`requires`, `ensures`) guide an AI assistant in generating correct implementations?
-
----
-
-## Chapter 33: Safety through Capabilities
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- What the capability security model is and why it is superior to conventional permission architectures.
-- System capabilities such as `Console`, `Database`, `Network`, `FileSystem`, `Process`, `Environment`, `Clock`, and `Random`.
-- How capabilities are declared on functions, propagated through call graphs, and constrained in `zelyra.toml`.
-- Why Zelyra is naturally immune to supply chain attacks and rogue dependencies.
-
-### 2. Why is this topic important?
-In contemporary package ecosystems such as npm (JavaScript) or PyPI (Python), projects routinely incorporate hundreds of third-party dependencies. If any single transitive dependency is compromised, it can silently read environment secrets, exfiltrate data across the internet, or encrypt local files. In Zelyra, this attack vector is eliminated at compile time: a function cannot send a single byte over the network without explicitly declaring `uses Network`â€”otherwise the compiler rejects the code outright!
-
-### 3. Understandable explanation without unnecessary jargon
-Think of Zelyra's capability system as a physical security clearance:
-- If a function needs to write data to disk, it must explicitly hold the `uses FileSystem` badge on its signature.
-- If it lacks that capability, it cannot touch the file systemâ€”even if malicious code tries to execute a write.
-- Crucially, if function `A` calls function `B`, and `B` requires a capability, `A` must also declare that capability. A quick glance at `main()` immediately reveals the total security boundary of the entire program!
-
-```zelyra
-fn safe_operation() {
-    // This function has NO capabilities.
-    // It is mathematically impossible for it to damage the disk or access the network!
-    print("Guaranteed side-effect free.")
-}
-
-fn main() {
-    safe_operation()
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Safe declaration of environment access**
-```zelyra
-fn read_configuration(key: String) -> Option<String>
-    uses Environment
-{
-    return env(key)
-}
-
-fn main() uses Environment {
-    print("Configuration access allowed.")
-}
-```
-
-**Example 2: Database access guarded by capabilities**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String required
-}
-
-fn load_data() uses Database {
-    records = sql<Task[]> {
-        SELECT id, name
-        FROM tasks
-    }
-    print("Database access granted.")
-}
-
-fn main() uses Database {
-    load_data()
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Forgetting to declare capabilities on upstream caller functions.
-  *Cause:* If function `a()` calls function `b() uses FileSystem`, then `a()` must also be annotated with `uses FileSystem`.
-- **Error:** Capability denied by project configuration in `zelyra.toml`.
-  *Cause:* The project configuration file sets the ceiling of permitted capabilities for the application.
-
-### 6. Key takeaways
-1. No function can secretly access files, databases, or the network.
-2. All side effects are explicitly documented in function signatures.
-3. Pure functions without capabilities are guaranteed to be side-effect free and immune to external tampering.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Inspect an existing codebase and list all functions that require system capabilities.
-- **Level 2 (Medium):** Write a utility function that combines `uses Clock` and `uses Environment`.
-- **Level 3 (Challenging):** Architect an application such that 100% of business domain logic resides in pure functions that require zero capabilities.
-
-### 8. Practical project task: Task Management
-Isolate capability boundaries in our Task Management system:
-```zelyra
-// 1. Pure logic: NO capabilities required
-fn is_ready_for_export(task_count: Int) -> Bool {
-    return task_count > 0
-}
-
-// 2. I/O logic: Explicit FileSystem capability
-fn execute_export(filename: String, content: String) uses FileSystem {
-    write_text(filename, content)
-    print("Export completed.")
-}
-
-fn main() uses FileSystem {
-    if is_ready_for_export(5) {
-        execute_export("tasks.txt", "Task 1")
-    }
-}
-```
-
-### 9. Summary
-- Zelyra's capability model protects against malicious packages and unintended side effects.
-- Applications become secure by design through explicit permission declaration and static enforcement.
-
-### 10. Self-check review questions
-1. Name three system capabilities provided by Zelyra.
-2. Why must caller functions declare the capabilities required by the sub-functions they invoke?
-3. How does Zelyra prevent supply chain attacks originating from third-party libraries?
-
----
-
-## Chapter 34: Zelyra in Comparison
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How Zelyra compares directly with Python, PHP/Laravel, TypeScript/Node, and Rust.
-- Where each language excels and why Zelyra was custom-tailored for modern data-driven web and AI applications.
-- How Zelyra marries the rigorous type safety of Rust with the development velocity of Python.
-
-### 2. Why is this topic important?
-No single programming language is optimal for every possible domain: C and Rust are unmatched for operating system kernels; Python reigns in data science; JavaScript dominates the browser. However, when building database-backed business applications and web backends, developers in those languages often battle significant legacy baggage. Zelyra unifies the greatest strengths of these ecosystems.
-
-### 3. Understandable explanation without unnecessary jargon: Language Comparison
-
-| Feature | Python | PHP / Laravel | TypeScript / Node | Rust | Zelyra |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Typing System** | Dynamic | Dynamic/Optional | Static (erased to JS) | Static (very strict) | **Static & Unambiguous** |
-| **Null Safety** | `None` crashes at runtime | `null` crashes at runtime | `undefined` crashes | Absolute (`Option`) | **Absolute (`Option`)** |
-| **SQL Integration** | ORM (String-based) | ORM (Eloquent) | ORM (Prisma/TypeORM) | Diesel / SQLx | **Native & Type-Checked** |
-| **Contracts** | No (only `assert`) | No | No | External libraries | **Built-in (`requires`, `ensures`)** |
-| **Security Capabilities** | No (Full OS access) | No (Full OS access) | No (Full OS access) | No | **Built-in (`uses ...`)** |
-| **AI Tooling Support** | Moderate (Ambiguous) | Moderate | Moderate | Difficult for LLMs | **Native (JSON, Typed Holes)** |
-
-### 4. Small, progressive examples
-
-**Comparison: How Zelyra catches bugs that slip into production in other languages**
-
-*In Python / JavaScript (potential runtime crash on missing value):*
-An unhandled missing field triggers a production server crash: `AttributeError: 'NoneType' object has no attribute 'title'`.
-
-*In Zelyra (guaranteed safe handling enforced at compile time):*
-```zelyra
-fn show_title(opt_title: Option<String>) {
-    match opt_title {
-        Some(t) => {
-            print("Title: " + t)
-        }
-        None => {
-            print("No title provided.")
-        }
-    }
-}
-
-fn main() {
-    show_title(Some("Project X"))
-    show_title(None)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to write Zelyra like Python (using indentation instead of curly braces, or attempting dynamic type reassignment).
-  *Cause:* Zelyra utilizes curly braces and enforces strict, static type stability.
-- **Error:** Confusing Zelyra with low-level systems languages like Rust (searching for manual memory management or complex lifetime annotations).
-  *Cause:* Zelyra manages memory completely automatically, freeing the developer to focus on business logic.
-
-### 6. Key takeaways
-1. Zelyra unifies the simplicity and developer velocity of scripting languages with the strict correctness of modern static type systems.
-2. Databases, web endpoints, and interfaces are native language constructs rather than disparate third-party libraries.
-3. Reliability and security are enforced structurally by the compiler rather than added as an afterthought.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Port a simple calculation script from Python into idiomatic, statically typed Zelyra.
-- **Level 2 (Medium):** Compare an Eloquent database query in PHP/Laravel with Zelyra's type-safe `sql<T[]>`.
-- **Level 3 (Challenging):** Explain, using a real-world supply chain vulnerability example, how Zelyra's capability system completely neutralizes malicious third-party dependencies.
-
-### 8. Practical project task: Task Management
-Consolidate key strengths of Zelyra within a concise demonstration of our Task Management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_demo"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    completed: Bool default false
-}
-
-fn count_open_tasks() -> Int uses Database {
-    open_tasks = sql<Task[]> {
-        SELECT id, name, completed
-        FROM tasks
-        WHERE completed = false
-    }
-    return len(open_tasks)
-}
-
-fn main() uses Database {
-    count = count_open_tasks()
-    print("Open tasks determined.")
-}
-```
-
-### 9. Summary
-- Zelyra bridges the gap between overly complex systems languages and error-prone dynamic scripting languages.
-- For modern web backends, data processing, and AI workflows, Zelyra offers an exceptionally dependable, developer-friendly platform.
-
-### 10. Self-check review questions
-1. What concrete advantage does Zelyra's `Option` type offer compared to Python's `None` or JavaScript's `null`?
-2. Why is native database integration in Zelyra safer than traditional ORM libraries?
-3. What vital role do capabilities play in safeguarding software from malicious third-party packages?
-
-# PART IX â€“ FROM DESIGN TO FINISHED APPLICATION
-
----
-
-## Chapter 35: Planning Software â€“ From Idea to Design
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to transform a vague product idea into a precise, implementable software architecture.
-- How to sketch domain entities and their relationships on paper or in your editor.
-- Why defining your schema early in Zelyra simplifies every subsequent development step.
-- How to decompose requirements into small, independently testable milestones.
-
-### 2. Why is this topic important?
-The single most common mistake made by beginners (and careless veterans) is rushing to write code before planning the underlying data flow. If you realize midway through implementation that a crucial table column or entity relation is missing, you often spend days refactoring existing code. Zelyra rewards disciplined planning: once your `table` schema is established, forms, validations, and APIs emerge naturally and predictably from that single source of truth.
-
-### 3. Understandable explanation without unnecessary jargon
-Every successful software project progresses through four planning phases:
-1. **Clarify purpose and target audience:** Who uses the system? What primary problem must it solve? (e.g., "A team lead wants to create, assign, and mark tasks as completed").
-2. **Design the data model:** What entities exist? Which fields are mandatory? (e.g., `tasks` with `name`, `priority`, and `completed`).
-3. **Security and access rules:** Who is permitted to perform which operations? Do we require authentication and permissions?
-4. **Iterative implementation:** First the schema (`table`), then domain logic (`fn`), then web views (`crud`/`page`), and finally APIs (`api`).
-
-### 4. Small, progressive examples
-
-**Example 1: The first milestone â€“ The data model**
-```zelyra
-database main {
-    engine: mariadb
-    database: "task_planner"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    priority: Int default 2
-    completed: Bool default false
-}
-
-fn main() {
-    print("Planning Step 1: Schema established.")
-}
-```
-
-**Example 2: Planning business logic as pure functions**
-```zelyra
-fn validate_deadline(days: Int) -> Bool {
-    return days >= 0
-}
-
-fn main() {
-    print(validate_deadline(3))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Attempting to program all features simultaneously before validating the core foundation.
-  *Cause:* Build software incrementally: verify each milestone immediately with `zelyra check`.
-- **Error:** Ambiguous mandatory fields in the data model.
-  *Cause:* Decide from the beginning which fields are strictly `required` and which may be empty (`Option<T>`).
-
-### 6. Key takeaways
-1. Failing to plan is planning to fail in software architecture.
-2. A clean, unambiguous data model is the backbone of any robust application.
-3. Decompose complex problems into small, independently verifiable functions.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Outline the feature set and data fields of a simple note-taking application as bullet points.
-- **Level 2 (Medium):** Design a relational table schema for users, tasks, and categories with appropriate Zelyra types and constraints.
-- **Level 3 (Challenging):** Formulate pre- and postconditions (`requires`, `ensures`) for all core domain functions of your planned application.
-
-### 8. Practical project task: Task Management
-Consolidate the architectural blueprint for our Task Management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_pro"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    priority: Int default 1
-    completed: Bool default false
-}
-
-fn calculate_urgency(priority: Int, remaining_days: Int) -> String {
-    if priority == 1 {
-        return "HIGHEST PRIORITY"
-    }
-    if remaining_days <= 1 {
-        return "URGENT DUE TO DEADLINE"
-    }
-    return "NORMAL"
-}
-
-fn main() {
-    status = calculate_urgency(1, 5)
-    print("Architecture plan verified: " + status)
-}
-```
-
-### 9. Summary
-- Structured planning saves development time and prevents costly architectural dead-ends.
-- Zelyra's declarative language structure integrates seamlessly into agile development workflows.
-
-### 10. Self-check review questions
-1. What four phases constitute professional software design?
-2. Why should the data model be defined before implementing user interfaces?
-3. How do preconditions assist in formulating unambiguous software specifications?
-
----
-
-## Chapter 36: Architecture and Clean Code Structure
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to structure your Zelyra application using the established three-layer architectural model.
-- The clean separation of persistence (`table`), business logic (`fn`), and presentation (`page`, `crud`, `api`).
-- How to minimize coupling and keep modules maintainable over long lifecycles.
-- Why a clean architecture protects you from unexpected regressions when adding new features.
-
-### 2. Why is this topic important?
-When database queries, business calculations, and HTML markup are tangled together in the same file or function, the result is fragile, unmaintainable "spaghetti code." If the database schema changes later, the frontend unexpectedly breaks. A clean architecture establishes clear boundaries: each layer has a single, well-defined responsibility.
-
-### 3. Understandable explanation without unnecessary jargon
-A well-architected Zelyra application is divided into three distinct layers:
-1. **Data and Persistence Layer:** Table declarations (`table`) and strongly typed SQL queries (`sql<T[]>`).
-2. **Business Logic Layer:** Pure calculation and validation functions protected by formal contracts (`requires`, `ensures`).
-3. **Presentation and Interface Layer:** Web interfaces (`crud`, `page`) and REST endpoints (`api`).
-
-```zelyra
-// 1. Data Model
-table tasks {
-    id: Id primary auto
-    name: String required
-}
-
-// 2. Business Logic
-fn format_name(raw_text: String) -> String {
-    return "[TASK] " + raw_text
-}
-
-// 3. Entry point / Execution
-fn main() {
-    print(format_name("Check server"))
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Decoupling domain logic from I/O**
-```zelyra
-// Pure calculation function: No capabilities needed
-fn calculate_percentage(value: Int, max_value: Int) -> Int
-    requires { max_value > 0 && value >= 0 }
-{
-    return (value * 100) / max_value
-}
-
-// I/O function: Uses the logic and prints output
-fn main() {
-    percentage = calculate_percentage(45, 50)
-    print(percentage)
-}
-```
-
-**Example 2: Clear structure through expressive component names**
-```zelyra
-table settings {
-    id: Id primary auto
-    app_name: String(60) required
-}
-
-fn show_system_info(name: String) {
-    print("System running: " + name)
-}
-
-fn main() {
-    show_system_info("Zelyra Task Suite")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Embedding complex business calculations directly into SQL queries or HTML template blocks.
-  *Cause:* Extract calculations into dedicated helper functions so they can be independently unit-tested.
-- **Error:** Introducing circular dependencies between modules.
-  *Cause:* Ensure data flow travels cleanly downward (Presentation -> Logic -> Data).
-
-### 6. Key takeaways
-1. Strictly separate data models, domain business rules, and UI presentation.
-2. Core business logic should remain free of side effects and capabilities whenever possible.
-3. Clean architectural layers ensure applications remain maintainable and straightforward to extend.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Identify the three distinct layers in an existing code snippet.
-- **Level 2 (Medium):** Refactor calculations embedded in a web route into pure standalone helper functions.
-- **Level 3 (Challenging):** Design a full three-layer architectural blueprint for an employee time-tracking system.
-
-### 8. Practical project task: Task Management
-Implement the layered architectural structure for our Task Management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_architecture"
-}
-
-// Layer 1: Persistence
-table tasks {
-    id: Id primary auto
-    name: String required
-    completed: Bool default false
-}
-
-// Layer 2: Business Logic
-fn is_task_important(name: String, urgent: Bool) -> Bool {
-    return urgent
-}
-
-// Layer 3: Application / Execution
-fn main() uses Database {
-    important = is_task_important("Submit tax return", true)
-    print("Task architecture verified.")
-}
-```
-
-### 9. Summary
-- The three-layer model provides long-term maintainability, clarity, and structural safety.
-- Zelyra's type system and declarative constructs enforce these boundaries naturally.
-
-### 10. Self-check review questions
-1. What three layers form the foundation of a clean Zelyra application?
-2. Why should core business logic avoid requiring capabilities whenever feasible?
-3. How does separating presentation from data persistence simplify future UI redesigns?
-
----
-
-## Chapter 37: Configuration and Environment Variables
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to securely manage configuration values via environment variables (`.env`).
-- How to use the standard library function `env(key)` and its required capability `uses Environment`.
-- How to safely handle the `Option<String>` return value from `env()`.
-- Why passwords, database secrets, and API tokens must never be hard-coded into source code.
-
-### 2. Why is this topic important?
-Accidentally committing database credentials or API keys into public Git repositories is one of the most common and disastrous security vulnerabilities in modern software. Furthermore, applications must adapt dynamically across development, testing, and production environments (e.g., using different database hosts). Environment variables cleanly decouple source code from confidential, environment-specific configuration.
-
-### 3. Understandable explanation without unnecessary jargon
-In Zelyra, you read environment variables using the built-in function `env()`. Because an environment variable may or may not be defined on the host system, `env()` always returns an `Option<String>`:
-
-```zelyra
-fn read_port() -> String uses Environment {
-    opt_port = env("APP_PORT")
-    match opt_port {
-        Some(p) => {
-            return p
-        }
-        None => {
-            return "8080"
-        }
-    }
-}
-
-fn main() uses Environment {
-    port = read_port()
-    print("Server listening on port: " + port)
-}
-```
-
-### 4. Small, progressive examples
-
-**Example 1: Configuring database host dynamically**
-```zelyra
-fn get_db_host() -> String uses Environment {
-    match env("DB_HOST") {
-        Some(host) => {
-            return host
-        }
-        None => {
-            return "127.0.0.1"
-        }
-    }
-}
-
-fn main() uses Environment {
-    print("Connecting to: " + get_db_host())
-}
-```
-
-**Example 2: Dynamically checking debug mode**
-```zelyra
-fn is_debug_active() -> Bool uses Environment {
-    match env("APP_DEBUG") {
-        Some(val) => {
-            return val == "true"
-        }
-        None => {
-            return false
-        }
-    }
-}
-
-fn main() uses Environment {
-    if is_debug_active() {
-        print("Debug mode is ON")
-    } else {
-        print("Debug mode is OFF")
-    }
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Hardcoding sensitive database passwords directly in `.zyl` files.
-  *Cause:* Always store secrets in a local `.env` file and read them via `env()`.
-- **Error:** Calling `env()` without declaring `uses Environment`.
-  *Cause:* Zelyra's capability security model prevents unauthorized access to host environment state.
-
-### 6. Key takeaways
-1. Never commit confidential secrets or credentials into version control.
-2. `env(name)` returns an `Option<String>` and requires the `uses Environment` capability.
-3. Always supply safe, predictable default fallback values for missing environment variables.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Read an environment variable `USER_NAME` and print a personalized greeting to the console.
-- **Level 2 (Medium):** Write a reusable helper function `get_env_or_default(key: String, default_val: String) -> String`.
-- **Level 3 (Challenging):** Configure an application so that it switches its logging and database endpoints between development and production modes based on environment settings.
-
-### 8. Practical project task: Task Management
-Construct the configuration management component for our Task Management system:
-```zelyra
-fn load_app_title() -> String uses Environment {
-    match env("APP_TITLE") {
-        Some(app_title) => {
-            return app_title
-        }
-        None => {
-            return "Zelyra Task Manager 0.1"
-        }
-    }
-}
-
-fn main() uses Environment {
-    print("System started: " + load_app_title())
-}
-```
-
-### 9. Summary
-- Environment variables provide flexible, secure configuration management across deployment tiers.
-- Zelyra's `Option` type ensures you explicitly handle missing configuration values without runtime crashes.
-
-### 10. Self-check review questions
-1. Why must confidential API keys and credentials never be hard-coded into application source files?
-2. What return type does the standard function `env()` produce?
-3. Which capability is required by a function that reads environment variables?
-
----
-
-## Chapter 38: Debugging and Optimization
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How to diagnose your project and environment thoroughly using the CLI command `zelyra doctor`.
-- How to leverage compiler diagnostics and actionable error hints effectively.
-- Systematic debugging methodologies for isolating logic bugs.
-- How to identify and eliminate performance bottlenecks.
-
-### 2. Why is this topic important?
-Even with careful design, unexpected issues arise during software development: a database port might be unreachable, an environment variable might be misconfigured, or an algorithm might execute redundant operations. Guessing randomly wastes precious hours. Systematic debugging with Zelyra's built-in toolchain leads to immediate solutions in minutes.
-
-### 3. Understandable explanation without unnecessary jargon
-Zelyra provides a comprehensive toolkit for proactive system diagnostics:
-- `zelyra check`: Validates syntax, types, capabilities, and formal contracts.
-- `zelyra doctor`: Audits host system environments, database connections, open ports, and package configurations.
-- `zelyra impact`: Pinpoints precisely which functions and modules are affected by a proposed change.
-
-```bash
-zelyra doctor main.zyl
-```
-If your MariaDB server is offline or unreachable, `zelyra doctor` immediately highlights the exact cause instead of leaving you stranded.
-
-### 4. Small, progressive examples
-
-**Example 1: Systematic diagnostic print statements**
-```zelyra
-fn calculate_sum(numbers: Int[]) -> Int {
-    mutable total = 0
-    for n in numbers {
-        total = total + n
-    }
-    return total
-}
-
-fn main() {
-    values: Int[] = [10, 20, 30]
-    result = calculate_sum(values)
-    print("Calculated result:")
-    print(result)
-}
-```
-
-**Example 2: Guarding against infinite loops using loop invariants**
-```zelyra
-fn safe_count(limit: Int) -> Int
-    requires { limit > 0 }
-{
-    mutable i = 0
-    while i < limit
-        invariant { i >= 0 }
-    {
-        i = i + 1
-    }
-    return i
-}
-
-fn main() {
-    print(safe_count(10))
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Modifying lines of code at random when an unexpected behavior occurs.
-  *Cause:* Accurately isolate the problem first using `zelyra check`, log output, and compiler hints.
-- **Error:** Suspecting database driver bugs when the project configuration in `zelyra.toml` simply lacks required permissions.
-  *Cause:* Run `zelyra doctor` to detect configuration issues instantly.
-
-### 6. Key takeaways
-1. `zelyra doctor` is your first step when investigating environment, network, or database failures.
-2. Contracts and invariants catch algorithmic errors before code ever enters production.
-3. Systematic root-cause debugging is faster and far more reliable than trial-and-error guessing.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Run `zelyra doctor` against your Task Management project and inspect each verification line.
-- **Level 2 (Medium):** Create a function with a deliberate logic error in an isolated test harness and analyze compiler feedback.
-- **Level 3 (Challenging):** Write a multi-step data transformation pipeline that outputs structured status logs at each milestone.
-
-### 8. Practical project task: Task Management
-Build an internal health check routine for our Task Management system:
-```zelyra
-fn perform_self_test() -> Bool {
-    test_ok = 1 + 1 == 2
-    return test_ok
-}
-
-fn main() {
-    print("Starting system self-test...")
-    if perform_self_test() {
-        print("[OK] System functioning properly.")
-    } else {
-        print("[ERROR] Internal system error.")
-    }
-}
-```
-
-### 9. Summary
-- The Zelyra toolchain (`doctor`, `check`, `impact`) provides rapid clarity when encountering defects.
-- Contracts and loop invariants prevent logical state corruption before it becomes a production bug.
-
-### 10. Self-check review questions
-1. What system and project aspects are audited by `zelyra doctor`?
-2. How can you systematically isolate a defect within an iterative calculation?
-3. What role do loop invariants play in preventing logical regression?
-
----
-
-## Chapter 39: Deployment and Operations
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- How Zelyra web applications are deployed to production environments.
-- How to package and operate your application inside lightweight Docker containers.
-- How Zelyra connects to a production MariaDB cluster.
-- How to maintain high availability using the built-in HTTP server with `zelyra serve`.
-
-### 2. Why is this topic important?
-Software is of little value if it only runs on a developer's local workstation. It must operate reliably 24/7 in production or cloud infrastructure. In traditional technology stacks, deployment often involves labyrinthine configurations of PHP-FPM, Apache/Nginx reverse proxies, and process managers. Zelyra radically simplifies operations: a single configuration file and a lightweight binary container are all you need.
-
-### 3. Understandable explanation without unnecessary jargon
-Zelyra includes its own high-performance, asynchronous web server:
-```bash
-zelyra serve src/main.zyl 0.0.0.0:8080
-```
-For professional production deployments, you package your application into a Docker container:
-- The container contains the compiled Zelyra binary, your project source files, and `zelyra.toml`.
-- On startup, the container automatically runs database schema migrations via `zelyra db apply` and launches the web server.
-
-### 4. Small, progressive examples
-
-**Example 1: Production-ready project configuration**
-```toml
-# zelyra.toml
-[package]
-name = "tasks_production"
-version = "1.0.0"
-
-[capabilities]
-database = true
-filesystem = false
-network = true
-```
-
-**Example 2: Clean web server entry point**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_prod"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    done: Bool default false
-}
-
-page "/" {
-    html {
-        <h1>Zelyra Task Manager Live</h1>
-        <p>Production system active and secure.</p>
-    }
-}
-```
-
-**Example 3: Server startup commands**
-On your production host or orchestration cluster:
-```bash
-zelyra db apply src/main.zyl
-zelyra serve src/main.zyl 0.0.0.0:80
-```
-
-### 5. Typical errors and their causes
-- **Error:** Starting the web server before applying database migrations (`zelyra db apply`).
-  *Cause:* New tables and columns must exist in MariaDB before incoming HTTP requests attempt to query them.
-- **Error:** Forgetting to expose port `8080` in Docker.
-  *Cause:* Ensure your `docker run` command or compose definition includes `-p 8080:8080`.
-
-### 6. Key takeaways
-1. `zelyra serve` launches the built-in HTTP server without external web server dependencies.
-2. `zelyra db apply` safely migrates production schemas to the latest version.
-3. Explicit capability constraints in `zelyra.toml` harden your production server against unauthorized system access.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Launch your web application locally on port 3000 using `zelyra serve main.zyl 127.0.0.1:3000`.
-- **Level 2 (Medium):** Author a `docker-compose.yml` file orchestrating MariaDB and your Zelyra application container.
-- **Level 3 (Challenging):** Simulate a production schema update: add a new column, run `zelyra db plan` to review SQL statements, and execute `zelyra db apply`.
-
-### 8. Practical project task: Task Management
-Consolidate all production deployment settings for our Task Management system:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_production"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    completed: Bool default false
-}
-
-page "/" {
-    html {
-        <html>
-            <body>
-                <h1>Task Management - Production System</h1>
-                <p>System ready for user traffic.</p>
-            </body>
-        </html>
-    }
-}
-```
-
-### 9. Summary
-- Zelyra applications run directly and performantly without complex server stack dependencies.
-- Database migrations, type-checked schemas, and web serving mesh seamlessly into one unified workflow.
-
-### 10. Self-check review questions
-1. Which command launches the integrated web application server?
-2. Why must `zelyra db apply` be executed prior to starting the production HTTP server?
-3. What architectural advantages does an embedded HTTP server offer over external web server setups?
-
-# PART X â€“ CAPSTONE PROJECT AND LOOKING AHEAD
-
----
-
-## Chapter 40: The Grand Capstone Project: Complete Task Management
-
-### 1. What will I learn in this chapter?
-In this grand finale, you will learn:
-- How all the individual building blocks learned throughout this book fuse into a cohesive, production-ready application.
-- How databases, authentication, role permissions, CRUD dashboards, REST APIs, and business contracts mesh seamlessly together.
-- How to read, understand, compile, and deploy the entire monolithic application on a live server.
-
-### 2. Why is this topic important?
-Understanding isolated code snippets is one thingâ€”building a real, production-ready web application from a single cohesive blueprint is the true craft of software engineering. This capstone project demonstrates the extraordinary elegance of Zelyra: in a single, well-structured file, you create a database-backed, authenticated web system with UI views and REST APIs that would require dozens of fragmented files in legacy frameworks.
-
-### 3. Understandable explanation without unnecessary jargon: Overview of the Complete Project
-Our complete Task Management application comprises:
-1. **Database & Schema Persistence:** Target MariaDB engine with relational tables for tasks (`tasks`), users (`users`), sessions (`auth_sessions`), and permissions (`user_permissions`).
-2. **Authentication:** Integrated `auth users` mechanism with protected session tokens and secure Argon2 password hashing.
-3. **Business Domain Logic:** Pure functions governed by formal contracts (`requires`, `ensures`) for calculating completion rates and priority classifications.
-4. **CRUD Interface:** Full administrative web dashboard featuring card-mode listings, detail views, creation/edit forms, and safe deletion workflows.
-5. **REST API:** Strongly typed JSON endpoints for programmatic external access.
-
-### 4. Small, progressive examples: The Complete Project: Final Source Code
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks_app"
-}
-
-// ==========================================
-// 1. AUTHENTIFIZIERUNG & BENUTZERVERWALTUNG
-// ==========================================
-
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-// ==========================================
-// 2. AUFGABEN-DATENMODELL
-// ==========================================
-
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(120) required
-    beschreibung: String(500)
-    prioritaet: Int default 2
-    erledigt: Bool default false
-}
-
-// ==========================================
-// 3. GESCHÃ„FTSLOGIK MIT VERTRÃ„GEN
-// ==========================================
-
-fn berechne_erfolgsquote(erledigte: Int, gesamt: Int) -> Int
-    requires { gesamt > 0 && erledigte >= 0 && erledigte <= gesamt }
-    ensures { result >= 0 && result <= 100 }
-{
-    return (erledigte * 100) / gesamt
-}
-
-fn prioritaet_label(stufe: Int) -> String {
-    match stufe {
-        1 => {
-            return "HOCH"
-        }
-        2 => {
-            return "MITTEL"
-        }
-        3 => {
-            return "NIEDRIG"
-        }
-        _ => {
-            return "NORMAL"
-        }
-    }
-}
-
-// ==========================================
-// 4. WEBOBERFLÃ„CHE & CRUD-SCHNITTSTELLE
-// ==========================================
-
-crud Task -> tasks {
-    title: "Zelyra Aufgabenverwaltung"
-
-    view {
-        fields {
-            name
-            prioritaet
-            erledigt
-        }
-
-        list {
-            mode: cards
-            empty: "Keine Aufgaben vorhanden. Erstelle deine erste Aufgabe!"
-        }
-
-        detail {
-            mode: cards
-            title: "Aufgabendetails"
-        }
-
-        form {
-            mode: cards
-            title: "Aufgabe bearbeiten"
-            submit: "Aufgabe sichern"
-        }
-
-        delete {
-            title: "Aufgabe entfernen"
-            message: "Moechtest du diese Aufgabe wirklich loeschen?"
-            submit: "Jetzt loeschen"
-        }
-    }
-
-    action abschliessen {
-        label: "Als erledigt markieren"
-        confirm: "Aufgabe abschliessen?"
-
-        sql {
-            UPDATE tasks
-            SET erledigt = true
-            WHERE id = :id
-        }
-
-        success "Aufgabe erfolgreich abgeschlossen."
-        redirect "/tasks"
-    }
-}
-
-// ==========================================
-// 5. REST-API ENDPUNKTE
-// ==========================================
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-api POST "/api/tasks" {
-    input {
-        name: String
-        prioritaet: Int
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-// ==========================================
-// 6. STARTSEITE
-// ==========================================
-
-page "/" {
-    html {
-        <html>
-            <head>
-                <title>Zelyra Aufgaben-System</title>
-            </head>
-            <body>
-                <h1>Zelyra Aufgabenverwaltung</h1>
-                <p>Das vollstaendige Abschlussprojekt ist einsatzbereit.</p>
-                <a href="/tasks">Zur Aufgabenuebersicht</a>
-            </body>
-        </html>
-    }
-}
-
-// ==========================================
-// 7. EINSTIEGSPUNKT
-// ==========================================
-
-fn main() {
-    print("Zelyra Aufgabenverwaltung vollstaendig initialisiert.")
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Launching the web server before executing `zelyra db apply`.
-  *Cause:* MariaDB tables and columns must be migrated before incoming web traffic can be serviced.
-- **Error:** Missing database credentials in your `.env` configuration.
-  *Cause:* Ensure `DB_HOST`, `DB_USER`, and `DB_PASSWORD` are configured in your local `.env` file.
-
-### 6. Key takeaways
-1. In Zelyra, a complete, secure web application is declared in one cohesive, maintainable source file.
-2. Type safety, contracts, user authentication, and REST APIs integrate with zero boilerplate.
-3. This application compiles instantly with `zelyra check` and serves live traffic via `zelyra serve`.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Compile the complete project using `zelyra check` and verify that 0 errors are reported.
-- **Level 2 (Medium):** Extend the `tasks` schema with a `faellig_am: Date` deadline field and update the form and list views accordingly.
-- **Level 3 (Challenging):** Set up a local MariaDB instance, apply the schema with `zelyra db apply`, and create your first real production tasks through your web browser.
-
-### 8. Practical project task: Task Management - Launching Your Own Production Server
-Initialize the project directory and start the server:
-```bash
-zelyra new task_manager --template minimal
-cd task_manager
-# Insert the complete source code above into src/main.zyl
-zelyra check src/main.zyl
-zelyra serve src/main.zyl 0.0.0.0:8080
-```
-Navigate to `http://localhost:8080` in your browserâ€”your own live Zelyra application is operational!
-
-### 9. Summary
-- The capstone project unites all nine preceding parts of this textbook into one production-grade system.
-- You have learned how to build modern, fault-tolerant web applications from the ground up.
-
-### 10. Self-check review questions
-1. What components were successfully combined in the capstone project?
-2. Why does Zelyra require so few lines of code to deliver a comprehensive CRUD system?
-3. What sequential steps are required to deploy this project to a fresh production server?
-
----
-
-## Chapter 41: The Zelyra Roadmap (From 0.3.0 to 1.0)
-
-### 1. What will I learn in this chapter?
-In this chapter, you will learn:
-- The developmental lifecycle of Zelyra: what the experimental 0.3.0 release delivers and what comes next.
-- Planned features for the next milestones: complete modules, package management, and WebAssembly compilation.
-- How backward compatibility and stability guarantees are maintained through version 1.0.
-
-### 2. Why is this topic important?
-A programming language is a living ecosystem. When you invest time into mastering Zelyra, you want assurance that the language has a clear strategic roadmap, professional stewardship, and that existing code remains compatible in future releases.
-
-### 3. Understandable explanation without unnecessary jargon: Roadmap Overview
-Zelyra's roadmap is structured across implementation phases and release
-milestones:
-- **Phases 1 to 3 (Foundations):** Lexer, parser, AST, static type checker, control flow, functions, and formal contracts (`requires`, `ensures`). *(Completed)*
-- **Phases 4 to 6 (Database & Data):** MariaDB and SQLite engines, type-checked `sql<T[]>`, migrations, transactions, FileSystem and Clock capabilities. *(Completed)*
-- **Phases 7 to 9 (Web & Security):** `page`, `html`, `form` with CSRF/XSS protection, `crud` views, `auth` with Argon2, `api` with automated OpenAPI schema generation, Typed Holes, and structured JSON diagnostics. *(Completed)*
-- **0.3.0 (current experimental release):** tested compiler and database
-  paths, installer and update check, generated business applications, and
-  Linux and Windows x86_64 release artifacts. Human onboarding acceptance was
-  deferred to the mandatory 0.4.0 gate.
-- **0.2.0 (previous release):** typed maps, declarative search, filtering and
-  pagination, reusable views and slots, generated CRUD, authentication and
-  permissions, audit support, setup/doctor tooling, and machine-readable
-  compiler interfaces.
-- **0.4.0 (proposed):** modules, database lifecycle, safer account/API
-  workflows, and independent human onboarding acceptance. See the [release
-  plan](../../release-plans/0.4.0.en.md).
-- **Later milestones:** a package manager, WebAssembly compilation, and any
-  LTS commitment remain future work. The current branch has an experimental
-  import slice for functions, types, records, tables, views, components, and
-  project-wide database configuration. It is not in release 0.3.0 and does
-  not yet provide a complete, stable project-module model.
-
-### 4. Small, progressive examples: Zelyra's Guarantees to Developers
-- **No breaking changes without deprecation cycles:** Syntax changes are introduced with generous transition periods and explicit compiler hints.
-- **Formal language specification:** Every language construct is grounded in an unambiguous formal grammar.
-
-### 5. Typical errors and their causes: Common Misconceptions
-- **Misconception:** "Zelyra 0.3.0 is production-ready because its core paths work."
-  *Correction:* Zelyra 0.3.0 is an experimental, tested scope. The repository
-  documents its supported paths and residual risks; production approval is not
-  claimed.
-- **Misconception:** Assuming that imports work in every Zelyra version like they do in another language.
-  *Correction:* Published 0.3.0 has no module imports. The current development branch supports static, project-local imports for a limited set of declarations through `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact`; complete module packaging, visibility, and tool integration remain planned.
-
-### 6. Key takeaways
-1. Zelyra follows a disciplined, transparent roadmap from the current 0.3.0
-   release toward later milestones.
-2. The core platform has tested experimental paths for database integration,
-   web applications, static safety, and AI-native tooling; it is not approved
-   for production today.
-3. A complete module model, package distribution, and WebAssembly remain
-   future work; the current development branch has a limited experimental
-   multi-file compiler slice.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
-- **Level 2 (Medium):** Compare the features implemented in Phase 9 with the milestones planned for Phase 11.
-- **Level 3 (Challenging):** Write an architectural proposal for a future reusable Zelyra package you plan to publish once Phase 12 launches.
-
-### 8. Practical project task: Task Management - Auditing Zelyra Version and Environment
-Verify your installed toolchain version and validate your host runtime environment:
-```bash
-zelyra --version
-zelyra doctor
-```
-
-### 9. Summary
-- Zelyra is advancing steadily and methodically toward its 1.0 LTS milestone.
-- The modular phased development methodology guarantees predictable, rock-solid evolution without breaking developer workflows.
-
-### 10. Self-check review questions
-1. Which core capabilities are implemented in the tested 0.3.0 scope?
-2. Which future milestone is planned for granular `import` statements?
-3. Why does the experimental status matter before deploying Zelyra to production?
-
----
-
-## Chapter 42: Your Journey as a Zelyra Developer
-
-### 1. What will I learn in this chapter?
-In this final chapter, you will learn:
-- How to deepen your acquired expertise and apply it to ambitious real-world applications.
-- Core architectural principles for engineering durable, maintainable software systems.
-- How to participate in the growing Zelyra community and contribute to its open-source ecosystem.
-
-### 2. Why is this topic important?
-Programming cannot be mastered merely by reading; it is mastered by building. This textbook has provided you with a rigorous foundationâ€”now your personal journey as an autonomous software engineer begins. With Zelyra, you command a modern, statically verified, and future-proof language engineered to support you at every stage of development.
-
-### 3. Understandable explanation without unnecessary jargon: The Five Golden Rules for Zelyra Developers
-1. **Model First:** Always initiate projects with your `table` schema. A well-modeled data schema eliminates half of all future implementation defects.
-2. **Define Contracts:** Anchor critical functions with `requires` and `ensures`. Contracts simultaneously serve as live documentation, formal verification, and unit tests.
-3. **Grant Capabilities Deliberately:** Keep the vast majority of your codebase purely functional (zero capabilities), and isolate external side effects explicitly.
-4. **Treat Errors as Values:** Leverage `Result` and `Option`. Eliminate excuses for unhandled runtime crashes and null-pointer exceptions.
-5. **Collaborate with AI:** Exploit Zelyra's `--format json` diagnostics and Typed Holes `_` to turn modern AI coding assistants into reliable, high-velocity copilots.
-
-### 4. Small, progressive examples: Architectural Patterns and Best Practices
-
-**Example 1: Pure functions safeguarded by contracts**
-```zelyra
-fn calculate_completion_percentage(completed: Int, total: Int) -> Int
-    requires { total > 0 && completed >= 0 && completed <= total }
-    ensures { result >= 0 && result <= 100 }
-{
-    return (completed * 100) / total
-}
-
-fn main() {
-    print(calculate_completion_percentage(4, 5))
-}
-```
-
-**Example 2: Explicit capability boundaries separating domain logic from I/O**
-```zelyra
-fn format_system_status(service_name: String, is_active: Bool) -> String {
-    if is_active {
-        return service_name + " is active."
-    }
-    return service_name + " is offline."
-}
-
-fn log_status(message: String) uses FileSystem {
-    write_text("system.log", message)
-    print("Logged: " + message)
-}
-
-fn main() uses FileSystem {
-    status = format_system_status("TaskWorker", true)
-    log_status(status)
-}
-```
-
-### 5. Typical errors and their causes
-- **Error:** Abandoning contracts and type safety when rushing through new projects.
-  *Cause:* In the long run, skipped contracts cause difficult-to-trace regression bugs. Invest the few seconds to specify `requires` and `ensures`.
-- **Error:** Over-assigning capabilities indiscriminately.
-  *Cause:* Giving every function `uses Database, FileSystem, Network` defeats the purpose of the capability security model.
-
-### 6. Key takeaways
-1. Software quality starts with a clean data schema and contract-based design.
-2. Pure functions make up the reliable core of your application; side effects are strictly declared capabilities.
-3. Continuous learning and practical coding are the keys to becoming an accomplished Zelyra developer.
-
-### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
-- **Level 1 (Easy):** Review your previous code snippets from earlier chapters and verify that all functions have descriptive parameter names.
-- **Level 2 (Medium):** Take one of your earlier exercises and add strict `requires` and `ensures` contracts to all calculation functions.
-- **Level 3 (Challenging):** Draft a complete architecture plan (database schema, capabilities, pure domain functions, and REST routes) for one of the suggested next projects.
-
-### 8. Practical project task: Task Management - Final Reflection and System Extension Ideas
-Reflect on the complete Task Management system built across this textbook and consider extensions:
-- **Personal Household Budget:** Incomes, expenditures, categories, and monthly summaries utilizing Zelyra CRUD.
-- **Support Ticket System:** Customer inquiries, priority escalation, staff assignments, and automated email dispatches.
-- **Client & Project Time Tracking:** Timesheet tracking with `uses Clock` and billing reports exported as structured JSON.
-
-### 9. Summary
-Congratulations! You have successfully mastered all 10 parts and 42 chapters of *Learning Zelyra*. You master the fundamentals, type system, error handling, databases, web applications, APIs, and secure software architecture. You are now equipped to create your own robust, production-grade applications with Zelyra!
-
-### 10. Self-check review questions
-1. Which unique feature of Zelyra do you appreciate most after completing this course?
-2. Why is the seamless interplay of language, compiler, and database in Zelyra so revolutionary?
-3. Which project will you build next with Zelyra?
-
-# TECHNICAL REFERENCE MANUAL
-
-## 1. What makes Zelyra different
-
-A typical business application describes the same fact repeatedly: in the
-database, backend, form, and API. Zelyra aims to turn those copies into one
-traceable chain:
-
-~~~text
-Table â†’ Types â†’ SQL â†’ Forms â†’ CRUD â†’ Web page â†’ API/OpenAPI
-~~~
-
-This field:
-
-~~~zelyra
-email: Email?
-~~~
-
-already says that the value is an email address, may be absent, affects SQL
-nullability, can select a suitable form control, and must be handled safely by
-views.
-
-SQL remains SQL. Zelyra does not force a respectable `JOIN` to disguise itself
-as a 38-link method chain. SQL has suffered enough.
-
-## 2. Installation
-
-### Prerequisites
-
-For language examples, you need:
-
-- Linux, macOS, or Windows (PowerShell/WSL);
-- `curl`;
-- a working shell.
-
-MariaDB is required only for database, form actions, auth, and CRUD examples.
-
-### Install from the repository
-
-~~~bash
-git clone https://github.com/sf1976/zelyra.git
-cd zelyra
-./install.sh
-~~~
-
-The installer is repeatable and user-local. Control options:
-
-~~~bash
-./install.sh --help
-./install.sh --dry-run --root "$HOME/.local"
-./install.sh --check
-./install.sh --uninstall
-~~~
-
-Use `--no-rustup` to disable automatic Rust installation; `--no-path` suppresses PATH instructions. With `--root PATH` or `ZELYRA_INSTALL_ROOT`, you can choose a different user-local target. Outdated `cargo` PATH entries are detected and not executed blindly.
-
-Published releases for Linux x86_64 and Windows x86_64 can be installed without Rust or Cargo. The archive is downloaded over HTTPS and verified with SHA-256:
-
-~~~bash
-./install.sh --release v0.3.0
-~~~
-
-On Windows, `install.ps1` is available for PowerShell and `install.cmd` for the Command Prompt:
-
-~~~powershell
-git clone https://github.com/sf1976/zelyra.git
-Set-Location zelyra
-.\install.ps1
-zelyra --version
-~~~
-
-Release archive installation on Windows:
-
-~~~powershell
-.\install.ps1 -Release v0.3.0
-~~~
-
-Then:
-
-~~~bash
-zelyra --version
-zelyra --help
-~~~
-
-If your shell cannot find `zelyra`:
-
-~~~bash
-export PATH="$HOME/.local/bin:$PATH"
-~~~
-
-### Docker and container environment
-
-Zelyra does not install Docker itself, modify operating-system packages, or request root privileges. For container and MariaDB workflows, Docker with Compose support is required:
-
-- **Linux:** Follow the [official Linux installation guide](https://docs.docker.com/engine/install/).
-- **Windows:** Use [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/) with Compose support.
-- **macOS:** Use [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
-
-Verify Docker Compose before first run:
-
-~~~bash
-docker compose version
-~~~
-
-If Docker is installed but access to its socket is denied, Zelyra reports a safe Linux group-membership remedy (`sudo usermod -aG docker $USER`) instead of raw Docker errors. Port collisions are also reported safely without exposing credentials.
-
-### Updating Zelyra
-
-An update consists of two separate parts: updating the compiler in the compiler repository, and verifying your application project. Your `.zyl` files, `zelyra.toml`, and `.env` live in your application project and are never overwritten by `install.sh`.
-
-#### Update from the Git repository
-
-~~~bash
-cd /path/to/zelyra
-git status --short
-git pull --ff-only origin main
-cargo check --workspace
-./install.sh
-zelyra doctor /path/to/your-project/main.zyl --json
-~~~
-
-Check the installed version with `zelyra --version`:
-
-~~~bash
-zelyra --version
-~~~
-
-## 3. Your first program
-
-Create `hello.zyl`:
-
-~~~zelyra
-fn main() {
-    print("Hello from Zelyra")
-}
-~~~
-
-Run it:
-
-~~~bash
-zelyra run hello.zyl
-~~~
-
-A slightly more ambitious program:
-
-~~~zelyra
-fn fibonacci(n: Int) -> Int {
-    if n <= 1 {
-        return n
-    }
-
-    return fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    print(fibonacci(10))
-}
-~~~
-
-The result is `55`. The computer survived. We may continue.
-
-## 4. Create a project and use the CLI
-
-### Compiler repository and application projects
-
-The GitHub repository `sf1976/zelyra` is the compiler repository. It contains lexer, parser, runtime, database, and web modules, as well as the CLI. Your own application is a separate directory. You do not need to work inside the Zelyra compiler source, and you should never store credentials there.
-
-The project root is the directory containing your Zelyra source file and, if present, `zelyra.toml`.
-
-### âœ… Create projects with the CLI
-
-~~~bash
-zelyra new addressbook
-cd addressbook
-zelyra run main.zyl
-~~~
-
-Initialize an existing directory:
-
-~~~bash
-mkdir addressbook
-cd addressbook
-zelyra init
-~~~
-
-For a local MariaDB and web-server template:
-
-~~~bash
-zelyra new machine-management --mariadb
-cd machine-management
-~~~
-
-This creates `main.zyl`, `.env.example`, `Dockerfile`, `docker-compose.mariadb.yml`, and a protected `.env` with random passwords.
-
-**Automatic Port Selection on Conflict:**
-If default ports `3000` (web) or `3306` (MariaDB) are occupied, `zelyra new`, `zelyra init`, and `zelyra setup` automatically select the next free host ports and record them in `.env`. The optional `--web-port <p>`, `--host-port <p>`, and `--db-host-port <p>` flags enforce exact ports.
-
-### âœ… Zelyra Setup Assistant (Console and Web)
-
-`zelyra setup` provides unified setup actions across CLI and browser:
-
-#### Console setup
-
-From a MariaDB project directory:
-
-~~~bash
-zelyra setup
-zelyra setup --database
-zelyra setup --schema
-zelyra setup --all
-zelyra setup --host-port 18080 --db-host-port 3308
-~~~
-
-- `zelyra setup`: Creates a protected `.env` if missing. Existing `.env` files are never overwritten.
-- `zelyra setup --database`: Starts Compose services (detects `docker compose` or legacy `docker-compose`).
-- `zelyra setup --schema`: Starts services and safely applies the schema from `main.zyl`.
-- `zelyra setup --all`: Executes configuration, container startup, and schema migration in one step.
-
-#### Local browser setup (`zelyra setup --web`)
-
-~~~bash
-zelyra setup --web
-~~~
-
-The server binds strictly to `127.0.0.1:3030` by default and outputs a one-time URL with a secure random token:
-
-~~~text
-Zelyra setup web is running on http://127.0.0.1:3030/
-open: http://127.0.0.1:3030/?token=<local-token>
-~~~
-
-- Provides browser actions to configure `.env`, start containers, and apply schemas.
-- Strictly local-only for security; never expose to public interfaces.
-- If port `3030` is busy, the assistant automatically chooses the next free port. Stop with `Ctrl+C`.
-
-Verify your project state non-destructively:
-
-~~~bash
-zelyra doctor main.zyl --env-file .env
-~~~
-
-For a complete business starter project:
-
-~~~bash
-zelyra new machine-management --template mariadb-crud
-cd machine-management
-zelyra setup --all
-~~~
-
-## 5. Variables, types, and functions
-
-Values are immutable by default:
-
-~~~zelyra
-machine_name = "Press 7"
-capacity: Int = 120
-active = true
-~~~
-
-Mutation is explicit:
-
-~~~zelyra
-mutable completed = 0
-completed = completed + 1
-~~~
-
-The compiler is not paranoid. It has simply seen things.
-
-Core types include:
-
-~~~text
-Int UInt Float Decimal Bool String Char Bytes
-Timestamp Date Time Duration Email Url Uuid Money
-~~~
-
-Functions are typed:
-
-~~~zelyra
-fn available_capacity(total: Int, reserved: Int) -> Int {
-    return total - reserved
-}
-~~~
-
-Nominal IDs keep domains separate:
-
-~~~zelyra
-type MachineId = Id
-type OrderId = Id
-~~~
-
-An `OrderId` is not a `MachineId`, even when both look similar underneath.
-Business mistakes do not become correct by sharing a storage type.
-
-## 6. Option, Result, and pattern matching
-
-Ordinary types are never null. Absence is explicit:
-
-~~~zelyra
-email: Email?
-~~~
-
-Handle both cases:
-
-~~~zelyra
-match email {
-    Some(value) => print(value)
-    None => print("No email address")
-}
-~~~
-
-Pattern matching must be exhaustive, preventing the forgotten case that would
-otherwise introduce itself during a Friday deployment.
-
-Functions expose failures through their return type. The current language core
-uses `Result<T, E>` with `Ok` or `Err`:
-
-~~~zelyra
-fn load_number(found: Bool) -> Result<Int, String> {
-    if found {
-        return Ok(42)
-    }
-    return Err("not found")
-}
-~~~
-
-## 7. MariaDB and tables
-
-âœ… MariaDB is the default backend and primary runtime reference. The generated
-Compose template uses `mariadb:11`; the compiler does not enforce a specific
-MariaDB server version. Database commands call the external `mariadb` client.
-
-~~~zelyra
-database main {
-    engine: mariadb
-}
-
-table departments {
-    id: Id primary auto
-    name: String(100) required unique
-}
-
-table machines {
-    id: Id primary auto
-    number: String(30) required unique
-    name: String(100) required
-    department: Department required
-    active: Bool default true
-}
-~~~
-
-Zelyra recognizes the relationship and can use it for foreign keys, forms, and
-select controls.
-
-| Zelyra | MariaDB |
-|---|---|
-| `Id primary auto` | generated primary ID |
-| `String(100)` | `VARCHAR(100)` |
-| `String` | `TEXT` |
-| `Email` | email-compatible text column |
-| `Bool` | Boolean database value |
-| `Timestamp` | timestamp value |
-
-### Prepare MariaDB safely
-
-Create a dedicated database and application user. Do not run the Zelyra web
-server as the MariaDB `root` account. The following is run as an administrative
-MariaDB user; the password is requested interactively:
-
-~~~bash
-mariadb --host=127.0.0.1 --port=3307 --user=root --password
-~~~
-
-~~~sql
-CREATE DATABASE `address_book`
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_unicode_ci;
-
-CREATE USER 'zelyra'@'127.0.0.1'
-    IDENTIFIED BY 'ENTER_A_LOCAL_PASSWORD_HERE';
-
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
-    ON `address_book`.* TO 'zelyra'@'127.0.0.1';
-
-SHOW GRANTS FOR 'zelyra'@'127.0.0.1';
-~~~
-
-Use `IF NOT EXISTS` when the database must be repeatably prepared. The grants
-are deliberately limited to this database; never use `GRANT ALL ON *.*` in an
-application quickstart. InnoDB is the expected engine for transactions and
-foreign keys, but the current Zelyra SQL generator does not add
-`ENGINE=InnoDB` itself. Inspect and supplement generated SQL before applying it
-if your server policy requires that clause.
-
-The listed grants cover normal CRUD work and the initial schema. A destructive
-`db apply --allow-destructive` may additionally need `DROP`; grant it only
-deliberately and, where possible, temporarily. `db setup` is an administrator
-operation because it creates the database itself.
-
-The generated Compose file publishes `127.0.0.1:3306` by default. If that host
-port is occupied, change its binding to `127.0.0.1:3307:3306`: the host port is
-then `3307`, while MariaDB remains on `3306` inside the container. Another
-Compose service connects to host `mariadb` and port `3306`; a host process uses
-`127.0.0.1` and the published port.
-
-### Inspect the address schema
-
-For the example, `zelyra db create src/main.zyl` currently produces, in essence:
-
-~~~sql
-CREATE TABLE IF NOT EXISTS `addresses` (
-    `id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
-    `first_name` VARCHAR(100) NOT NULL,
-    `last_name` VARCHAR(100) NOT NULL,
-    `street` VARCHAR(150) NOT NULL,
-    `postal_code` VARCHAR(10) NOT NULL,
-    `city` VARCHAR(100) NOT NULL,
-    `email` VARCHAR(255)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-~~~
-
-For MariaDB, the generated table statements include
-`ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
-The output is therefore ready for the documented MariaDB baseline, but it is
-still a reviewed schema proposal: inspect `db plan` before applying changes to
-an existing database.
-
-### Additional database backends
-
-Besides MariaDB, the schema CLI can currently process SQLite and PostgreSQL.
-Select the backend in the `.zyl` file:
-
-~~~zelyra
-database main { engine: sqlite database: "address-book.sqlite3" }
-database main { engine: postgres database: "address-book" }
-~~~
-
-For SQLite, `DATABASE_URL` uses the `sqlite://` or `sqlite:` scheme; MariaDB
-accepts `mariadb://` and the compatible `mysql://` name. The `create`,
-`inspect`, `plan`, and `apply` schema operations account for tables, columns,
-foreign keys, and indexes. Automatic database creation through `db setup` and
-`db bootstrap` currently supports MariaDB and SQLite; for PostgreSQL use
-`db create`, `db inspect`, `db plan`, and then `db apply`.
-
-~~~bash
-export DATABASE_URL='sqlite:///tmp/address-book.sqlite3'
-zelyra db bootstrap src/main.zyl
-zelyra db inspect src/main.zyl
-~~~
-
-The native SQL runtime is still primarily exercised with MariaDB. A supported
-schema backend therefore does not automatically mean that every runtime query
-behaves identically on every backend.
-
-## 8. Inspecting and applying schemas
-
-Zelyra uses no migration classes. The source file is the desired schema; the
-CLI compares it with the current database. The actual workflow is:
-
-1. Check the source: `zelyra check src/main.zyl`.
-2. Print SQL only: `zelyra db create src/main.zyl`.
-3. Read the current schema: `zelyra db inspect src/main.zyl`.
-4. Plan the difference: `zelyra db plan src/main.zyl`.
-5. Read the plan and assess its risk.
-6. Apply only after review: `zelyra db apply src/main.zyl`.
-
-Supply the connection only through the process environment:
-
-~~~bash
-export DATABASE_URL='mariadb://zelyra:ENTER_A_LOCAL_PASSWORD_HERE@127.0.0.1:3307/address_book'
-~~~
-
-âš ï¸ Zelyra does **not** load `.env` automatically. It is a safe local place to
-store values, but the process must receive the variables before the CLI runs;
-see section 16.
-
-Print the desired SQL:
-
-~~~bash
-zelyra db create src/main.zyl > sql/addresses.generated.sql
-~~~
-
-If you added `ENGINE=InnoDB` and the charset clauses after review, apply that
-exact file manually with the MariaDB client:
-
-~~~bash
-mariadb --host=127.0.0.1 --port=3307 --user=zelyra --password \
-    address_book < sql/addresses.generated.sql
-~~~
-
-`zelyra db apply` does not read an edited SQL file; it regenerates its plan from
-the `.zyl` source. Use either the unchanged Zelyra plan or the reviewed manual
-client path, rather than blindly doing both.
-
-Inspect, plan, and apply:
-
-~~~bash
-zelyra db inspect src/main.zyl
-zelyra db plan src/main.zyl
-zelyra db apply src/main.zyl
-~~~
-
-Destructive changes require explicit permission:
-
-~~~bash
-zelyra db apply src/main.zyl --allow-destructive
-~~~
-
-That flag does not mean â€œprobably fine.â€ It means â€œI read the plan, have a
-backup, and my pulse is normal.â€
-
-For MariaDB, `db setup` and its `db bootstrap` alias first try to create the
-database and then apply the generated schema. `DATABASE_URL` therefore needs
-administrative privileges for that operation. An application user with limited
-grants should use `db create` and have an administrator apply the SQL instead.
-Without `DATABASE_URL`, `db plan` can plan against an empty schema; that is a
-preview, not a connection test.
-
-âŒ There is no `zelyra db check`, `zelyra schema inspect`, `zelyra schema plan`,
-or `zelyra schema apply` command. The actual readiness test is
-`zelyra doctor src/main.zyl`; it checks static rules, Cargo, `DATABASE_URL`
-when set, and the local web port.
-
-### In 10 minutes to a first Zelyra application
-
-These steps consistently use the directory `address-book`, source file
-`src/main.zyl`, database `address_book`, user `zelyra`, and host port `3307`.
-
-1. Create the project and copy the environment template:
-
-   ~~~bash
-   zelyra new address-book --mariadb
-   cd address-book
-   cp .env.example .env
-   ~~~
-
-2. Put local placeholder values into `.env`. Compose reads the `MARIADB_*`
-   values when the container is first initialized; Zelyra itself reads only
-   `DATABASE_URL`. Change the Compose binding to `127.0.0.1:3307:3306` before
-   starting it.
-
-3. Start MariaDB:
-
-   ~~~bash
-   docker compose -f docker-compose.mariadb.yml up -d mariadb
-   docker compose -f docker-compose.mariadb.yml ps
-   ~~~
-
-4. As a MariaDB administrator, create the database and user with the SQL from
-   section 7. Use an obvious local placeholder, never a real password in docs.
-
-5. Save the valid address-book source as `src/main.zyl` and check it:
-
-   ~~~bash
-   zelyra check src/main.zyl
-   ~~~
-
-6. Load `DATABASE_URL` into the process and test readiness. `.env` is not
-   automatically loaded by Zelyra:
-
-   ~~~bash
-   set -a
-   . ./.env
-   set +a
-   zelyra doctor src/main.zyl --json
-   ~~~
-
-7. Generate and inspect SQL:
-
-   ~~~bash
-   zelyra db create src/main.zyl > sql/addresses.generated.sql
-   sed -n '1,160p' sql/addresses.generated.sql
-   ~~~
-
-8. Inspect and plan:
-
-   ~~~bash
-   zelyra db inspect src/main.zyl
-   zelyra db plan src/main.zyl
-   ~~~
-
-9. Apply only after review:
-
-   ~~~bash
-   zelyra db apply src/main.zyl
-   ~~~
-
-10. Start the web server. A CRUD route also needs a web definition accepted by
-    the server; `crud` alone is not a static export:
-
-    ~~~bash
-    zelyra serve src/main.zyl 127.0.0.1:3000
-    ~~~
-
-On Windows, use `Copy-Item` and set the process variable in PowerShell:
-
-~~~powershell
-Copy-Item .env.example .env
-$env:DATABASE_URL = 'mariadb://zelyra:ENTER_A_LOCAL_PASSWORD_HERE@127.0.0.1:3307/address_book'
-zelyra doctor src/main.zyl --json
-~~~
-
-The generated Compose template publishes host port `3306` by default. `3307`
-in this handbook is a deliberate alternative to avoid a collision; change the
-Compose port binding before copying the quickstart.
-
-## 9. Native SQL
-
-âœ… SQL is a language element:
-
-~~~zelyra
-fn load_active_machines() -> Machine[]
-    uses Database
-{
-    return sql<Machine[]> {
-        SELECT id, number, name, department_id, active
-        FROM machines
-        WHERE active = true
-        ORDER BY number
-    }
-}
-~~~
-
-Named parameters are bound safely:
-
-~~~zelyra
-fn load_machine(id: MachineId) -> Machine?
-    uses Database
-{
-    return sql<Machine?> {
-        SELECT id, number, name, department_id, active
-        FROM machines
-        WHERE id = :id
-    }
-}
-~~~
-
-Where schema information is available, Zelyra checks tables, columns, aliases,
-parameters, nullability, result mappings, and the `Database` capability.
-
-Writes can be grouped in transactions:
-
-~~~zelyra
-transaction {
-    sql {
-        UPDATE machines
-        SET active = false
-        WHERE id = :id
-    }
-}
-~~~
-
-## 10. Web pages
-
-âœ… A complete, safe web layer with typed data bindings, declarative query controls, and reusable views is implemented.
-
-~~~zelyra
-page "/machines/{name}" {
-    html {
-        <html>
-            <body>
-                <h1>Machine {name}</h1>
-                <p>Running smoothly.</p>
-            </body>
-        </html>
-    }
-}
-~~~
-
-Start the web server:
-
-~~~bash
-zelyra serve app.zyl
-~~~
-
-Then visit:
-
-~~~text
-http://127.0.0.1:3000/machines/Press-7
-~~~
-
-Path parameters are HTML-escaped by default. The web core handles GET routes, path parameters, query strings, and HTML responses.
-
-### Typed view data loading and collection loops
-
-View interpolations are checked before the server starts. A page may load a typed record and use checked field access:
-
-~~~zelyra
-page "/customers/{name}" {
-    load customer = sql<Customer> {
-        SELECT id, name FROM customers WHERE name = :name
-    }
-    html { <h1>{customer.name}</h1> }
-}
-~~~
-
-SQL is checked against the schema, route parameters are safely bound, and capabilities and permissions are enforced. Collections can be rendered with a typed server-side loop:
-
-~~~zelyra
-page "/customers" {
-    load customers = sql<Customer[]> { SELECT id, name FROM customers }
-    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
-}
-~~~
-
-### Declarative web query controls: Search, sort, pagination, and filter
-
-Pages can declare typed query inputs for explicit SQL:
-
-~~~zelyra
-page "/customers" {
-    input { search: String? }
-
-    load customers = sql<Customer[]> {
-        SELECT id, name FROM customers
-        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
-        ORDER BY name
-    }
-
-    html { <p>Search: {search}</p> }
-}
-~~~
-
-For page collections declaring search, sorting, pagination, or filtering, Zelyra automatically generates semantic query controls and preserves URL state:
-
-~~~zelyra
-page "/customers" {
-    search { name email }
-    sort { name }
-    paginated 25
-    filter { name quantity }
-    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
-    html {
-        <p>Page: {page} of {pages} (Total: {total})</p>
-        <p>Sort: {sort} ({order})</p>
-    }
-}
-~~~
-
-- `search { name email }`: Compiler-checked whitelist for `?search=...`, parameterized `LIKE` query.
-- `sort { name }`: Accepts declared result fields; `order` accepts `asc` or `desc` (`/customers?sort=name&order=desc`).
-- `paginated 25`: Validates `page` as positive integer, applies parameterized `LIMIT`/`OFFSET`, and exposes `page`, `pages`, and `total` as `UInt`.
-- `filter { ... }`: Supports typed operators: text fields support `eq`, `contains`, `starts_with`, `ends_with`, and null checks; numeric fields additionally support `gt`, `gte`, `lt`, `lte`. Examples: `/customers?filter_name__contains=Acme` or `/customers?filter_quantity__gte=10`. Invalid operators return controlled HTTP 400.
-
-### Reusable view layouts and components
-
-A named view provides a reusable page layout with slots:
-
-~~~zelyra
-view SiteShell {
-    html {
-        <html><body><main><slot /></main></body></html>
-    }
-}
-
-page "/customers" {
-    view: SiteShell
-    html { <h1>Customers</h1> }
-}
-~~~
-
-Typed components declare properties via `props`:
-
-~~~zelyra
-component Badge {
-    props { text: String }
-    html { <span class="badge">{text}</span> }
-}
-
-page "/status" {
-    html { <Badge text="Ready" /> }
-}
-~~~
-
-Components accept child HTML through default and named slots with fallback content:
-
-~~~zelyra
-component Panel {
-    html {
-        <section class="panel">
-            <header><slot name="header">Default Header</slot></header>
-            <div class="body"><slot /></div>
-        </section>
-    }
-}
-
-page "/dashboard" {
-    html {
-        <Panel>
-            <slot name="header"><h1>My Dashboard</h1></slot>
-            <p>Main panel body content.</p>
-        </Panel>
-    }
-}
-~~~
-
-*Note:* Component slots nested inside a component invocation no longer require an outer page `view:` layout.
-
-## 11. Forms
-
-âœ… Forms can inherit table rules:
-
-~~~zelyra
-form MachineCreate -> machines {
-    fields {
-        number
-        name
-        department
-        active
-    }
-}
-~~~
-
-An explicit definition can add presentation and validation rules:
-
-~~~zelyra
-form ContactForm {
-    field email: Email {
-        label: "Email"
-        required
-        max: 255
-        widget: email
-    }
-}
-~~~
-
-Validate without a server:
-
-~~~bash
-zelyra form validate examples/customer_form.zyl CustomerCreate \
-    name="Example Ltd" email=info@example.test
-~~~
-
-With `zelyra serve`, Zelyra exposes a form at `/forms/FormName`. GET renders a
-CSRF token; POST checks the token and validates the submitted values.
-
-Database-backed action:
-
-~~~zelyra
-form CustomerCreate -> customers {
-    fields { name email }
-
-    action save {
-        requires auth
-        permits "customers.save"
-        sql {
-            INSERT INTO customers (name, email)
-            VALUES (:name, :email)
-        }
-
-        redirect "/customers"
-    }
-}
-~~~
-
-Form actions may declare their own authorization. The permission is checked
-when the form is rendered and again before submission.
-
-## 12. CRUD
-
-âœ… The shortest case is satisfyingly short:
-
-~~~zelyra
-crud Machine -> machines
-~~~
-
-Configured resource:
-
-~~~zelyra
-crud Machine -> machines {
-    title: "Machines"
-    list { number name department active }
-    search { number name }
-    filter { department active }
-}
-~~~
-
-Zelyra provides list and detail pages, Create/Edit forms, search, filters,
-allowlisted sorting, pagination, and CSRF-protected deletion. Configured fields
-are checked against the schema.
-
-Example URLs:
-
-~~~text
-/machines
-/machines?search=Press
-/machines?filter_active=true
-/machines?sort=number&order=asc
-/machines/new
-/machines/42/edit
-~~~
-
-ðŸ—ºï¸ Fully custom typed components and fine-grained view overrides are part of
-the continuing view roadmap.
-
-### CRUD views, actions, and soft delete
-
-ðŸ§ª The current CRUD layer can be customized inside the safe default paths. A
-list can use cards without losing search, filters, sorting, pagination, output
-escaping, or permission checks:
-
-~~~zelyra
-crud Customer -> customers {
-    view {
-        list {
-            mode: cards
-            empty: "No customers found."
-        }
-        detail {
-            mode: cards
-            title: "Customer details"
-        }
-        form {
-            mode: cards
-            title: "Customer form"
-            submit: "Save customer"
-        }
-        delete {
-            title: "Delete customer"
-            message: "This action cannot be undone."
-            submit: "Delete now"
-        }
-        loading { message: "Loading customers ..." }
-        error {
-            title: "Customers unavailable"
-            message: "Please try again later."
-        }
-    }
-}
-~~~
-
-For the common case, a shared field profile can uniformly control the generated
-list, detail view, and create/edit forms:
-
-~~~zelyra
-crud Customer -> customers {
-    view {
-        fields { name email active }
-    }
-}
-~~~
-
-An explicit `list { ... }` remains a local override for list/detail. Primary keys
-and auto-generated fields are automatically excluded from forms; the compiler
-rejects unknown profile fields. When the technical `id` column is omitted from
-visible `fields` (as in `name email active` above), Zelyra automatically links
-the first displayed field (`name`) to the record detail page for both table and
-card layouts.
-
-Domain actions remain POST-only, parameterized, and protected:
-
-~~~zelyra
-crud Customer -> customers {
-    action deactivate {
-        label: "Deactivate customer"
-        confirm: "Really deactivate this customer?"
-        permits "customers.edit"
-        sql {
-            UPDATE customers
-            SET active = false
-            WHERE id = :id
-        }
-        success "Customer deactivated."
-        redirect "/customers"
-    }
-}
-~~~
-
-The runtime enforces the database capability, CSRF protection,
-authentication, and the declared permission. Actions can also declare typed
-fields, a server-side confirmation page, and custom success or error pages.
-This extends the existing CRUD runtime; it is not a freely programmable
-frontend generator.
-
-Reversible deletion is available through soft delete:
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    deleted_at: Timestamp?
-}
-
-crud Customer -> customers {
-    soft_delete { column: deleted_at }
-}
-~~~
-
-Normal lists and details show only rows whose column is `NULL`; archived
-records are available through `?archived=true` and can be restored through a
-CSRF-protected action. Permanent deletion, retention rules, and bulk archiving
-remain planned.
-
-When an auth definition declares an audit table, CRUD create, update, delete,
-archive, restore, and custom actions write events in the same MariaDB
-transaction. Passwords, tokens, secrets, and hashes are removed from change
-details.
-
-## 13. Authentication and permissions
-
-ðŸ§ª Zelyra supports Argon2 login, persistent MariaDB sessions, logout, route
-guards, and database-backed permission checks. Five failed attempts for the
-same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
-lockout. A successful login rotates and invalidates the previous browser
-session token.
-
-Every state-changing browser form requires its CSRF token and a same-origin
-`Origin` or `Referer` matching the request `Host` and effective scheme.
-Malformed, missing, or cross-origin evidence is rejected, so copying a token
-from another browser cannot authorize a cross-site form submission. API
-requests carrying browser-origin information or a browser session cookie also
-receive this check, including `GET` requests because handlers are not yet
-statically restricted to read-only behavior. Cross-origin API access is
-possible only for an exact origin explicitly listed in the project's CORS
-policy; a session cookie additionally requires credentialed CORS. The current
-CSRF token is process-scoped rather than individually stored per session, so
-these origin checks are a required part of the protection.
-
-The Zelyra server currently speaks plain HTTP. Put it behind a trusted TLS
-terminating proxy before exposing it beyond a local development machine. The
-proxy must preserve the public `Host`, overwrite `X-Forwarded-Proto` with the
-actual external scheme, and prevent direct public access to the application
-port. Zelyra uses that header to validate the effective origin and to add the
-`Secure` attribute to session cookies for HTTPS requests. Never trust a
-client-supplied forwarded header at an exposed proxy boundary.
-
-The server also checks every supplied `Host` header against
-`ZELYRA_ALLOWED_HOSTS`. The default permits only `localhost`, `127.0.0.1`, and
-`[::1]`, which also blocks DNS rebinding through arbitrary hostnames. Add the
-actual hostname explicitly to the comma-separated `.env` setting when using a
-custom domain or LAN host. Schemes, ports, and wildcards are not accepted.
-Duplicate security-sensitive request headers such as `Host`, `Origin`,
-`Referer`, `Cookie`, and `Authorization` are rejected to avoid ambiguous
-parsing. The response policy `Referrer-Policy: same-origin` allows
-same-origin API GETs to provide that evidence without sending referrer
-information to other origins.
-Process environment overrides the project `.env`, which overrides the
-fallback. The allowlist does not replace TLS or origin/CSRF checks.
-
-Create a value for the required `password_hash` column with the CLI. The
-interactive command disables password echo and asks for confirmation:
-
-~~~bash
-zelyra auth hash-password
-~~~
-
-For deliberate automation, pass one password line through `--stdin`. Do not
-put real passwords in command arguments or commit generated hashes to source
-control:
-
-~~~bash
-printf '%s\n' 'change-this-password' | zelyra auth hash-password --stdin
-~~~
-
-~~~zelyra
-auth users {
-    table: users
-    permissions: user_permissions
-    roles: user_roles
-    role_permissions: role_permissions
-}
-
-page "/admin" {
-    requires auth
-    permits "machines.manage"
-
-    html {
-        <h1>Machine management</h1>
-    }
-}
-~~~
-
-The optional `permissions` table contains `user_id` and `permission` for
-direct grants. Role groups are enabled with `roles` and `role_permissions`:
-the first table contains `user_id` and `role`, and the second contains `role`
-and `permission`. Effective permissions are the union of direct grants and
-all permissions inherited from the user's roles. In the built-in administration
-view, the permission revocation form transmits the valid CSRF token and
-reliably removes selected permissions.
-
-The same guards protect typed API handlers:
-
-~~~zelyra
-api GET "/api/machines/{id}" {
-    handler get_machine
-    requires auth
-    permits "machines.view"
-    input { id: MachineId }
-    output Machine
-    errors { 404 NotFound }
-}
-~~~
-
-Protected API failures use JSON with an error `code` and `message`. A handler
-can return `Err("NotFound")` to select a matching status from the declared
-`errors` block; undeclared errors become 500 responses. Richer domain-error
-values remain future work. JSON arrays can be bound to typed fields such as
-`Int[]` or `MachineId[]`. Nested JSON input uses declared records:
-
-~~~zelyra
-struct Address { city: String }
-struct CustomerInput { name: String address: Address }
-
-api POST "/customers" {
-    handler echo_customer
-    input { customer: CustomerInput }
-    output CustomerInput
-}
-~~~
-
-Unknown record fields and missing required fields are rejected. In the language
-core, arrays support literals, indexing, `len`, `append`, `contains`, `first`,
-`last`, and concatenation with `+`. Record literals and checked field access
-are available for nested values:
-
-~~~zelyra
-customer = CustomerInput {
-    name: "Anna"
-    address: Address { city: "Berlin" }
-}
-
-print(customer.address.city)
-~~~
-
-Array iteration uses `for ... in`; the loop variable is immutable and scoped to
-the loop body. `break` and `continue` are supported.
-
-Generate a browser or Node-compatible TypeScript client from the same API
-declarations:
-
-~~~bash
-zelyra doc examples/api_records.zyl --typescript > customer-client.ts
-~~~
-
-The generated client uses standard `fetch`, includes declared records and
-tables as TypeScript types, and handles path/query parameters, JSON bodies,
-bearer tokens, response types, and HTTP errors. Declared API error names are
-available through `ZelyraApiErrorCode`; `ZelyraApiError.fromResponse` extracts
-the status, code, and server message while preserving the raw response body.
-
-API errors may also carry a checked payload. Add the payload type after a
-colon and use the same type as the error side of the handler's `Result`:
-
-~~~zelyra
-struct ValidationProblem {
-    field: String
-    message: String
-}
-
-api POST "/customers/validate" {
-    handler validate_customer
-    output Result<String, ValidationProblem>
-    errors { 422 ValidationError: ValidationProblem }
-}
-~~~
-
-The response retains `error.code` and `error.message` and adds the serialized
-payload as `error.details`. OpenAPI includes the details schema, while the
-generated client exposes it through `ZelyraApiErrorPayloads` and the generic
-`ZelyraApiError.details` field. Existing untyped API errors remain compatible.
-
-Browser access is disabled by default. Enable exact origins in the project
-configuration when a separate frontend needs to call an API:
-
-~~~toml
-[web]
-allowed_origins = ["http://localhost:5173"]
-allow_credentials = false
-~~~
-
-Zelyra answers API `OPTIONS` preflight requests automatically and adds CORS
-headers only to declared API routes. Wildcard origins are rejected, and CORS
-does not bypass authentication or permissions. Enable credentials only when
-browser session cookies are required; the client must also use
-`credentials: "include"`.
-
-An origin must begin with `http://` or `https://`. Paths, queries, fragments,
-wildcards, and a trailing slash are not allowed. Allowed responses receive
-`Access-Control-Allow-Origin` and `Vary: Origin`; enabled credentials add
-`Access-Control-Allow-Credentials: true`. A preflight response returns HTTP 204
-with the allowed methods and requested headers. Forbidden origins or methods
-return structured JSON errors; method errors include the `Allow` header.
-
-A hidden button is not a security boundary. Authorization must be enforced on
-the server-side action. Browsers become remarkably creative when trusted.
-
-### API input and secure response defaults
-
-API request bodies for methods other than `GET` and `DELETE` may currently use
-`application/json` or `application/x-www-form-urlencoded`. Unsupported media
-types return HTTP 415 as a structured JSON error. JSON bodies must be objects;
-each declared field is then converted to and checked against its Zelyra type.
-
-The HTTP parser checks `Content-Length`, reads complete bodies across multiple
-network reads, and limits request bodies to 1 MiB. Headers are limited to 64
-KiB. An oversized body is rejected with HTTP 413 before the handler runs.
-
-All HTML, JSON, redirect, error, and preflight responses receive these secure
-default headers:
-
-~~~http
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-Referrer-Policy: same-origin
-~~~
-
-These defaults do not replace TLS, authentication, authorization, CSRF
-protection, or an appropriate Content-Security-Policy.
-
-### Role management and tamper-evident audit
-
-ðŸ§ª Roles and role permissions can be managed with the available CLI commands
-when the `auth` definition configures the corresponding tables:
-
-~~~zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-    roles: user_roles
-    role_permissions: role_permissions
-    audit: auth_audit_log
-    admin_path: "/admin/access"
-    admin_permission: "auth.manage"
-    admin_role: admin
-}
-~~~
-
-~~~bash
-DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
-  zelyra auth role grant app.zyl 42 manager
-DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
-  zelyra auth role-permission grant app.zyl manager customers.edit
-~~~
-
-`revoke` removes the respective assignment. The commands bind values as SQL
-parameters and check the project schema first. Do not use a real password in
-the example value.
-
-With `audit: auth_audit_log`, authentication, role, and CRUD events can be
-inspected or exported:
-
-~~~bash
-DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
-  zelyra audit inspect app.zyl --limit 100
-DATABASE_URL='mariadb://user:password@127.0.0.1:3306/app' \
-  zelyra audit export app.zyl --format json > audit.json
-zelyra audit verify app.zyl
-~~~
-
-For visible tamper detection, enable chaining explicitly:
-
-~~~zelyra
-auth users {
-    table: users
-    audit: auth_audit_log
-    audit_chain: true
-}
-~~~
-
-The audit table then needs `id`, `previous_hash`, and `entry_hash`, usually
-`String(64)`. Zelyra stores lowercase SHA-256 hex values. The hash covers the
-canonical pipe-separated sequence
-`previous_hash|actor_user_id|event|target_user_id|details|created_at`.
-`zelyra audit verify` checks both links and hashes. Pruning is deliberately
-disabled for chained logs because deleting an entry would break the chain.
-Non-chained old entries can be deliberately removed with
-`zelyra audit prune ... --before ... --confirm`.
-
-An optional browser administration page is enabled by `admin_path`,
-`admin_permission`, and `admin_role`. It can manage users, passwords, active
-status, roles, and role permissions; its forms are CSRF-protected. The last
-active administrator remains protected.
-
-## 14. Capabilities
-
-âœ… External powers are declared explicitly:
-
-~~~zelyra
-fn load_machines() -> Machine[]
-    uses Database
-{
-    return sql<Machine[]> {
-        SELECT id, number, name FROM machines
-    }
-}
-~~~
-
-Known capabilities:
-
-~~~text
-Database Network FileSystem Environment Process Clock Random Console
-~~~
-
-Calling functions must propagate required capabilities. Projects grant them
-through `zelyra.toml`:
-
-~~~toml
-[capabilities]
-database = true
-network = false
-~~~
-
-Static checking and runtime enforcement at function, native-SQL, forms, CRUD,
-and authentication database boundaries are implemented when project grants are
-supplied. A complete operating-system sandbox for every capability is not yet
-available.
-
-Two safe host APIs are implemented:
-
-~~~zelyra
-fn runtime_timestamp() -> Timestamp uses Clock {
-    return now()
-}
-
-fn configured_mode() -> String? uses Environment {
-    return env("ZELYRA_MODE")
-}
-~~~
-
-now() requires Clock and returns Unix-epoch milliseconds. env(name) requires
-Environment and returns String?; a missing variable becomes None. Values are
-not logged or exposed automatically. Network, file-system, process, and random
-host APIs are implemented, but each requires its own resource grant and
-remains deliberately limited in this first version.
-
-The Random capability provides secure integer generation:
-
-~~~zelyra
-fn dice_roll() -> Int uses Random {
-    return random_int(1, 6)
-}
-~~~
-
-The range is inclusive on both sides. Invalid ranges fail at runtime, and
-random values are not emitted implicitly. Process execution is available only
-through the explicitly bounded API below.
-
-The first Network host API is `http_get`:
-
-~~~zelyra
-fn load_status(url: String) -> String uses Network {
-    return http_get(url)
-}
-~~~
-
-Project execution uses an exact host allowlist and bounded resources:
-
-~~~toml
-[network]
-allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
-timeout_ms = 5000
-max_response_bytes = 1048576
-~~~
-
-Without `[network]`, a project allows no hosts. The transport supports
-`http://` and `https://` with Rustls certificate verification enabled by
-default. It does not follow redirects and returns only successful UTF-8 GET
-response bodies within the configured limits. The `http_get` helper remains
-the simple GET-only convenience API; use `http_request` when request headers,
-request bodies, or response status are needed.
-
-Typed requests use `http_request`:
-
-~~~zelyra
-fn create_customer(url: String) -> HttpResponse uses Network {
-    return http_request(
-        "POST",
-        url,
-        ["Content-Type: application/json"],
-        Some("{\"name\":\"Anna\"}")
-    )
-}
-~~~
-
-The method accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
-Headers are `Name: value` strings, the body is `String?`, and the typed result
-contains `status: Int`, `headers: String[]`, and `body: String`. GET/HEAD
-requests cannot carry a body.
-
-JSON values can be converted to and from checked Zelyra values. Records and
-their nested fields are validated against the declared schema:
-
-~~~zelyra
-struct Customer { name: String tags: String[] nickname: String? }
-
-fn decode_customer(body: String) -> Customer {
-    return json_decode<Customer>(body)
-}
-
-fn encode_customer(customer: Customer) -> String {
-    return json_encode(customer)
-}
-~~~
-
-`json_decode<Type>(text)` requires one target type argument and supports
-records, nested records, arrays, options, and scalar values. `json_encode`
-serializes the same value families. Malformed JSON, type mismatches, unknown
-record fields, and missing required fields are explicit runtime errors.
-
-For a complete typed JSON request/response flow, use `http_json` with separate
-request and response type arguments:
-
-~~~zelyra
-struct CustomerCreate { name: String }
-struct Customer { id: Int name: String }
-
-fn create_customer(url: String, payload: CustomerCreate) -> Customer uses Network {
-    return http_json<CustomerCreate, Customer>("POST", url, [], Some(payload))
-}
-~~~
-
-The request record is serialized automatically and the response body is
-decoded into the response record. If no `Content-Type` header is supplied,
-`application/json` is added. Non-2xx responses are explicit runtime errors;
-the helper returns the decoded value rather than response headers.
-
-When response metadata must remain available, use `http_result`:
-
-~~~zelyra
-fn submit(url: String, payload: CustomerCreate) -> HttpResult<Customer> uses Network {
-    return http_result<CustomerCreate, Customer>("POST", url, [], Some(payload))
-}
-~~~
-
-`HttpResult<Response>` contains `status: Int`, `headers: String[]`,
-`body: String`, `data: Response?`, and `error: HttpError?`. Successful 2xx
-responses populate `data`; non-2xx responses populate `error` with status,
-headers, body, and message. Transport failures and invalid success JSON remain
-runtime errors.
-
-The Process capability exposes a shell-free command API:
-
-~~~zelyra
-fn render_report(input: String) -> String uses Process {
-    return run_process("/usr/bin/printf", ["%s", input])
-}
-~~~
-
-Project execution requires an exact command allowlist:
-
-~~~toml
-[process]
-allowed_commands = ["/usr/bin/printf"]
-timeout_ms = 5000
-max_output_bytes = 1048576
-~~~
-
-Without `[process]`, no command may run. The child environment is cleared,
-stdin is closed, timeouts terminate the process, and stdout/stderr are
-bounded. Shell execution, environment forwarding, working directories, and
-pipelines are future work.
-
-The FileSystem host APIs are:
-
-~~~zelyra
-fn read_source(path: String) -> String uses FileSystem {
-    return read_text(path)
-}
-
-fn write_note(path: String, content: String) uses FileSystem {
-    write_text(path, content)
-}
-
-fn entries(path: String) -> String[] uses FileSystem {
-    return list_dir(path)
-}
-
-fn remove_note(path: String) uses FileSystem {
-    delete_file(path)
-}
-~~~
-
-All four APIs require FileSystem. Reads and directory listings use read_roots;
-writes and deletes use write_roots. Relative paths are resolved from the
-project directory, and existing symlink targets are canonicalized before
-access. Without a filesystem section, project reads are limited to the
-project directory while writes and deletes are denied:
-
-~~~toml
-[filesystem]
-read_roots = ["."]
-write_roots = ["data"]
-~~~
-
-The configured directories must already exist. A new write target must have an
-existing parent directory.
-
-### Structured concurrency
-
-An initial, limited concurrency flow is available through `parallel` and
-`await`:
-
-~~~zelyra
-parallel {
-    customer = await load_customer()
-    orders = await load_orders()
-}
-~~~
-
-Each branch binds its result with `await`. Branches receive an immutable
-snapshot of surrounding values and are merged in source order before execution
-continues. An error in one branch fails the whole block after the started
-branches finish. The type checker rejects `await` outside a `parallel` block.
-The current runtime uses one worker thread per branch; cancellation and
-database connection-pool integration are not implemented yet.
-
-## 15. Contracts and verification
-
-ðŸ§ª Preconditions and postconditions:
-
-~~~zelyra
-fn reserve(stock: Int, amount: Int) -> Int
-    requires {
-        amount > 0
-        stock >= amount
-    }
-    ensures {
-        result >= 0
-        result == stock - amount
-    }
-{
-    return stock - amount
-}
-~~~
-
-`requires` runs before the body; `ensures` runs afterward, with `result`
-representing the returned value.
-
-~~~bash
-zelyra verify examples/contracts.zyl
-~~~
-
-Statuses:
-
-~~~text
-PROVEN
-RUNTIME_CHECK
-UNPROVEN
-FAILED
-~~~
-
-Only `PROVEN` means proven. `RUNTIME_CHECK` does not wear a fake moustache and
-claim to be mathematics.
-
-The verifier also summarizes bounded function calls. A callee with multiple
-return paths, such as an absolute-value function, contributes its path
-conditions when a caller returns that call. Callee `requires` clauses are
-checked after argument substitution; caller `requires` clauses are assumptions
-when proving caller `ensures`. Complex, recursive, or unresolved cases remain
-`RUNTIME_CHECK`.
-
-Local state is included in these summaries. Both `next: Int = value + 1` and
-the concise `next = value + 1`, followed by `return next`, are analyzed like a
-direct return. Simple linear mutable assignments such as `next = next + 1` are
-also tracked. Statically bounded loops with a linear counter are unfolded;
-`break` exits the current loop and `continue` starts its next iteration as
-separate symbolic paths. Nonlinear assignments and unbounded loops without a
-proven invariant remain conservative.
-
-### Loop invariants
-
-A `while` or unconditional `loop` may declare one or more explicit invariants:
-
-~~~zelyra
-while current > 0
-    invariant { current >= 0 }
-{
-    current = current - 1
-}
-~~~
-
-The verifier checks the invariant at entry and after supported body paths. A
-proven invariant can summarize an otherwise unbounded linear `while` loop; an
-unconditional `loop` can use it with a modeled `break` exit. Runtime execution
-checks it before and after each iteration. Unsupported or unproven invariants
-remain conservative and do not produce `PROVEN` results.
-
-`zelyra verify` reports each declared invariant separately, after a function's
-`ensures` results. Invariant indexes are zero-based:
-
-~~~text
-PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
-PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
-FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
-~~~
-
-Every result includes a stable code and a source range as
-`(file.zyl:start-line:start-column-end-line:end-column)`. The codes are
-`V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`), and
-`V-004` (`FAILED`). For IDEs and CI, use `zelyra verify app.zyl --json`; the
-JSON output contains the same result data, a human-readable `message`, an
-optional `counterexample` object, and a structured `location` object. A
-counterexample is emitted only when a bounded search verifies a small linear
-integer witness. The current search covers up to three linear variables in the
-range `-32..=32`, including failed loop-invariant checks; otherwise it is
-`null`. Text output also shows an explanation and a source-line excerpt with a
-caret marker for every result.
-
-`FAILED` means that the invariant is false on a feasible analyzed path or is
-not preserved by the loop body. `RUNTIME_CHECK` means that runtime checking
-is required because the symbolic verifier cannot complete the proof. Only
-`PROVEN` is a mathematical proof.
-
-## 16. Configuration and secrets
-
-Project configuration belongs in `zelyra.toml`; secrets do not:
-
-~~~toml
-[project]
-name = "machine-management"
-version = "0.1.50"
-zelyra = "0.1"
-
-[capabilities]
-database = true
-network = false
-~~~
-
-Connections and secrets are supplied via protected environment variables:
-
-~~~bash
-export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/zelyra_demo'
-~~~
-
-Rules:
-- never commit `.env` to version control;
-- never place production credentials in code examples;
-- do not log secrets;
-- separate development, test, and production databases;
-- never run destructive tests against production.
-
-### Simple defaults, optional feature switches
-
-The beginner path does not require a feature configuration. Advanced project surfaces can be selected in `zelyra.toml`, while environment-specific, non-secret overrides can be placed in `.env` or the process environment:
-
-~~~toml
-[features]
-web = true
-api = true
-crud = true
-auth = true
-audit = true
-~~~
-
-| Switch | `.env` / Process variable | Default | Meaning |
-|---|---|---:|---|
-| `web` | `ZELYRA_FEATURE_WEB` | `true` | Pages, forms, and web resources |
-| `api` | `ZELYRA_FEATURE_API` | `true` | `api` declarations and API surface |
-| `crud` | `ZELYRA_FEATURE_CRUD` | `true` | `crud` declarations and generated CRUD surface |
-| `auth` | `ZELYRA_FEATURE_AUTH` | `true` | `auth` declarations and authentication surface |
-| `audit` | `ZELYRA_FEATURE_AUDIT` | `true` | Audit trail configuration |
-
-Precedence order:
-```text
-Process environment â†’ .env â†’ zelyra.toml â†’ safe defaults
-```
-
-When source code uses a disabled surface, the compiler reports `E-FEATURE-001`. Feature switches cannot disable type checking, SQL validation, capabilities, contracts, CSRF protection, or security rules.
-
-Inspect effective configuration safely without exposing secrets:
-
-~~~bash
-zelyra config main.zyl
-zelyra config main.zyl --format=json
-~~~
-
-### Complete `.env` reference for the current code
-
-| Variable | Default in generated project | Usage | Secret |
-|---|---:|---|---|
-| `ZELYRA_WEB_PORT` | `3000` | Port of internal web server inside container | no |
-| `ZELYRA_HOST_PORT` | `3000` (or auto-selected free port) | Locally published web port | no |
-| `ZELYRA_DB_HOST_PORT` | `3306` (or auto-selected free port) | Locally published MariaDB port | no |
-| `DATABASE_URL` | project-dependent | MariaDB connection URI (`mariadb://user:pass@host:port/db`) | yes |
-| `MARIADB_DATABASE` | `zelyra_app` | Compose: database name | no |
-| `MARIADB_USER` | `zelyra` | Compose: application user | no |
-| `MARIADB_PASSWORD` | randomly generated | Compose: user password | yes |
-| `MARIADB_ROOT_PASSWORD` | randomly generated | Compose: root password | yes |
-| `ZELYRA_AUTH_TOKEN` | none | Optional local bearer token for protected endpoints | yes |
-| `ZELYRA_AUTH_PERMISSIONS` | empty list | Comma-separated local permission allowlist | no |
-
-### Test and CI variables
-
-Variables prefixed with `ZELYRA_INSTALL_ROOT`, `ZELYRA_BIN`, `*_E2E_*`, and `GENERATED_*` serve internal CI and local integration tests (such as `tests/generated-project-docker-e2e.sh`, `tests/sqlite-e2e.sh`). They are not application configuration and must never contain production secrets.
-
-### Environment access inside the language
-
-Via the built-in `env(name)` function, Zelyra code can read environment variables if `uses Environment` and `[capabilities] environment = true` are declared:
-
-~~~zelyra
-fn configured_mode() -> String? uses Environment {
-    return env("ZELYRA_MODE")
-}
-~~~
-
-`DATABASE_URL` and sensitive secrets must never be exposed via `env(...)` to unverified code.
-
-## 17. Diagnostics and troubleshooting
-
-Zelyra aims to explain errors without requiring an archaeological excavation
-through a stack trace.
-
-### Test the connection independently
-
-Test MariaDB without Zelyra first. The password is requested interactively and
-is not written into shell history:
-
-~~~bash
-mariadb \
-    --host=127.0.0.1 \
-    --port=3307 \
-    --user=zelyra \
-    --password \
-    address_book
-~~~
-
-Then run `zelyra doctor src/main.zyl --json` (optionally with `--env-file .env`
-and `--port 18080`), the implemented Zelyra readiness test. There is no
-`zelyra db check` command. `doctor` checks source code, schema, DB
-connectivity, Docker Compose, and host ports. Without `DATABASE_URL`, `doctor`
-reports a warning; with an unreachable URL it reports a failure. A running
-database container alone does not prove that host, port, user, and database
-match.
-
-### Safe diagnostic commands
-
-~~~bash
-pwd
-ls -la
-docker compose ps
-docker compose logs mariadb
-ss -ltn
-mariadb --version
-~~~
-
-In PowerShell, use `Get-Location`, `Get-ChildItem`, `docker compose ps`, and
-`mariadb --version` as the first checks. Never print `DATABASE_URL` or a
-password in diagnostics.
-
-### Common failures
-
-| Error | Likely cause | Fix |
-|---|---|---|
-| `Permission denied` | insufficient file permissions or no access to the client | inspect `ls -la`, use `chmod 600 .env`, and check the install path |
-| `Access denied for user` | wrong password or user is granted for another host | inspect `SHOW GRANTS FOR 'zelyra'@'127.0.0.1';` and rotate the password |
-| `Connection refused` | no service listens on the host/port | inspect `docker compose ps`, `ss -ltn`, and the published port |
-| `Can't connect to server` | wrong host/port or container is not ready | inspect `docker compose logs mariadb`; use `127.0.0.1:3307` from the host and `mariadb:3306` inside Compose |
-| `Unknown database` | URL and MariaDB use different database names | run `SHOW DATABASES;` and correct `DATABASE_URL` |
-| wrong port | confused host `3307` with container `3306` | host uses `3307`; a Compose service uses `3306` |
-| MariaDB container not started | Compose error, occupied port, or unhealthy volume | inspect `docker compose ps` and `docker compose logs mariadb` |
-| user granted only for another host | `'zelyra'@'localhost'` is not always `'zelyra'@'127.0.0.1'` | grant the exact host and inspect grants |
-| missing environment variable | `DATABASE_URL` was not exported | load `.env` or set the process variable; Zelyra does not load it itself |
-| `.env` not found | wrong working directory or assumed automatic loader | use `pwd`, `ls -la`, and export the variable explicitly |
-| invalid numeric port | URI port is not numeric | use digits such as `3307`; otherwise URL parsing fails |
-| wrong charset | database uses another charset/collation | inspect the database; `db setup` uses `utf8mb4`/`utf8mb4_unicode_ci` |
-| TLS error | unsupported TLS parameters were appended to the URL | use the current URL form; TLS configuration is planned |
-| test database rejected for safety | a protection mechanism is expected but not implemented | Zelyra does not automatically prevent production access in tests; check variables manually |
-| PostgreSQL SQL sent to MariaDB | wrong backend or incompatible DDL | inspect the `.zyl` backend and read `zelyra db create` output before applying |
-
-If `mariadb` cannot be started at all, Zelyra reports the external process
-start error. The CLI does not contain its own MariaDB driver.
-
-~~~bash
-zelyra check app.zyl
-~~~
-
-Common error classes include unknown names and types, mutation of immutable
-values, incomplete pattern matches, unknown tables or columns, missing SQL
-parameters, incompatible result mappings, missing capabilities, invalid form
-fields, failed contracts, and incomplete typed holes (`_`).
-
-During development, you can place `_` as a placeholder for an unfinished
-expression (typed hole). While `zelyra check` intentionally rejects incomplete
-code for compilation, it reports helpful contextual diagnostics: the expected
-type, visible variables and functions, active capabilities, contract obligations,
-and source spans.
-
-Language-only checks work without `DATABASE_URL`. Database operations report a
-missing connection in a controlled way. Without the variable, `run` uses the
-pure runtime; `serve` can start routes, but database-backed pages return a
-controlled error.
-
-## 18. Testing and contributing
-
-Before every commit:
-
-~~~bash
-cargo fmt --all
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-~~~
-
-A language feature is complete only when it has documented syntax, AST/HIR
-support, static checks, useful diagnostics, positive and negative tests, a
-runnable example, and synchronized German and English documentation.
-
-Tests that are green only because they never ran are decoration.
-
-## 19. What comes next
-
-Major planned areas include:
-
-- fully customizable typed view components;
-- email templates and SMTP;
-- an in-application notification center;
-- background jobs and a transactional outbox;
-- activity, audit, and technical logs;
-- typed connections and secret providers;
-- ODBC and external read-only databases;
-- richer domain-error values beyond typed API payloads and advanced runtime
-  request/response processing;
-- cancellation and database-pool integration for structured concurrency;
-- broader formal verification;
-- optimization models for real planning problems.
-
-Zelyra keeps the common case short without locking the door when the special
-case arrives:
-
-> **Generated when possible. Custom where needed. Verified everywhere.**
-
-Now build a table, read the SQL, and check the backup. In that order.
-
-## 20. Zelyra compared with Rust
-
-### The most important statement first
-
-Zelyra is developed with Rust. The Zelyra compiler, language crates, and parts
-of the runtime are Rust crates in the compiler repository. That does not mean
-that Zelyra changes Rust or that Zelyra applications are Rust programs.
-
-> **Zelyra is not modified Rust. Zelyra is an independent language whose
-> compiler and runtime are developed in Rust.**
-
-The Rust compiler is not forked or extended with Zelyra keywords. Zelyra is not
-a Rust library and not a preprocessor that rewrites ordinary Rust code. A
-`.zyl` file is read by Zelyra's own lexer and parser, converted into its own
-AST/HIR structures, type-checked, and then processed by the Zelyra runtime.
-
-Similar spelling in `fn`, braces, `if`, `match`, or static typing is a design
-choice, not proof of identity. Grammar, semantics, and the programming model
-are what matter. Zelyra is still an experimental prototype; its independence
-grows as its own type system, SQL checking, runtime, and language constructs
-are implemented.
-
-The statements in this chapter were checked against the current source:
-the lexer and `TokenKind` define Zelyra tokens, the parser produces its own
-AST structures, and later modules perform resolution, type checking, contract
-checking, SQL analysis, web processing, and runtime execution. The CLI and
-database modules were reviewed as well. Where a feature exists only as a token,
-AST node, or target design, it is not presented as a fully executable language
-feature.
-
-### General comparison
-
-| Area | Rust | Zelyra | Essential difference | Zelyra status |
-|---|---|---|---|---|
-| Language category | general-purpose systems and application language | independent declarative language for business and web applications | different grammar and semantics | ðŸ§ª |
-| Main use | systems, services, CLI, embedded, WebAssembly, web | database-backed business and web applications | Zelyra bundles application layers | ðŸ§ª |
-| Compiler | `rustc` and Cargo ecosystem | its own Rust program in the Zelyra repository | Rust compiles the compiler; `rustc` does not compile `.zyl` | âœ… |
-| Runtime | native Rust or a chosen runtime | its own Zelyra runtime, implemented in Rust | Zelyra executes its own values and rules | ðŸ§ª |
-| Memory management | ownership, borrowing, lifetimes | largely automatic/hidden for application code | no Rust borrow checker in `.zyl` code | ðŸ§ª |
-| Ownership | central Rust semantics | no equivalent `.zyl` construct | memory rules are not the same | ðŸ—ºï¸ |
-| Borrowing | references and borrow checker | no equivalent `.zyl` construct | no Rust reference syntax | ðŸ—ºï¸ |
-| Lifetimes | explicit or inferred lifetimes | no lifetime syntax | Zelyra does not expose this layer yet | ðŸ—ºï¸ |
-| Static typing | mature, generic, trait-based | own checker with `Int`, `String`, `Option`, records, and more | Zelyra types are not Rust types | âœ… |
-| Nullability | `Option<T>` | `T?`, such as `Email?` | Zelyra can derive schema/form rules | âœ… |
-| Error handling | `Result<T, E>`, `Option<T>`, `?` operator | `Result<T, E>`, `Some`/`None`, runtime diagnostics | no Rust `?` operator syntax in Zelyra | âœ… |
-| Database integration | external crates such as SQLx, Diesel, or SeaORM | intended as part of language, CLI, and runtime | different integration model; external client today | ðŸ§ª |
-| SQL | libraries, macros, or strings | native `sql<T> { ... }` with schema/parameter checks | Zelyra knows SQL as an expression | âœ… |
-| MariaDB schema | not a Rust-language responsibility | tables are described in Zelyra | generator prints visible SQL | ðŸ§ª |
-| Forms | connect framework, templates, and validation yourself | `form` construct and table rules | the standard path is part of the model | ðŸ§ª |
-| CRUD | must be programmed or generated by a framework | declarative `crud Name -> table` with shared view field profile | current runtime serves CRUD routes | ðŸ§ª |
-| Views | external libraries or frameworks | `page`/`html`, named `view` layouts, typed `component` blocks, and named slots with fallbacks exist | no Rust equivalent; free styling components are still missing | ðŸ§ª |
-| Code formatting | `cargo fmt`, `rustfmt` | `zelyra fmt <file.zyl> [--check]` | deterministic Zelyra formatter, protects SQL and HTML | âœ… |
-| Refactoring/impact | `rust-analyzer`, compiler APIs | `zelyra impact`, `zelyra edit` | versioned atomic JSON machine interfaces | ðŸ§ª |
-| Authentication | external web/auth crates | auth definition, sessions, and permission checks in web crate | Zelyra bundles the standard case | ðŸ§ª |
-| Permissions | user-designed types and middleware | `requires auth`, `permits`, and CRUD action permissions | declarative rules are checked server-side | ðŸ§ª |
-| Contracts | manual or library-based | native `requires {}` and `ensures {}` plus `verify` | contract syntax belongs to Zelyra | âœ… |
-| Capabilities | APIs and libraries regulate effects | `uses Database`, `uses Network`, and more | effect declarations are language syntax | âœ… |
-| Email | external SMTP/mail crates | no integrated email construct | do not invent `uses Email` | âŒ |
-| Jobs | external job/queue systems | no background-job construct | no stable job syntax | âŒ |
-| Audit | external logging/audit crates | audit table, CLI inspection, and optional hash chain | tied to auth/CRUD and still experimental | ðŸ§ª |
-| Deployment | Cargo, containers, CI, and infrastructure are free choices | generated Docker/Compose template exists | template is a development start, not a production platform | ðŸ§ª |
-| Production maturity | widely used in production | Zelyra compiler 0.3.0 is experimental | maturity and ecosystem are not comparable | ðŸ§ª |
-| Ecosystem | very large: crates, tools, frameworks | small repository and few integrations | Zelyra cannot directly import Rust crates | ðŸ§ª |
-
-Rust is the technical foundation, not the application language behind Zelyra. A
-Rust `Customer` struct and a Zelyra `customers` table may describe similar data,
-but they do not create the same behavior.
-
-### Detailed syntax comparison
-
-In this chapter, `âœ…` means that the construct is present in the current source
-and was checked with the installed Rust toolchain or Zelyra CLI. `ðŸ§ª`, `ðŸ—ºï¸`, and
-`âŒ` continue to identify limited, planned, or currently unavailable features.
-
-| Language feature | Zelyra syntax | Rust syntax | Semantic difference | Zelyra status |
-|---|---|---|---|---|
-| File extension | `app.zyl` | `main.rs` | own lexer and file type | âœ… |
-| Program entry | `fn main() { ... }` | `fn main() { ... }` | same spelling, different language | âœ… |
-| Function definition | `fn add(a: Int) -> Int { ... }` | `fn add(a: i64) -> i64 { ... }` | own AST types | âœ… |
-| Parameters | `name: String` | `name: String` | similar position, different type semantics | âœ… |
-| Return type | `-> Int` | `-> i64` | Zelyra abstracts a business type | âœ… |
-| Return value | `return value` | `value` or `return value;` | final Rust expression returns a value | âœ… |
-| Immutable variable | `value = 1` | `let value = 1;` | Zelyra is immutable without `mutable` | âœ… |
-| Mutable variable | `mutable value = 1` | `let mut value = 1;` | different marker for mutation | âœ… |
-| Integer | `Int` or `UInt` | `i32`, `i64`, `u32`, `u64` | Rust requires a concrete width; Zelyra abstracts it today | âœ… |
-| Decimal | `Float` or `Decimal` | `f64` or `f32` | Zelyra width and exact overflow rules are not fully specified | ðŸ§ª |
-| Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | own base-type model | âœ… |
-| String | `String` and character literals | `String`, `&str`, character literals | Rust distinguishes ownership and borrowing | âœ… |
-| Optional value | `Email?` or `Option<String>` | `Option<String>` | `?` is Zelyra's Option shorthand | âœ… |
-| Missing value | `None` | `None` | same name in different enum models | âœ… |
-| Lists/arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | no Rust macro syntax in Zelyra | âœ… |
-| Named data types | `type CustomerId = Id`, `struct Customer { ... }` | `type CustomerId = u64`, `struct Customer { ... }` | records and structs are not interchangeable | âœ… |
-| Conditions | `if ok { ... }` | `if ok { ... }` | block and expression rules differ | âœ… |
-| `else` | `else { ... }` | `else { ... }` | similar control-flow form | âœ… |
-| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | both require exhaustive cases | âœ… |
-| Loops | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | no Rust iterator traits in Zelyra | âœ… |
-| Function call | `add(1, 2)` | `add(1, 2)` | same surface, different name resolution | âœ… |
-| Output | `print(value)` | `println!("{}", value);` | Rust uses a macro with `!` | âœ… |
-| Comments | `// comment` | `// comment`, `/* ... */` | current Zelyra lexer has line comments | âœ… |
-| Newlines | usually separators; continuation after operators | usually whitespace | parser rules are independent | âœ… |
-| Semicolons | accepted as statement separators, not required | often statement separators | Zelyra is not semicolon-dependent | âœ… |
-| Blocks | `{ ... }` | `{ ... }` | braces determine blocks in both | âœ… |
-| Indentation | readability, not block semantics | readability, not block semantics | whitespace is not Python-style structure | âœ… |
-| Error handling | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra has no Rust `?` operator | âœ… |
-| String interpolation | HTML bodies may use `{name}` | `format!("{name}")` or `println!("{}", name)` | no general Zelyra string interpolation | ðŸ§ª |
-| Modules | `pub fn` and other declarations in imported files (development branch) | `mod name {}`, files and modules | experimental; release 0.3.0 has none, and views/components still lack visibility modifiers | ðŸ§ª |
-| Imports | `import "src/math.zyl" as math`, `math::add()` (development branch) | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | ðŸ§ª |
-| Generics | `Option<T>`, `Result<T, E>`, limited built-in type arguments | general generics and traits | no user-defined Zelyra generics | ðŸ§ª |
-| Async functions | no `async fn`; `await`/`parallel` are limited | `async fn`, `.await`, futures | no stable Zelyra async model | ðŸ§ª |
-| Tables | `table customers { ... }` | no language construct | Zelyra connects table and schema | âœ… |
-| Database types | `Id`, `String(100)`, `Email`, `Bool` | Rust types and external mapping crates | Zelyra emits SQL types from a table | âœ… |
-| Relationships | `department: Department required` | field plus query/mapping logic | Zelyra derives foreign keys | âœ… |
-| SQL queries | `sql<Customer[]> { SELECT ... }` | string/macro from a DB crate | Zelyra checks schema, parameters, result | âœ… |
-| Forms | `form CustomerCreate -> customers { ... }` | no native form | web framework and validation required | âœ… |
-| CRUD | `crud Customer -> customers` | no native CRUD | Zelyra runtime serves standard routes | ðŸ§ª |
-| Views | `page`, `view SiteShell`, and `component Badge` | no native view construct | named views/components exist; `input`/`render`/`??` remain target syntax | ðŸ§ª |
-| Preconditions | `requires { amount > 0 }` | no built-in equivalent | contract is part of the Zelyra function | âœ… |
-| Postconditions | `ensures { result >= 0 }` | no built-in equivalent | verifier and runtime know Zelyra contracts | âœ… |
-| Old values | Not yet specified; `old(...)` is not parsed | no general built-in contract standard | do not invent `old` syntax | âŒ |
-| Capabilities | `uses Database` | no identical language construct | effects are declared visibly in Zelyra | âœ… |
-| Email | Not yet specified | external crate/API | no `Email` capability key | âŒ |
-| Background jobs | Not yet specified | external queue/runtime crate | no job syntax | âŒ |
-| Audit | `auth users { audit: auth_audit_log }` | external logging/audit crate | Zelyra ties audit to auth and CRUD events | ðŸ§ª |
-| API definitions | `api GET "/customers" { ... }` | router, handler, and types separately | Zelyra bundles route and contract | âœ… |
-
-### Functions: same idea, different language
-
-Both snippets express a small function in their own language. The Zelyra form
-uses function syntax processed by the parser and was checked with the current
-CLI.
-
-~~~zelyra
-fn add(a: Int, b: Int) -> Int {
-    return a + b
-}
-~~~
-
-~~~rust
-fn add(a: i64, b: i64) -> i64 {
-    a + b
-}
-~~~
-
-Rust uses concrete integer types such as `i32`, `i64`, `u32`, or `u64`.
-Zelyra offers `Int` for typical business logic; its definitive size, overflow
-behavior, and database mapping still need complete specification.
-
-### Fibonacci
-
-~~~zelyra
-fn fibonacci(n: Int) -> Int {
-    if n <= 1 {
-        return n
-    }
-
-    return fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    print(fibonacci(10))
-}
-~~~
-
-~~~rust
-fn fibonacci(n: u64) -> u64 {
-    if n <= 1 {
-        return n;
-    }
-
-    fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    println!("{}", fibonacci(10));
-}
-~~~
-
-âœ… The Zelyra version uses `Int`, `print`, and explicit `return`; Rust uses
-`u64`, the `println!` macro, and the final expression as the return value. Rust
-macros carry `!`. Semicolons are not required in Zelyra. Braces determine block
-structure in both examples; indentation is for readability. A newline after `+`
-continues the expression because the parser skips it there. Recursion works in
-Zelyra only because function resolution and the runtime support it. This code
-was not executed in this work run.
-
-### Optional values
-
-~~~zelyra
-email: Email?
-~~~
-
-~~~rust
-email: Option<String>
-~~~
-
-`Email?` is shorter and also expresses the domain type. Rust uses the general
-generic `Option<T>`. Zelyra can account for `Email?` in table, form, and SQL
-checking; a general automatic view/validation derivation is not available for
-every surface.
-
-### Tables
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    email: Email?
-    active: Bool default true
-}
-~~~
-
-~~~rust
-struct Customer {
-    id: u64,
-    name: String,
-    email: Option<String>,
-    active: bool,
-}
-~~~
-
-The Rust struct creates no database table, SQL columns, validation, form, or
-CRUD interface. Rust needs additional crates, macros, queries, handlers, and
-templates. The Zelyra table is included in schema derivation and, where the web
-features exist, in forms and CRUD.
-
-### CRUD
-
-~~~zelyra
-crud Customer -> customers
-~~~
-
-Rust has no native equivalent. A typical Rust implementation combines a web
-framework, routing, database crate, data model, queries, request types,
-validation, handlers, templates or a frontend, error handling, and authorization.
-Zelyra parses this declarative definition and the current runtime serves CRUD
-routes, forms, search, filters, and CSRF-protected actions. This is experimental;
-it is not a static frontend generator.
-
-### SQL
-
-The target syntax from the request included `with { ... }`. That is not in the
-current parser. Parameters currently arrive as function parameters:
-
-~~~zelyra
-struct Customer { id: Int name: String email: Email? active: Bool }
-
-fn active_customers(active: Bool) -> Customer[]
-    uses Database
-{
-    return sql<Customer[]> {
-        SELECT id, name, email, active
-        FROM customers
-        WHERE active = :active
-        ORDER BY name
-    }
-}
-~~~
-
-~~~rust
-let customers = sqlx::query_as!(
-    Customer,
-    r#"
-        SELECT id, name, email, active
-        FROM customers
-        WHERE active = ?
-        ORDER BY name
-    "#,
-    true
-)
-.fetch_all(&pool)
-.await?;
-~~~
-
-Rust does not have SQL as a language feature; SQLx and other crates can provide
-additional compile-time checks. Zelyra's current SQL checker validates, where
-schema and types are known, tables, columns, aliases, parameters, nullability,
-result mapping, and the `Database` capability. This does not automatically make
-Zelyra better than SQLx. The current MariaDB generator and its missing table
-options remain documented in section 7.
-
-### Views: current syntax, not the target model
-
-The target syntax with `view`, `input`, `render`, components, and `??` is not
-current parser syntax. The current web core uses:
-
-~~~zelyra
-page "/customers/{name}" {
-    html {
-        <h1>Customer {name}</h1>
-    }
-}
-~~~
-
-Rust has no built-in HTML or component syntax; templates and web frameworks are
-added externally. Zelyra's `page`/`html` form, named views, and typed components
-exist. Multiple slots, nested components, and the target `input`/`render`
-syntax are not stable yet; `??` is not an implemented Zelyra operator.
-
-### Contracts
-
-The target syntax `require amount > 0` and `old(...)` is not current syntax. The
-parser accepts `requires {}` and `ensures {}`:
-
-~~~zelyra
-fn reserve(stock: Int, amount: Int) -> Int
-    requires {
-        amount > 0
-        stock >= amount
-    }
-    ensures {
-        result >= 0
-        result == stock - amount
-    }
-{
-    return stock - amount
-}
-~~~
-
-Rust has no direct built-in equivalent. `requires` describes preconditions and
-`ensures` postconditions. Runtime checks and formal verification differ:
-`zelyra verify` can report `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN`, or `FAILED`.
-Accessing an old value with `old(...)` is not implemented.
-
-### Capabilities
-
-~~~zelyra
-fn load_customers() -> Customer[] uses Database {
-    return sql<Customer[]> {
-        SELECT id, name, email, active FROM customers
-    }
-}
-~~~
-
-`uses` makes allowed side effects visible in a signature. `Database`, `Network`,
-`FileSystem`, `Environment`, `Process`, `Clock`, `Random`, and `Console` are known
-capabilities in the current runtime code. Rust has no identical built-in
-capability system; access is usually organized through types, values, and
-library APIs. `Email` is not a Zelyra capability.
-
-### What Rust developers should not look for in Zelyra
-
-For typical business applications, Zelyra is not intended to require explicit
-lifetimes in ordinary application code, borrowing debug sessions for simple
-forms, choosing among many integer widths, or assembling a web framework from
-many crates. That is an abstraction, not a claim that memory and runtime
-concerns disappear.
-
-Zelyra is inspired by static typing, useful diagnostics, safe defaults, explicit
-mutation, pattern matching, records/enums, clear boundaries, reproducible
-tooling, and formal checks.
-
-### What makes Zelyra its own language
-
-| Zelyra feature | Benefit | Status |
-|---|---|---|
-| One domain definition | fewer contradictory duplicate definitions | ðŸ§ª |
-| native checked SQL | catch database errors before execution where possible | âœ… |
-| declarative CRUD | standard administration with little code | ðŸ§ª |
-| `page`/`html` web core | simple typed path values and HTML responses | ðŸ§ª |
-| visible MariaDB SQL | traceable schema changes | ðŸ§ª |
-| `requires` and `ensures` | state business rules explicitly | âœ… |
-| capabilities | make allowed effects visible | âœ… |
-| integrated audit | trace changes | ðŸ§ª |
-
-### Honest conclusion
-
-> Zelyra looks similar to Rust in places because both are modern, statically
-> typed languages with braces and clear function signatures. Zelyra nevertheless
-> follows a different programming model: database, SQL, forms, CRUD, views, and
-> business rules are intended to be parts of one language system. Rust is the
-> technical foundation of the compilerâ€”not the language Zelyra application
-> developers write.
-
-> **Status:** Zelyra is currently an experimental language prototype. Some
-> language features shown here describe the binding target and are not fully
-> implemented. The status next to each example shows what exists in current
-> source and was checked in this work run.
-
-Further reading: [Introduction](#1-what-makes-zelyra-different), [language
-basics](#5-variables-types-and-functions), [MariaDB](#7-mariadb-and-tables),
-[SQL](#9-native-sql), [forms](#11-forms), [views/web pages](#10-web-pages),
-[CRUD](#12-crud), [contracts](#15-contracts-and-verification),
-[capabilities](#14-capabilities), [implementation status](#17-diagnostics-and-troubleshooting),
-and [roadmap](#22-roadmap-from-the-current-repository). The live repository status is also shown on
-the [status page](https://siedelmann.com/en/status).
-
-## 21. Positioning and current development status
-
-The current `docs/positioning.md` describes Zelyra as an independent language
-for database-backed business applications. It does not replace compiler tests;
-it explains how the implemented pieces are intended to fit together.
-
-### What makes Zelyra distinct
-
-1. **One source of truth:** schema, types, SQL, forms, CRUD, views, and APIs
-   should come from definitions that can be checked together.
-2. **SQL stays first-class:** SQL is not hidden behind an ORM abstraction; the
-   program can check tables, parameters, and result shapes.
-3. **Business features are language primitives:** tables, forms, CRUD, pages,
-   authentication, permissions, and contracts belong to one model.
-4. **Secure defaults are visible:** HTML escaping, parameterized SQL, CSRF
-   protection, null safety, and server-side permissions are more than advice.
-5. **Proof claims are honest:** `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN`, and
-   `FAILED` distinguish static proofs from runtime checks and open cases.
-6. **A short path and a full language:** the declarative standard case is short,
-   while custom functions and native SQL remain available for domain logic.
-7. **A small starting stack:** the built-in server and CLI aim to support local
-   learning and development without Apache, PHP, or a mandatory framework set.
-
-The project is nevertheless an experimental prototype. The status marks and
-the roadmap therefore matter more than a broad product claim.
-
-## 22. Roadmap from the current repository
-
-This summary comes from `docs/ROADMAP.md` in the current Zelyra repository. It
-is a development plan, not a release-date promise.
-
-| Area | Current focus | Open expansion |
-|---|---|---|
-| Beginner experience and distribution | source and release installers (Linux/Windows x86_64 via SHA-256), `zelyra new/init` with starter templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker/DB ports, `zelyra setup`, `zelyra doctor`, E2E tests | signed binaries, interactive connection assistant, reverse-proxy automation |
-| Language and compiler | lexer, parser, AST/HIR, type checking, `Option`, `Result`, pattern matching, expression typed holes (`_`), canonical `zelyra fmt`; limited project-local imports are experimental in the unreleased 0.4 branch | broader module visibility and tooling integration, generics, declaration holes, and complete formal verification |
-| Database platform | MariaDB, SQLite, and PostgreSQL schema CLI; typed SQL | broader schema coverage and stronger production workflows |
-| Views and web | pages, named views, components, default and named slots with fallback content, safe output | themes, view inheritance, free-form styling components |
-| Forms and CRUD | validation, CSRF, search, filters, pagination, actions, soft delete, shared CRUD view field profile (`view.fields`) | permanent deletion, retention, archiving, and broader view customization |
-| Authentication and audit | login, sessions, roles, permissions, browser admin, audit, and hash chains | self-service, broader policy management, and archive strategies |
-| APIs and integration | typed APIs, OpenAPI, TypeScript client, and CORS | versioning, rate limits, and OAuth/integration features |
-| Verification and operations | contracts, capability checks, and first concurrency building blocks | cancellation, timeouts, database-pool integration, and production performance |
-| AI-native interfaces | `zelyra fmt` (Stage B âœ…), expression holes `_` (Stage C ðŸ§ª), `zelyra impact` with `--symbol` (Stage D ðŸ§ª), `zelyra edit` rename (Stage E ðŸ§ª) | declaration holes, schema/runtime impact, complex edit operations, AI benchmark |
-| Quality and governance | tests, documentation, and reproducible checks | broader acceptance applications and production hardening |
-
-Do not document email or background-job systems, complete modules/imports,
-multi-slot free-form `view` components, or automatic production migrations as
-available. Each remains ðŸ—ºï¸ until the current CLI and runtime implement it.
-
-For a learning project, the useful order is:
-
-1. `check` and `run` for language basics;
-2. `db create`, `db inspect`, `db plan`, and a reviewed `db apply`;
-3. a small `page`, `form`, or `crud` application;
-4. only then authentication, roles, audit, and API integration.
-
-## 23. AI-native development
-
-The current architecture and specification documents add an important
-principle:
-
-> **The AI writes. Zelyra checks.**
-
-Zelyra should be useful to humans and AI systems alike while remaining fully
-independent of AI. The compiler and tests are the trust boundary; a plausible
-model explanation is not proof of correctness. Human-written and generated
-code go through the same lexer, parser, name, type, SQL, capability, contract,
-test, and runtime checks.
-
-### Machine interfaces available today
-
-ðŸ§ª Tool-facing JSON uses a common envelope with `schema_version: "1"`. Human
-output remains the default; request JSON explicitly with `--format=json`:
-
-~~~json
-{
-    "schema_version": "1",
-    "command": "check",
-    "success": false,
-    "diagnostics": []
-}
-~~~
-
-Output is deterministic. `schema_version` is mandatory; new optional fields
-may be added within a version, while incompatible changes require a new
-version. JSON goes only to `stdout`, technical messages to `stderr`. Source
-spans use zero-based UTF-8 byte offsets, one-based line/byte columns, and a
-half-open interval. Secrets, timestamps, random IDs, machine-dependent
-absolute paths, and live database contents do not belong in these outputs.
-
-#### Canonical code formatting
-
-âœ… `zelyra fmt <file.zyl>` produces deterministic code formatting after
-successful lexing and parsing. `zelyra fmt <file.zyl> --check` writes no files
-and returns an error code if reformatting is required, allowing CI to enforce
-canonical source formatting.
-
-~~~bash
-zelyra fmt examples/fibonacci.zyl
-zelyra fmt examples/fibonacci.zyl --check
-~~~
-
-The formatter preserves line comments and treats SQL and HTML blocks as opaque
-source. It is idempotent: formatting an already formatted document yields
-byte-for-byte identical output.
-
-#### Typed holes
-
-âœ… Expression typed holes with `_` are available as an initial safe stage. The
-compiler reports expected contextual types, visible values and functions, active
-capabilities, contract obligations, and source spans:
-
-~~~zelyra
-fn double(x: Int) -> Int {
-    return _
-}
-~~~
-
-`zelyra check` reports diagnosis `E-HOLE-001` with the expected type `Int` and
-visible identifiers. Buildable commands (`build`, `run`, `serve`) reject
-incomplete code before lowering and execution. Declaration-level holes remain
-planned.
-
-#### Structured project context
-
-âœ… `context` is read-only: it does not connect to MariaDB, use the network, send
-email, run jobs, or expose secrets:
-
-~~~bash
-zelyra context examples/auth_crud_api.zyl --format=json
-~~~
-
-It reports declared functions, tables, SQL queries, CRUD resources, forms, APIs,
-and source spans.
-
-#### Deterministic impact analysis
-
-ðŸ§ª Source dependencies can be deterministically analyzed:
-
-~~~bash
-zelyra impact examples/auth_crud_api.zyl --format=json
-zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
-~~~
-
-The impact response reports source-based tables, SQL, forms, CRUD resources,
-views, APIs, permissions, contracts, and a deterministic `references` edge
-list for known relationships. Each known edge includes source, target, kind,
-and source span. Email, job, test, and live schema impacts remain explicitly
-empty or unavailable; the command never connects to MariaDB.
-
-Using `--symbol <kind:name>` focuses the output on a known node such as
-`table:customers`. The focused response contains only directly connected
-references and related node IDs. Unknown nodes return `E-IMPACT-001` and a
-non-zero exit code.
-
-#### Atomic semantic edits
-
-ðŸ§ª A validated symbol rename can be previewed without modifying source:
-
-~~~json
-{
-  "schema_version": "1",
-  "entry": "examples/fibonacci.zyl",
-  "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
-  "operations": [
-    {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
-  ]
-}
-~~~
-
-Save this as `change.json` and run:
-
-~~~bash
-zelyra edit --format=json change.json
-~~~
-
-The request is versioned and must point to an existing `.zyl` file inside the
-resolved Zelyra project root. Source code before and after the change must pass
-all compiler checks. The result reports exact token spans and a deterministic
-source fingerprint.
-
-When applying changes with `--apply`, the request must include the fingerprint
-from the preview to prevent overwriting concurrently modified files (stale-source
-protection). Without the explicit `--apply` flag, it remains a preview:
-
-~~~bash
-zelyra edit --format=json --apply change.json
-~~~
-
-Before atomic replacement, the source is re-parsed and fully validated; an
-invalid or semantically unsafe change will not be written.
-
-Renames of functions, types, and records are AST-based: declarations and known
-references are updated while local bindings of the same name remain untouched.
-Table, view, form, and CRUD declarations and their structured references are
-also supported. Table renames update checked SQL table positions (`FROM`,
-`JOIN`, `INTO`, `UPDATE`) while preserving literals, comments, parameters, and
-HTML. Component renames update both the declaration and known opening and
-closing component tags in HTML bodies.
-
-### Safety boundary and benchmark
-
-AI tools must not silently add capabilities, widen permissions, execute
-destructive SQL, weaken diagnostics, disable tests, or reveal secrets.
-Destructive schema changes and security-sensitive changes require visible human
-approval. Zelyra does not automatically send source code to external AI
-services; planned integrations should be open, local-capable, vendor-neutral,
-and versioned.
-
-The new AI-authoring benchmark is a specification in
-`docs/benchmarks/ai-authoring.md`. With versioned fixtures and identical tasks,
-it is intended to measure first-pass compilation, correction loops, time to
-passing tests, tokens, security failures, missed dependencies, unsafe schema
-changes, and human review effort. No comparative results have been published.
-A secret leak or unapproved destructive change is a security failure and cannot
-be balanced by claimed productivity.
-
-# APPENDICES
-
----
-
-## 24. Authoritative Sources and Compiler Verification (Source Authority)
-
-> **Principle:** Zelyra is its own language. The parser and verified tests decide what exists.
-
-When sources disagree, report the disagreement explicitly and use this authoritative order:
-
-1. **[Formal Language Specification](specification.md) and phase documents**
-2. **Compiler implementation code:** Lexer, AST, parser, name resolution, type checking, and semantic compiler code across `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web`, and `forms`
-3. **Official automated language and integration tests:** Workspace tests (`cargo test --workspace`), machine-interface tests, and E2E scripts in `tests/`
-4. **Official standard library:** (once formally introduced)
-5. **Official Zelyra examples:** `.zyl` files in `examples/` verified by the current compiler
-6. **Documentation and handbook explanations**
-
-### Invariants for developers and AI agents
-
-- **Roadmap is planning, not syntax:** Future phase proposals become valid syntax only after implementation in lexer and parser.
-- **Rust is the implementation language, not Zelyra:** Zelyra is developed in Rust, but Rust syntax in a `.zyl` file is invalid unless Zelyra's grammar explicitly defines it.
-- **No invented commands:** Every CLI command must exist in `cli/src/main.rs`.
-- **Quality gate:** Every feature undergoes formatting (`cargo fmt`), workspace checks (`cargo check`), clippy linter (`cargo clippy`), and test suite execution (`cargo test`).
-
----
-
-## Appendix A: Quickstart / Cheat Sheet (Syntax Cheat Sheet)
-
-### Basic Syntax
-```zelyra
-// Functions with contracts
-fn sum(a: Int, b: Int) -> Int
-    requires { a >= 0 && b >= 0 }
-    ensures { result >= 0 }
-{
-    return a + b
-}
-
-// Entry point and variables
-fn main() {
-    x = 10                  // Type inference (immutable)
-    mutable counter = 0     // Mutable
-    name: String = "Zelyra" // Explicit type
-
-    print(sum(3, 7))
-}
-```
-
-### Types
-- Numbers: `Int` (64-bit signed integer), `UInt` (unsigned integer), `Float`, `Decimal` (fixed-point arithmetic)
-- Text & Characters: `String`, `Char`
-- Booleans: `Bool` (`true`, `false`)
-- Collections: `Int[]`, `String[]`
-- Optionality: `Option<T>` (`Some(x)`, `None`), shorthand `T?`
-- Error Handling: `Result<T, E>` (`Ok(x)`, `Err(e)`)
-- System & Chronology: `Timestamp`, `Date`, `Time`, `Duration`
-
-### Control Flow
-```zelyra
-fn control_flow(x: Int) {
-    if x > 10 {
-        print("Large")
-    } else {
-        print("Small")
-    }
-
-    match x {
-        1 => { print("One") }
-        2 => { print("Two") }
-        _ => { print("Other") }
-    }
-
-    mutable i = 0
-    while i < 3 invariant { i >= 0 } {
-        i = i + 1
-    }
-
-    for n in [1, 2, 3] {
-        print(n)
-    }
-}
-
-fn main() {
-    control_flow(1)
-}
-```
-
-### Database & Web
-```zelyra
-database main {
-    engine: mariadb
-    database: "app"
-}
-
-table items {
-    id: Id primary auto
-    description: String required
-}
-
-page "/items" {
-    html {
-        <h1>Item List</h1>
-    }
-}
-```
-
----
-
-## Appendix B: Complete Zelyra Diagnostic & Error Code Reference
-
-| Error Code | Category | Description | Typical Fix |
-| :--- | :--- | :--- | :--- |
-| `E-LEX-001` | Lexer | Unexpected character / lexical error | Remove typographical or illegal special characters |
-| `E-PARSE-001` | Parser | Syntax error (e.g. missing brace, invalid token) | Correct syntax per Zelyra grammar |
-| `E-NAME-001` | Resolution | Unknown name / variable not declared | Check declaration or correct typo |
-| `E-TYPE-001` | Type checking | Type mismatch (e.g. String assigned to Int) | Align types or add conversion |
-| `E-FEATURE-001` | Feature switch | Access to disabled language surface (`web`, `api`, `crud`, `auth`, `audit`) | Enable feature in `zelyra.toml` or `.env` |
-| `E-CAP-001` / `E-CAP-002` | Capabilities | Missing capability permission (e.g. `database`, `network`) | Grant capability in `zelyra.toml` under `[capabilities]` |
-| `E-POLICY-001` / `002` | Policy | Security or audit policy violation | Review security policy declarations |
-| `E-DB-001` - `E-DB-005` | Database | Database connection or driver error | Verify `DATABASE_URL`, ensure MariaDB is running |
-| `E-SQL-001` - `E-SQL-004` | SQL | Invalid SQL / schema mismatch / unknown column | Check SQL statement against table schema |
-| `E-VIEW-001` - `E-VIEW-009` | Views & Pages | Error in view interpolation, slots, or data binding | Check slot names and binding data types |
-| `E-VIEW-010` - `E-VIEW-015` | Query controls | Invalid search, sort, pagination, or filter fields | Check declared whitelist (`search`, `sort`, `filter`) |
-| `E-FORM-001` - `E-FORM-004` | Forms | Validation error or invalid form field types | Review form declaration and input payload |
-| `E-CRUD-001` - `E-CRUD-006` | CRUD | Invalid CRUD resource, schema conflict, or layout error | Verify table binding and layout slots |
-| `E-AUTH-001` - `E-AUTH-028` | Authentication | Session, password, or permission conflict | Check roles (`permits`), `requires auth`, and password hashes |
-| `E-AUDIT-001` - `E-AUDIT-010` | Audit trail | Failure in cryptographic hash chain of audit log | Validate checksums and audit table integrity |
-| `E-SETUP-001` - `E-SETUP-006` | Setup flow | Port conflict, socket error, or Compose failure | Choose free ports, check Docker socket permissions |
-| `E-SETUP-WEB-001` | Web setup | Invalid or expired setup token | Restart setup assistant and use tokenized URL |
-| `E-IMPACT-001` | Impact analysis | Cyclical or invalid dependencies | Untangle code dependencies |
-| `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
-
----
-
-## Appendix C: Zelyra CLI Command Reference
-
-| Command | Option / Flag | Description |
-| :--- | :--- | :--- |
-| `zelyra --version` | | Outputs full compiler and package version |
-| `zelyra new <dir>` | `--template minimal\|mariadb-crud\|...` | Creates a new Zelyra project with template |
-| | `--mariadb` | Generates MariaDB project with Compose, Dockerfile, and `.env` |
-| | `--web-port <p> --host-port <p> --db-host-port <p>` | Configures container and host ports |
-| `zelyra init` | `[--mariadb]` | Initializes current directory as Zelyra project |
-| `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
-| `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
-| `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
-| `zelyra setup` | `[--database]` | Starts Docker Compose / MariaDB |
-| | `[--schema]` | Starts environment and applies database schema |
-| | `[--all]` | Executes configuration, container startup, and schema migration |
-| | `[--host-port <p>] [--db-host-port <p>]` | Enforces exact host ports for new `.env` |
-| `zelyra setup --web` | `[--port <p>]` | Starts local token-protected browser setup assistant |
-| `zelyra config <file.zyl>` | `[--format json]` | Safely displays effective configuration and feature switches |
-| `zelyra doctor <file.zyl>` | `[--port <p>] [--json]` | Checks toolchain, MariaDB, Docker, and ports non-destructively |
-| | `[--env-file <file>]` | Reads `DATABASE_URL` from specified file |
-| `zelyra fmt <file.zyl>` | `[--check]` | Formats source code according to official standards |
-| `zelyra verify <file.zyl>` | | Performs formal contract verification |
-| `zelyra doc <file.zyl>` | `--openapi` | Generates OpenAPI 3.0 specifications |
-| | `--typescript` | Generates typed dependency-free TypeScript client |
-| `zelyra db init <file.zyl>` | | Initializes database and base tables |
-| `zelyra db setup <file.zyl>` | | Sets up MariaDB database initially |
-| `zelyra db apply <file.zyl>` | | Applies schema migrations safely |
-| `zelyra auth hash-password` | `[--stdin]` | Generates secure Argon2 password hashes |
-| `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
-| `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
-| `zelyra module plan <entry> <module>` | | Shows the read-only source closure; not a deployment export |
-
----
-
-## Appendix D: Standard Library Overview
-
-### Pure Core Functions (Zero Capabilities Required)
-- `print(value)`: Prints any value to standard output.
-- `len(array)`: Returns the number of elements in an array as an `Int`.
-- `append(array, element)`: Produces a new array with the appended value.
-- `contains(array, element)` -> `Bool`: Checks whether an item is present in an array.
-- `first(array)` -> `Option<T>`: Returns the first item wrapped in `Some`, or `None`.
-- `last(array)` -> `Option<T>`: Returns the final item wrapped in `Some`, or `None`.
-- `get(map, key)` -> `Option<V>`: Looks up a key within a `Map<K, V>`.
-- `put(map, key, value)` -> `Map<K, V>`: Inserts or updates a key-value pair functionally.
-- `keys(map)` -> `K[]`: Returns all keys of a map as an array.
-- `values(map)` -> `V[]`: Returns all values of a map as an array.
-- `Some(value)` / `None`: Value constructors for the `Option<T>` type.
-- `Ok(value)` / `Err(error)`: Value constructors for the `Result<T, E>` type.
-- `json_encode(value)` -> `String`: Serializes typed data into a JSON string.
-- `json_decode<T>(text)` -> `T`: Parses typed JSON; invalid data are reported as runtime errors.
-
-### Capability-Guarded Functions
-- `uses Console`:
-  - `read_console(prompt: String)` -> `String?`: Displays the prompt and reads one line; `None` represents EOF.
-- `uses Clock`:
-  - `now()` -> `Timestamp`: Returns current system timestamp.
-- `uses Random`:
-  - `random_int(min: Int, max: Int)` -> `Int`: Generates an integer in the given range.
-- `uses Environment`:
-  - `env(name: String)` -> `Option<String>`: Reads a host environment variable.
-- `uses FileSystem`:
-  - `read_text(path: String)` -> `String`: Reads file contents as text.
-  - `write_text(path: String, content: String)`: Writes text content to file.
-  - `delete_file(path: String)`: Deletes a target file.
-  - `list_dir(dir: String)` -> `String[]`: Lists directory filenames.
-- `uses Database`:
-  - `sql<T[]> { SELECT ... }`: Executes type-checked SQL queries returning entity records.
-  - `transaction { ... }`: Wraps multiple SQL operations inside an atomic transaction.
-
----
-
-## Appendix E: SQL Cheat Sheet for Zelyra Developers
-
-SQL statements embedded directly within Zelyra are executed with `sql<T[]>` or `sql`:
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "app"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String required
-    completed: Bool default false
-}
-
-fn sql_examples() uses Database {
-    // 1. SELECT with typed return type and safe parameter
-    status = false
-    filtered = sql<Task[]> {
-        SELECT id, name, completed
-        FROM tasks
-        WHERE completed = :status
-    }
-
-    // 2. INSERT within a transaction
-    text = "New task"
-    transaction {
-        sql {
-            INSERT INTO tasks (name, completed)
-            VALUES (:text, false)
-        }
-    }
-
-    // 3. UPDATE
-    target_id = 1
-    transaction {
-        sql {
-            UPDATE tasks
-            SET completed = true
-            WHERE id = :target_id
-        }
-    }
-}
-
-fn main() uses Database {
-    print("SQL cheat sheet validated.")
-}
-```
-
----
-
-## Appendix F: HTML and Web Reference in Zelyra
-
-### Web structures and declarations
-
-| Element | Declaration | Purpose |
-| :--- | :--- | :--- |
-| **Page** | `page "/path/{param}" { ... }` | Defines an HTTP GET route with path parameters and HTML response |
-| **View Layout** | `view LayoutName { html { ... <slot /> ... } }` | Reusable layout with default and named slots |
-| **Component** | `component Name { props { ... } html { ... } }` | Reusable HTML component with typed properties |
-| **Named Slot** | `<slot name="header">Fallback</slot>` | Placeholder in layout/component with optional default content |
-| **Slot Injection** | `<slot name="header">Content</slot>` | Passes child content into matching slot |
-| **Data Loading** | `load item = sql<Item> { SELECT ... }` | Typed loading of single record with field access `{item.field}` |
-| **Collection Loop**| `for item in items { <li>{item.name}</li> }` | Typed server-side iteration over loaded collection |
-| **Search Control** | `search { col1 col2 }` | Whitelist-checked URL search with parameterized `LIKE` query |
-| **Sort Control** | `sort { col1 col2 }` | Typed sorting via `?sort=col&order=asc\|desc` |
-| **Pagination** | `paginated 25` | Pagination with `LIMIT`/`OFFSET`, `page`, `pages`, and `total` |
-| **Filter Control** | `filter { col1 col2 }` | Typed filter operators (`eq`, `contains`, `starts_with`, `gt`, `lte` etc.) |
-| **CRUD Layout** | `crud Res { table tbl layout: LayoutName }` | Embeds CRUD views into slots `title`, `nav`, `content`, `actions` |
-
----
-
-## Appendix G: Glossary of Technical Terms
-
-- **AST (Abstract Syntax Tree):** The hierarchical tree data structure representing the syntactic elements of your source code following lexical and grammatical analysis.
-- **Capability:** An explicit permission marker (`uses FileSystem`, `uses Database`, etc.) required on a function's signature before it is permitted to touch guarded external system resources.
-- **Design by Contract:** A formal software design methodology where functions establish strict preconditions (`requires`) and postconditions (`ensures`) enforced by static analysis and runtime checks.
-- **Immutable:** Unchangeable after initial assignment. In Zelyra, all variables are immutable by default unless explicitly declared with the `mutable` keyword.
-- **Invariant:** A logical condition (such as in a loop) that is guaranteed to evaluate to true before and after every execution cycle.
-- **Option:** A algebraic data type (`Some(v)` or `None`) representing the potential absence of a valueâ€”Zelyra's robust replacement for dreaded null-pointer exceptions.
-- **Result:** A type (`Ok(v)` or `Err(e)`) that encapsulates the outcome of an operation that might fail, treating errors as first-class recoverable values rather than untyped exceptions.
-- **Typed Hole (`_`):** A compiler-supported placeholder indicating incomplete code, which signals the compiler and AI tooling to display the required type, local scope, and applicable contracts for that location.
-
----
-
-## Appendix H: Solutions to Chapter Exercises
-
-### Chapter 1: Greeting
-```zelyra
-fn main() {
-    print("Hello World from Zelyra!")
-}
-```
-
-### Chapter 5: Calculate Discount Price
-```zelyra
-fn calculate_discount(original: Float, percent: Float) -> Float {
-    return original * (1.0 - (percent / 100.0))
-}
-
-fn main() {
-    print(calculate_discount(100.0, 20.0))
-}
-```
-
-### Chapter 11: Double Numbers
-```zelyra
-fn double_number(number: Int) -> Int {
-    return number * 2
-}
-
-fn main() {
-    print(double_number(21))
-}
-```
-
-### Chapter 12: Pre- and Postconditions
-```zelyra
-fn clamp(value: Int, min_val: Int, max_val: Int) -> Int
-    requires { min_val <= max_val }
-    ensures { result >= min_val && result <= max_val }
-{
-    if value < min_val { return min_val }
-    if value > max_val { return max_val }
-    return value
-}
-
-fn main() {
-    print(clamp(120, 0, 100))
-}
-```
-
-### Chapter 13: Sum an Array
-```zelyra
-fn sum_array(numbers: Int[]) -> Int {
-    mutable total = 0
-    for n in numbers {
-        total = total + n
-    }
-    return total
-}
-
-fn main() {
-    items: Int[] = [1, 2, 3, 4, 5]
-    print(sum_array(items))
-}
-```
-
----
-
-## Appendix I: Frequently Asked Questions (FAQ)
-
-**Question: Why is there no `import` statement in Zelyra 0.3.0?**
-*Answer:* The published 0.3.0 binary has no module imports. A CLI invocation
-checks only the explicitly named `.zyl` source file. The current unreleased
-development branch has experimental imports for functions, types, records,
-tables, views, components, and project-wide database configuration. Commands
-including `serve` can use the linked project graph, but complete stable modules
-and package exports remain planned work.
-
-**Question: Can I build command-line applications with Zelyra?**
-*Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.
-
-**Question: Why does Zelyra emphasize MariaDB as its primary database engine?**
-*Answer:* MariaDB provides exceptional transactional performance, open-source licensing, robust cloud compatibility, and rock-solid reliability for enterprise web applications.
-
----
-
-## Appendix J: Next Resources and Community
-
-- **Official GitHub Repository:** [https://github.com/sf1976/zelyra](https://github.com/sf1976/zelyra)
-- **Documentation & Online Handbook:** [https://siedelmann.com/handbook](https://siedelmann.com/handbook) / [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch)
-- **Examples & Templates:** Check the `examples/` directory in the official repository for runnable templates covering authentication, CRUD views, REST APIs, and database migrations.
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×]8ãÄèµ©hºÚn¶X§zÍHÈH™[\˜H[™›ÛÚÂ‚ŠŠ‘œ›ÛH›Ý[™][ÛœÈÈ]X˜\ÙKX˜XÚÙYÙXˆ\XØ][ÛœËˆÝ]H[[ˆ›Ý™HÛÜœ™XÝ™\ÜËŠŠ‚‚‘[™Û\Ú0­ÈÑ]]ØÚH]\ÙØX™WJÚ[™XÚ
+B‚•Ù[ÛÛYHÈHÛÛ\]H™[\˜H[™›ÛÚËˆ][˜ÛY\È›ÝH[›ÙXÝÜžH^›ÛÚÈ
+Šˆ“X\›š[™È™[\˜H8 $È[™\œÝ[™X›H›ÙÜ˜[[Z[™Èœ›ÛHH›Ý[™][ÛœÈÈ[Ý\ˆÝÛˆ\XØ][ÛˆŠŠˆ
+\ÈHÈÚ\\œÈHÈŠKH
+Š•XÚšXØ[™Y™\™[˜ÙHX[X[
+Šˆ
+Ú\\œÈHÈŒÊK[™ÛÛ\™Z[œÚ]™H
+Š\[™XÙ\ÊŠˆ
+HÈŠK‚‚ˆ
+Š”›Ú™XÝÝ]\ÎŠŠˆÛÛ\[\ˆŒËŒ[\[Y[ÈH\ÝY^\š[Y[[ÝXœÙ]Ùˆ[™ÝXYÙH[™HŒKˆ™[\˜H\È›Ý\›Ý™Y›Üˆ›ÙXÝ[Ûˆ\ÙK‚‚ˆÈÈÝ]\ÈX\šÜÂ‚‹H8§!H
+Š’[\[Y[Y[™™\šYšYYŠŠˆ™\Ù[[ˆHÝ\œ™[™\ÜÚ]ÜžH[™ÝXØÙ\ÜÙ[H[ˆ[ˆ\È\ÜË‚‹H<'éêˆ
+Š‘^\š[Y[[ŠŠˆ™\Ù[]X\›HÜˆÛÛœÝ˜Z[™Y‚‹H<'åî»î#È
+Š”[›™YŠŠˆ\ÙˆH[™ÝXYÙHš\Ú[Û‹›ÝY]™[XX›H]˜Z[X›K‚‹H8§c
+ŠÝ\œ™[H[˜]˜Z[X›NŠŠˆ›Ý™\Ù[[ˆHÝ\œ™[ÓK‚‚ˆÈÈX›HÙˆÛÛ[Â‚ˆÈÈÈX\›š[™È™[\˜H8 $ÈH^›ÛÚÂ‚‹H
+Š–ÔT•H8 $ÈS‘T”ÕS‘S‘È‘STHS‘“ÑÔSSRS‘×JÜ\ZK][™\œÝ[™[™Ë^™[\˜KX[™\›ÙÜ˜[[Z[™ÊJŠ‚ˆHÐÚ\\ˆNˆÙ[ÛÛYHÈ™[\˜WJØÚ\\‹LK]Ù[ÛÛYK]Ë^™[\˜JBˆHÐÚ\\ˆŽˆÝÈH›ÙÜ˜[HÛÜšÜ×JØÚ\\‹L‹ZÝËXK\›ÙÜ˜[K]ÛÜšÜÊBˆHÐÚ\\ˆÎˆ[œÝ[[™È[™Ù][™È\™[\˜WJØÚ\\‹LËZ[œÝ[[™ËX[™\Ù][™Ë]\^™[\˜JBˆHÐÚ\\ˆˆHš\œÝ™[\˜H›Ú™XÝJØÚ\\‹M]KYš\œÝ^™[\˜K\›Ú™XÝ
+B‹H
+Š–ÔT•RH8 $ÈS‘ÕPQÑH•S‘SQS•S×JÜ\ZZK[[™ÝXYÙKY[™[Y[[ÊJŠ‚ˆHÐÚ\\ˆNˆ˜[Y\È[™]H\\×JØÚ\\‹MK]˜[Y\ËX[™Y]K]\\ÊBˆHÐÚ\\ˆŽˆ˜\šXX›\È[™[[]]Xš[]WJØÚ\\‹M‹]˜\šXX›\ËX[™Z[[]]Xš[]JBˆHÐÚ\\ˆÎˆÜ\˜]ÜœÈ[™^™\ÜÚ[Ûœ×JØÚ\\‹MË[Ü\˜]ÜœËX[™Y^™\ÜÚ[ÛœÊBˆHÐÚ\\ˆˆ[œ][™Ý]]JØÚ\\‹NZ[œ]X[™[Ý]]
+BˆHÐÚ\\ˆNˆXÚ\Ú[ÛœÈÚ]ÛÛ™][Ûœ×JØÚ\\‹NKYXÚ\Ú[ÛœË]Ú]XÛÛ™][ÛœÊBˆHÐÚ\\ˆLˆ™\]][Ûˆ[™ÛÜ×JØÚ\\‹LL\™\]][Û‹X[™[ÛÜÊB‹H
+Š–ÔT•RRH8 $ÈÕ•PÕT’S‘È“ÑÔST×JÜ\ZZZK\ÝXÝ\š[™Ë\›ÙÜ˜[\ÊJŠ‚ˆHÐÚ\\ˆLNˆ[˜Ý[ÛœÈ[™›ØÙY\™\×JØÚ\\‹LLKY[˜Ý[ÛœËX[™\›ØÙY\™\ÊBˆHÐÚ\\ˆLŽˆÛÛ˜XÝÈ[™™XÛÛ™][ÛœÈ
+\ÚYÛˆžHÛÛ˜XÝ
+WJØÚ\\‹LL‹XÛÛ˜XÝËX[™\™XÛÛ™][ÛœËY\ÚYÛ‹XžKXÛÛ˜XÝ
+BˆHÐÚ\\ˆLÎˆÛÛXÝ[ÛœË\ÝË[™XÝ[Û˜\šY\È
+\œ˜^\È	ˆX\ÊWJØÚ\\‹LLËXÛÛXÝ[ÛœË[\ÝËX[™YXÝ[Û˜\šY\ËX\œ˜^\ËX[™[X\ÊBˆHÐÚ\\ˆMˆÜ™X][™ÈÝ\ÝÛH]H\\È
+™XÛÜ™È	ˆX›\ÊWJØÚ\\‹LMXÜ™X][™ËXÝ\ÝÛKY]K]\\Ë\™XÛÜ™Ë]X›\ÊBˆHÐÚ\\ˆMNˆ[Ù[\È[™ÛÙHÜ™Ø[š^˜][Û—JØÚ\\‹LMK[[Ù[\ËX[™XÛÙK[Ü™Ø[š^˜][ÛŠB‹H
+Š–ÔT•Uˆ8 $ÈÐQ‘UHS‘T”“ÔˆS‘S‘×JÜ\Z]‹\ØY™]KX[™Y\œ›Ü‹Z[™[™ÊJŠ‚ˆHÐÚ\\ˆMŽˆ\œ›Üˆ\\È[™Z\ˆØ]\Ù\×JØÚ\\‹LM‹Y\œ›Ü‹]\\ËX[™]Z\‹XØ]\Ù\ÊBˆHÐÚ\\ˆMÎˆ\œ›ÜœÈ\È˜[Y\È8 $ÈH™\Ý[]\›—JØÚ\\‹LMËY\œ›ÜœËX\Ë]˜[Y\Ë]K\™\Ý[\]\›ŠBˆHÐÚ\\ˆNˆ›Ý[™Û™\ÜÈÙ\È›Ý^\Ý8 $ÈÛÜšÚ[™ÈØY™[HÚ]Ü[Û—JØÚ\\‹LN[›Ý[™Û™\ÜËYÙ\Ë[›ÝY^\Ý]ÛÜšÚ[™Ë\ØY™[K]Ú][Ü[ÛŠBˆHÐÚ\\ˆNNˆ\Ý[™È[™]X[]H\ÜÝ\˜[˜ÙWJØÚ\\‹LNK]\Ý[™ËX[™\]X[]KX\ÜÝ\˜[˜ÙJB‹H
+Š–ÔT•ˆ8 $ÈPÕPÐSUH“ÐÑTÔÒS‘×JÜ\]‹\˜XÝXØ[Y]K\›ØÙ\ÜÚ[™ÊJŠ‚ˆHÐÚ\\ˆŒˆÛÜšÚ[™ÈÚ]š[\×JØÚ\\‹LŒ]ÛÜšÚ[™Ë]Ú]Yš[\ÊBˆHÐÚ\\ˆŒNˆ]K[YK˜[™Û[™\ÜË[™ÝXÝ\™Y]WJØÚ\\‹LŒKY]K][YK\˜[™Û[™\ÜËX[™\ÝXÝ\™YY]JBˆHÐÚ\\ˆŒŽˆÛÛ˜Ý\œ™[˜ÞH[™˜XÚÙÜ›Ý[™\ÚÜ×JØÚ\\‹LŒ‹XÛÛ˜Ý\œ™[˜ÞKX[™X˜XÚÙÜ›Ý[™]\ÚÜÊB‹H
+Š–ÔT•’H8 $ÈUPTÑTÈÒU‘STWJÜ\]šKY]X˜\Ù\Ë]Ú]^™[\˜JJŠ‚ˆHÐÚ\\ˆŒÎˆÚH™[\˜H[™\œÝ[™È]X˜\Ù\È\™XÝWJØÚ\\‹LŒË]ÚK^™[\˜K][™\œÝ[™ËY]X˜\Ù\ËY\™XÝJBˆHÐÚ\\ˆˆYš[š[™ÈX›\È[™]H[Ù[[™×JØÚ\\‹LYYš[š[™Ë]X›\ËX[™Y]K[[Ù[[™ÊBˆHÐÚ\\ˆNˆ]Y\žZ[™È[™[ÙYžZ[™È]WJØÚ\\‹LK\]Y\žZ[™ËX[™[[ÙYžZ[™ËY]JB‹H
+Š–ÔT•’RH8 $ÈÑPˆTPÐUSÓ”ÈS‘“Ô“T×JÜ\]šZK]ÙX‹X\XØ][ÛœËX[™Y›Ü›\ÊJŠ‚ˆHÐÚ\\ˆŽˆ™[™\š[™ÈÙXˆYÙ\×JØÚ\\‹L‹\™[™\š[™Ë]ÙX‹\YÙ\ÊBˆHÐÚ\\ˆÎˆ›Ü›\È[™\Ù\ˆ[œ]×JØÚ\\‹LËY›Ü›\ËX[™]\Ù\‹Z[œ]ÊBˆHÐÚ\\ˆŽˆHÛÛ\]HÔ•Q]\›—JØÚ\\‹LŽ]KXÛÛ\]KXÜY\]\›ŠBˆHÐÚ\\ˆŽNˆ\Ù\œË\ÜÝÛÜ™Ë[™Ù\ÜÚ[Ûœ×JØÚ\\‹LŽK]\Ù\œË\\ÜÝÛÜ™ËX[™\Ù\ÜÚ[ÛœÊBˆHÐÚ\\ˆÌˆT\È[™]H^Ú[™ÙWJØÚ\\‹LÌX\\ËX[™Y]KY^Ú[™ÙJB‹H
+Š–ÔT•’RRH8 $ÈHTÕSÕU‘H‘PUT‘TÈÑˆ‘STWJÜ\]šZZK]KY\Ý[˜Ý]™KY™X]\™\Ë[Ù‹^™[\˜JJŠ‚ˆHÐÚ\\ˆÌNˆ™XYXš[]H\ÈHYÚ\Ýš[Üš]WJØÚ\\‹LÌK\™XYXš[]KX\Ë]KZYÚ\Ý\š[Üš]JBˆHÐÚ\\ˆÌŽˆRKS˜]]š]H8 $ÈÚH™[\˜H\ÈZ[›ÜˆRH\ÜÚ\Ý[×JØÚ\\‹LÌ‹XZK[˜]]š]K]ÚK^™[\˜KZ\ËXZ[Y›Ü‹XZKX\ÜÚ\Ý[ÊBˆHÐÚ\\ˆÌÎˆØY™]H›ÝYÚØ\Xš[]Y\×JØÚ\\‹LÌË\ØY™]K]›ÝYÚXØ\Xš[]Y\ÊBˆHÐÚ\\ˆÍˆ™[\˜H[ˆÛÛ\\š\ÛÛ—JØÚ\\‹LÍ^™[\˜KZ[‹XÛÛ\\š\ÛÛŠB‹H
+Š–ÔT•V8 $È”“ÓHTÒQÓˆÈ’S’TÒQTPÐUSÓ—JÜ\Z^Yœ›ÛKY\ÚYÛ‹]ËYš[š\ÚYX\XØ][ÛŠJŠ‚ˆHÐÚ\\ˆÍNˆ[›š[™ÈÛÙØ\™H8 $Èœ›ÛHYXHÈ\ÚYÛ—JØÚ\\‹LÍK\[›š[™Ë\ÛÙØ\™KYœ›ÛKZYXK]ËY\ÚYÛŠBˆHÐÚ\\ˆÍŽˆ\˜Ú]XÝ\™H[™ÛX[ˆÛÙHÝXÝ\™WJØÚ\\‹LÍ‹X\˜Ú]XÝ\™KX[™XÛX[‹XÛÙK\ÝXÝ\™JBˆHÐÚ\\ˆÍÎˆÛÛ™šYÝ\˜][Ûˆ[™[š\›Û›Y[˜\šXX›\×JØÚ\\‹LÍËXÛÛ™šYÝ\˜][Û‹X[™Y[š\›Û›Y[]˜\šXX›\ÊBˆHÐÚ\\ˆÎˆXYÙÚ[™È[™Ü[Z^˜][Û—JØÚ\\‹LÎYXYÙÚ[™ËX[™[Ü[Z^˜][ÛŠBˆHÐÚ\\ˆÎNˆ\Þ[Y[[™Ü\˜][Ûœ×JØÚ\\‹LÎKY\Þ[Y[X[™[Ü\˜][ÛœÊB‹H
+Š–ÔT•8 $ÈÐTÕÓ‘H“Ò‘PÕS‘ÓÒÒS‘ÈRPQJÜ\^XØ\ÝÛ™K\›Ú™XÝX[™[ÛÚÚ[™ËXZXY
+JŠ‚ˆHÐÚ\\ˆˆHÜ˜[™Ø\ÝÛ™H›Ú™XÝˆÛÛ\]H\ÚÈX[˜YÙ[Y[JØÚ\\‹M]KYÜ˜[™XØ\ÝÛ™K\›Ú™XÝXÛÛ\]K]\ÚË[X[˜YÙ[Y[
+BˆHÐÚ\\ˆNˆH™[\˜H›ØYX\
+œ›ÛHŒËŒÈKŒ
+WJØÚ\\‹MK]K^™[\˜K\›ØYX\Yœ›ÛKLÌ]ËLL
+BˆHÐÚ\\ˆŽˆ[Ý\ˆ›Ý\›™^H\ÈH™[\˜H]™[Ü\—JØÚ\\‹M‹^[Ý\‹Z›Ý\›™^KX\ËXK^™[\˜KY]™[Ü\ŠB‚ˆÈÈÈXÚšXØ[™Y™\™[˜ÙHX[X[‚‹HÌKˆÚ]XZÙ\È™[\˜HY™™\™[JÌK]Ú][XZÙ\Ë^™[\˜KYY™™\™[
+B‹HÌ‹ˆ[œÝ[][Û—JÌ‹Z[œÝ[][ÛŠB‹HÌËˆ[Ý\ˆš\œÝ›ÙÜ˜[WJÌË^[Ý\‹Yš\œÝ\›ÙÜ˜[JB‹HÍˆÜ™X]HH›Ú™XÝ[™\ÙHHÓWJÍXÜ™X]KXK\›Ú™XÝX[™]\ÙK]KXÛJB‹HÍKˆ˜\šXX›\Ë\\Ë[™[˜Ý[Ûœ×JÍK]˜\šXX›\Ë]\\ËX[™Y[˜Ý[ÛœÊB‹HÍ‹ˆÜ[Û‹™\Ý[[™]\›ˆX]Ú[™×JÍ‹[Ü[Û‹\™\Ý[X[™\]\›‹[X]Ú[™ÊB‹HÍËˆX\šXQˆ[™X›\×JÍË[X\šXY‹X[™]X›\ÊB‹HÎˆ[œÜXÝ[™È[™\Z[™ÈØÚ[X\×JÎZ[œÜXÝ[™ËX[™X\Z[™Ë\ØÚ[X\ÊB‹HÎKˆ˜]]™HÔSJÎK[˜]]™K\Ü[
+B‹HÌLˆÙXˆYÙ\×JÌL]ÙX‹\YÙ\ÊB‹HÌLKˆ›Ü›\×JÌLKY›Ü›\ÊB‹HÌL‹ˆÔ•QJÌL‹XÜY
+B‹HÌLËˆ]][XØ][Ûˆ[™\›Z\ÜÚ[Ûœ×JÌLËX]][XØ][Û‹X[™\\›Z\ÜÚ[ÛœÊB‹HÌMˆØ\Xš[]Y\×JÌMXØ\Xš[]Y\ÊB‹HÌMKˆÛÛ˜XÝÈ[™™\šYšXØ][Û—JÌMKXÛÛ˜XÝËX[™]™\šYšXØ][ÛŠB‹HÌM‹ˆÛÛ™šYÝ\˜][Ûˆ[™ÙXÜ™]×JÌM‹XÛÛ™šYÝ\˜][Û‹X[™\ÙXÜ™]ÊB‹HÌMËˆXYÛ›ÜÝXÜÈ[™›ÝX›\ÚÛÝ[™×JÌMËYXYÛ›ÜÝXÜËX[™]›ÝX›\ÚÛÝ[™ÊB‹HÌNˆ\Ý[™È[™ÛÛšX][™×JÌN]\Ý[™ËX[™XÛÛšX][™ÊB‹HÌNKˆÚ]ÛÛY\È™^JÌNK]Ú]XÛÛY\Ë[™^
+B‹HÌŒˆ™[\˜HÛÛ\\™YÚ]\ÝJÌŒ^™[\˜KXÛÛ\\™Y]Ú]\\Ý
+B‹HÌŒKˆÜÚ][Ûš[™È[™Ý\œ™[]™[ÜY[Ý]\×JÌŒK\ÜÚ][Ûš[™ËX[™XÝ\œ™[Y]™[ÜY[\Ý]\ÊB‹HÌŒ‹ˆ›ØYX\œ›ÛHHÝ\œ™[™\ÜÚ]ÜžWJÌŒ‹\›ØYX\Yœ›ÛK]KXÝ\œ™[\™\ÜÚ]ÜžJB‹HÌŒËˆRK[˜]]™H]™[ÜY[JÌŒËXZK[˜]]™KY]™[ÜY[
+B‹HÌˆ]]Üš]]]™HÛÝ\˜Ù\È[™ÛÛ\[\ˆ™\šYšXØ][Ûˆ
+ÛÝ\˜ÙH]]Üš]JWJÌX]]Üš]]]™K\ÛÝ\˜Ù\ËX[™XÛÛ\[\‹]™\šYšXØ][Û‹\ÛÝ\˜ÙKX]]Üš]JB‚ˆÈÈÈ\[™XÙ\Â‚‹HÐ\[™^Nˆ]ZXÚÜÝ\ÈÚX]ÚY]
+Þ[^ÚX]ÚY]
+WJØ\[™^XK\]ZXÚÜÝ\XÚX]\ÚY]\Þ[^XÚX]\ÚY]
+B‹HÐ\[™^ŽˆÛÛ\]H™[\˜HXYÛ›ÜÝXÈ	ˆ\œ›ÜˆÛÙH™Y™\™[˜ÙWJØ\[™^X‹XÛÛ\]K^™[\˜KYXYÛ›ÜÝXËY\œ›Ü‹XÛÙK\™Y™\™[˜ÙJB‹HÐ\[™^Îˆ™[\˜HÓHÛÛ[X[™™Y™\™[˜ÙWJØ\[™^XË^™[\˜KXÛKXÛÛ[X[™\™Y™\™[˜ÙJB‹HÐ\[™^ˆÝ[™\™Xœ˜\žHÝ™\šY]×JØ\[™^Y\Ý[™\™[Xœ˜\žK[Ý™\šY]ÊB‹HÐ\[™^NˆÔSÚX]ÚY]›Üˆ™[\˜H]™[Ü\œ×JØ\[™^YK\Ü[XÚX]\ÚY]Y›Ü‹^™[\˜KY]™[Ü\œÊB‹HÐ\[™^ŽˆS[™ÙXˆ™Y™\™[˜ÙH[ˆ™[\˜WJØ\[™^Y‹Z[X[™]ÙX‹\™Y™\™[˜ÙKZ[‹^™[\˜JB‹HÐ\[™^ÎˆÛÜÜØ\žHÙˆXÚšXØ[\›\×JØ\[™^YËYÛÜÜØ\žK[Ù‹]XÚšXØ[]\›\ÊB‹HÐ\[™^ˆÛÛ][ÛœÈÈÚ\\ˆ^\˜Ú\Ù\×JØ\[™^Z\ÛÛ][ÛœË]ËXÚ\\‹Y^\˜Ú\Ù\ÊB‹HÐ\[™^Nˆœ™\]Y[H\ÚÙY]Y\Ý[ÛœÈ
+TJWJØ\[™^ZKYœ™\]Y[KX\ÚÙY\]Y\Ý[ÛœËY˜\JB‹HÐ\[™^Žˆ™^™\ÛÝ\˜Ù\È[™ÛÛ[][š]WJØ\[™^Z‹[™^\™\ÛÝ\˜Ù\ËX[™XÛÛ[][š]JB‚ˆÈT•H8 $ÈS‘T”ÕS‘S‘È‘STHS‘“ÑÔSSRS‘Â‚‹KKB‚ˆÈÈÚ\\ˆNˆÙ[ÛÛYHÈ™[\˜B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\È[›ÙXÝÜžHÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]H›ÙÜ˜[[Z[™È[™ÝXYÙH\È]]ÈÛÜ™H[™Ú]\œÜÙH]Ù\™\Ë‚‹HÚ]XZÙ\È™[\˜H\Ý[˜Ý]™H[™ÚH]Ø\ÈÜ™X]Y\È[ˆ[™\[™[›ÙÜ˜[[Z[™È[™ÝXYÙK‚‹HÚXÚ˜XÝXØ[ÛØ[È™[\˜H\œÝY\È[™Ú]Ú[™ÈÙˆ\ÚÜÈ]\ÈÜXÚYšXØ[HZ[Ü™Y›Ü‹‚‹HÝÈ™[\˜HÝX\˜[Y\È™XYXš[]K™[XXš[]K[™ØY™]HšYÚœ›ÛHHÝ\‚‹HÚH™[\˜HØ\È[[[Û˜[H\ÚYÛ™Y›Üˆ›Ý[X[ˆÛÙØ\™H[™Ú[™Y\œÈ[™RHÛÙ[™È\ÜÚ\Ý[Ë‚‹HÝÈ\È^›ÛÚÈ\ÈÝXÝ\™Y[™ÝÈ[ÝHØ[ˆÛÜšÈÚ]][ÜÝY™™XÝ]™[K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â™Y›Ü™H[ÝHÜš]H[Ý\ˆš\œÝ[™HÙˆÛÙK[ÝHÚÝ[[™\œÝ[™H[™[Y[[›Ø›[H]™[\˜HÛÛ™\Ëˆ[Ù\›ˆÛÙØ\™H[™Ú[™Y\š[™ø %\ÜXÚX[HÚ[ˆZ[[™È]KZ[[œÚ]™H[™ÙX‹Yš]™[ˆ\XØ][Ûœø %œ™\]Y[HÝY™™\œÈœ›ÛHX\ÜÚ]™Hœ˜YÛY[][ÛŽˆ[ÝH\ÚYÛˆH]X˜\ÙHX›HØÚ[XH[ˆÔS™KZ[\[Y[H^XÝØ[YH[\È[œÚYHH˜XÚÙ[™œ˜[Y]ÛÜšÈ
+ÝXÚ\È\˜]™[^™\ÜËÜˆ˜[™ÛÊK™K]˜[Y]HHØ[YHÛÛœÝ˜Z[ÈH\™[YH[ˆHœ›Û[™
+SÒ˜]˜TØÜš\
+K[™[ˆX[X[HÙ[™\˜]HTHØÚ[X\Ë‚–™[\˜Hœ™XZÜÈ›ÝYÚ\Èœ˜YÛY[][ÛŽˆ[ÝHYš[™H[Ý\ˆ]H[Ù[Ë\Ú[™\ÜÈ[\Ë[™[\™˜XÙ\È[ˆÛ™HÛÚ\Ú]™H[™ÝXYÙx %[™™[\˜H\š]™\È™\šYšYYÙXÝ\™H\XØ][ÛˆÛÛ\Û™[Èœ›ÛH]Ú[™ÛHÛÝ\˜ÙHÙˆ]‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚H
+Šœ›ÙÜ˜[[Z[™È[™ÝXYÙJŠˆ\ÈH™XÚ\ÙHÙ]Ùˆ[\È[™[œÝXÝ[ÛœËˆ][ÝÜÈ[ÝHÈÚ]™H[˜[XšYÝ[Ý\ÈÛÛ[X[™ÈÈHÛÛ\]\‹ˆÛÛ\]\œÈ\™H^˜[Ü™[˜\š[H˜\Ý]^H]™H›È[›˜]HÛÛ[[ÛˆÙ[œÙNˆYˆ[ˆ[œÝXÝ[Ûˆ\È[XšYÝ[Ý\ÈÜˆ[ˆ[š[™YÛÛ™][ÛˆØØÝ\œËH\XØ][ÛˆZ]\ˆÜ˜\Ú\ÈÜˆ›ÙXÙ\ÈÜš]XØ[YÜË‚‚ŠŠ–™[\˜JŠˆ\ÈH[Ù\›‹Ý]XØ[H\Y[™ÝXYÙKˆ”Ý]XØ[H\YˆYX[œÈ]™Y›Ü™HH›ÙÜ˜[H]™\ˆ[œËH™[\˜HÛÛ\[\ˆšYÛÜ›Ý\ÛH[œÜXÝÈÚ]\ˆ[ÛÛ\Û™[Èš]ÙÙ]\ˆÛÜœ™XÝKˆYˆH[˜Ý[Ûˆ^XÝÈ^][ÝHXØÚY[[H\ÜÈ]H[X™\‹™[\˜H[\È[ÝH[[YYX][H]ÛÛ\[H[Yx %™Y›Ü™H[Ý\ˆÛÙH]™\ˆ™XXÚ\ÈHÙ\™\ˆÜˆ[™\Ù\‹‚‚]HØ[YH[YK™[\˜H\È
+Š™]X˜\ÙKH[™ÙX‹XÙ[šXÊŠŽ‚‹HHX›HØÚ[XH
+X›X
+H\È›Ý[ˆ\ÛÛ]YÔSZYÜ˜][Ûˆš[K]Hš\œÝXÛ\ÜÈ[™ÝXYÙH[[Y[‚‹H˜\šXX›\È\™H
+Šš[[]]X›HžHY˜][
+Š‹ˆ\ÈH™\Ý[˜[Y\ÈØ[››ÝÚ[™ÙH[™^XÝYH™Z[™HØÙ[™\Ë‚‹H›È[Ú[\ˆÝ\œš\Ù\ÎˆZ\ÜÚ[™ÈÜˆÜ[Û˜[˜[Y\È]\Ý™HXÛ\™Y^XÚ]H\ÈÜ[Û˜‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚“]\È^[Z[™HHš\œÝZ[š[X[™[\˜H›ÙÜ˜[N‚‚˜™[\˜B‹ËÈÝ\ˆš\œÝ™[\˜H›ÙÜ˜[NˆHÜ™Y][™Â™›ˆXZ[Š
+HÂˆš[
+•Ù[ÛÛYHÈ™[\˜HHŠBŸB˜‚•ÈÚ]™H\È›ÙÜ˜[H[Ü™H[Ù[\ˆÝXÝ\™KÙHØ[ˆœ™XZÈH\ÚÈÝÛˆ[ÈH™]\ØX›H[˜Ý[ÛŽ‚‚˜™[\˜B™›ˆÜ™Y]
+˜[YNˆÝš[™ÊHOˆÝš[™ÈÂˆ™]\›ˆ’[Ëˆ
+È˜[YH
+ÈˆHÙ[ÛÛYHÈHÛÜ›Ùˆ™[\˜Kˆ‚ŸB‚™›ˆXZ[Š
+HÂˆY\ÜØYÙHHÜ™Y]
+‘]™[Ü\ˆŠBˆš[
+Y\ÜØYÙJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆXÚ[™ÈHÙ[ZXÛÛÛˆ]H[™ÙˆH[™H
+\È[ˆ˜]˜KÊÊËÜˆ
+K‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜K[™Hœ™XZÜÈÛX[›H[[Z]Ý][Y[Ëˆ™Y[™[Ù[ZXÛÛÛœÈÛ]\ˆHÛÙK‚‹H
+Š‘\œ›ÜŽŠŠˆ\ÜÝ[Z[™È™[\˜H\ÈY\™[HHXœ˜\žKœ˜[Y]ÛÜšËÜˆYÚÙZYÚØÜš\[™È^Y\‹‚ˆ
+Ø]\ÙNŠˆ™[\˜H\È[ˆ[™\[™[ÛÛ\[Y[™ÝXYÙHÚ]]ÈÝÛˆ\HÞ\Ý[KÝ]XÈ[˜[\Ú\Ë[™™\šYšXØ][Ûˆ\[[™K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜H[šYšY\È]H[Ù[Ë\Ú[™\ÜÈÙÚXË[™\Ù\ˆ[\™˜XÙ\ÈÚ][ˆHÚ[™ÛHÛÚ\Ú]™H[™ÝXYÙK‚Œ‹ˆÚ][ÝHYX[ˆ\È^XÚ]HÜš][ˆ[ˆHÛÙNˆ›ÈY[ˆXYÚXË›È[\XÚ][˜[Y\Ë‚ŒËˆHÛÛ\[\ˆXÝÈ\È[Ý\ˆ™\šYšXØ][Ûˆ\™\Žˆ]Ø]Ú\ÈYÜÈX\›K™Y›Ü™H^HØ[ˆØ]\ÙH[XYÙH[ˆ›ÙXÝ[Û‹‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ[ÙYžHHÜ™Y][™È›ÙÜ˜[HÛÈ]]š[È[Ý\ˆÝÛˆš\œÝ˜[YH[™ÛY]ÝÛ‹‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HHÙXÛÛ™[˜Ý[Ûˆ˜\™]Ù[
+˜[YNˆÝš[™ÊHOˆÝš[™Ø]ÛÛœÝXÝÈH\[™ÈY\ÜØYÙK[™Ø[›Ý[˜Ý[ÛœÈÚ][ˆXZ[Š
+X‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆY[YžH™YHÛÛ[[ÛˆYÜÈ]œ™\]Y[HØØÝ\ˆ[ˆ[˜[ZXØ[H\Y[™ÝXYÙ\ÈYHÈ\ÜÈÜˆ\HZ\ÛX]Ú\È
+ÝXÚ\È\ÜÚ[™ÈH[X™\ˆÚ\™H^\È^XÝY
+K[™^Z[ˆÝÈHÝ]XÈÛÛ\[\ˆ™]™[È[Hš[ÜˆÈ\Þ[Y[‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[•›ÝYÚÝ]\È›ÛÚËÙHÚ[Ý\XžK\Ý\ÛÛœÝXÝH›Ø\Ý™X[]ÛÜ›
+Š•\ÚÈX[˜YÙ[Y[
+ŠˆÞ\Ý[KˆÙH™YÚ[ˆžH^Z[™ÈH›Ý[™][ÛŽ‚Ü™X]HHš[H˜[YY\ÚÜ×ÜÝ\žž[]ÛX[›Hš[ÈHÞ\Ý[H˜[YH[™™\œÚ[Ûˆ[X™\ˆÈHØÜ™Y[Ž‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆÞ\Ý[WÛ˜[YHH–™[\˜H\ÚÓX[˜YÙ\ˆ‚ˆ™\œÚ[ÛˆHŒŒKL‚ˆš[
+Þ\Ý[WÛ˜[YH
+Èˆ
+™\œÚ[Ûˆˆ
+È™\œÚ[Ûˆ
+ÈŠHÝ\YˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H\ÈHÝ]XØ[H\YÙXÝ\™K[™YÚH™XYX›H[™ÝXYÙH\ÚYÛ™Y›Üˆ\Ú[™\ÜÈÙÚXË]X˜\Ù\Ë[™HÙX‹‚‹H™[\˜H[[Z[˜]\È™Y[™[˜ÚY\È™]ÙY[ˆ]X˜\ÙHØÚ[X\Ë˜[Y][Ûˆ^Y\œË[™THYš[š][ÛœË‚‹H˜\šXX›\È\™H[[]]X›HžHY˜][[˜X›[™ÈHÛÛ\[\ˆÈÝX\˜[YHÝXš[]H[™Û\š]K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ][™[Y[[H\Ý[™ÝZ\Ú\ÈHÝ]XØ[H\Y[™ÝXYÙHœ›ÛHH[˜[ZXØ[H\Y[™ÝXYÙOÂŒ‹ˆÚH\È]Y˜[YÙ[Ý\ÈÈXÛ\™H]X˜\ÙHX›HØÚ[X\È\™XÝHÚ][ˆH›ÙÜ˜[[Z[™È[™ÝXYÙH]Ù[ÂŒËˆÚH\™H[[]]X›H˜[Y\ÈžHY˜][ØY™\ˆ[ˆ]]X›H˜\šXX›\ÏÂ‚‹KKB‚ˆÈÈÚ\\ˆŽˆÝÈH›ÙÜ˜[HÛÜšÜÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈ[Ý\ˆÜš][ˆÛÝ\˜ÙHÛÙH\ÈÞ\Ý[X]XØ[H˜[œÙ›Ü›YY[È[ˆ^XÝ][™È›ÙÜ˜[K‚‹HH›Û\È^YYžHH^\‹\œÙ\‹\HÚXÚÙ\‹™\šYšY\‹[™[\œ™]\ˆ[ˆ™[\˜K‚‹HÚ]™XÚ\Ù[HZÙ\ÈXÙHÚ[ˆH™[\˜H›ÙÜ˜[H›ÛÝÈ\‚‹HH[™[Y[[Y™™\™[˜ÙH™]ÙY[ˆÞ[^
+›Ü›JH[™Ù[X[XÜÈ
+YX[š[™ÊK‚‹HÚ][ˆ[ÛÜš]H\È[™ÝÈHTÈ[Ù[
+[œ]›ØÙ\ÜËÝ]]
+HÜ\˜]\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â‘XYÛ›ÜÚ[™È[™š^[™È›ÙÜ˜[[Z[™ÈYÜÈ™XÛÛY\È[Z]]™HÛ˜ÙH[ÝH[™\œÝ[™]ÚXÚÝYÙHÙˆHÛÛÚZ[ˆ[ˆ\ÜÝYH\È]XÝYˆHÞ[^\œ›Üˆ[™XØ]\ÈX[›Ü›YY^ÈH\H\œ›Üˆ[™XØ]\ÈÛÛ˜YXÝÜžHÙÚXÎÈH[[YH\œ›Üˆ[™XØ]\È[ˆ[™›Ü™\ÙY[ˆÛÛ™][Ûˆ[˜ÛÝ[\™Y\š[™È^XÝ][Û‹ˆ[™\œÝ[™[™È\È›ØÙ\ÜÚ[™È\[[™H[[Z[˜]\È™X\ˆÚ[ˆ˜XÚ[™ÈÛÛ\[\ˆXYÛ›ÜÝXÜË‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚HÛÛ\]\ˆ›ØÙ\ÜÛÜˆ\™XÝH[™\œÝ[™ÈÛ›Hš[˜\žH™\›ÜÈ[™Û™\È
+XXÚ[™HÛÙJKˆÚ[ˆÙH[X[œÈ]]ÜˆH^š[HÛÛZ[š[™È™[\˜HÛÙH
+K™Ë‹›ÙÜ˜[Kžž[
+K]ÛÙH˜]™\œÙ\ÈÙ]™\˜[\Ý[˜ÝÝYÙ\Î‚‚˜^”ÛÝ\˜ÙHÛÙH
+žž[
+Bˆ8¥ ‚ˆ8¥¯–ÌKˆ^\—Nˆœ™XZÜÈÝÛˆ˜]È^[ÈÛÜ™ËÝÚÙ[œÂˆ8¥ ‚ˆ8¥¯–Ì‹ˆ\œÙ\—NˆZ[È[ˆXœÝ˜XÝÞ[^™YH
+TÕ
+Bˆ8¥ ‚ˆ8¥¯–ÌËˆ\HÚXÚÙ\—Nˆ˜[Y]\È\\ËÞ[X›ÛË[™Ø\Xš[]Y\Âˆ8¥ ‚ˆ8¥¯–Íˆ™\šYšY\—Nˆ›Ü›X[HÚXÚÜÈÛÜ[˜\šX[È[™ÛÛ˜XÝÂˆ8¥ ‚ˆ8¥¯–ÍKˆ[[YHÈ[\œ™]\—Nˆ^XÝ]\ÈH™\šYšYY[œÝXÝ[ÛœÂ˜‚‹H
+Š”Þ[^
+Šˆ™\™\Ù[ÈÜ˜[[X\ˆ[™ÝXÝ\™Nˆ\™Hœ˜XÚÙ]È˜[[˜ÙYÈ\™HÙ^]ÛÜ™ÈÜ[YÛÜœ™XÝOÂ‹H
+Š”Ù[X[XÜÊŠˆ™\™\Ù[ÈYX[š[™ÎˆÜš][™ÈYÙHHÙ[KYš]™H˜\ÈÞ[XÝXØ[H˜[Y^]Yˆ[ÝH][\\š]Y]XÈÜ\˜][ÛœÈÚ]]]\ÈÙ[X[XØ[HYX[š[™Û\ÜË‚‹H
+Š[ÛÜš]JŠŽˆHš[š]KÝ\XžK\Ý\›ØÙY\™H\ÚYÛ™YÈÛÛ™HHÜXÚYšXÈ›Ø›[K‚‹H
+Š’TÈ[Ù[
+ŠŽˆ[œ]\È™XÙZ]™Y›ØÙ\ÜÙYXØÛÜ™[™ÈÈÝšXÝ[\Ë[™Ý]]\È›ÙXÙY‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚HÝ˜ZYÚ›ÜØ\™[ÛÜš]HØ[Ý[][™È™[XZ[š[™È^\È[[HXY[™N‚‚˜™[\˜B™›ˆ^\×Ý[[Ý\™Ù]
+\™Ù]Ù^Nˆ[Ý\œ™[Ù^Nˆ[
+HOˆ[Âˆ™[XZ[š[™ÈH\™Ù]Ù^HHÝ\œ™[Ù^Bˆ™]\›ˆ™[XZ[š[™ÂŸB‚™›ˆXZ[Š
+HÂˆÙ^HHLˆYWÙ]HHˆ^\ÈH^\×Ý[[Ý\™Ù]
+YWÙ]KÙ^JBˆš[
+^\ÊBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÜ[š[™ÈHÝ\›Hœ˜XÙHØÚ]Ý]›ÝšY[™ÈHÛÜÚ[™Èœ˜XÙHX‚ˆ
+Ø]\ÙNŠˆ\È\ÈH
+ŠœÞ[^\œ›ÜŠŠˆ
+KTT”ÑKLX
+KˆH\œÙ\ˆ[È[[YYX][H™XØ]\ÙHHÞ[^™YHØ[››Ý™HÛÛ\]Y‚‹H
+Š‘\œ›ÜŽŠŠˆ\ÜÚYÛš[™ÈHÝš[™ÈÈ[ˆ[YÙ\ˆ˜\šXX›NˆYÙNˆ[HŒŒ˜‚ˆ
+Ø]\ÙNŠˆ\È\ÈH
+Š\H\œ›ÜŠŠˆ
+KUTKLX
+KˆH\œÙ\ˆ[™\œÝ[™ÈHÜ˜[[X]XØ[ÝXÝ\™K]H\HÚXÚÙ\ˆ™Z™XÝÈH\ÜÚYÛ›Y[‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆH^\ˆØØ[œÈÚ\˜XÝ\œËH\œÙ\ˆ[™\œÝ[™ÈÝXÝ\™K[™H\HÚXÚÙ\ˆ˜[Y]\ÈÙ[X[XÈYX[š[™Ë‚Œ‹ˆHX\›Y\ˆ[ˆ\œ›Üˆ\È[\˜Ù\Y
+]ÛÛ\[H[YH˜]\ˆ[ˆ[ˆ›ÙXÝ[ÛŠKHØY™\ˆ[™[Ü™HÛÜÝYY™™XÝ]™HHÛÙØ\™H\Ë‚ŒËˆ]™\žH›ÙÜ˜[HY\™\ÈÈHTÈ[Ù[ˆZÙH[œ]›ØÙ\ÜÈ\Ú[™È[˜[XšYÝ[Ý\ÈÙÚXË[™[]™\ˆÝ]]‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ˜]ÈH›ÝØÚ\[\Ý˜][™ÈH^XÝ][ÛˆÝ\ÈÙˆXZ[Š
+X[ˆHXY[™H^[\HX›Ý™K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ^[™H^\×Ý[[Ý\™Ù][˜Ý[ÛˆÚ][ˆY˜Ý][Y[ˆYˆÝ\œ™[Ù^Hˆ\™Ù]Ù^X™]\›ˆ‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ^Z[ˆ[ˆ[Ý\ˆÝÛˆÛÜ™ÈÚH™[\˜HÝ]XØ[H˜[Y]\ÈÛÙH
+™[\˜HÚXÚØ
+H™Y›Ü™H[›š[™È˜]\ˆ[ˆ›[™H^XÝ][™ÈÝ][Y[È[™HžH[™K‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[’[ˆÝ\ˆ\ÚÈX[˜YÙ[Y[\XØ][Û‹ÙH]\Ý]\›Z[™H\ÚÈ\™Ù[˜ÞH˜\ÙYÛˆ™[XZ[š[™È^\ËˆYˆ™]Ù\ˆ[ˆÜˆ\]X[ÈÈ^\È™[XZ[‹H\ÚÈ\ÈÛÛœÚY\™Y\™Ù[‚‚˜™[\˜B™›ˆ\×Ý\™Ù[
+™[XZ[š[™×Ù^\Îˆ[
+HOˆ›ÛÛÂˆ™]\›ˆ™[XZ[š[™×Ù^\ÈHÂŸB‚™›ˆXZ[Š
+HÂˆXY[™WÚ[—Ù^\ÈH‚ˆ\™Ù[H\×Ý\™Ù[
+XY[™WÚ[—Ù^\ÊBˆYˆ\™Ù[Âˆš[
+•Ø\›š[™Îˆ\ÚÈ\ÈYÚš[Üš]HHŠBˆH[ÙHÂˆš[
+•\ÚÈ\ÈÛˆØÚY[KˆŠBˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÛÙH[Ý™\È›ÝYÚHYš[™Y\[[™Nˆ^[™Ë\œÚ[™Ë\HÚXÚÚ[™Ë™\šYšXØ][Û‹[™^XÝ][Û‹‚‹H™[\˜HÝX\˜[Y\È]Þ[^[™\\È\™HÜ›ÝYÚH˜[Y]Y™Y›Ü™H[žH›ÙÜ˜[H[œË‚‹H[ÛÜš]\ÈÛÛ™\[œ]È[È™[XX›HÝ]]È›ÝYÚÛX\‹ÙÚXØ[Ù\]Y[˜Ù\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆ]Ú]Ú[[ˆHÛÛÚZ[ˆ\È[ˆ[˜ÛÜÙY][Ý][ÛˆX\šÈ]XÝYÂŒ‹ˆÚ]Ù\ÈHTÈ
+[œ]›ØÙ\ÜËÝ]]
+H[Ù[\ØÜšX™OÂŒËˆÚHÙ\ÈHÝ]XØ[H\YÞ\Ý[H™Y\ÙHÈ^XÝ]HÚ[ˆ^[™[X™\œÈ\™H[\›Ü\›HÛÛXš[™YÂ‚‹KKB‚ˆÈÈÚ\\ˆÎˆ[œÝ[[™È[™Ù][™È\™[\˜B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â‹HÞ\Ý[H™\]Z\™[Y[È›ÜˆH™[\˜H]™[ÜY[[š\›Û›Y[Ûˆ[^XXÓÔË[™Ú[™ÝÜË‚‹H]›Ü›K\ÜXÚYšXÈØÚÙ\ˆÙ]\[™™\šYšXØ][ÛˆÚ]ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û˜‚‹HÝÈÈ[œÝ[™[\˜Hœ›ÛHÛÝ\˜ÙH
+‹Ú[œÝ[œÚÈ[œÝ[œÌX
+HÜˆHÝX›H™[X\ÙH\˜Ú]™H
+K\™[X\ÙHŒŒËŒ
+K‚‹HÛÛ\]HÛÛ\[\ˆ™\œÚ[Ûˆ]Y\žHÚ]™[\˜HK]™\œÚ[Û˜[™[š\›Û›Y[XYÛ›ÜÚ\ÈÚ]™[\˜HØÝÜ˜‚‹HH[YÜ˜]YÚÙ[‹\›ÝXÝYÙXˆÙ]\\ÜÚ\Ý[
+™[\˜HÙ]\K]ÙX˜
+K‚‹H\XØ[\›Z\ÜÚ[Ûˆ[™ÜÛÛ™›XÝÈ
+ÝXÚ\ÈØÚÙ\ˆÛØÚÙ]\›Z\ÜÚ[ÛœÈ[™]]ÛX]XÈÜÙ[XÝ[ÛŠK‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂHÛ[ÛÝÛÛÚZ[ˆ\ÈH›Ý[™][ÛˆÙˆ]™\žHÝXØÙ\ÜÙ[›Ú™XÝˆYˆÛÛ[X[™È\™HZ\ÜÚ[™ÈÜˆ[š\›Û›Y[˜\šXX›\ÈZ\ØÛÛ™šYÝ\™Y˜[XX›H[YH\ÈÜÝˆ™[\˜H›ÝšY\ÈHX[‹\Ù\‹[ØØ[[œÝ[\ˆ]™\]Z\™\È›È\™\\HXÚØYÙHX[˜YÙ\œÈÜˆ›ÛÝš]š[YÙ\ËˆY][Û˜[KH™]ÈÙXˆÙ]\\ÜÚ\Ý[š\ÝX[HÝZY\È™YÚ[›™\œÈ›ÝYÚ]X˜\ÙH[™ÛÛZ[™\ˆ[š]X[^˜][Û‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚–™[\˜H™\]Z\™\È™Z]\ˆ\XÚH›ÜˆX]žH\™\\H[[Y\È›ÜˆÚ[\H›ÙÜ˜[\ËˆH™[\˜HÓH
+™[\˜X
+H\ÈHÚ[™ÛKYÚHÜ[Z^™Yš[˜\žH^XÝ]X›K‚‚ÚÛÜÙHH]]š]È[Ý\ˆÜ\˜][™ÈÞ\Ý[N‚ŒKˆ
+Š“[^ÈXXÓÔÎŠŠˆÛÛ™HHÙ™šXÚX[™\ÜÚ]ÜžH[™^XÝ]H‹Ú[œÝ[œÚ
+Üˆ[œÝ[H™[X\ÙHš[˜\žJKˆ™[\˜H\È[œÝ[Y\Ù\‹[ØØ[HÈ‹Ë›ØØ[Øš[˜ˆ›ÜˆØÚÙ\‹\ÙHHÛÙ™šXÚX[[^[™Ú[™H[œÝXÝ[Ûœ×JÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ[™Ú[™KÚ[œÝ[ÊHÛˆ[^[™ÑØÚÙ\ˆ\ÚÝÜ›ÜˆXX×JÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÛXXËZ[œÝ[ÊHÛˆXXÓÔË‚Œ‹ˆ
+Š•Ú[™ÝÜÎŠŠˆÛˆÚ[™ÝÜË[œÝ[œÌX›ÜˆÝÙ\”Ú[[™[œÝ[˜ÛY›ÜˆHÛÛ[X[™›Û\\™H›ÝšYYˆ›ÜˆÛÛ\]HX\šXQˆ›Ú™XÝËÑØÚÙ\ˆ\ÚÝÜ›ÜˆÚ[™ÝÜ×JÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÝÚ[™ÝÜËZ[œÝ[ÊHÚ][˜X›YÛÛ\ÜÙHÝ\Ü\È™XÛÛ[Y[™Y‚ŒËˆ
+Š”]›Ü›HØÚÙ\ˆÚXÚÜÎŠŠˆ™[\˜H[X™\˜][HÙ\È›Ý[œÝ[ØÚÙ\ˆ]Ù[ˆÜˆ™\]Y\Ý›ÛÝ\›Z\ÜÚ[ÛœËˆ™Y›Ü™HÝ\[™ÈÛÛ\ÜÙHÙ\šXÙ\Ë™\šYžH[Ý\ˆ[š\›Û›Y[Ú]ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û˜ˆYˆÛÛ\ÜÙH\ÈZ\ÜÚ[™ÈÜˆÛØÚÙ]XØÙ\ÜÈ\È[šYY™[\˜HÝ]]ÈÛX\‹]›Ü›K\ÜXÚYšXÈ[Ë‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ”Ý\Nˆ[œÝ[™[\˜JŠ‚‘œ›ÛHÛÝ\˜ÙH
+[^ÈXXÓÔÊN‚˜˜\Ú™Ú]ÛÛ™HÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜K™Ú]˜Ù™[\˜B‹‹Ú[œÝ[œÚ˜“Üˆ\™XÝH\ÈH™XÛÛ\[Y™[X\ÙH\˜Ú]™HÚ]Ý]\Ý‚˜˜\Ú‹‹Ú[œÝ[œÚK\™[X\ÙHŒŒËŒ˜“ÛˆÚ[™ÝÜÈ
+ÝÙ\”Ú[
+N‚˜ÝÙ\œÚ[™Ú]ÛÛ™HÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜K™Ú]”Ù]SØØ][Ûˆ™[\˜B‹—[œÝ[œÌHT™[X\ÙHŒŒËŒ˜‚ŠŠ”Ý\Žˆ™\šYžH™\œÚ[Ûˆ[™[
+Š‚˜˜\Úž™[\˜HK]™\œÚ[Û‚ž™[\˜HKZ[˜˜™[\˜HK]™\œÚ[Û˜Ý]]ÈH[ÛÛ\[\ˆ[™XÚØYÙH™\œÚ[Ûˆ
+›Üˆ^[\K™[\˜HŒËŒ
+KˆH[™ÝXYÙHÛÛ\]Xš[]H[™H™[XZ[œÈŒK‚‚ŠŠ”Ý\Îˆ™\šYžHØÚÙ\ˆÛÛ\ÜÙH
+›ÜˆX\šXQˆ›Ú™XÝÊJŠ‚˜˜\Ú™ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û‚˜‚ŠŠ”Ý\ˆ[ˆÞ\Ý[HXYÛ›ÜÝXÜÊŠ‚˜˜\Úž™[\˜HØÝÜ‚˜•\ÈÛÛ[X[™[˜[^™\È[š\›Û›Y[]ËÜË[™ÛÛËˆ\ÙH™[\˜HØÝÜˆKZœÛÛ˜›ÜˆÝXÝ\™YXXÚ[™K\™XYX›HÝ]]‚‚ŠŠ”Ý\NˆÝZYYÙXˆÙ]\\ÜÚ\Ý[
+Ü[Û˜[
+JŠ‚’[ˆ[žHX\šXQˆ›Ú™XÝ\™XÝÜžKÝ\Hš\ÝX[\ÜÚ\Ý[‚˜˜\Úž™[\˜HÙ]\K]ÙX‚˜–™[\˜HÜ[œÈHØØ[Ù\™\ˆÛˆLËŒŒŒNŒÌÌÚ]H˜[™ÛKÚ[™ÛK]\ÙHÙXÝ\š]HÚÙ[‹ˆ\™K[ÝHØ[ˆÙ[™\˜]H[Ý\ˆ™[˜ÛÛ™šYÝ\˜][Û‹Ý\HX\šXQˆÛÛZ[™\‹[™\H]X˜\ÙHØÚ[X\ÈÚ]Û™HÛXÚË‚‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ™[\˜NˆÛÛ[X[™›Ý›Ý[™ˆ
+Ø]\ÙNŠˆH\™XÝÜžH‹Ë›ØØ[Øš[˜\È›ÝY][ˆ[Ý\ˆ	U˜\šXX›Kˆ[ˆ^ÜUH‰ÓQKË›ØØ[Øš[Ž‰U˜Üˆ™\Ý\[Ý\ˆ\›Z[˜[‚‹H
+Š‘\œ›ÜŽŠŠˆ\›Z\ÜÚ[Ûˆ[šYYÚ[HžZ[™ÈÈÛÛ›™XÝÈHØÚÙ\ˆY[[ÛˆÛØÚÙ]ˆ
+Ø]\ÙNŠˆÛˆ[^Þ\Ý[\Ë[Ý\ˆ\Ù\ˆÙ\È›ÝY]™[Û™ÈÈHØÚÙ\˜Ü›Ý\ˆ[ˆÝYÈ\Ù\›[ÙXQÈØÚÙ\ˆ	TÑT˜[™ÙÈ˜XÚÈ[‹ˆ™[\˜HØ]Ú\È\È[™›ÝšY\ÈHÛX\ˆ[‚‹H
+Š‘\œ›ÜŽŠŠˆY˜][ÜÌÜˆÌÌˆ\ÈØØÝ\YY‚ˆ
+Ø]\ÙNŠˆ[›Ý\ˆØØ[Ù\šXÙH\È\Ú[™ÈHÜˆ™[\˜HÙ]\[™™[\˜H™]Ø]]ÛX]XØ[H]XÝÛÛ\Ú[ÛœÈ[™Ù[XÝH™^œ™YHÜÝÜ‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆH™[\˜HÓH[™\ÈÛÛ\[\‹[›™\‹›Ü›HÚXÚÙ\‹ZYÜ˜]Ü‹ÙXˆÙ\™\‹[™Ù]\\ÜÚ\Ý[[ˆHÚ[™ÛHÛÛ‚Œ‹ˆØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û˜[™™[\˜HØÝÜ˜™\šYžHHX[Ùˆ[Ý\ˆ[š\›Û›Y[][žH[YK‚ŒËˆHÝX›H™[X\ÙHØ[ˆ™H[œÝ[YÚ]Ý]\Ý\Ú[™ÈK\™[X\ÙHŒŒËŒ‚ˆ™[\˜HÙ]\K]ÙX˜›ÝšY\È[ˆ[Z]]™Kœ›ÝÜÙ\‹X˜\ÙY[š]X[Ù]\Ú]HÙXÝ\™HÛ™K][YHÚÙ[‹‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ[ˆ™[\˜HK]™\œÚ[Û˜[™™[\˜HØÝÜ˜[ˆ[Ý\ˆ\›Z[˜[[™›ÝHHÝ]]‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ^Ü™HH[YÙHÚ]™[\˜HÚXÚÈKZ[[™™]šY]ÈHKY›Ü›X]œÛÛ˜Ü[Û‹‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÙ]\š[H\ÜÛØÚX][Ûˆ[ˆ[Ý\ˆ^Y]ÜˆÛÈ]žž[š[\È\™HYÚYÚYÛX[›K‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ™\\™HH\ÚÈX[˜YÙ\ˆ[š\›Û›Y[Ü™X]HH\™XÝÜžHÛˆ[Ý\ˆXXÚ[™H[™[œÝ\™HH™[\˜HÛÛÚZ[ˆ[œÈ›Ü\›N‚‚˜˜\Ú›ZÙ\ˆ^K]\ÚÛX[˜YÙ\‚˜Ù^K]\ÚÛX[˜YÙ\‚™XÚÈ	Ù›ˆXZ[Š
+HÈš[
+•\ÚÓX[˜YÙ\ˆ[š\›Û›Y[™XYKˆŠHIÈˆ\Ýžž[ž™[\˜HÚXÚÈ\Ýžž[ž™[\˜H[ˆ\Ýžž[˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H\È[œÝ[YšXH‹Ú[œÝ[œÚÚ[™ÝÜÈÝÙ\”Ú[ØÜš\Üˆ™XÛÛ\[Y™[X\ÙH\˜Ú]™\Ë‚‹HHÛÛ[X[™[[™HÛÛ™[\˜XÛÛZ[œÈ[™XÙ\ÜØ\žH[˜Ý[ÛœË‚‹H™[\˜HØÝÜ˜[œÝ\™\È]™\ž][™È\ÈÛÛ™šYÝ\™YÛÜœ™XÝK‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚÛÛ[X[™\Ü^\ÈH[ÛÛ\[\ˆ[™XÚØYÙH™\œÚ[ÛÂŒ‹ˆÚHÙ\È™[\˜H™\]Z\™H›È^\›˜[ÙXˆÙ\™\ˆZÙH\XÚH›ÜˆÙXˆÙ\šXÙ\ÏÂŒËˆÚ]Ù\È™[\˜HØÝÜ˜ÚXÚÏÂ‚‹KKB‚ˆÈÈÚ\\ˆˆHš\œÝ™[\˜H›Ú™XÝ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â‹HÝÈÈÜ™X]HH™[\˜H›Ú™XÝÚ]™[\˜H™]ØÜˆ™[\˜H[š]
+[˜ÛY[™ÈK[X\šXY˜
+K‚‹HÝÈHÝ[™\™›Ú™XÝ›Û\ˆ\ÈÝXÝ\™Y
+XZ[‹žž[™[\˜KÛ[™[˜
+K‚‹H]]ÛX]XÈÜÙ[XÝ[Ûˆ
+‘STWÒÔÕÔÔ•[™‘STWÑ—ÒÔÕÔÔ•
+HÚ[ˆY˜][È\™HØØÝ\YY‚‹HÝÈ™[\˜HÙ]\KX[[™™[\˜HÙ]\K]ÙX˜]]ÛX]HHš\œÝ\[ˆÛÜšÙ›ÝË‚‹HÜ[Û˜[™X]\™HÝÚ]Ú\È
+Ù™X]\™\×X[ˆ™[\˜KÛ[Üˆ™[˜
+H[™[œÜXÝ[ÛˆÚ]™[\˜HÛÛ™šYØ‚‹HÚ[ˆH›ÙÜ˜[H™\]Z\™\ÈHXZ[Š
+X[˜Ý[Ûˆ[™ÝÈÈÚXÚË[‹[™›Ü›X]ÛÙK‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â\ÈÛÛÛˆ\È›ÙÜ˜[\È^ÙYY[ˆ[™\Ë^H™[Û™È[ˆHÛX[ˆ›Ú™XÝÝXÝ\™KˆHÝ[™\™^™Y\™XÝÜžHÝXÝ\™H[œÝ\™\È]ÛÛ™šYÝ\˜][ÛœË]X˜\ÙH[Ù[ËÙXˆ›Ý]\Ë[™\Ú[™\ÜÈÙÚXÈ]™HH™YXÝX›HØØ][Û‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•Ú]™[\˜H™]È›Ú™XÝ˜[YO˜[ÝHÜ™X]HH\›šÙ^H›Ú™XÝ‚‚‹H
+Š˜XZ[‹žž[
+ŠŽˆH[žHš[Kˆ\™H[ÝHYš[™HZ]\ˆ›ˆXZ[Š
+XÜˆXÛ\™HX›\ËÙXˆYÙ\Ë[™T\Ë‚‹H
+Š˜™[\˜KÛ[
+ŠŽˆH\˜X›H›Ú™XÝÛÛ™šYÝ\˜][Ûˆ
+˜[YK™\œÚ[Û‹Ø\Xš[]Y\Ë[™Ü[Û˜[™X]\™HÝÚ]Ú\ÈZÙHÙX˜\XÜY]]]Y]
+K‚‹H
+Š˜™[˜
+ŠŽˆØØ[ÙXÜ™]È[™ÜÈ›ÝÛÛ[Z]YÈ™\œÚ[ÛˆÛÛ›Û
+UPTÑWÕT“‘STWÒÔÕÔÔ•‘STWÑ—ÒÔÕÔÔ•
+K‚‹H
+Š‘ØÚÙ\ˆ	ˆX\šXQŠŠŽˆÚ]K[X\šXY˜™[\˜HÙ[™\˜]\ÈØÚÙ\™š[XØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[[™™[‹™^[\X‚‚ŠŠ]]ÛX]XÈÜÙ[XÝ[ÛŽŠŠˆYˆY˜][ÜÈÌ
+ÙXŠHÜˆÌÌˆ
+X\šXQŠH\™H[™XYH[ˆ\ÙK™[\˜H]]ÛX]XØ[HØØ[œÈ[™\ÜÚYÛœÈœ™YHÜÈ[ˆH™]ÛHÙ[™\˜]Y™[˜‚‚ŠŠ“Ü[Û˜[™X]\™HÝÚ]Ú\ÎŠŠˆ[ÝHØ[ˆ[˜X›HÜˆ\ØX›H›Ú™XÝÝ\™˜XÙ\È[ˆ™[\˜KÛ[Üˆ™[˜‚˜Û[–Ù™X]\™\×BÙXˆHYB˜\HHYB˜ÜYHYB˜]]HYB˜]Y]HYB˜’YˆÛÝ\˜ÙHÛÙH\Ù\ÈH\ØX›YÝ\™˜XÙKHÛÛ\[\ˆ™\ÜÈKQ‘PUT‘KLXˆ[ÝHØ[ˆ[œÜXÝHY™™XÝ]™HÛÛ™šYÝ\˜][Ûˆ][žH[YHÚ]Ý]^ÜÚ[™ÈÙXÜ™]Î‚˜˜\Úž™[\˜HÛÛ™šYÈXZ[‹žž[ž™[\˜HÛÛ™šYÈXZ[‹žž[KY›Ü›X]ZœÛÛ‚˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠÜ™X]HH›Ú™XÝ
+Z[š[X[ÜˆX\šXQŠNŠŠ‚˜˜\ÚˆÈZ[š[X[ØÜš\›Ú™XÝ‚ž™[\˜H™]È\ÚÛX[˜YÙ\ˆK][\]HZ[š[X[˜Ù\ÚÛX[˜YÙ\‚‚ˆÈÜˆÛÛ\]HX\šXQˆÙXˆ›Ú™XÝ‚ž™[\˜H™]È\ÚÛX[˜YÙ\‹]ÙXˆK[X\šXY‚˜Ù\ÚÛX[˜YÙ\‹]ÙX‚˜‚ŠŠ‘š\œÝ][YHÙ]\[ˆÛ™HÛÛ[X[™ŠŠ‚˜˜\Úž™[\˜HÙ]\KX[˜•\ÈÜ™X]\ÈH›ÝXÝY™[˜Ý\ÈHX\šXQˆÛÛZ[™\œË[™\Y\ÈHØÚ[XK‚‚ŠŠ’[œÜXÝY™™XÝ]™H›Ú™XÝÛÛ™šYÝ\˜][ÛŽŠŠ‚˜˜\Úž™[\˜HÛÛ™šYÈXZ[‹žž[˜‚ŠŠÚXÚÈ[™[ˆ›Ú™XÝŠŠ‚˜˜\Úž™[\˜HÚXÚÈXZ[‹žž[ž™[\˜H[ˆXZ[‹žž[˜‚ŠŠ‘›Ü›X]›Ú™XÝÛÙNŠŠ‚˜˜\Úž™[\˜H›]XZ[‹žž[˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÜ™X][™Èš[\ÈÚ]Ý]Hžž[^[œÚ[Û‹‚ˆ
+Ø]\ÙNŠˆHÛÛ\[\ˆÝšXÝH^XÝÈš[\È[™[™È[ˆžž[‚‹H
+Š‘\œ›ÜŽŠŠˆ[›š[™ÈHÓH›ÙÜ˜[HÚ]Ý]›ˆXZ[Š
+X‚ˆ
+Ø]\ÙNŠˆ™[\˜H[˜ÛÚÜÈ›Üˆ›ˆXZ[Š
+Xˆ[ˆÙXˆÙ\šXÙ\È[›š[™ÈÚ]™[\˜HÙ\™XXZ[Š
+X\ÈÜ[Û˜[‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜H™]ØÜ™X]\ÈHÝ[™\™^™Y›Ú™XÝÝXÝ\™K‚Œ‹ˆ[ˆ™[\˜KÛ[˜[YK™\œÚ[Û‹Ø\Xš[]Y\Ë[™™X]\™HÝÚ]Ú\È\™HX[˜YÙY‚ŒËˆ™[\˜HÙ]\KX[[™™[\˜HÙ]\K]ÙX˜Ý™X[[[™HX\šXQˆÙ]\‚ˆ™[\˜H›][œÝ\™\ÈÛÛœÚ\Ý[›Ü›X][™ÈXÜ›ÜÜÈHX[K‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]HH›Ú™XÝ^WÙš\œÝÜ›Ú™XÝÚ]™[\˜H™]Ø[™[ˆ]‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ[ˆ™[\˜HÛÛ™šYÈXZ[‹žž[[™[œÜXÝHXÝ]™H™X]\™HÝÚ]Ú\Ë‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ›Ü›X][ˆ[™›Ü›X]Yžž[š[H\Ú[™È™[\˜H›]XZ[‹žž[‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ[š]X[^™HH\ÚÈX[˜YÙ[Y[›Ú™XÝÜ™X]HH›Ú™XÝ]Ú[XØÛÛ\[žH\È›ÝYÚÝ]\È›ÛÚÎ‚‚˜˜\Úž™[\˜H™]È™[\˜K]\ÚÜÈK][\]HZ[š[X[˜Ù™[\˜K]\ÚÜÂ˜‚YHY[HÈXZ[‹žž[‚˜™[\˜B™›ˆÚÝ×ÛY[J
+HÂˆš[
+OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHŠBˆš[
+ˆ‘STHTÒÈPSQÑSQS•ŠBˆš[
+OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHŠBˆš[
+ŒNˆ\Ý[\ÚÜÈŠBˆš[
+ŒŽˆÜ™X]H™]È\ÚÈŠBˆš[
+ŒÎˆ^]ŠBŸB‚™›ˆXZ[Š
+HÂˆÚÝ×ÛY[J
+BŸB˜ÚXÚÈÚ]™[\˜HÚXÚÈXZ[‹žž[[™[ˆÚ]™[\˜H[ˆXZ[‹žž[‚‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H›Ú™XÝÈ]™HHÛX[ˆÝXÝ\™HÙˆÛÝ\˜ÙHÛÙH
+žž[
+H[™ÛÛ™šYÝ\˜][Ûˆ
+™[\˜KÛ[
+K‚‹H™[\˜HÚXÚØ™\šYšY\ÈÛÜœ™XÝ™\ÜÎÈ™[\˜H[˜^XÝ]\ÈH›ÙÜ˜[K‚‹H™[\˜H›]›Ü›X]ÈÛÙHXØÛÜ™[™ÈÈÝ[™\™ÛÛ™[[ÛœË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\ÈH›ÛHÙˆ™[\˜KÛ[ÂŒ‹ˆÚ]\[œÈYˆHY˜][ÜÝÜ\ÈØØÝ\YYÚ[ˆÜ™X][™ÈHX\šXQˆ›Ú™XÝÂŒËˆÚ[ˆÙ\ÈH™[\˜H›ÙÜ˜[H™\]Z\™HHXZ[Š
+X[˜Ý[ÛÂ‚‹KKB‚ˆÈÈÚ\\ˆNˆ˜[Y\È[™]H\\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]˜[Y\È[™]H\\È\™H[™ÚH^H›Ü›HH˜XÚØ›Û™HÙˆ™[XX›HÛÙØ\™K‚‹HH[™[Y[[[Y\šXÈ\\Îˆ[R[›Ø][™XÚ[X[‚‹H^[™Ú\˜XÝ\ˆ\\ÎˆÝš[™Ø[™Ú\˜‚‹H›ÛÛX[ˆ]˜[Y\È
+›ÛÛ
+H[™H[\H\H
+[š]
+K‚‹H]H[™[YH™\™\Ù[][ÛœÎˆ[Y\Ý[\]X[YX[™\˜][Û˜‚‹HHY™™\™[˜ÙH™]ÙY[ˆ]]ÛX]XÈ\H[™™\™[˜ÙH[™^XÚ]\H[››Ý][ÛœË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’[ˆH™X[ÛÜ›[ÝHØ[››ÝY\\ÈÈÜ˜[™Ù\ËˆÚ]Ý]H\HÞ\Ý[KÝÙ]™\‹HÛÛ\]\ˆÛÝ[È™XÚ\Ù[H]ˆ]ÛÝ[\[H][\È][\HHÜÝ[ÛÙHžHH[Û™]\žHšXÙKÜˆ[\œ™]\˜š]˜\žHš[˜\žHÚX˜™\š\Ú\ÈHØ[[™\ˆ]Kˆ[ˆ™[\˜KH\HÞ\Ý[H™]™[ÈÝXÚXœÝ\™]Y\È™Y›Ü™HÛÙH]™\ˆ[œËˆH]H\HÜXÚYšY\È^XÝHÚXÚ˜[Y\È\™H˜[Y[™ÚXÚÜ\˜][ÛœÈ\™H\›Z]YÛˆ[K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‘]™\žH˜[YH[ˆ™[\˜HÜÜÙ\ÜÙ\ÈHYš[š]H\Kˆ[ÝHØ[ˆZ]\ˆÜXÚYžHH\H^XÚ]HÜˆ]™[\˜H[™™\ˆ]]]ÛX]XØ[H˜\ÙYÛˆH\ÜÚYÛ™Y^™\ÜÚ[ÛŽ‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆËÈ^XÚ]\H[››Ý][ÛŽˆ˜[YH›ÛÝÙYžHÛÛÛˆ[™\BˆÛÝ[ˆ[HL‚ˆËÈ]]ÛX]XÈ\H[™™\™[˜ÙNˆ™[\˜H[[YYX][H]XÝÈ]\È\ÈHÝš[™Âˆ\Ú×Û˜[YHH’[\Ü[YY][™È‚‚ˆš[
+\Ú×Û˜[YJBŸB˜‚•HÛÜ™H]H\\È[ˆ™[\˜N‚‹H
+Š˜[
+ŠŽˆXš]ÚYÛ™Y[YÙ\œËK™Ë‹MX˜‚‹H
+Š˜R[
+ŠŽˆ[œÚYÛ™Y[YÙ\œÈ
+H
+KYX[›Üˆ™XÛÜ™QÈ[™ÜÚ]]™HÛÝ[\œË‚‹H
+Š˜›Ø]
+ŠŽˆ›Ø][™Ë\Ú[[X™\œÈ›ÜˆØÚY[YšXÈØ[Ý[][ÛœËK™Ë‹ËŒMMX‚‹H
+Š˜XÚ[X[
+ŠŽˆš^Y\Ú[[X™\œÈÚ]ÝX\˜[YY™XÚ\Ú[Û¸ %[™\Ü[œØX›H›Üˆš[˜[˜ÚX[[[Ý[ÈÈ[[Z[˜]H›Ø][™Ë\Ú[›Ý[™[™È\Y˜XÝÈB‹H
+Š˜›ÛÛ
+ŠŽˆ›ÛÛX[ˆ˜[Y\È™\™\Ù[[™È]ˆ^XÝHÛÈÝ]\È^\ÝˆYXÜˆ˜[ÙX‚‹H
+Š˜Ýš[™Ø
+ŠŽˆU‹NÚ\˜XÝ\ˆ^[˜ÛÜÙY[ˆÝX›H][Ý][ÛˆX\šÜÎˆ’[ÈÛÜ›˜‚‹H
+Š˜Ú\˜
+ŠŽˆ[™]šYX[Ú\˜XÝ\œÈ[˜ÛÜÙY[ˆÚ[™ÛH][Ý][ÛˆX\šÜÎˆ	ÐIØ	Þ‰Ø‚‹H
+Š˜[š]
+ŠŽˆ™\™\Ù[È››ÈYX[š[™Ù[˜[YH‹[˜[ÙÛÝ\ÈÈ›ÚY[ˆÝ\ˆ[™ÝXYÙ\ËˆÚ[ˆH[˜Ý[ÛˆÛ›H\™›Ü›\ÈÚYHY™™XÝÈ[™™]\›œÈ›Ý[™Ë]È\H\È[š]‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\Ú×ÚYˆ[HLBˆ\Ú×Û˜[YNˆÝš[™ÈH•\]HÙ\™\ˆ‚ˆ\×ÙÛ™Nˆ›ÛÛH˜[ÙBˆ\Ý[X]YÚÝ\œÎˆ›Ø]H‹BˆÝ\›WÜ˜]Nˆ›Ø]HKL‚ˆš[
+\Ú×Û˜[YJBˆš[
+\×ÙÛ™JBŸB˜‚–™[\˜HÝšXÝHÝX\™ÈYØZ[œÝ\HZ\ÛX]Ú\Î‚’Yˆ[ÝH][\ÈÜš]H\Ú×ÚYH›Û™H[™™Y˜HÛÛ\[\ˆ™Z™XÝÈH\ÜÚYÛ›Y[[[YYX][HÚ]\œ›ÜˆKUTKLX‚‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÛÛ\][™Èš[˜[˜ÚX[[[Ý[È\Ú[™È›Ø]‚ˆ
+Ø]\ÙNŠˆQQQKMÍM›Ø][™Ë\Ú[[X™\œÈØ[ˆ[›ÙXÙHÝXH[˜XØÝ\˜XÚY\ÈÝXÚ\ÈŒH
+ÈŒˆHŒÌˆ[ˆ™[\˜K[Ø^\È\ÙHXÚ[X[›Üˆš[˜[˜ÚX[ÙÚXË‚‹H
+Š‘\œ›ÜŽŠŠˆ[˜ÛÜÚ[™ÈHÚ[™ÛHÚ\˜XÝ\ˆ[ˆÝX›H][Ý\ÈÚ[ˆHÚ\˜\È^XÝY‚ˆ
+Ø]\ÙNŠˆH˜\ÈHÝš[™ØÚ\™X\È	ÐIØ\ÈHÚ\˜‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ]H\\È™]™[[˜[YÜ\˜][ÛœÈ™]ÙY[ˆ[˜ÛÛ\]X›HÚ[™ÈÙˆ[™›Ü›X][Û‹‚Œ‹ˆ›Üˆš[˜[˜ÚX[˜[[˜Ù\È[™Ý\œ™[˜ÞNˆ[Ø^\È\ÙHXÚ[X[™]™\ˆ›Ø]‚ŒËˆ™[\˜H[™™\œÈ\\ÈXØÝ\˜][K]^XÚ]\H[››Ý][ÛœÈÛX\›HØÝ[Y[\ÚYÛˆ[[‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆXÛ\™H™YH˜\šXX›\È›Üˆ[Ý\ˆ˜]›Üš]H›ÛÚÎˆ]H
+Ýš[™Ø
+KX›XØ][ÛˆYX\ˆ
+[
+K[™Ú]\ˆ[ÝH]™Hš[š\ÚY™XY[™È]
+›ÛÛ
+K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÛÛ\]HHÝ[ÛÜÝÙˆH\ÚÈœ›ÛH\Ý[X]YÚÝ\œØ[™Ý\›WÜ˜]X[™š[H™\Ý[‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ^Z[ˆÚH[ˆ[]HQ\È\XØ[H™]\ˆ[Ù[Y\È[ˆ[ÜˆH›ÛZ[˜[\H\H\ÚÒYHY˜]\ˆ[ˆ[ˆ\˜š]˜\žHÝš[™Ø‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[‘^[™Ý\ˆ\ÚÈX[˜YÙ[Y[›Ú™XÝ[ˆXZ[‹žž[žHYš[š[™ÈH\Y]šX]\ÈÙˆ[ˆ[™]šYX[\ÚÎ‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\Ú×ÚYˆ[HBˆ\Ú×Û˜[YNˆÝš[™ÈH•™\šYžH]X˜\ÙHØÚ[XH‚ˆ\×ÙÛ™Nˆ›ÛÛH˜[ÙBˆš[Üš]Nˆ[HHËÈHHYÚˆHYY][KÈHÝÂ‚ˆš[
+•\ÚÈÈˆ
+ÈŒHˆ
+ÈŽˆˆ
+È\Ú×Û˜[YJBˆYˆ\×ÙÛ™HÂˆš[
+”Ý]\ÎˆÛ™HŠBˆH[ÙHÂˆš[
+”Ý]\ÎˆÜ[ˆ
+š[Üš]NˆYÚ\™Ù[˜ÞJHŠBˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H›ÝšY\ÈHšXÚ[]HÙˆš[Z]]™H]H\\È›Üˆ[X™\œË^[™ÙÚXË‚‹H\\ÈØ[ˆ™H^XÚ]H[››Ý]YÜˆ]]ÛX]XØ[H[™™\œ™YžHHÛÛ\[\‹‚‹HÝšXÝÛÛ\[K][YH\H™\šYšXØ][ÛˆØ]Ú\ÈÙÚXØ[YÜÈ\š[™È]™[ÜY[‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚHÚÝ[XÚ[X[[Ø^\È™HÚÜÙ[ˆÝ™\ˆ›Ø]›ÜˆÝ\œ™[˜ÞHØ[Ý[][ÛœÏÂŒ‹ˆÚ]\ÈH[™[Y[[Þ[XÝXÈ[™Ù[X[XÈY™™\™[˜ÙH™]ÙY[ˆ–ˆ˜[™	Ö‰ØÂŒËˆÚXÚÛÈ\Ý[˜Ý˜[Y\ÈØ[ˆH›ÛÛÛÂ‚‹KKB‚ˆÈÈÚ\\ˆŽˆ˜\šXX›\È[™[[]]Xš[]B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]H˜\šXX›H™\™\Ù[È[ˆÛÛ\]\ˆY[[ÜžK‚‹HÚH˜\šXX›\È[ˆ™[\˜H\™H[[]]X›HžHY˜][‚‹HÝÈÈXÛ\™H]]X›H˜\šXX›\È^XÚ]H\Ú[™ÈH]]X›XÙ^]ÛÜ™‚‹H˜\šXX›HØÛÜ\È[™Y™][Y\ÈÚ][ˆÛÙH›ØÚÜË‚‹HÚH[[]]Xš[]HXZÙ\ÈÛÙØ\™H˜[X]XØ[H[Ü™H›Ø\Ý[™™YXÝX›K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â“Û™HÙˆH[ÜÝœ™\]Y[Ø]\Ù\ÈÙˆÝXHYÜÈ[ˆ[™ÝXYÙ\ÈÝXÚ\È˜]˜TØÜš\]Û‹ÜˆÊÊÈ\È[˜ÛÛ›ÛY]]Xš[]NˆÛ™H[˜Ý[Ûˆ]ZY]H]]]\ÈHÚ\™Y˜\šXX›KØ]\Ú[™È[ˆ[\™[H[œ™[]Y[Ù[HÈÜ˜\Ú‚–™[\˜HY\™\ÈÈHÛX\ˆš[˜Ú\Nˆ
+ŠÛÛœÝ[È\™HH˜\Ù[[™KŠŠˆYˆH˜[YH\È[[™YÈÚ[™ÙH\š[™È[[YH^XÝ][Û‹[ÝH]\ÝÛÛœØÚ[Ý\ÛHÚYÛ˜[]™Z]š[Üˆ\Ú[™È]]X›X‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•[šÈÙˆH˜\šXX›H\ÈHX™[Y›ÞÝÜ™Y[ˆÛÛ\]\ˆY[[ÜžN‚‚‹H
+Š’[[]]X›Hš[™[™È
+Y˜][
+NŠŠ‚ˆ™[\˜Bˆ›ˆXZ[Š
+HÂˆ\Ú×Û˜[YHH•^™]\›ˆ‚ˆš[
+\Ú×Û˜[YJBˆBˆˆ[ÝHXÙHH^•^™]\›ˆ˜[ÈH›ÞX™[Y\Ú×Û˜[YX[™ÙX[]ˆ›Ø›ÙH\È\›Z]YÈ™\XÙHHÛÛ[Ùˆ]›Þˆ[žHÛÙH™XY[™ÈH›ÞØ[ˆ™[HÛˆ]ÈÛÛ[È™[XZ[š[™È[˜\šX[‚‚‹H
+Š“]]X›H˜\šXX›H
+]]X›X
+NŠŠ‚ˆ™[\˜Bˆ›ˆXZ[Š
+HÂˆ]]X›HÛÝ[\ˆHˆÛÝ[\ˆHÛÝ[\ˆ
+ÈBˆš[
+ÛÝ[\ŠBˆBˆˆ\™KH›Þ™[XZ[œÈ[œÙX[Yˆ[ÝH\™H[ÝÙYÈ™[[Ý™HHÝ\œ™[˜[YH[™™\XÙH]Ú]H™]ÈÛ™K‚‚ŠŠ”ØÛÜH[™Y™][Y\ÎŠŠ‚•˜\šXX›\È^\Ý^Û\Ú]™[HÚ][ˆH›ØÚÈÈ‹‹ˆX[ˆÚXÚ^H\™HXÛ\™YˆÚ[ˆ^XÝ][Ûˆ^]È]›ØÚË™[\˜H]]ÛX]XØ[H™XÛZ[\ÈH˜\šXX›Kˆ\Èœ™Y\ÈY[[ÜžH[™[[Z[˜]\È˜[Z[™ÈÛÛ™›XÝË‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ[[]]Xš[]H™]™[ÈXØÚY[[Ý™\Üš]\ÊŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ›Ú™XÝH–™[\˜HÛÜ™H‚ˆËÈ›Ú™XÝH“™]È›Ú™XÝˆËÈT”“ÔŽˆÛÛ\[\ˆ›ØÚÜÈ\ÜÚYÛ›Y[È[[]]X›H˜\šXX›HBˆš[
+›Ú™XÝ
+BŸB˜‚ŠŠ‘^[\HŽˆÚ[ˆ]]X›X\È\›ÜšX]H
+ÛÝ[\œÈ[™XØÝ[][]ÜœÊJŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ]]X›HÜ[—Ý\ÚÜÈHBˆš[
+Ü[—Ý\ÚÜÊB‚ˆËÈÛ™H\ÚÈ\È™Y[ˆÛÛ\]Y‚ˆÜ[—Ý\ÚÜÈHÜ[—Ý\ÚÜÈHBˆš[
+Ü[—Ý\ÚÜÊBŸB˜‚ŠŠ‘^[\HÎˆ˜\šXX›HØÛÜ\ÊŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆØÛÜWÝ˜\ˆH‘ÛØ˜[[ˆXZ[ˆ‚ˆYˆYHÂˆØØ[Ý˜\ˆH“Û›Hš\ÚX›H[œÚYHYˆ‚ˆš[
+ØØ[Ý˜\ŠBˆš[
+ØÛÜWÝ˜\ŠBˆBˆËÈš[
+ØØ[Ý˜\ŠHËÈT”“ÔŽˆØØ[Ý˜\˜›ÈÛ™Ù\ˆ^\ÝÈÝ]ÚYHH›ØÚÈBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈ™X\ÜÚYÛˆH˜\šXX›HXÛ\™YÚ]Ý]]]X›X‚ˆ
+Ø]\ÙNŠˆ™[\˜H\ÜÝY\ÈØ[››Ý\ÜÚYÛˆÈ[[]]X›H˜\šXX›XˆYˆH˜[YH]\ÝÚ[™ÙHÝ™\ˆ[YKXÛ\™H]\È]]X›H˜[YHH‹‹˜‚‹H
+Š‘\œ›ÜŽŠŠˆXÛ\š[™È]™\žH˜\šXX›H\È]]X›XÝ]ÙˆXš]‚ˆ
+Ø]\ÙNŠˆÛÜˆ\ÚYÛˆÝ[Kˆ™\ÝšXÝ]]X›XÈØØ][ÛœÈÚ\™H˜[Y\È[H™YYÈ]›Û™H
+K™Ë‹ÛÜÛÝ[\œÈÜˆXØÝ[][]ÜœÊK‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ[ˆ™[\˜K˜\šXX›\È\™H[[]]X›HžHY˜][‚Œ‹ˆÚ[ˆH˜[YH\È[[™YÈÚ[™ÙK]]X›X]\Ý™H^XÚ]HXÛ\™Y‚ŒËˆ˜\šXX›\È^\Ý^Û\Ú]™[HÚ][ˆZ\ˆXÛ\™Y›ØÚÈÈ‹‹ˆX‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]H[ˆ[[]]X›H˜\šXX›HÛ[™È[Ý\ˆ\Ù\›˜[YH[™š[]‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]H]]X›HØÛÜ™HHLYXÝMHÚ[ËYÌÚ[Ë[™š[H[\›YYX]H˜[Y\Ë‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ^Z[ˆÚH[[]]Xš[]H›ÝšY\ÈÚYÛšYšXØ[ØY™]H™[™Yš]È[ˆÛÛ˜Ý\œ™[\XØ][ÛœÈ[›š[™È][\HÜ\˜][ÛœÈ[ˆ\˜[[‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[’[ˆÝ\ˆ\ÚÈX[˜YÙ[Y[\XØ][Û‹ÙHØ[ÈÛÝ[ÝÈX[žH\ÚÜÈ™[XZ[ˆÈ™HÛÛ\]Y‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆ]]X›HÜ[—ØÛÝ[HÂˆš[
+”Ý\ˆ\ÚÜÈÈÛÛ\]NˆŠBˆš[
+Ü[—ØÛÝ[
+B‚ˆËÈš\œÝ\ÚÈÛÛ\]Y‚ˆÜ[—ØÛÝ[HÜ[—ØÛÝ[HBˆš[
+’[\›YYX]HÛÝ[ˆÝ[Ü[ŽˆŠBˆš[
+Ü[—ØÛÝ[
+B‚ˆËÈÙXÛÛ™\ÚÈÛÛ\]Y‚ˆÜ[—ØÛÝ[HÜ[—ØÛÝ[HBˆš[
+‘š[˜[ÛÝ[ˆÝ[Ü[ŽˆŠBˆš[
+Ü[—ØÛÝ[
+BŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H[[]]Xš[]H\È™[\˜IÜÈY˜][™]™[[™È[š[[™YÚYHY™™XÝË‚‹H]]X›H˜\šXX›\È]\Ý™H^XÚ]HXÛ\™YÚ]]]X›X‚‹HÝ\›Hœ˜XÙ\ÈYš[™HHØÛÜH[™Y™][YHÙˆ[˜\šXX›\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]ØØÝ\œÈYˆ[ÝH\ÜÚYÛˆH™]È˜[YHÈH˜\šXX›HXÛ\™YÚ]Ý]]]X›XÂŒ‹ˆÚHÙ\È[[]]Xš[]HÙ\™H\ÈH[™[Y[[ÙXÝ\š]H[™ÝXš[]H™X]\™OÂŒËˆØ[ˆH˜\šXX›HXÛ\™Y[œÚYH[ˆ[›™\ˆ›ØÚÈ™HXØÙ\ÜÙYÝ]ÚYHÙˆ]›ØÚÏÂ‚‹KKB‚ˆÈÈÚ\\ˆÎˆÜ\˜]ÜœÈ[™^™\ÜÚ[ÛœÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ][ˆÜ\˜]Üˆ\È[™Ú]ÛÛœÝ]]\È[ˆ^™\ÜÚ[Û‹‚‹H\š]Y]XÈÜ\˜]ÜœÈ›Üˆ[X™\œÎˆ
+ØX
+˜Ø	X‚‹HÛÛ\\š\ÛÛˆÜ\˜]ÜœÎˆOXOXX˜X‚‹HÙÚXØ[Ü\˜]ÜœÎˆ	‰˜
+S‘
+K
+ÔŠK[™X
+“Õ
+K‚‹HÜ\˜]Üˆ™XÙY[˜ÙH[™ÛX[ˆ^™\ÜÚ[ÛˆÜ›Ý\[™È\Ú[™È\™[\Ù\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â”ÛÙØ\™HÙ\È›ÝY\™[HÝÜ™HÝ]XÈ˜[Y\ÎÈ]ÛÛ\]\È™\Ý[ËÛÛ\\™\È˜XÝË[™ÛÛXš[™\ÈÙÚXØ[ÛÛ™][ÛœËˆ[ˆÜ\˜]Üˆ\ÈHYXÚ[š\ÛH]˜[œÙ›Ü›\È˜]È]H[ÈXÝ[Û˜X›HÛ›ÝÛYÙKˆX\Ý\š[™ÈÜ\˜]ÜœÈ[˜X›\È[ÝHÈ˜[œÛ]HÛÛ\^\Ú[™\ÜÈ[\È[ÈÜš\Ü™[XX›H^™\ÜÚ[ÛœË‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‹H[ˆ
+Š™^™\ÜÚ[ÛŠŠˆ\È[žHÙYÛY[ÙˆÛÝ\˜ÙHÛÙH]]˜[X]\ÈÈHÛÛ˜Ü™]H˜[YKˆ›Üˆ[œÝ[˜ÙKH
+ÈØ\È[ˆ^™\ÜÚ[Ûˆ]ZY[È‚‹H[ˆ
+Š›Ü\˜]ÜŠŠˆ\ÈHÞ[X›ÛXÈÚÙ[ˆ]XÝ]\ÈHÜ\˜][Ûˆ
+ÝXÚ\È
+ØÜˆOX
+K‚‚ŠŠ\š]Y]XÈÜ\˜]ÜœÎŠŠ‚‹H
+ØˆY][Ûˆ
+[ÛÈ\ÙY›ÜˆÝš[™ÈÛÛ˜Ø][˜][Ûˆ[™\œ˜^HY\™Ú[™ÊK‚‹HXˆÝX˜XÝ[Ûˆ
+Üˆ[Y\šXØ[™YØ][ÛŽˆ^
+K‚‹H
+˜ˆ][\XØ][Û‹‚‹HØˆ]š\Ú[Û‹‚‹H	Xˆ[Ù[È
+™[XZ[™\ˆÙˆ[YÙ\ˆ]š\Ú[Û‹K™Ë‹È	HÈOHX
+K‚‚ŠŠÛÛ\\š\ÛÛˆÜ\˜]ÜœÈ
+[Ø^\È]˜[X]HÈ›ÛÛ
+NŠŠ‚‹HOXˆ\È\]X[ÏÂ‹HOXˆ\È›Ý\]X[ÏÂ‹HÈXˆ\ÜÈ[ˆÈ\ÜÈ[ˆÜˆ\]X[ÏÂ‹H˜ÈXˆÜ™X]\ˆ[ˆÈÜ™X]\ˆ[ˆÜˆ\]X[ÏÂ‚ŠŠ“ÙÚXØ[Ü\˜]ÜœÎŠŠ‚‹H	‰˜
+S‘
+Nˆ]˜[X]\ÈÈYXÛ›HYˆ
+Š˜›Ý
+ŠˆÚY\È\™HYX
+YH	‰ˆYHOHYX
+K‚‹H
+ÔŠNˆ]˜[X]\ÈÈYXYˆ
+Š˜]X\ÝÛ™JŠˆÚYH\ÈYX‚‹HX
+“Õ
+Nˆ[™\ÈH]˜[YH
+]YHOH˜[ÙX
+K‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚˜™[\˜B™›ˆXZ[Š
+HÂˆËÈ\š]Y]XÂˆ˜\ÙWÝ[YHHŒˆY™™\—Ý[YHHMBˆÝ[Ý[YHH˜\ÙWÝ[YH
+ÈY™™\—Ý[YBˆš[
+Ý[Ý[YJB‚ˆËÈÛÛ\\š\ÛÛ‚ˆ\×ÛÛ™ÈHÝ[Ý[YHˆŒˆš[
+\×ÛÛ™ÊB‚ˆËÈÙÚXØ[ÛÛXš[˜][Û‚ˆ\×ØY™™\ˆHY™™\—Ý[YHˆˆ\×ØÜš]XØ[HÝ[Ý[YHˆLŒ	‰ˆZ\×ØY™™\‚ˆš[
+\×ØÜš]XØ[
+BŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™ÈHÚ[™ÛH\]X[ÈÚYÛˆX[œÚYHHÛÛ\\š\ÛÛˆÚXÚÎˆYˆHX‚ˆ
+Ø]\ÙNŠˆX\ÈH\ÜÚYÛ›Y[Ü\˜]ÜˆH\]X[]HÛÛ\\š\ÛÛœÈ[ˆ™[\˜HÝšXÝH™\]Z\™HHÝX›H\]X[ÈOX‚‹H
+Š‘\œ›ÜŽŠŠˆ]š\Ú[ÛˆžH™\›È
+È
+K‚ˆ
+Ø]\ÙNŠˆ™\Ý[È[ˆH[[YHX›Üˆ[Ø^\È˜[Y]H]H]š\ÛÜˆ\È›Û‹^™\›È™Y›Ü™H]šY[™Ë‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ\ÜÚYÛˆ˜[Y\È\Ú[™ÈXÛÛ\\™H˜[Y\È\Ú[™ÈOX‚Œ‹ˆ\š]Y]XÈ^™\ÜÚ[ÛœÈ™\ÜXÝÜ\˜]Üˆ™XÙY[˜ÙNÈ\ÙH\™[\Ù\ÈÚ[™]™\ˆÛ\š]H\È™YYY‚ŒËˆ	‰˜[X[™È]›ÝÜ\˜[™È\™HYKÚ[HÝXØÙYYÈÚ[ˆZ]\ˆÜ\˜[™\ÈYK‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ\ÙHOX[™	XÈ™\šYžHÚ]\ˆL	H˜\]X[È
+]™[‹[[X™\ˆÚXÚÊK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]H[ˆ^™\ÜÚ[Ûˆ\Ý[™ÈÚ]\ˆ[ˆ[YÙ\ˆYÙX˜[ÈÚ][ˆH˜[™ÙHNÈX
+[˜Û\Ú]™JK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]H[ˆ^™\ÜÚ[Ûˆ›ÜˆH\ØÛÝ[[NˆHÝ\ÝÛY\ˆ]X[YšY\È›ÜˆH\ØÛÝ[Yˆ^H\™HH’T
+\×Ýš\OHYX
+HÔˆYˆZ\ˆÜ™\ˆÝ[^ÙYYÈLS‘^H\™H›ÝH™]ÈÝ\ÝÛY\‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[’[ˆÝ\ˆ\ÚÈX[˜YÙ[Y[›Ú™XÝÙH™YYÈ]\›Z[™HÚ]\ˆH\ÚÈ\ÈÝ™\™YH[™™\]Z\™\È[[YYX]H][[ÛŽ‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆ^\×Ü™[XZ[š[™ÈHL‚ˆ\×ÙÛ™HH˜[ÙBˆ\×Ø›ØÚÙYH˜[ÙB‚ˆËÈH\ÚÈ\ÈÝ™\™YHYˆ^\È[™]\È›ÝY]ÛÛ\]Yˆ\×ÛÝ™\™YHH^\×Ü™[XZ[š[™È	‰ˆZ\×ÙÛ™B‚ˆËÈYÚ\™Ù[˜ÞNˆÝ™\™YH[™›Ý›ØÚÙYžHÝ\ˆ\ÚÜÂˆ™\]Z\™\×Ø][[ÛˆH\×ÛÝ™\™YH	‰ˆZ\×Ø›ØÚÙY‚ˆš[
+•\ÚÈÝ™\™YOÈŠBˆš[
+\×ÛÝ™\™YJBˆš[
+“™YYÈ[[YYX]H[\™[[ÛÈŠBˆš[
+™\]Z\™\×Ø][[ÛŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÜ\˜]ÜœÈÛÛXš[™H[™]šYX[˜[Y\È[È^™\ÜÚ]™HÝ][Y[Ë‚‹HÛÛ\\š\ÛÛˆÜ\˜]ÜœÈZY[›ÛÛX[ˆ˜[Y\È
+›ÛÛ
+K‚‹HÙÚXØ[Ü\˜]ÜœÈ
+	‰˜X
+H[ÝÈH^™\ÜÚ[ÛˆÙˆ[šXØ]H\Ú[™\ÜÈ[\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\ÈHY™™\™[˜ÙH™]ÙY[ˆX[™OXÂŒ‹ˆÚ]˜[YHÙ\ÈH^™\ÜÚ[ÛˆHˆÈ	‰ˆˆˆL]˜[X]HÏÂŒËˆÚ]Ù\ÈH	X[Ù[ÈÜ\˜]ÜˆÛÛ\]OÂ‚‹KKB‚ˆÈÈÚ\\ˆˆ[œ][™Ý]]‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈ\Ü^H[™›Ü›X][Ûˆ™[XX›HÛˆHÛÛœÛÛH\Ú[™Èš[
+
+X‚‹HÝÈÈ™XYH[™H[\˜XÝ]™[Hœ›ÛHH\›Z[˜[Ú]™XYØÛÛœÛÛJ
+X‚‹HÝÈ^[™˜\šXX›\È\™H›Ü›X]YšXHÝš[™ÈÛÛ˜Ø][˜][Û‹‚‹HÝÈ™[\˜H™XÙZ]™\È[œ]›ÝYÚ\˜[Y]\œË[š\›Û›Y[˜\šXX›\Ëš[\ËH\›Z[˜[[™ÙXˆ›Ý]\Ë‚‹HÚH™[\˜H™\]Z\™\È^XÚ]Ø\Xš[]Y\Ø›Üˆ^\›˜[Þ\Ý[H[\˜XÝ[ÛœË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂH›ÙÜ˜[H]Ø[››Ý™XÙZ]™H[œ]ÜˆÛÛ[][šXØ]HÝ]]\È\Ù[\ÜÈÈ\Ù\œËˆ[œ][™Ý]]
+KÓÊHÛÛ›™XÝHÛÛ\]][Û˜[ÙÚXÈÙˆ[Ý\ˆÛÙHÚ]H™X[ÛÜ›ˆ™XØ]\ÙH[\˜XÝ[ÛœÈÚ]HÙ^X›Ø\™š[\Þ\Ý[KÜˆ™]ÛÜšÈ[›ÙXÙHÙXÝ\š]Hš\ÚÜË™[\˜H™YÝ[]\È\ÙHÜ\˜][ÛœÈ˜\ˆ[Ü™HÝšXÝH[ˆÛ\ˆ[™ÝXYÙ\Ë‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‹H
+Š“Ý]]ŠŠˆHZ[Z[ˆš[
+˜[YJX[œÝXÝ[ÛˆXØÙ\È[X™\œË›ÛÛX[œËÝš[™ÜË[™ÝXÝ\™YØš™XÝËš[[™È[H\™XÝHÈÝ[™\™Ý]]
+ÝÝ]
+K‚‹H
+Š‘›Ü›X][™ÎŠŠˆ][\HÝš[™ÜÈ[™˜[Y\ÈØ[ˆ™HÛÛXš[™Y\Ú[™ÈH\ÈÜ\˜]Üˆ
+Ø‚‹H
+Š’[œ][ˆ™[\˜NŠŠ‚ˆ›ÙÜ˜[\È™XÙZ]™H[œ]›ÝYÚ\˜[Y]\œË[š\›Û›Y[˜\šXX›\Ëš[\ËÙXˆ™\]Y\ÝËÜˆ[\˜XÝ]™[Hœ›ÛHH\›Z[˜[‚ˆKˆ
+Š‘[˜Ý[Ûˆ\˜[Y]\œÎŠŠˆ[œ]]H\È\ÜÙY\™XÝH\š[™È[›ØØ][Û‹‚ˆ‹ˆ
+Š‘[š\›Û›Y[˜\šXX›\ÎŠŠˆ[Š“VWÒÑVHŠX™XYÈÛÛ™šYÝ\˜][Ûˆ\˜[Y]\œÈœ›ÛHHÜ\˜][™ÈÞ\Ý[K‚ˆËˆ
+Š‘š[\ÎŠŠˆ™XYÝ^
+š[œ]ŠX[™Ù\ÝÈ\œÚ\ÝY]K‚ˆˆ
+Š•ÙXˆ™\]Y\ÝÎŠŠˆ›Ü›HXÛ\˜][ÛœÈ
+›Ü›X
+H[™›Ý]H[™Ú[È
+YÙH‹Ý\Ù\‹ÞÚYH˜
+H›ØÙ\ÜÈœ›ÝÜÙ\ˆ[œ]‚ˆKˆ
+Š•\›Z[˜[ŠŠˆ™XYØÛÛœÛÛJ”›Û\ˆŠX\Ü^\ÈH›Û\[™™XYÈÛ™H[™Kˆ]™]\›œÈÝš[™ÏØˆ›Û™XYX[œÈ[™Ùˆ[œ]Ú[H[ˆ[\H[™H\ÈÛÛYJˆŠX‚‚•\›Z[˜[XØÙ\ÜÈ\ÈHØ\Xš[]KˆHØ[[™È[˜Ý[Ûˆ]\ÝXÛ\™H\Ù\ÂÛÛœÛÛXˆ›Ú™XÝÈÚ]HØØ\Xš[]Y\×XÙXÝ[Ûˆ]\Ý[ÛÈÙ]˜ÛÛœÛÛHHYXÈ™]È›Ú™XÝ[\]\ÈX]™H\ÈÜ˜[\ØX›YžHY˜][‚ÛÛœÛÛH[œ]\È[[™Y›Üˆ™[\˜H[˜ˆÙXˆ\XØ][ÛœÈÚÝ[\ÙH\Yœ™\]Y\ÝÈ[™›Ü›\È[œÝXY‚’[œ]\È›ÝY[ŽÈÈ›Ý\ÙH™XYØÛÛœÛÛJ
+X›Üˆ\ÜÝÛÜ™ÈÜˆÝ\‚œÙXÜ™]Ë‚‚˜™[\˜B™›ˆXZ[Š
+H\Ù\ÈÛÛœÛÛHÂˆ]HH™XYØÛÛœÛÛJ‘]NˆŠBˆX]Ú]HÂˆÛÛYJ˜[YJHOˆÂˆš[
+‘[\™Yˆˆ
+È˜[YJBˆBˆ›Û™HOˆÂˆš[
+“›È[œ]ˆŠBˆBˆBŸB˜‚˜Û[–ØØ\Xš[]Y\×B˜ÛÛœÛÛHHYB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘›Ü›X][™ÈÝ]]ŠŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\Ú×Û˜[YHH”™[X\ÙHKŒ‚ˆ\˜Ù[YÙHHˆš[
+”›ÙÜ™\ÜÈ›Üˆˆ
+È\Ú×Û˜[YH
+ÈŽˆŠBˆš[
+\˜Ù[YÙJBŸB˜‚ŠŠ’[œ]šXH[˜Ý[Ûˆ\˜[Y]\œÈ[™[š\›Û›Y[˜\šXX›\ÎŠŠ‚˜™[\˜B™›ˆ›ØÙ\Ü×Ý\ÚÊ\Ú×Û˜[YNˆÝš[™Ëš[Üš]WÛ]™[ˆ[
+HÂˆš[
+”›ØÙ\ÜÚ[™Îˆˆ
+È\Ú×Û˜[YJBˆš[
+”š[Üš]H]™[ˆŠBˆš[
+š[Üš]WÛ]™[
+BŸB‚™›ˆXZ[Š
+H\Ù\È[š\›Û›Y[Âˆ[ÙHH[ŠTÓSÑHŠBˆš[
+Ý\œ™[[ÙNˆŠBˆš[
+[ÙJBˆ›ØÙ\Ü×Ý\ÚÊÜ™X]H˜XÚÝ\‹JBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈÛÛ˜Ø][˜]H[ˆ[YÙ\ˆ\™XÝHÚ]HÝš[™È\Ú[™È
+Øˆ•˜[YNˆˆ
+ÈX‚ˆ
+Ø]\ÙNŠˆ™[\˜H™\]Z\™\È\HÛÛ\]Xš[]KˆX\È[ˆ[›ÝHÝš[™Øˆš[H[X™\ˆÙ\\˜][HšXHš[
+JXÜˆ\ÙHÛÛ™\œÚ[Ûˆ[\œË‚‹H
+Š‘\œ›ÜŽŠŠˆØ[[™È[Š
+XÚ]Ý]XÛ\š[™È\Ù\È[š\›Û›Y[ÛˆH[˜ÛÜÚ[™È[˜Ý[Û‹‚ˆ
+Ø]\ÙNŠˆ™[\˜IÜÈØ\Xš[]HÙXÝ\š]H[Ù[™\]Z\™\È[˜Ý[ÛœÈ[\˜XÝ[™ÈÚ]HÜÝ[š\›Û›Y[ÈXÛ\™HZ\ˆØ\Xš[]Y\È^XÚ]K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆš[
+
+X™[XX›HÝ]]È˜[Y\È[™^ÈHÛÛœÛÛK‚Œ‹ˆ[œ]È[\ˆ™[\˜H›ÙÜ˜[\ÈšXH\˜[Y]\œË[š\›Û›Y[˜\šXX›\Ëš[\ËH\›Z[˜[ÜˆÙXˆ›Ý]\Ë‚ŒËˆ^\›˜[Þ\Ý[HXØÙ\ÜÈ™\]Z\™\ÈXÛ\š[™ÈHÛÜœ™\ÜÛ™[™ÈØ\Xš[]H
+ÝXÚ\È\Ù\È[š\›Û›Y[
+K‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆš[H›Ü›X]YÛÛXÝØ\™
+˜[YK›Øˆ]K[XZ[Y™\ÜÊH\Ú[™È][\Hš[
+
+XÝ][Y[Ë‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆš[Ý\Ú×Ù[žJYˆ[\Ú×Û˜[YNˆÝš[™Ë\×ÙÛ™Nˆ›ÛÛ
+X]š[È[™YHšY[ÈÛX[›H›Ü›X]Y‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]HHÓH›ÙÜ˜[H\Ú[™È™XYØÛÛœÛÛJ
+X[™^Z[ˆÚ[ˆ\›Z[˜[[œ]\È\ÙY[[™Ú[ˆÝXÝ\™YÙXˆ™\]Y\ÝÈ\™HH™]\ˆš]‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[ÛÛœÝXÝ[ˆÝ]]›Ü›X][™È][]H›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[\XØ][ÛŽ‚‚˜™[\˜B™›ˆš[ÚXY\ŠÙXÝ[Û—Û˜[YNˆÝš[™ÊHÂˆš[
+‹KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHŠBˆš[
+”ÑPÕSÓŽˆˆ
+ÈÙXÝ[Û—Û˜[YJBˆš[
+‹KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHŠBŸB‚™›ˆš[Ý\Ú×Ù[žJ[žWÛ[Nˆ[\Ú×Û˜[YNˆÝš[™Ë\×ÙÛ™Nˆ›ÛÛ
+HÂˆš[
+•\ÚÈ›ÎˆŠBˆš[
+[žWÛ[JBˆš[
+“˜[YNˆˆ
+È\Ú×Û˜[YJBˆYˆ\×ÙÛ™HÂˆš[
+”Ý]\ÎˆÖHÓ‘HŠBˆH[ÙHÂˆš[
+”Ý]\ÎˆÈHÔSˆŠBˆBˆš[
+‹KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHŠBŸB‚™›ˆXZ[Š
+HÂˆš[ÚXY\Š•ÑVIÔÈTÒÔÈŠBˆš[Ý\Ú×Ù[žJK•ÛÜšÈ›ÝYÚH[™›ÛÚÈ‹YJBˆš[Ý\Ú×Ù[žJ‹”˜XÝXÙH™[\˜H^[\\È‹˜[ÙJBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÛÛœÛÛHÝ]]\È\™›Ü›YYÛX[›H[™™[XX›H\Ú[™Èš[
+
+X‚‹H^\›˜[[š\›Û›Y[[\˜XÝ[ÛœÈ\™H›ÝXÝYžH^XÚ]Ø\Xš[]Y\Ë‚‹H[œ]È\™H™XÙZ]™Y›ÝYÚ\˜[Y]\œËš[\Ë[š\›Û›Y[˜\šXX›\Ë™XYØÛÛœÛÛJ
+XÜˆÙXˆ™\]Y\ÝË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚZ[Z[ˆ[˜Ý[Ûˆ\È\ÙY[ˆ™[\˜H›ÜˆÛÛœÛÛH^Ý]]ÂŒ‹ˆÚHÙ\ÈXØÙ\ÜÚ[™È[Š
+XX[™]HH\Ù\È[š\›Û›Y[XÛ\˜][ÛÂŒËˆÚXÚ[œ]Ú[›™[È\™H\XØ[›ÜˆÙ\™\‹X˜\ÙY™[\˜HÛÙØ\™OÂ‚‹KKB‚ˆÈÈÚ\\ˆNˆXÚ\Ú[ÛœÈÚ]ÛÛ™][ÛœÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈ›ÙÜ˜[\È^XÝ]HÛÛ™][Û˜[œ˜[˜Ú\È\Ú[™ÈY˜[™[ÙX‚‹HÝÈÈ]˜[X]H][K]Ø^H[\›˜]]™\È\Ú[™È[ÙHY˜‚‹HÝÈÈÛÛXš[™H][\HÛÛ™][ÛœÈÙÚXØ[K‚‹HÝÈÈ]]ÜˆÛX[ˆ[™^]\Ý]™H]\›ˆX]Ú\ÈÚ]X]Ú‚‹HÛÛ[[ÛˆÙÚXÈ]˜[ÈÚ]™\ÝYÛÛ™][ÛœÈ[™ÝÈÈÝXÝ\™HÛÙHÛX[›K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•Ú]Ý]ÛÛ™][Û˜[œ˜[˜Ú[™ËÛÙØ\™HÛÝ[™H\ÈšYÚY\ÈH]\ÚXÈ›ÞÞ[[™\Žˆ]ÛÝ[™\^HH^XÝØ[YHÝ\È]™\žHÚ[™ÛH[YKˆÛÙØ\™H™XÛÛY\È[HØ\X›HÚ[ˆ][˜[ZXØ[H™XXÝÈÈÚ[™Ú[™ÈÚ\˜Ý[\Ý[˜Ù\Îˆ\ÈH\Ù\ˆ]][XØ]YÈ\ÈHXY[™H\ÜÙYÈ\ÈH˜[[˜ÙHÝY™šXÚY[ÈÚ]Y˜[™X]Ú[ÝHÜ˜[[Ý\ˆÛÙHHXš[]HÈXZÙHXÚ\Ú[ÛœË‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‹H
+Š˜Y˜È[ÙXŠŠˆ]˜[X]\ÈH›ÛÛX[ˆÛÛ™][Û‹ˆYˆ]]˜[X]\ÈÈYXHš\œÝ›ØÚÈ^XÝ]\ÎÈÝ\Ú\ÙKH[ÙX›ØÚÈ[œÎ‚ˆ™[\˜Bˆ›ˆÚXÚ×Ü™\Ý[
+ØÛÜ™Nˆ[
+HÂˆYˆØÛÜ™HHLÂˆš[
+”\ÜÙYHŠBˆH[ÙHÂˆš[
+•[™›Ü[˜][H˜Z[YˆŠBˆBˆB‚ˆ›ˆXZ[Š
+HÂˆÚXÚ×Ü™\Ý[
+ÍJBˆBˆ‹H
+Š˜X]ÚŠŠˆÚ[ˆ]˜[X][™ÈH˜[YHYØZ[œÝ][\HÛ›ÝÛˆØ\Ù\ËX]Ú\È˜\ˆÛX[™\ˆ[™[Ü™H™XYX›H[ˆÜ˜]Û[™ÈYˆÈ[ÙHY˜Ø\ØØY\Ëˆ[ˆ™[\˜KHÛÛ\[\ˆ™\šYšY\È][ÜÜÚX›HØ\Ù\È\™HÛÝ™\™Y
+^]\Ý]™[™\ÜÊN‚ˆ™[\˜Bˆ›ˆÚÝ×ÜÝ]\ÊÝ]\×ØÛÙNˆ[
+HÂˆX]ÚÝ]\×ØÛÙHÂˆHOˆÈš[
+“™]ÈŠHBˆˆOˆÈš[
+’[ˆ›ÙÜ™\ÜÈŠHBˆÈOˆÈš[
+‘Û™HŠHBˆÈOˆÈš[
+•[šÛ›ÝÛˆÝ]\ÈŠHBˆBˆB‚ˆ›ˆXZ[Š
+HÂˆÚÝ×ÜÝ]\ÊŠBˆBˆˆH[™\œØÛÜ™HØ\ÈH
+ŠÚ[Ø\™]\›ŠŠŽˆ]X]Ú\È[™[XZ[š[™È˜[Y\È]Ù\™H›Ý^XÚ]H\ÝY‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ”Ú[\Hœ˜[˜Ú[™ÎŠŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆÜ[—Ý\ÚÜÈHˆYˆÜ[—Ý\ÚÜÈOHÂˆš[
+‘Ü™X]H[\ÚÜÈ\™HÛÛ\]YˆŠBˆH[ÙHÂˆš[
+•\™H\™HÝ[Ü[ˆ\ÚÜËˆŠBˆBŸB˜‚ŠŠ“][KPœ˜[˜ÚXÚ\Ú[ÛˆÚ]X]ÚŠŠ‚˜™[\˜B™›ˆ]˜[X]WÜš[Üš]J]™[ˆ[
+HOˆÝš[™ÈÂˆX]Ú]™[ÂˆHOˆÈ™]\›ˆ•‘T–HT‘ÑS•ˆBˆˆOˆÈ™]\›ˆ““Ô“PSˆBˆÈOˆÈ™]\›ˆ“ÕÈˆBˆÈOˆÈ™]\›ˆ•S’Ó“ÕÓˆˆBˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+]˜[X]WÜš[Üš]JJJBˆš[
+]˜[X]WÜš[Üš]JŠJBŸB˜‚ŠŠ”]\›ˆX]Ú[™ÈÝ]\ÈÛÙ\ÎŠŠ‚˜™[\˜B™›ˆÝ]\×Ù\ØÜš\[ÛŠÛÙNˆ[
+HOˆÝš[™ÈÂˆX]ÚÛÙHÂˆOˆÈ™]\›ˆ‘˜YˆBˆHOˆÈ™]\›ˆXÝ]™HˆBˆˆOˆÈ™]\›ˆ\˜Ú]™YˆBˆÈOˆÈ™]\›ˆ’[˜[YˆBˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+Ý]\×Ù\ØÜš\[ÛŠJJBˆš[
+Ý]\×Ù\ØÜš\[ÛŠNJJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÛZ][™ÈHÚ[Ø\™Øœ˜[˜ÚÚ[ˆX]Ú[™ÈÝ™\ˆ[X™\œË‚ˆ
+Ø]\ÙNŠˆ[X™\œÈØ[ˆZÙHš\X[H[™š[š]H˜[Y\ËˆYˆ[ÝHÛ›H[™HX[™˜HÛÛ\[\ˆÚYÛ˜[ÈH›Û‹Y^]\Ý]™HX]Ú‚‹H
+Š‘\œ›ÜŽŠŠˆ^Ù\ÜÚ]™H™\Ý[™È
+H\œ›ÝÈ[K\]\›ŽˆYˆÈYˆÈYˆÈ‹‹ˆHHX
+K‚ˆ
+Ø]\ÙNŠˆ\™È™XY[™XYËˆ›][ˆY\™\Ý[™È\Ú[™ÈX\›H™]\›œÈÜˆX]Ú‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆY˜œ˜[˜Ú\È˜\ÙYÛˆH›ÛÛX[ˆ˜[YH
+›ÛÛ
+K‚Œ‹ˆX]ÚÚXÚÜÈ˜[Y\ÈYØZ[œÝ]\›œÈ[™[™›Ü˜Ù\È^]\Ý]™[™\ÜË‚ŒËˆHÚ[Ø\™ØØY™[HØ]Ú\È[[›\ÝYØ\Ù\Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH[˜Ý[Ûˆ\×ØY[
+YÙNˆ[
+HOˆ›ÛÛ]ÚXÚÜÈYˆYÙHHN‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆ^\×Ú[—Û[Û
+[Ûˆ[
+HOˆ[\Ú[™ÈX]Ú]™]\›œÈH[X™\ˆÙˆ^\È›Üˆ[ÛÈH›ÝYÚLˆ
+Ý[™\™Ž^\È›Üˆ™XœX\žJK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆZ[H˜[Y][Ûˆ[˜Ý[Ûˆ]ÚXÚÜÈÚ]\ˆH\ÜÝÛÜ™YY]È[™ÝÜš]\šXH
+]X\ÝÚ\˜XÝ\œÊH[™\È›Ý\]X[ÈŒLŒÍMÎ˜‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[’[\[Y[]]ÛX]Y˜Y™šXË[YÚš[Üš]HÛ\ÜÚYšXØ][Ûˆ›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚‚˜™[\˜B™›ˆØ[Ý[]WÝ˜Y™šX×ÛYÚ
+™[XZ[š[™×Ù^\Îˆ[\×Ùš[š\ÚYˆ›ÛÛ
+HOˆÝš[™ÈÂˆYˆ\×Ùš[š\ÚYÂˆ™]\›ˆ‘Ô‘QSŽˆ\ÚÈ\ÈÛÛ\]Y‚ˆH[ÙHÂˆYˆ™[XZ[š[™×Ù^\ÈÂˆ™]\›ˆ”‘QˆXY[™H\È\ÜÙYH‚ˆH[ÙHÂˆYˆ™[XZ[š[™×Ù^\ÈHˆÂˆ™]\›ˆ–QSÕÎˆYHÛÛÛ‹X\ÙH[™H‚ˆH[ÙHÂˆ™]\›ˆ“QNˆÛˆØÚY[H‚ˆBˆBˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+Ø[Ý[]WÝ˜Y™šX×ÛYÚ
+K˜[ÙJJBˆš[
+Ø[Ý[]WÝ˜Y™šX×ÛYÚ
+K˜[ÙJJBˆš[
+Ø[Ý[]WÝ˜Y™šX×ÛYÚ
+LK˜[ÙJJBˆš[
+Ø[Ý[]WÝ˜Y™šX×ÛYÚ
+LKYJJBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HY˜[™[ÙX\™XÝÛÛ›Û›ÝÈ˜\ÙYÛˆ›ÛÛX[ˆ™YXØ]\Ë‚‹HX]Ú˜XÚ[]]\ÈÛX[‹ÛÛ\[\‹]™\šYšYY]\›ˆœ˜[˜Ú[™Ë‚‹HÙ[\ÝXÝ\™YÛÛ™][Û˜[ÙÚXÈÙY\È\Ú[™\ÜÈ[\ÈÛX\ˆ[™XZ[Z[˜X›K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ[ˆ\ÈX]Ú™Y™\˜X›HÈ[ˆYˆÈ[ÙHY˜ÚZ[ÂŒ‹ˆÚ]›ÛHÙ\ÈHÚ[Ø\™]\›ˆØ\™›Ü›H[ˆX]ÚÂŒËˆÚHÙ\È™[\˜HX[™]H]]\›ˆX]Ú\È™H^]\Ý]™OÂ‚‹KKB‚ˆÈÈÚ\\ˆLˆ™\]][Ûˆ[™ÛÜÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚHÛÜÈ\™H[™\Ü[œØX›H[ˆ]H›ØÙ\ÜÚ[™È[™ÛÛ\]][Û‹‚‹HÛÝ[Y[™ÛÛ™][Û‹Yš]™[ˆÛÜÎˆÚ[HÛÛ™][ÛˆÈ‹‹ˆX‚‹H]\˜][ÛˆXÜ›ÜÜÈÛÛXÝ[ÛœÈ[™\œ˜^\Îˆ›Üˆ[[Y[[ˆ\œ˜^HÈ‹‹ˆX‚‹H[˜ÛÛ™][Û˜[ÛÜÎˆÛÜÈ‹‹ˆX‚‹Hš[™KYÜ˜Z[™YÛÜÛÛ›Û\Ú[™Èœ™XZØ
+^]
+H[™ÛÛ[YX
+ÚÚ\
+K‚‹HÛÜ[˜\šX[È
+[˜\šX[
+K[˜X›[™È›Ü›X[X][X]XØ[›ÛÙˆÙˆÛÜÛÜœ™XÝ™\ÜË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂÛÛ\]\œÈÙ\™H[™[YÈ\™›Ü›H™\]]]™KY[Ý\È\ÚÜÈÝÚYH[™Ú]Ý][X[ˆ˜]YÝYHÜˆ\œ›Ü‹ˆYˆ[ÝH™YYÈ™]šY]™K[œÜXÝ[™™[™\ˆK™XÛÜ™Èœ›ÛHH]X˜\ÙK[ÝH™]™\ˆÜš]HH›ØÙ\ÜÚ[™ÈÙÚXÈHÝ\Ø[™[Y\ø %[ÝHÜš]H]Û˜ÙH[œÚYHHÛÜˆ™[\˜H›ÝšY\È›Ø\ÝÛÜ[™ÈÛÛœÝXÝÈ[Û™ÈÚ]›Ü›X[[˜\šX[™\šYšXØ][Û‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚–™[\˜HÝ\ÜÈ™YHš[X\žHÛÜ›Ü›\Î‚‚ŒKˆ
+Š˜›Üˆ‹‹ˆ[˜ŠŠˆHØY™\Ý[™[ÜÝÛÛ˜Ú\ÙHØ^HÈ˜]™\œÙHHÛÛXÝ[ÛˆÙˆ[[Y[ËˆHÛÜ]\˜]\ÈÝ™\ˆXXÚ[[Y[[ˆÙ\]Y[˜ÙH[™[È]]ÛX]XØ[N‚ˆ™[\˜Bˆ›ˆXZ[Š
+HÂˆ›Üˆ[H[ˆÌK‹×HÂˆš[
+[JBˆBˆBˆŒ‹ˆ
+Š˜Ú[HÛÛ™][Û˜ŠŠˆÛÛ[Y\È^XÝ][Ûˆ\ÈÛ™È\ÈHÛÛ™][Ûˆ]˜[X]\ÈÈYXˆ\ÙY[Ú[ˆH^XÝ[X™\ˆÙˆ]\˜][ÛœÈ\È›ÝÛ›ÝÛˆ[ˆY˜[˜ÙK‚ŒËˆ
+Š˜ÛÜŠŠˆHÛÛ[[Ý\ÈÛÜ][œÈ[™Yš[š][H[[[ˆ[›™\ˆœ™XZØÝ][Y[\È[˜ÛÝ[\™Y‚‚ŠŠ“ÛÜÛÛ›ÛÛÛ[X[™ÎŠŠ‚‹H
+Š˜œ™XZØ
+ŠŽˆ\›Z[˜]\ÈHÛÜ[[YYX][Kˆ^XÝ][Ûˆ™\Ý[Y\ÈY\ˆHÛÜ›ØÚË‚‹H
+Š˜ÛÛ[YX
+ŠŽˆ[ÈHÝ\œ™[]\˜][Ûˆ[™[\È\™XÝHÈH™^ÞXÛK‚‚ŠŠ“ÛÜ[˜\šX[È
+[˜\šX[
+NŠŠ‚[ˆ[˜\šX[\ÈHÙÚXØ[›ÜÜÚ][Ûˆ]]\Ý™[XZ[ˆYX
+Š˜™Y›Ü™JŠ‹
+Š™\š[™ÊŠ‹[™
+Š˜Y\ŠŠˆ]™\žHÚ[™ÛH]\˜][ÛˆÙˆHÛÜ
+K™Ë‹[˜\šX[ÈÛÝ[\ˆHX
+KˆH™[\˜H™\šYšXØ][Ûˆ[™Ú[™H
+™[\˜H™\šYžX
+HÚXÚÜÈÛÜ[˜\šX[ÈX][X]XØ[HÈ›Ý™H]HÛÜØ[››Ý[\ˆ[˜[YÝ]\ÈB‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ›Üˆ‹‹ˆ[˜XÜ›ÜÜÈ[ˆ\œ˜^JŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\ÚÜÈHÈ”[ˆ‹”›ÙÜ˜[H‹•\Ý‹‘\ÞH—Bˆ›Üˆ[ˆ\ÚÜÈÂˆš[
+”Ý\ˆˆ
+È
+BˆBŸB˜‚ŠŠ‘^[\HŽˆÚ[XÚ]ÛÝ[\ˆ[™[˜\šX[
+Š‚˜™[\˜B™›ˆXZ[Š
+HÂˆ]]X›HÛÝ[\ˆHBˆÚ[HÛÝ[\ˆHÂˆ[˜\šX[ÈÛÝ[\ˆHHBˆÂˆš[
+ÛÝ[\ŠBˆÛÝ[\ˆHÛÝ[\ˆ
+ÈBˆBŸB˜‚ŠŠ‘^[\HÎˆ\™Ù]Y\ÙHÙˆœ™XZØ[™ÛÛ[YX
+Š‚˜™[\˜B™›ˆXZ[Š
+HÂˆ›Üˆ[H[ˆÌK‹ËWHÂˆYˆ[HOHˆÂˆËÈÚÚ\H[X™\ˆŽ‚ˆÛÛ[YBˆBˆYˆ[HOHÂˆËÈX›ÜÛÛ\][H]‚ˆœ™XZÂˆBˆš[
+[JBˆBŸB˜Š“Ý]]Šˆš[ÈX[™ØB‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™ÈÈ[˜Ü™[Y[HÛÜÛÝ[\ˆ[œÚYHHÚ[XÛÜ
+ÛÝ[\ˆHÛÝ[\ˆ
+ÈX
+K‚ˆ
+Ø]\ÙNŠˆHÛÜÛÛ™][Ûˆ™[XZ[œÈ\›X[™[HYK™\Ý[[™È[ˆ[ˆ
+Šš[™š[š]HÛÜ
+Šˆ]œ™Y^™\ÈH›ÙÜ˜[K‚‹H
+Š‘\œ›ÜŽŠŠˆÙ™‹XžK[Û™H›Ý[™\žH\œ›ÜœÈÚ]X[X[[™^ÛÝ[\œË‚ˆ
+Ø]\ÙNŠˆÚ[™]™\ˆÜÜÚX›K\ÙH›Üˆ[[Y[[ˆ\œ˜^XÈ]›ÚY›Ý[™\žHZ\ÝZÙ\ÈÛÛ\][K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™Y™\ˆ›Üˆ‹‹ˆ[˜›ÜˆÛÛXÝ[ÛœÈ[™\œ˜^\Ë‚Œ‹ˆœ™XZØ^]ÈHÛÜ[[YYX][NÈÛÛ[YX›ØÙYYÈÈH™^]\˜][Û‹‚ŒËˆ[˜\šX[ÈØÝ[Y[[™X][X]XØ[H›Ý™HHÛÜœ™XÝ™\ÜÈ[™ØY™]HÙˆÛÜË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ\ÙHHÚ[XÛÜÈš[[X™\œÈÛÝ[[™ÈÝÛˆœ›ÛHLÈK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÛÛ\]HHÝ[HÙˆ[[X™\œÈ[ˆH\œ˜^HÌLŒÌX\Ú[™ÈH›Ü˜ÛÜ‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÙX\˜Ú[ˆ\œ˜^HÙˆ[X™\œÈ›ÜˆH\™Ù]˜[YH˜ˆYˆ›Ý[™š[‘›Ý[™H˜[™^]HÛÜ[[YYX][HšXHœ™XZØˆYˆH[X™\ˆ\È›Ý™\Ù[š[“›Ý›Ý[™˜]H[™‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[“]\È\HÛÜÈÈÝ\ˆ\ÚÈX[˜YÙ[Y[›Ú™XÝˆÙH[œÜXÝH\ÚÈ\ÝX\šÈÛÛ\]Y\ÚÜË[™ÛÝ[Ý[ÛÛ\][ÛœÎ‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\ÚÜÈHÈ•Üš]HÜXÚYšXØ][Ûˆ‹”Ù]\]X˜\ÙH‹•Üš]H\ÝÈ—Bˆ]]X›HÛÛ\]YØÛÝ[H‚ˆš[
+”™]šY]Ú[™È\ÚÈ\ÝˆŠBˆ›Üˆ[ˆ\ÚÜÈÂˆYˆOH•Üš]HÜXÚYšXØ][ÛˆˆÂˆš[
+–ÖHˆ
+È
+BˆÛÛ\]YØÛÝ[HÛÛ\]YØÛÝ[
+ÈBˆH[ÙHÂˆš[
+–ÈHˆ
+È
+BˆBˆB‚ˆš[
+•Ý[ÛÛ\]Y\ÚÜÎˆŠBˆš[
+ÛÛ\]YØÛÝ[
+BŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÛÜÈ]]ÛX]H[Û›ÝÛ›Ý\Ë™\]]]™H›ØÙ\ÜÚ[™È\ÚÜË‚‹H›Üˆ‹‹ˆ[˜ØY™[H]\˜]\ÈÝ™\ˆ\œ˜^\ÎÈÚ[X]\˜]\ÈÛÛ™][Û˜[K‚‹Hœ™XZØ[™ÛÛ[YX›ÝšYH^XÝÛÛ›ÛÝ™\ˆ]\˜][Ûˆ›ÝË‚‹H[˜\šX[[˜X›\È›Ü›X[X][X]XØ[™\šYšXØ][ÛˆÚ]™[\˜H™\šYžX‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\ÈHY™™\™[˜ÙH™]ÙY[ˆœ™XZØ[™ÛÛ[YXÂŒ‹ˆÚH\È›Üˆ‹‹ˆ[˜ØY™\ˆÚ[ˆ]\˜][™ÈÝ™\ˆ\œ˜^\È[ˆHX[X[Ú[XÛÜÂŒËˆÚ]›ÛHÙ\È[ˆ[˜\šX[^H[ˆ›ÙÜ˜[H™\šYšXØ][ÛÂ‚ˆÈT•RRH8 $ÈÕ•PÕT’S‘È“ÑÔSTÂ‚‹KKB‚ˆÈÈÚ\\ˆLNˆ[˜Ý[ÛœÈ[™›ØÙY\™\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ][˜Ý[ÛœÈ\™H[™ÝÈ^HXZÙH›ÙÜ˜[\ÈÝXÝ\™Y™XYX›K[™™]\ØX›K‚‹HÝÈÈ\ÜÈ\˜[Y]\œÈ[™XÛ\™H™]\›ˆ\\È\Ú[™ÈOˆ\X‚‹HÚ]\™H[˜Ý[ÛœÈ
+
+™[˜Ý[ÛœÈÚ]Ý]ÚYHY™™XÝÊŠH\™H[™ÚH^H\™H[˜[XX›K‚‹HÚ]›ØÙY\™\È\™H
+[˜Ý[ÛœÈÚ]Ý]H™]\›ˆ˜[YHÜˆÚ]\H[š]
+H]^XÝ]HXÝ[ÛœË‚‹HÝÈ™[\˜H›ÜÝ\œÈÛX\ˆ˜[Z[™ÈÛÛ™[[ÛœÈ[™ÛX[ˆ›ÙÜ˜[[Z[™ÈÝ[K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’Yˆ[ÝH™\X]]™\žHØ[Ý[][Ûˆ[™ÛÛœÛÛHÝ]][ˆ[Y\È[ˆY™™\™[XÙ\ÈXÜ›ÜÜÈ[Ý\ˆÛÙX˜\ÙKH™XYYœÜYÚ]HÛÙHˆ[›ÛY[›Ûˆ]ZXÚÛHZÙ\ÈÝ™\‹ˆÚ[ˆH\Ú[™\ÜÈ[HÚ[™Ù\È
+›Üˆ^[\KÝÈH\ÚÈXY[™H\ÈØ[Ý[]Y
+K[ÝHÛÝ[]™HÈØØ]H[™Y\Ý[[ˆXÙ\ø %[™]š]X›H[›ÙXÚ[™ÈYÜËˆ[˜Ý[ÛœÈÜ›Ý\HÙÚXØ[Ü\˜][Ûˆ[™\ˆH\ØÜš\]™H˜[YNˆ[ÝHÜš]H]Û˜ÙK\Ý]Ü›ÝYÚK[™™]\ÙH][ž]Ú\™H\ÈÙ[ˆ\È™YYY‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•[šÈÙˆH[˜Ý[ÛˆZÙHHÚ]Ú[ˆ\X[˜ÙN‚‹H[ÝH][™Ü™YY[È[ˆ
+
+Šœ\˜[Y]\œÊŠŠK‚‹HH\X[˜ÙH›ØÙ\ÜÙ\ÈH[™Ü™YY[ÈXØÛÜ™[™ÈÈHš^Y™XÚ\H
+
+Š™[˜Ý[Ûˆ›ÙJŠŠK‚‹H]H[™Hš[š\ÚY\ÚÛÛY\ÈÝ]
+
+Šœ™]\›ˆ˜[YJŠŠK‚‚’[ˆ™[\˜K[ÝHYš[™H[˜Ý[ÛœÈ\Ú[™ÈH›˜Ù^]ÛÜ™‚˜™[\˜B™›ˆY
+Nˆ[Žˆ[
+HOˆ[Âˆ™]\›ˆH
+È‚ŸB‚™›ˆXZ[Š
+HÂˆš[
+Y
+‹ÊJBŸB˜’YˆH[˜Ý[Ûˆ\È›È™]\›ˆ˜[YH™XØ]\ÙH]Y\™[H\™›Ü›\È[ˆXÝ[Ûˆ
+ÝXÚ\Èš[[™ÈH[™HÙˆ^ÈHÛÛœÛÛJK]È™]\›ˆ\H\È[š]
+[™Ø[ˆÚ[\H™HÛZ]Y
+N‚˜™[\˜B™›ˆš[ÜÙ\\˜]ÜŠ
+HÂˆš[
+‹KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKHŠBŸB‚™›ˆXZ[Š
+HÂˆš[ÜÙ\\˜]ÜŠ
+BŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆØ[Ý[][ÛˆÚ]H™]\›ˆ˜[YJŠ‚˜™[\˜B™›ˆØ[Ý[]WÙ^\×Ý[[ÙXY[™JÙ^WÙ^Nˆ[XY[™WÙ^Nˆ[
+HOˆ[Âˆ™]\›ˆXY[™WÙ^HHÙ^WÙ^BŸB‚™›ˆXZ[Š
+HÂˆ^\ÈHØ[Ý[]WÙ^\×Ý[[ÙXY[™JLN
+Bˆš[
+^\ÊBŸB˜‚ŠŠ‘^[\HŽˆ^›Ü›X][™È[ˆH[\ˆ[˜Ý[ÛŠŠ‚˜™[\˜B™›ˆ›Ü›X]Ý\ÚÊYÝ^ˆÝš[™Ë^ˆÝš[™ËÛ™Nˆ›ÛÛ
+HOˆÝš[™ÈÂˆ]]X›HÝ]\×ÛX\šÈH–ÈH‚ˆYˆÛ™HÂˆÝ]\×ÛX\šÈH–ÖH‚ˆBˆ™]\›ˆÝ]\×ÛX\šÈ
+ÈˆÈˆ
+ÈYÝ^
+ÈŽˆˆ
+È^ŸB‚™›ˆXZ[Š
+HÂˆ›Ü›X]YH›Ü›X]Ý\ÚÊŒH‹”™XYØÝ[Y[][Ûˆ‹YJBˆš[
+›Ü›X]Y
+BŸB˜‚ŠŠ‘^[\HÎˆ›ØÙY\™H›ÜˆXY\ˆÝ]]
+Š‚˜™[\˜B™›ˆÚÝ×ÚXY\Š\Ù\—Û˜[YNˆÝš[™ÊHÂˆš[
+“ÙÙÙY[ˆ\Îˆˆ
+È\Ù\—Û˜[YJBˆš[
+OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHŠBŸB‚™›ˆXZ[Š
+HÂˆÚÝ×ÚXY\Š[XÙHŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™ÈH™]\›˜Ý][Y[Ú[ˆH™]\›ˆ\HØ\ÈXÛ\™Y‚ˆ
+Ø]\ÙNŠˆÚ[ˆH™]\›ˆ\H\ÈÜXÚYšYY™[\˜HÝšXÝH™\]Z\™\ÈHX]Ú[™È˜[YHÛˆ]™\žH^XÝ][Ûˆ]‚‹H
+Š‘\œ›ÜŽŠŠˆÜ›Û™È\™Ý[Y[Ü™\ˆ\š[™ÈH[˜Ý[ÛˆØ[‚ˆ
+Ø]\ÙNŠˆ™[\˜H[™›Ü˜Ù\ÈÝšXÝ\˜[Y]\ˆ\HÚXÚÚ[™ËˆYˆHš\œÝ\˜[Y]\ˆ\È[ˆ[[ÝHØ[››Ý\ÜÈHÝš[™Ø‚‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈÛÛ˜Ø][˜]HÝš[™Ø[™[\™XÝHÚ]
+Ø‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜KH
+ØÜ\˜]ÜˆZ]\ˆÛÛ˜Ø][˜]\ÈÛÈÝš[™ÜÈÜˆYÈÛÈ[X™\œÈÙˆHØ[YH\KˆÛÛ™\Üˆ›Ü›X]˜[Y\È\ÈÝš[™ÜÈÜˆš[[HÙ\\˜][HšXHš[
+
+X‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆH[˜Ý[ÛˆÚÝ[[š[^XÝHÛ™HÚ[™ÛKÛX\›HYš[™Y\ÚË‚Œ‹ˆ\™H[˜Ý[ÛœÈ[Ø^\È›ÙXÙHY[XØ[Ý]]È›ÜˆY[XØ[[œ]È[™›ÙXÙH›ÈÚYHY™™XÝË‚ŒËˆ[˜Ý[Ûˆ˜[Y\ÈÚÝ[™H\ØÜš\]™H™\˜œÈÜˆ™\˜ˆ˜\Ù\È
+K™Ë‹Ø[Ý[]WÙY™™\™[˜ÙX›Ü›X]Ý\ÚØ
+K‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH[˜Ý[ÛˆÝX›WÝ˜[
+[Nˆ[
+HOˆ[]™]\›œÈÚXÙHHÚ]™[ˆ[X™\‹‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆ\×Ý\™Ù[
+^\Îˆ[
+HOˆ›ÛÛ]™]\›œÈYXYˆ™]Ù\ˆ[ˆÈ^\È™[XZ[‹‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]HH[˜Ý[ÛˆÝ]\×ÜÞ[X›Û
+Û™Nˆ›ÛÛ
+HOˆÝš[™Ø]™]\›œÈ–ÓÒ×H˜YˆÛ™H[™–ÓÔS—H˜Ý\Ú\ÙK‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È[Ù[\š^š[™È\ÚÈ\Ü^B•Üš]HH™[\˜H›ÙÜ˜[H]›Ü›X]È[™\Ü^\È™YH\ÚÜÈÚ][ˆQÝš[™Ë\ÚÈ˜[YK[™ÛÛ\][ÛˆÝ]\È\Ú[™ÈH™]\ØX›H›Ü›X][™È[˜Ý[ÛŽ‚‚˜™[\˜B™›ˆ›Ü›X]Ù[žJYÝ^ˆÝš[™Ë˜[YNˆÝš[™ËÛ™Nˆ›ÛÛ
+HOˆÝš[™ÈÂˆ]]X›HÝ]\×ÛX\šÈH–ÓÔS—H‚ˆYˆÛ™HÂˆÝ]\×ÛX\šÈH–ÓÒ×H‚ˆBˆ™]\›ˆÝ]\×ÛX\šÈ
+Èˆ\ÚÈˆ
+ÈYÝ^
+ÈŽˆˆ
+È˜[YBŸB‚™›ˆXZ[Š
+HÂˆš[
+›Ü›X]Ù[žJŒH‹ÛÛXÝXZ[‹YJJBˆš[
+›Ü›X]Ù[žJŒˆ‹”^H[›ÚXÙH‹˜[ÙJJBˆš[
+›Ü›X]Ù[žJŒÈ‹Ü™X]H˜XÚÝ\‹˜[ÙJJBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H[˜Ý[ÛœÈ]šYH›ÙÜ˜[\È[ÈÙÚXØ[X[˜YÙXX›HZ[[™È›ØÚÜË‚‹H\˜[Y]\œÈ[™™]\›ˆ\\È\™HÝšXÝH\Y[ˆ™[\˜K‚‹H\™H[˜Ý[ÛœÈÙY\ÛÙHXZ[Z[˜X›K\ÝX›K[™™\Ú[Y[YØZ[œÝ[™^XÝYYÜË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\HÙ\ÈH[˜Ý[Ûˆ]™H]Ù\È›Ý™]\›ˆ[žH˜[YOÂŒ‹ˆÚH\™H\™H[˜Ý[ÛœÈ]XÚX\ÚY\ˆÈ\Ý[ˆ[˜Ý[ÛœÈÚ]ÛØ˜[ÚYHY™™XÝÏÂŒËˆÚ]Ù\ÈH™[\˜HÛÛ\[\ˆÚXÚÈ\š[™È]™\žH[˜Ý[ÛˆØ[Â‚‹KKB‚ˆÈÈÚ\\ˆLŽˆÛÛ˜XÝÈ[™™XÛÛ™][ÛœÈ
+\ÚYÛˆžHÛÛ˜XÝ
+B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]HÛÛ˜Ù\Ùˆ
+‘\ÚYÛˆžHÛÛ˜XÝ
+ˆYX[œË‚‹HÝÈÈYš[™H™XÛÛ™][ÛœÈ\Ú[™È™\]Z\™\Ø‚‹HÝÈÈ›Ü›][]HÜÝÛÛ™][ÛœÈ\Ú[™È[œÝ\™\Ø[™H™\Ý[Ù^]ÛÜ™‚‹HÝÈÛÜ[˜\šX[È\™H\ÝX›\ÚYÚ][˜\šX[‚‹HÚHÛÛ˜XÝÈ\™HÝ\\š[ÜˆÈY™[œÚ]™HØ\ØØY\ÈÙˆY˜Ý][Y[Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂYÜÈœ™\]Y[HØØÝ\ˆ™XØ]\ÙH]™[Ü\œÈXZÙH[œÝ]Y\ÜÝ[\[ÛœÈ]\™HØÝ[Y[Y›ÝÚ\™Nˆ•\È[˜Ý[Ûˆ]\Ý™]™\ˆ™HØ[YÚ]H™YØ]]™H[X™\ˆHˆÚ[ˆÛÛY[Û™HØ[È][˜Ý[ÛˆÚ^[ÛÈ]\ˆÚ]LXH\XØ][Ûˆ˜Z[È[™^XÝYKˆ[ˆ˜Y][Û˜[[™ÝXYÙ\Ë]™[Ü\œÈZ]\ˆÜš]H[™\ÜÈY™[œÚ]™HY˜ÚXÚÜÈÜˆ™[HÛˆÚ\Ú[[šÚ[™È[™Ý]]YÛÛ[Y[Ëˆ™[\˜H[]˜]\ÈÛÛ˜XÝÈÈš\œÝXÛ\ÜÈ[™ÝXYÙHÛÛœÝXÝÎˆ™XÛÛ™][ÛœÈ[™ÜÝÛÛ™][ÛœÈ\™HXÛ\™Y\™XÝHÛˆ[˜Ý[ÛˆÚYÛ˜]\™\È[™ÝX\˜[YYÈ™H[™›Ü˜ÙY‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚HÛÛ˜XÝ[ˆ™[\˜H[˜Ý[ÛœÈZÙHH›Ü›X[YØ[YÜ™Y[Y[™]ÙY[ˆHØ[\ˆ[™H[˜Ý[ÛŽ‚‹H
+Š˜™\]Z\™\Ø
+™XÛÛ™][ÛŠNŠŠˆHØ[\ˆ›ÛZ\Ù\ÈÈÝ\HÛ›H\™Ý[Y[È]Ø]\ÙžHHÛÛ™][Ûˆ
+K™Ë‹˜[YHˆ
+K‚‹H
+Š˜[œÝ\™\Ø
+ÜÝÛÛ™][ÛŠNŠŠˆ[ˆ™]\›‹H[˜Ý[ÛˆÝX\˜[Y\È]]ÈÛÛ\]YÝ]ÛÛYH
+™\Ý[
+HØ]\ÙšY\ÈÜXÚYšXÈ›Ü\Y\È
+K™Ë‹™\Ý[H
+K‚‚’YˆHÛÛ˜XÝ\Èš[Û]Y™[\˜H[È[[YYX][HÚ]HÛX\ˆÛÛ˜XÝ\œ›Üˆ
+KPÓÓ•PÕJ˜
+KY[YžZ[™È^XÝHÚXÚ\Hœ™XXÚYHYÜ™Y[Y[‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ™XÛÛ™][ÛˆÚ]™\]Z\™\ÊŠ‚˜™[\˜B™›ˆ]šYJ[Y\˜]ÜŽˆ[[›ÛZ[˜]ÜŽˆ[
+HOˆ[ˆ™\]Z\™\ÈÈ[›ÛZ[˜]ÜˆOHBžÂˆ™]\›ˆ[Y\˜]ÜˆÈ[›ÛZ[˜]Ü‚ŸB‚™›ˆXZ[Š
+HÂˆ™\Ý[Ý˜[H]šYJL
+Bˆš[
+™\Ý[Ý˜[
+BŸB˜‚ŠŠ‘^[\HŽˆÛÛXš[š[™È™XÛÛ™][Ûˆ[™ÜÝÛÛ™][ÛŠŠ‚˜™[\˜B™›ˆY\ÝÜš[Üš]JÝ\œ™[Û]™[ˆ[[Nˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÝ\œ™[Û]™[HH	‰ˆ[HHBˆ[œÝ\™\ÈÈ™\Ý[HHBžÂˆ™]×Û]™[HÝ\œ™[Û]™[
+È[Bˆ™]\›ˆ™]×Û]™[ŸB‚™›ˆXZ[Š
+HÂˆHY\ÝÜš[Üš]J‹JBˆš[
+
+BŸB˜‚ŠŠ‘^[\HÎˆÛÜ[˜\šX[
+Š‚˜™[\˜B™›ˆÛÝ[Ý\ÝÊ[Z]ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈ[Z]HBˆ[œÝ\™\ÈÈ™\Ý[OH[Z]BžÂˆ]]X›HHHˆÚ[HH[Z]ˆ[˜\šX[ÈHHBˆÂˆHHH
+ÈBˆBˆ™]\›ˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+ÛÝ[Ý\ÝÊJJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈ˜[Y]H˜]È\Ù\ˆ[œ]šXH™\]Z\™\Ø‚ˆ
+Ø]\ÙNŠˆÛÛ˜XÝÈ\™H[\›˜[ØY™YÝX\™ÈYØZ[œÝ›ÙÜ˜[[Y\ˆ\œ›Üˆ[™ÙÚXÈY™XÝË›Ý[œ]Ø[š]^™\œÈ›Üˆ[\ÝY\Ù\ˆ[œ]Ëˆ›Üˆ\Ù\ˆ[œ]\ÙH›Ü›H˜[Y][Ûˆ[\È
+›Ü›X
+HÜˆH™\Ý[\K‚‹H
+Š‘\œ›ÜŽŠŠˆÜš][™È[ˆ[œÝ\™\ØÛ]\ÙH]H[˜Ý[Ûˆ[\[Y[][ÛˆÙÚXØ[HØ[››ÝØ]\ÙžK‚ˆ
+Ø]\ÙNŠˆYˆH[˜Ý[Ûˆ™]\›œÈMX]H[œÝ\™\ØÛ]\ÙH[X[™ÈÈ™\Ý[HXHÜÝÛÛ™][ÛˆÚXÚÈÚ[˜Z[‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™\]Z\™\Ø›ÝXÝÈH[˜Ý[ÛˆYØZ[œÝ[˜[Y[œ]È›ÝšYYžHHØ[\‹‚Œ‹ˆ[œÝ\™\ØÝX\˜[Y\ÈHØ[\ˆH˜[YÝ]ÛÛYH™Y™\™[˜ÙYšXH™\Ý[‚ŒËˆÛÛ˜XÝÈ˜[œÙ›Ü›H[\XÚ]Y[[\ÜÝ[\[ÛœÈ[È™\šYšXX›K]š[™ÈÜXÚYšXØ][ÛœË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH[˜Ý[Ûˆ˜Z]™WÜÜ\
+ˆ[
+HOˆ[Ú]H™XÛÛ™][Ûˆ™\]Z\™\ÈÈHX‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[ÛˆÛ[\Ý˜[
+˜[ˆ[Z[—Ý˜[ˆ[X^Ý˜[ˆ[
+HOˆ[Ú]™XÛÛ™][ÛœÈ™\]Z\š[™ÈZ[—Ý˜[HX^Ý˜[[™\›ÜšX]HÜÝÛÛ™][ÛœË‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÙXÝ\™HH[˜Ý[Ûˆ\˜Ù[YÙJ\ˆ[Ý[ØÛÝ[ˆ[
+HOˆ[[œÝ\š[™È]š\Ú[ÛˆžH™\›È™]™\ˆØØÝ\œÈ[™H™\Ý[\ÈÝšXÝH™]ÙY[ˆ[™L‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È\ÚÈ›ÙÜ™\ÜÈØ[Ý[]Ü‚•Üš]HHÛÛ˜XÝYÝX\˜[YY[˜Ý[Ûˆ›Üˆ\ÚÈ›ÙÜ™\ÜÈ[ˆ\ÚÈX[˜YÙ[Y[‚˜™[\˜B™›ˆØ[Ý[]WÜ›ÙÜ™\ÜÊÛÛ\]Yˆ[Ý[ØÛÝ[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÝ[ØÛÝ[ˆ	‰ˆÛÛ\]YH	‰ˆÛÛ\]YHÝ[ØÛÝ[Bˆ[œÝ\™\ÈÈ™\Ý[H	‰ˆ™\Ý[HLBžÂˆ™]\›ˆ
+ÛÛ\]Y
+ˆL
+HÈÝ[ØÛÝ[ŸB‚™›ˆXZ[Š
+HÂˆ˜][ÈHØ[Ý[]WÜ›ÙÜ™\ÜÊË
+Bˆš[
+˜][ÊBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+HØÝ[Y[[™[™›Ü˜ÙH›ÙÜ˜[[Z[™È\ÜÝ[\[ÛœÈ][[YK‚‹H™\Ý[[ˆ[œÝ\™\Ø™Y™\œÈÈHÛÛ\]Y™]\›ˆ˜[YHÙˆH[˜Ý[Û‹‚‹HÛÜ[˜\šX[È™\šYžHH[YÜš]HÙˆHÛÜÝ]HXÜ›ÜÜÈ]™\žH]\˜][Û‹‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ[ˆ\ÈH™\]Z\™\ØÛÛ™][Ûˆ]˜[X]Yˆ™Y›Ü™HÜˆY\ˆ[˜Ý[Ûˆ^XÝ][ÛÂŒ‹ˆÚ]Ù\ÈHÙ^]ÛÜ™™\Ý[™Y™\ˆÈ[ˆHÛÛ˜XÝÂŒËˆÚHÙ\ÈHÛÛ˜XÝ›Ý™\XÙH[ˆS›Ü›H˜[Y][Ûˆ]\›Â‚‹KKB‚ˆÈÈÚ\\ˆLÎˆÛÛXÝ[ÛœË\ÝË[™XÝ[Û˜\šY\È
+\œ˜^\È	ˆX\ÊB‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÝÜ™H][\HÛ[ÙÙ[™[Ý\È˜[Y\È[ˆ[ˆ\œ˜^H
+\V×X
+K‚‹HH[ÜÝ[\Ü[Z[Z[ˆÛÛXÝ[Ûˆ[˜Ý[ÛœÎˆ[˜\[™ÛÛZ[œØš\œÝ\Ý‚‹HÝÈÈ]\˜]H›ÝYÚÛÛXÝ[ÛœÈ\Ú[™È›Üˆ‹ˆ[˜‚‹HÝÈ\ÜÛØÚX]]™HÙ^K]˜[YHÛÛXÝ[ÛœÈ\™HXÛ\™Y[™\ÙYÚ]X\Ù^K˜[YO˜‚‹HH[ÜÝ[\Ü[X\[˜Ý[ÛœÎˆÙ]]ÛÛZ[œØÙ^\Ø˜[Y\Ø‚‹HÚH™[\˜IÜÈÙ]
+
+X[Ø^\È™]\›œÈHØY™HÜ[Û˜È[[Z[˜]H[Ú[\ˆÜ˜\Ú\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â[ˆ\XØ][ÛˆØ\X›HÙˆÝÜš[™ÈÛ›H\ÛÛ]Y˜[Y\ÈÛÝ[™H˜XÝXØ[H\Ù[\ÜËˆ[ˆ™X[]ÛÜ›ÛÙØ\™KÙH[[ÜÝ[Ø^\ÈÛÜšÈÚ]ÛÛXÝ[ÛœÎˆ\ÝÈÙˆ\ÚÜË[XZ[ËÜˆX›H›ÝÜÈ™]ÚYœ›ÛHH]X˜\ÙK‚”ÛÛY][Y\ÈÙH™YYÈXØÙ\ÜÈ][\ÈžHÙ\]Y[X[Ü™\ˆ
+\ÝÈÜˆ\œ˜^\ÊKˆ™\žHÙ[‹ÝÙ]™\‹ÙH™YYÈÛÚÈ\]H\™XÝH\Ú[™ÈH[š\]YHÙ^x %ÝXÚ\È\Ù\ˆ™Y™\™[˜Ù\ÈžH\Ù\ˆQØØ[^™Y˜[œÛ][ÛˆXÝ[Û˜\šY\ËÜˆ[\Û™HÛÝ[žHÛÙ\Ëˆ›Üˆ\ÙH\ÙHØ\Ù\Ë™[\˜H›ÝšY\È\YXÝ[Û˜\šY\È
+X\
+K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‚ˆÈÈÈÈ\Nˆ\œ˜^\È8 $ÈHÜ™\™Y\Ý[ˆ\œ˜^H\ÈZÙHHÛÛ\\Y[[^™YÜ™Ø[š^™\ˆÜˆH[›ÞÚ][X™\™YÛÝÎˆ]™\žHÛÝ\ÈHš^YÜÚ][Ûˆ[™ÛÈ^XÝHÛ™H[[Y[ˆ[ˆ™[\˜K[[[Y[ÈÚ][ˆHØ[YHÛÛZ[™\ˆ]\Ý]™HHY[XØ[\H
+[×XÝš[™Ö×X]ËŠN‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆ[X™\œÎˆ[×HHÌLŒÌBˆš[
+[Š[X™\œÊJBŸB˜‚–™[\˜H›ÝšY\ÈÝÙ\™[Z[Z[ˆ[˜Ý[ÛœÈ›Üˆ\œ˜^\Î‚‹H[Š][\ÊXˆ™]\›œÈH[X™\ˆÙˆ[[Y[Ë‚‹H\[™
+][\Ë˜[YJXˆ™]\›œÈH™]È\œ˜^HÚ]H[[Y[\[™Y‚‹Hš\œÝ
+][\ÊXˆ™]\›œÈHš\œÝ[[Y[\È[ˆÜ[Û˜‚‹H\Ý
+][\ÊXˆ™]\›œÈH\Ý[[Y[\È[ˆÜ[Û˜‚‹HÛÛZ[œÊ][\Ë˜[YJXˆÚXÚÜÈÚ]\ˆ[ˆ[[Y[\È™\Ù[
+›ÛÛ
+K‚‚ˆÈÈÈÈ\ŽˆX\È8 $È\ÜÛØÚX]]™HÙ^KU˜[YHXÝ[Û˜\šY\ÂHX\X\ÈXXÚ[š\]YHÙ^H
+
+’Ù^JŠHÈ^XÝHÛ™HÛÜœ™\ÜÛ™[™È˜[YH
+
+•˜[YJŠK‚‹H
+Š•\H›Ý][ÛŽŠŠˆX\Ù^U\K˜[YU\O˜›Üˆ^[\HX\Ýš[™Ë[˜ÜˆX\Ýš[™ËÝš[™Ï˜‚‹H
+Š“]\˜[Þ[^ŠŠˆX\ÈšÙ^HŽˆ˜[YHX‹H
+Š’Ù^H\\ÎŠŠˆ[ØØ[\ˆ\\È
+Ýš[™Ø[Y]ËŠH\™H\›Z]Y‚‚˜™[\˜B™›ˆXZ[Š
+HÂˆÛÝ[žWØÛÙ\ÎˆX\Ýš[™Ë[ˆHX\Âˆ™HŽˆBˆ˜]ŽˆÂˆ˜ÚŽˆBˆBŸB˜‚’Ù^HÜ\˜][ÛœÈÛˆX\Î‚‹H
+Š˜Ù]
+X\Ù^JX
+ŠŽˆÛÚÜÈ\HÙ^Kˆ™XØ]\ÙHHÙ^HZYÚ›Ý^\ÝÙ]
+
+X
+Š˜[Ø^\ÊŠˆ™]\›œÈHØY™HÜ[Û˜[YO˜
+ÛÛYJ˜[
+XÜˆ›Û™X
+x %™]™\ˆH[Ú[\ˆÜ˜\ÚB‹H
+Š˜]
+X\Ù^K˜[YJX
+ŠŽˆ[œÙ\ÈHÙ^K]˜[YHZ\ˆÜˆ\]\È[ˆ^\Ý[™ÈÙ^Kˆ›ÛÝÚ[™È™[\˜IÜÈ[˜Ý[Û˜[[[]]Xš[]Hš[˜Ú\\Ë]
+
+X™]\›œÈH™]Ë\]YX\‚‹H
+Š˜ÛÛZ[œÊX\Ù^JX
+ŠŽˆ™]\›œÈYXYˆHÙ^H^\ÝÈ[ˆHX\‚‹H
+Š˜Ù^\ÊX\
+X
+ŠŽˆ™]\›œÈ[Ù^\È\ÈH\Y\œ˜^H
+Ù^U\V×X
+K‚‹H
+Š˜˜[Y\ÊX\
+X
+ŠŽˆ™]\›œÈ[˜[Y\È\ÈH\Y\œ˜^H
+˜[YU\V×X
+K‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÜ™X][™È[™]\˜][™ÈÝ™\ˆ[ˆ\œ˜^JŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ\Ú×ÚYÎˆ[×HHÌLKL‹LËLBˆ›ÜˆY[ˆ\Ú×ÚYÈÂˆš[
+Y
+BˆBŸB˜‚ŠŠ‘^[\HŽˆ\[™[™È[[Y[ÈÈ[ˆ\œ˜^JŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ]]X›H][\Îˆ[×HHÌK‹×Bˆ][\ÈH\[™
+][\Ë
+Bˆš[
+[Š][\ÊJBŸB˜‚ŠŠ‘^[\HÎˆÜ™X][™Ë\][™Ë[™]Y\žZ[™ÈHX\
+Š‚˜™[\˜B™›ˆXZ[Š
+HÂˆšXÙ\ÎˆX\Ýš[™Ë[ˆHX\ÂˆÛÙ™™YHŽˆÂˆ•XHŽˆ‚ˆBˆˆËÈYH™]È][Bˆ]]X›HÝ\œ™[ÜšXÙ\ÈH]
+šXÙ\ËØZÙH‹
+BˆËÈ\]H^\Ý[™ÈšXÙBˆÝ\œ™[ÜšXÙ\ÈH]
+Ý\œ™[ÜšXÙ\ËÛÙ™™YH‹
+BˆˆËÈØY™[H]Y\žH\Ú[™ÈX]ÚˆX]ÚÙ]
+Ý\œ™[ÜšXÙ\ËÛÙ™™YHŠHÂˆÛÛYJšXÙJHOˆÂˆš[
+ÛÙ™™YHšXÙNˆˆ
+ÈÝŠšXÙJH
+Èˆ]\›ÈŠBˆBˆ›Û™HOˆÂˆš[
+’][H›Ý›Ý[™ˆŠBˆBˆBˆˆËÈÝ]][Ù^\Âˆš[
+Ù^\ÊÝ\œ™[ÜšXÙ\ÊJBŸB˜‚ŠŠ‘^[\HˆÚXÚÚ[™ÈÙ^H^\Ý[˜ÙH[ˆHX\
+Š‚˜™[\˜B™›ˆXZ[Š
+HÂˆÙ][™ÜÎˆX\Ýš[™Ë›ÛÛˆHX\Âˆ™\š×Û[ÙHŽˆYBˆ››ÝYšXØ][ÛœÈŽˆ˜[ÙBˆBˆˆYˆÛÛZ[œÊÙ][™ÜË™\š×Û[ÙHŠHÂˆš[
+‘\šÈ[ÙHÙ][™È\È^XÚ]HÛÛ™šYÝ\™YˆŠBˆBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈZ^Y™™\™[\\ÈÚ][ˆHÚ[™ÛH\œ˜^HÜˆX\
+K™Ë‹ÌK’[È—X
+K‚ˆ
+Ø]\ÙNŠˆ™[\˜H\ÈÝšXÝHÛ[ÙÙ[™[Ý\Ëˆ[[[Y[È[ˆ[ˆ\œ˜^K[™[Ù^\È[™˜[Y\È[ˆHX\]\ÝÛÛ™›Ü›HÈZ\ˆXÛ\™Y\\Ë‚‹H
+Š‘\œ›ÜŽŠŠˆ™X][™ÈX\™Ù]
+šÙ^HŠX\ÈH˜]È˜[YHÚ]Ý][Ü˜\[™ÈHÜ[Û˜‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝX\˜[Y\ÈÛÛ\[K][YHØY™]Kˆ™XØ]\ÙHHÙ^HZYÚ›Ý™H[ˆHXÝ[Û˜\žKHÛÛ\[\ˆ›Ü˜Ù\È[ÝHÈ[™HÛÛYX[™›Û™X\Ú[™ÈX]ÚÜˆY˜][˜[Y\Ë‚‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™È›Û‹\ØØ[\ˆ\\È
+ÝXÚ\È\œ˜^\ÊH\ÈX\Ù^\Ë‚ˆ
+Ø]\ÙNŠˆX\Ù^\È]\Ý™HØØ[\ˆ\\È
+Ýš[™Ø[Y
+HÈÝX\˜[YH]\›Z[š\ÝXÈÛÛ\\š\ÛÛˆ[™”ÓÓˆÙ\šX[^˜][Û‹‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ\œ˜^\È[ˆ™[\˜H\™HÝšXÝHÛ[ÙÙ[™[Ý\Îˆ[×XÝš[™Ö×X›ÛÛ×X‚Œ‹ˆ]\˜][Ûˆ\È\™›Ü›YYØY™[H[™ÛX[›HÚ]›Üˆ[[Y[[ˆÛÛXÝ[ÛˆÈ‹‹ˆX‚ŒËˆX\Ù^K˜[YO˜ÝÜ™\È[š\]YHÙ^K]˜[YH\ÜÛØÚX][ÛœË‚ˆÙ]
+X\Ù^JX[Ø^\È™]\›œÈ[ˆÜ[Û˜
+ÛÛYXÜˆ›Û™X
+K™]™[[™È[[YH^Ù\[ÛœË‚Kˆ]
+X\Ù^K˜[YJX[˜Ý[Û˜[H›ÙXÙ\ÈH™]Ë\]YXÝ[Û˜\žK‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]H[ˆ\œ˜^HÛÛZ[š[™È™YHÝš[™ÜÈ[™š[XXÚ[[Y[\Ú[™ÈH›Ü˜ÛÜ‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]HHX\Ýš[™Ë[˜Ú]™YH›ÙXÝ˜[Y\È[™Z\ˆšXÙ\Ëˆ]Y\žH›Ý[ˆ^\Ý[™È[™H›Û‹Y^\Ý[™È][H\Ú[™ÈÙ]
+
+X[™X]Ú‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]HH[˜Ý[ÛˆÛÝ[ÝÛÜ™ÊÛÜ™ÎˆÝš[™Ö×JHOˆX\Ýš[™Ë[˜]ÛÝ[ÈÝÈÙ[ˆXXÚÛÜ™ØØÝ\œÈ[ˆH\Ý[™™]\›œÈH™\Ý[\ÈHX\‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $Èš[Üš]H™YÚ\ÝžBZ[Hš[Üš]HÛÚÝ\X›H›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™›ˆÚÝ×Üš[Üš]Jš[Üš]Y\ÎˆX\Ýš[™Ë[‹\Ú×Û˜[YNˆÝš[™ÊHÂˆX]ÚÙ]
+š[Üš]Y\Ë\Ú×Û˜[YJHÂˆÛÛYJ]™[
+HOˆÂˆš[
+”š[Üš]H›Üˆˆ
+È\Ú×Û˜[YH
+ÈŽˆ]™[ˆ
+ÈÝŠ]™[
+JBˆBˆ›Û™HOˆÂˆš[
+“›Èš[Üš]H™YÚ\Ý\™Y›ÜŽˆˆ
+È\Ú×Û˜[YJBˆBˆBŸB‚™›ˆXZ[Š
+HÂˆš[×ÛX\ˆX\Ýš[™Ë[ˆHX\Âˆ‘]X˜\ÙHZYÜ˜][ÛˆŽˆBˆ•ÙXZÈÔÔÈÝ[\ÈŽˆÂˆ•Üš]HØÝ[Y[][ÛˆŽˆ‚ˆBˆˆÚÝ×Üš[Üš]Jš[×ÛX\‘]X˜\ÙHZYÜ˜][ÛˆŠBˆÚÝ×Üš[Üš]Jš[×ÛX\ÛÙ™™YHœ™XZÈŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H\œ˜^\È
+\V×X
+HÝÜ™HÜ™\™YÙ\]Y[˜Ù\ÈÙˆÛ[ÙÙ[™[Ý\È[[Y[Ë‚‹HX\È
+X\Ù^K˜[YO˜
+HÝÜ™HÙ^K]˜[YHXÝ[Û˜\šY\ÈÚ]ØY™HÙ]
+
+X]
+
+XÛÛZ[œÊ
+XÙ^\Ê
+X[™˜[Y\Ê
+X‚‹H›ÝÛÛXÝ[Ûˆ\\È\™H[H\K\ØY™H[™[YÜ˜]HÙX[[\ÜÛHÚ]™[\˜IÜÈÜ[Û˜\HÞ\Ý[K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\HÙ\ÈH^™\ÜÚ[ÛˆÈH‹ˆ‹È—X]˜[X]HÏÂŒ‹ˆÚHÙ\È\[™
+ÌK—K•™YHŠX˜Z[]ÛÛ\[H[YOÂŒËˆÝÈÈ[ÝHY™šXÚY[HÚXÚÈÚ]\ˆH˜[YH^\ÝÈ[œÚYH[ˆ\œ˜^OÂ‚‹KKB‚ˆÈÈÚ\\ˆMˆÜ™X][™ÈÝ\ÝÛH]H\\È
+™XÛÜ™È	ˆX›\ÊB‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÜ™X]H[Ý\ˆÝÛˆÛXZ[‹\ÜXÚYšXÈ]H\\Ë‚‹HÚ]›ÛZ[˜[\\È
+\H\ÚÒYHY
+H\™H[™ÝÈ^H™]™[XØÚY[[QÛÛ™\Ú[Û‹‚‹HÝÈ™XÛÜ™È\™HYš[™Y[ˆ™[\˜H\ÈHX›XÚ]]šX]\È
+YˆYš[X\žH]]Ø
+K‚‹HÚHÝ›Û™È\[™È[™[Y[[H[]˜]\ÈÛÙØ\™H]X[]K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’[ˆœ˜YÚ[HÛÙØ\™H\˜Ú]XÝ\™\Ë[[ÜÝ]™\ž][™È\È™\™\Ù[Y\ÈHš[Z]]™H[YÙ\ˆÜˆÝš[™È
+[ˆ[K\]\›ˆÛ›ÝÛˆ\È”š[Z]]™HØœÙ\ÜÚ[ÛˆŠKˆYˆH[˜Ý[Ûˆ^XÝÈ™\šYžJ\Ù\—ÚYˆ[\Ú×ÚYˆ[
+X[™[ÝHXØÚY[[HÝØ\H\™Ý[Y[ËHÛÛ\[\ˆ\Ú[™È˜]È[\\ÈÚ[™]™\ˆ›ÝXÙx %[™[Ý\ˆ\XØ][ÛˆZYÚ\ÜÚYÛˆÙ[œÚ]]™H™XÛÜ™ÈÈHÜ›Û™È\Ù\‹ˆÚ]\Ý[˜ÝÝ\ÝÛH\\Ë™[\˜H\Ý[™ÝZ\Ú\È™]ÙY[ˆH\Ù\’Y[™H\ÚÒYšYÚ]ÛÛ\[H[YK‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚Ý\ÝÛH]H\\È[ÝÈ[ÝHÈ[Ù[™X[]ÛÜ›ÛÛ˜Ù\ÈXØÝ\˜][N‚ŒKˆ
+Š“›ÛZ[˜[\H[X\Ù\ÎŠŠ‚ˆ™[\˜Bˆ\H\ÚÒYHY‚ˆ›ˆXZ[Š
+HÂˆš[
+•\H[X\È\ÚÒYXÝ]™HŠBˆBˆˆ\ÈÚ]™\È\ÚÒY]ÈÝÛˆ\Ý[˜Ý\HY[]K‚Œ‹ˆ
+Š•X›\È\ÈÝXÝ\™Y]H\\ÎŠŠ‚ˆ™[\˜BˆX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™È™\]Z\™YˆÛ™Nˆ›ÛÛˆB‚ˆ›ˆXZ[Š
+HÂˆš[
+•X›HØÚ[XHYš[™YŠBˆBˆˆ\ÈØÚ[XHÙ\È›ÝY\™[HÜXÚYžHH]X˜\ÙHX›NÈ[ˆ™[\˜K]Ú[][[™[Ý\ÛHXÛ\™\ÈH[‹[Y[[ÜžH]H\H›ÜˆH\ÚÈB‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆYš[š[™ÈHÝ\ÝÛH\H[X\È›ÜˆQÊŠ‚˜™[\˜B\H\ÚÒYHY‚™›ˆXZ[Š
+HÂˆš[
+•\H[X\ÈYš[™YÝXØÙ\ÜÙ[HŠBŸB˜‚ŠŠ‘^[\HŽˆYš[š[™ÈH]H[Ù[\ÈHX›JŠ‚˜™[\˜BX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™È™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆXZ[Š
+HÂˆš[
+•X›HØÚ[XH›Üˆ\ÚÜÈYš[™YŠBŸB˜‚ŠŠ‘^[\HÎˆÛÜšÚ[™ÈÚ]\Y]šX]\È[ˆ[˜Ý[ÛœÊŠ‚˜™[\˜BX›H›Ú™XÝÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™YˆXÝ]™Nˆ›ÛÛŸB‚™›ˆÚÝ×Ü›Ú™XÝÜÝ]\ÊÛ˜[YNˆÝš[™ËØXÝ]™Nˆ›ÛÛ
+HÂˆ]]X›HÝ]\×Ý^H”]\ÙY‚ˆYˆØXÝ]™HÂˆÝ]\×Ý^HXÝ]™H‚ˆBˆš[
+”›Ú™XÝˆˆ
+ÈÛ˜[YH
+ÈˆÈˆ
+ÈÝ]\×Ý^
+È—HŠBŸB‚™›ˆXZ[Š
+HÂˆÚÝ×Ü›Ú™XÝÜÝ]\Ê•ÙXˆÜ[‹YJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ˜[Z[™ÈHX›HšY[Ú]H™\Ù\™YÙ^]ÛÜ™ÝXÚ\È]X\ÝÜˆ]Z[‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜K\ÙHY[YšY\œÈ\™H™\Ù\™Y›Üˆ]Y\šY\È[™RHšY]ÜËˆ\ÙH\ØÜš\]™H˜[Y\ÈZÙH˜[YX\ØÜš\[Û˜ÜˆÝXš™XÝ[œÝXY‚‹H
+Š‘\œ›ÜŽŠŠˆXÛ\š[™ÈHš[X\žHÙ^HÚ]š[X\žHÙ^X[œÝXYÙˆš[X\žX‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜KHÝ[™\™ÛÛ[[ˆÜXÚYšXØ][Ûˆ\ÈYˆYš[X\žH]]Ø‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆÝ\ÝÛH]H\\È™Y›XÝ[Ý\ˆ\Ú[™\ÜÈÛXZ[ˆ[™[[Z[˜]HXØÚY[[\˜[Y]\ˆÝØ\[™Ë‚Œ‹ˆX›XXÛ\˜][ÛœÈ[ˆ™[\˜HXÝ\È›Ý]X˜\ÙHØÚ[X\È[™˜]]™H[™ÝXYÙH\\Ë‚ŒËˆ™\Ù\™YÛÜ™È
+]X\ÝXÝ[Û˜šY[]ËŠH]\Ý™]™\ˆ™H\ÙY\ÈÛÛ[[ˆÜˆ˜\šXX›H˜[Y\Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]HH›ÛZ[˜[\H[X\È\H\Ù\’YHY‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ[Ù[HX›HØ]YÛÜšY\ØÚ]YˆYš[X\žH]]Ø[™Ø]YÛÜžWÛ˜[YNˆÝš[™È™\]Z\™Y‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[Ù[HX›H›Ý\Ø][šÜÈÈH\ÚÈšXHHšY[\Ú×ÚYˆY‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $ÈÛÜ™H\ÚÈØÚ[XB‘Yš[™HHÛÛ\]HÛÜ™H™[\˜HØÚ[XH›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚‚˜™[\˜BX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™Yˆ\ØÜš\[ÛŽˆÝš[™Âˆš[Üš]Nˆ[ˆ\×ÙÛ™Nˆ›ÛÛŸB‚™›ˆXZ[Š
+HÂˆš[
+ÛÜ™HØÚ[XHÙˆ\ÚÈX[˜YÙ[Y[XÝ]™KˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÝ\ÝÛH\\ÈÚ]™H˜]È]H[˜[XšYÝ[Ý\ÈYX[š[™È[™ÛÛ^‚‹HX›XÙX[[\ÜÛH[šYšY\ÈØÚ[XHXÛ\˜][Ûˆ[™Ý]XÈ\H[Ù[[™È[ˆH[™ÝXYÙK‚‹HÝ]XÈ\[™ÈØ]Ú\ÈÙÚXØ[Z\ÛX]Ú\ÈÚ[H[ÝHÜš]H[Ý\ˆÛÙK‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]Y˜[YÙHÙ\È\H\ÚÒYHYÙ™™\ˆÛÛ\\™YÈHÚ[\H[ÂŒ‹ˆÚH]\ÝX›HšY[È[ˆ™[\˜H[Ø^\ÈÜÜÙ\ÜÈ[ˆ^XÚ]\OÂŒËˆÚXÚÛÜ™È]\Ý™H]›ÚYYÚ[ˆ˜[Z[™ÈšY[ÏÂ‚‹KKB‚ˆÈÈÚ\\ˆMNˆ[Ù[\È[™ÛÙHÜ™Ø[š^˜][Û‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈHÝ[™\™™[\˜H›Ú™XÝ\ÈÝXÝ\™YÛˆ\ÚË‚‹HHÙ[˜[›ÛHÙˆH™[\˜KÛ[›Ú™XÝÛÛ™šYÝ\˜][ÛˆX[šY™\Ý‚‹HÝÈÈÙ\\˜]HÛÙH[ÈÙÚXØ[ÛÛ˜Ù\›œÈ
+ØÚ[XK\Ú[™\ÜÈÙÚXËšY]ÜÊK‚‹HÝÈH›Ú™XÝ\ÈÜ™Ø[š^™Y[™Ú]HÓHÝ\œ™[HÙ\ÈÚ]][\BˆÛÝ\˜ÙHš[\Ë‚‹HHÝ\œ™[]™[ÜY[Ý]\È[™›ØYX\›Üˆ[Ù[\È[™[\ÜË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•Ú[ˆÝ\[™ÈÝ]]\È[\[™ÈÈÜš]H[ˆ[\™H›ÙÜ˜[H[ˆHÚ[™ÛHš[KˆÝÙ]™\‹\È[Ý\ˆ\ÚÈX[˜YÙ[Y[\XØ][Ûˆ^[™ø %[˜ÛÜœÜ˜][™È]X˜\ÙHX›\ËÞ™[œÈÙˆ\Ú[™\ÜÈ[˜Ý[ÛœËÙXˆ›Ü›\Ë[™˜[Y][Ûˆ[\ø %˜]šYØ][™ÈH[Û›Û]XÈ‹[[™Hš[H™XÛÛY\È[›X[˜YÙXX›Kˆ›Ù™\ÜÚ[Û˜[ÛÙØ\™H[™Ú[™Y\š[™È[X[™ÈÝXÝ\š[™ÈÛÙHÛÈ]]™\žHX[HY[X™\ˆØ[ˆØØ]HØÚ[X\Ë\Ú[™\ÜÈÙÚXË[™RHYš[š][ÛœÈ[œÝ[K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚H›Ú™XÝ\ÈHÛX\ˆ\™XÝÜžH^[Ý]ˆ™[\˜KÛ[ÛÛZ[œÈ›Ú™XÝ›Y]Y]H[™Ø\Xš[]HÜ˜[ÎÈXZ[‹žž[\ÈHÛÝ\˜ÙHš[HÜ™X]YžHBœÝ\\ˆ[\]Kˆ[ÝHØ[ˆÜ™X]HY][Û˜[š[\È[™›Û\œÈ›Üˆ[Ý\ˆÝÛ‚›Ü™Ø[š^˜][Û‹ˆ[ˆHX›\ÚYŒËŒ™[X\ÙKXXÚÓHÛÛ[X[™›ØÙ\ÜÙ\ÈÛ›BHÛÝ\˜ÙHš[H^XÚ]H\ÜÙYÈ]ÈÝ\ˆžž[š[\È\™H›Ý\ØÛÝ™\™Y›ÜˆÛÛXš[™Y]]ÛX]XØ[K‚‚˜Û[–Ü›Ú™XÝB›˜[YHH\Ú×Ü[›™\ˆ‚™\œÚ[ÛˆHŒŒËŒ‚ž™[\˜HHŒŒH‚‚–ØØ\Xš[]Y\×B™]X˜\ÙHHYB›™]ÛÜšÈH˜[ÙB˜ÛÛœÛÛHH˜[ÙB˜‚ŠŠ”X›\ÚYŒËŒÝ]\ÎŠŠˆ[\Ü[™H[Ù[HÞ\Ý[H\™H›Ý[\[Y[Y‚˜™[\˜HÚXÚÈXZ[‹žž[ÚXÚÜÈXZ[‹žž[È[›Ý\ˆš[HÝXÚ\Â˜Ü˜ËÜØÚ[XKžž[\ÈÚXÚÙYÛ›HYˆ[ÝH[›ÚÙH™[\˜HÚXÚÈÜ˜ËÜØÚ[XKžž[œÙ\\˜][Kˆ˜[Y\È[™\\ÈXÛ\™Y[ˆÛ™Hš[H\™H\™Y›Ü™H›Ý˜]]ÛX]XØ[H]˜Z[X›H[ˆHÝ\‹ˆHX›\ÚY™[X\ÙHÛÛZ[œÈ›Â›[Ù[H[\ÜËˆHÝ\œ™[]™[ÜY[œ˜[˜Ú\È[ˆ^\š[Y[[[\ÜÛXÙNÂ˜ÛÛ\]H[Ù[\È[™]\›Z[š\ÝXÈ][KYš[H›Ú™XÝÈ™[XZ[ˆÛÜšÈ›ÜˆŒ‚‚ŠŠ¼'éêˆÝ\œ™[[œ™[X\ÙY]™[ÜY[œ˜[˜ÚŠŠˆ[ˆ^\š[Y[[š\œÝ›Ú™XÝ[[Ù[HÛXÙH\È[\[Y[Y[™\ÝYˆ]ÈÞ[^\Î‚‚ŸŸŸž™[\˜Bš[\ÜœÜ˜ËÛX]žž[ˆ\ÈX]‚™›ˆXZ[Š
+HÂˆš[
+X]Ž˜Y
+‹ÊJBŸBŸŸŸ‚‚•H[\ÜYš[H]\ÝXÛ\™HXˆ›ˆY
+‹‹ŠXÈ[˜Ý[ÛœÈ\™Hš]˜]HžB™Y˜][ˆ]È\™H™[]]™HÈH[žHš[IÜÈ\™XÝÜžKˆH›Ú™XÝØY\‚œ™Z™XÝÈÞXÛ\È[™]ÈÝ]ÚYHH›Ú™XÝ›ÛÝ˜[™ÙY\\KØ\Xš[]K[™ÛÛ˜XÝÚXÚÜÈXÝ]™Kˆ[\ÜYš[\ÈX^B˜Ý\œ™[HÛÛZ[ˆ[˜Ý[ÛœË\H[X\Ù\Ë™XÛÜ™ËX›\ËX›]šY]ÜËYÙ\Ë›˜[YYšY]ÜË\YÛÛ\Û™[Ë[™Û™Bœ›Ú™XÝ]ÚYH]X˜\ÙHÛÛ›™XÝ[ÛˆYš[š][Û‹ˆ]X˜\ÙHÛÛ™šYÝ\˜][Ûˆ\Â˜ÛÛ\ÜÙY[ÈH\XØ][Ûˆ[™\È›ÝXØÙ\ÜÙY›ÝYÚH[\Ü[X\ÎÂ›Û›HÛ™H]X˜\ÙHYš[š][Ûˆ\È[ÝÙY[ˆHÛÛ\]H›Ú™XÝÜ˜\‚’[\ÜYX›\È›Ú[ˆH\XØ][Û‰ÜÈÚ\™Y\ÚXØ[ØÚ[XKˆZ\ˆ˜[Y\Â˜\™HÛØ˜[ÔSY[YšY\œË›Ý[Ù[K\]X[YšYY˜[Y\Ë[™\XØ]HX›B›˜[Y\È\™H™Z™XÝYˆX›]šY]ÜËšY]ÜË[™ÛÛ\Û™[È\™HÛÛ\ÜÙYœ›ÛBš[\ÜYš[\Â[™\ˆZ\ˆXÛ\™Y[œ]X[YšYY˜[Y\ÎÈ^HÈ›ÝY]]™HX˜š\ÚXš[]BœÞ[^ˆ[\ÜYYÙ\È›Ú[ˆH\XØ][Û‰ÜÈ›Ý]HÙ]ÈÝ™\›\[™ÈYÙBœ]\›œÈ\™H™Z™XÝYÚ]Z\ˆÛÝ\˜ÙHØØ][Û‹ˆ›Ü›\ËÔ•Q™XÛ\˜][ÛœËT\Ë[™]][XØ][Ûˆ™\ÛÝ\˜Ù\È™[XZ[ˆ[žKYš[K[Û›K‚‘[˜Ý[Û‹\K[™œ™XÛÜ™XÛ\˜][ÛœÈ\™Hš]˜]HžHY˜][ÈX›\È[™H]X˜\ÙB™Yš[š][Ûˆ\™H[˜ÛYYžH[\Ü[™ÈZ\ˆš[KˆX›XÈ™XÛÜ™ÈØ[››Ý^ÜÙBœš]˜]HšY[\\Ë‚•H]X˜\ÙH[Ù[H\ÈÜ™[˜\žH›Ú™XÝÛÛ™šYÝ\˜][Û‹›ÝHÙ\\˜][H˜[YY™]X˜\ÙHÙ\šXÙNˆHÝ\œ™[[[YHÝ\ÜÈÛ›HÛ™HÛÛ™šYÝ\™Y]X˜\ÙB™›ÜˆHÛÛ\ÜÙY\XØ][Û‹ˆH[›˜X›H^[\H\È[‚˜^[\\ËÛ[Ù[\ËØ‚˜ÚXÚØZ[[˜Ù\™XÛÛ^™\šYžX[\XÝ[™]X˜\ÙB˜ÛÛ[X[™ÈØYH›Ú™XÝÜ˜\ˆ]X˜\ÙHÛÛ[X[™ÈZ[HØÚ[XHœ›ÛHB˜ÛÛ\ÜÙYXÛ\˜][ÛœÎÈÛÛYHØÚ[XHXYÛ›ÜÝXÜÈÝ[XÚÈÛÛ\]H[Ù[BœÛÝ\˜ÙH]šX][Û‹ˆÙ\™XØ[ˆÛÛ\ÜÙH[\ÜYYÙ\ËX\šXQ‹X˜XÚÙYX›]šY]ÜËšY]ÜË[™ÛÛ\Û™[È[ÈH\XØ][ÛŽÈHX›]šY]È]Y\žBœ[[YHÙ\È›ÝY]^XÝ]HYØZ[œÝÔS]KˆÛÛ^KY›Ü›X]ZœÛÛ˜™\ÜÂH]\›Z[š\ÝXØ[HÛÜY[Ù[HÜ˜\[\ÜYÙ\Ë[™HÝ\œ™[BœÝ\ÜYX›XÈ[˜Ý[ÛœË\\Ë[™™XÛÜ™È\ˆš[H[™\‚˜[Ù[\Ö×K™^ÜØˆ[Ù[H[šY\È[ÛÈ[˜ÛYHH[\Ü[X\È[™œ›Ú™XÝ\™[]]™HÛÝ\˜ÙH]ˆ[\ÜYX›\ËX›]šY]ÜËYÙ\ËšY]ÜË[™˜ÛÛ\Û™[È\X\ˆ[ˆXÛ\˜][ÛœÈÚ]Z\ˆÛÝ\˜ÙH][ˆÜ[‹™š[Xˆ\Â™^Ü\Ý\È[ˆ[›ÜÜXÝ[ÛˆZY›ÝHÛÛ\]HXÚØYÙHÜˆ\Þ[Y[›X[šY™\Ý[™]Ù\È›ÝXZÙHRH™\ÛÝ\˜Ù\ÈX›XË‚”ÛÛYH[\]HXYÛ›ÜÝXÜÈÝ[™YY[Ü™HÛÛ\]H\‹[[Ù[HÛÝ\˜ÙB˜]šX][Û‹ˆ™\šYžX[ÛÈÚXÚÜÈH[šÙYÜ˜\]™Ù\È›ÝY]]šX]H™\Ý[ÈÈ[™]šYX[[Ù[HÛÝ\˜ÙHš[\Ëˆ[\XÝ˜[˜[^™\ÈH[šÙYÜ˜\[™X\šÜÈÜ[œÈÚ]Z\ˆÛÝ\˜ÙHš[Kˆ›][™˜Y]Ý[›ØÙ\ÜÈÛ›HH^XÚ]H˜[YYÛÝ\˜ÙHš[Kˆ\Èœ˜[˜Ú˜™Z]š[Üˆ\È^\š[Y[[[™\È›Ý[˜ÛYY[ˆHX›\ÚYŒËŒš[˜\žK‚‚[ˆ^\š[Y[[™XÝ\œÛÜˆ›Üˆ]\™H[Ù[H^ÜÈ\Î‚‚ŸŸŸœÚž™[\˜H[Ù[H[ˆXZ[‹žž[Ü˜ËÚ[›ÚXÙ\Ëžž[ŸŸŸ‚‚•H™XY[Û›K]\›Z[š\ÝXÈ”ÓÓˆ™]šY]È›ÛÝÜÈ^XÚ][\ÜÈ[™œ™Y™\™[˜Ù\ÈÝ\œ™[H™XÛÙÛš^™YžHHÝ]XÈ[\XÝÜ˜\ˆ\ÙH[˜ÛYBšÛ›ÝÛˆYÙK]Ë]šY]È[™YÙK]ËXÛÛ\Û™[™Y™\™[˜Ù\ËYÙKTÔS]Ë]X›HYÙ\Ëœ™XÛÙÛš^™YX›H™[][ÛœË[™]X˜\ÙHÛÛ™šYÝ\˜][Û‹ˆ[œ™\ÛÛ™Y™Y™\™[˜Ù\Â˜\X\ˆ[ˆ[œ™\ÛÛ™YÜ™Y™\™[˜Ù\Øˆ[˜[ZXÈÜˆ[›[Ù[Y\[™[˜ÚY\Ë\ÜÙ]Ëœ[[YHÛÛ™šYÝ\˜][Û‹^\›˜[Ù\šXÙ\Ë[™ØÚÙ\ˆ\Y˜XÝÈ\™H›Ýš[˜ÛYYˆÛÛ\]WÙ\Þ[Y[™[XZ[œÈ^XÚ]H˜[ÙXÈHÛÛ[X[™Ù\Â››Ý^ÜÜˆ[ˆ[ˆ\XØ][Û‹‚‚’[\ÜYRH™\ÛÝ\˜Ù\ÈØ[ˆ™H\ÙYžHHYÙH[ˆH[žHš[KˆH[X\Âš[˜ÛY\ÈHš[NÈšY]È[™ÛÛ\Û™[˜[Y\È\™HÝ\œ™[H[œ]X[YšYY[ˆS‚‚ŸŸŸž™[\˜B‹ËÈÜ˜ËÝZKžž[˜ÛÛ\Û™[˜[›™\ˆÂˆ›ÜÈÂˆ]NˆÝš[™ÂˆBˆ[ÂˆXY\Ý›Û™ÏžÝ]_OÜÝ›Û™ÏÚXY\‚ˆBŸB‚šY]ÈÚ[Âˆ[Âˆ[›ÙO˜[›™\ˆ]OH’[›ÚXÙ\ÈˆÏXZ[ÛÝÏÛXZ[Ø›ÙOÚ[‚ˆBŸBŸŸŸ‚‚ŸŸŸž™[\˜B‹ËÈXZ[‹žž[š[\ÜœÜ˜ËÝZKžž[ˆ\ÈZB‚œYÙH‹ÈˆÂˆšY]ÎˆÚ[ˆ[Âˆ•\ÈYÙH\Ù\È[\ÜYRH™\ÛÝ\˜Ù\ËÜ‚ˆBŸBŸŸŸ‚‚”[ˆ™[\˜HÙ\™HXZ[‹žž[È™[™\ˆH[šÙY›Ú™XÝˆHÛÛ\]H^[\BÚ]ÙÚXÈ[™]X˜\ÙH[Ù[\È\È[ˆ^[\\ËÛ[Ù[\ËØ‚‚H[Ù[HØ[ˆ^ÜHÛXZ[ˆ™XÛÜ™›Üˆ[›Ý\ˆ[Ù[HÈ\ÙH[ˆH[˜Ý[Û‚œÚYÛ˜]\™N‚‚ŸŸŸž™[\˜BœXˆÝXÝ[Û™^HÂˆÙ[Îˆ[ŸBŸŸŸ‚‚ŸŸŸž™[\˜Bš[\ÜœÜ˜ËÛ[Û™^Kžž[ˆ\È[Û™^B‚œXˆ›ˆÝ[
+
+HOˆ[Û™^NŽ“[Û™^HÂˆ™]\›ˆ[Û™^NŽ“[Û™^HÈÙ[ÎˆLBŸBŸŸŸ‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆHÛX[ˆXZ[ˆ[žHÚ[
+Š‚˜™[\˜B™›ˆXZ[Š
+HÂˆš[
+–™[\˜H\ÚÈÞ\Ý[H™XYKˆŠBŸB˜‚ŠŠ‘^[\HŽˆÙ\\˜][™ÈÙÚXÈ[˜Ý[ÛœÊŠ‚˜™[\˜B™›ˆ›Ü›X]ÜÞ\Ý[WÜÝ]\ÊÝ]\×Ý^ˆÝš[™ÊHOˆÝš[™ÈÂˆ™]\›ˆ–ÔÕUT×Hˆ
+ÈÝ]\×Ý^ŸB‚™›ˆXZ[Š
+HÂˆš[
+›Ü›X]ÜÞ\Ý[WÜÝ]\Ê‘]X˜\ÙHÛÛ›™XÝYŠJBŸB˜‚ŠŠ‘^[\HÎˆXÛ\š[™ÈØ\Xš[]Y\È[ˆH›Ú™XÝX[šY™\Ý
+Š‚’[ˆ™[\˜KÛ[[ÝH^XÚ]HÛÛ™šYÝ\™HÚXÚÞ\Ý[H™\ÛÝ\˜Ù\ÈH›Ú™XÝ\È[ÝÙYÈ™\]Y\ÝˆYˆ[Ý\ˆ\XØ][ÛˆXØÙ\ÜÙ\ÈH]X˜\ÙK]X˜\ÙHHYX]\Ý™H[˜X›Y[™\ˆØØ\Xš[]Y\×X‚‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™È[Ù[H[\ÜÈÚ]HX›\ÚY™[\˜HŒËŒš[˜\žK‚ˆ
+Ø]\ÙNŠˆ[\Ü\È›Ý\Ùˆ]™[X\ÙKˆH]™[ÜY[œ˜[˜Ú\Âˆ^\š[Y[[[\ÜÈ›Üˆ[˜Ý[ÛœË\H[X\Ù\Ë™XÛÜ™Ë[™Û™Bˆ›Ú™XÝ]ÚYH]X˜\ÙHYš[š][ÛŽÈ\ÙH\™H›ÝÝ\ÜYŒËŒ™X]\™\Ë‚‹H
+Š‘\œ›ÜŽŠŠˆ[][™È™[\˜KÛ[Üˆ^XÝ][™ÈÓHÛÛ[X[™Èœ›ÛHÝ]ÚYHH›Ú™XÝ›ÛÝ\™XÝÜžK‚ˆ
+Ø]\ÙNŠˆÛÛ[X[™ÈZÙH™[\˜H[˜ÛÚÈ›Üˆ™[\˜KÛ[[ˆHÝ\œ™[ÛÜšÚ[™È\™XÝÜžHÈÛÛ™šYÝ\™HØ\Xš[]Y\È[™ÛÛ\[][Ûˆ]Ë‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜KÛ[ÛÝ™\›œÈ›Ú™XÝY]Y]K\[™[˜ÚY\Ë[™Ø\Xš[]HÙXÝ\š]HÛXÚY\Ë‚Œ‹ˆXZ[Z[ˆHÛX[ˆÙ\\˜][ÛˆÙˆÛÛ˜Ù\›œÎˆ]H[Ù[È
+X›X
+K\Ú[™\ÜÈÙÚXÈ
+›˜
+K[™RHšY]ÜË‚ŒËˆHÛX[ˆ›Ú™XÝ^[Ý]™]™[ÈXØÚY[[ÛÝ\[™È[™ÜYYÈ\X[]ÛÜšË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÙ[™\˜]HH™]È›Ú™XÝÚÙ[]Ûˆ\Ú[™È™[\˜H™]È\Ú×Ø\[™^Ü™HHÙ[™\˜]Yš[\Ë‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ\]H™[\˜KÛ[Ú]H›Ú™XÝ\ØÜš\[Ûˆ[™[˜Ü™[Y[H™\œÚ[Ûˆ[X™\ˆÈŒËŒ‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]H[ˆ\XØ][ÛˆÝXÝ\™Y[È™YHÙ\\˜]H[˜Ý[ÛœÈ[™[™È[š]X[^˜][Û‹\Ú[™\ÜÈ›ØÙ\ÜÚ[™Ë[™Ý]]™\Ü[™Ë‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È›Ú™XÝÝXÝ\™B‘\ÝX›\ÚH\ÚÈX[˜YÙ[Y[\˜Ú]XÝ\™HÚ]H›ÛÝÚ[™È[\[Y[][Ûˆ[ˆXZ[‹žž[‚‚˜™[\˜BX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆÝ\ÜÞ\Ý[J
+HÂˆš[
+OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHŠBˆš[
+ˆTÒÈPSQÑTˆÕPÐÑTÔÑ•SHÕT•QŠBˆš[
+OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHŠBŸB‚™›ˆXZ[Š
+HÂˆÝ\ÜÞ\Ý[J
+BŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H›Ú™XÝÈ\™HÛÛ™šYÝ\™Y[™ÙXÝ\™YšXH™[\˜KÛ[‚‹HHX›\ÚYŒËŒÓHÚXÚÜÈHÛÝ\˜ÙHš[H^XÚ]H˜[YY[ˆHÛÛ[X[™‚‹HH[œ™[X\ÙY]™[ÜY[œ˜[˜Ú[\ÜÈ[˜Ý[ÛœË\H[X\Ù\Ë™XÛÜ™Ëˆ[™Û™H›Ú™XÝ]ÚYH]X˜\ÙHYš[š][Ûˆ^\š[Y[[NÈ]Ù\È›ÝY]ˆ›ÝšYHHÛÛ\]H[Ù[\ˆ\XØ][Ûˆ[Ù[‚‹HÜ™Ø[š^š[™Èš[\È[È›Û\œÈ[È™XY\œË]Ù\È›ÝžH]Ù[ˆÛÛ›™XÝ[Ù[\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚš[HÛÛZ[œÈHY]Y]H[™Ø\Xš[]HYš[š][ÛœÈÙˆH™[\˜H›Ú™XÝÂŒ‹ˆÚH\ÈXÛÝ\[™ÈH]HØÚ[XHœ›ÛH^XÝ][ÛˆÙÚXÈ™XÛÛ[Y[™YÂŒËˆÚXÚÛÛ[X[™ÈÝ\œ™[H›ÛÝÈ^\š[Y[[[˜Ý[Ûˆ[\ÜÈ[ˆH]™[ÜY[œ˜[˜ÚÂ‚ˆÈT•Uˆ8 $ÈÐQ‘UHS‘T”“ÔˆS‘S‘Â‚‹KKB‚ˆÈÈÚ\\ˆMŽˆ\œ›Üˆ\\È[™Z\ˆØ]\Ù\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HH›Ý\ˆš[X\žHØ]YÛÜšY\ÈÙˆ\œ›ÜœÈ[˜ÛÝ[\™Y[ˆÛÙØ\™H]™[ÜY[‚‹HHY™™\™[˜Ù\È™]ÙY[ˆÞ[^\œ›ÜœË\H\œ›ÜœËÛÛ˜XÝØØ\Xš[]H\œ›ÜœË[™ÙÚXÈ\œ›ÜœË‚‹HÝÈH™[\˜HÛÛ\[\ˆÝZY\È[ÝHÚ]™XÚ\ÙHXYÛ›ÜÝXÜÈ]Z[[™È[™H[X™\œËÛÛ[[ˆØØ][ÛœË[™XÝ[Û˜X›H[Ë‚‹HÚHX\›HÛÛ\[K][YH\œ›Üˆ]XÝ[ÛˆØ]™\ÈÝXœÝ[X[[YH[™™]™[ÈÛÜÝHYÜÈ[ˆ›ÙXÝ[Û‹‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â‘\œ›ÜœÈ\™HH˜]\˜[]™\žY^H\Ùˆ›ÙÜ˜[[Z[™Ëˆ]™[ˆÙX\ÛÛ™YÛÙØ\™H[™Ú[™Y\œÈ[˜ÛÝ[\ˆÞ™[œÈÙˆÛÛ\[\ˆ\œ›ÜœÈ]™\žH^KˆHY™™\™[˜ÙH™]ÙY[ˆÝYÙÛ[™È[™›ÙšXÚY[]™[Ü\œÈ\È›ÝXZÚ[™È™\›ÈZ\ÝZÙ\Ë]™Z[™ÈX›HÈ™XY[™[™\œÝ[™\œ›ÜˆXYÛ›ÜÝXÜÈ]ZXÚÛKˆ™[\˜HØ\È[[[Û˜[H\ÚYÛ™YÛÈ]H˜\ÝXZ›Üš]HÙˆ\œ›ÜœÈ\™HØ]YÚšYÚ]ÛÛ\[H[YH
+™[\˜HÚXÚØ
+HÛ™È™Y›Ü™H[Ý\ˆ\XØ][Ûˆ]™\ˆ™XXÚ\È[ˆ[™\Ù\‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚’[ˆÛÙØ\™H[™Ú[™Y\š[™ËÙH\Ý[™ÝZ\Ú™]ÙY[ˆ›Ý\ˆ[™[Y[[Û\ÜÙ\ÈÙˆ\œ›ÜœÎ‚ŒKˆ
+Š”Þ[^\œ›ÜœÈ
+KSVJ˜KTT”ÑKJ˜
+NŠŠˆ[ÝHš[Û]YHÜ˜[[X\ˆÙˆH›ÙÜ˜[[Z[™È[™ÝXYÙx %[˜[ÙÛÝ\ÈÈH[˜ÝX][ÛˆÜˆÜ[[™ÈZ\ÝZÙH[ˆ[X[ˆ[™ÝXYÙH
+ÝXÚ\È›Ü™Ù][™ÈHÛÜÚ[™ÈÝ\›Hœ˜XÚÙ]
+K‚Œ‹ˆ
+Š•\H\œ›ÜœÈ
+KUTKJ˜
+NŠŠˆHÜ˜[[X\ˆ\ÈÞ[XÝXØ[H˜[Y]H]H\\ÈÈ›Ýš]ÙÙ]\ˆ
+ÝXÚ\È][\[™ÈÈY^È[ˆ[YÙ\ŠK‚ŒËˆ
+ŠÛÛ˜XÝ[™Ø\Xš[]H\œ›ÜœÈ
+KPÓÓ•PÕJ˜KPÐTJ˜
+NŠŠˆH™KXYÜ™YY™XÛÛ™][ÛˆØ\Èœ™XXÚYÜˆH[˜Ý[Ûˆ][\YÈXØÙ\ÜÈ™\ÝšXÝYÞ\Ý[H™\ÛÝ\˜Ù\È
+ÝXÚ\È™XY[™ÈHš[\Þ\Ý[HÚ]Ý]\›Z\ÜÚ[ÛŠK‚ˆ
+Š“ÙÚXÈ\œ›ÜœÎŠŠˆH›ÙÜ˜[HÛÛ\[\È[™^XÝ]\ÈÚ]Ý]Ü˜\Ú[™Ë]›ÙXÙ\È[˜ÛÜœ™XÝ™\Ý[È™XØ]\ÙHH[ÛÜš]HØ\ÈÜ›Û™È
+K™Ë‹Y[™ÈH\ØÛÝ[[œÝXYÙˆÝX˜XÝ[™È]
+K‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ\XØ[Þ[^\œ›Üˆ
+[™™XY[™ÈÛÛ\[\ˆÝ]]
+JŠ‚•Ú[ˆ[ÝHÜš]HÛX[‹X]Ú[™Èœ˜XÚÙ]Î‚˜™[\˜B‹ËÈÞ[XÝXØ[HÛÜœ™XÝ‚™›ˆÛÜœ™XÝØœ˜XÚÙ]Ê
+HÂˆš[
+[œ˜XÚÙ]È\™HÛÜÙYˆŠBŸB‚™›ˆXZ[Š
+HÂˆÛÜœ™XÝØœ˜XÚÙ]Ê
+BŸB˜‚ŠŠ‘^[\HŽˆØ\Xš[]H\œ›Üˆ
+ÙXÝ\š]HØ\Xš[]H™\šYšXØ][ÛŠJŠ‚’YˆH[˜Ý[Ûˆ][\ÈÈXØÙ\ÜÈ™\ÝšXÝYÞ\Ý[H™\ÛÝ\˜Ù\ÈÚ]Ý]XÛ\š[™ÈH™\]Z\™Y\›Z\ÜÚ[Û‹™[\˜HÝÜÈ[[YYX][N‚˜™[\˜B™›ˆ™XYÙš[J]ˆÝš[™ÊHOˆÝš[™Âˆ\Ù\Èš[TÞ\Ý[BžÂˆ™]\›ˆ™XYÝ^
+]
+BŸB‚™›ˆXZ[Š
+HÂˆš[
+‘š[HXØÙ\ÜÈ›Ü\›HXÛ\™YˆŠBŸB˜‚ŠŠ‘^[\HÎˆ^ÜÚ[™ÈÙÚXÈ\œ›ÜœÈ›ÝYÚÛÛ˜XÝÊŠ‚˜™[\˜B™›ˆØ[Ý[]WÙ\ØÛÝ[ÜšXÙJÜšYÚ[˜[ˆ[\ØÛÝ[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÜšYÚ[˜[H	‰ˆ\ØÛÝ[H	‰ˆ\ØÛÝ[HÜšYÚ[˜[Bˆ[œÝ\™\ÈÈ™\Ý[HÜšYÚ[˜[BžÂˆ™]\›ˆÜšYÚ[˜[H\ØÛÝ[ŸB‚™›ˆXZ[Š
+HÂˆšXÙHHØ[Ý[]WÙ\ØÛÝ[ÜšXÙJLŒ
+Bˆš[
+šXÙJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆYÛ›Üš[™ÈÛÛ\[\ˆXYÛ›ÜÝXÜÈÚ]Ý]ÛÚÚ[™È]H[™H[™ÛÛ[[ˆ[™XØ]ÜœË‚ˆ
+Ø]\ÙNŠˆ™[\˜HÚ[È[ÝH\™XÝHÈH^XÝÛÝ\˜ÙHØØ][ÛˆÚ\™HH\ÜÝYHÜšYÚ[˜]Y‚‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™È
+Ø™]ÙY[ˆÝš[™ÜÈ[™[X™\œË‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝšXÝH[™›Ü˜Ù\ÈÝ]XÈ\HØY™]Kˆ›Ü›X]˜[Y\È\ÈÝš[™ÜÈÜˆš[[H\ÈÙ\\˜]H\™Ý[Y[Ë‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆHÛÛ\[\ˆ\œ›Üˆ\È›ÝH˜Z[\™x %]\È[ˆ]]ÛX]Y[œÝ[ÛÙH™]šY]Ë‚Œ‹ˆHX\›Y\ˆ[ˆ\œ›Üˆ\ÈØ]YÚ
+ÛÛ\[H[YHœËˆ[[YJKHØY™\ˆ[™ÚX\\ˆ[Ý\ˆ\XØ][Ûˆ\ÈÈXZ[Z[‹‚ŒËˆÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+H\›ˆÝXKÜ™Y\[™ÈÙÚXÈYÜÈ[È[[YYX]K™\›ÙXÚX›HÛÛ˜XÝš[Û][ÛœË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆ[[[Û˜[HšYÙÙ\ˆHÞ[^\œ›Üˆ
+K™Ë‹ÛZ][™ÈHœ˜XÚÙ]
+H[™^[Z[™HHÝ]]Ùˆ™[\˜HÚXÚØ‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[ÛˆÚ]H\HZ\ÛX]Ú\œ›Üˆ[™™\ÛÛ™H]›ÛÝÚ[™ÈHÛÛ\[\‰ÜÈXYÛ›ÜÝXÈ[Ë‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]H[ˆYÙH™\šYšXØ][Ûˆ[˜Ý[Ûˆ\]Z\YÚ]ÛÛ˜XÝÈ][[YYX][H™Z™XÝÈ[˜[YYÙ\È
+K™Ë‹™YØ]]™H[X™\œÊK‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È˜][UÛ\˜[\ÚÈ\˜][ÛˆÙÙÚ[™Â•Üš]HH™\šYšYY[˜Ý[Ûˆ›Üˆ\ÚÈX[˜YÙ[Y[]™]™[È™YØ]]™HÝ\œÈœ›ÛH™Z[™È™XÛÜ™Y‚˜™[\˜B™›ˆÙ×ÚÝ\œÊ™]š[Ý\×ÚÝ\œÎˆ[™]×ÚÝ\œÎˆ[
+HOˆ[ˆ™\]Z\™\ÈÈ™]š[Ý\×ÚÝ\œÈH	‰ˆ™]×ÚÝ\œÈHBˆ[œÝ\™\ÈÈ™\Ý[H™]š[Ý\×ÚÝ\œÈBžÂˆ™]\›ˆ™]š[Ý\×ÚÝ\œÈ
+È™]×ÚÝ\œÂŸB‚™›ˆXZ[Š
+HÂˆÝ[ÚÝ\œÈHÙ×ÚÝ\œÊKÊBˆš[
+Ý[ÚÝ\œÊBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜HØ]YÛÜš^™\È\œ›ÜœÈ[ÈÞ[^\KÛÛ˜XÝØØ\Xš[]K[™ÙÚXÈØ]YÛÜšY\Ë‚‹HÝ]XÈÚXÚÚ[™È[™ÛÛ˜XÝ[™›Ü˜Ù[Y[Ø]ÚY™XÝÈ™Y›Ü™HÛÙH]™\ˆ\Þ\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\œ›ÜˆÛÙH˜[Z[H
+KK‹‹˜
+H\ÈÙ[™\˜]YÚ[ˆHÙ^]ÛÜ™\ÈZ\ÜÜ[YÜˆZ\ÜÚ[™ÏÂŒ‹ˆÚHØ[ˆH›ÙÜ˜[HÛÛ\[HÛÛ\][HÚ]Ý]\œ›ÜœÈ[™Ý[Ø[Ý[]H[˜ÛÜœ™XÝ˜[Y\ÏÂŒËˆÝÈÈ›Ü›X[ÛÛ˜XÝÈ[[˜ÛÝ™\ˆY[ˆÙÚXØ[™X\ÛÛš[™ÈYÜÏÂ‚‹KKB‚ˆÈÈÚ\\ˆMÎˆ\œ›ÜœÈ\È˜[Y\È8 $ÈH™\Ý[]\›‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]H™\Ý[]\›ˆ\È[™ÚH™[\˜H]›ÚYÈ[˜ÛÛ›ÛY^Ù\[ÛœË‚‹HHÛÈ˜\šX[ÎˆÚÊ˜[YJX›ÜˆÝXØÙ\ÜÈ[™\œŠY\ÜØYÙJX›Üˆ˜Z[\™K‚‹HÝÈÈXÛÛœÝXÝ™\Ý[ÈØY™[H\Ú[™ÈX]Ú‚‹HÚH™X][™È\œ›ÜœÈ\È™YÝ[\ˆ˜[Y\ÈXZÙ\È[Ý\ˆÛÙØ\™H˜[œÜ\™[™YXÝX›K[™Ü˜\Ú\›ÛÙ‹‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’[ˆX[žH˜Y][Û˜[[™ÝXYÙ\È
+ZÙH˜]˜K]Û‹Üˆ
+K[˜Ý[ÛœÈÚYÛ˜[˜Z[\™HžH›ÝÚ[™È^Ù\[ÛœËˆYˆ[ˆ^Ù\[ÛˆÛÙ\È[˜Ø]YÚ[ž]Ú\™H[ˆHØ[ÝXÚËH[\™HÙXˆ™\]Y\ÝÜ˜\Ú\ÈÚ][ˆL\œ›Ü‹ˆ[ˆ™[\˜K\™H\™H›È[˜ÛÛ›ÛY[[YH^Ù\[ÛœÎˆÚ[™]™\ˆ[ˆÜ\˜][ÛˆØ[ˆ˜Z[
+ÝXÚ\ÈHZ\ÜÚ[™È™XÛÜ™Üˆ[ˆ[˜[Y[œ]
+K]^XÚ]H™]\›œÈH™\Ý[O˜ˆHÛÛ\[\ˆÝX\˜[Y\È][ÝH[™H›ÝÝXØÙ\ÜÈ[™\œ›ÜˆÝ]ÛÛY\È™Y›Ü™H[Ý\ˆÛÙHØ[ˆ[‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚’[XYÚ[™H™XÙZ]š[™ÈH[]™\žH\˜Ù[‚‹HYˆHÛÝ\šY\ˆ[]™\œÈHXÚØYÙHÝXØÙ\ÜÙ[K[ÝHÜ[ˆ][™š[™H][H[œÚYNˆÚÊÛÛ[
+X‚‹HYˆHY™\ÜÈÙ\È›Ý^\Ý[ÝH™XÙZ]™HH™]\›ˆÛ\Ý][™ÈH™X\ÛÛŽˆ\œŠY™\ÜÈ[šÛ›ÝÛˆŠX‚‚H\˜Ù[™]™\ˆ™^Ù\Èˆ[ˆ[Ý\ˆ˜XÙx %[ÝHÚ[\H[œÜXÝÚ]\œš]™Y‚˜™[\˜B™›ˆ]šYWÜØY™JNˆ[Žˆ[
+HOˆ™\Ý[[Ýš[™ÏˆÂˆYˆˆOHÂˆ™]\›ˆ\œŠ‘]š\Ú[ÛˆžH™\›È\È›Ý[ÝÙYŠBˆBˆ™]\›ˆÚÊHÈŠBŸB‚™›ˆXZ[Š
+HÂˆš[
+”ØY™H]š\Ú[ÛˆYš[™YˆŠBŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆYš[š[™È[™[™[™ÈH[˜Ý[ÛˆÚ]™\Ý[
+Š‚˜™[\˜B™›ˆÚXÚ×Üš[Üš]J]™[ˆ[
+HOˆ™\Ý[[Ýš[™ÏˆÂˆYˆ]™[HÂˆ™]\›ˆ\œŠ”š[Üš]HÛÈÝÈ
+Z[š[][HJHŠBˆBˆYˆ]™[ˆÈÂˆ™]\›ˆ\œŠ”š[Üš]HÛÈYÚ
+X^[][HÊHŠBˆBˆ™]\›ˆÚÊ]™[
+BŸB‚™›ˆXZ[Š
+HÂˆ™\ÈHÚXÚ×Üš[Üš]JŠBˆX]Ú™\ÈÂˆÚÊ]™[
+HOˆÂˆš[
+•˜[Yš[Üš]NˆŠBˆš[
+]™[
+BˆBˆ\œŠ\œ—Û\ÙÊHOˆÂˆš[
+\œ—Û\ÙÊBˆBˆBŸB˜‚ŠŠ‘^[\HŽˆ[™[™ÈH\œ›ÜˆØ\ÙJŠ‚˜™[\˜B™›ˆÙ]Ø˜[[˜ÙJ[Žˆ[
+HOˆ™\Ý[[Ýš[™ÏˆÂˆYˆ[ˆOHLŒÍÂˆ™]\›ˆ\œŠ’[˜ÛÜœ™XÝSˆHŠBˆBˆ™]\›ˆÚÊL
+BŸB‚™›ˆXZ[Š
+HÂˆ][\HÙ]Ø˜[[˜ÙJNNNJBˆX]Ú][\ÂˆÚÊ[[Ý[
+HOˆÂˆš[
+[[Ý[
+BˆBˆ\œŠ\œ—Û\ÙÊHOˆÂˆš[
+‘[šYYˆˆ
+È\œ—Û\ÙÊBˆBˆBŸB˜‚ŠŠ‘^[\HÎˆØY™H˜[YH˜[Y][ÛŠŠ‚˜™[\˜B™›ˆÚXÚ×Ý\Ú×Û˜[YWÛ[™Ý
+\Ú×Û˜[YNˆÝš[™ÊHOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆYˆ\Ú×Û˜[YHOHˆˆÂˆ™]\›ˆ\œŠ•\ÚÈ˜[YH]\Ý›Ý™H[\KˆŠBˆBˆ™]\›ˆÚÊ\Ú×Û˜[YJBŸB‚™›ˆXZ[Š
+HÂˆÝ]ÛÛYHHÚXÚ×Ý\Ú×Û˜[YWÛ[™Ý
+”›Ú™XÝ™\ÜŠBˆX]ÚÝ]ÛÛYHÂˆÚÊ
+HOˆÂˆš[
+•˜[Y˜[YNˆˆ
+È
+BˆBˆ\œŠJHOˆÂˆš[
+‘\œ›ÜŽˆˆ
+ÈJBˆBˆBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈXØÙ\ÜÈH[›™\ˆ˜[YH\™XÝHÚ]Ý][œXÚÚ[™È]\Ú[™ÈX]Ú‚ˆ
+Ø]\ÙNŠˆ™\Ý[O˜\ÈHÛÛZ[™\ˆ\Kˆ[ÝH]\Ý[Ü˜\]›ÝYÚ]\›ˆX]Ú[™Ë‚‹H
+Š‘\œ›ÜŽŠŠˆÛZ][™ÈÛ™HÙˆHÛÈœ˜[˜Ú\È
+ÚØÜˆ\œ˜
+H[ˆHX]Ú^™\ÜÚ[Û‹‚ˆ
+Ø]\ÙNŠˆ™[\˜H[™›Ü˜Ù\È^]\Ý]™H]\›ˆX]Ú[™ÈÈ[œÝ\™H[š[™Y˜Z[\™H]È\™H[\ÜÜÚX›K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™\Ý[O˜XZÙ\È\œ›Üˆ[™[™È^XÚ]žH™X][™È\œ›ÜœÈ\È™YÝ[\ˆ™]\›ˆ˜[Y\Ë‚Œ‹ˆÚÊŠX™\™\Ù[ÈÝXØÙ\ÜÈØ\œžZ[™ÈH˜[YKÚ[H\œŠJX™\™\Ù[È[ˆ^Z[™Y˜Z[\™K‚ŒËˆ]\›ˆX]Ú[™ÈÚ]X]Ú™\]Z\™\È[™[™È[Ý]ÛÛY\Ë™]™[[™ÈÚ[[[˜Ø]YÚÜ˜\Ú\Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH[˜Ý[ÛˆÚXÚ×Ù]™[Š[Nˆ[
+HOˆ™\Ý[[Ýš[™Ï˜]™]\›œÈÚÊ[JXYˆ]š\ÚX›HžH‹Üˆ\œŠ“ÙŠXÝ\Ú\ÙK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆ˜[Y]WÝ\Ù\›˜[YJ˜[YNˆÝš[™ÊHOˆ™\Ý[Ýš[™ËÝš[™Ï˜]™Z™XÝÈ[\HÝš[™ÜÈÜˆ˜YZ[ˆ˜‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[\[Y[[ˆ\š]Y]XÈ]š\Ú[Ûˆ[˜Ý[Ûˆ]˜[Y]\È[œ]È[™™]\›œÈÚXÙHH™\Ý[ÛˆÝXØÙ\ÜË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È˜[Y][™È\ÚÈÜ™X][Û‚Ü™X]HH›Ø\Ý˜[Y][Ûˆ[˜Ý[Ûˆ›ÜˆY[™È™]È\ÚÜÎ‚˜™[\˜B™›ˆÜ™X]WÝ\Ú×ØÚXÚÙY
+˜[YNˆÝš[™Ëš[Üš]Nˆ[
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆYˆ˜[YHOHˆˆÂˆ™]\›ˆ\œŠ“˜[YH]\Ý›Ý™H[\HHŠBˆBˆYˆš[Üš]HHÂˆ™]\›ˆ\œŠ”š[Üš]H]\Ý™H]X\ÝHHŠBˆBˆ™]\›ˆÚÊ•\ÚÈÈˆ
+È˜[YH
+È—HÜ™X]YÝXØÙ\ÜÙ[KˆŠBŸB‚™›ˆXZ[Š
+HÂˆ][LHHÜ™X]WÝ\Ú×ØÚXÚÙY
+ÛÛ\]HØÝ[Y[][Ûˆ‹JBˆX]Ú][LHÂˆÚÊ\ÙÊHOˆÂˆš[
+\ÙÊBˆBˆ\œŠ\œ—Û\ÙÊHOˆÂˆš[
+‘\œ›ÜŽˆˆ
+È\œ—Û\ÙÊBˆBˆB‚ˆ][LˆHÜ™X]WÝ\Ú×ØÚXÚÙY
+ˆ‹
+BˆX]Ú][LˆÂˆÚÊ\ÙÊHOˆÂˆš[
+\ÙÊBˆBˆ\œŠ\œ—Û\ÙÊHOˆÂˆš[
+‘\œ›ÜŽˆˆ
+È\œ—Û\ÙÊBˆBˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HH™\Ý[]\›ˆ™\XÙ\È[˜ÛÛ›ÛY^Ù\[ÛœÈÚ]ÝšXÝH\Y˜[Y\Ë‚‹H™[\˜HÝX\˜[Y\È]ÛÛ\[H[YH]˜Z[\™HØ\Ù\ÈØ[››Ý™HÚ[[HYÛ›Ü™Y‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]È[™X™\™\Ù[[ˆ™\Ý[O˜ÂŒ‹ˆÚHÈ[š[™Y\œ›ÜœÈ[ˆ™[\˜H™]™\ˆØ]\ÙH[™^XÝY\XØ][ÛˆÜ˜\Ú\ÏÂŒËˆÝÈÈ[ÝHØY™[H^˜XÝH^[ØYœ›ÛHH™\Ý[˜[YOÂ‚‹KKB‚ˆÈÈÚ\\ˆNˆ›Ý[™Û™\ÜÈÙ\È›Ý^\Ý8 $ÈÛÜšÚ[™ÈØY™[HÚ]Ü[Û‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚHÛžHØ\™H\ØÜšX™YH[™[[ÛˆÙˆ[\È\È˜š[[Û‹YÛ\ˆZ\ÝZÙKˆ‚‹HÝÈ™[\˜HÛÛ\][H[[Z[˜]\È[[™™\XÙ\È]Ú]H\K\ØY™HÜ[Û˜
+ÚÜ[™Ø
+K‚‹HÝÈÈÜ˜\˜[Y\È[ˆÛÛYJ˜[YJX[™™\™\Ù[Z\ˆXœÙ[˜ÙHÚ]›Û™X‚‹HÝÈZ[Z[ˆÛÛXÝ[ÛˆÜ\˜][ÛœÈZÙHš\œÝ[™\Ý]™\˜YÙHÜ[Û˜‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’[ˆ[™ÝXYÙ\ÈZÙH˜]˜TØÜš\˜]˜KÜˆËH˜[YH[\šÜÈ]™\ž]Ú\™KˆÚ[™]™\ˆÛÙH[˜Y™\[HØ[ÈHY]ÙÜˆ™XYÈ[ˆ]šX]HÛˆH[™Y™\™[˜ÙKH[\™H\XØ][ÛˆÜ˜\Ú\ÈÚ]H™XYY[Ú[\‘^Ù\[Û˜Üˆ\Q\œ›ÜŽˆØ[››Ý™XY›Ü\Y\ÈÙˆ[ˆ[ˆ™[\˜K[Ú[\HÙ\È›Ý^\ÝˆÝ[™\™˜[Y\È\™HÝšXÝHÝX\˜[YYÈ^\ÝˆÚ[™]™\ˆH˜[YHX^HYÚ][X][H™HXœÙ[]]\Ý™H^XÚ]H\Y\È[ˆÜ[Û˜‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•[šÈÙˆ[ˆÜ[Û˜\ÈHÚY›Þ‚‹HH›ÞX^HÛÛZ[ˆH™\Ù[ˆÛÛYJ”ÛX\Û™HŠX‚‹HÜˆH›Þ\ÈÛÛ\][H[\Nˆ›Û™X‚‚–[ÝHØ[››ÝXØÚY[[H\ÙHHÚYÚ]Ý]š\œÝ[œXÚÚ[™ÈH›Þ\Ú[™ÈX]Ú‚˜™[\˜B™›ˆš[™Ý\Ú×ØžWÚY
+Yˆ[
+HOˆÜ[ÛÝš[™ÏˆÂˆYˆYOHˆÂˆ™]\›ˆÛÛYJ”Ù]\Ù\™\ˆŠBˆBˆ™]\›ˆ›Û™BŸB‚™›ˆXZ[Š
+HÂˆš[
+•\ÚÈÙX\˜ÚYš[™YˆŠBŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÜ™X][™È[™X]Ú[™È[ˆÜ[ÛŠŠ‚˜™[\˜B™›ˆXZ[Š
+HÂˆ›Ý[™ˆÜ[ÛÝš[™ÏˆHÛÛYJ–™[\˜HŒH[™›ÛÚÈŠBˆX]Ú›Ý[™ÂˆÛÛYJ][WÛ˜[YJHOˆÂˆš[
+‘›Ý[™ˆˆ
+È][WÛ˜[YJBˆBˆ›Û™HOˆÂˆš[
+“›ÈX]Ú›Ý[™ŠBˆBˆBŸB˜‚ŠŠ‘^[\HŽˆØY™H\œ˜^H[œÜXÝ[ÛˆÚ]š\œÝ
+
+H[™\Ý
+
+JŠ‚XØÙ\ÜÚ[™È[ˆ[\HÛÛXÝ[Ûˆ[ˆ™[\˜H™]™\ˆÜ˜\Ú\È[Ý\ˆÛÙØ\™x %]ÛX[›H™]\›œÈ›Û™X‚˜™[\˜B™›ˆXZ[Š
+HÂˆ^WÛ[X™\œÎˆ[×HHÌLŒÌBˆš\œÝÚ][HHš\œÝ
+^WÛ[X™\œÊBˆX]Úš\œÝÚ][HÂˆÛÛYJ˜[
+HOˆÂˆš[
+‘š\œÝ˜[YNˆŠBˆš[
+˜[
+BˆBˆ›Û™HOˆÂˆš[
+•H\Ý\È[\HHŠBˆBˆBŸB˜‚ŠŠ‘^[\HÎˆ›ÝšY[™È˜[˜XÚÈY˜][ÈÚ]Ü[ÛŠŠ‚˜™[\˜B™›ˆ\Ú×Û˜[YWÛÜ—ÙY˜][
+ÜÛ˜[YNˆÜ[ÛÝš[™ÏŠHOˆÝš[™ÈÂˆX]ÚÜÛ˜[YHÂˆÛÛYJ
+HOˆÂˆ™]\›ˆˆBˆ›Û™HOˆÂˆ™]\›ˆ•[]Y‚ˆBˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+\Ú×Û˜[YWÛÜ—ÙY˜][
+ÛÛYJ’[\Ü[YY][™ÈŠJJBˆš[
+\Ú×Û˜[YWÛÜ—ÙY˜][
+›Û™JJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\ÜÝ[Z[™È][ˆÜ[ÛÝš[™Ï˜Ø[ˆ™H\ÙY\™XÝH\ÈHÝš[™Ø‚ˆ
+Ø]\ÙNŠˆH›Þ\È›ÝHÚYˆ[ÝH]\Ý[œXÚÈ]\Ú[™È]\›ˆX]Ú[™È
+X]Ú
+K‚‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈ\ÜÚYÛˆ›Û™XÈHÝ[™\™›Û‹[Ü[Û˜[˜\šXX›K‚ˆ
+Ø]\ÙNŠˆ™YÝ[\ˆ˜\šXX›\È\™HÝX\˜[YYÈ[Ø^\ÈÛÛZ[ˆHÛÛ˜Ü™]H˜[YK‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜HÛÛ\][H[[Z[˜]\È[™[™\š[™È[Ú[\‘^Ù\[Û˜Ü˜\Ú\È[\ÜÜÚX›K‚Œ‹ˆÚ[™]™\ˆH˜[YHX^H™HXœÙ[XÛ\™H]\ÈÜ[Û˜ÜˆØ‚ŒËˆÛÛYJ
+XÜ˜\ÈH™\Ù[˜[YKÚ[H›Û™X^XÚ]H[™XØ]\ÈXœÙ[˜ÙK‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH[˜Ý[Ûˆš[™Ü\™\Š˜[YNˆÝš[™ÊHOˆÜ[ÛÝš[™Ï˜]™]\›œÈÛÛYJ’[Y]ŠXÚ[ˆÚ]™[ˆ”›ÛY[È˜[™›Û™XÝ\Ú\ÙK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ™]šY]™HH\Ý[[Y[Ùˆ[ˆ[YÙ\ˆ\œ˜^H\Ú[™È\Ý
+
+X[™š[]È˜[YHÜˆ[ˆ[\K[\Ý›ÝXÙK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]HHÙX\˜Ú[˜Ý[Ûˆ]ÙX\˜Ú\È[ˆ\œ˜^HÙˆQÈ[™™]\›œÈHX]Ú[™È[™^ÜÚ][Ûˆ\ÈÜ[Û[˜‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $ÈØY™H\ÚÈ]Z[ÛÚÝ\’[\[Y[ØY™H\ÚÈ\ØÜš\[Ûˆ™]šY]˜[›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™›ˆš[™Ý\Ú×Ù\ØÜš\[ÛŠYˆ[
+HOˆÜ[ÛÝš[™ÏˆÂˆYˆYOHHÂˆ™]\›ˆÛÛYJÜ™X]H]X˜\ÙHØÚ[XH›Üˆ™[\˜HŠBˆBˆYˆYOHˆÂˆ™]\›ˆÛÛYJ‘\ÚYÛˆÙXˆ[\™˜XÙHŠBˆBˆ™]\›ˆ›Û™BŸB‚™›ˆXZ[Š
+HÂˆÛÚÝ\HHš[™Ý\Ú×Ù\ØÜš\[ÛŠJBˆX]ÚÛÚÝ\HÂˆÛÛYJ^
+HOˆÂˆš[
+•\ÚÈNˆˆ
+È^
+BˆBˆ›Û™HOˆÂˆš[
+•\ÚÈH›Ý›Ý[™HŠBˆBˆB‚ˆÛÚÝ\NHHš[™Ý\Ú×Ù\ØÜš\[ÛŠNJBˆX]ÚÛÚÝ\NHÂˆÛÛYJ^
+HOˆÂˆš[
+•\ÚÈNNˆˆ
+È^
+BˆBˆ›Û™HOˆÂˆš[
+•\ÚÈNH›Ý›Ý[™HŠBˆBˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÜ[Û˜ÚY[È\XØ][ÛœÈœ›ÛHH\Ø\Ý›Ý\È\œ›ÜœÈØ]\ÙYžH[™^XÝY[™Y™\™[˜Ù\Ë‚‹H™[\˜HÝ]XØ[H[™›Ü˜Ù\È]]™\žHÜÜÚX›H›Û™XÛÛ™][Ûˆ\ÈY™\ÜÙY™Y›Ü™H^XÝ][Û‹‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚH\È\™H›È[Ù^]ÛÜ™ÜˆÛÛ˜Ù\[ˆ™[\˜OÂŒ‹ˆÚ]\ÈH[™[Y[[Y™™\™[˜ÙH™]ÙY[ˆÝš[™Ø[™Ü[ÛÝš[™Ï˜ÂŒËˆÚXÚÛÈœ˜[˜Ú\È]\Ý[Ø^\È™H™\Ù[Ú[ˆ]\›ˆX]Ú[™È[ˆÜ[Û˜Â‚‹KKB‚ˆÈÈÚ\\ˆNNˆ\Ý[™È[™]X[]H\ÜÝ\˜[˜ÙB‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚH]]ÛX]Y\Ý[™È›Ü›\ÈH[™\Ü[œØX›H˜XÚØ›Û™HÙˆ™[XX›KÝ\ÝZ[˜X›HÛÙØ\™K‚‹HÝÈ™[\˜IÜÈ™\šYšXØ][ÛˆÛÛ
+™[\˜H™\šYžX
+H›Ü›X[H›Ý™\È[˜Ý[ÛˆÛÛ˜XÝË‚‹HÝÈÈ\ÚYÛˆ[™ÝXÝ\™H\ÜÙ\[Û‹X˜\ÙY\ÝÝZ]\Ë‚‹HH[ÜÛÜHÙˆ
+•\ÝQš]™[ˆ]™[ÜY[
+ˆ
+
+K‚‹H[ˆÝ]ÛÚÈÛˆ™[\˜IÜÈ]\™H[YÜ˜]Y\Ýœ˜[Y]ÛÜšË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â“X[X[\Ý[™ø %ÛXÚÚ[™È\›Ý[™[ˆHœ›ÝÜÙ\ˆÜˆX[X[HØ[[™È[˜Ý[Ûœø %\ÈY[Ý\Ë[˜ÛÛœÚ\Ý[[™\œ›Ü‹\›Û™Kˆ\ÈÛÙØ\™HÜ›ÝÜÈ[ˆÛÛ\^]K]™[ˆZ[›Üˆ[ÙYšXØ][ÛœÈ[ˆÛ™HÝXœÞ\Ý[H[™]š]X›H[›ÙXÙH™YÜ™\ÜÚ[ÛœÈ[ˆÙY[Z[™ÛH[œ™[]Y[Ù[\Ëˆ]]ÛX]Y\ÝÈXÝ\È[ˆ]]ÛX]YØY™]H™]›Ýš[™È]^\Ý[™È\Ú[™\ÜÈÙÚXÈÛÛ[Y\ÈÈ[˜Ý[ÛˆXØÛÜ™[™ÈÈÜXÚYšXØ][Ûˆ^\Ë[ÛË[™YX\œÈ[ÈH]\™K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚”]X[]H\ÜÝ\˜[˜ÙH[ˆ™[\˜H™\ÝÈÛˆÛÈÝÙ\™[[\œÎ‚ŒKˆ
+Š‘›Ü›X[ÛÛ˜XÝ™\šYšXØ][ÛˆÚ]™[\˜H™\šYžXŠŠ‚ˆHÛÛ\[\ˆX][X]XØ[HÚXÚÜÈÚ]\ˆ™XÛÛ™][ÛœÈ[™ÜÝÛÛ™][ÛœÈ
+™\]Z\™\Ø[œÝ\™\Ø
+HÛ[™\ˆ[ÜÜÚX›H˜[Y[œ]Ë‚Œ‹ˆ
+Š]]ÛX]Y\ÜÙ\[Ûˆ\Ý[™ÎŠŠ‚ˆ[ÝHÜš]HÛÛ˜Ú\ÙH\Ý›Ý][™\È]Ý\HØ[\H[œ]ÈÈ[Ý\ˆ\Ú[™\ÜÈ[˜Ý[ÛœÈ[™™\šYžH]HXÝX[Ý]]X]Ú\ÈH^XÝYÝ]ÛÛYK‚‚Š”›ØYX\›ÝNŠˆHZ[Z[ˆÓH\Ýœ˜[Y]ÛÜšÈ
+™[\˜H\Ý
+H\ÈØÚY[YÛˆH™[\˜H›ØYX\›Üˆ\ÙHLKÌL‹ˆ[ˆ™[\˜HŒK]]ÛX]Y]X[]H\ÜÝ\˜[˜ÙH\ÈÛÛ™XÝY\Ú[™È™[\˜HÚXÚØ™[\˜H™\šYžX[™ÝXÝ\™Y\Ý\[›™\ˆ[žHÚ[Ë‚˜ËÈÔXÙZÛ\Žˆ™[\˜H\Ýœ˜[Y]ÛÜšÈH™X[^™Y[ˆŒHšXH™\šYžH[™\Ý[›™\œÎÈÙYH›ØYX\\ÙHLWX‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆHYÚÙZYÚ\ÜÙ\[Ûˆ[\ŠŠ‚˜™[\˜B™›ˆ\ÜÙ\Ý\Ý
+\ÝÛ˜[YNˆÝš[™ËÛÛ™][ÛŽˆ›ÛÛ
+HÂˆYˆÛÛ™][ÛˆÂˆš[
+–ÔTÔ×Hˆ
+È\ÝÛ˜[YJBˆH[ÙHÂˆš[
+–ÑRSHˆ
+È\ÝÛ˜[YJBˆBŸB‚™›ˆÝX›WÝ˜[
+ˆ[
+HOˆ[Âˆ™]\›ˆ
+ˆ‚ŸB‚™›ˆXZ[Š
+HÂˆ\ÜÙ\Ý\Ý
+‘ÝX›HH\ÈL‹ÝX›WÝ˜[
+JHOHL
+Bˆ\ÜÙ\Ý\Ý
+‘ÝX›H\È‹ÝX›WÝ˜[
+
+HOH
+BŸB˜‚ŠŠ‘^[\HŽˆ\Ý[™ÈÜ[Ûˆ™]\›ˆ˜[Y\ÊŠ‚˜™[\˜B™›ˆ\×ØY[
+YÙNˆ[
+HOˆÜ[Û›ÛÛˆÂˆYˆYÙHÂˆ™]\›ˆ›Û™BˆBˆ™]\›ˆÛÛYJYÙHHN
+BŸB‚™›ˆXZ[Š
+HÂˆ\ÝHH\×ØY[
+Œ
+BˆX]Ú\ÝHÂˆÛÛYJÚÊHOˆÂˆYˆÚÈÂˆš[
+–ÔTÔ×HŒYX\œÈ\ÈÙˆYÙHŠBˆH[ÙHÂˆš[
+–ÑRSH[™^XÝYÝ]HŠBˆBˆBˆ›Û™HOˆÂˆš[
+–ÑRSH[˜[YYÙHŠBˆBˆBŸB˜‚ŠŠ‘^[\HÎˆ›ÝXÝ[™ÈÙÚXÈÚ]›Ü›X[ÛÛ˜XÝ™\šYšXØ][ÛŠŠ‚˜™[\˜B™›ˆØ[Ý[]WÛÝ™\[YJÝ\œÎˆ[™YÝ[\—ÚÝ\œÎˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÝ\œÈH	‰ˆ™YÝ[\—ÚÝ\œÈHBˆ[œÝ\™\ÈÈ™\Ý[HBžÂˆYˆÝ\œÈˆ™YÝ[\—ÚÝ\œÈÂˆ™]\›ˆÝ\œÈH™YÝ[\—ÚÝ\œÂˆBˆ™]\›ˆŸB‚™›ˆXZ[Š
+HÂˆš[
+Ø[Ý[]WÛÝ™\[YJK
+JBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\Ý[™ÈÛ›HHš\H]ˆ[™YÛ›Üš[™È›Ý[™\žHÛÛ™][ÛœÈ
+™\›È˜[Y\Ë™YØ]]™H[X™\œË[\HÛÛXÝ[ÛœÊK‚ˆ
+Ø]\ÙNŠˆ[ÜÝ™X[]ÛÜ›™YÜ™\ÜÚ[ÛœÈØØÝ\ˆ]H^™[YH›Ý[™\šY\ÈÙˆ[œ]˜[™Ù\Ë‚‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™ÈÈ[ˆ]]ÛX]YÚXÚÜÈY\ˆ™Y˜XÝÜš[™ÈÛÙK‚ˆ
+Ø]\ÙNŠˆ[Ø^\ÈXZÙH™[\˜HÚXÚØ[™[Ý\ˆ\ÝÝZ]\È[ˆ]]ÛX]XÈXš]Ú[™]™\ˆ[ÝHY]ÛÝ\˜ÙHš[\Ë‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ[\ÝYÛÙH\Èœ›ÚÙ[ˆÛÙH]\ÈÚ[\H›Ý˜Z[Y[ˆX›XÈY]‚Œ‹ˆ™[\˜H™\šYžXX][X]XØ[H]˜[X]\È[˜Ý[ÛˆÛÛ˜XÝÈ\™XÝH]H[™ÝXYÙH]™[‚ŒËˆYÚ]˜[YH\ÝÈ[X™\˜][H\™Ù]YÙHØ\Ù\Ë›Ý[™\šY\Ë[™˜Z[\™H]Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\Â‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]H™YH\ÝØ\Ù\È›ÜˆH[˜Ý[ÛˆY
+Nˆ[Žˆ[
+HOˆ[‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]H\ÜÙ\[Ûˆ\ÝÈ›ÜˆHÜ[Û˜X˜\ÙYÛÚÝ\[˜Ý[Ûˆœ›ÛHÚ\\ˆN‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[\[Y[HÛÛ\™Z[œÚ]™H\ÝÝZ]H›ÜˆH[˜Ý[Ûˆ]ÚXÚÜÈYˆH\ÚÈ˜[YHØ]\ÙšY\È\Ú[™\ÜÈ[\È
+›Û‹Y[\KZ[š[][H[™Ý
+K‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[8 $È\Ý[›™\ˆ›Üˆ\ÚÈ\Ú[™\ÜÈÙÚXÂÛÛœÝXÝHYÚÙZYÚ\ÝÝZ]H›ÜˆHÛÜ™H\Ú[™\ÜÈ[\ÈÙˆH\ÚÈX[˜YÙ[Y[\XØ][ÛŽ‚˜™[\˜B™›ˆ\ÝØØ\ÙJ\ØÜš\[ÛŽˆÝš[™ËÚÎˆ›ÛÛ
+HÂˆYˆÚÈÂˆš[
+“ÒÎˆˆ
+È\ØÜš\[ÛŠBˆH[ÙHÂˆš[
+‘T”“ÔŽˆˆ
+È\ØÜš\[ÛŠBˆBŸB‚™›ˆX]Ú\×Üš[Üš]Jˆ[
+HOˆ›ÛÛÂˆ™]\›ˆOHBŸB‚™›ˆXZ[Š
+HÂˆš[
+”Ý\[™È\ÝÝZ]Nˆ\ÚÈÙÚXÈŠBˆ\ÝØØ\ÙJ”š[Üš]HHX]Ú\È‹X]Ú\×Üš[Üš]JJHOHYJBˆ\ÝØØ\ÙJ”š[Üš]Hˆ\ÈYÛ›Ü™Y‹X]Ú\×Üš[Üš]JŠHOH˜[ÙJBˆš[
+•\ÝÝZ]HÛÛ\]YˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H]]ÛX]Y™\šYšXØ][ÛˆØY™YÝX\™ÈÛÙØ\™H™[XXš[]HXÜ›ÜÜÈÛ™È]™[ÜY[ÞXÛ\Ë‚‹HÛÛXš[š[™È™[\˜H™\šYžXÚ]\ÜÙ\[Ûˆ\ÝÝZ]\È›ÝšY\ÈÛÛ\™Z[œÚ]™HÛÛ™šY[˜ÙH[ˆ\Ú[™\ÜÈÙÚXË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]Ù\ÈH\›Hœ™YÜ™\ÜÚ[ÛˆˆYX[ˆ[ˆÛÙØ\™H]™[ÜY[ÂŒ‹ˆÚ]™\ÜÛœÚXš[]HÙ\ÈHÓHÛÛ[X[™™[\˜H™\šYžX\™›Ü›OÂŒËˆÚH\™H›Ý[™\žH˜[Y\È
+K™Ë‹ÜˆX^[][HØ\XÚ]JHÜš]XØ[[ˆ\Ý\ÚYÛÂ‚ˆÈT•ˆ8 $ÈPÕPÐSUH“ÐÑTÔÒS‘Â‚‹KKB‚ˆÈÈÚ\\ˆŒˆÛÜšÚ[™ÈÚ]š[\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÜ™X]K™XY\Ý[™[]H^š[\È\Ú[™È™[\˜K‚‹HÚHš[HÜ\˜][ÛœÈ[ˆ™[\˜HÝšXÝH™\]Z\™HH\Ù\Èš[TÞ\Ý[XØ\Xš[]K‚‹HH[ÜÝ[\Ü[Ý[™\™Xœ˜\žH[˜Ý[ÛœÎˆ™XYÝ^Üš]WÝ^[]WÙš[X[™\ÝÙ\˜‚‹HÝÈÈ\œÚ\Ý\ÚÈ\ÝÈÈ\ÚÈ\Èš[\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•˜\šXX›\È[ˆY[[ÜžH\™H›Û][NÈ^H˜[š\ÚH[ÛY[[Ý\ˆ›ÙÜ˜[H^]ÈÜˆHÜ\˜][™ÈÞ\Ý[H™\Ý\ËˆÈ™\Ù\™H]H\›X[™[x %ÝXÚ\È^Üš[\Ë\XØ][ÛˆÙ][™ÜËÜˆ]Y]ÙÜø %]]\Ý™HÜš][ˆÈ›Û‹]›Û][HÝÜ˜YÙKˆ]HØ[YH[YK\˜š]˜\žHš[HÞ\Ý[HXØÙ\ÜÈ™\™\Ù[ÈHÚYÛšYšXØ[ÙXÝ\š]HXXš[]Kˆ™[\˜H›ÝXÝÈ[Ý\ˆÞ\Ý[HžH[™›Ü˜Ú[™Èš[™KYÜ˜Z[™YØ\Xš[]Y\Îˆ[˜Ý[ÛœÈØ[››ÝÝXÚH\ÚÈ[›\ÜÈ^H^XÚ]HXÛ\™HH\›ÜšX]H\›Z\ÜÚ[ÛœÈ\œ›Û‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•[šÈÙˆHš[HÞ\Ý[H\ÈHÙXÝ\™HØÝ[Y[\˜Ú]™N‚‹HÚ[ˆ[ÝHØ[Èš[HHØÝ[Y[[ÝHÜš]H^[È]
+Üš]WÝ^
+K‚‹HÚ[ˆ[ÝHØ[È[œÜXÝHš[K[ÝH™XY]ÈÛÛ[È
+™XYÝ^
+K‚‹H[ÝHØ[ˆÛ›H[\ˆH\ÚXØ[\˜Ú]™H›ÛÛHYˆ[ÝHÛHÙ^XØ\™ˆ\Ù\Èš[TÞ\Ý[X‚‚˜™[\˜B™›ˆØ]™WÛ›ÝJ]ˆÝš[™ËÛÛ[ˆÝš[™ÊBˆ\Ù\Èš[TÞ\Ý[BžÂˆÜš]WÝ^
+]ÛÛ[
+BŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆØ]™WÛ›ÝJ››ÝK‹”ÚÜ[™È\ÝˆZ[Ëœ™XYŠBˆš[
+“›ÝHØ]™YˆŠBŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÜš][™È[™™XY[™È^š[\ÊŠ‚˜™[\˜B™›ˆš[WÝÛÜšÙ›ÝÊ
+H\Ù\Èš[TÞ\Ý[HÂˆ]H\ÚÜ×Ù^Ü‚ˆÜš]WÝ^
+]•\ÚÈNˆX\›ˆ™[\˜HŠBˆ^H™XYÝ^
+]
+Bˆš[
+”™XYÛÛ[ˆˆ
+È^
+BŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆš[WÝÛÜšÙ›ÝÊ
+BŸB˜‚ŠŠ‘^[\HŽˆÛX[š[™È\š[\ÈÚ][]WÙš[JŠ‚˜™[\˜B™›ˆÛX[\Ùš[J]ˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆ[]WÙš[J]
+Bˆš[
+‘š[H[]YˆŠBŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆÜš]WÝ^
+[\‹”ÚÜ[]™YŠBˆÛX[\Ùš[J[\ŠBŸB˜‚ŠŠ‘^[\HÎˆ\Ý[™È\™XÝÜžHÛÛ[ÊŠ‚˜™[\˜B™›ˆÚÝ×Ùš[\Ê\—Ü]ˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆš[\ÈH\ÝÙ\Š\—Ü]
+Bˆ›Üˆš[WÛ˜[YH[ˆš[\ÈÂˆš[
+‘›Ý[™š[Nˆˆ
+Èš[WÛ˜[YJBˆBŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆÚÝ×Ùš[\Ê‹ˆŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆØ[[™È™XYÝ^ÜˆÜš]WÝ^Ú]Ý]XÛ\š[™È\Ù\Èš[TÞ\Ý[X‚ˆ
+Ø]\ÙNŠˆ™[\˜IÜÈØ\Xš[]HÞ\Ý[H
+KPÐTLX
+H™]™[È[žH[˜]]Üš^™YXØÙ\ÜÈÈÙXÛÛ™\žHÝÜ˜YÙK‚‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™È]XZ[Š
+X]\Ý[ÛÈXÛ\™H\Ù\Èš[TÞ\Ý[XÚ[ˆØ[[™È[˜Ý[ÛœÈ]XØÙ\ÜÈHš[HÞ\Ý[K‚ˆ
+Ø]\ÙNŠˆØ\Xš[]Y\È›ÜYØ]H\HØ[ÝXÚÎÈHØ[\ˆØ[››Ý[›ÚÙH[ˆY™™XÝ[[˜Ý[ÛˆÚ]Ý]]š[™È]\›Z\ÜÚ[Ûˆ]Ù[‹‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ[žH[˜Ý[Ûˆ[\˜XÝ[™ÈÚ]Hš[HÞ\Ý[H]\ÝXÛ\™H\Ù\Èš[TÞ\Ý[X‚Œ‹ˆÜš]WÝ^Ü™X]\ÈH™]Èš[HÜˆÛÛ\][HÝ™\Üš]\È[ˆ^\Ý[™ÈÛ™K‚ŒËˆ™XYÝ^™]\›œÈH[\™HÛÛ[ÈÙˆHš[H\ÈHÝš[™Ø‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]HH›ÙÜ˜[H]Üš]\ÈHÜ™Y][™ÈY\ÜØYÙH[È[Ë‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆ]™XYÈHš[H[™\Ü^\È]ÈÛÛ[ÛˆHÛÛœÛÛK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[\[Y[HÚ[\HÙÙÚ[™È[˜Ý[Ûˆ]\[™ÈÝ]\ÈY\ÜØYÙ\È[™HžH[™H[™\œÚ\ÝÈ[HÈ\ÚË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[‘^ÜH[™[™È\ÚÜÈÙˆÝ\ˆ\XØ][Ûˆ[ÈH^š[N‚˜™[\˜B™›ˆ^ÜÝ\ÚÜÊ]ˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆÛÛ[H–ÈHÛÛ\]HØÝ[Y[][Û—–ÓÒ×H[œÝ[™[\˜HÛÛ\[\ˆ‚ˆÜš]WÝ^
+]ÛÛ[
+Bˆš[
+•\ÚÜÈÝXØÙ\ÜÙ[H^ÜYÈˆ
+È]
+È‹ˆŠBŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆ^ÜÝ\ÚÜÊ\ÚÜ×ÝÙ^KŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H›ÝšY\ÈÛX[‹ØY™K[™Y™šXÚY[š[Z]]™\È›Üˆš[H[œ][™Ý]]‚‹HHØ\Xš[]KX˜\ÙYÙXÝ\š]H[Ù[™]™[È[˜]]Üš^™Yš[HX[š\[][Ûˆ[™]HXZÜË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚØ\Xš[]H]\ÝH[˜Ý[Ûˆ™\]Y\Ý™Y›Ü™H]Ø[ˆ[›ÚÙHÜš]WÝ^ÂŒ‹ˆÚHÙ\È™[\˜H™\]Z\™H\Ù\Èš[TÞ\Ý[XÛˆXZ[Š
+X]™[ˆYˆXZ[˜Û›H[YØ]\ÈÈ[›Ý\ˆ[˜Ý[ÛÂŒËˆÚXÚÝ[™\™Xœ˜\žH[˜Ý[Ûˆ™]\›œÈH\ÝÙˆ[š[[˜[Y\È[œÚYHH\™XÝÜžOÂ‚‹KKB‚ˆÈÈÚ\\ˆŒNˆ]K[YK˜[™Û[™\ÜË[™ÝXÝ\™Y]B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈ™]šY]™HÝ\œ™[[Y\Ý[\ÈÚ]›ÝÊ
+X
+\Ù\ÈÛØÚØ
+K‚‹HÝÈÈÙ[™\˜]HÙ]YË\˜[™ÛH˜[Y\È\Ú[™È˜[™ÛWÚ[
+Z[‹X^
+X
+\Ù\È˜[™ÛX
+K‚‹HÝÈÈÙ\šX[^™H]HÝXÝ\™\È[È[š]™\œØ[”ÓÓˆÚ]œÛÛ—Ù[˜ÛÙX‚‹HÝÈÈ\œÙH”ÓÓˆÝš[™ÜÈ˜XÚÈ[ÈÝ›Û™ÛH\YÝXÝ\™\È\Ú[™ÈœÛÛ—ÙXÛÙO˜‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•š\X[H]™\žH™X[]ÛÜ›\XØ][Ûˆ™\]Z\™\È[™[™È[\Ü˜[]™[ÎˆÚ[ˆØ\ÈH\ÚÈÜ™X]YÈÚ[ˆÙ\ÈHXY[™H^\™OÈÚ[Z[\›KÝXÝ\™Y›Ü›X]ÈÝXÚ\È”ÓÓˆÙ\™H\ÈH[™ÝXHœ˜[˜ØHXÜ›ÜÜÈHÙX¸ %œ›ÛH‘TÕT\ÈÈÛÛ™šYÝ\˜][Ûˆš[\Ëˆ™[\˜H[˜ÛÜœÜ˜]\È[YK˜[™Û[™\ÜË[™”ÓÓˆ˜]]™[H[ÈH[™ÝXYÙK›ÝšY[™ÈÝšXÝ\K\ØY™]HÚ]Ý]^\›˜[\[™[˜ÚY\Ë‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‹H
+Š•[Y\Ý[\ÎŠŠˆØ[[™È›ÝÊ
+X™]\›œÈH™XÚ\ÙHÝ\œ™[Þ\Ý[H[YH\ÈH[Y\Ý[\ˆ™XØ]\ÙH™XY[™ÈHÞ\Ý[HÛØÚÈ\È[ˆ^\›˜[›Û‹Y]\›Z[š\ÝXÈY™™XÝ[Ý\ˆ[˜Ý[Ûˆ]\ÝXÛ\™H\Ù\ÈÛØÚØ‚‹H
+Š”˜[™ÛH[X™\œÎŠŠˆØ[[™È˜[™ÛWÚ[
+KL
+XÙ[™\˜]\ÈHÙ]YË\˜[™ÛH[YÙ\ˆ™]ÙY[ˆH[™L™\]Z\š[™È\Ù\È˜[™ÛX‚‹H
+Š’”ÓÓŽŠŠˆ”ÓÓˆ\ÈHYÚÙZYÚ^›Ü›X]X\Ú[H\œÙYžHXXÚ[™\È[™[X[œËˆÚ]œÛÛ—Ù[˜ÛÙX[ÝH\›ˆ™[\˜H\œ˜^\È[™™XÛÜ™È[ÈHÙ\šX[^™YÝš[™È™XYH›Üˆ™]ÛÜšÈ˜[œÙ™\ˆÜˆš[HÝÜ˜YÙK‚‚˜™[\˜B™›ˆÚÝ×Ý[YJ
+H\Ù\ÈÛØÚÈÂˆÝ\œ™[Ý[YHH›ÝÊ
+Bˆš[
+Ý\œ™[Þ\Ý[H[YH™XÛÜ™YŠBŸB‚™›ˆXZ[Š
+H\Ù\ÈÛØÚÈÂˆÚÝ×Ý[YJ
+BŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆXY[™\È[™[YH˜XÚÚ[™ÈÚ]ÛØÚÊŠ‚˜™[\˜B™›ˆÙ×ØÜ™X][ÛŠ\Ú×Û˜[YNˆÝš[™ÊH\Ù\ÈÛØÚÈÂˆÜ™X]YØ]H›ÝÊ
+Bˆš[
+•\ÚÈÜ™X]Yˆˆ
+È\Ú×Û˜[YJBŸB‚™›ˆXZ[Š
+H\Ù\ÈÛØÚÈÂˆÙ×ØÜ™X][ÛŠ”]ÚÙ\™\ˆŠBŸB˜‚ŠŠ‘^[\HŽˆÙ[™\˜][™È˜[™ÛHXÚÙ][X™\œÊŠ‚˜™[\˜B™›ˆÙ[™\˜]WÝXÚÙ]Û[X™\Š
+HOˆ[\Ù\È˜[™ÛHÂˆ™]\›ˆ˜[™ÛWÚ[
+LNNNJBŸB‚™›ˆXZ[Š
+H\Ù\È˜[™ÛHÂˆXÚÙ]HÙ[™\˜]WÝXÚÙ]Û[X™\Š
+Bˆš[
+–[Ý\ˆXÚÙ]ÛÙNˆŠBˆš[
+XÚÙ]
+BŸB˜‚ŠŠ‘^[\HÎˆ^Ü[™È]H\È”ÓÓŠŠ‚˜™[\˜B™›ˆ^ÜÚY×Ø\×ÚœÛÛŠYÎˆ[×JHOˆÝš[™ÈÂˆ™]\›ˆœÛÛ—Ù[˜ÛÙJYÊBŸB‚™›ˆXZ[Š
+HÂˆYÎˆ[×HHÌLKL‹L×BˆœÛÛ—Ý^H^ÜÚY×Ø\×ÚœÛÛŠYÊBˆš[
+’”ÓÓˆÝ]]ˆˆ
+ÈœÛÛ—Ý^
+BŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆØ[[™È›ÝÊ
+XÚ]Ý]XÛ\š[™È\Ù\ÈÛØÚØ[ˆH[˜Ý[ÛˆÚYÛ˜]\™K‚ˆ
+Ø]\ÙNŠˆÛØÚÈ]Y\šY\È\™H[š\™[H›Û‹Y]\›Z[š\ÝXÎÈ™[\˜H™\]Z\™\È^XÚ]Ø\Xš[]HXÛ\˜][ÛœË‚‹H
+Š‘\œ›ÜŽŠŠˆ\ÜÚ[™ÈX[›Ü›YY”ÓÓˆ^[ÈœÛÛ—ÙXÛÙX‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝšXÝH˜[Y]\È”ÓÓˆ[œ]ÈØÚ[XHZ\ÛX]Ú\ÈÜˆÞ[^\œ›ÜœÈ™\Ý[[ˆH™\Ý[˜Z[\™K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ›ÝÊ
+XZY[ÈHÝ\œ™[[Y\Ý[\[™™\]Z\™\È\Ù\ÈÛØÚØ‚Œ‹ˆ˜[™ÛWÚ[›ÙXÙ\È˜[™ÛH[YÙ\œÈ[™[X[™È\Ù\È˜[™ÛX‚ŒËˆœÛÛ—Ù[˜ÛÙXÛÛ™\È™[\˜H]HÝXÝ\™\È[ÈÝ[™\™”ÓÓˆÝš[™ÜË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÙ[™\˜]HH˜[™ÛH[YÙ\ˆ™]ÙY[ˆH[™ˆ
+Ú[][][™ÈHXÙH›Û
+H[™š[]‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[Ûˆ]Ù\šX[^™\È[ˆ\œ˜^HÙˆ[YÙ\ˆÝ]\ÈÛÙ\È[È”ÓÓ‹‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÛÛXš[™H\Ù\ÈÛØÚØ[™\Ù\Èš[TÞ\Ý[XÈÜš]HH[Y\Ý[\YÙÈ[žH[ÈÙË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[Ü™X]HH”ÓÓˆÛ˜\ÚÝÙˆÝ\œ™[\ÚÈQÈ[™\œÚ\Ý]È\ÚÎ‚˜™[\˜B™›ˆØ]™WÜÛ˜\ÚÝ
+š[WÛ˜[YNˆÝš[™ËYÎˆ[×JBˆ\Ù\ÈÛØÚËš[TÞ\Ý[BžÂˆœÛÛ—Ù]HHœÛÛ—Ù[˜ÛÙJYÊBˆÜš]WÝ^
+š[WÛ˜[YKœÛÛ—Ù]JBˆš[
+”Û˜\ÚÝØ]™YÝXØÙ\ÜÙ[KˆŠBŸB‚™›ˆXZ[Š
+H\Ù\ÈÛØÚËš[TÞ\Ý[HÂˆÝ\œ™[ÚYÎˆ[×HHÌK‹KBˆØ]™WÜÛ˜\ÚÝ
+\ÚÜ×ÜÛ˜\ÚÝšœÛÛˆ‹Ý\œ™[ÚYÊBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H[˜ÛY\È˜]]™K\K\ØY™HÝ\Ü›Üˆ[Y\Ý[\Ë˜[™Û[™\ÜË[™”ÓÓˆ]H^Ú[™ÙK‚‹HY™™XÝØ\Xš[]Y\È
+ÛØÚØ˜[™ÛX
+HÝX\˜[YH]Y]Xš[]H[™ØY™]HXÜ›ÜÜÈ[Ý\ˆÛÙX˜\ÙK‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚØ\Xš[]H]\ÝH[˜Ý[ÛˆXÛ\™HÈØ[›ÝÊ
+XÂŒ‹ˆÚHÙ\È™[\˜H[™›Ü˜ÙHH\Ù\È˜[™ÛX\›Z\ÜÚ[Ûˆ›ÜˆÙ[™\˜][™È˜[™ÛH[X™\œÏÂŒËˆÚ]Ý[™\™›Ü›X]Ù\ÈœÛÛ—Ù[˜ÛÙX›ÙXÙOÂ‚‹KKB‚ˆÈÈÚ\\ˆŒŽˆÛÛ˜Ý\œ™[˜ÞH[™˜XÚÙÜ›Ý[™\ÚÜÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚ]ÛÛ˜Ý\œ™[˜ÞH\È[™Ú[ˆ\ÚÜÈÚÝ[™H^XÝ]YÚ[][[™[Ý\ÛK‚‹HÝÈ™[\˜IÜÈÝXÝ\™Y\˜[[›ØÚÈÛÜšÜÎˆ\˜[[ÈHH]ØZ]‹‹ŽÈˆH]ØZ]‹‹ˆX‚‹HÚH™[\˜H]›ÚYÈ[˜ÛÛ›ÛY˜]È™XYÈ[™Ø[˜XÚÈ[‚‹HÝÈ]\›Z[š\ÝXÈÛÛ˜Ý\œ™[˜ÞHÙY\È[Ý\ˆ\XØ][Ûˆ\™›Ü›X[[™œ™YHÙˆ˜XÙHÛÛ™][ÛœË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â“[Ù\›ˆÔ\È[™Ù\™\œÈ™X]\™H][\HÛÜ™\ËˆÚ[ˆ[ˆ\XØ][Ûˆ™YYÈÈÙ[™\˜]H[™\[™[™\ÜÈÜˆ]Y\žHÙ]™\˜[™[[ÝHT\Ë^XÝ][™È[HÙ\]Y[X[HÛ™HY\ˆ[›Ý\ˆØ\Ý\È[YKˆ[›š[™È\ÚÜÈ[ˆ\˜[[[ÝÜÈ›ÙÜ˜[\ÈÈÛÛ\]H[ˆHœ˜XÝ[ÛˆÙˆH[YKˆÝÙ]™\‹[ˆX[žH[™ÝXYÙ\ÈÛÛ˜Ý\œ™[˜ÞH[›ÙXÙ\È[œÚY[Ý\ÈYÜÈÝXÚ\È˜XÙHÛÛ™][ÛœÈ[™XYØÚÜËˆ™[\˜H[[Z[˜]\È\ÙH[™Ù\œÈ›ÝYÚÝXÝ\™Y]\›Z[š\ÝXÈÛÛ˜Ý\œ™[˜ÞK‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚’[XYÚ[™HHÛÛ[Y\˜ÚX[™\Ý]\˜[Ú]Ú[Ž‚‹HYˆHÚYˆœšY\ÈHÝXZÈš\œÝ[ˆœšY\ÈHÝ]Ù\Ë[™š[˜[HØ\Ú\ÈHØ[YHÝXZÈÙ]ÈÛÛ‚‹HHÚÚ[YÚYˆ™YÚ[œÈ[™YH\ÚÜÈÚ[][[™[Ý\ÛH[™ØZ]È[[[™YH\Ú\È\™H™XYHÈ™HÙ\™Y‚‚’[ˆ™[\˜K[ÝHXÚY]™H\È\Ú[™ÈH\˜[[›ØÚÈZ\™YÚ]]ØZ]‚˜™[\˜B™›ˆØ[Ý[]WÜ\ÌJ
+HOˆ[Âˆ™]\›ˆŸB‚™›ˆØ[Ý[]WÜ\ÌŠ
+HOˆ[Âˆ™]\›ˆŒŸB‚™›ˆXZ[Š
+HÂˆ\˜[[Âˆ™\Ý[ÌHH]ØZ]Ø[Ý[]WÜ\ÌJ
+Bˆ™\Ý[ÌˆH]ØZ]Ø[Ý[]WÜ\ÌŠ
+BˆBˆš[
+›ÝÝX\ÚÜÈÛÛ\]Y[ˆ\˜[[ˆŠBŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ\˜[[ÝX‹XÛÛ\]][ÛœÊŠ‚˜™[\˜B™›ˆÛÛ\]WÜÝ]\ÝXÜÊ
+HOˆÝš[™ÈÂˆ™]\›ˆ”Ý]\ÝXÜÈÛÛ\]Y‚ŸB‚™›ˆØYØ\˜Ú]™J
+HOˆÝš[™ÈÂˆ™]\›ˆ\˜Ú]™HØYY‚ŸB‚™›ˆXZ[Š
+HÂˆ\˜[[ÂˆÝ]ÈH]ØZ]ÛÛ\]WÜÝ]\ÝXÜÊ
+Bˆ\˜Ú]™HH]ØZ]ØYØ\˜Ú]™J
+BˆBˆš[
+”\˜[[ØY[™ÈÝXØÙ\ÜÙ[ˆŠBŸB˜‚ŠŠ‘^[\HŽˆ[™\[™[]H™]šY]˜[
+Š‚˜™[\˜B™›ˆ™]ÚÜÝ[WØJ
+HOˆ[Âˆ™]\›ˆLŸB‚™›ˆ™]ÚÜÝ[WØŠ
+HOˆ[Âˆ™]\›ˆLŸB‚™›ˆXZ[Š
+HÂˆ\˜[[Âˆ˜[ØHH]ØZ]™]ÚÜÝ[WØJ
+Bˆ˜[ØˆH]ØZ]™]ÚÜÝ[WØŠ
+BˆBˆš[
+”Ý[\ÈØ[Ý[]YˆŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™È]ØZ]Ý]ÚYHÙˆH\˜[[›ØÚË‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝšXÝH™\ÝšXÝÈ]ØZ]ÈH›ÙHÙˆH\˜[[È‹‹ˆX›ØÚË‚‹H
+Š‘\œ›ÜŽŠŠˆXÚ[™ÈÙ[™\˜[Ý][Y[ÈÜˆÛÛ\^œ˜[˜Ú[™È[œÚYHH\˜[[›ØÚË‚ˆ
+Ø]\ÙNŠˆH\˜[[›ØÚÈ\ÈYXØ]YÈÛÛ˜Ý\œ™[]˜[X][ÛŽÈ]ÈÝ][Y[È]\ÝÛÛ™›Ü›HÈHY[YšY\ˆH]ØZ]Ø[
+
+X\ÜÚYÛ›Y[]\›‹‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ\˜[[È‹‹ˆX^XÝ]\È[™\[™[Ü\˜][ÛœÈÛÛ˜Ý\œ™[K‚Œ‹ˆ]™\žH[™H[ˆH\˜[[›ØÚÈY\™\ÈÈ˜\šXX›HH]ØZ]^™\ÜÚ[ÛŠ
+X‚ŒËˆÝXÝ\™YÛÛ˜Ý\œ™[˜ÞHÝX\˜[Y\ÈÛÛ\][Ûˆ[™™]™[È[™Û[™È˜XÚÙÜ›Ý[™›ØÙ\ÜÙ\Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆYš[™HÛÈÚ[\H\š]Y]XÈ[˜Ý[ÛœÈ[™^XÝ]H[H[œÚYHH\˜[[›ØÚË‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]HÛÈ[˜Ý[ÛœÈ]XXÚ›ÙXÙHHÝš[™ÈY\ÜØYÙK[™]˜[X]H›ÝÛÛ˜Ý\œ™[K‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÚ[][]HÚXÚÚ[™ÈÛÈ›Ú™XÝ˜[Y][ÛˆÛÛ™][ÛœÈ[ˆ\˜[[™Y›Ü™H[š]X[^š[™ÈHÛÜšÙ›ÝË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[XØÙ[\˜]H\XØ][ÛˆÝ\\žH™]Ú[™È\Ù\ˆ›Ùš[\È[™\ÚÈ\ÝÈÚ[][[™[Ý\ÛN‚˜™[\˜B™›ˆØYÝ\Ù\—Ü›Ùš[J
+HOˆÝš[™ÈÂˆ™]\›ˆ”›Ùš[Nˆ]™[Ü\ˆ‚ŸB‚™›ˆØYÝ\Ú×Û\Ý
+
+HOˆÝš[™ÈÂˆ™]\›ˆH\ÚÜÈØYY‚ŸB‚™›ˆXZ[Š
+HÂˆš[
+”Ý\[™È\˜[[™]šY]˜[‹‹ˆŠBˆ\˜[[Âˆ›Ùš[HH]ØZ]ØYÝ\Ù\—Ü›Ùš[J
+Bˆ\ÚÜÈH]ØZ]ØYÝ\Ú×Û\Ý
+
+BˆBˆš[
+‘\Ú›Ø\™™XYKˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÛÛ˜Ý\œ™[˜ÞH[ˆ™[\˜H\ÈÝXÝ\™Y]\›Z[š\ÝXË[™›ÝXÝYYØZ[œÝ˜XÙHÛÛ™][ÛœË‚‹HH\˜[[ÛÛœÝXÝ™X]H[šYšY\È\Þ[˜Ú›Û›Ý\ÈÛÛ\]][ÛœÈ[ˆHÛÛ˜Ú\ÙH›ØÚË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ\™H[ˆH™[\˜H›ÙÜ˜[H\ÈH]ØZ]Ù^]ÛÜ™\›Z]YÂŒ‹ˆÚ]ÜXÚYšXÈÞ[^]\ÝÝ][Y[È[œÚYHH\˜[[›ØÚÈ›ÛÝÏÂŒËˆÚ]\ÈHš[X\žH™[™Yš]Ùˆ\˜[[^XÝ][ÛˆÝ™\ˆÙ\]Y[X[]˜[X][ÛÂ‚ˆÈT•’H8 $ÈUPTÑTÈÒU‘STB‚‹KKB‚ˆÈÈÚ\\ˆŒÎˆÚH™[\˜H[™\œÝ[™È]X˜\Ù\È\™XÝB‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÚHH[YÜ˜][Ûˆ™]ÙY[ˆ›ÙÜ˜[[Z[™È[™ÝXYÙ\È[™™[][Û˜[]X˜\Ù\È\È˜Y][Û˜[H™Y[ˆ›Û™HÈÝXHYÜË‚‹HÚ]HØš™XÝ\™[][Û˜[[\Y[˜ÙHZ\ÛX]Ú›Ø›[H\È[™ÚHÔ“\ÈÝYÙÛHÚ]]‚‹HÝÈ™[\˜H[YÜ˜]\È™[][Û˜[]X˜\Ù\È\Èš\œÝXÛ\ÜÈÚ]^™[œÈ\™XÝH[ÈH[™ÝXYÙK‚‹HÝÈ™[\˜H™\šYšY\ÈÔSÝ][Y[È›ÜˆÞ[^[™\HÛÜœ™XÝ™\ÜÈ]ÛÛ\[H[YK‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â’[ˆ™X\›H[Ü[\ˆÙXˆœ˜[Y]ÛÜšÜÈ
+ÝXÚ\ÈÓ\˜]™[]Û‹Ñ˜[™ÛËÜˆ›ÙKÕ\SÔ“JK[ˆ]ÚÝØ\™]šYH^\ÝÎˆ]™[Ü\œÈÛÛ\ÜÙHÔSÝš[™ÜÈÜˆ™[HÛˆX]ž]ÙZYÚØš™XÝ\™[][Û˜[X\[™È
+Ô“JHXœÝ˜XÝ[ÛœËˆ\ÜÈ[ˆÛÛ[[ˆ˜[Y\ø %ÝXÚ\È\Ù\‹™[XZZ[8 %Ù[ˆ™[XZ[ˆ[™]XÝY[[[ˆ[™\Ù\ˆ[˜ÛÝ[\œÈ[ˆL\œ›Üˆ[ˆ›ÙXÝ[Û‹ˆ™[\˜H[[Z[˜]\È\È^˜\™]H›ÛÝˆYˆ[ˆÔS]Y\žHÙ\È›ÝX]ÚHXÛ\™YX›HØÚ[XKHÛÛ\[\ˆ™Z™XÝÈHZ[[[YYX][K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚’[ˆ™[\˜K[ÝHYš[™H[Ý\ˆ]X˜\ÙHÛÛ™šYÝ\˜][Ûˆ\™XÝH[ˆ[Ý\ˆÛÝ\˜ÙHÛÙH\Ú[™ÈH]X˜\ÙXÙ^]ÛÜ™‚‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ŸB‚™›ˆXZ[Š
+HÂˆš[
+‘]X˜\ÙHÛÛ™šYÝ\˜][Ûˆ[š]X[^™YˆŠBŸB˜‚•Ú[ˆ]Y\žZ[™È]K[ÝHÜš]H]][XÈÔS8 %Y]HÛÛ\[\ˆÛ›ÝÜÈ]™\žH^\Ý[™ÈX›H[™ÛÛ[[Ž‚‹HÜš][™ÈÑSPÕY\ØÜš\[Ûˆ”“ÓH\ÚÜØ\ÈÛÛ\][H˜[Y‚‹HÜš][™ÈÑSPÕ›Û—Ù^\Ý[”“ÓH\ÚÜØØ]\Ù\È™[\˜HÈ™\ÜHÛÛ\[K][YH\œ›Üˆ[[YYX][Nˆ[šÛ›ÝÛˆÛÛ[[ˆ›Û—Ù^\Ý[‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆXÛ\š[™È]X˜\ÙH[™X›JŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÝÙˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™ÊMJH™\]Z\™YŸB‚™›ˆXZ[Š
+HÂˆš[
+‘]X˜\ÙH[™X›HÚXÚÙYˆŠBŸB˜‚ŠŠ‘^[\HŽˆÛÛ\[K][YHÔS˜[Y][ÛŠŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÝÙˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™ÊMJH™\]Z\™YŸB‚™›ˆÚÝ×Ý\ÚÜÊ
+H\Ù\È]X˜\ÙHÂˆ™XÛÜ™ÈHÜ[\ÚÖ×OˆÂˆÑSPÕY\ØÜš\[Û‚ˆ”“ÓH\ÚÜÂˆBˆš[
+”ÔS\KXÚXÚÙYˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆÚÝ×Ý\ÚÜÊ
+BŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ^XÝ][™ÈÔS]Y\šY\ÈÚ]Ý]XÛ\š[™È\Ù\È]X˜\ÙXÛˆH[˜ÛÜÚ[™È[˜Ý[Û‹‚ˆ
+Ø]\ÙNŠˆ™[\˜IÜÈØ\Xš[]HÞ\Ý[H›ÝXÝÈYØZ[œÝ[˜]]Üš^™Y]X˜\ÙH]Y\šY\Ë‚‹H
+Š‘\œ›ÜŽŠŠˆÛZ][™ÈH]X˜\ÙHXZ[˜›ØÚË‚ˆ
+Ø]\ÙNŠˆÚ]Ý]H\™Ù][™Ú[™HXÛ\˜][Û‹™[\˜HØ[››Ý™\šYžHÔSX[XÝÙ[X[XÜÈÜˆHØÚ[XK‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜HœšYÙ\ÈHØ\™]ÙY[ˆ\XØ][ÛˆÛÙH[™™[][Û˜[]X˜\Ù\Ë‚Œ‹ˆÔS]Y\šY\È\™H\KXÚXÚÙY]ÛÛ\[H[YK‚ŒËˆ]X˜\ÙHÜ\˜][ÛœÈÝšXÝH™\]Z\™H\Ù\È]X˜\ÙX‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]HH]X˜\ÙX›ØÚÈ›ÜˆÔS]HÜˆX\šXQ‹‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ[Ù[H\Ù\œØX›H[™Üš]H[ˆÔS]Y\žH]Ù[XÝÈ[\Ù\œË‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[X™\˜][H[›ÙXÙHH\È[È[ˆÔSÛÛ[[ˆ˜[YH[™ØœÙ\™HÝÈ™[\˜H[œÚ[ÈH\œ›Ü‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[”Ù]\H]X˜\ÙH›Ý[™][Ûˆ›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆž™[\˜WÝ\ÚÜÈ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆÝ]\×Ü™\Ü
+
+H\Ù\È]X˜\ÙHÂˆ™XÛÜ™ÈHÜ[\ÚÖ×OˆÂˆÑSPÕY˜[YKÛ™Bˆ”“ÓH\ÚÜÂˆBˆš[
+‘]X˜\ÙH›Üˆ\ÚÈX[˜YÙ[Y[™XYKˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆÝ]\×Ü™\Ü
+
+BŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H]X˜\Ù\È[™ØÚ[X\È\™H˜]]™K[YÜ˜[ÛÛ\Û™[ÈÙˆ™[\˜K‚‹H\ÜÈ[ˆÔSÝ][Y[È\™HØ]YÚ[™™]™[Y]ÛÛ\[H[YK‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]›Ø›[HÈ™[\˜IÜÈ\KXÚXÚÙYÔS›ØÚÜÈÛÛ™HÛÛ\\™YÈÜ™[˜\žHÔSÝš[™ÜÏÂŒ‹ˆÚXÚØ\Xš[]H]\Ý™HXÛ\™YžHH[˜Ý[Ûˆ^XÝ][™ÈÜ[ÂŒËˆÝÈÙ\È™[\˜H\š]™HH\H\ÚØœ›ÛHHX›H\ÚÜØÂ‚‹KKB‚ˆÈÈÚ\\ˆˆYš[š[™ÈX›\È[™]H[Ù[[™Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈ™[][Û˜[X›\È\™HXÛ\™YÚ]X›X‚‹HHÞ[^›Üˆš[X\žHÙ^\ÎˆYˆYš[X\žH]]Ø‚‹HÝÈÛÛ[[ˆ[ÙYšY\œÈ\™HYš[™Yˆ™\]Z\™Y[™ÝÛÛœÝ˜Z[ÈZÙHÝš[™ÊL
+X[™Y˜][˜[Y\Ë‚‹HÝÈ™[][ÛœÚ\È™]ÙY[ˆX›\È\™H[Ù[Y‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•H]H[Ù[\ÈH™Y›ØÚÈÙˆ[žH\XØ][Û‹ˆYˆØÚ[XH\ÚYÛˆ\È™YÛXÝYX\›HÛ‹XÚšXØ[XÛÜœ\]K[™\™›Ü›X[˜ÙH›Ý[™XÚÜÈÚ[[™Ù\ˆ›ÜˆYX\œËˆ™[\˜H[™›Ü˜Ù\ÈX[™]ÜžHÛÛœÝ˜Z[Ë^XÚ]\\Ë[™™Y™\™[X[[YÜš]HšYÚœ›ÛH^HÛ™K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚HX›H
+X›X
+H\ÈZÙHHÝXÝ\™Yš[[™ÈØXš[™]›Üˆ[šY›Ü›H™XÛÜ™ÚY]Î‚‹H]™\žHÚY]ÜÜÙ\ÜÙ\ÈH[š\]YHÙ\šX[[X™\ŽˆYˆYš[X\žH]]Ø‚‹HÙ\Z[ˆ]šX]\È]\Ý™]™\ˆ™HÛZ]Yˆ™\]Z\™Y‚‹H^ÛÛ[[œÈØ[ˆ]™HÝšXÝ[™Ý›Ý[™ÎˆÝš[™ÊL
+X‚‚˜™[\˜BX›HØ]YÛÜšY\ÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YŸB˜‚‘œ›ÛHHYš[š][ÛˆX›HØ]YÛÜšY\Ø™[\˜H]]ÛX]XØ[HÙ[™\˜]\ÈHÝ›Û™ÛH\YÝXÝØ]YÛÜžXÚ]ÛÜœ™\ÜÛ™[™ÈšY[Ë‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÚ[\HX›HÚ]™\]Z\™YšY[ÊŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ˜\Ùˆ‚ŸB‚X›H›Ú™XÝÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™Ê
+H™\]Z\™YˆXÝ]™Nˆ›ÛÛŸB‚™›ˆXZ[Š
+HÂˆš[
+•X›H›Ú™XÝÈXÛ\™YˆŠBŸB˜‚ŠŠ‘^[\HŽˆX›HÚ]]H[™[Y\šXÈšY[ÊŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ˜\Ùˆ‚ŸB‚X›H[YWÙ[šY\ÈÂˆYˆYš[X\žH]]ÂˆÝ\œÎˆ›Ø]ˆ™XÛÜ™YØ]ˆ[Y\Ý[\ŸB‚™›ˆXZ[Š
+HÂˆš[
+•X›H[YWÙ[šY\ÈXÛ\™YˆŠBŸB˜‚ŠŠ‘^[\HÎˆ[šÚ[™ÈÛÈX›\ÈšXHQÊŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ˜\Ùˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™ÊŒ
+H™\]Z\™Yˆ›Ú™XÝÚYˆYŸB‚™›ˆXZ[Š
+HÂˆš[
+”™[][ÛœÚ\\ÚÜÈOˆ›Ú™XÝÚYÜ™X]YˆŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÛZ][™ÈH™\]Z\™YšY[\š[™È™XÛÜ™Ü™X][Û‹‚ˆ
+Ø]\ÙNŠˆÛÛ[[œÈ›YÙÙYÚ]™\]Z\™Y]\ÝÛ˜[Y˜[Y\È[ˆ]™\žH™XÛÜ™‚‹H
+Š‘\œ›ÜŽŠŠˆ\Ú[™È™\Ù\™YÙ^]ÛÜ™ÈÝXÚ\ÈXÝ[Û˜šY[]XÜˆ\Ý\ÈÛÛ[[ˆ˜[Y\Ë‚ˆ
+Ø]\ÙNŠˆ\ÙHY[YšY\œÈ\™H™\Ù\™Y[™ÝXYÙHÞ[^[[Y[È[ˆ™[\˜K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ]™\žHX›H]\ÝYš[™HHš[X\žHÙ^HYˆYš[X\žH]]Ø‚Œ‹ˆH™\]Z\™Y[ÙYšY\ˆ›ÚXš]È[ÜˆXœÙ[˜[Y\È]›Ý]X˜\ÙH[™\H]™[Ë‚ŒËˆHÚ[™Ý[\ˆ˜[YHÙˆH\˜[X›H
+K™Ë‹\ÚØ›Üˆ\ÚÜØ
+H™XÛÛY\È[ˆ]]ÛX]XÈ™[\˜H]H\K‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆYš[™HHX›HYÜØÚ]HX[™]ÜžHÛÛ[[ˆ˜[YNˆÝš[™ÊÌ
+H™\]Z\™Y‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]HHX›HÝ\ÝÛY\œØÚ][XZ[ˆ[XZ[[™Û™NˆÝš[™ÊÌ
+X‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[Ù[HX›HÛÛ[Y[Ø[šÙYšXH\Ú×ÚYˆYÈH\ÚÈ[™]š[™ÈHÜ™X]YØ]ˆ[Y\Ý[\ÛÛ[[‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[Ü™X]HHÛÛ\]H›ÙXÝ[Ûˆ]H[Ù[›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆž™[\˜WÝ\ÚÜÈ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊLŒ
+H™\]Z\™Yˆ\ØÜš\[ÛŽˆÝš[™ÊL
+Bˆš[Üš]Nˆ[ˆ\×ÙÛ™Nˆ›ÛÛŸB‚™›ˆXZ[Š
+HÂˆš[
+ÛÛ\]H\ÚÈØÚ[XHXÝ]™KˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HX›XYš[™\ÈHÝXÝ\™K\\Ë[™ÛÛœÝ˜Z[ÈÙˆ]H™XÛÜ™Ë‚‹H™[\˜HÝX\˜[Y\È]]X˜\ÙHØÚ[X\È[™\XØ][Ûˆ\\ÈÝ^HÝšXÝH[ˆÞ[˜Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]\ÈH\œÜÙHÙˆH]]Ø]šX]HÛˆš[X\žHÙ^\ÏÂŒ‹ˆÚ]Ù\ÈH™\]Z\™YÙ^]ÛÜ™[™›Ü˜ÙHÛˆHX›HÛÛ[[ÂŒËˆÚ]\H˜[YH\È]]ÛX]XØ[HÞ[\Ú^™Yœ›ÛHHX›H›Ú™XÝØÂ‚‹KKB‚ˆÈÈÚ\\ˆNˆ]Y\žZ[™È[™[ÙYžZ[™È]B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈØY™[H]Y\žH™XÛÜ™Èœ›ÛHH]X˜\ÙH\Ú[™ÈÜ[×O˜‚‹HÝÈÔS[š™XÝ[Ûˆ\ÈXYH[\ÜÜÚX›H›ÝYÚ\˜[Y]\š^™Y]Y\šY\È
+œ\˜[X
+K‚‹HÝÈÈ]]]H]H\Ú[™ÈS”ÑT•TUX[™SUX‚‹HÚH[ÙYšXØ][ÛœÈ]\Ý™HÜ›Ý\Y[È˜[œØXÝ[ÛˆÈ‹‹ˆX›ØÚÜË‚‹HHÓH]X˜\ÙHZYÜ˜][ÛˆÛÛ[X[™È
+™[\˜HˆÙ]\™[\˜Hˆ\X
+K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â”ÔS[š™XÝ[Ûˆ\È™[XZ[™YÛ™HÙˆHÜÙXˆÙXÝ\š]H™X]È›ÜˆÝ™\ˆÛÈXØY\Îˆ[ˆ]XÚÙ\ˆ[œ]ÈX[XÚ[Ý\È^[ØYÈ[ÈH›Ü›K^˜XÝ[™È\ÜÝÛÜ™\Ú\ÈÜˆ\Ý›ÞZ[™ÈX›\Ëˆ™[\˜H›ÝXÝÈ[Ý\ˆÛÙØ\™HžHÛÛœÝXÝ[ÛŽˆÔS\˜[Y]\œÈ›Ý[™Ú]HÛÛÛˆ
+›˜[YX
+H\™HÝšXÝH™X]Y\È]H[™ÙXÝ\™[H\ØØ\YžHH[™Ú[™Kˆ\\›[Ü™K˜[œØXÝ[ÛœÈ[œÝ\™H]˜Z[\™\È™]™\ˆX]™H[‹XÛÛ[Z]YÛÜœ\YÝ]H[ˆ[Ý\ˆ]X˜\ÙK‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‹H
+Š”™XY[™ÈÚ]Ü[×OŽŠŠ‚ˆ™[\˜Bˆ]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ˆBˆX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™Yˆ\×ÙÛ™Nˆ›ÛÛˆBˆ›ˆØYÝ\ÚÜÊš[\—Ý˜[ˆ›ÛÛ
+H\Ù\È]X˜\ÙHÂˆ^WÝ\ÚÜÈHÜ[\ÚÖ×OˆÂˆÑSPÕY˜[YK\×ÙÛ™Bˆ”“ÓH\ÚÜÂˆÒT‘H\×ÙÛ™HH™š[\—Ý˜[ˆBˆš[
+•\ÚÜÈØYYŠBˆBˆ›ˆXZ[Š
+H\Ù\È]X˜\ÙHÈØYÝ\ÚÜÊ˜[ÙJHBˆ‹H
+Š•Üš][™È[œÚYHH˜[œØXÝ[ÛŽŠŠ‚ˆ™[\˜Bˆ]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ˆBˆX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™Yˆ\×ÙÛ™Nˆ›ÛÛˆBˆ›ˆÜ™X]WÝ\ÚÊ™]×Û˜[YNˆÝš[™ÊH\Ù\È]X˜\ÙHÂˆÛ™WÙ›YÈH˜[ÙBˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆS”ÑT•S•È\ÚÜÈ
+˜[YK\×ÙÛ™JBˆSQTÈ
+›™]×Û˜[YK™Û™WÙ›YÊBˆBˆBˆBˆ›ˆXZ[Š
+H\Ù\È]X˜\ÙHÈÜ™X]WÝ\ÚÊ•\ÝŠHBˆˆYˆ[ˆ\œ›ÜˆØØÝ\œÈ\š[™È^XÝ][Û‹H]X˜\ÙH]]ÛX]XØ[H›ÛÈ˜XÚÈ[[\›YYX]HÜ\˜][ÛœË‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ[œÙ\[™ÈH™]È™XÛÜ™
+Š‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆYÝ\ÚÊ\Ú×Ý^ˆÝš[™ÊH\Ù\È]X˜\ÙHÂˆÛ™WÜÝ]\ÈH˜[ÙBˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆS”ÑT•S•È\ÚÜÈ
+˜[YKÛ™JBˆSQTÈ
+\Ú×Ý^™Û™WÜÝ]\ÊBˆBˆBˆš[
+•\ÚÈØ]™YˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆYÝ\ÚÊ[œÝÙ\ˆ[XZ[ŠBŸB˜‚ŠŠ‘^[\HŽˆ]Y\žZ[™È\Y™XÛÜ™ÊŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆØYØ[
+
+H\Ù\È]X˜\ÙHÂˆ™XÛÜ™ÈHÜ[\ÚÖ×OˆÂˆÑSPÕY˜[YKÛ™Bˆ”“ÓH\ÚÜÂˆBˆš[
+•\ÚÈ\ÝØYYˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆØYØ[
+
+BŸB˜‚ŠŠ‘^[\HÎˆ\][™ÈH™XÛÜ™
+Š‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ùˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛ™Nˆ›ÛÛŸB‚™›ˆX\š×Ø\×ÙÛ™J\Ú×ÚYˆ[
+H\Ù\È]X˜\ÙHÂˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆTUH\ÚÜÂˆÑUÛ™HHYBˆÒT‘HYH\Ú×ÚYˆBˆBˆš[
+”Ý]\È\]YˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆX\š×Ø\×ÙÛ™JJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÝš[™ÈÛÛ˜Ø][˜][Ûˆ[ˆÔS]Y\šY\È
+•ÒT‘HYHˆ
+ÈY
+K‚ˆ
+Ø]\ÙNŠˆ™[\˜H›Ü˜šYÈ˜]ÈÝš[™ÈÛÛ˜Ø][˜][Ûˆ[ˆÔS›ØÚÜËˆ[Ø^\È\ÙH˜[YY\˜[Y]\œÈÚ]HÛÛÛˆ
+šY
+K‚‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™È]]]][™ÈÜ\˜][ÛœÈ]\Ý™\ÚYH[œÚYHH˜[œØXÝ[ÛˆÈ‹‹ˆX›ØÚË‚ˆ
+Ø]\ÙNŠˆ™[\˜H™\]Z\™\È^XÚ]˜[œØXÝ[Ûˆ›Ý[™\šY\È›Üˆ[žHÜš]HÜ\˜][ÛœË‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ[Ø^\Èš[™[œ]˜[Y\È[ˆÔS\Ú[™Èœ\˜[Y]\˜È™]™[ÔS[š™XÝ[Ûˆ[™\˜Xš[]Y\Ë‚Œ‹ˆ[Üš]HÜ\˜][ÛœÈ]\Ý™H[˜ÛÜÙYÚ][ˆ˜[œØXÝ[ÛˆÈ‹‹ˆX‚ŒËˆ™[\˜Hˆ\XZYÜ˜]\ÈHXÛ\™YØÚ[XHÈH]™H]X˜\ÙK‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÜš]H[ˆÔS]Y\žHÙ[XÝ[™È[[˜ÛÛ\]Y\ÚÜÈ
+Û™HH˜[ÙX
+K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH[˜Ý[ÛˆÈ[]HH\ÚÈžH]ÈQ
+SUH”“ÓH\ÚÜÈÒT‘HYHšY
+K‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ[\[Y[H[˜Ý[Ûˆ]\˜Ú]™\È[ˆÛ\ÚÈ[™Ü™X]\ÈHÝXØÙ\ÜÛÜˆ\ÚÈÚ][ˆHÚ[™ÛH˜[œØXÝ[Û‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[•Üš]HÛÛ\]H]X˜\ÙHXØÙ\ÜÈ›Ý][™\È›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[\XØ][ÛŽ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆž™[\˜WÝ\ÚÜÈ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ\×ÙÛ™Nˆ›ÛÛŸB‚™›ˆÜ™X]WÝ\ÚÊ\Ú×Û˜[YNˆÝš[™ÊH\Ù\È]X˜\ÙHÂˆ[š]X[ÜÝ]\ÈH˜[ÙBˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆS”ÑT•S•È\ÚÜÈ
+˜[YK\×ÙÛ™JBˆSQTÈ
+\Ú×Û˜[YKš[š]X[ÜÝ]\ÊBˆBˆBˆš[
+•\ÚÈÜ™X]YˆŠBŸB‚™›ˆÛÛ\]WÝ\ÚÊ\™Ù]ÚYˆ[
+H\Ù\È]X˜\ÙHÂˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆTUH\ÚÜÂˆÑU\×ÙÛ™HHYBˆÒT‘HYH\™Ù]ÚYˆBˆBˆš[
+•\ÚÈÛÛ\]YˆŠBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆÜ™X]WÝ\ÚÊ“][˜Úš\œÝ™[\˜H›Ú™XÝŠBˆÛÛ\]WÝ\ÚÊJBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÔS[ˆ™[\˜H\È˜]]™K\K\ØY™K[™]]ÛX]XØ[HY™[™YYØZ[œÝ[š™XÝ[Ûˆ]XÚÜË‚‹HH˜[œØXÝ[Û˜›ØÚÈÝX\˜[Y\È]X˜\ÙHÛÛœÚ\Ý[˜ÞHXÜ›ÜÜÈ[]]][ÛœË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÝÈÙ\È™[\˜H™]™[X[XÚ[Ý\ÈÔS[š™XÝ[Ûˆ]XÚÜÏÂŒ‹ˆÚH]\Ý]]][™ÈÔSÝ][Y[È™HXÙY[œÚYHH˜[œØXÝ[Û˜›ØÚÏÂŒËˆÚXÚÓHÛÛ[X[™›Ýš\Ú[ÛœÈ[™ZYÜ˜]\È]X˜\ÙHX›\ÈXØÛÜ™[™ÈÈ[Ý\ˆÛÙOÂ‚ˆÈT•’RH8 $ÈÑPˆTPÐUSÓ”ÈS‘“Ô“TÂ‚‹KKB‚ˆÈÈÚ\\ˆŽˆ™[™\š[™ÈÙXˆYÙ\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÜ™X]HÙXˆYÙ\È[™›Ý]\È˜\YH\Ú[™ÈHYÙXÙ^]ÛÜ™‚‹HÝÈÈ\ÜÈ[˜[ZXÈT“\˜[Y]\œÈ
+ÝXÚ\ÈÝ\ÚÜËÞÚYX
+K‚‹HÝÈS[\]\È\™HXÛ\™Y\™XÝHÚ][ˆ™[\˜HÛÙH
+[È‹‹ˆX
+K‚‹HÝÈ™[\˜HÛÛ\][H™]™[ÈÜ›ÜÜËTÚ]HØÜš\[™È
+ÔÊH›ÝYÚ]]ÛX]XÈS\ØØ\[™Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•˜Y][Û˜[ÙXˆ]™[ÜY[›Ü˜Ù\È[ÝHÈÛÛÜ™[˜]H][\H\Ú›Ú[ÛÛÎˆÙXˆÙ\™\œÈ
+ZÙH™Ú[žÜˆ\XÚJKT“›Ý]\œË[\]H[™Ú[™\È
+›YKš[š˜KÚYÊK[™˜XÚÙ[™\Ú[™\ÜÈÙÚXËˆYˆH]™[Ü\ˆ›Ü™Ù]ÈÈ\ØØ\HSÜXÚX[Ú\˜XÝ\œÈ[ˆ\ÝÛ™HXÙK]XÚÙ\œÈØ[ˆ[š™XÝX[XÚ[Ý\È˜]˜TØÜš\
+ÔÊH[È\Ù\œÉÈœ›ÝÜÙ\œËˆ[ˆ™[\˜KHÙ\™\ˆ\ÈZ[Z[ˆ
+™[\˜HÙ\™X
+K[™ÛÛ^X]Ø\™HS\ØØ\[™È\È]]ÛX]XÈ[™[˜]›ÚYX›K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚•Ú]HYÙXÙ^]ÛÜ™[ÝHYš[™H›Ý[ˆ›Ý]H[™]ÈÛÜœ™\ÜÛ™[™ÈSX\šÝ\[ˆÛ™H[šYšYY›ØÚÎ‚‚˜™[\˜BœYÙH‹ÝÙ[ÛÛYHˆÂˆ[ÂˆO•Ù[ÛÛYHÈ™[\˜OÚO‚ˆ–[Ý\ˆ[Ù\›ˆÙXˆ\XØ][Ûˆ\È[›š[™ÈOÜ‚ˆBŸB˜‚•Ú[™]™\ˆ[ÝHØ[È™[™\ˆ[˜[ZXÈ˜[Y\ËXÙH[H[œÚYHÝ\›Hœ˜XÙ\ÎˆÛ˜[Y_Xˆ™[\˜H™\XÙ\ÈHXÙZÛ\ˆÙXÝ\™[HÚ]›Ü\›H\ØØ\Y^‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÚ[\HÝ]XÈÙ[ÛÛYHYÙJŠ‚˜™[\˜BœYÙH‹Ú[ÈˆÂˆ[Âˆ[‚ˆ›ÙO‚ˆO’[È™[\˜HÛÜ›OÚO‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB˜‚ŠŠ‘^[\HŽˆ[˜[ZXÈ›Ý]HÚ]T“\˜[Y]\ŠŠ‚˜™[\˜BœYÙH‹Ý\Ù\‹ÞÛ˜[Y_HˆÂˆ[Âˆ[‚ˆ›ÙO‚ˆO”›Ùš[HÙˆÛ˜[Y_OÚO‚ˆ•Ù[ÛÛYH˜XÚÈÈH\Ú›Ø\™Ü‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB˜‚ŠŠ‘^[\HÎˆØY™H\ØØ\[™ÈYØZ[œÝÔÈ]XÚÜÊŠ‚’YˆHX[XÚ[Ý\È\Ù\ˆÝX›Z]ÈØÜš\˜[\
+	ÚXÚÉÊOÜØÜš\˜\ÈZ\ˆ˜[YK™[\˜H™[™\œÈ][ˆHœ›ÝÜÙ\ˆ\È™[šYÛˆ^8 %HØÜš\Ú[™]™\ˆ^XÝ]N‚˜™[\˜BœYÙH‹ÜÙXÝ\™KÞÝ\Ù\—Ú[œ]HˆÂˆ[Âˆ]’[œ]ˆÝ\Ù\—Ú[œ]OÙ]‚ˆBŸB˜‚ŠŠ‘^[\Hˆ™]\ØX›HšY]È^[Ý]È[™˜[YYÛÝÈ
+œ›ÛH™[\˜HŒKJJŠ‚’[œÝXYÙˆ™\X][™È[˜XY˜XY\œË[™›ÛÝ\œÈÛˆ]™\žHYÙK[ÝHXÛ\™H™]\ØX›H^[Ý]Ú[ÈÚ]šY]ØˆHšY]ÈYš[™\È^XÝHÛ™HY˜][ÛÝÛÝÏ˜[™Ü[Û˜[˜[YYÛÝÈÚ]ØY™H˜[˜XÚÈÛÛ[‚˜™[\˜BšY]È\Ú[Âˆ[Âˆ[[™ÏH™[ˆ‚ˆXY]O–™[\˜H\XØ][ÛÝ]OÚXY‚ˆ›ÙO‚ˆXY\‚ˆÛÝ˜[YOHšXY\ˆO–™[\˜HÜ[ÚOÜÛÝ‚ˆÚXY\‚ˆXZ[‚ˆÛÝÏ‚ˆÛXZ[‚ˆ›ÛÝ\‚ˆÛÝ˜[YOH™›ÛÝ\ˆZ[Ú]™[\˜OÜÜÛÝ‚ˆÙ›ÛÝ\‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB‚œYÙH‹Ù\Ú›Ø\™ˆÂˆšY]Îˆ\Ú[ˆ[ÂˆÛÝ˜[YOHšXY\ˆO“^H\Ú›Ø\™ÚOÜÛÝ‚ˆ”ÜXÚYšXÈYÙHÛÛ[\È[œÙ\Y[ÈHY˜][ÛÝÙˆH\Ú[Ü‚ˆBŸB˜‚ŠŠ‘^[\HNˆXÛ\˜]]™HÙX\˜Úš[\š[™Ë[™YÚ[˜][Ûˆ
+œ›ÛH™[\˜HŒK
+JŠ‚‘›Üˆ]KYš]™[ˆÛÛXÝ[ÛˆYÙ\Ë™[\˜H]]ÛX]XØ[HÙ[™\˜]\ÈÙ[X[XÈ›Ü›HÛÛ›ÛÈ›ÜˆÙX\˜ÚÛÜ[™Ë[™YÚ[˜][ÛˆÚ][T“Ý]H™\Ù\˜][ÛŽ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ]NˆÝš[™ÊL
+H™\]Z\™YˆÛ™Nˆ›ÛÛY˜][˜[ÙBŸB‚œYÙH‹Ý\ÚÜÈˆÂˆÙX\˜ÚÈ]HBˆš[\ˆÈÛ™HBˆÛÜÈ]HBˆYÚ[˜]YB‚ˆØY\ÚÜÈHÜ[\ÚÖ×OˆÂˆÑSPÕY]KÛ™Bˆ”“ÓH\ÚÜÂˆÔ‘Tˆ–H]BˆB‚ˆ[ÂˆO•\ÚÜÈ
+ÝÝ[HÝ[YÙHÜYÙ_HÙˆÜYÙ\ßJOÚO‚ˆ[‚ˆ›Üˆ\ÚÈ[ˆ\ÚÜÈÂˆOžÝ\ÚË]_OÛO‚ˆBˆÝ[‚ˆBŸB˜–™[\˜H]]ÛX]XØ[H[œÈHÜ[Z^™YÓÕS•
+
+ŠX]Y\žH[ˆH˜XÚÙÜ›Ý[™š[™ÈÝ[[™YÙ\Ø\È\YR[˜\šXX›\Ë[™™[™\œÈÙ[X[XÈš[\ˆšY[Ù]Ë‚‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ˜Z[[™ÈÈ›Ü\›HÛÜÙHSYÜÈ
+K™Ë‹O˜Ú]Ý]ÚO˜
+K‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝšXÝH\œÙ\ÈHS™YH›ÜˆÙ[Y›Ü›YY™\ÜÈ]ÛÛ\[H[YK‚‹H
+Š‘\œ›ÜŽŠŠˆ[˜ÛÛœÚ\Ý[\˜[Y]\ˆ˜[Y\È[ˆÝ\›Hœ˜XÙ\Ë‚ˆ
+Ø]\ÙNŠˆH›Ý]HXÙZÛ\ˆ
+K™Ë‹ÚYX
+H]\ÝX]ÚH˜\šXX›HY[YšY\ˆ\ÙY[ˆHS[\]K‚‹H
+Š‘\œ›ÜœÈKU’QUËLLÈKU’QUËLMXŠŠˆ[™XÛ\™Y˜\šXX›\ÈÜˆ\HZ\ÛX]Ú\È[ˆšY]È[\œÛ][Û‹‚ˆ
+Ø]\ÙNŠˆH™[\˜HÛÛ\[\ˆÚXÚÜÈšY]Èš[™[™ÜÈ[™ÛÛ\Û™[›Ü\Y\È]ÛÛ\[H[YHYØZ[œÝXÛ\™Y›Ý]\Ë\\Ë[™ÔSØYË‚‹H
+Š‘\œ›ÜŽŠŠˆÝ\Z[™È[™XÛ\™YÜˆ\XØ]HÛÝÈ[ˆHYÙX‚ˆ
+Ø]\ÙNŠˆHYÙHX^HÛ›H›ÝšYHÛÛ[›Üˆ˜[YYÛÝÈ]]ÈXÛ\™YšY]Ø^XÚ]HYš[™\Ë‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆYÙH‹Ü]˜Yš[™\ÈHÙXˆ›Ý]H[™Ù\™\È™\šYšYYÙ[Y›Ü›YYS‚Œ‹ˆ˜\šXX›\È[ˆS[\]\È\™H[\œÛ]YšXHÝ˜\šXX›_X[™\ØØ\Y]]ÛX]XØ[K‚ŒËˆšY]È˜[YHÈ‹‹ˆXYš[™\È™]\ØX›HX\Ý\ˆ^[Ý]Ú[ÈÚ]ÛÝÏ˜[™˜[YYÛÝÈ
+ÛÝ˜[YOH‹‹‹ˆ˜
+K‚ˆÙX\˜Úš[\˜[™YÚ[˜]Y]]ÛX]XØ[HÙ[™\˜]HÙ[X[XÈ]Y\žHÛÛ›ÛÈÚ]T“Ý]H™\Ù\˜][Û‹‚KˆHÛÛ[X[™™[\˜HÙ\™XÝ\ÈHZ[Z[ˆÙ\™\ˆÚ]Ý]^\›˜[ÙXˆÙ\™\ˆÛÛ™šYÝ\˜][ÛœË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÜ™X]HHYÙH‹ØX›Ý]˜]\Ü^\È[ˆ[™›Ü›X]]™H\ØÜš\[ÛˆÙˆHÛÛ\[žK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]HH[˜[ZXÈ›Ý]HÜ›ÙXÝÞÚ][WÚYX\Ü^Z[™ÈH›ÙXÝ]Z[šY]Ë‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ\ÚYÛˆ[ˆÝ™\šY]ÈYÙHÛÛZ[š[™ÈXY[™ÜË˜]šYØ][Ûˆ[šÜË[™[ˆÜ™\™Y\Ý[œÚYHHS›ØÚË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[Z[HXZ[ˆ[™[™ÈYÙH›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[\XØ][ÛŽ‚˜™[\˜BœYÙH‹Ý\ÚÜÈˆÂˆ[Âˆ[‚ˆXY‚ˆ]O–™[\˜H\ÚÈX[˜YÙ[Y[Ý]O‚ˆÚXY‚ˆ›ÙO‚ˆO“^H\ÚÜÏÚO‚ˆ•Ù[ÛÛYHÈ[Ý\ˆ\œÛÛ˜[\ÚÈX[˜YÙ\‹Ü‚ˆH™YH‹Ý\ÚÜËÛ™]ÈÜ™X]H™]È\ÚÏØO‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB˜‚”Ý\H]™[ÜY[Ù\™\ˆÚ]™[\˜HÙ\™HXZ[‹žž[[™˜]šYØ]HÈ‹ËÛØØ[ÜÝŽÝ\ÚÜØ[ˆ[Ý\ˆœ›ÝÜÙ\ˆB‚ˆÈÈÈKˆÝ[[X\žB‹HÙXˆYÙ\È\™HXÛ\™Y\™XÝH[™ÛÛ˜Ú\Ù[H\Ú[™ÈYÙX[™[‚‹H]]ÛX]XÈÛÛ^X]Ø\™H\ØØ\[™È›ÝXÝÈ[Ý\ˆ\Ù\œÈYØZ[œÝÙXˆÙXÝ\š]H™X]Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚÙ^]ÛÜ™[›ÙXÙ\ÈHÙXˆYÙHYš[š][Ûˆ[ˆ™[\˜OÂŒ‹ˆÝÈ\™H[˜[ZXÈ˜[Y\È›Ý[™[ÈSX\šÝ\ÂŒËˆÚH\™HÔÈ[™\˜Xš[]Y\È™XÛYYžHY˜][[ˆ™[\˜HS™[™\š[™ÏÂ‚‹KKB‚ˆÈÈÚ\\ˆÎˆ›Ü›\È[™\Ù\ˆ[œ]Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈYš[™HÙXÝ\™H[œ]›Ü›\È›Ý[™È]X˜\ÙHX›\È\Ú[™È›Ü›X‚‹HÝÈ]]ÛX]XÈÜ›ÜÜËTÚ]H™\]Y\Ý›Ü™Ù\žH
+ÔÔ‘ŠH›ÝXÝ[ÛˆÛÜšÜÈ™Z[™HØÙ[™\Ë‚‹HÝÈ™[\˜H˜[Y]\È[œ]]HYØZ[œÝÝ›Û™È\\È
+ÝXÚ\È[XZ[Üˆ[™Ý[Z]ÊK‚‹HÝÈÈ\Ý[™[œÜXÝ›Ü›\Èš[ÜˆÈ[[YH\Ú[™È™[\˜H›Ü›H˜[Y]X‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•[\ÝY\Ù\ˆ[œ]È™\™\Ù[HÚ[™ÛH\™Ù\Ý™XÝÜˆ›ÜˆÙXˆ[™\˜Xš[]Y\Îˆ]XÚÙ\œÈÝX›Z][\H™\]Z\™Y˜[Y\ËÜÛÙ™Y›Ü™ZYÛˆQËÜˆšXÚÈ]][XØ]Y\Ù\œÈ[È[˜]]Üš^™Y™\]Y\ÝÈ
+ÔÔ‘ˆ]XÚÜÊKˆ[ˆÝ\ˆœ˜[Y]ÛÜšÜË]™[Ü\œÈ]\ÝX[X[HÝ]ÚÙÙ]\ˆ[œ]›Ü›\Ë˜[Y][Ûˆ[\Ë\œ›Üˆ™YY˜XÚË[™ÔÔ‘ˆÚÙ[œËˆ™[\˜IÜÈ›Ü›XÛÛœÝXÝ\š]™\ÈH[œ]X\ÚÈ\™XÝHœ›ÛH[Ý\ˆ]X˜\ÙHX›HØÚ[XKØY™YÝX\™[™È[[\˜XÝ[ÛœÈ]]ÛX]XØ[K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚H›Ü›H\™XÝHÛÛ›™XÝÈ[ˆ[œ]X\ÚÈÚ]H\™Ù]]X˜\ÙHX›N‚‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ\ØÜš\[ÛŽˆÝš[™ÊL
+BŸB‚™›Ü›H\ÚÐÜ™X]HOˆ\ÚÜÈÂˆšY[ÈÂˆ˜[YBˆ\ØÜš\[Û‚ˆBŸB˜‚‘œ›ÛH\ÈÛÛ˜Ú\ÙHYš[š][Û‹™[\˜H]]ÛX]XØ[H›ÙXÙ\Î‚‹HS[œ][[Y[ÈX]Ú[™ÈHØÚ[XH\\È
+[œ]\OH^˜]ËŠK‚‹H[ˆ[š\ÚX›HÜž\ÙÜ˜\XÈÔÔ‘ˆÚÙ[ˆ™]™[[™È[˜]]Üš^™Y›Ü›HÝX›Z\ÜÚ[ÛœË‚‹HÙ\™\‹\ÚYH˜[Y][Ûˆ[\È
+K™Ë‹˜[YXØ[››Ý^ÙYYLÚ\˜XÝ\œÈ[™Ø[››Ý™HÛZ]Y
+K‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ˜\ÚXÈ›Ü›H›ÜˆÝ\ÝÛY\ˆ]JŠ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™Ê
+H™\]Z\™Yˆ[XZ[ˆ[XZ[ÂŸB‚™›Ü›HÝ\ÝÛY\‘›Ü›HOˆÝ\ÝÛY\œÈÂˆšY[ÈÂˆ˜[YBˆ[XZ[ˆBŸB˜‚ŠŠ‘^[\HŽˆZ[š[X[›Ü›HÚ]Ú[™ÛHšY[
+Š‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YŸB‚™›Ü›H™]Õ\ÚÑ›Ü›HOˆ\ÚÜÈÂˆšY[ÈÂˆ˜[YBˆBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\Ý[™ÈHšY[[œÚYHšY[Ø]Ù\È›Ý^\Ý[ˆH\™Ù]X›K‚ˆ
+Ø]\ÙNŠˆ™[\˜HÝšXÝH˜[Y]\ÈšY[ØYØZ[œÝÛÛ[[œÈXÛ\™YÛˆH[™\›Z[™ÈX›K‚‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈ\ØX›HÔÔ‘ˆ›ÝXÝ[Û‹‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜KÔÔ‘ˆY™[œÙH\È[ˆ[˜ÛÛ\›ÛZ\ÙYX[™]ÜžH\˜Ú]XÝ\˜[Ý[™\™‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ›Ü›H˜[YHOˆ\™Ù]ÝX›XÙ[™\˜]\ÈHÝ›Û™ÛH˜[Y]YÙXÝ\™H[œ]›Ü›K‚Œ‹ˆ[X›HÛÛ[[ˆÛÛœÝ˜Z[È
+[™ÝË™\]Z\™Y›YÜË\\ÊH\™H]]ÛX]XØ[H[™›Ü˜ÙYÛˆ[œ]‚ŒËˆÔÔ‘ˆ[™ÔÈ›ÝXÝ[ÛœÈ\™H[YÜ˜[[™XÝ]™HžHY˜][‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆYš[™HH›Ü›HØ]YÛÜžPÜ™X]X›ÜˆHØ]YÛÜšY\ØX›K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ\Ý›Ü›H˜[Y][Ûˆ[\ÈÛˆHÛÛ[X[™[™H\Ú[™È™[\˜H›Ü›H˜[Y]X‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆYHš[Üš]HÛÛ[[ˆÈH\ÚÈ›Ü›H[™\ÝÙ\™\‹\ÚYH˜[Y][ÛˆYØZ[œÝ\œ›Û™[Ý\ÈÝX›Z\ÜÚ[ÛœË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[‘Yš[™HHÜ™X][Ûˆ›Ü›H›Üˆ™]È\ÚÜÎ‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆš[Üš]Nˆ[ŸB‚™›Ü›H\ÚÐÜ™X]HOˆ\ÚÜÈÂˆšY[ÈÂˆ˜[YBˆš[Üš]BˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+•\ÚÈ›Ü›H™XYKˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H›Ü›\ÈœšYÙH]X˜\ÙHX›\È\™XÝHÚ]ÙXÝ\™HÙXˆ[œ]X\ÚÜË‚‹H™[\˜HX[˜YÙ\È˜[Y][Û‹ÔÔ‘ˆÚÙ[œË[™\œ›Üˆ[™[™ÈÚ]™\›È›Ú[\œ]K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]Ù\ÈH\œ›ÝÈO˜ÚYÛšYžH[ˆ›Ü›H\ÚÐÜ™X]HOˆ\ÚÜØÂŒ‹ˆÚHÛ‰Ý™[\˜H]™[Ü\œÈ™YYÈX[X[H[œÙ\ÔÔ‘ˆÚÙ[œÈ[È[\]\ÏÂŒËˆÚXÚÛÛ[[ˆ˜[Y][ÛœÈ\™H]]ÛX]XØ[H[™›Ü˜ÙYÛˆH›Ü›OÂµÓŽ<¶‰žËkºwµçX]ÚY›ÜˆÜ\˜][™ÈÞ\Ý[HÙ\›™[ÎÈ]Ûˆ™ZYÛœÈ[ˆ]HØÚY[˜ÙNÈ˜]˜TØÜš\ÛZ[˜]\ÈHœ›ÝÜÙ\‹ˆÝÙ]™\‹Ú[ˆZ[[™È]X˜\ÙKX˜XÚÙY\Ú[™\ÜÈ\XØ][ÛœÈ[™ÙXˆ˜XÚÙ[™Ë]™[Ü\œÈ[ˆÜÙH[™ÝXYÙ\ÈÙ[ˆ˜]HÚYÛšYšXØ[YØXÞH˜YÙØYÙKˆ™[\˜H[šYšY\ÈHÜ™X]\ÝÝ™[™ÝÈÙˆ\ÙHXÛÜÞ\Ý[\Ë‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛŽˆ[™ÝXYÙHÛÛ\\š\ÛÛ‚‚Ÿ™X]\™H]ÛˆÈ\˜]™[\TØÜš\È›ÙH\Ý™[\˜HŸ‹KKH‹KKH‹KKH‹KKH‹KKH‹KKHŸ
+Š•\[™ÈÞ\Ý[JŠˆ[˜[ZXÈ[˜[ZXËÓÜ[Û˜[Ý]XÈ
+\˜\ÙYÈ”ÊHÝ]XÈ
+™\žHÝšXÝ
+H
+Š”Ý]XÈ	ˆ[˜[XšYÝ[Ý\ÊŠˆŸ
+Š“[ØY™]JŠˆ›Û™XÜ˜\Ú\È][[YH[Ü˜\Ú\È][[YH[™Yš[™YÜ˜\Ú\ÈXœÛÛ]H
+Ü[Û˜
+H
+ŠXœÛÛ]H
+Ü[Û˜
+JŠˆŸ
+Š”ÔS[YÜ˜][ÛŠŠˆÔ“H
+Ýš[™ËX˜\ÙY
+HÔ“H
+[Ü]Y[
+HÔ“H
+š\ÛXKÕ\SÔ“JHY\Ù[ÈÔS
+Š“˜]]™H	ˆ\KPÚXÚÙY
+ŠˆŸ
+ŠÛÛ˜XÝÊŠˆ›È
+Û›H\ÜÙ\
+H›È›È^\›˜[Xœ˜\šY\È
+ŠZ[Z[ˆ
+™\]Z\™\Ø[œÝ\™\Ø
+JŠˆŸ
+Š”ÙXÝ\š]HØ\Xš[]Y\ÊŠˆ›È
+[ÔÈXØÙ\ÜÊH›È
+[ÔÈXØÙ\ÜÊH›È
+[ÔÈXØÙ\ÜÊH›È
+ŠZ[Z[ˆ
+\Ù\È‹‹˜
+JŠˆŸ
+ŠRHÛÛ[™ÈÝ\Ü
+Šˆ[Ù\˜]H
+[XšYÝ[Ý\ÊH[Ù\˜]H[Ù\˜]HY™šXÝ[›Üˆ\È
+Š“˜]]™H
+”ÓÓ‹\YÛ\ÊJŠˆ‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠÛÛ\\š\ÛÛŽˆÝÈ™[\˜HØ]Ú\ÈYÜÈ]Û\[È›ÙXÝ[Ûˆ[ˆÝ\ˆ[™ÝXYÙ\ÊŠ‚‚Š’[ˆ]ÛˆÈ˜]˜TØÜš\
+Ý[X[[[YHÜ˜\ÚÛˆZ\ÜÚ[™È˜[YJNŠ‚[ˆ[š[™YZ\ÜÚ[™ÈšY[šYÙÙ\œÈH›ÙXÝ[ÛˆÙ\™\ˆÜ˜\Úˆ]šX]Q\œ›ÜŽˆ	Ó›Û™U\IÈØš™XÝ\È›È]šX]H	Ý]IØ‚‚Š’[ˆ™[\˜H
+ÝX\˜[YYØY™H[™[™È[™›Ü˜ÙY]ÛÛ\[H[YJNŠ‚˜™[\˜B™›ˆÚÝ×Ý]JÜÝ]NˆÜ[ÛÝš[™ÏŠHÂˆX]ÚÜÝ]HÂˆÛÛYJ
+HOˆÂˆš[
+•]Nˆˆ
+È
+BˆBˆ›Û™HOˆÂˆš[
+“›È]H›ÝšYYˆŠBˆBˆBŸB‚™›ˆXZ[Š
+HÂˆÚÝ×Ý]JÛÛYJ”›Ú™XÝŠJBˆÚÝ×Ý]J›Û™JBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈÜš]H™[\˜HZÙH]Ûˆ
+\Ú[™È[™[][Ûˆ[œÝXYÙˆÝ\›Hœ˜XÙ\ËÜˆ][\[™È[˜[ZXÈ\H™X\ÜÚYÛ›Y[
+K‚ˆ
+Ø]\ÙNŠˆ™[\˜H][^™\ÈÝ\›Hœ˜XÙ\È[™[™›Ü˜Ù\ÈÝšXÝÝ]XÈ\HÝXš[]K‚‹H
+Š‘\œ›ÜŽŠŠˆÛÛ™\Ú[™È™[\˜HÚ]ÝË[]™[Þ\Ý[\È[™ÝXYÙ\ÈZÙH\Ý
+ÙX\˜Ú[™È›ÜˆX[X[Y[[ÜžHX[˜YÙ[Y[ÜˆÛÛ\^Y™][YH[››Ý][ÛœÊK‚ˆ
+Ø]\ÙNŠˆ™[\˜HX[˜YÙ\ÈY[[ÜžHÛÛ\][H]]ÛX]XØ[Kœ™YZ[™ÈH]™[Ü\ˆÈ›ØÝ\ÈÛˆ\Ú[™\ÜÈÙÚXË‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜H[šYšY\ÈHÚ[\XÚ]H[™]™[Ü\ˆ™[ØÚ]HÙˆØÜš\[™È[™ÝXYÙ\ÈÚ]HÝšXÝÛÜœ™XÝ™\ÜÈÙˆ[Ù\›ˆÝ]XÈ\HÞ\Ý[\Ë‚Œ‹ˆ]X˜\Ù\ËÙXˆ[™Ú[Ë[™[\™˜XÙ\È\™H˜]]™H[™ÝXYÙHÛÛœÝXÝÈ˜]\ˆ[ˆ\Ü\˜]H\™\\HXœ˜\šY\Ë‚ŒËˆ™[XXš[]H[™ÙXÝ\š]H\™H[™›Ü˜ÙYÝXÝ\˜[HžHHÛÛ\[\ˆ˜]\ˆ[ˆYY\È[ˆY\ÝYÚ‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÜHÚ[\HØ[Ý[][ÛˆØÜš\œ›ÛH]Ûˆ[ÈY[ÛX]XËÝ]XØ[H\Y™[\˜K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÛÛ\\™H[ˆ[Ü]Y[]X˜\ÙH]Y\žH[ˆÓ\˜]™[Ú]™[\˜IÜÈ\K\ØY™HÜ[×O˜‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ^Z[‹\Ú[™ÈH™X[]ÛÜ›Ý\HÚZ[ˆ[™\˜Xš[]H^[\KÝÈ™[\˜IÜÈØ\Xš[]HÞ\Ý[HÛÛ\][H™]]˜[^™\ÈX[XÚ[Ý\È\™\\H\[™[˜ÚY\Ë‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[ÛÛœÛÛY]HÙ^HÝ™[™ÝÈÙˆ™[\˜HÚ][ˆHÛÛ˜Ú\ÙH[[ÛœÝ˜][ÛˆÙˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ù[[È‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚™›ˆÛÝ[ÛÜ[—Ý\ÚÜÊ
+HOˆ[\Ù\È]X˜\ÙHÂˆÜ[—Ý\ÚÜÈHÜ[\ÚÖ×OˆÂˆÑSPÕY˜[YKÛÛ\]Yˆ”“ÓH\ÚÜÂˆÒT‘HÛÛ\]YH˜[ÙBˆBˆ™]\›ˆ[ŠÜ[—Ý\ÚÜÊBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆÛÝ[HÛÝ[ÛÜ[—Ý\ÚÜÊ
+Bˆš[
+“Ü[ˆ\ÚÜÈ]\›Z[™YˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜HœšYÙ\ÈHØ\™]ÙY[ˆÝ™\›HÛÛ\^Þ\Ý[\È[™ÝXYÙ\È[™\œ›Ü‹\›Û™H[˜[ZXÈØÜš\[™È[™ÝXYÙ\Ë‚‹H›Üˆ[Ù\›ˆÙXˆ˜XÚÙ[™Ë]H›ØÙ\ÜÚ[™Ë[™RHÛÜšÙ›ÝÜË™[\˜HÙ™™\œÈ[ˆ^Ù\[Û˜[H\[™X›K]™[Ü\‹YœšY[™H]›Ü›K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]ÛÛ˜Ü™]HY˜[YÙHÙ\È™[\˜IÜÈÜ[Û˜\HÙ™™\ˆÛÛ\\™YÈ]Û‰ÜÈ›Û™XÜˆ˜]˜TØÜš\	ÜÈ[ÂŒ‹ˆÚH\È˜]]™H]X˜\ÙH[YÜ˜][Ûˆ[ˆ™[\˜HØY™\ˆ[ˆ˜Y][Û˜[Ô“HXœ˜\šY\ÏÂŒËˆÚ]š][›ÛHÈØ\Xš[]Y\È^H[ˆØY™YÝX\™[™ÈÛÙØ\™Hœ›ÛHX[XÚ[Ý\È\™\\HXÚØYÙ\ÏÂ‚ˆÈT•V8 $È”“ÓHTÒQÓˆÈ’S’TÒQTPÐUSÓ‚‚‹KKB‚ˆÈÈÚ\\ˆÍNˆ[›š[™ÈÛÙØ\™H8 $Èœ›ÛHYXHÈ\ÚYÛ‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈ˜[œÙ›Ü›HH˜YÝYH›ÙXÝYXH[ÈH™XÚ\ÙK[\[Y[X›HÛÙØ\™H\˜Ú]XÝ\™K‚‹HÝÈÈÚÙ]ÚÛXZ[ˆ[]Y\È[™Z\ˆ™[][ÛœÚ\ÈÛˆ\\ˆÜˆ[ˆ[Ý\ˆY]Ü‹‚‹HÚHYš[š[™È[Ý\ˆØÚ[XHX\›H[ˆ™[\˜HÚ[\YšY\È]™\žHÝXœÙ\]Y[]™[ÜY[Ý\‚‹HÝÈÈXÛÛ\ÜÙH™\]Z\™[Y[È[ÈÛX[[™\[™[H\ÝX›HZ[\ÝÛ™\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•HÚ[™ÛH[ÜÝÛÛ[[ÛˆZ\ÝZÙHXYHžH™YÚ[›™\œÈ
+[™Ø\™[\ÜÈ™]\˜[œÊH\È\Ú[™ÈÈÜš]HÛÙH™Y›Ü™H[›š[™ÈH[™\›Z[™È]H›ÝËˆYˆ[ÝH™X[^™HZYØ^H›ÝYÚ[\[Y[][Ûˆ]HÜXÚX[X›HÛÛ[[ˆÜˆ[]H™[][Ûˆ\ÈZ\ÜÚ[™Ë[ÝHÙ[ˆÜ[™^\È™Y˜XÝÜš[™È^\Ý[™ÈÛÙKˆ™[\˜H™]Ø\™È\ØÚ\[™Y[›š[™ÎˆÛ˜ÙH[Ý\ˆX›XØÚ[XH\È\ÝX›\ÚY›Ü›\Ë˜[Y][ÛœË[™T\È[Y\™ÙH˜]\˜[H[™™YXÝX›Hœ›ÛH]Ú[™ÛHÛÝ\˜ÙHÙˆ]‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚‘]™\žHÝXØÙ\ÜÙ[ÛÙØ\™H›Ú™XÝ›ÙÜ™\ÜÙ\È›ÝYÚ›Ý\ˆ[›š[™È\Ù\Î‚ŒKˆ
+ŠÛ\šYžH\œÜÙH[™\™Ù]]YY[˜ÙNŠŠˆÚÈ\Ù\ÈHÞ\Ý[OÈÚ]š[X\žH›Ø›[H]\Ý]ÛÛ™OÈ
+K™Ë‹HX[HXYØ[ÈÈÜ™X]K\ÜÚYÛ‹[™X\šÈ\ÚÜÈ\ÈÛÛ\]YŠK‚Œ‹ˆ
+Š‘\ÚYÛˆH]H[Ù[ŠŠˆÚ][]Y\È^\ÝÈÚXÚšY[È\™HX[™]ÜžOÈ
+K™Ë‹\ÚÜØÚ]˜[YXš[Üš]X[™ÛÛ\]Y
+K‚ŒËˆ
+Š”ÙXÝ\š]H[™XØÙ\ÜÈ[\ÎŠŠˆÚÈ\È\›Z]YÈ\™›Ü›HÚXÚÜ\˜][ÛœÏÈÈÙH™\]Z\™H]][XØ][Ûˆ[™\›Z\ÜÚ[ÛœÏÂˆ
+Š’]\˜]]™H[\[Y[][ÛŽŠŠˆš\œÝHØÚ[XH
+X›X
+K[ˆÛXZ[ˆÙÚXÈ
+›˜
+K[ˆÙXˆšY]ÜÈ
+ÜYØYÙX
+K[™š[˜[HT\È
+\X
+K‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆHš\œÝZ[\ÝÛ™H8 $ÈH]H[Ù[
+Š‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\Ú×Ü[›™\ˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆš[Üš]Nˆ[Y˜][‚ˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚™›ˆXZ[Š
+HÂˆš[
+”[›š[™ÈÝ\NˆØÚ[XH\ÝX›\ÚYˆŠBŸB˜‚ŠŠ‘^[\HŽˆ[›š[™È\Ú[™\ÜÈÙÚXÈ\È\™H[˜Ý[ÛœÊŠ‚˜™[\˜B™›ˆ˜[Y]WÙXY[™J^\Îˆ[
+HOˆ›ÛÛÂˆ™]\›ˆ^\ÈHŸB‚™›ˆXZ[Š
+HÂˆš[
+˜[Y]WÙXY[™JÊJBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][\[™ÈÈ›ÙÜ˜[H[™X]\™\ÈÚ[][[™[Ý\ÛH™Y›Ü™H˜[Y][™ÈHÛÜ™H›Ý[™][Û‹‚ˆ
+Ø]\ÙNŠˆZ[ÛÙØ\™H[˜Ü™[Y[[Nˆ™\šYžHXXÚZ[\ÝÛ™H[[YYX][HÚ]™[\˜HÚXÚØ‚‹H
+Š‘\œ›ÜŽŠŠˆ[XšYÝ[Ý\ÈX[™]ÜžHšY[È[ˆH]H[Ù[‚ˆ
+Ø]\ÙNŠˆXÚYHœ›ÛHH™YÚ[›š[™ÈÚXÚšY[È\™HÝšXÝH™\]Z\™Y[™ÚXÚX^H™H[\H
+Ü[Û˜
+K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ˜Z[[™ÈÈ[ˆ\È[›š[™ÈÈ˜Z[[ˆÛÙØ\™H\˜Ú]XÝ\™K‚Œ‹ˆHÛX[‹[˜[XšYÝ[Ý\È]H[Ù[\ÈH˜XÚØ›Û™HÙˆ[žH›Ø\Ý\XØ][Û‹‚ŒËˆXÛÛ\ÜÙHÛÛ\^›Ø›[\È[ÈÛX[[™\[™[H™\šYšXX›H[˜Ý[ÛœË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÝ][™HH™X]\™HÙ][™]HšY[ÈÙˆHÚ[\H›ÝK]ZÚ[™È\XØ][Ûˆ\È[]Ú[Ë‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ\ÚYÛˆH™[][Û˜[X›HØÚ[XH›Üˆ\Ù\œË\ÚÜË[™Ø]YÛÜšY\ÈÚ]\›ÜšX]H™[\˜H\\È[™ÛÛœÝ˜Z[Ë‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ›Ü›][]H™KH[™ÜÝÛÛ™][ÛœÈ
+™\]Z\™\Ø[œÝ\™\Ø
+H›Üˆ[ÛÜ™HÛXZ[ˆ[˜Ý[ÛœÈÙˆ[Ý\ˆ[›™Y\XØ][Û‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[ÛÛœÛÛY]HH\˜Ú]XÝ\˜[›Y\š[›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ü›È‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊLŒ
+H™\]Z\™Yˆš[Üš]Nˆ[Y˜][BˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚™›ˆØ[Ý[]WÝ\™Ù[˜ÞJš[Üš]Nˆ[™[XZ[š[™×Ù^\Îˆ[
+HOˆÝš[™ÈÂˆYˆš[Üš]HOHHÂˆ™]\›ˆ’QÒTÕ’SÔ’UH‚ˆBˆYˆ™[XZ[š[™×Ù^\ÈHHÂˆ™]\›ˆ•T‘ÑS•QHÈPQS‘H‚ˆBˆ™]\›ˆ““Ô“PS‚ŸB‚™›ˆXZ[Š
+HÂˆÝ]\ÈHØ[Ý[]WÝ\™Ù[˜ÞJKJBˆš[
+\˜Ú]XÝ\™H[ˆ™\šYšYYˆˆ
+ÈÝ]\ÊBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HÝXÝ\™Y[›š[™ÈØ]™\È]™[ÜY[[YH[™™]™[ÈÛÜÝH\˜Ú]XÝ\˜[XYY[™Ë‚‹H™[\˜IÜÈXÛ\˜]]™H[™ÝXYÙHÝXÝ\™H[YÜ˜]\ÈÙX[[\ÜÛH[ÈYÚ[H]™[ÜY[ÛÜšÙ›ÝÜË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]›Ý\ˆ\Ù\ÈÛÛœÝ]]H›Ù™\ÜÚ[Û˜[ÛÙØ\™H\ÚYÛÂŒ‹ˆÚHÚÝ[H]H[Ù[™HYš[™Y™Y›Ü™H[\[Y[[™È\Ù\ˆ[\™˜XÙ\ÏÂŒËˆÝÈÈ™XÛÛ™][ÛœÈ\ÜÚ\Ý[ˆ›Ü›][][™È[˜[XšYÝ[Ý\ÈÛÙØ\™HÜXÚYšXØ][ÛœÏÂ‚‹KKB‚ˆÈÈÚ\\ˆÍŽˆ\˜Ú]XÝ\™H[™ÛX[ˆÛÙHÝXÝ\™B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÝXÝ\™H[Ý\ˆ™[\˜H\XØ][Ûˆ\Ú[™ÈH\ÝX›\ÚY™YK[^Y\ˆ\˜Ú]XÝ\˜[[Ù[‚‹HHÛX[ˆÙ\\˜][ÛˆÙˆ\œÚ\Ý[˜ÙH
+X›X
+K\Ú[™\ÜÈÙÚXÈ
+›˜
+K[™™\Ù[][Ûˆ
+YÙXÜY\X
+K‚‹HÝÈÈZ[š[Z^™HÛÝ\[™È[™ÙY\[Ù[\ÈXZ[Z[˜X›HÝ™\ˆÛ™ÈY™XÞXÛ\Ë‚‹HÚHHÛX[ˆ\˜Ú]XÝ\™H›ÝXÝÈ[ÝHœ›ÛH[™^XÝY™YÜ™\ÜÚ[ÛœÈÚ[ˆY[™È™]È™X]\™\Ë‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•Ú[ˆ]X˜\ÙH]Y\šY\Ë\Ú[™\ÜÈØ[Ý[][ÛœË[™SX\šÝ\\™H[™ÛYÙÙ]\ˆ[ˆHØ[YHš[HÜˆ[˜Ý[Û‹H™\Ý[\Èœ˜YÚ[K[›XZ[Z[˜X›HœÜYÚ]HÛÙKˆˆYˆH]X˜\ÙHØÚ[XHÚ[™Ù\È]\‹Hœ›Û[™[™^XÝYHœ™XZÜËˆHÛX[ˆ\˜Ú]XÝ\™H\ÝX›\Ú\ÈÛX\ˆ›Ý[™\šY\ÎˆXXÚ^Y\ˆ\ÈHÚ[™ÛKÙ[YYš[™Y™\ÜÛœÚXš[]K‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚HÙ[X\˜Ú]XÝY™[\˜H\XØ][Ûˆ\È]šYY[È™YH\Ý[˜Ý^Y\œÎ‚ŒKˆ
+Š‘]H[™\œÚ\Ý[˜ÙH^Y\ŽŠŠˆX›HXÛ\˜][ÛœÈ
+X›X
+H[™Ý›Û™ÛH\YÔS]Y\šY\È
+Ü[×O˜
+K‚Œ‹ˆ
+Š\Ú[™\ÜÈÙÚXÈ^Y\ŽŠŠˆ\™HØ[Ý[][Ûˆ[™˜[Y][Ûˆ[˜Ý[ÛœÈ›ÝXÝYžH›Ü›X[ÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+K‚ŒËˆ
+Š”™\Ù[][Ûˆ[™[\™˜XÙH^Y\ŽŠŠˆÙXˆ[\™˜XÙ\È
+ÜYYÙX
+H[™‘TÕ[™Ú[È
+\X
+K‚‚˜™[\˜B‹ËÈKˆ]H[Ù[X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™YŸB‚‹ËÈ‹ˆ\Ú[™\ÜÈÙÚXÂ™›ˆ›Ü›X]Û˜[YJ˜]×Ý^ˆÝš[™ÊHOˆÝš[™ÈÂˆ™]\›ˆ–ÕTÒ×Hˆ
+È˜]×Ý^ŸB‚‹ËÈËˆ[žHÚ[È^XÝ][Û‚™›ˆXZ[Š
+HÂˆš[
+›Ü›X]Û˜[YJÚXÚÈÙ\™\ˆŠJBŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆXÛÝ\[™ÈÛXZ[ˆÙÚXÈœ›ÛHKÓÊŠ‚˜™[\˜B‹ËÈ\™HØ[Ý[][Ûˆ[˜Ý[ÛŽˆ›ÈØ\Xš[]Y\È™YYY™›ˆØ[Ý[]WÜ\˜Ù[YÙJ˜[YNˆ[X^Ý˜[YNˆ[
+HOˆ[ˆ™\]Z\™\ÈÈX^Ý˜[YHˆ	‰ˆ˜[YHHBžÂˆ™]\›ˆ
+˜[YH
+ˆL
+HÈX^Ý˜[YBŸB‚‹ËÈKÓÈ[˜Ý[ÛŽˆ\Ù\ÈHÙÚXÈ[™š[ÈÝ]]™›ˆXZ[Š
+HÂˆ\˜Ù[YÙHHØ[Ý[]WÜ\˜Ù[YÙJKL
+Bˆš[
+\˜Ù[YÙJBŸB˜‚ŠŠ‘^[\HŽˆÛX\ˆÝXÝ\™H›ÝYÚ^™\ÜÚ]™HÛÛ\Û™[˜[Y\ÊŠ‚˜™[\˜BX›HÙ][™ÜÈÂˆYˆYš[X\žH]]Âˆ\Û˜[YNˆÝš[™ÊŒ
+H™\]Z\™YŸB‚™›ˆÚÝ×ÜÞ\Ý[WÚ[™›Ê˜[YNˆÝš[™ÊHÂˆš[
+”Þ\Ý[H[›š[™Îˆˆ
+È˜[YJBŸB‚™›ˆXZ[Š
+HÂˆÚÝ×ÜÞ\Ý[WÚ[™›Ê–™[\˜H\ÚÈÝZ]HŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ[X™Y[™ÈÛÛ\^\Ú[™\ÜÈØ[Ý[][ÛœÈ\™XÝH[ÈÔS]Y\šY\ÈÜˆS[\]H›ØÚÜË‚ˆ
+Ø]\ÙNŠˆ^˜XÝØ[Ý[][ÛœÈ[ÈYXØ]Y[\ˆ[˜Ý[ÛœÈÛÈ^HØ[ˆ™H[™\[™[H[š]]\ÝY‚‹H
+Š‘\œ›ÜŽŠŠˆ[›ÙXÚ[™ÈÚ\˜Ý[\ˆ\[™[˜ÚY\È™]ÙY[ˆ[Ù[\Ë‚ˆ
+Ø]\ÙNŠˆ[œÝ\™H]H›ÝÈ˜]™[ÈÛX[›HÝÛØ\™
+™\Ù[][ÛˆOˆÙÚXÈOˆ]JK‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆÝšXÝHÙ\\˜]H]H[Ù[ËÛXZ[ˆ\Ú[™\ÜÈ[\Ë[™RH™\Ù[][Û‹‚Œ‹ˆÛÜ™H\Ú[™\ÜÈÙÚXÈÚÝ[™[XZ[ˆœ™YHÙˆÚYHY™™XÝÈ[™Ø\Xš[]Y\ÈÚ[™]™\ˆÜÜÚX›K‚ŒËˆÛX[ˆ\˜Ú]XÝ\˜[^Y\œÈ[œÝ\™H\XØ][ÛœÈ™[XZ[ˆXZ[Z[˜X›H[™Ý˜ZYÚ›ÜØ\™È^[™‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆY[YžHH™YH\Ý[˜Ý^Y\œÈ[ˆ[ˆ^\Ý[™ÈÛÙHÛš\]‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ™Y˜XÝÜˆØ[Ý[][ÛœÈ[X™YY[ˆHÙXˆ›Ý]H[È\™HÝ[™[Û™H[\ˆ[˜Ý[ÛœË‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ\ÚYÛˆH[™YK[^Y\ˆ\˜Ú]XÝ\˜[›Y\š[›Üˆ[ˆ[\ÞYYH[YK]˜XÚÚ[™ÈÞ\Ý[K‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[’[\[Y[H^Y\™Y\˜Ú]XÝ\˜[ÝXÝ\™H›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ø\˜Ú]XÝ\™H‚ŸB‚‹ËÈ^Y\ˆNˆ\œÚ\Ý[˜ÙBX›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™YˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚‹ËÈ^Y\ˆŽˆ\Ú[™\ÜÈÙÚXÂ™›ˆ\×Ý\Ú×Ú[\Ü[
+˜[YNˆÝš[™Ë\™Ù[ˆ›ÛÛ
+HOˆ›ÛÛÂˆ™]\›ˆ\™Ù[ŸB‚‹ËÈ^Y\ˆÎˆ\XØ][ÛˆÈ^XÝ][Û‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆ[\Ü[H\×Ý\Ú×Ú[\Ü[
+”ÝX›Z]^™]\›ˆ‹YJBˆš[
+•\ÚÈ\˜Ú]XÝ\™H™\šYšYYˆŠBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HH™YK[^Y\ˆ[Ù[›ÝšY\ÈÛ™Ë]\›HXZ[Z[˜Xš[]KÛ\š]K[™ÝXÝ\˜[ØY™]K‚‹H™[\˜IÜÈ\HÞ\Ý[H[™XÛ\˜]]™HÛÛœÝXÝÈ[™›Ü˜ÙH\ÙH›Ý[™\šY\È˜]\˜[K‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]™YH^Y\œÈ›Ü›HH›Ý[™][ÛˆÙˆHÛX[ˆ™[\˜H\XØ][ÛÂŒ‹ˆÚHÚÝ[ÛÜ™H\Ú[™\ÜÈÙÚXÈ]›ÚY™\]Z\š[™ÈØ\Xš[]Y\ÈÚ[™]™\ˆ™X\ÚX›OÂŒËˆÝÈÙ\ÈÙ\\˜][™È™\Ù[][Ûˆœ›ÛH]H\œÚ\Ý[˜ÙHÚ[\YžH]\™HRH™Y\ÚYÛœÏÂ‚‹KKB‚ˆÈÈÚ\\ˆÍÎˆÛÛ™šYÝ\˜][Ûˆ[™[š\›Û›Y[˜\šXX›\Â‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈÙXÝ\™[HX[˜YÙHÛÛ™šYÝ\˜][Ûˆ˜[Y\ÈšXH[š\›Û›Y[˜\šXX›\È
+™[˜
+K‚‹HÝÈÈ\ÙHHÝ[™\™Xœ˜\žH[˜Ý[Ûˆ[ŠÙ^JX[™]È™\]Z\™YØ\Xš[]H\Ù\È[š\›Û›Y[‚‹HÝÈÈØY™[H[™HHÜ[ÛÝš[™Ï˜™]\›ˆ˜[YHœ›ÛH[Š
+X‚‹HÚH\ÜÝÛÜ™Ë]X˜\ÙHÙXÜ™]Ë[™THÚÙ[œÈ]\Ý™]™\ˆ™H\™XÛÙY[ÈÛÝ\˜ÙHÛÙK‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂXØÚY[[HÛÛ[Z][™È]X˜\ÙHÜ™Y[X[ÈÜˆTHÙ^\È[ÈX›XÈÚ]™\ÜÚ]ÜšY\È\ÈÛ™HÙˆH[ÜÝÛÛ[[Ûˆ[™\Ø\Ý›Ý\ÈÙXÝ\š]H[™\˜Xš[]Y\È[ˆ[Ù\›ˆÛÙØ\™Kˆ\\›[Ü™K\XØ][ÛœÈ]\ÝY\[˜[ZXØ[HXÜ›ÜÜÈ]™[ÜY[\Ý[™Ë[™›ÙXÝ[Ûˆ[š\›Û›Y[È
+K™Ë‹\Ú[™ÈY™™\™[]X˜\ÙHÜÝÊKˆ[š\›Û›Y[˜\šXX›\ÈÛX[›HXÛÝ\HÛÝ\˜ÙHÛÙHœ›ÛHÛÛ™šY[X[[š\›Û›Y[\ÜXÚYšXÈÛÛ™šYÝ\˜][Û‹‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚’[ˆ™[\˜K[ÝH™XY[š\›Û›Y[˜\šXX›\È\Ú[™ÈHZ[Z[ˆ[˜Ý[Ûˆ[Š
+Xˆ™XØ]\ÙH[ˆ[š\›Û›Y[˜\šXX›HX^HÜˆX^H›Ý™HYš[™YÛˆHÜÝÞ\Ý[K[Š
+X[Ø^\È™]\›œÈ[ˆÜ[ÛÝš[™Ï˜‚‚˜™[\˜B™›ˆ™XYÜÜ
+
+HOˆÝš[™È\Ù\È[š\›Û›Y[ÂˆÜÜÜH[ŠTÔÔ•ŠBˆX]ÚÜÜÜÂˆÛÛYJ
+HOˆÂˆ™]\›ˆˆBˆ›Û™HOˆÂˆ™]\›ˆŽ‚ˆBˆBŸB‚™›ˆXZ[Š
+H\Ù\È[š\›Û›Y[ÂˆÜH™XYÜÜ
+
+Bˆš[
+”Ù\™\ˆ\Ý[š[™ÈÛˆÜˆˆ
+ÈÜ
+BŸB˜‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÛÛ™šYÝ\š[™È]X˜\ÙHÜÝ[˜[ZXØ[JŠ‚˜™[\˜B™›ˆÙ]Ù—ÚÜÝ
+
+HOˆÝš[™È\Ù\È[š\›Û›Y[ÂˆX]Ú[Š‘—ÒÔÕŠHÂˆÛÛYJÜÝ
+HOˆÂˆ™]\›ˆÜÝˆBˆ›Û™HOˆÂˆ™]\›ˆŒLËŒŒŒH‚ˆBˆBŸB‚™›ˆXZ[Š
+H\Ù\È[š\›Û›Y[Âˆš[
+ÛÛ›™XÝ[™ÈÎˆˆ
+ÈÙ]Ù—ÚÜÝ
+
+JBŸB˜‚ŠŠ‘^[\HŽˆ[˜[ZXØ[HÚXÚÚ[™ÈXYÈ[ÙJŠ‚˜™[\˜B™›ˆ\×ÙXY×ØXÝ]™J
+HOˆ›ÛÛ\Ù\È[š\›Û›Y[ÂˆX]Ú[ŠTÑP•QÈŠHÂˆÛÛYJ˜[
+HOˆÂˆ™]\›ˆ˜[OHYH‚ˆBˆ›Û™HOˆÂˆ™]\›ˆ˜[ÙBˆBˆBŸB‚™›ˆXZ[Š
+H\Ù\È[š\›Û›Y[ÂˆYˆ\×ÙXY×ØXÝ]™J
+HÂˆš[
+‘XYÈ[ÙH\ÈÓˆŠBˆH[ÙHÂˆš[
+‘XYÈ[ÙH\ÈÑ‘ˆŠBˆBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ\™ÛÙ[™ÈÙ[œÚ]]™H]X˜\ÙH\ÜÝÛÜ™È\™XÝH[ˆžž[š[\Ë‚ˆ
+Ø]\ÙNŠˆ[Ø^\ÈÝÜ™HÙXÜ™]È[ˆHØØ[™[˜š[H[™™XY[HšXH[Š
+X‚‹H
+Š‘\œ›ÜŽŠŠˆØ[[™È[Š
+XÚ]Ý]XÛ\š[™È\Ù\È[š\›Û›Y[‚ˆ
+Ø]\ÙNŠˆ™[\˜IÜÈØ\Xš[]HÙXÝ\š]H[Ù[™]™[È[˜]]Üš^™YXØÙ\ÜÈÈÜÝ[š\›Û›Y[Ý]K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™]™\ˆÛÛ[Z]ÛÛ™šY[X[ÙXÜ™]ÈÜˆÜ™Y[X[È[È™\œÚ[ÛˆÛÛ›Û‚Œ‹ˆ[Š˜[YJX™]\›œÈ[ˆÜ[ÛÝš[™Ï˜[™™\]Z\™\ÈH\Ù\È[š\›Û›Y[Ø\Xš[]K‚ŒËˆ[Ø^\ÈÝ\HØY™K™YXÝX›HY˜][˜[˜XÚÈ˜[Y\È›ÜˆZ\ÜÚ[™È[š\›Û›Y[˜\šXX›\Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆ™XY[ˆ[š\›Û›Y[˜\šXX›HTÑT—ÓSQX[™š[H\œÛÛ˜[^™YÜ™Y][™ÈÈHÛÛœÛÛK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜš]HH™]\ØX›H[\ˆ[˜Ý[ÛˆÙ]Ù[—ÛÜ—ÙY˜][
+Ù^NˆÝš[™ËY˜][Ý˜[ˆÝš[™ÊHOˆÝš[™Ø‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÛÛ™šYÝ\™H[ˆ\XØ][ÛˆÛÈ]]ÝÚ]Ú\È]ÈÙÙÚ[™È[™]X˜\ÙH[™Ú[È™]ÙY[ˆ]™[ÜY[[™›ÙXÝ[Ûˆ[Ù\È˜\ÙYÛˆ[š\›Û›Y[Ù][™ÜË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[ÛÛœÝXÝHÛÛ™šYÝ\˜][ÛˆX[˜YÙ[Y[ÛÛ\Û™[›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™›ˆØYØ\Ý]J
+HOˆÝš[™È\Ù\È[š\›Û›Y[ÂˆX]Ú[ŠTÕUHŠHÂˆÛÛYJ\Ý]JHOˆÂˆ™]\›ˆ\Ý]BˆBˆ›Û™HOˆÂˆ™]\›ˆ–™[\˜H\ÚÈX[˜YÙ\ˆŒH‚ˆBˆBŸB‚™›ˆXZ[Š
+H\Ù\È[š\›Û›Y[Âˆš[
+”Þ\Ý[HÝ\Yˆˆ
+ÈØYØ\Ý]J
+JBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H[š\›Û›Y[˜\šXX›\È›ÝšYH›^X›KÙXÝ\™HÛÛ™šYÝ\˜][ÛˆX[˜YÙ[Y[XÜ›ÜÜÈ\Þ[Y[Y\œË‚‹H™[\˜IÜÈÜ[Û˜\H[œÝ\™\È[ÝH^XÚ]H[™HZ\ÜÚ[™ÈÛÛ™šYÝ\˜][Ûˆ˜[Y\ÈÚ]Ý][[YHÜ˜\Ú\Ë‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚH]\ÝÛÛ™šY[X[THÙ^\È[™Ü™Y[X[È™]™\ˆ™H\™XÛÙY[È\XØ][ÛˆÛÝ\˜ÙHš[\ÏÂŒ‹ˆÚ]™]\›ˆ\HÙ\ÈHÝ[™\™[˜Ý[Ûˆ[Š
+X›ÙXÙOÂŒËˆÚXÚØ\Xš[]H\È™\]Z\™YžHH[˜Ý[Ûˆ]™XYÈ[š\›Û›Y[˜\šXX›\ÏÂ‚‹KKB‚ˆÈÈÚ\\ˆÎˆXYÙÚ[™È[™Ü[Z^˜][Û‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈXYÛ›ÜÙH[Ý\ˆ›Ú™XÝ[™[š\›Û›Y[Ü›ÝYÚH\Ú[™ÈHÓHÛÛ[X[™™[\˜HØÝÜ˜‚‹HÝÈÈ]™\˜YÙHÛÛ\[\ˆXYÛ›ÜÝXÜÈ[™XÝ[Û˜X›H\œ›Üˆ[ÈY™™XÝ]™[K‚‹HÞ\Ý[X]XÈXYÙÚ[™ÈY]ÙÛÙÚY\È›Üˆ\ÛÛ][™ÈÙÚXÈYÜË‚‹HÝÈÈY[YžH[™[[Z[˜]H\™›Ü›X[˜ÙH›Ý[™XÚÜË‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â‘]™[ˆÚ]Ø\™Y[\ÚYÛ‹[™^XÝY\ÜÝY\È\š\ÙH\š[™ÈÛÙØ\™H]™[ÜY[ˆH]X˜\ÙHÜZYÚ™H[œ™XXÚX›K[ˆ[š\›Û›Y[˜\šXX›HZYÚ™HZ\ØÛÛ™šYÝ\™YÜˆ[ˆ[ÛÜš]HZYÚ^XÝ]H™Y[™[Ü\˜][ÛœËˆÝY\ÜÚ[™È˜[™Û[HØ\Ý\È™XÚ[Ý\ÈÝ\œËˆÞ\Ý[X]XÈXYÙÚ[™ÈÚ]™[\˜IÜÈZ[Z[ˆÛÛÚZ[ˆXYÈÈ[[YYX]HÛÛ][ÛœÈ[ˆZ[]\Ë‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚–™[\˜H›ÝšY\ÈHÛÛ\™Z[œÚ]™HÛÛÚ]›Üˆ›ØXÝ]™HÞ\Ý[HXYÛ›ÜÝXÜÎ‚‹H™[\˜HÚXÚØˆ˜[Y]\ÈÞ[^\\ËØ\Xš[]Y\Ë[™›Ü›X[ÛÛ˜XÝË‚‹H™[\˜HØÝÜ˜ˆ]Y]ÈÜÝÞ\Ý[H[š\›Û›Y[Ë]X˜\ÙHÛÛ›™XÝ[ÛœËÜ[ˆÜË[™XÚØYÙHÛÛ™šYÝ\˜][ÛœË‚‹H™[\˜H[\XÝˆ[œÚ[È™XÚ\Ù[HÚXÚ[˜Ý[ÛœÈ[™[Ù[\È\™HY™™XÝYžHH›ÜÜÙYÚ[™ÙK‚‚˜˜\Úž™[\˜HØÝÜˆXZ[‹žž[˜’Yˆ[Ý\ˆX\šXQˆÙ\™\ˆ\ÈÙ™›[™HÜˆ[œ™XXÚX›K™[\˜HØÝÜ˜[[YYX][HYÚYÚÈH^XÝØ]\ÙH[œÝXYÙˆX]š[™È[ÝHÝ˜[™Y‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆÞ\Ý[X]XÈXYÛ›ÜÝXÈš[Ý][Y[ÊŠ‚˜™[\˜B™›ˆØ[Ý[]WÜÝ[J[X™\œÎˆ[×JHOˆ[Âˆ]]X›HÝ[Hˆ›Üˆˆ[ˆ[X™\œÈÂˆÝ[HÝ[
+È‚ˆBˆ™]\›ˆÝ[ŸB‚™›ˆXZ[Š
+HÂˆ˜[Y\Îˆ[×HHÌLŒÌBˆ™\Ý[HØ[Ý[]WÜÝ[J˜[Y\ÊBˆš[
+Ø[Ý[]Y™\Ý[ˆŠBˆš[
+™\Ý[
+BŸB˜‚ŠŠ‘^[\HŽˆÝX\™[™ÈYØZ[œÝ[™š[š]HÛÜÈ\Ú[™ÈÛÜ[˜\šX[ÊŠ‚˜™[\˜B™›ˆØY™WØÛÝ[
+[Z]ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈ[Z]ˆBžÂˆ]]X›HHHˆÚ[HH[Z]ˆ[˜\šX[ÈHHBˆÂˆHHH
+ÈBˆBˆ™]\›ˆBŸB‚™›ˆXZ[Š
+HÂˆš[
+ØY™WØÛÝ[
+L
+JBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ[ÙYžZ[™È[™\ÈÙˆÛÙH]˜[™ÛHÚ[ˆ[ˆ[™^XÝY™Z]š[ÜˆØØÝ\œË‚ˆ
+Ø]\ÙNŠˆXØÝ\˜][H\ÛÛ]HH›Ø›[Hš\œÝ\Ú[™È™[\˜HÚXÚØÙÈÝ]][™ÛÛ\[\ˆ[Ë‚‹H
+Š‘\œ›ÜŽŠŠˆÝ\ÜXÝ[™È]X˜\ÙHš]™\ˆYÜÈÚ[ˆH›Ú™XÝÛÛ™šYÝ\˜][Ûˆ[ˆ™[\˜KÛ[Ú[\HXÚÜÈ™\]Z\™Y\›Z\ÜÚ[ÛœË‚ˆ
+Ø]\ÙNŠˆ[ˆ™[\˜HØÝÜ˜È]XÝÛÛ™šYÝ\˜][Ûˆ\ÜÝY\È[œÝ[K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜HØÝÜ˜\È[Ý\ˆš\œÝÝ\Ú[ˆ[™\ÝYØ][™È[š\›Û›Y[™]ÛÜšËÜˆ]X˜\ÙH˜Z[\™\Ë‚Œ‹ˆÛÛ˜XÝÈ[™[˜\šX[ÈØ]Ú[ÛÜš]ZXÈ\œ›ÜœÈ™Y›Ü™HÛÙH]™\ˆ[\œÈ›ÙXÝ[Û‹‚ŒËˆÞ\Ý[X]XÈ›ÛÝXØ]\ÙHXYÙÚ[™È\È˜\Ý\ˆ[™˜\ˆ[Ü™H™[XX›H[ˆšX[X[™Y\œ›ÜˆÝY\ÜÚ[™Ë‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆ[ˆ™[\˜HØÝÜ˜YØZ[œÝ[Ý\ˆ\ÚÈX[˜YÙ[Y[›Ú™XÝ[™[œÜXÝXXÚ™\šYšXØ][Ûˆ[™K‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÜ™X]HH[˜Ý[ÛˆÚ]H[X™\˜]HÙÚXÈ\œ›Üˆ[ˆ[ˆ\ÛÛ]Y\Ý\›™\ÜÈ[™[˜[^™HÛÛ\[\ˆ™YY˜XÚË‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]HH][K\Ý\]H˜[œÙ›Ü›X][Ûˆ\[[™H]Ý]]ÈÝXÝ\™YÝ]\ÈÙÜÈ]XXÚZ[\ÝÛ™K‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[Z[[ˆ[\›˜[X[ÚXÚÈ›Ý][™H›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™›ˆ\™›Ü›WÜÙ[—Ý\Ý
+
+HOˆ›ÛÛÂˆ\ÝÛÚÈHH
+ÈHOH‚ˆ™]\›ˆ\ÝÛÚÂŸB‚™›ˆXZ[Š
+HÂˆš[
+”Ý\[™ÈÞ\Ý[HÙ[‹]\Ý‹‹ˆŠBˆYˆ\™›Ü›WÜÙ[—Ý\Ý
+
+HÂˆš[
+–ÓÒ×HÞ\Ý[H[˜Ý[Ûš[™È›Ü\›KˆŠBˆH[ÙHÂˆš[
+–ÑT”“Ô—H[\›˜[Þ\Ý[H\œ›Ü‹ˆŠBˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹HH™[\˜HÛÛÚZ[ˆ
+ØÝÜ˜ÚXÚØ[\XÝ
+H›ÝšY\È˜\YÛ\š]HÚ[ˆ[˜ÛÝ[\š[™ÈY™XÝË‚‹HÛÛ˜XÝÈ[™ÛÜ[˜\šX[È™]™[ÙÚXØ[Ý]HÛÜœ\[Ûˆ™Y›Ü™H]™XÛÛY\ÈH›ÙXÝ[ÛˆYË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]Þ\Ý[H[™›Ú™XÝ\ÜXÝÈ\™H]Y]YžH™[\˜HØÝÜ˜ÂŒ‹ˆÝÈØ[ˆ[ÝHÞ\Ý[X]XØ[H\ÛÛ]HHY™XÝÚ][ˆ[ˆ]\˜]]™HØ[Ý[][ÛÂŒËˆÚ]›ÛHÈÛÜ[˜\šX[È^H[ˆ™]™[[™ÈÙÚXØ[™YÜ™\ÜÚ[ÛÂ‚‹KKB‚ˆÈÈÚ\\ˆÎNˆ\Þ[Y[[™Ü\˜][ÛœÂ‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HÝÈ™[\˜HÙXˆ\XØ][ÛœÈ\™H\ÞYYÈ›ÙXÝ[Ûˆ[š\›Û›Y[Ë‚‹HÝÈÈXÚØYÙH[™Ü\˜]H[Ý\ˆ\XØ][Ûˆ[œÚYHYÚÙZYÚØÚÙ\ˆÛÛZ[™\œË‚‹HÝÈ™[\˜HÛÛ›™XÝÈÈH›ÙXÝ[ÛˆX\šXQˆÛ\Ý\‹‚‹HÝÈÈXZ[Z[ˆYÚ]˜Z[Xš[]H\Ú[™ÈHZ[Z[ˆÙ\™\ˆÚ]™[\˜HÙ\™X‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â”ÛÙØ\™H\ÈÙˆ]H˜[YHYˆ]Û›H[œÈÛˆH]™[Ü\‰ÜÈØØ[ÛÜšÜÝ][Û‹ˆ]]\ÝÜ\˜]H™[XX›HÍÈ[ˆ›ÙXÝ[ÛˆÜˆÛÝY[™œ˜\ÝXÝ\™Kˆ[ˆ˜Y][Û˜[XÚ›ÛÙÞHÝXÚÜË\Þ[Y[Ù[ˆ[›Û™\ÈXž\š[[™HÛÛ™šYÝ\˜][ÛœÈÙˆQ”K\XÚKÓ™Ú[ž™]™\œÙH›ÞY\Ë[™›ØÙ\ÜÈX[˜YÙ\œËˆ™[\˜H˜YXØ[HÚ[\YšY\ÈÜ\˜][ÛœÎˆHÚ[™ÛHÛÛ™šYÝ\˜][Ûˆš[H[™HYÚÙZYÚš[˜\žHÛÛZ[™\ˆ\™H[[ÝH™YY‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛ‚–™[\˜H[˜ÛY\È]ÈÝÛˆYÚ\\™›Ü›X[˜ÙK\Þ[˜Ú›Û›Ý\ÈÙXˆÙ\™\Ž‚˜˜\Úž™[\˜HÙ\™HÜ˜ËÛXZ[‹žž[ŒŒŒŽ˜‘›Üˆ›Ù™\ÜÚ[Û˜[›ÙXÝ[Ûˆ\Þ[Y[Ë[ÝHXÚØYÙH[Ý\ˆ\XØ][Ûˆ[ÈHØÚÙ\ˆÛÛZ[™\Ž‚‹HHÛÛZ[™\ˆÛÛZ[œÈHÛÛ\[Y™[\˜Hš[˜\žK[Ý\ˆ›Ú™XÝÛÝ\˜ÙHš[\Ë[™™[\˜KÛ[‚‹HÛˆÝ\\HÛÛZ[™\ˆ]]ÛX]XØ[H[œÈ]X˜\ÙHØÚ[XHZYÜ˜][ÛœÈšXH™[\˜Hˆ\X[™][˜Ú\ÈHÙXˆÙ\™\‹‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Â‚ŠŠ‘^[\HNˆ›ÙXÝ[Û‹\™XYH›Ú™XÝÛÛ™šYÝ\˜][ÛŠŠ‚˜Û[ˆÈ™[\˜KÛ[–ÜXÚØYÙWB›˜[YHH\ÚÜ×Ü›ÙXÝ[Ûˆ‚™\œÚ[ÛˆHŒKŒŒ‚‚–ØØ\Xš[]Y\×B™]X˜\ÙHHYB™š[\Þ\Ý[HH˜[ÙB›™]ÛÜšÈHYB˜‚ŠŠ‘^[\HŽˆÛX[ˆÙXˆÙ\™\ˆ[žHÚ[
+Š‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ü›Ù‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊLŒ
+H™\]Z\™YˆÛ™Nˆ›ÛÛY˜][˜[ÙBŸB‚œYÙH‹ÈˆÂˆ[ÂˆO–™[\˜H\ÚÈX[˜YÙ\ˆ]™OÚO‚ˆ”›ÙXÝ[ÛˆÞ\Ý[HXÝ]™H[™ÙXÝ\™KÜ‚ˆBŸB˜‚ŠŠ‘^[\HÎˆÙ\™\ˆÝ\\ÛÛ[X[™ÊŠ‚“Ûˆ[Ý\ˆ›ÙXÝ[ÛˆÜÝÜˆÜ˜Ú\Ý˜][ÛˆÛ\Ý\Ž‚˜˜\Úž™[\˜Hˆ\HÜ˜ËÛXZ[‹žž[ž™[\˜HÙ\™HÜ˜ËÛXZ[‹žž[ŒŒŒŽ˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆÝ\[™ÈHÙXˆÙ\™\ˆ™Y›Ü™H\Z[™È]X˜\ÙHZYÜ˜][ÛœÈ
+™[\˜Hˆ\X
+K‚ˆ
+Ø]\ÙNŠˆ™]ÈX›\È[™ÛÛ[[œÈ]\Ý^\Ý[ˆX\šXQˆ™Y›Ü™H[˜ÛÛZ[™È™\]Y\ÝÈ][\È]Y\žH[K‚‹H
+Š‘\œ›ÜŽŠŠˆ›Ü™Ù][™ÈÈ^ÜÙHÜ[ˆØÚÙ\‹‚ˆ
+Ø]\ÙNŠˆ[œÝ\™H[Ý\ˆØÚÙ\ˆ[˜ÛÛ[X[™ÜˆÛÛ\ÜÙHYš[š][Ûˆ[˜ÛY\È\Ž‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜HÙ\™X][˜Ú\ÈHZ[Z[ˆÙ\™\ˆÚ]Ý]^\›˜[ÙXˆÙ\™\ˆ\[™[˜ÚY\Ë‚Œ‹ˆ™[\˜Hˆ\XØY™[HZYÜ˜]\È›ÙXÝ[ÛˆØÚ[X\ÈÈH]\Ý™\œÚ[Û‹‚ŒËˆ^XÚ]Ø\Xš[]HÛÛœÝ˜Z[È[ˆ™[\˜KÛ[\™[ˆ[Ý\ˆ›ÙXÝ[ÛˆÙ\™\ˆYØZ[œÝ[˜]]Üš^™YÞ\Ý[HXØÙ\ÜË‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆ][˜Ú[Ý\ˆÙXˆ\XØ][ÛˆØØ[HÛˆÜÌ\Ú[™È™[\˜HÙ\™HXZ[‹žž[LËŒŒŒNŒÌ‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ]]ÜˆHØÚÙ\‹XÛÛ\ÜÙKž[[š[HÜ˜Ú\Ý˜][™ÈX\šXQˆ[™[Ý\ˆ™[\˜H\XØ][ÛˆÛÛZ[™\‹‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÚ[][]HH›ÙXÝ[ÛˆØÚ[XH\]NˆYH™]ÈÛÛ[[‹[ˆ™[\˜Hˆ[˜È™]šY]ÈÔSÝ][Y[Ë[™^XÝ]H™[\˜Hˆ\X‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[ÛÛœÛÛY]H[›ÙXÝ[Ûˆ\Þ[Y[Ù][™ÜÈ›ÜˆÝ\ˆ\ÚÈX[˜YÙ[Y[Þ\Ý[N‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ\ÚÜ×Ü›ÙXÝ[Ûˆ‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚œYÙH‹ÈˆÂˆ[Âˆ[‚ˆ›ÙO‚ˆO•\ÚÈX[˜YÙ[Y[H›ÙXÝ[ÛˆÞ\Ý[OÚO‚ˆ”Þ\Ý[H™XYH›Üˆ\Ù\ˆ˜Y™šXËÜ‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H\XØ][ÛœÈ[ˆ\™XÝH[™\™›Ü›X[HÚ]Ý]ÛÛ\^Ù\™\ˆÝXÚÈ\[™[˜ÚY\Ë‚‹H]X˜\ÙHZYÜ˜][ÛœË\KXÚXÚÙYØÚ[X\Ë[™ÙXˆÙ\š[™ÈY\ÚÙX[[\ÜÛH[ÈÛ™H[šYšYYÛÜšÙ›ÝË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚÛÛ[X[™][˜Ú\ÈH[YÜ˜]YÙXˆ\XØ][ÛˆÙ\™\ÂŒ‹ˆÚH]\Ý™[\˜Hˆ\X™H^XÝ]Yš[ÜˆÈÝ\[™ÈH›ÙXÝ[ÛˆÙ\™\ÂŒËˆÚ]\˜Ú]XÝ\˜[Y˜[YÙ\ÈÙ\È[ˆ[X™YYÙ\™\ˆÙ™™\ˆÝ™\ˆ^\›˜[ÙXˆÙ\™\ˆÙ]\ÏÂ‚ˆÈT•8 $ÈÐTÕÓ‘H“Ò‘PÕS‘ÓÒÒS‘ÈRPQ‚‹KKB‚ˆÈÈÚ\\ˆˆHÜ˜[™Ø\ÝÛ™H›Ú™XÝˆÛÛ\]H\ÚÈX[˜YÙ[Y[‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÜ˜[™š[˜[K[ÝHÚ[X\›Ž‚‹HÝÈ[H[™]šYX[Z[[™È›ØÚÜÈX\›™Y›ÝYÚÝ]\È›ÛÚÈ\ÙH[ÈHÛÚ\Ú]™K›ÙXÝ[Û‹\™XYH\XØ][Û‹‚‹HÝÈ]X˜\Ù\Ë]][XØ][Û‹›ÛH\›Z\ÜÚ[ÛœËÔ•Q\Ú›Ø\™Ë‘TÕT\Ë[™\Ú[™\ÜÈÛÛ˜XÝÈY\ÚÙX[[\ÜÛHÙÙ]\‹‚‹HÝÈÈ™XY[™\œÝ[™ÛÛ\[K[™\ÞHH[\™H[Û›Û]XÈ\XØ][ÛˆÛˆH]™HÙ\™\‹‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â•[™\œÝ[™[™È\ÛÛ]YÛÙHÛš\]È\ÈÛ™H[™ø %Z[[™ÈH™X[›ÙXÝ[Û‹\™XYHÙXˆ\XØ][Ûˆœ›ÛHHÚ[™ÛHÛÚ\Ú]™H›Y\š[\ÈHYHÜ˜YÙˆÛÙØ\™H[™Ú[™Y\š[™Ëˆ\ÈØ\ÝÛ™H›Ú™XÝ[[ÛœÝ˜]\ÈH^˜[Ü™[˜\žH[YØ[˜ÙHÙˆ™[\˜Nˆ[ˆHÚ[™ÛKÙ[\ÝXÝ\™Yš[K[ÝHÜ™X]HH]X˜\ÙKX˜XÚÙY]][XØ]YÙXˆÞ\Ý[HÚ]RHšY]ÜÈ[™‘TÕT\È]ÛÝ[™\]Z\™HÞ™[œÈÙˆœ˜YÛY[Yš[\È[ˆYØXÞHœ˜[Y]ÛÜšÜË‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛŽˆÝ™\šY]ÈÙˆHÛÛ\]H›Ú™XÝ“Ý\ˆÛÛ\]H\ÚÈX[˜YÙ[Y[\XØ][ÛˆÛÛ\š\Ù\Î‚ŒKˆ
+Š‘]X˜\ÙH	ˆØÚ[XH\œÚ\Ý[˜ÙNŠŠˆ\™Ù]X\šXQˆ[™Ú[™HÚ]™[][Û˜[X›\È›Üˆ\ÚÜÈ
+\ÚÜØ
+K\Ù\œÈ
+\Ù\œØ
+KÙ\ÜÚ[ÛœÈ
+]]ÜÙ\ÜÚ[ÛœØ
+K[™\›Z\ÜÚ[ÛœÈ
+\Ù\—Ü\›Z\ÜÚ[ÛœØ
+K‚Œ‹ˆ
+Š]][XØ][ÛŽŠŠˆ[YÜ˜]Y]]\Ù\œØYXÚ[š\ÛHÚ]›ÝXÝYÙ\ÜÚ[ÛˆÚÙ[œÈ[™ÙXÝ\™H\™ÛÛŒˆ\ÜÝÛÜ™\Ú[™Ë‚ŒËˆ
+Š\Ú[™\ÜÈÛXZ[ˆÙÚXÎŠŠˆ\™H[˜Ý[ÛœÈÛÝ™\›™YžH›Ü›X[ÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+H›ÜˆØ[Ý[][™ÈÛÛ\][Ûˆ˜]\È[™š[Üš]HÛ\ÜÚYšXØ][ÛœË‚ˆ
+ŠÔ•Q[\™˜XÙNŠŠˆ[YZ[š\Ý˜]]™HÙXˆ\Ú›Ø\™™X]\š[™ÈØ\™[[ÙH\Ý[™ÜË]Z[šY]ÜËÜ™X][Û‹ÙY]›Ü›\Ë[™ØY™H[][ÛˆÛÜšÙ›ÝÜË‚Kˆ
+Š”‘TÕTNŠŠˆÝ›Û™ÛH\Y”ÓÓˆ[™Ú[È›Üˆ›ÙÜ˜[[X]XÈ^\›˜[XØÙ\ÜË‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\ÎˆHÛÛ\]H›Ú™XÝˆš[˜[ÛÝ\˜ÙHÛÙB‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆž™[\˜WÝ\ÚÜ×Ø\‚ŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈKˆUUS•Q’V’QT•S‘È	ˆ‘S•U‘T•‘T•ÐSS‘Â‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚˜]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆÙ\ÜÚ[ÛœÎˆ]]ÜÙ\ÜÚ[ÛœÂˆ\›Z\ÜÚ[ÛœÎˆ\Ù\—Ü\›Z\ÜÚ[ÛœÂŸB‚X›H\Ù\œÈÂˆYˆYš[X\žH]]Âˆ[XZ[ˆ[XZ[™\]Z\™Y[š\]YBˆ\ÜÝÛÜ™Ú\ÚˆÝš[™ÊMJH™\]Z\™YˆXÝ]™Nˆ›ÛÛY˜][YBŸB‚X›H]]ÜÙ\ÜÚ[ÛœÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™YˆÚÙ[—Ú\ÚˆÝš[™Ê
+H™\]Z\™Y[š\]YBˆ^\™\×Ø]ˆ[Y\Ý[\™\]Z\™YŸB‚X›H\Ù\—Ü\›Z\ÜÚ[ÛœÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™Yˆ\›Z\ÜÚ[ÛŽˆÝš[™ÊL
+H™\]Z\™YŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈ‹ˆUQ‘ÐP‘S‹QUS“SÑS‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚\H\ÚÒYHY‚X›H\ÚÜÈÂˆYˆ\ÚÒYš[X\žH]]Âˆ˜[YNˆÝš[™ÊLŒ
+H™\]Z\™Yˆ™\ØÚ™ZX[™ÎˆÝš[™ÊL
+Bˆš[Üš]Y]ˆ[Y˜][‚ˆ\›YYÝˆ›ÛÛY˜][˜[ÙBŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈËˆÑTÐÒ0á•ÓÑÒRÈRU‘T•°áÑS‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚™›ˆ™\™XÚ™WÙ\™›ÛÜÜ][ÝJ\›YYÝNˆ[Ù\Ø[]ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÙ\Ø[]ˆ	‰ˆ\›YYÝHH	‰ˆ\›YYÝHHÙ\Ø[]Bˆ[œÝ\™\ÈÈ™\Ý[H	‰ˆ™\Ý[HLBžÂˆ™]\›ˆ
+\›YYÝH
+ˆL
+HÈÙ\Ø[]ŸB‚™›ˆš[Üš]Y]ÛX™[
+ÝY™Nˆ[
+HOˆÝš[™ÈÂˆX]ÚÝY™HÂˆHOˆÂˆ™]\›ˆ’ÐÒ‚ˆBˆˆOˆÂˆ™]\›ˆ“RUS‚ˆBˆÈOˆÂˆ™]\›ˆ“’QQ’QÈ‚ˆBˆÈOˆÂˆ™]\›ˆ““Ô“PS‚ˆBˆBŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈˆÑP“Ð‘T‘“0áÒH	ˆÔ•QTÐÒ’UÕSB‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚˜ÜY\ÚÈOˆ\ÚÜÈÂˆ]Nˆ–™[\˜H]Y™ØX™[™\Ø[[™È‚‚ˆšY]ÈÂˆšY[ÈÂˆ˜[YBˆš[Üš]Y]ˆ\›YYÝˆB‚ˆ\ÝÂˆ[ÙNˆØ\™Âˆ[\Nˆ’ÙZ[™H]Y™ØX™[ˆ›Üš[™[‹ˆ\œÝ[HZ[™H\œÝH]Y™ØX™HH‚ˆB‚ˆ]Z[Âˆ[ÙNˆØ\™Âˆ]Nˆ]Y™ØX™[™]Z[È‚ˆB‚ˆ›Ü›HÂˆ[ÙNˆØ\™Âˆ]Nˆ]Y™ØX™H™X\˜™Z][ˆ‚ˆÝX›Z]ˆ]Y™ØX™HÚXÚ\›ˆ‚ˆB‚ˆ[]HÂˆ]Nˆ]Y™ØX™H[™\›™[ˆ‚ˆY\ÜØYÙNˆ“[ÙXÚ\ÝHY\ÙH]Y™ØX™HÚ\šÛXÚÙ\ØÚ[È‚ˆÝX›Z]ˆ’™]Ù\ØÚ[ˆ‚ˆBˆB‚ˆXÝ[ÛˆXœØÚY\ÜÙ[ˆÂˆX™[ˆ[È\›YYÝX\šÚY\™[ˆ‚ˆÛÛ™š\›Nˆ]Y™ØX™HXœØÚY\ÜÙ[È‚‚ˆÜ[ÂˆTUH\ÚÜÂˆÑU\›YYÝHYBˆÒT‘HYHšYˆB‚ˆÝXØÙ\ÜÈ]Y™ØX™H\™›ÛÜ™ZXÚX™Ù\ØÚÜÜÙ[‹ˆ‚ˆ™Y\™XÝ‹Ý\ÚÜÈ‚ˆBŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈKˆ‘TÕPTHS‘S’ÕB‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚˜\HÑU‹Ø\KÝ\ÚÜËÞÚYHˆÂˆ[œ]ÂˆYˆ\ÚÒYˆBˆÝ]]\ÚÂˆ\œ›ÜœÈÂˆ›Ý›Ý[™ˆBŸB‚˜\HÔÕ‹Ø\KÝ\ÚÜÈˆÂˆ[œ]Âˆ˜[YNˆÝš[™Âˆš[Üš]Y]ˆ[ˆBˆÝ]]\ÚÂˆ\œ›ÜœÈÂˆ˜[Y][Û‘\œ›Ü‚ˆBŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈ‹ˆÕT•ÑRUB‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚œYÙH‹ÈˆÂˆ[Âˆ[‚ˆXY‚ˆ]O–™[\˜H]Y™ØX™[‹TÞ\Ý[OÝ]O‚ˆÚXY‚ˆ›ÙO‚ˆO–™[\˜H]Y™ØX™[™\Ø[[™ÏÚO‚ˆ‘\È›ÛÝY[™YÙHXœØÚ\ÜÜ›Ú™ZÝ\ÝZ[œØ]˜™\™Z]Ü‚ˆH™YH‹Ý\ÚÜÈ–\ˆ]Y™ØX™[YX™\œÚXÚØO‚ˆØ›ÙO‚ˆÚ[‚ˆBŸB‚‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‹ËÈËˆRS”ÕQQÔÔS’Õ‹ËÈOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOB‚™›ˆXZ[Š
+HÂˆš[
+–™[\˜H]Y™ØX™[™\Ø[[™È›ÛÝY[™YÈ[š]X[\ÚY\ˆŠBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆ][˜Ú[™ÈHÙXˆÙ\™\ˆ™Y›Ü™H^XÝ][™È™[\˜Hˆ\X‚ˆ
+Ø]\ÙNŠˆX\šXQˆX›\È[™ÛÛ[[œÈ]\Ý™HZYÜ˜]Y™Y›Ü™H[˜ÛÛZ[™ÈÙXˆ˜Y™šXÈØ[ˆ™HÙ\šXÙY‚‹H
+Š‘\œ›ÜŽŠŠˆZ\ÜÚ[™È]X˜\ÙHÜ™Y[X[È[ˆ[Ý\ˆ™[˜ÛÛ™šYÝ\˜][Û‹‚ˆ
+Ø]\ÙNŠˆ[œÝ\™H—ÒÔÕ—ÕTÑT˜[™—ÔTÔÕÓÔ‘\™HÛÛ™šYÝ\™Y[ˆ[Ý\ˆØØ[™[˜š[K‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ[ˆ™[\˜KHÛÛ\]KÙXÝ\™HÙXˆ\XØ][Ûˆ\ÈXÛ\™Y[ˆÛ™HÛÚ\Ú]™KXZ[Z[˜X›HÛÝ\˜ÙHš[K‚Œ‹ˆ\HØY™]KÛÛ˜XÝË\Ù\ˆ]][XØ][Û‹[™‘TÕT\È[YÜ˜]HÚ]™\›È›Ú[\œ]K‚ŒËˆ\È\XØ][ÛˆÛÛ\[\È[œÝ[HÚ]™[\˜HÚXÚØ[™Ù\™\È]™H˜Y™šXÈšXH™[\˜HÙ\™X‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆÛÛ\[HHÛÛ\]H›Ú™XÝ\Ú[™È™[\˜HÚXÚØ[™™\šYžH]\œ›ÜœÈ\™H™\ÜY‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆ^[™H\ÚÜØØÚ[XHÚ]H˜Y[Y×Ø[Nˆ]XXY[™HšY[[™\]HH›Ü›H[™\ÝšY]ÜÈXØÛÜ™[™ÛK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÙ]\HØØ[X\šXQˆ[œÝ[˜ÙK\HHØÚ[XHÚ]™[\˜Hˆ\X[™Ü™X]H[Ý\ˆš\œÝ™X[›ÙXÝ[Ûˆ\ÚÜÈ›ÝYÚ[Ý\ˆÙXˆœ›ÝÜÙ\‹‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[H][˜Ú[™È[Ý\ˆÝÛˆ›ÙXÝ[ÛˆÙ\™\‚’[š]X[^™HH›Ú™XÝ\™XÝÜžH[™Ý\HÙ\™\Ž‚˜˜\Úž™[\˜H™]È\Ú×ÛX[˜YÙ\ˆK][\]HZ[š[X[˜Ù\Ú×ÛX[˜YÙ\‚ˆÈ[œÙ\HÛÛ\]HÛÝ\˜ÙHÛÙHX›Ý™H[ÈÜ˜ËÛXZ[‹žž[ž™[\˜HÚXÚÈÜ˜ËÛXZ[‹žž[ž™[\˜HÙ\™HÜ˜ËÛXZ[‹žž[ŒŒŒŽ˜“˜]šYØ]HÈ‹ËÛØØ[ÜÝŽ[ˆ[Ý\ˆœ›ÝÜÙ\¸ %[Ý\ˆÝÛˆ]™H™[\˜H\XØ][Ûˆ\ÈÜ\˜][Û˜[B‚ˆÈÈÈKˆÝ[[X\žB‹HHØ\ÝÛ™H›Ú™XÝ[š]\È[š[™H™XÙY[™È\ÈÙˆ\È^›ÛÚÈ[ÈÛ™H›ÙXÝ[Û‹YÜ˜YHÞ\Ý[K‚‹H[ÝH]™HX\›™YÝÈÈZ[[Ù\›‹˜][]Û\˜[ÙXˆ\XØ][ÛœÈœ›ÛHHÜ›Ý[™\‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚ]ÛÛ\Û™[ÈÙ\™HÝXØÙ\ÜÙ[HÛÛXš[™Y[ˆHØ\ÝÛ™H›Ú™XÝÂŒ‹ˆÚHÙ\È™[\˜H™\]Z\™HÛÈ™]È[™\ÈÙˆÛÙHÈ[]™\ˆHÛÛ\™Z[œÚ]™HÔ•QÞ\Ý[OÂŒËˆÚ]Ù\]Y[X[Ý\È\™H™\]Z\™YÈ\ÞH\È›Ú™XÝÈHœ™\Ú›ÙXÝ[ÛˆÙ\™\Â‚‹KKB‚ˆÈÈÚ\\ˆNˆH™[\˜H›ØYX\
+œ›ÛHŒËŒÈKŒ
+B‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\ÈÚ\\‹[ÝHÚ[X\›Ž‚‹HH]™[ÜY[[Y™XÞXÛHÙˆ™[\˜NˆÚ]H^\š[Y[[ŒËŒ™[X\ÙH[]™\œÈ[™Ú]ÛÛY\È™^‚‹H[›™Y™X]\™\È›ÜˆH™^Z[\ÝÛ™\ÎˆÛÛ\]H[Ù[\ËXÚØYÙHX[˜YÙ[Y[[™ÙX\ÜÙ[X›HÛÛ\[][Û‹‚‹HÝÈ˜XÚÝØ\™ÛÛ\]Xš[]H[™ÝXš[]HÝX\˜[Y\È\™HXZ[Z[™Y›ÝYÚ™\œÚ[ÛˆKŒ‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[ÂH›ÙÜ˜[[Z[™È[™ÝXYÙH\ÈH]š[™ÈXÛÜÞ\Ý[KˆÚ[ˆ[ÝH[™\Ý[YH[ÈX\Ý\š[™È™[\˜K[ÝHØ[\ÜÝ\˜[˜ÙH]H[™ÝXYÙH\ÈHÛX\ˆÝ˜]YÚXÈ›ØYX\›Ù™\ÜÚ[Û˜[Ý]Ø\™Ú\[™]^\Ý[™ÈÛÙH™[XZ[œÈÛÛ\]X›H[ˆ]\™H™[X\Ù\Ë‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛŽˆ›ØYX\Ý™\šY]Â–™[\˜IÜÈ›ØYX\\ÈÝXÝ\™YXÜ›ÜÜÈ[\[Y[][Ûˆ\Ù\È[™™[X\ÙB›Z[\ÝÛ™\Î‚‹H
+Š”\Ù\ÈHÈÈ
+›Ý[™][ÛœÊNŠŠˆ^\‹\œÙ\‹TÕÝ]XÈ\HÚXÚÙ\‹ÛÛ›Û›ÝË[˜Ý[ÛœË[™›Ü›X[ÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+Kˆ
+ŠÛÛ\]Y
+J‚‹H
+Š”\Ù\ÈÈˆ
+]X˜\ÙH	ˆ]JNŠŠˆX\šXQˆ[™ÔS]H[™Ú[™\Ë\KXÚXÚÙYÜ[×O˜ZYÜ˜][ÛœË˜[œØXÝ[ÛœËš[TÞ\Ý[H[™ÛØÚÈØ\Xš[]Y\Ëˆ
+ŠÛÛ\]Y
+J‚‹H
+Š”\Ù\ÈÈÈH
+ÙXˆ	ˆÙXÝ\š]JNŠŠˆYÙX[›Ü›XÚ]ÔÔ‘‹ÖÔÈ›ÝXÝ[Û‹ÜYšY]ÜË]]Ú]\™ÛÛŒ‹\XÚ]]]ÛX]YÜ[THØÚ[XHÙ[™\˜][Û‹\YÛ\Ë[™ÝXÝ\™Y”ÓÓˆXYÛ›ÜÝXÜËˆ
+ŠÛÛ\]Y
+J‚‹H
+ŠŒŒËŒ
+Ý\œ™[^\š[Y[[™[X\ÙJNŠŠˆ\ÝYÛÛ\[\ˆ[™]X˜\ÙBˆ]Ë[œÝ[\ˆ[™\]HÚXÚËÙ[™\˜]Y\Ú[™\ÜÈ\XØ][ÛœË[™ˆ[^[™Ú[™ÝÜÈ—Í™[X\ÙH\Y˜XÝËˆ[X[ˆÛ˜›Ø\™[™ÈXØÙ\[˜ÙHØ\ÂˆY™\œ™YÈHX[™]ÜžHŒØ]K‚‹H
+ŠŒŒ‹Œ
+™]š[Ý\È™[X\ÙJNŠŠˆ\YX\ËXÛ\˜]]™HÙX\˜Úš[\š[™È[™ˆYÚ[˜][Û‹™]\ØX›HšY]ÜÈ[™ÛÝËÙ[™\˜]YÔ•Q]][XØ][Ûˆ[™ˆ\›Z\ÜÚ[ÛœË]Y]Ý\ÜÙ]\ÙØÝÜˆÛÛ[™Ë[™XXÚ[™K\™XYX›BˆÛÛ\[\ˆ[\™˜XÙ\Ë‚‹H
+ŠŒŒ
+›ÜÜÙY
+NŠŠˆ[Ù[\Ë]X˜\ÙHY™XÞXÛKØY™\ˆXØÛÝ[ÐTBˆÛÜšÙ›ÝÜË[™[™\[™[[X[ˆÛ˜›Ø\™[™ÈXØÙ\[˜ÙKˆÙYHHÜ™[X\ÙBˆ[—J‹‹Ë‹‹Ü™[X\ÙK\[œËÌŒ™[‹›Y
+K‚‹H
+Š“]\ˆZ[\ÝÛ™\ÎŠŠˆHXÚØYÙHX[˜YÙ\‹ÙX\ÜÙ[X›HÛÛ\[][Û‹[™[žBˆÈÛÛ[Z]Y[™[XZ[ˆ]\™HÛÜšËˆHÝ\œ™[œ˜[˜Ú\È[ˆ^\š[Y[[ˆ[\ÜÛXÙH›Üˆ[˜Ý[ÛœË\\Ë™XÛÜ™ËX›\ËšY]ÜËÛÛ\Û™[Ë[™ˆ›Ú™XÝ]ÚYH]X˜\ÙHÛÛ™šYÝ\˜][Û‹ˆ]\È›Ý[ˆ™[X\ÙHŒËŒ[™Ù\Âˆ›ÝY]›ÝšYHHÛÛ\]KÝX›H›Ú™XÝ[[Ù[H[Ù[‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Îˆ™[\˜IÜÈÝX\˜[Y\ÈÈ]™[Ü\œÂ‹H
+Š“›Èœ™XZÚ[™ÈÚ[™Ù\ÈÚ]Ý]\™XØ][ÛˆÞXÛ\ÎŠŠˆÞ[^Ú[™Ù\È\™H[›ÙXÙYÚ]Ù[™\›Ý\È˜[œÚ][Ûˆ\š[ÙÈ[™^XÚ]ÛÛ\[\ˆ[Ë‚‹H
+Š‘›Ü›X[[™ÝXYÙHÜXÚYšXØ][ÛŽŠŠˆ]™\žH[™ÝXYÙHÛÛœÝXÝ\ÈÜ›Ý[™Y[ˆ[ˆ[˜[XšYÝ[Ý\È›Ü›X[Ü˜[[X\‹‚‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\ÎˆÛÛ[[ÛˆZ\ØÛÛ˜Ù\[ÛœÂ‹H
+Š“Z\ØÛÛ˜Ù\[ÛŽŠŠˆ–™[\˜HŒËŒ\È›ÙXÝ[Û‹\™XYH™XØ]\ÙH]ÈÛÜ™H]ÈÛÜšËˆ‚ˆ
+ÛÜœ™XÝ[ÛŽŠˆ™[\˜HŒËŒ\È[ˆ^\š[Y[[\ÝYØÛÜKˆH™\ÜÚ]ÜžBˆØÝ[Y[È]ÈÝ\ÜY]È[™™\ÚYX[š\ÚÜÎÈ›ÙXÝ[Ûˆ\›Ý˜[\È›ÝˆÛZ[YY‚‹H
+Š“Z\ØÛÛ˜Ù\[ÛŽŠŠˆ\ÜÝ[Z[™È][\ÜÈÛÜšÈ[ˆ]™\žH™[\˜H™\œÚ[ÛˆZÙH^HÈ[ˆ[›Ý\ˆ[™ÝXYÙK‚ˆ
+ÛÜœ™XÝ[ÛŽŠˆX›\ÚYŒËŒ\È›È[Ù[H[\ÜËˆHÝ\œ™[]™[ÜY[œ˜[˜ÚÝ\ÜÈÝ]XË›Ú™XÝ[ØØ[[\ÜÈ›ÜˆH[Z]YÙ]ÙˆXÛ\˜][ÛœÈ›ÝYÚÚXÚØZ[[˜Ù\™XÛÛ^™\šYžX[™[\XÝÈÛÛ\]H[Ù[HXÚØYÚ[™Ëš\ÚXš[]K[™ÛÛ[YÜ˜][Ûˆ™[XZ[ˆ[›™Y‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆ™[\˜H›ÛÝÜÈH\ØÚ\[™Y˜[œÜ\™[›ØYX\œ›ÛHHÝ\œ™[ŒËŒˆ™[X\ÙHÝØ\™]\ˆZ[\ÝÛ™\Ë‚Œ‹ˆHÛÜ™H]›Ü›H\È\ÝY^\š[Y[[]È›Üˆ]X˜\ÙH[YÜ˜][Û‹ˆÙXˆ\XØ][ÛœËÝ]XÈØY™]K[™RK[˜]]™HÛÛ[™ÎÈ]\È›Ý\›Ý™Yˆ›Üˆ›ÙXÝ[ÛˆÙ^K‚ŒËˆHÛÛ\]H[Ù[H[Ù[XÚØYÙH\ÝšX][Û‹[™ÙX\ÜÙ[X›H™[XZ[‚ˆ]\™HÛÜšÎÈHÝ\œ™[]™[ÜY[œ˜[˜Ú\ÈH[Z]Y^\š[Y[[ˆ][KYš[HÛÛ\[\ˆÛXÙK‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆ™XYHÙ™šXÚX[ÒS‘ÑSÑË›Y[ˆH™[\˜HÚ]Xˆ™\ÜÚ]ÜžK‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆÛÛ\\™HH™X]\™\È[\[Y[Y[ˆ\ÙHHÚ]HZ[\ÝÛ™\È[›™Y›Üˆ\ÙHLK‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆÜš]H[ˆ\˜Ú]XÝ\˜[›ÜÜØ[›ÜˆH]\™H™]\ØX›H™[\˜HXÚØYÙH[ÝH[ˆÈX›\ÚÛ˜ÙH\ÙHLˆ][˜Ú\Ë‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[H]Y][™È™[\˜H™\œÚ[Ûˆ[™[š\›Û›Y[•™\šYžH[Ý\ˆ[œÝ[YÛÛÚZ[ˆ™\œÚ[Ûˆ[™˜[Y]H[Ý\ˆÜÝ[[YH[š\›Û›Y[‚˜˜\Úž™[\˜HK]™\œÚ[Û‚ž™[\˜HØÝÜ‚˜‚ˆÈÈÈKˆÝ[[X\žB‹H™[\˜H\ÈY˜[˜Ú[™ÈÝXY[H[™Y]ÙXØ[HÝØ\™]ÈKŒÈZ[\ÝÛ™K‚‹HH[Ù[\ˆ\ÙY]™[ÜY[Y]ÙÛÙÞHÝX\˜[Y\È™YXÝX›K›ØÚË\ÛÛY]›Û][ÛˆÚ]Ý]œ™XZÚ[™È]™[Ü\ˆÛÜšÙ›ÝÜË‚‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚÛÜ™HØ\Xš[]Y\È\™H[\[Y[Y[ˆH\ÝYŒËŒØÛÜOÂŒ‹ˆÚXÚ]\™HZ[\ÝÛ™H\È[›™Y›ÜˆÜ˜[[\ˆ[\ÜÝ][Y[ÏÂŒËˆÚHÙ\ÈH^\š[Y[[Ý]\ÈX]\ˆ™Y›Ü™H\ÞZ[™È™[\˜HÈ›ÙXÝ[ÛÂ‚‹KKB‚ˆÈÈÚ\\ˆŽˆ[Ý\ˆ›Ý\›™^H\ÈH™[\˜H]™[Ü\‚‚ˆÈÈÈKˆÚ]Ú[HX\›ˆ[ˆ\ÈÚ\\Â’[ˆ\Èš[˜[Ú\\‹[ÝHÚ[X\›Ž‚‹HÝÈÈY\[ˆ[Ý\ˆXÜ]Z\™Y^\\ÙH[™\H]È[Xš][Ý\È™X[]ÛÜ›\XØ][ÛœË‚‹HÛÜ™H\˜Ú]XÝ\˜[š[˜Ú\\È›Üˆ[™Ú[™Y\š[™È\˜X›KXZ[Z[˜X›HÛÙØ\™HÞ\Ý[\Ë‚‹HÝÈÈ\XÚ\]H[ˆHÜ›ÝÚ[™È™[\˜HÛÛ[][š]H[™ÛÛšX]HÈ]ÈÜ[‹\ÛÝ\˜ÙHXÛÜÞ\Ý[K‚‚ˆÈÈÈ‹ˆÚH\È\ÈÜXÈ[\Ü[Â”›ÙÜ˜[[Z[™ÈØ[››Ý™HX\Ý\™YY\™[HžH™XY[™ÎÈ]\ÈX\Ý\™YžHZ[[™Ëˆ\È^›ÛÚÈ\È›ÝšYY[ÝHÚ]HšYÛÜ›Ý\È›Ý[™][Û¸ %›ÝÈ[Ý\ˆ\œÛÛ˜[›Ý\›™^H\È[ˆ]]Û›Û[Ý\ÈÛÙØ\™H[™Ú[™Y\ˆ™YÚ[œËˆÚ]™[\˜K[ÝHÛÛ[X[™H[Ù\›‹Ý]XØ[H™\šYšYY[™]\™K\›ÛÙˆ[™ÝXYÙH[™Ú[™Y\™YÈÝ\Ü[ÝH]]™\žHÝYÙHÙˆ]™[ÜY[‚‚ˆÈÈÈËˆ[™\œÝ[™X›H^[˜][ÛˆÚ]Ý][›™XÙ\ÜØ\žH˜\™ÛÛŽˆHš]™HÛÛ[ˆ[\È›Üˆ™[\˜H]™[Ü\œÂŒKˆ
+Š“[Ù[š\œÝŠŠˆ[Ø^\È[š]X]H›Ú™XÝÈÚ][Ý\ˆX›XØÚ[XKˆHÙ[[[Ù[Y]HØÚ[XH[[Z[˜]\È[ˆÙˆ[]\™H[\[Y[][ÛˆY™XÝË‚Œ‹ˆ
+Š‘Yš[™HÛÛ˜XÝÎŠŠˆ[˜ÚÜˆÜš]XØ[[˜Ý[ÛœÈÚ]™\]Z\™\Ø[™[œÝ\™\ØˆÛÛ˜XÝÈÚ[][[™[Ý\ÛHÙ\™H\È]™HØÝ[Y[][Û‹›Ü›X[™\šYšXØ][Û‹[™[š]\ÝË‚ŒËˆ
+Š‘Ü˜[Ø\Xš[]Y\È[X™\˜][NŠŠˆÙY\H˜\ÝXZ›Üš]HÙˆ[Ý\ˆÛÙX˜\ÙH\™[H[˜Ý[Û˜[
+™\›ÈØ\Xš[]Y\ÊK[™\ÛÛ]H^\›˜[ÚYHY™™XÝÈ^XÚ]K‚ˆ
+Š•™X]\œ›ÜœÈ\È˜[Y\ÎŠŠˆ]™\˜YÙH™\Ý[[™Ü[Û˜ˆ[[Z[˜]H^Ý\Ù\È›Üˆ[š[™Y[[YHÜ˜\Ú\È[™[\Ú[\ˆ^Ù\[ÛœË‚Kˆ
+ŠÛÛX›Ü˜]HÚ]RNŠŠˆ^Ú]™[\˜IÜÈKY›Ü›X]œÛÛ˜XYÛ›ÜÝXÜÈ[™\YÛ\ÈØÈ\›ˆ[Ù\›ˆRHÛÙ[™È\ÜÚ\Ý[È[È™[XX›KYÚ]™[ØÚ]HÛÜ[ÝË‚‚ˆÈÈÈˆÛX[›ÙÜ™\ÜÚ]™H^[\\Îˆ\˜Ú]XÝ\˜[]\›œÈ[™™\Ý˜XÝXÙ\Â‚ŠŠ‘^[\HNˆ\™H[˜Ý[ÛœÈØY™YÝX\™YžHÛÛ˜XÝÊŠ‚˜™[\˜B™›ˆØ[Ý[]WØÛÛ\][Û—Ü\˜Ù[YÙJÛÛ\]Yˆ[Ý[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈÝ[ˆ	‰ˆÛÛ\]YH	‰ˆÛÛ\]YHÝ[Bˆ[œÝ\™\ÈÈ™\Ý[H	‰ˆ™\Ý[HLBžÂˆ™]\›ˆ
+ÛÛ\]Y
+ˆL
+HÈÝ[ŸB‚™›ˆXZ[Š
+HÂˆš[
+Ø[Ý[]WØÛÛ\][Û—Ü\˜Ù[YÙJJJBŸB˜‚ŠŠ‘^[\HŽˆ^XÚ]Ø\Xš[]H›Ý[™\šY\ÈÙ\\˜][™ÈÛXZ[ˆÙÚXÈœ›ÛHKÓÊŠ‚˜™[\˜B™›ˆ›Ü›X]ÜÞ\Ý[WÜÝ]\ÊÙ\šXÙWÛ˜[YNˆÝš[™Ë\×ØXÝ]™Nˆ›ÛÛ
+HOˆÝš[™ÈÂˆYˆ\×ØXÝ]™HÂˆ™]\›ˆÙ\šXÙWÛ˜[YH
+Èˆ\ÈXÝ]™Kˆ‚ˆBˆ™]\›ˆÙ\šXÙWÛ˜[YH
+Èˆ\ÈÙ™›[™Kˆ‚ŸB‚™›ˆÙ×ÜÝ]\ÊY\ÜØYÙNˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆÜš]WÝ^
+œÞ\Ý[K›ÙÈ‹Y\ÜØYÙJBˆš[
+“ÙÙÙYˆˆ
+ÈY\ÜØYÙJBŸB‚™›ˆXZ[Š
+H\Ù\Èš[TÞ\Ý[HÂˆÝ]\ÈH›Ü›X]ÜÞ\Ý[WÜÝ]\Ê•\ÚÕÛÜšÙ\ˆ‹YJBˆÙ×ÜÝ]\ÊÝ]\ÊBŸB˜‚ˆÈÈÈKˆ\XØ[\œ›ÜœÈ[™Z\ˆØ]\Ù\Â‹H
+Š‘\œ›ÜŽŠŠˆX˜[™Ûš[™ÈÛÛ˜XÝÈ[™\HØY™]HÚ[ˆ\Ú[™È›ÝYÚ™]È›Ú™XÝË‚ˆ
+Ø]\ÙNŠˆ[ˆHÛ™È[‹ÚÚ\YÛÛ˜XÝÈØ]\ÙHY™šXÝ[]Ë]˜XÙH™YÜ™\ÜÚ[ÛˆYÜËˆ[™\ÝH™]ÈÙXÛÛ™ÈÈÜXÚYžH™\]Z\™\Ø[™[œÝ\™\Ø‚‹H
+Š‘\œ›ÜŽŠŠˆÝ™\‹X\ÜÚYÛš[™ÈØ\Xš[]Y\È[™\ØÜš[Z[˜][K‚ˆ
+Ø]\ÙNŠˆÚ]š[™È]™\žH[˜Ý[Ûˆ\Ù\È]X˜\ÙKš[TÞ\Ý[K™]ÛÜšØY™X]ÈH\œÜÙHÙˆHØ\Xš[]HÙXÝ\š]H[Ù[‚‚ˆÈÈÈ‹ˆÙ^HZÙX]Ø^\ÂŒKˆÛÙØ\™H]X[]HÝ\ÈÚ]HÛX[ˆ]HØÚ[XH[™ÛÛ˜XÝX˜\ÙY\ÚYÛ‹‚Œ‹ˆ\™H[˜Ý[ÛœÈXZÙH\H™[XX›HÛÜ™HÙˆ[Ý\ˆ\XØ][ÛŽÈÚYHY™™XÝÈ\™HÝšXÝHXÛ\™YØ\Xš[]Y\Ë‚ŒËˆÛÛ[[Ý\ÈX\›š[™È[™˜XÝXØ[ÛÙ[™È\™HHÙ^\ÈÈ™XÛÛZ[™È[ˆXØÛÛ\\ÚY™[\˜H]™[Ü\‹‚‚ˆÈÈÈËˆ^\˜Ú\Ù\È
+]™[HX\ÞK]™[ˆYY][K]™[ÈÚ[[™Ú[™ÊB‹H
+Š“]™[H
+X\ÞJNŠŠˆ™]šY]È[Ý\ˆ™]š[Ý\ÈÛÙHÛš\]Èœ›ÛHX\›Y\ˆÚ\\œÈ[™™\šYžH][[˜Ý[ÛœÈ]™H\ØÜš\]™H\˜[Y]\ˆ˜[Y\Ë‚‹H
+Š“]™[ˆ
+YY][JNŠŠˆZÙHÛ™HÙˆ[Ý\ˆX\›Y\ˆ^\˜Ú\Ù\È[™YÝšXÝ™\]Z\™\Ø[™[œÝ\™\ØÛÛ˜XÝÈÈ[Ø[Ý[][Ûˆ[˜Ý[ÛœË‚‹H
+Š“]™[È
+Ú[[™Ú[™ÊNŠŠˆ˜YHÛÛ\]H\˜Ú]XÝ\™H[ˆ
+]X˜\ÙHØÚ[XKØ\Xš[]Y\Ë\™HÛXZ[ˆ[˜Ý[ÛœË[™‘TÕ›Ý]\ÊH›ÜˆÛ™HÙˆHÝYÙÙ\ÝY™^›Ú™XÝË‚‚ˆÈÈÈˆ˜XÝXØ[›Ú™XÝ\ÚÎˆ\ÚÈX[˜YÙ[Y[Hš[˜[™Y›XÝ[Ûˆ[™Þ\Ý[H^[œÚ[ÛˆYX\Â”™Y›XÝÛˆHÛÛ\]H\ÚÈX[˜YÙ[Y[Þ\Ý[HZ[XÜ›ÜÜÈ\È^›ÛÚÈ[™ÛÛœÚY\ˆ^[œÚ[ÛœÎ‚‹H
+Š”\œÛÛ˜[Ý\ÙZÛYÙ]ŠŠˆ[˜ÛÛY\Ë^[™]\™\ËØ]YÛÜšY\Ë[™[ÛHÝ[[X\šY\È][^š[™È™[\˜HÔ•Q‚‹H
+Š”Ý\ÜXÚÙ]Þ\Ý[NŠŠˆÝ\ÝÛY\ˆ[œ]Z\šY\Ëš[Üš]H\ØØ[][Û‹ÝY™ˆ\ÜÚYÛ›Y[Ë[™]]ÛX]Y[XZ[\Ü]Ú\Ë‚‹H
+ŠÛY[	ˆ›Ú™XÝ[YH˜XÚÚ[™ÎŠŠˆ[Y\ÚY]˜XÚÚ[™ÈÚ]\Ù\ÈÛØÚØ[™š[[™È™\ÜÈ^ÜY\ÈÝXÝ\™Y”ÓÓ‹‚‚ˆÈÈÈKˆÝ[[X\žBÛÛ™Ü˜][][ÛœÈH[ÝH]™HÝXØÙ\ÜÙ[HX\Ý\™Y[L\È[™ˆÚ\\œÈÙˆ
+“X\›š[™È™[\˜J‹ˆ[ÝHX\Ý\ˆH[™[Y[[Ë\HÞ\Ý[K\œ›Üˆ[™[™Ë]X˜\Ù\ËÙXˆ\XØ][ÛœËT\Ë[™ÙXÝ\™HÛÙØ\™H\˜Ú]XÝ\™Kˆ[ÝH\™H›ÝÈ\]Z\YÈÜ™X]H[Ý\ˆÝÛˆ›Ø\Ý›ÙXÝ[Û‹YÜ˜YH\XØ][ÛœÈÚ]™[\˜HB‚ˆÈÈÈLˆÙ[‹XÚXÚÈ™]šY]È]Y\Ý[ÛœÂŒKˆÚXÚ[š\]YH™X]\™HÙˆ™[\˜HÈ[ÝH\™XÚX]H[ÜÝY\ˆÛÛ\][™È\ÈÛÝ\œÙOÂŒ‹ˆÚH\ÈHÙX[[\ÜÈ[\œ^HÙˆ[™ÝXYÙKÛÛ\[\‹[™]X˜\ÙH[ˆ™[\˜HÛÈ™]›Û][Û˜\žOÂŒËˆÚXÚ›Ú™XÝÚ[[ÝHZ[™^Ú]™[\˜OÂ‚ˆÈPÒ’PÐS‘Q‘T‘SÑHPS•PS‚ˆÈÈKˆÚ]XZÙ\È™[\˜HY™™\™[‚H\XØ[\Ú[™\ÜÈ\XØ][Ûˆ\ØÜšX™\ÈHØ[YH˜XÝ™\X]YNˆ[ˆB™]X˜\ÙK˜XÚÙ[™›Ü›K[™TKˆ™[\˜HZ[\ÈÈ\›ˆÜÙHÛÜY\È[ÈÛ™B˜XÙXX›HÚZ[Ž‚‚ŸŸŸ^•X›H8¡¤ˆ\\È8¡¤ˆÔS8¡¤ˆ›Ü›\È8¡¤ˆÔ•Q8¡¤ˆÙXˆYÙH8¡¤ˆTKÓÜ[TBŸŸŸ‚‚•\ÈšY[‚‚ŸŸŸž™[\˜B™[XZ[ˆ[XZ[ÂŸŸŸ‚‚˜[™XYHØ^\È]H˜[YH\È[ˆ[XZ[Y™\ÜËX^H™HXœÙ[Y™™XÝÈÔS›[Xš[]KØ[ˆÙ[XÝHÝZ]X›H›Ü›HÛÛ›Û[™]\Ý™H[™YØY™[HžBšY]ÜË‚‚”ÔS™[XZ[œÈÔSˆ™[\˜HÙ\È›Ý›Ü˜ÙHH™\ÜXÝX›H“ÒS˜È\ÙÝZ\ÙH]Ù[‚˜\ÈHÎ[[šÈY]ÙÚZ[‹ˆÔS\ÈÝY™™\™Y[›ÝYÚ‚‚ˆÈÈ‹ˆ[œÝ[][Û‚‚ˆÈÈÈ™\™\]Z\Ú]\Â‚‘›Üˆ[™ÝXYÙH^[\\Ë[ÝH™YY‚‚‹H[^XXÓÔËÜˆÚ[™ÝÜÈ
+ÝÙ\”Ú[ÕÔÓ
+NÂ‹HÝ\›Â‹HHÛÜšÚ[™ÈÚ[‚‚“X\šXQˆ\È™\]Z\™YÛ›H›Üˆ]X˜\ÙK›Ü›HXÝ[ÛœË]][™Ô•Q^[\\Ë‚‚ˆÈÈÈ[œÝ[œ›ÛHH™\ÜÚ]ÜžB‚ŸŸŸ˜˜\Ú™Ú]ÛÛ™HÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜K™Ú]˜Ù™[\˜B‹‹Ú[œÝ[œÚŸŸŸ‚‚•H[œÝ[\ˆ\È™\X]X›H[™\Ù\‹[ØØ[ˆÛÛ›ÛÜ[ÛœÎ‚‚ŸŸŸ˜˜\Ú‹‹Ú[œÝ[œÚKZ[‹‹Ú[œÝ[œÚKYžK\[ˆK\›ÛÝ‰ÓQKË›ØØ[‚‹‹Ú[œÝ[œÚKXÚXÚÂ‹‹Ú[œÝ[œÚK][š[œÝ[ŸŸŸ‚‚•\ÙHK[›Ë\\Ý\È\ØX›H]]ÛX]XÈ\Ý[œÝ[][ÛŽÈK[›Ë\]Ý\™\ÜÙ\ÈU[œÝXÝ[ÛœËˆÚ]K\›ÛÝUÜˆ‘STWÒS”ÕSÔ“ÓÕ[ÝHØ[ˆÚÛÜÙHHY™™\™[\Ù\‹[ØØ[\™Ù]ˆÝ]]YØ\™ÛØU[šY\È\™H]XÝY[™›Ý^XÝ]Y›[™K‚‚”X›\ÚY™[X\Ù\È›Üˆ[^—Í[™Ú[™ÝÜÈ—ÍØ[ˆ™H[œÝ[YÚ]Ý]\ÝÜˆØ\™ÛËˆH\˜Ú]™H\ÈÝÛ›ØYYÝ™\ˆÈ[™™\šYšYYÚ]ÒKLMŽ‚‚ŸŸŸ˜˜\Ú‹‹Ú[œÝ[œÚK\™[X\ÙHŒŒËŒŸŸŸ‚‚“ÛˆÚ[™ÝÜË[œÝ[œÌX\È]˜Z[X›H›ÜˆÝÙ\”Ú[[™[œÝ[˜ÛY›ÜˆHÛÛ[X[™›Û\‚‚ŸŸŸœÝÙ\œÚ[™Ú]ÛÛ™HÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜K™Ú]”Ù]SØØ][Ûˆ™[\˜B‹—[œÝ[œÌBž™[\˜HK]™\œÚ[Û‚ŸŸŸ‚‚”™[X\ÙH\˜Ú]™H[œÝ[][ÛˆÛˆÚ[™ÝÜÎ‚‚ŸŸŸœÝÙ\œÚ[‹—[œÝ[œÌHT™[X\ÙHŒŒËŒŸŸŸ‚‚•[Ž‚‚ŸŸŸ˜˜\Úž™[\˜HK]™\œÚ[Û‚ž™[\˜HKZ[ŸŸŸ‚‚’Yˆ[Ý\ˆÚ[Ø[››Ýš[™™[\˜X‚‚ŸŸŸ˜˜\Ú™^ÜUH‰ÓQKË›ØØ[Øš[Ž‰U‚ŸŸŸ‚‚ˆÈÈÈØÚÙ\ˆ[™ÛÛZ[™\ˆ[š\›Û›Y[‚–™[\˜HÙ\È›Ý[œÝ[ØÚÙ\ˆ]Ù[‹[ÙYžHÜ\˜][™Ë\Þ\Ý[HXÚØYÙ\ËÜˆ™\]Y\Ý›ÛÝš]š[YÙ\Ëˆ›ÜˆÛÛZ[™\ˆ[™X\šXQˆÛÜšÙ›ÝÜËØÚÙ\ˆÚ]ÛÛ\ÜÙHÝ\Ü\È™\]Z\™Y‚‚‹H
+Š“[^ŠŠˆ›ÛÝÈHÛÙ™šXÚX[[^[œÝ[][ÛˆÝZYWJÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ[™Ú[™KÚ[œÝ[ÊK‚‹H
+Š•Ú[™ÝÜÎŠŠˆ\ÙHÑØÚÙ\ˆ\ÚÝÜ›ÜˆÚ[™ÝÜ×JÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÝÚ[™ÝÜËZ[œÝ[ÊHÚ]ÛÛ\ÜÙHÝ\Ü‚‹H
+Š›XXÓÔÎŠŠˆ\ÙHÑØÚÙ\ˆ\ÚÝÜ›ÜˆXX×JÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÛXXËZ[œÝ[ÊK‚‚•™\šYžHØÚÙ\ˆÛÛ\ÜÙH™Y›Ü™Hš\œÝ[Ž‚‚ŸŸŸ˜˜\Ú™ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û‚ŸŸŸ‚‚’YˆØÚÙ\ˆ\È[œÝ[Y]XØÙ\ÜÈÈ]ÈÛØÚÙ]\È[šYY™[\˜H™\ÜÈHØY™H[^Ü›Ý\[Y[X™\œÚ\™[YYH
+ÝYÈ\Ù\›[ÙXQÈØÚÙ\ˆ	TÑT˜
+H[œÝXYÙˆ˜]ÈØÚÙ\ˆ\œ›ÜœËˆÜÛÛ\Ú[ÛœÈ\™H[ÛÈ™\ÜYØY™[HÚ]Ý]^ÜÚ[™ÈÜ™Y[X[Ë‚‚ˆÈÈÈ\][™È™[\˜B‚[ˆ\]HÛÛœÚ\ÝÈÙˆÛÈÙ\\˜]H\Îˆ\][™ÈHÛÛ\[\ˆ[ˆHÛÛ\[\ˆ™\ÜÚ]ÜžK[™™\šYžZ[™È[Ý\ˆ\XØ][Ûˆ›Ú™XÝˆ[Ý\ˆžž[š[\Ë™[\˜KÛ[[™™[˜]™H[ˆ[Ý\ˆ\XØ][Ûˆ›Ú™XÝ[™\™H™]™\ˆÝ™\Üš][ˆžH[œÝ[œÚ‚‚ˆÈÈÈÈ\]Hœ›ÛHHÚ]™\ÜÚ]ÜžB‚ŸŸŸ˜˜\Ú˜ÙÜ]ÝËÞ™[\˜B™Ú]Ý]\ÈK\ÚÜ™Ú][KY™‹[Û›HÜšYÚ[ˆXZ[‚˜Ø\™ÛÈÚXÚÈK]ÛÜšÜÜXÙB‹‹Ú[œÝ[œÚž™[\˜HØÝÜˆÜ]ÝËÞ[Ý\‹\›Ú™XÝÛXZ[‹žž[KZœÛÛ‚ŸŸŸ‚‚ÚXÚÈH[œÝ[Y™\œÚ[ÛˆÚ]™[\˜HK]™\œÚ[Û˜‚‚ŸŸŸ˜˜\Úž™[\˜HK]™\œÚ[Û‚ŸŸŸ‚‚ˆÈÈËˆ[Ý\ˆš\œÝ›ÙÜ˜[B‚Ü™X]H[Ëžž[‚‚ŸŸŸž™[\˜B™›ˆXZ[Š
+HÂˆš[
+’[Èœ›ÛH™[\˜HŠBŸBŸŸŸ‚‚”[ˆ]‚‚ŸŸŸ˜˜\Úž™[\˜H[ˆ[Ëžž[ŸŸŸ‚‚HÛYÚH[Ü™H[Xš][Ý\È›ÙÜ˜[N‚‚ŸŸŸž™[\˜B™›ˆšX›Û˜XØÚJŽˆ[
+HOˆ[ÂˆYˆˆHHÂˆ™]\›ˆ‚ˆB‚ˆ™]\›ˆšX›Û˜XØÚJˆHJH
+ÈšX›Û˜XØÚJˆHŠBŸB‚™›ˆXZ[Š
+HÂˆš[
+šX›Û˜XØÚJL
+JBŸBŸŸŸ‚‚•H™\Ý[\ÈMXˆHÛÛ\]\ˆÝ\š]™YˆÙHX^HÛÛ[YK‚‚ˆÈÈˆÜ™X]HH›Ú™XÝ[™\ÙHHÓB‚ˆÈÈÈÛÛ\[\ˆ™\ÜÚ]ÜžH[™\XØ][Ûˆ›Ú™XÝÂ‚•HÚ]Xˆ™\ÜÚ]ÜžHÙŒNMÍ‹Þ™[\˜X\ÈHÛÛ\[\ˆ™\ÜÚ]ÜžKˆ]ÛÛZ[œÈ^\‹\œÙ\‹[[YK]X˜\ÙK[™ÙXˆ[Ù[\Ë\ÈÙ[\ÈHÓKˆ[Ý\ˆÝÛˆ\XØ][Ûˆ\ÈHÙ\\˜]H\™XÝÜžKˆ[ÝHÈ›Ý™YYÈÛÜšÈ[œÚYHH™[\˜HÛÛ\[\ˆÛÝ\˜ÙK[™[ÝHÚÝ[™]™\ˆÝÜ™HÜ™Y[X[È\™K‚‚•H›Ú™XÝ›ÛÝ\ÈH\™XÝÜžHÛÛZ[š[™È[Ý\ˆ™[\˜HÛÝ\˜ÙHš[H[™Yˆ™\Ù[™[\˜KÛ[‚‚ˆÈÈÈ8§!HÜ™X]H›Ú™XÝÈÚ]HÓB‚ŸŸŸ˜˜\Úž™[\˜H™]ÈY™\ÜØ›ÛÚÂ˜ÙY™\ÜØ›ÛÚÂž™[\˜H[ˆXZ[‹žž[ŸŸŸ‚‚’[š]X[^™H[ˆ^\Ý[™È\™XÝÜžN‚‚ŸŸŸ˜˜\Ú›ZÙ\ˆY™\ÜØ›ÛÚÂ˜ÙY™\ÜØ›ÛÚÂž™[\˜H[š]ŸŸŸ‚‚‘›ÜˆHØØ[X\šXQˆ[™ÙX‹\Ù\™\ˆ[\]N‚‚ŸŸŸ˜˜\Úž™[\˜H™]ÈXXÚ[™K[X[˜YÙ[Y[K[X\šXY‚˜ÙXXÚ[™K[X[˜YÙ[Y[ŸŸŸ‚‚•\ÈÜ™X]\ÈXZ[‹žž[™[‹™^[\XØÚÙ\™š[XØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[[™H›ÝXÝY™[˜Ú]˜[™ÛH\ÜÝÛÜ™Ë‚‚ŠŠ]]ÛX]XÈÜÙ[XÝ[ÛˆÛˆÛÛ™›XÝŠŠ‚’YˆY˜][ÜÈÌ
+ÙXŠHÜˆÌÌ˜
+X\šXQŠH\™HØØÝ\YY™[\˜H™]Ø™[\˜H[š][™™[\˜HÙ]\]]ÛX]XØ[HÙ[XÝH™^œ™YHÜÝÜÈ[™™XÛÜ™[H[ˆ™[˜ˆHÜ[Û˜[K]ÙX‹\Ü˜KZÜÝ\Ü˜[™KY‹ZÜÝ\Ü˜›YÜÈ[™›Ü˜ÙH^XÝÜË‚‚ˆÈÈÈ8§!H™[\˜HÙ]\\ÜÚ\Ý[
+ÛÛœÛÛH[™ÙXŠB‚˜™[\˜HÙ]\›ÝšY\È[šYšYYÙ]\XÝ[ÛœÈXÜ›ÜÜÈÓH[™œ›ÝÜÙ\Ž‚‚ˆÈÈÈÈÛÛœÛÛHÙ]\‚‘œ›ÛHHX\šXQˆ›Ú™XÝ\™XÝÜžN‚‚ŸŸŸ˜˜\Úž™[\˜HÙ]\ž™[\˜HÙ]\KY]X˜\ÙBž™[\˜HÙ]\K\ØÚ[XBž™[\˜HÙ]\KX[ž™[\˜HÙ]\KZÜÝ\ÜNKY‹ZÜÝ\ÜÌÌŸŸŸ‚‚‹H™[\˜HÙ]\ˆÜ™X]\ÈH›ÝXÝY™[˜YˆZ\ÜÚ[™Ëˆ^\Ý[™È™[˜š[\È\™H™]™\ˆÝ™\Üš][‹‚‹H™[\˜HÙ]\KY]X˜\ÙXˆÝ\ÈÛÛ\ÜÙHÙ\šXÙ\È
+]XÝÈØÚÙ\ˆÛÛ\ÜÙXÜˆYØXÞHØÚÙ\‹XÛÛ\ÜÙX
+K‚‹H™[\˜HÙ]\K\ØÚ[XXˆÝ\ÈÙ\šXÙ\È[™ØY™[H\Y\ÈHØÚ[XHœ›ÛHXZ[‹žž[‚‹H™[\˜HÙ]\KX[ˆ^XÝ]\ÈÛÛ™šYÝ\˜][Û‹ÛÛZ[™\ˆÝ\\[™ØÚ[XHZYÜ˜][Ûˆ[ˆÛ™HÝ\‚‚ˆÈÈÈÈØØ[œ›ÝÜÙ\ˆÙ]\
+™[\˜HÙ]\K]ÙX˜
+B‚ŸŸŸ˜˜\Úž™[\˜HÙ]\K]ÙX‚ŸŸŸ‚‚•HÙ\™\ˆš[™ÈÝšXÝHÈLËŒŒŒNŒÌÌžHY˜][[™Ý]]ÈHÛ™K][YHT“Ú]HÙXÝ\™H˜[™ÛHÚÙ[Ž‚‚ŸŸŸ^–™[\˜HÙ]\ÙXˆ\È[›š[™ÈÛˆ‹ËÌLËŒŒŒNŒÌÌÂ›Ü[Žˆ‹ËÌLËŒŒŒNŒÌÌÏÝÚÙ[OØØ[]ÚÙ[‚ŸŸŸ‚‚‹H›ÝšY\Èœ›ÝÜÙ\ˆXÝ[ÛœÈÈÛÛ™šYÝ\™H™[˜Ý\ÛÛZ[™\œË[™\HØÚ[X\Ë‚‹HÝšXÝHØØ[[Û›H›ÜˆÙXÝ\š]NÈ™]™\ˆ^ÜÙHÈX›XÈ[\™˜XÙ\Ë‚‹HYˆÜÌÌ\È\ÞKH\ÜÚ\Ý[]]ÛX]XØ[HÚÛÜÙ\ÈH™^œ™YHÜˆÝÜÚ]Ý›
+ÐØ‚‚•™\šYžH[Ý\ˆ›Ú™XÝÝ]H›Û‹Y\ÝXÝ]™[N‚‚ŸŸŸ˜˜\Úž™[\˜HØÝÜˆXZ[‹žž[KY[‹Yš[H™[‚ŸŸŸ‚‚‘›ÜˆHÛÛ\]H\Ú[™\ÜÈÝ\\ˆ›Ú™XÝ‚‚ŸŸŸ˜˜\Úž™[\˜H™]ÈXXÚ[™K[X[˜YÙ[Y[K][\]HX\šXY‹XÜY˜ÙXXÚ[™K[X[˜YÙ[Y[ž™[\˜HÙ]\KX[ŸŸŸ‚‚ˆÈÈKˆ˜\šXX›\Ë\\Ë[™[˜Ý[ÛœÂ‚•˜[Y\È\™H[[]]X›HžHY˜][‚‚ŸŸŸž™[\˜B›XXÚ[™WÛ˜[YHH”™\ÜÈÈ‚˜Ø\XÚ]Nˆ[HLŒ˜XÝ]™HHYBŸŸŸ‚‚“]]][Ûˆ\È^XÚ]‚‚ŸŸŸž™[\˜B›]]X›HÛÛ\]YH˜ÛÛ\]YHÛÛ\]Y
+ÈBŸŸŸ‚‚•HÛÛ\[\ˆ\È›Ý\˜[›ÚYˆ]\ÈÚ[\HÙY[ˆ[™ÜË‚‚ÛÜ™H\\È[˜ÛYN‚‚ŸŸŸ^’[R[›Ø]XÚ[X[›ÛÛÝš[™ÈÚ\ˆž]\Â•[Y\Ý[\]H[YH\˜][Ûˆ[XZ[\›]ZY[Û™^BŸŸŸ‚‚‘[˜Ý[ÛœÈ\™H\Y‚‚ŸŸŸž™[\˜B™›ˆ]˜Z[X›WØØ\XÚ]JÝ[ˆ[™\Ù\™Yˆ[
+HOˆ[Âˆ™]\›ˆÝ[H™\Ù\™YŸBŸŸŸ‚‚“›ÛZ[˜[QÈÙY\ÛXZ[œÈÙ\\˜]N‚‚ŸŸŸž™[\˜B\HXXÚ[™RYHY\HÜ™\’YHYŸŸŸ‚‚[ˆÜ™\’Y\È›ÝHXXÚ[™RY]™[ˆÚ[ˆ›ÝÛÚÈÚ[Z[\ˆ[™\›™X]‚\Ú[™\ÜÈZ\ÝZÙ\ÈÈ›Ý™XÛÛYHÛÜœ™XÝžHÚ\š[™ÈHÝÜ˜YÙH\K‚‚ˆÈÈ‹ˆÜ[Û‹™\Ý[[™]\›ˆX]Ú[™Â‚“Ü™[˜\žH\\È\™H™]™\ˆ[ˆXœÙ[˜ÙH\È^XÚ]‚‚ŸŸŸž™[\˜B™[XZ[ˆ[XZ[ÂŸŸŸ‚‚’[™H›ÝØ\Ù\Î‚‚ŸŸŸž™[\˜B›X]Ú[XZ[ÂˆÛÛYJ˜[YJHOˆš[
+˜[YJBˆ›Û™HOˆš[
+“›È[XZ[Y™\ÜÈŠBŸBŸŸŸ‚‚”]\›ˆX]Ú[™È]\Ý™H^]\Ý]™K™]™[[™ÈH›Ü™ÛÝ[ˆØ\ÙH]ÛÝ[›Ý\Ú\ÙH[›ÙXÙH]Ù[ˆ\š[™ÈHœšY^H\Þ[Y[‚‚‘[˜Ý[ÛœÈ^ÜÙH˜Z[\™\È›ÝYÚZ\ˆ™]\›ˆ\KˆHÝ\œ™[[™ÝXYÙHÛÜ™B\Ù\È™\Ý[O˜Ú]ÚØÜˆ\œ˜‚‚ŸŸŸž™[\˜B™›ˆØYÛ[X™\Š›Ý[™ˆ›ÛÛ
+HOˆ™\Ý[[Ýš[™ÏˆÂˆYˆ›Ý[™Âˆ™]\›ˆÚÊŠBˆBˆ™]\›ˆ\œŠ››Ý›Ý[™ŠBŸBŸŸŸ‚‚ˆÈÈËˆX\šXQˆ[™X›\Â‚¸§!HX\šXQˆ\ÈHY˜][˜XÚÙ[™[™š[X\žH[[YH™Y™\™[˜ÙKˆHÙ[™\˜]YÛÛ\ÜÙH[\]H\Ù\ÈX\šXYŽŒLXÈHÛÛ\[\ˆÙ\È›Ý[™›Ü˜ÙHHÜXÚYšXÂ“X\šXQˆÙ\™\ˆ™\œÚ[Û‹ˆ]X˜\ÙHÛÛ[X[™ÈØ[H^\›˜[X\šXY˜ÛY[‚‚ŸŸŸž™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ŸB‚X›H\\Y[ÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Y[š\]YBŸB‚X›HXXÚ[™\ÈÂˆYˆYš[X\žH]]Âˆ[X™\ŽˆÝš[™ÊÌ
+H™\]Z\™Y[š\]YBˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ\\Y[ˆ\\Y[™\]Z\™YˆXÝ]™Nˆ›ÛÛY˜][YBŸBŸŸŸ‚‚–™[\˜H™XÛÙÛš^™\ÈH™[][ÛœÚ\[™Ø[ˆ\ÙH]›Üˆ›Ü™ZYÛˆÙ^\Ë›Ü›\Ë[™œÙ[XÝÛÛ›ÛË‚‚Ÿ™[\˜HX\šXQˆŸKK_KK_ŸYš[X\žH]]ØÙ[™\˜]Yš[X\žHQŸÝš[™ÊL
+XTÒTŠL
+XŸÝš[™ØVŸ[XZ[[XZ[XÛÛ\]X›H^ÛÛ[[ˆŸ›ÛÛ›ÛÛX[ˆ]X˜\ÙH˜[YHŸ[Y\Ý[\[Y\Ý[\˜[YH‚ˆÈÈÈ™\\™HX\šXQˆØY™[B‚Ü™X]HHYXØ]Y]X˜\ÙH[™\XØ][Ûˆ\Ù\‹ˆÈ›Ý[ˆH™[\˜HÙX‚œÙ\™\ˆ\ÈHX\šXQˆ›ÛÝXØÛÝ[ˆH›ÛÝÚ[™È\È[ˆ\È[ˆYZ[š\Ý˜]]™B“X\šXQˆ\Ù\ŽÈH\ÜÝÛÜ™\È™\]Y\ÝY[\˜XÝ]™[N‚‚ŸŸŸ˜˜\Ú›X\šXYˆKZÜÝLLËŒŒŒHK\ÜLÌÌÈK]\Ù\\›ÛÝK\\ÜÝÛÜ™ŸŸŸ‚‚ŸŸŸœÜ[Ô‘PUHUPTÑHY™\Ü×Ø›ÛÚØˆÒTPÕTˆÑU]ŽXˆÓÓUH]ŽXÝ[šXÛÙWØÚNÂ‚Ô‘PUHTÑTˆ	Þ™[\˜IÐ	ÌLËŒŒŒIÂˆQS•Q’QQ–H	ÑS•T—ÐWÓÐÐSÔTÔÕÓÔ‘ÒT‘IÎÂ‚‘ÔS•ÑSPÕS”ÑT•TUKSUKÔ‘PUKST‹S‘V‘Q‘T‘SÑTÂˆÓˆY™\Ü×Ø›ÛÚØŠˆÈ	Þ™[\˜IÐ	ÌLËŒŒŒIÎÂ‚”ÒÕÈÔS•È“Ôˆ	Þ™[\˜IÐ	ÌLËŒŒŒIÎÂŸŸŸ‚‚•\ÙHQˆ“ÕVTÕØÚ[ˆH]X˜\ÙH]\Ý™H™\X]X›H™\\™YˆHÜ˜[Â˜\™H[X™\˜][H[Z]YÈ\È]X˜\ÙNÈ™]™\ˆ\ÙHÔS•SÓˆ
+‹Š˜[ˆ[‚˜\XØ][Ûˆ]ZXÚÜÝ\ˆ[››Ñˆ\ÈH^XÝY[™Ú[™H›Üˆ˜[œØXÝ[ÛœÈ[™™›Ü™ZYÛˆÙ^\Ë]HÝ\œ™[™[\˜HÔSÙ[™\˜]ÜˆÙ\È›ÝY˜S‘ÒS‘OR[››Ñ˜]Ù[‹ˆ[œÜXÝ[™Ý\[Y[Ù[™\˜]YÔS™Y›Ü™H\Z[™È]šYˆ[Ý\ˆÙ\™\ˆÛXÞH™\]Z\™\È]Û]\ÙK‚‚•H\ÝYÜ˜[ÈÛÝ™\ˆ›Ü›X[Ô•QÛÜšÈ[™H[š]X[ØÚ[XKˆH\ÝXÝ]™B˜ˆ\HKX[ÝËY\ÝXÝ]™XX^HY][Û˜[H™YY“ÔÈÜ˜[]Û›B™[X™\˜][H[™Ú\™HÜÜÚX›K[\Ü˜\š[KˆˆÙ]\\È[ˆYZ[š\Ý˜]Ü‚›Ü\˜][Ûˆ™XØ]\ÙH]Ü™X]\ÈH]X˜\ÙH]Ù[‹‚‚•HÙ[™\˜]YÛÛ\ÜÙHš[HX›\Ú\ÈLËŒŒŒNŒÌÌ˜žHY˜][ˆYˆ]ÜÝœÜ\ÈØØÝ\YYÚ[™ÙH]Èš[™[™ÈÈLËŒŒŒNŒÌÌÎŒÌÌ˜ˆHÜÝÜ\Â[ˆÌÌØÚ[HX\šXQˆ™[XZ[œÈÛˆÌÌ˜[œÚYHHÛÛZ[™\‹ˆ[›Ý\‚ÛÛ\ÜÙHÙ\šXÙHÛÛ›™XÝÈÈÜÝX\šXY˜[™ÜÌÌ˜ÈHÜÝ›ØÙ\ÜÈ\Ù\Â˜LËŒŒŒX[™HX›\ÚYÜ‚‚ˆÈÈÈ[œÜXÝHY™\ÜÈØÚ[XB‚‘›ÜˆH^[\K™[\˜HˆÜ™X]HÜ˜ËÛXZ[‹žž[Ý\œ™[H›ÙXÙ\Ë[ˆ\ÜÙ[˜ÙN‚‚ŸŸŸœÜ[Ô‘PUHP“HQˆ“ÕVTÕÈY™\ÜÙ\Ø
+ˆY’QÒS•’SPT–HÑVH“Õ•SUU×ÒSÔ‘SQS•ˆš\œÝÛ˜[YXTÒTŠL
+H“Õ•Sˆ\ÝÛ˜[YXTÒTŠL
+H“Õ•SˆÝ™Y]TÒTŠML
+H“Õ•SˆÜÝ[ØÛÙXTÒTŠL
+H“Õ•SˆÚ]XTÒTŠL
+H“Õ•Sˆ[XZ[TÒTŠMJBŠHS‘ÒS‘OR[››ÑˆQUSÒTPÕTˆÑU]]ŽXÓÓUO]]ŽXÝ[šXÛÙWØÚNÂŸŸŸ‚‚‘›ÜˆX\šXQ‹HÙ[™\˜]YX›HÝ][Y[È[˜ÛYB˜S‘ÒS‘OR[››ÑˆQUSÒTPÕTˆÑU]]ŽXÓÓUO]]ŽXÝ[šXÛÙWØÚX‚•HÝ]]\È\™Y›Ü™H™XYH›ÜˆHØÝ[Y[YX\šXQˆ˜\Ù[[™K]]\ÂœÝ[H™]šY]ÙYØÚ[XH›ÜÜØ[ˆ[œÜXÝˆ[˜™Y›Ü™H\Z[™ÈÚ[™Ù\ÈÂ˜[ˆ^\Ý[™È]X˜\ÙK‚‚ˆÈÈÈY][Û˜[]X˜\ÙH˜XÚÙ[™Â‚™\ÚY\ÈX\šXQ‹HØÚ[XHÓHØ[ˆÝ\œ™[H›ØÙ\ÜÈÔS]H[™ÜÝÜ™TÔS‚”Ù[XÝH˜XÚÙ[™[ˆHžž[š[N‚‚ŸŸŸž™[\˜B™]X˜\ÙHXZ[ˆÈ[™Ú[™NˆÜ[]H]X˜\ÙNˆ˜Y™\ÜËX›ÛÚËœÜ[]LÈˆB™]X˜\ÙHXZ[ˆÈ[™Ú[™NˆÜÝÜ™\È]X˜\ÙNˆ˜Y™\ÜËX›ÛÚÈˆBŸŸŸ‚‚‘›ÜˆÔS]KUPTÑWÕT“\Ù\ÈHÜ[]N‹ËØÜˆÜ[]N˜ØÚ[YNÈX\šXQ‚˜XØÙ\ÈX\šXYŽ‹ËØ[™HÛÛ\]X›H^\Ü[‹ËØ˜[YKˆHÜ™X]X˜[œÜXÝ[˜[™\XØÚ[XHÜ\˜][ÛœÈXØÛÝ[›ÜˆX›\ËÛÛ[[œË™›Ü™ZYÛˆÙ^\Ë[™[™^\Ëˆ]]ÛX]XÈ]X˜\ÙHÜ™X][Ûˆ›ÝYÚˆÙ]\[™˜ˆ›ÛÝÝ˜\Ý\œ™[HÝ\ÜÈX\šXQˆ[™ÔS]NÈ›ÜˆÜÝÜ™TÔS\ÙB˜ˆÜ™X]Xˆ[œÜXÝˆ[˜[™[ˆˆ\X‚‚ŸŸŸ˜˜\Ú™^ÜUPTÑWÕT“IÜÜ[]N‹ËËÝ\ØY™\ÜËX›ÛÚËœÜ[]LÉÂž™[\˜Hˆ›ÛÝÝ˜\Ü˜ËÛXZ[‹žž[ž™[\˜Hˆ[œÜXÝÜ˜ËÛXZ[‹žž[ŸŸŸ‚‚•H˜]]™HÔS[[YH\ÈÝ[š[X\š[H^\˜Ú\ÙYÚ]X\šXQ‹ˆHÝ\ÜYœØÚ[XH˜XÚÙ[™\™Y›Ü™HÙ\È›Ý]]ÛX]XØ[HYX[ˆ]]™\žH[[YH]Y\žB˜™Z]™\ÈY[XØ[HÛˆ]™\žH˜XÚÙ[™‚‚ˆÈÈˆ[œÜXÝ[™È[™\Z[™ÈØÚ[X\Â‚–™[\˜H\Ù\È›ÈZYÜ˜][ÛˆÛ\ÜÙ\ËˆHÛÝ\˜ÙHš[H\ÈH\Ú\™YØÚ[XNÈBÓHÛÛ\\™\È]Ú]HÝ\œ™[]X˜\ÙKˆHXÝX[ÛÜšÙ›ÝÈ\Î‚‚ŒKˆÚXÚÈHÛÝ\˜ÙNˆ™[\˜HÚXÚÈÜ˜ËÛXZ[‹žž[‚Œ‹ˆš[ÔSÛ›Nˆ™[\˜HˆÜ™X]HÜ˜ËÛXZ[‹žž[‚ŒËˆ™XYHÝ\œ™[ØÚ[XNˆ™[\˜Hˆ[œÜXÝÜ˜ËÛXZ[‹žž[‚ˆ[ˆHY™™\™[˜ÙNˆ™[\˜Hˆ[ˆÜ˜ËÛXZ[‹žž[‚Kˆ™XYH[ˆ[™\ÜÙ\ÜÈ]Èš\ÚË‚‹ˆ\HÛ›HY\ˆ™]šY]Îˆ™[\˜Hˆ\HÜ˜ËÛXZ[‹žž[‚‚”Ý\HHÛÛ›™XÝ[ÛˆÛ›H›ÝYÚH›ØÙ\ÜÈ[š\›Û›Y[‚‚ŸŸŸ˜˜\Ú™^ÜUPTÑWÕT“IÛX\šXYŽ‹ËÞ™[\˜N‘S•T—ÐWÓÐÐSÔTÔÕÓÔ‘ÒT‘PLËŒŒŒNŒÌÌËØY™\Ü×Ø›ÛÚÉÂŸŸŸ‚‚¸¦¨;î#È™[\˜HÙ\È
+Š››Ý
+ŠˆØY™[˜]]ÛX]XØ[Kˆ]\ÈHØY™HØØ[XÙHÂœÝÜ™H˜[Y\Ë]H›ØÙ\ÜÈ]\Ý™XÙZ]™HH˜\šXX›\È™Y›Ü™HHÓH[œÎÂœÙYHÙXÝ[ÛˆM‹‚‚”š[H\Ú\™YÔS‚‚ŸŸŸ˜˜\Úž™[\˜HˆÜ™X]HÜ˜ËÛXZ[‹žž[ˆÜ[ØY™\ÜÙ\Ë™Ù[™\˜]YœÜ[ŸŸŸ‚‚’Yˆ[ÝHYYS‘ÒS‘OR[››Ñ˜[™HÚ\œÙ]Û]\Ù\ÈY\ˆ™]šY]Ë\H]™^XÝš[HX[X[HÚ]HX\šXQˆÛY[‚‚ŸŸŸ˜˜\Ú›X\šXYˆKZÜÝLLËŒŒŒHK\ÜLÌÌÈK]\Ù\^™[\˜HK\\ÜÝÛÜ™ˆY™\Ü×Ø›ÛÚÈÜ[ØY™\ÜÙ\Ë™Ù[™\˜]YœÜ[ŸŸŸ‚‚˜™[\˜Hˆ\XÙ\È›Ý™XY[ˆY]YÔSš[NÈ]™YÙ[™\˜]\È]È[ˆœ›ÛBHžž[ÛÝ\˜ÙKˆ\ÙHZ]\ˆH[˜Ú[™ÙY™[\˜H[ˆÜˆH™]šY]ÙYX[X[˜ÛY[]˜]\ˆ[ˆ›[™HÚ[™È›Ý‚‚’[œÜXÝ[‹[™\N‚‚ŸŸŸ˜˜\Úž™[\˜Hˆ[œÜXÝÜ˜ËÛXZ[‹žž[ž™[\˜Hˆ[ˆÜ˜ËÛXZ[‹žž[ž™[\˜Hˆ\HÜ˜ËÛXZ[‹žž[ŸŸŸ‚‚‘\ÝXÝ]™HÚ[™Ù\È™\]Z\™H^XÚ]\›Z\ÜÚ[ÛŽ‚‚ŸŸŸ˜˜\Úž™[\˜Hˆ\HÜ˜ËÛXZ[‹žž[KX[ÝËY\ÝXÝ]™BŸŸŸ‚‚•]›YÈÙ\È›ÝYX[ˆ8 '›Ø˜X›Hš[™K¸ 'H]YX[œÈ8 'H™XYH[‹]™HB˜˜XÚÝ\[™^H[ÙH\È›Ü›X[¸ 'B‚‘›ÜˆX\šXQ‹ˆÙ]\[™]Èˆ›ÛÝÝ˜\[X\Èš\œÝžHÈÜ™X]HB™]X˜\ÙH[™[ˆ\HHÙ[™\˜]YØÚ[XKˆUPTÑWÕT“\™Y›Ü™H™YYÂ˜YZ[š\Ý˜]]™Hš]š[YÙ\È›Üˆ]Ü\˜][Û‹ˆ[ˆ\XØ][Ûˆ\Ù\ˆÚ][Z]Y™Ü˜[ÈÚÝ[\ÙHˆÜ™X]X[™]™H[ˆYZ[š\Ý˜]Üˆ\HHÔS[œÝXY‚•Ú]Ý]UPTÑWÕT“ˆ[˜Ø[ˆ[ˆYØZ[œÝ[ˆ[\HØÚ[XNÈ]\ÈBœ™]šY]Ë›ÝHÛÛ›™XÝ[Ûˆ\Ý‚‚¸§c\™H\È›È™[\˜HˆÚXÚØ™[\˜HØÚ[XH[œÜXÝ™[\˜HØÚ[XH[˜›Üˆ™[\˜HØÚ[XH\XÛÛ[X[™ˆHXÝX[™XY[™\ÜÈ\Ý\Â˜™[\˜HØÝÜˆÜ˜ËÛXZ[‹žž[È]ÚXÚÜÈÝ]XÈ[\ËØ\™ÛËUPTÑWÕT“Ú[ˆÙ][™HØØ[ÙXˆÜ‚‚ˆÈÈÈ[ˆLZ[]\ÈÈHš\œÝ™[\˜H\XØ][Û‚‚•\ÙHÝ\ÈÛÛœÚ\Ý[H\ÙHH\™XÝÜžHY™\ÜËX›ÛÚØÛÝ\˜ÙHš[B˜Ü˜ËÛXZ[‹žž[]X˜\ÙHY™\Ü×Ø›ÛÚØ\Ù\ˆ™[\˜X[™ÜÝÜÌÌØ‚‚ŒKˆÜ™X]HH›Ú™XÝ[™ÛÜHH[š\›Û›Y[[\]N‚‚ˆŸŸ˜˜\Úˆ™[\˜H™]ÈY™\ÜËX›ÛÚÈK[X\šXY‚ˆÙY™\ÜËX›ÛÚÂˆÜ™[‹™^[\H™[‚ˆŸŸ‚‚Œ‹ˆ]ØØ[XÙZÛ\ˆ˜[Y\È[È™[˜ˆÛÛ\ÜÙH™XYÈHPT’PQ—Ê˜ˆ˜[Y\ÈÚ[ˆHÛÛZ[™\ˆ\Èš\œÝ[š]X[^™YÈ™[\˜H]Ù[ˆ™XYÈÛ›BˆUPTÑWÕT“ˆÚ[™ÙHHÛÛ\ÜÙHš[™[™ÈÈLËŒŒŒNŒÌÌÎŒÌÌ˜™Y›Ü™BˆÝ\[™È]‚‚ŒËˆÝ\X\šXQŽ‚‚ˆŸŸ˜˜\ÚˆØÚÙ\ˆÛÛ\ÜÙHYˆØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[\YX\šXY‚ˆØÚÙ\ˆÛÛ\ÜÙHYˆØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[ÂˆŸŸ‚‚ˆ\ÈHX\šXQˆYZ[š\Ý˜]Ü‹Ü™X]HH]X˜\ÙH[™\Ù\ˆÚ]HÔSœ›ÛBˆÙXÝ[ÛˆËˆ\ÙH[ˆØš[Ý\ÈØØ[XÙZÛ\‹™]™\ˆH™X[\ÜÝÛÜ™[ˆØÜË‚‚KˆØ]™HH˜[YY™\ÜËX›ÛÚÈÛÝ\˜ÙH\ÈÜ˜ËÛXZ[‹žž[[™ÚXÚÈ]‚‚ˆŸŸ˜˜\Úˆ™[\˜HÚXÚÈÜ˜ËÛXZ[‹žž[ˆŸŸ‚‚‹ˆØYUPTÑWÕT“[ÈH›ØÙ\ÜÈ[™\Ý™XY[™\ÜËˆ™[˜\È›Ýˆ]]ÛX]XØ[HØYYžH™[\˜N‚‚ˆŸŸ˜˜\ÚˆÙ]XBˆˆ‹Ë™[‚ˆÙ]
+ØBˆ™[\˜HØÝÜˆÜ˜ËÛXZ[‹žž[KZœÛÛ‚ˆŸŸ‚‚ËˆÙ[™\˜]H[™[œÜXÝÔS‚‚ˆŸŸ˜˜\Úˆ™[\˜HˆÜ™X]HÜ˜ËÛXZ[‹žž[ˆÜ[ØY™\ÜÙ\Ë™Ù[™\˜]YœÜ[ˆÙY[ˆ	ÌKMŒ	ÈÜ[ØY™\ÜÙ\Ë™Ù[™\˜]YœÜ[ˆŸŸ‚‚Žˆ[œÜXÝ[™[Ž‚‚ˆŸŸ˜˜\Úˆ™[\˜Hˆ[œÜXÝÜ˜ËÛXZ[‹žž[ˆ™[\˜Hˆ[ˆÜ˜ËÛXZ[‹žž[ˆŸŸ‚‚ŽKˆ\HÛ›HY\ˆ™]šY]Î‚‚ˆŸŸ˜˜\Úˆ™[\˜Hˆ\HÜ˜ËÛXZ[‹žž[ˆŸŸ‚‚ŒLˆÝ\HÙXˆÙ\™\‹ˆHÔ•Q›Ý]H[ÛÈ™YYÈHÙXˆYš[š][ÛˆXØÙ\YžBˆHÙ\™\ŽÈÜY[Û™H\È›ÝHÝ]XÈ^Ü‚‚ˆŸŸ˜˜\Úˆ™[\˜HÙ\™HÜ˜ËÛXZ[‹žž[LËŒŒŒNŒÌˆŸŸ‚‚“ÛˆÚ[™ÝÜË\ÙHÛÜKR][X[™Ù]H›ØÙ\ÜÈ˜\šXX›H[ˆÝÙ\”Ú[‚‚ŸŸŸœÝÙ\œÚ[ÛÜKR][H™[‹™^[\H™[‚‰[Ž‘UPTÑWÕT“H	ÛX\šXYŽ‹ËÞ™[\˜N‘S•T—ÐWÓÐÐSÔTÔÕÓÔ‘ÒT‘PLËŒŒŒNŒÌÌËØY™\Ü×Ø›ÛÚÉÂž™[\˜HØÝÜˆÜ˜ËÛXZ[‹žž[KZœÛÛ‚ŸŸŸ‚‚•HÙ[™\˜]YÛÛ\ÜÙH[\]HX›\Ú\ÈÜÝÜÌÌ˜žHY˜][ˆÌÌØš[ˆ\È[™›ÛÚÈ\ÈH[X™\˜]H[\›˜]]™HÈ]›ÚYHÛÛ\Ú[ÛŽÈÚ[™ÙHBÛÛ\ÜÙHÜš[™[™È™Y›Ü™HÛÜZ[™ÈH]ZXÚÜÝ\‚‚ˆÈÈKˆ˜]]™HÔS‚¸§!HÔS\ÈH[™ÝXYÙH[[Y[‚‚ŸŸŸž™[\˜B™›ˆØYØXÝ]™WÛXXÚ[™\Ê
+HOˆXXÚ[™V×Bˆ\Ù\È]X˜\ÙBžÂˆ™]\›ˆÜ[XXÚ[™V×OˆÂˆÑSPÕY[X™\‹˜[YK\\Y[ÚYXÝ]™Bˆ”“ÓHXXÚ[™\ÂˆÒT‘HXÝ]™HHYBˆÔ‘Tˆ–H[X™\‚ˆBŸBŸŸŸ‚‚“˜[YY\˜[Y]\œÈ\™H›Ý[™ØY™[N‚‚ŸŸŸž™[\˜B™›ˆØYÛXXÚ[™JYˆXXÚ[™RY
+HOˆXXÚ[™OÂˆ\Ù\È]X˜\ÙBžÂˆ™]\›ˆÜ[XXÚ[™OÏˆÂˆÑSPÕY[X™\‹˜[YK\\Y[ÚYXÝ]™Bˆ”“ÓHXXÚ[™\ÂˆÒT‘HYHšYˆBŸBŸŸŸ‚‚•Ú\™HØÚ[XH[™›Ü›X][Ûˆ\È]˜Z[X›K™[\˜HÚXÚÜÈX›\ËÛÛ[[œË[X\Ù\Ëœ\˜[Y]\œË[Xš[]K™\Ý[X\[™ÜË[™H]X˜\ÙXØ\Xš[]K‚‚•Üš]\ÈØ[ˆ™HÜ›Ý\Y[ˆ˜[œØXÝ[ÛœÎ‚‚ŸŸŸž™[\˜B˜[œØXÝ[ÛˆÂˆÜ[ÂˆTUHXXÚ[™\ÂˆÑUXÝ]™HH˜[ÙBˆÒT‘HYHšYˆBŸBŸŸŸ‚‚ˆÈÈLˆÙXˆYÙ\Â‚¸§!HHÛÛ\]KØY™HÙXˆ^Y\ˆÚ]\Y]Hš[™[™ÜËXÛ\˜]]™H]Y\žHÛÛ›ÛË[™™]\ØX›HšY]ÜÈ\È[\[Y[Y‚‚ŸŸŸž™[\˜BœYÙH‹ÛXXÚ[™\ËÞÛ˜[Y_HˆÂˆ[Âˆ[‚ˆ›ÙO‚ˆO“XXÚ[™HÛ˜[Y_OÚO‚ˆ”[›š[™ÈÛ[ÛÝKÜ‚ˆØ›ÙO‚ˆÚ[‚ˆBŸBŸŸŸ‚‚”Ý\HÙXˆÙ\™\Ž‚‚ŸŸŸ˜˜\Úž™[\˜HÙ\™H\žž[ŸŸŸ‚‚•[ˆš\Ú]‚‚ŸŸŸ^š‹ËÌLËŒŒŒNŒÌÛXXÚ[™\ËÔ™\ÜËMÂŸŸŸ‚‚”]\˜[Y]\œÈ\™HSY\ØØ\YžHY˜][ˆHÙXˆÛÜ™H[™\ÈÑU›Ý]\Ë]\˜[Y]\œË]Y\žHÝš[™ÜË[™S™\ÜÛœÙ\Ë‚‚ˆÈÈÈ\YšY]È]HØY[™È[™ÛÛXÝ[ÛˆÛÜÂ‚•šY]È[\œÛ][ÛœÈ\™HÚXÚÙY™Y›Ü™HHÙ\™\ˆÝ\ËˆHYÙHX^HØYH\Y™XÛÜ™[™\ÙHÚXÚÙYšY[XØÙ\ÜÎ‚‚ŸŸŸž™[\˜BœYÙH‹ØÝ\ÝÛY\œËÞÛ˜[Y_HˆÂˆØYÝ\ÝÛY\ˆHÜ[Ý\ÝÛY\ˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÈÒT‘H˜[YHH›˜[YBˆBˆ[ÈOžØÝ\ÝÛY\‹›˜[Y_OÚOˆBŸBŸŸŸ‚‚”ÔS\ÈÚXÚÙYYØZ[œÝHØÚ[XK›Ý]H\˜[Y]\œÈ\™HØY™[H›Ý[™[™Ø\Xš[]Y\È[™\›Z\ÜÚ[ÛœÈ\™H[™›Ü˜ÙYˆÛÛXÝ[ÛœÈØ[ˆ™H™[™\™YÚ]H\YÙ\™\‹\ÚYHÛÜ‚‚ŸŸŸž™[\˜BœYÙH‹ØÝ\ÝÛY\œÈˆÂˆØYÝ\ÝÛY\œÈHÜ[Ý\ÝÛY\–×OˆÈÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÈBˆ[È[™›ÜˆÝ\ÝÛY\ˆ[ˆÝ\ÝÛY\œÈÈOžØÝ\ÝÛY\‹›˜[Y_OÛOˆOÝ[ˆBŸBŸŸŸ‚‚ˆÈÈÈXÛ\˜]]™HÙXˆ]Y\žHÛÛ›ÛÎˆÙX\˜ÚÛÜYÚ[˜][Û‹[™š[\‚‚”YÙ\ÈØ[ˆXÛ\™H\Y]Y\žH[œ]È›Üˆ^XÚ]ÔS‚‚ŸŸŸž™[\˜BœYÙH‹ØÝ\ÝÛY\œÈˆÂˆ[œ]ÈÙX\˜ÚˆÝš[™ÏÈB‚ˆØYÝ\ÝÛY\œÈHÜ[Ý\ÝÛY\–×OˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÂˆÒT‘H
+œÙX\˜ÚTÈ•SÔˆ˜[YHRÑHÓÓÐU
+	ÉIËœÙX\˜Ú	ÉIÊJBˆÔ‘Tˆ–H˜[YBˆB‚ˆ[È”ÙX\˜ÚˆÜÙX\˜ÚOÜˆBŸBŸŸŸ‚‚‘›ÜˆYÙHÛÛXÝ[ÛœÈXÛ\š[™ÈÙX\˜ÚÛÜ[™ËYÚ[˜][Û‹Üˆš[\š[™Ë™[\˜H]]ÛX]XØ[HÙ[™\˜]\ÈÙ[X[XÈ]Y\žHÛÛ›ÛÈ[™™\Ù\™\ÈT“Ý]N‚‚ŸŸŸž™[\˜BœYÙH‹ØÝ\ÝÛY\œÈˆÂˆÙX\˜ÚÈ˜[YH[XZ[BˆÛÜÈ˜[YHBˆYÚ[˜]YBˆš[\ˆÈ˜[YH]X[]HBˆØYÝ\ÝÛY\œÈHÜ[Ý\ÝÛY\–×OˆÈÑSPÕY˜[YK]X[]H”“ÓHÝ\ÝÛY\œÈBˆ[Âˆ”YÙNˆÜYÙ_HÙˆÜYÙ\ßH
+Ý[ˆÝÝ[JOÜ‚ˆ”ÛÜˆÜÛÜH
+ÛÜ™\ŸJOÜ‚ˆBŸBŸŸŸ‚‚‹HÙX\˜ÚÈ˜[YH[XZ[XˆÛÛ\[\‹XÚXÚÙYÚ][\Ý›ÜˆÜÙX\˜ÚK‹‹˜\˜[Y]\š^™YRÑX]Y\žK‚‹HÛÜÈ˜[YHXˆXØÙ\ÈXÛ\™Y™\Ý[šY[ÎÈÜ™\˜XØÙ\È\ØØÜˆ\ØØ
+ØÝ\ÝÛY\œÏÜÛÜ[˜[YI›Ü™\Y\ØØ
+K‚‹HYÚ[˜]YXˆ˜[Y]\ÈYÙX\ÈÜÚ]]™H[YÙ\‹\Y\È\˜[Y]\š^™YSRUØÑ‘”ÑU[™^ÜÙ\ÈYÙXYÙ\Ø[™Ý[\ÈR[‚‹Hš[\ˆÈ‹‹ˆXˆÝ\ÜÈ\YÜ\˜]ÜœÎˆ^šY[ÈÝ\Ü\XÛÛZ[œØÝ\×ÝÚ][™×ÝÚ][™[ÚXÚÜÎÈ[Y\šXÈšY[ÈY][Û˜[HÝ\ÜÝÝXXˆ^[\\ÎˆØÝ\ÝÛY\œÏÙš[\—Û˜[YW×ØÛÛZ[œÏPXÛYXÜˆØÝ\ÝÛY\œÏÙš[\—Ü]X[]W×ÙÝOLLˆ[˜[YÜ\˜]ÜœÈ™]\›ˆÛÛ›ÛY‚‚ˆÈÈÈ™]\ØX›HšY]È^[Ý]È[™ÛÛ\Û™[Â‚H˜[YYšY]È›ÝšY\ÈH™]\ØX›HYÙH^[Ý]Ú]ÛÝÎ‚‚ŸŸŸž™[\˜BšY]ÈÚ]TÚ[Âˆ[Âˆ[›ÙOXZ[ÛÝÏÛXZ[Ø›ÙOÚ[‚ˆBŸB‚œYÙH‹ØÝ\ÝÛY\œÈˆÂˆšY]ÎˆÚ]TÚ[ˆ[ÈOÝ\ÝÛY\œÏÚOˆBŸBŸŸŸ‚‚•\YÛÛ\Û™[ÈXÛ\™H›Ü\Y\ÈšXH›ÜØ‚‚ŸŸŸž™[\˜B˜ÛÛ\Û™[˜YÙHÂˆ›ÜÈÈ^ˆÝš[™ÈBˆ[ÈÜ[ˆÛ\ÜÏH˜˜YÙHžÝ^OÜÜ[ˆBŸB‚œYÙH‹ÜÝ]\ÈˆÂˆ[È˜YÙH^H”™XYHˆÏˆBŸBŸŸŸ‚‚ÛÛ\Û™[ÈXØÙ\Ú[S›ÝYÚY˜][[™˜[YYÛÝÈÚ]˜[˜XÚÈÛÛ[‚‚ŸŸŸž™[\˜B˜ÛÛ\Û™[[™[Âˆ[ÂˆÙXÝ[ÛˆÛ\ÜÏHœ[™[‚ˆXY\ÛÝ˜[YOHšXY\ˆ‘Y˜][XY\ÜÛÝÚXY\‚ˆ]ˆÛ\ÜÏH˜›ÙHÛÝÏÙ]‚ˆÜÙXÝ[Û‚ˆBŸB‚œYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ[™[‚ˆÛÝ˜[YOHšXY\ˆO“^H\Ú›Ø\™ÚOÜÛÝ‚ˆ“XZ[ˆ[™[›ÙHÛÛ[Ü‚ˆÔ[™[‚ˆBŸBŸŸŸ‚‚Š“›ÝNŠˆÛÛ\Û™[ÛÝÈ™\ÝY[œÚYHHÛÛ\Û™[[›ØØ][Ûˆ›ÈÛ™Ù\ˆ™\]Z\™H[ˆÝ]\ˆYÙHšY]Î˜^[Ý]‚‚ˆÈÈLKˆ›Ü›\Â‚¸§!H›Ü›\ÈØ[ˆ[š\š]X›H[\Î‚‚ŸŸŸž™[\˜B™›Ü›HXXÚ[™PÜ™X]HOˆXXÚ[™\ÈÂˆšY[ÈÂˆ[X™\‚ˆ˜[YBˆ\\Y[ˆXÝ]™BˆBŸBŸŸŸ‚‚[ˆ^XÚ]Yš[š][ÛˆØ[ˆY™\Ù[][Ûˆ[™˜[Y][Ûˆ[\Î‚‚ŸŸŸž™[\˜B™›Ü›HÛÛXÝ›Ü›HÂˆšY[[XZ[ˆ[XZ[ÂˆX™[ˆ‘[XZ[‚ˆ™\]Z\™YˆX^ˆMBˆÚYÙ]ˆ[XZ[ˆBŸBŸŸŸ‚‚•˜[Y]HÚ]Ý]HÙ\™\Ž‚‚ŸŸŸ˜˜\Úž™[\˜H›Ü›H˜[Y]H^[\\ËØÝ\ÝÛY\—Ù›Ü›Kžž[Ý\ÝÛY\Ü™X]Hˆ˜[YOH‘^[\Hˆ[XZ[Z[™›Ð^[\K\ÝŸŸŸ‚‚•Ú]™[\˜HÙ\™X™[\˜H^ÜÙ\ÈH›Ü›H]Ù›Ü›\ËÑ›Ü›S˜[YXˆÑU™[™\œÈBÔÔ‘ˆÚÙ[ŽÈÔÕÚXÚÜÈHÚÙ[ˆ[™˜[Y]\ÈHÝX›Z]Y˜[Y\Ë‚‚‘]X˜\ÙKX˜XÚÙYXÝ[ÛŽ‚‚ŸŸŸž™[\˜B™›Ü›HÝ\ÝÛY\Ü™X]HOˆÝ\ÝÛY\œÈÂˆšY[ÈÈ˜[YH[XZ[B‚ˆXÝ[ÛˆØ]™HÂˆ™\]Z\™\È]]ˆ\›Z]È˜Ý\ÝÛY\œËœØ]™H‚ˆÜ[ÂˆS”ÑT•S•ÈÝ\ÝÛY\œÈ
+˜[YK[XZ[
+BˆSQTÈ
+›˜[YK™[XZ[
+BˆB‚ˆ™Y\™XÝ‹ØÝ\ÝÛY\œÈ‚ˆBŸBŸŸŸ‚‚‘›Ü›HXÝ[ÛœÈX^HXÛ\™HZ\ˆÝÛˆ]]Üš^˜][Û‹ˆH\›Z\ÜÚ[Ûˆ\ÈÚXÚÙYÚ[ˆH›Ü›H\È™[™\™Y[™YØZ[ˆ™Y›Ü™HÝX›Z\ÜÚ[Û‹‚‚ˆÈÈL‹ˆÔ•Q‚¸§!HHÚÜ\ÝØ\ÙH\ÈØ]\ÙžZ[™ÛHÚÜ‚‚ŸŸŸž™[\˜B˜ÜYXXÚ[™HOˆXXÚ[™\ÂŸŸŸ‚‚ÛÛ™šYÝ\™Y™\ÛÝ\˜ÙN‚‚ŸŸŸž™[\˜B˜ÜYXXÚ[™HOˆXXÚ[™\ÈÂˆ]Nˆ“XXÚ[™\È‚ˆ\ÝÈ[X™\ˆ˜[YH\\Y[XÝ]™HBˆÙX\˜ÚÈ[X™\ˆ˜[YHBˆš[\ˆÈ\\Y[XÝ]™HBŸBŸŸŸ‚‚–™[\˜H›ÝšY\È\Ý[™]Z[YÙ\ËÜ™X]KÑY]›Ü›\ËÙX\˜Úš[\œË˜[ÝÛ\ÝYÛÜ[™ËYÚ[˜][Û‹[™ÔÔ‘‹\›ÝXÝY[][Û‹ˆÛÛ™šYÝ\™YšY[Â˜\™HÚXÚÙYYØZ[œÝHØÚ[XK‚‚‘^[\HT“Î‚‚ŸŸŸ^‹ÛXXÚ[™\Â‹ÛXXÚ[™\ÏÜÙX\˜ÚT™\ÜÂ‹ÛXXÚ[™\ÏÙš[\—ØXÝ]™O]YB‹ÛXXÚ[™\ÏÜÛÜ[[X™\‰›Ü™\X\ØÂ‹ÛXXÚ[™\ËÛ™]Â‹ÛXXÚ[™\ËÍ‹ÙY]ŸŸŸ‚‚¼'åî»î#È[HÝ\ÝÛH\YÛÛ\Û™[È[™š[™KYÜ˜Z[™YšY]ÈÝ™\œšY\È\™H\Ù‚HÛÛ[Z[™ÈšY]È›ØYX\‚‚ˆÈÈÈÔ•QšY]ÜËXÝ[ÛœË[™ÛÙ[]B‚¼'éêˆHÝ\œ™[Ô•Q^Y\ˆØ[ˆ™HÝ\ÝÛZ^™Y[œÚYHHØY™HY˜][]ËˆB›\ÝØ[ˆ\ÙHØ\™ÈÚ]Ý]ÜÚ[™ÈÙX\˜Úš[\œËÛÜ[™ËYÚ[˜][Û‹Ý]]™\ØØ\[™ËÜˆ\›Z\ÜÚ[ÛˆÚXÚÜÎ‚‚ŸŸŸž™[\˜B˜ÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆšY]ÈÂˆ\ÝÂˆ[ÙNˆØ\™Âˆ[\Nˆ“›ÈÝ\ÝÛY\œÈ›Ý[™ˆ‚ˆBˆ]Z[Âˆ[ÙNˆØ\™Âˆ]NˆÝ\ÝÛY\ˆ]Z[È‚ˆBˆ›Ü›HÂˆ[ÙNˆØ\™Âˆ]NˆÝ\ÝÛY\ˆ›Ü›H‚ˆÝX›Z]ˆ”Ø]™HÝ\ÝÛY\ˆ‚ˆBˆ[]HÂˆ]Nˆ‘[]HÝ\ÝÛY\ˆ‚ˆY\ÜØYÙNˆ•\ÈXÝ[ÛˆØ[››Ý™H[™Û™Kˆ‚ˆÝX›Z]ˆ‘[]H›ÝÈ‚ˆBˆØY[™ÈÈY\ÜØYÙNˆ“ØY[™ÈÝ\ÝÛY\œÈ‹‹ˆˆBˆ\œ›ÜˆÂˆ]NˆÝ\ÝÛY\œÈ[˜]˜Z[X›H‚ˆY\ÜØYÙNˆ”X\ÙHžHYØZ[ˆ]\‹ˆ‚ˆBˆBŸBŸŸŸ‚‚‘›ÜˆHÛÛ[[ÛˆØ\ÙKHÚ\™YšY[›Ùš[HØ[ˆ[šY›Ü›[HÛÛ›ÛHÙ[™\˜]Y›\Ý]Z[šY]Ë[™Ü™X]KÙY]›Ü›\Î‚‚ŸŸŸž™[\˜B˜ÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆšY]ÈÂˆšY[ÈÈ˜[YH[XZ[XÝ]™HBˆBŸBŸŸŸ‚‚[ˆ^XÚ]\ÝÈ‹‹ˆX™[XZ[œÈHØØ[Ý™\œšYH›Üˆ\ÝÙ]Z[ˆš[X\žHÙ^\Â˜[™]]ËYÙ[™\˜]YšY[È\™H]]ÛX]XØ[H^ÛYYœ›ÛH›Ü›\ÎÈHÛÛ\[\‚œ™Z™XÝÈ[šÛ›ÝÛˆ›Ùš[HšY[ËˆÚ[ˆHXÚšXØ[YÛÛ[[ˆ\ÈÛZ]Yœ›ÛBš\ÚX›HšY[Ø
+\È[ˆ˜[YH[XZ[XÝ]™XX›Ý™JK™[\˜H]]ÛX]XØ[H[šÜÂHš\œÝ\Ü^YYšY[
+˜[YX
+HÈH™XÛÜ™]Z[YÙH›Üˆ›ÝX›H[™˜Ø\™^[Ý]Ë‚‚‘ÛXZ[ˆXÝ[ÛœÈ™[XZ[ˆÔÕ[Û›K\˜[Y]\š^™Y[™›ÝXÝY‚‚ŸŸŸž™[\˜B˜ÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆXÝ[ÛˆXXÝ]˜]HÂˆX™[ˆ‘XXÝ]˜]HÝ\ÝÛY\ˆ‚ˆÛÛ™š\›Nˆ”™X[HXXÝ]˜]H\ÈÝ\ÝÛY\È‚ˆ\›Z]È˜Ý\ÝÛY\œË™Y]‚ˆÜ[ÂˆTUHÝ\ÝÛY\œÂˆÑUXÝ]™HH˜[ÙBˆÒT‘HYHšYˆBˆÝXØÙ\ÜÈÝ\ÝÛY\ˆXXÝ]˜]Yˆ‚ˆ™Y\™XÝ‹ØÝ\ÝÛY\œÈ‚ˆBŸBŸŸŸ‚‚•H[[YH[™›Ü˜Ù\ÈH]X˜\ÙHØ\Xš[]KÔÔ‘ˆ›ÝXÝ[Û‹˜]][XØ][Û‹[™HXÛ\™Y\›Z\ÜÚ[Û‹ˆXÝ[ÛœÈØ[ˆ[ÛÈXÛ\™H\Y™šY[ËHÙ\™\‹\ÚYHÛÛ™š\›X][ÛˆYÙK[™Ý\ÝÛHÝXØÙ\ÜÈÜˆ\œ›ÜˆYÙ\Ë‚•\È^[™ÈH^\Ý[™ÈÔ•Q[[YNÈ]\È›ÝHœ™Y[H›ÙÜ˜[[XX›B™œ›Û[™Ù[™\˜]Ü‹‚‚”™]™\œÚX›H[][Ûˆ\È]˜Z[X›H›ÝYÚÛÙ[]N‚‚ŸŸŸž™[\˜BX›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ[]YØ]ˆ[Y\Ý[\ÂŸB‚˜ÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆÛÙÙ[]HÈÛÛ[[Žˆ[]YØ]BŸBŸŸŸ‚‚“›Ü›X[\ÝÈ[™]Z[ÈÚÝÈÛ›H›ÝÜÈÚÜÙHÛÛ[[ˆ\È•SÈ\˜Ú]™Yœ™XÛÜ™È\™H]˜Z[X›H›ÝYÚØ\˜Ú]™Y]YX[™Ø[ˆ™H™\ÝÜ™Y›ÝYÚBÔÔ‘‹\›ÝXÝYXÝ[Û‹ˆ\›X[™[[][Û‹™][[Ûˆ[\Ë[™[È\˜Ú]š[™Âœ™[XZ[ˆ[›™Y‚‚•Ú[ˆ[ˆ]]Yš[š][ÛˆXÛ\™\È[ˆ]Y]X›KÔ•QÜ™X]K\]K[]K˜\˜Ú]™K™\ÝÜ™K[™Ý\ÝÛHXÝ[ÛœÈÜš]H]™[È[ˆHØ[YHX\šXQ‚˜[œØXÝ[Û‹ˆ\ÜÝÛÜ™ËÚÙ[œËÙXÜ™]Ë[™\Ú\È\™H™[[Ý™Yœ›ÛHÚ[™ÙB™]Z[Ë‚‚ˆÈÈLËˆ]][XØ][Ûˆ[™\›Z\ÜÚ[ÛœÂ‚¼'éêˆ™[\˜HÝ\ÜÈ\™ÛÛŒˆÙÚ[‹\œÚ\Ý[X\šXQˆÙ\ÜÚ[ÛœËÙÛÝ]›Ý]B™ÝX\™Ë[™]X˜\ÙKX˜XÚÙY\›Z\ÜÚ[ÛˆÚXÚÜËˆš]™H˜Z[Y][\È›ÜˆBœØ[YH›Ü›X[^™YK[XZ[Y™\ÜÈÚ][ˆMHZ[]\ÈšYÙÙ\ˆHŒ\ÙXÛÛ™ŽB›ØÚÛÝ]ˆHÝXØÙ\ÜÙ[ÙÚ[ˆ›Ý]\È[™[˜[Y]\ÈH™]š[Ý\Èœ›ÝÜÙ\‚œÙ\ÜÚ[ÛˆÚÙ[‹‚‚‘]™\žHÝ]KXÚ[™Ú[™Èœ›ÝÜÙ\ˆ›Ü›H™\]Z\™\È]ÈÔÔ‘ˆÚÙ[ˆ[™HØ[YK[ÜšYÚ[‚˜ÜšYÚ[˜Üˆ™Y™\™\˜X]Ú[™ÈH™\]Y\ÝÜÝ[™Y™™XÝ]™HØÚ[YK‚“X[›Ü›YYZ\ÜÚ[™ËÜˆÜ›ÜÜË[ÜšYÚ[ˆ]šY[˜ÙH\È™Z™XÝYÛÈÛÜZ[™ÈHÚÙ[‚™œ›ÛH[›Ý\ˆœ›ÝÜÙ\ˆØ[››Ý]]Üš^™HHÜ›ÜÜË\Ú]H›Ü›HÝX›Z\ÜÚ[Û‹ˆTBœ™\]Y\ÝÈØ\œžZ[™Èœ›ÝÜÙ\‹[ÜšYÚ[ˆ[™›Ü›X][ÛˆÜˆHœ›ÝÜÙ\ˆÙ\ÜÚ[ÛˆÛÛÚÚYH[ÛÂœ™XÙZ]™H\ÈÚXÚË[˜ÛY[™ÈÑU™\]Y\ÝÈ™XØ]\ÙH[™\œÈ\™H›ÝY]œÝ]XØ[H™\ÝšXÝYÈ™XY[Û›H™Z]š[Ü‹ˆÜ›ÜÜË[ÜšYÚ[ˆTHXØÙ\ÜÈ\ÂœÜÜÚX›HÛ›H›Üˆ[ˆ^XÝÜšYÚ[ˆ^XÚ]H\ÝY[ˆH›Ú™XÝ	ÜÈÓÔ”ÂœÛXÞNÈHÙ\ÜÚ[ÛˆÛÛÚÚYHY][Û˜[H™\]Z\™\ÈÜ™Y[X[YÓÔ”ËˆHÝ\œ™[ÔÔ‘ˆÚÙ[ˆ\È›ØÙ\ÜË\ØÛÜY˜]\ˆ[ˆ[™]šYX[HÝÜ™Y\ˆÙ\ÜÚ[Û‹ÛÂ\ÙHÜšYÚ[ˆÚXÚÜÈ\™HH™\]Z\™Y\ÙˆH›ÝXÝ[Û‹‚‚•H™[\˜HÙ\™\ˆÝ\œ™[HÜXZÜÈZ[ˆˆ]]™Z[™H\ÝYÂ\›Z[˜][™È›ÞH™Y›Ü™H^ÜÚ[™È]™^[Û™HØØ[]™[ÜY[XXÚ[™KˆBœ›ÞH]\Ý™\Ù\™HHX›XÈÜÝÝ™\Üš]HQ›ÜØ\™YT›ÝØÚ]B˜XÝX[^\›˜[ØÚ[YK[™™]™[\™XÝX›XÈXØÙ\ÜÈÈH\XØ][Û‚œÜˆ™[\˜H\Ù\È]XY\ˆÈ˜[Y]HHY™™XÝ]™HÜšYÚ[ˆ[™ÈYB˜ÙXÝ\™X]šX]HÈÙ\ÜÚ[ÛˆÛÛÚÚY\È›ÜˆÈ™\]Y\ÝËˆ™]™\ˆ\ÝB˜ÛY[\Ý\YY›ÜØ\™YXY\ˆ][ˆ^ÜÙY›ÞH›Ý[™\žK‚‚•HÙ\™\ˆ[ÛÈÚXÚÜÈ]™\žHÝ\YYÜÝXY\ˆYØZ[œÝ˜‘STWÐSÕÑQÒÔÕØˆHY˜][\›Z]ÈÛ›HØØ[ÜÝLËŒŒŒX[™˜ÎŽŒWXÚXÚ[ÛÈ›ØÚÜÈ”È™Xš[™[™È›ÝYÚ\˜š]˜\žHÜÝ˜[Y\ËˆYB˜XÝX[ÜÝ˜[YH^XÚ]HÈHÛÛ[XK\Ù\\˜]Y™[˜Ù][™ÈÚ[ˆ\Ú[™ÈB˜Ý\ÝÛHÛXZ[ˆÜˆSˆÜÝˆØÚ[Y\ËÜË[™Ú[Ø\™È\™H›ÝXØÙ\Y‚‘\XØ]HÙXÝ\š]K\Ù[œÚ]]™H™\]Y\ÝXY\œÈÝXÚ\ÈÜÝÜšYÚ[˜˜™Y™\™\˜ÛÛÚÚYX[™]]Üš^˜][Û˜\™H™Z™XÝYÈ]›ÚY[XšYÝ[Ý\Âœ\œÚ[™ËˆH™\ÜÛœÙHÛXÞH™Y™\œ™\‹TÛXÞNˆØ[YK[ÜšYÚ[˜[ÝÜÂœØ[YK[ÜšYÚ[ˆTHÑUÈÈ›ÝšYH]]šY[˜ÙHÚ]Ý]Ù[™[™È™Y™\œ™\‚š[™›Ü›X][ÛˆÈÝ\ˆÜšYÚ[œË‚”›ØÙ\ÜÈ[š\›Û›Y[Ý™\œšY\ÈH›Ú™XÝ™[˜ÚXÚÝ™\œšY\ÈB™˜[˜XÚËˆH[ÝÛ\ÝÙ\È›Ý™\XÙHÈÜˆÜšYÚ[‹ÐÔÔ‘ˆÚXÚÜË‚‚Ü™X]HH˜[YH›ÜˆH™\]Z\™Y\ÜÝÛÜ™Ú\ÚÛÛ[[ˆÚ]HÓKˆBš[\˜XÝ]™HÛÛ[X[™\ØX›\È\ÜÝÛÜ™XÚÈ[™\ÚÜÈ›ÜˆÛÛ™š\›X][ÛŽ‚‚ŸŸŸ˜˜\Úž™[\˜H]]\Ú\\ÜÝÛÜ™ŸŸŸ‚‚‘›Üˆ[X™\˜]H]]ÛX][Û‹\ÜÈÛ™H\ÜÝÛÜ™[™H›ÝYÚK\Ý[˜ˆÈ›Ýœ]™X[\ÜÝÛÜ™È[ˆÛÛ[X[™\™Ý[Y[ÈÜˆÛÛ[Z]Ù[™\˜]Y\Ú\ÈÈÛÝ\˜ÙB˜ÛÛ›Û‚‚ŸŸŸ˜˜\Úœš[ˆ	É\×‰È	ØÚ[™ÙK]\Ë\\ÜÝÛÜ™	È™[\˜H]]\Ú\\ÜÝÛÜ™K\Ý[‚ŸŸŸ‚‚ŸŸŸž™[\˜B˜]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆ\›Z\ÜÚ[ÛœÎˆ\Ù\—Ü\›Z\ÜÚ[ÛœÂˆ›Û\Îˆ\Ù\—Ü›Û\Âˆ›ÛWÜ\›Z\ÜÚ[ÛœÎˆ›ÛWÜ\›Z\ÜÚ[ÛœÂŸB‚œYÙH‹ØYZ[ˆˆÂˆ™\]Z\™\È]]ˆ\›Z]È›XXÚ[™\Ë›X[˜YÙH‚‚ˆ[ÂˆO“XXÚ[™HX[˜YÙ[Y[ÚO‚ˆBŸBŸŸŸ‚‚•HÜ[Û˜[\›Z\ÜÚ[ÛœØX›HÛÛZ[œÈ\Ù\—ÚY[™\›Z\ÜÚ[Û˜›Ü‚™\™XÝÜ˜[Ëˆ›ÛHÜ›Ý\È\™H[˜X›YÚ]›Û\Ø[™›ÛWÜ\›Z\ÜÚ[ÛœØ‚Hš\œÝX›HÛÛZ[œÈ\Ù\—ÚY[™›ÛX[™HÙXÛÛ™ÛÛZ[œÈ›ÛX˜[™\›Z\ÜÚ[Û˜ˆY™™XÝ]™H\›Z\ÜÚ[ÛœÈ\™HH[š[ÛˆÙˆ\™XÝÜ˜[È[™˜[\›Z\ÜÚ[ÛœÈ[š\š]Yœ›ÛHH\Ù\‰ÜÈ›Û\Ëˆ[ˆHZ[Z[ˆYZ[š\Ý˜][Û‚šY]ËH\›Z\ÜÚ[Ûˆ™]›ØØ][Ûˆ›Ü›H˜[œÛZ]ÈH˜[YÔÔ‘ˆÚÙ[ˆ[™œ™[XX›H™[[Ý™\ÈÙ[XÝY\›Z\ÜÚ[ÛœË‚‚•HØ[YHÝX\™È›ÝXÝ\YTH[™\œÎ‚‚ŸŸŸž™[\˜B˜\HÑU‹Ø\KÛXXÚ[™\ËÞÚYHˆÂˆ[™\ˆÙ]ÛXXÚ[™Bˆ™\]Z\™\È]]ˆ\›Z]È›XXÚ[™\ËšY]È‚ˆ[œ]ÈYˆXXÚ[™RYBˆÝ]]XXÚ[™Bˆ\œ›ÜœÈÈ›Ý›Ý[™BŸBŸŸŸ‚‚”›ÝXÝYTH˜Z[\™\È\ÙH”ÓÓˆÚ][ˆ\œ›ÜˆÛÙX[™Y\ÜØYÙXˆH[™\‚˜Ø[ˆ™]\›ˆ\œŠ“›Ý›Ý[™ŠXÈÙ[XÝHX]Ú[™ÈÝ]\Èœ›ÛHHXÛ\™Y˜\œ›ÜœØ›ØÚÎÈ[™XÛ\™Y\œ›ÜœÈ™XÛÛYHL™\ÜÛœÙ\ËˆšXÚ\ˆÛXZ[‹Y\œ›Ü‚˜[Y\È™[XZ[ˆ]\™HÛÜšËˆ”ÓÓˆ\œ˜^\ÈØ[ˆ™H›Ý[™È\YšY[ÈÝXÚ\Â˜[×XÜˆXXÚ[™RY×Xˆ™\ÝY”ÓÓˆ[œ]\Ù\ÈXÛ\™Y™XÛÜ™Î‚‚ŸŸŸž™[\˜BœÝXÝY™\ÜÈÈÚ]NˆÝš[™ÈBœÝXÝÝ\ÝÛY\’[œ]È˜[YNˆÝš[™ÈY™\ÜÎˆY™\ÜÈB‚˜\HÔÕ‹ØÝ\ÝÛY\œÈˆÂˆ[™\ˆXÚ×ØÝ\ÝÛY\‚ˆ[œ]ÈÝ\ÝÛY\ŽˆÝ\ÝÛY\’[œ]BˆÝ]]Ý\ÝÛY\’[œ]ŸBŸŸŸ‚‚•[šÛ›ÝÛˆ™XÛÜ™šY[È[™Z\ÜÚ[™È™\]Z\™YšY[È\™H™Z™XÝYˆ[ˆH[™ÝXYÙB˜ÛÜ™K\œ˜^\ÈÝ\Ü]\˜[Ë[™^[™Ë[˜\[™ÛÛZ[œØš\œÝ˜\Ý[™ÛÛ˜Ø][˜][ÛˆÚ]
+Øˆ™XÛÜ™]\˜[È[™ÚXÚÙYšY[XØÙ\ÜÂ˜\™H]˜Z[X›H›Üˆ™\ÝY˜[Y\Î‚‚ŸŸŸž™[\˜B˜Ý\ÝÛY\ˆHÝ\ÝÛY\’[œ]Âˆ˜[YNˆ[›˜H‚ˆY™\ÜÎˆY™\ÜÈÈÚ]Nˆ™\›[ˆˆBŸB‚œš[
+Ý\ÝÛY\‹˜Y™\ÜË˜Ú]JBŸŸŸ‚‚\œ˜^H]\˜][Ûˆ\Ù\È›Üˆ‹‹ˆ[˜ÈHÛÜ˜\šXX›H\È[[]]X›H[™ØÛÜYÂHÛÜ›ÙKˆœ™XZØ[™ÛÛ[YX\™HÝ\ÜY‚‚‘Ù[™\˜]HHœ›ÝÜÙ\ˆÜˆ›ÙKXÛÛ\]X›H\TØÜš\ÛY[œ›ÛHHØ[YHTB™XÛ\˜][ÛœÎ‚‚ŸŸŸ˜˜\Úž™[\˜HØÈ^[\\ËØ\WÜ™XÛÜ™Ëžž[K]\\ØÜš\ˆÝ\ÝÛY\‹XÛY[ÂŸŸŸ‚‚•HÙ[™\˜]YÛY[\Ù\ÈÝ[™\™™]Ú[˜ÛY\ÈXÛ\™Y™XÛÜ™È[™X›\È\È\TØÜš\\\Ë[™[™\È]Ü]Y\žH\˜[Y]\œË”ÓÓˆ›ÙY\Ë˜™X\™\ˆÚÙ[œË™\ÜÛœÙH\\Ë[™\œ›ÜœËˆXÛ\™YTH\œ›Üˆ˜[Y\È\™B˜]˜Z[X›H›ÝYÚ™[\˜P\Q\œ›ÜÛÙXÈ™[\˜P\Q\œ›Ü‹™œ›ÛT™\ÜÛœÙX^˜XÝÂHÝ]\ËÛÙK[™Ù\™\ˆY\ÜØYÙHÚ[H™\Ù\š[™ÈH˜]È™\ÜÛœÙH›ÙK‚‚TH\œ›ÜœÈX^H[ÛÈØ\œžHHÚXÚÙY^[ØYˆYH^[ØY\HY\ˆB˜ÛÛÛˆ[™\ÙHHØ[YH\H\ÈH\œ›ÜˆÚYHÙˆH[™\‰ÜÈ™\Ý[‚‚ŸŸŸž™[\˜BœÝXÝ˜[Y][Û”›Ø›[HÂˆšY[ˆÝš[™ÂˆY\ÜØYÙNˆÝš[™ÂŸB‚˜\HÔÕ‹ØÝ\ÝÛY\œËÝ˜[Y]HˆÂˆ[™\ˆ˜[Y]WØÝ\ÝÛY\‚ˆÝ]]™\Ý[Ýš[™Ë˜[Y][Û”›Ø›[O‚ˆ\œ›ÜœÈÈŒˆ˜[Y][Û‘\œ›ÜŽˆ˜[Y][Û”›Ø›[HBŸBŸŸŸ‚‚•H™\ÜÛœÙH™]Z[œÈ\œ›Ü‹˜ÛÙX[™\œ›Ü‹›Y\ÜØYÙX[™YÈHÙ\šX[^™Yœ^[ØY\È\œ›Ü‹™]Z[ØˆÜ[TH[˜ÛY\ÈH]Z[ÈØÚ[XKÚ[HB™Ù[™\˜]YÛY[^ÜÙ\È]›ÝYÚ™[\˜P\Q\œ›Ü”^[ØYØ[™HÙ[™\šXÂ˜™[\˜P\Q\œ›Ü‹™]Z[ØšY[ˆ^\Ý[™È[\YTH\œ›ÜœÈ™[XZ[ˆÛÛ\]X›K‚‚œ›ÝÜÙ\ˆXØÙ\ÜÈ\È\ØX›YžHY˜][ˆ[˜X›H^XÝÜšYÚ[œÈ[ˆH›Ú™XÝ˜ÛÛ™šYÝ\˜][ÛˆÚ[ˆHÙ\\˜]Hœ›Û[™™YYÈÈØ[[ˆTN‚‚ŸŸŸÛ[–ÝÙX—B˜[ÝÙYÛÜšYÚ[œÈHÈš‹ËÛØØ[ÜÝLMÌÈ—B˜[Ý×ØÜ™Y[X[ÈH˜[ÙBŸŸŸ‚‚–™[\˜H[œÝÙ\œÈTHÔSÓ”Ø™Y›YÚ™\]Y\ÝÈ]]ÛX]XØ[H[™YÈÓÔ”ÂšXY\œÈÛ›HÈXÛ\™YTH›Ý]\ËˆÚ[Ø\™ÜšYÚ[œÈ\™H™Z™XÝY[™ÓÔ”Â™Ù\È›Ýž\\ÜÈ]][XØ][ÛˆÜˆ\›Z\ÜÚ[ÛœËˆ[˜X›HÜ™Y[X[ÈÛ›HÚ[‚˜œ›ÝÜÙ\ˆÙ\ÜÚ[ÛˆÛÛÚÚY\È\™H™\]Z\™YÈHÛY[]\Ý[ÛÈ\ÙB˜Ü™Y[X[Îˆš[˜ÛYH˜‚‚[ˆÜšYÚ[ˆ]\Ý™YÚ[ˆÚ]‹ËØÜˆÎ‹ËØˆ]Ë]Y\šY\Ëœ˜YÛY[ËÚ[Ø\™Ë[™H˜Z[[™ÈÛ\Ú\™H›Ý[ÝÙYˆ[ÝÙY™\ÜÛœÙ\È™XÙZ]™B˜XØÙ\ÜËPÛÛ›ÛP[ÝËSÜšYÚ[˜[™˜\žNˆÜšYÚ[˜È[˜X›YÜ™Y[X[ÈY˜XØÙ\ÜËPÛÛ›ÛP[ÝËPÜ™Y[X[ÎˆYXˆH™Y›YÚ™\ÜÛœÙH™]\›œÈŒÚ]H[ÝÙYY]ÙÈ[™™\]Y\ÝYXY\œËˆ›Ü˜šY[ˆÜšYÚ[œÈÜˆY]ÙÂœ™]\›ˆÝXÝ\™Y”ÓÓˆ\œ›ÜœÎÈY]Ù\œ›ÜœÈ[˜ÛYHH[ÝØXY\‹‚‚HY[ˆ]Ûˆ\È›ÝHÙXÝ\š]H›Ý[™\žKˆ]]Üš^˜][Ûˆ]\Ý™H[™›Ü˜ÙYÛ‚HÙ\™\‹\ÚYHXÝ[Û‹ˆœ›ÝÜÙ\œÈ™XÛÛYH™[X\šØX›HÜ™X]]™HÚ[ˆ\ÝY‚‚ˆÈÈÈTH[œ][™ÙXÝ\™H™\ÜÛœÙHY˜][Â‚TH™\]Y\Ý›ÙY\È›ÜˆY]ÙÈÝ\ˆ[ˆÑU[™SUXX^HÝ\œ™[H\ÙB˜\XØ][Û‹ÚœÛÛ˜Üˆ\XØ][Û‹Þ]ÝÝËY›Ü›K]\›[˜ÛÙYˆ[œÝ\ÜYYYXB\\È™]\›ˆMH\ÈHÝXÝ\™Y”ÓÓˆ\œ›Ü‹ˆ”ÓÓˆ›ÙY\È]\Ý™HØš™XÝÎÂ™XXÚXÛ\™YšY[\È[ˆÛÛ™\YÈ[™ÚXÚÙYYØZ[œÝ]È™[\˜H\K‚‚•H\œÙ\ˆÚXÚÜÈÛÛ[S[™Ý™XYÈÛÛ\]H›ÙY\ÈXÜ›ÜÜÈ][\B›™]ÛÜšÈ™XYË[™[Z]È™\]Y\Ý›ÙY\ÈÈHZP‹ˆXY\œÈ\™H[Z]YÈ’ÚP‹ˆ[ˆÝ™\œÚ^™Y›ÙH\È™Z™XÝYÚ]LÈ™Y›Ü™HH[™\ˆ[œË‚‚[S”ÓÓ‹™Y\™XÝ\œ›Ü‹[™™Y›YÚ™\ÜÛœÙ\È™XÙZ]™H\ÙHÙXÝ\™B™Y˜][XY\œÎ‚‚ŸŸŸš–PÛÛ[U\KSÜ[ÛœÎˆ›ÜÛšY™‚–Qœ˜[YKSÜ[ÛœÎˆS–B”™Y™\œ™\‹TÛXÞNˆØ[YK[ÜšYÚ[‚ŸŸŸ‚‚•\ÙHY˜][ÈÈ›Ý™\XÙHË]][XØ][Û‹]]Üš^˜][Û‹ÔÔ‘‚œ›ÝXÝ[Û‹Üˆ[ˆ\›ÜšX]HÛÛ[TÙXÝ\š]KTÛXÞK‚‚ˆÈÈÈ›ÛHX[˜YÙ[Y[[™[\\‹Y]šY[]Y]‚¼'éêˆ›Û\È[™›ÛH\›Z\ÜÚ[ÛœÈØ[ˆ™HX[˜YÙYÚ]H]˜Z[X›HÓHÛÛ[X[™ÂÚ[ˆH]]Yš[š][ÛˆÛÛ™šYÝ\™\ÈHÛÜœ™\ÜÛ™[™ÈX›\Î‚‚ŸŸŸž™[\˜B˜]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆÙ\ÜÚ[ÛœÎˆ]]ÜÙ\ÜÚ[ÛœÂˆ\›Z\ÜÚ[ÛœÎˆ\Ù\—Ü\›Z\ÜÚ[ÛœÂˆ›Û\Îˆ\Ù\—Ü›Û\Âˆ›ÛWÜ\›Z\ÜÚ[ÛœÎˆ›ÛWÜ\›Z\ÜÚ[ÛœÂˆ]Y]ˆ]]Ø]Y]ÛÙÂˆYZ[—Ü]ˆ‹ØYZ[‹ØXØÙ\ÜÈ‚ˆYZ[—Ü\›Z\ÜÚ[ÛŽˆ˜]]›X[˜YÙH‚ˆYZ[—Ü›ÛNˆYZ[‚ŸBŸŸŸ‚‚ŸŸŸ˜˜\Ú‘UPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\Žœ\ÜÝÛÜ™LËŒŒŒNŒÌÌ‹Ø\	Èˆ™[\˜H]]›ÛHÜ˜[\žž[ˆX[˜YÙ\‚‘UPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\Žœ\ÜÝÛÜ™LËŒŒŒNŒÌÌ‹Ø\	Èˆ™[\˜H]]›ÛK\\›Z\ÜÚ[ÛˆÜ˜[\žž[X[˜YÙ\ˆÝ\ÝÛY\œË™Y]ŸŸŸ‚‚˜™]›ÚÙX™[[Ý™\ÈH™\ÜXÝ]™H\ÜÚYÛ›Y[ˆHÛÛ[X[™Èš[™˜[Y\È\ÈÔSœ\˜[Y]\œÈ[™ÚXÚÈH›Ú™XÝØÚ[XHš\œÝˆÈ›Ý\ÙHH™X[\ÜÝÛÜ™[‚H^[\H˜[YK‚‚•Ú]]Y]ˆ]]Ø]Y]ÛÙØ]][XØ][Û‹›ÛK[™Ô•Q]™[ÈØ[ˆ™Bš[œÜXÝYÜˆ^ÜY‚‚ŸŸŸ˜˜\Ú‘UPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\Žœ\ÜÝÛÜ™LËŒŒŒNŒÌÌ‹Ø\	Èˆ™[\˜H]Y][œÜXÝ\žž[K[[Z]L‘UPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\Žœ\ÜÝÛÜ™LËŒŒŒNŒÌÌ‹Ø\	Èˆ™[\˜H]Y]^Ü\žž[KY›Ü›X]œÛÛˆˆ]Y]šœÛÛ‚ž™[\˜H]Y]™\šYžH\žž[ŸŸŸ‚‚‘›Üˆš\ÚX›H[\\ˆ]XÝ[Û‹[˜X›HÚZ[š[™È^XÚ]N‚‚ŸŸŸž™[\˜B˜]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆ]Y]ˆ]]Ø]Y]ÛÙÂˆ]Y]ØÚZ[ŽˆYBŸBŸŸŸ‚‚•H]Y]X›H[ˆ™YYÈY™]š[Ý\×Ú\Ú[™[žWÚ\Ú\ÝX[B˜Ýš[™Ê
+Xˆ™[\˜HÝÜ™\ÈÝÙ\˜Ø\ÙHÒKLMˆ^˜[Y\ËˆH\ÚÛÝ™\œÈB˜Ø[›ÛšXØ[\K\Ù\\˜]YÙ\]Y[˜ÙB˜™]š[Ý\×Ú\ÚXÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ßÜ™X]YØ]‚˜™[\˜H]Y]™\šYžXÚXÚÜÈ›Ý[šÜÈ[™\Ú\Ëˆ[š[™È\È[X™\˜][B™\ØX›Y›ÜˆÚZ[™YÙÜÈ™XØ]\ÙH[][™È[ˆ[žHÛÝ[œ™XZÈHÚZ[‹‚“›Û‹XÚZ[™YÛ[šY\ÈØ[ˆ™H[X™\˜][H™[[Ý™YÚ]˜™[\˜H]Y][™H‹‹ˆKX™Y›Ü™H‹‹ˆKXÛÛ™š\›X‚‚[ˆÜ[Û˜[œ›ÝÜÙ\ˆYZ[š\Ý˜][ÛˆYÙH\È[˜X›YžHYZ[—Ü]˜YZ[—Ü\›Z\ÜÚ[Û˜[™YZ[—Ü›ÛXˆ]Ø[ˆX[˜YÙH\Ù\œË\ÜÝÛÜ™ËXÝ]™BœÝ]\Ë›Û\Ë[™›ÛH\›Z\ÜÚ[ÛœÎÈ]È›Ü›\È\™HÔÔ‘‹\›ÝXÝYˆH\Ý˜XÝ]™HYZ[š\Ý˜]Üˆ™[XZ[œÈ›ÝXÝY‚‚ˆÈÈMˆØ\Xš[]Y\Â‚¸§!H^\›˜[ÝÙ\œÈ\™HXÛ\™Y^XÚ]N‚‚ŸŸŸž™[\˜B™›ˆØYÛXXÚ[™\Ê
+HOˆXXÚ[™V×Bˆ\Ù\È]X˜\ÙBžÂˆ™]\›ˆÜ[XXÚ[™V×OˆÂˆÑSPÕY[X™\‹˜[YH”“ÓHXXÚ[™\ÂˆBŸBŸŸŸ‚‚’Û›ÝÛˆØ\Xš[]Y\Î‚‚ŸŸŸ^‘]X˜\ÙH™]ÛÜšÈš[TÞ\Ý[H[š\›Û›Y[›ØÙ\ÜÈÛØÚÈ˜[™ÛHÛÛœÛÛBŸŸŸ‚‚Ø[[™È[˜Ý[ÛœÈ]\Ý›ÜYØ]H™\]Z\™YØ\Xš[]Y\Ëˆ›Ú™XÝÈÜ˜[[B›ÝYÚ™[\˜KÛ[‚‚ŸŸŸÛ[–ØØ\Xš[]Y\×B™]X˜\ÙHHYB›™]ÛÜšÈH˜[ÙBŸŸŸ‚‚”Ý]XÈÚXÚÚ[™È[™[[YH[™›Ü˜Ù[Y[][˜Ý[Û‹˜]]™KTÔS›Ü›\ËÔ•Q˜[™]][XØ][Ûˆ]X˜\ÙH›Ý[™\šY\È\™H[\[Y[YÚ[ˆ›Ú™XÝÜ˜[È\™BœÝ\YYˆHÛÛ\]HÜ\˜][™Ë\Þ\Ý[HØ[™›Þ›Üˆ]™\žHØ\Xš[]H\È›ÝY]˜]˜Z[X›K‚‚•ÛÈØY™HÜÝT\È\™H[\[Y[Y‚‚ŸŸŸž™[\˜B™›ˆ[[YWÝ[Y\Ý[\
+
+HOˆ[Y\Ý[\\Ù\ÈÛØÚÈÂˆ™]\›ˆ›ÝÊ
+BŸB‚™›ˆÛÛ™šYÝ\™YÛ[ÙJ
+HOˆÝš[™ÏÈ\Ù\È[š\›Û›Y[Âˆ™]\›ˆ[Š–‘STWÓSÑHŠBŸBŸŸŸ‚‚››ÝÊ
+H™\]Z\™\ÈÛØÚÈ[™™]\›œÈ[š^Y\ØÚZ[\ÙXÛÛ™Ëˆ[Š˜[YJH™\]Z\™\Â‘[š\›Û›Y[[™™]\›œÈÝš[™ÏÎÈHZ\ÜÚ[™È˜\šXX›H™XÛÛY\È›Û™Kˆ˜[Y\È\™B››ÝÙÙÙYÜˆ^ÜÙY]]ÛX]XØ[Kˆ™]ÛÜšËš[K\Þ\Ý[K›ØÙ\ÜË[™˜[™ÛBšÜÝT\È\™H[\[Y[Y]XXÚ™\]Z\™\È]ÈÝÛˆ™\ÛÝ\˜ÙHÜ˜[[™œ™[XZ[œÈ[X™\˜][H[Z]Y[ˆ\Èš\œÝ™\œÚ[Û‹‚‚•H˜[™ÛHØ\Xš[]H›ÝšY\ÈÙXÝ\™H[YÙ\ˆÙ[™\˜][ÛŽ‚‚ŸŸŸž™[\˜B™›ˆXÙWÜ›Û
+
+HOˆ[\Ù\È˜[™ÛHÂˆ™]\›ˆ˜[™ÛWÚ[
+KŠBŸBŸŸŸ‚‚•H˜[™ÙH\È[˜Û\Ú]™HÛˆ›ÝÚY\Ëˆ[˜[Y˜[™Ù\È˜Z[][[YK[™œ˜[™ÛH˜[Y\È\™H›Ý[Z]Y[\XÚ]Kˆ›ØÙ\ÜÈ^XÝ][Ûˆ\È]˜Z[X›HÛ›B›ÝYÚH^XÚ]H›Ý[™YTH™[ÝË‚‚•Hš\œÝ™]ÛÜšÈÜÝTH\ÈÙÙ]‚‚ŸŸŸž™[\˜B™›ˆØYÜÝ]\Ê\›ˆÝš[™ÊHOˆÝš[™È\Ù\È™]ÛÜšÈÂˆ™]\›ˆÙÙ]
+\›
+BŸBŸŸŸ‚‚”›Ú™XÝ^XÝ][Ûˆ\Ù\È[ˆ^XÝÜÝ[ÝÛ\Ý[™›Ý[™Y™\ÛÝ\˜Ù\Î‚‚ŸŸŸÛ[–Û™]ÛÜš×B˜[ÝÙYÚÜÝÈHÈŒLËŒŒŒNŽ‹˜\K™^[\K˜ÛÛH—B[Y[Ý]Û\ÈHL›X^Ü™\ÜÛœÙWØž]\ÈHLMÍ‚ŸŸŸ‚‚•Ú]Ý]Û™]ÛÜš×XH›Ú™XÝ[ÝÜÈ›ÈÜÝËˆH˜[œÜÜÝ\ÜÂ˜‹ËØ[™Î‹ËØÚ]\ÝÈÙ\YšXØ]H™\šYšXØ][Ûˆ[˜X›YžB™Y˜][ˆ]Ù\È›Ý›ÛÝÈ™Y\™XÝÈ[™™]\›œÈÛ›HÝXØÙ\ÜÙ[U‹NÑUœ™\ÜÛœÙH›ÙY\ÈÚ][ˆHÛÛ™šYÝ\™Y[Z]ËˆHÙÙ][\ˆ™[XZ[œÂHÚ[\HÑU[Û›HÛÛ™[šY[˜ÙHTNÈ\ÙHÜ™\]Y\ÝÚ[ˆ™\]Y\ÝXY\œËœ™\]Y\Ý›ÙY\ËÜˆ™\ÜÛœÙHÝ]\È\™H™YYY‚‚•\Y™\]Y\ÝÈ\ÙHÜ™\]Y\Ý‚‚ŸŸŸž™[\˜B™›ˆÜ™X]WØÝ\ÝÛY\Š\›ˆÝš[™ÊHOˆ™\ÜÛœÙH\Ù\È™]ÛÜšÈÂˆ™]\›ˆÜ™\]Y\Ý
+ˆ”ÔÕ‹ˆ\›ˆÈÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛˆ—KˆÛÛYJž×›˜[YWŽ—[›˜WŸHŠBˆ
+BŸBŸŸŸ‚‚•HY]ÙXØÙ\ÈÑUÔÕUUÒSUX[™PQ‚’XY\œÈ\™H˜[YNˆ˜[YXÝš[™ÜËH›ÙH\ÈÝš[™ÏØ[™H\Y™\Ý[˜ÛÛZ[œÈÝ]\Îˆ[XY\œÎˆÝš[™Ö×X[™›ÙNˆÝš[™ØˆÑUÒPQœ™\]Y\ÝÈØ[››ÝØ\œžHH›ÙK‚‚’”ÓÓˆ˜[Y\ÈØ[ˆ™HÛÛ™\YÈ[™œ›ÛHÚXÚÙY™[\˜H˜[Y\Ëˆ™XÛÜ™È[™Z\ˆ™\ÝYšY[È\™H˜[Y]YYØZ[œÝHXÛ\™YØÚ[XN‚‚ŸŸŸž™[\˜BœÝXÝÝ\ÝÛY\ˆÈ˜[YNˆÝš[™ÈYÜÎˆÝš[™Ö×HšXÚÛ˜[YNˆÝš[™ÏÈB‚™›ˆXÛÙWØÝ\ÝÛY\Š›ÙNˆÝš[™ÊHOˆÝ\ÝÛY\ˆÂˆ™]\›ˆœÛÛ—ÙXÛÙOÝ\ÝÛY\Š›ÙJBŸB‚™›ˆ[˜ÛÙWØÝ\ÝÛY\ŠÝ\ÝÛY\ŽˆÝ\ÝÛY\ŠHOˆÝš[™ÈÂˆ™]\›ˆœÛÛ—Ù[˜ÛÙJÝ\ÝÛY\ŠBŸBŸŸŸ‚‚˜œÛÛ—ÙXÛÙO\OŠ^
+X™\]Z\™\ÈÛ™H\™Ù]\H\™Ý[Y[[™Ý\ÜÂœ™XÛÜ™Ë™\ÝY™XÛÜ™Ë\œ˜^\ËÜ[ÛœË[™ØØ[\ˆ˜[Y\ËˆœÛÛ—Ù[˜ÛÙXœÙ\šX[^™\ÈHØ[YH˜[YH˜[Z[Y\ËˆX[›Ü›YY”ÓÓ‹\HZ\ÛX]Ú\Ë[šÛ›ÝÛ‚œ™XÛÜ™šY[Ë[™Z\ÜÚ[™È™\]Z\™YšY[È\™H^XÚ][[YH\œ›ÜœË‚‚‘›ÜˆHÛÛ\]H\Y”ÓÓˆ™\]Y\ÝÜ™\ÜÛœÙH›ÝË\ÙHÚœÛÛ˜Ú]Ù\\˜]Bœ™\]Y\Ý[™™\ÜÛœÙH\H\™Ý[Y[Î‚‚ŸŸŸž™[\˜BœÝXÝÝ\ÝÛY\Ü™X]HÈ˜[YNˆÝš[™ÈBœÝXÝÝ\ÝÛY\ˆÈYˆ[˜[YNˆÝš[™ÈB‚™›ˆÜ™X]WØÝ\ÝÛY\Š\›ˆÝš[™Ë^[ØYˆÝ\ÝÛY\Ü™X]JHOˆÝ\ÝÛY\ˆ\Ù\È™]ÛÜšÈÂˆ™]\›ˆÚœÛÛÝ\ÝÛY\Ü™X]KÝ\ÝÛY\Š”ÔÕ‹\›×KÛÛYJ^[ØY
+JBŸBŸŸŸ‚‚•H™\]Y\Ý™XÛÜ™\ÈÙ\šX[^™Y]]ÛX]XØ[H[™H™\ÜÛœÙH›ÙH\Â™XÛÙY[ÈH™\ÜÛœÙH™XÛÜ™ˆYˆ›ÈÛÛ[U\XXY\ˆ\ÈÝ\YY˜\XØ][Û‹ÚœÛÛ˜\ÈYYˆ›Û‹Lž™\ÜÛœÙ\È\™H^XÚ][[YH\œ›ÜœÎÂH[\ˆ™]\›œÈHXÛÙY˜[YH˜]\ˆ[ˆ™\ÜÛœÙHXY\œË‚‚•Ú[ˆ™\ÜÛœÙHY]Y]H]\Ý™[XZ[ˆ]˜Z[X›K\ÙHÜ™\Ý[‚‚ŸŸŸž™[\˜B™›ˆÝX›Z]
+\›ˆÝš[™Ë^[ØYˆÝ\ÝÛY\Ü™X]JHOˆ™\Ý[Ý\ÝÛY\ˆ\Ù\È™]ÛÜšÈÂˆ™]\›ˆÜ™\Ý[Ý\ÝÛY\Ü™X]KÝ\ÝÛY\Š”ÔÕ‹\›×KÛÛYJ^[ØY
+JBŸBŸŸŸ‚‚˜™\Ý[™\ÜÛœÙO˜ÛÛZ[œÈÝ]\Îˆ[XY\œÎˆÝš[™Ö×X˜›ÙNˆÝš[™Ø]Nˆ™\ÜÛœÙOØ[™\œ›ÜŽˆ\œ›ÜØˆÝXØÙ\ÜÙ[žœ™\ÜÛœÙ\ÈÜ[]H]XÈ›Û‹Lž™\ÜÛœÙ\ÈÜ[]H\œ›Ü˜Ú]Ý]\ËšXY\œË›ÙK[™Y\ÜØYÙKˆ˜[œÜÜ˜Z[\™\È[™[˜[YÝXØÙ\ÜÈ”ÓÓˆ™[XZ[‚œ[[YH\œ›ÜœË‚‚•H›ØÙ\ÜÈØ\Xš[]H^ÜÙ\ÈHÚ[Yœ™YHÛÛ[X[™TN‚‚ŸŸŸž™[\˜B™›ˆ™[™\—Ü™\Ü
+[œ]ˆÝš[™ÊHOˆÝš[™È\Ù\È›ØÙ\ÜÈÂˆ™]\›ˆ[—Ü›ØÙ\ÜÊ‹Ý\Ü‹Øš[‹Üš[ˆ‹È‰\È‹[œ]JBŸBŸŸŸ‚‚”›Ú™XÝ^XÝ][Ûˆ™\]Z\™\È[ˆ^XÝÛÛ[X[™[ÝÛ\Ý‚‚ŸŸŸÛ[–Ü›ØÙ\Ü×B˜[ÝÙYØÛÛ[X[™ÈHÈ‹Ý\Ü‹Øš[‹Üš[ˆ—B[Y[Ý]Û\ÈHL›X^ÛÝ]]Øž]\ÈHLMÍ‚ŸŸŸ‚‚•Ú]Ý]Ü›ØÙ\Ü×X›ÈÛÛ[X[™X^H[‹ˆHÚ[[š\›Û›Y[\ÈÛX\™YœÝ[ˆ\ÈÛÜÙY[Y[Ý]È\›Z[˜]HH›ØÙ\ÜË[™ÝÝ]ÜÝ\œˆ\™B˜›Ý[™YˆÚ[^XÝ][Û‹[š\›Û›Y[›ÜØ\™[™ËÛÜšÚ[™È\™XÝÜšY\Ë[™œ\[[™\È\™H]\™HÛÜšË‚‚•Hš[TÞ\Ý[HÜÝT\È\™N‚‚ŸŸŸž™[\˜B™›ˆ™XYÜÛÝ\˜ÙJ]ˆÝš[™ÊHOˆÝš[™È\Ù\Èš[TÞ\Ý[HÂˆ™]\›ˆ™XYÝ^
+]
+BŸB‚™›ˆÜš]WÛ›ÝJ]ˆÝš[™ËÛÛ[ˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆÜš]WÝ^
+]ÛÛ[
+BŸB‚™›ˆ[šY\Ê]ˆÝš[™ÊHOˆÝš[™Ö×H\Ù\Èš[TÞ\Ý[HÂˆ™]\›ˆ\ÝÙ\Š]
+BŸB‚™›ˆ™[[Ý™WÛ›ÝJ]ˆÝš[™ÊH\Ù\Èš[TÞ\Ý[HÂˆ[]WÙš[J]
+BŸBŸŸŸ‚‚[›Ý\ˆT\È™\]Z\™Hš[TÞ\Ý[Kˆ™XYÈ[™\™XÝÜžH\Ý[™ÜÈ\ÙH™XYÜ›ÛÝÎÂÜš]\È[™[]\È\ÙHÜš]WÜ›ÛÝËˆ™[]]™H]È\™H™\ÛÛ™Yœ›ÛHBœ›Ú™XÝ\™XÝÜžK[™^\Ý[™ÈÞ[[[šÈ\™Ù]È\™HØ[›ÛšXØ[^™Y™Y›Ü™B˜XØÙ\ÜËˆÚ]Ý]Hš[\Þ\Ý[HÙXÝ[Û‹›Ú™XÝ™XYÈ\™H[Z]YÈBœ›Ú™XÝ\™XÝÜžHÚ[HÜš]\È[™[]\È\™H[šYY‚‚ŸŸŸÛ[–Ùš[\Þ\Ý[WBœ™XYÜ›ÛÝÈHÈ‹ˆ—BÜš]WÜ›ÛÝÈHÈ™]H—BŸŸŸ‚‚•HÛÛ™šYÝ\™Y\™XÝÜšY\È]\Ý[™XYH^\ÝˆH™]ÈÜš]H\™Ù]]\Ý]™H[‚™^\Ý[™È\™[\™XÝÜžK‚‚ˆÈÈÈÝXÝ\™YÛÛ˜Ý\œ™[˜ÞB‚[ˆ[š]X[[Z]YÛÛ˜Ý\œ™[˜ÞH›ÝÈ\È]˜Z[X›H›ÝYÚ\˜[[[™˜]ØZ]‚‚ŸŸŸž™[\˜Bœ\˜[[ÂˆÝ\ÝÛY\ˆH]ØZ]ØYØÝ\ÝÛY\Š
+BˆÜ™\œÈH]ØZ]ØYÛÜ™\œÊ
+BŸBŸŸŸ‚‚‘XXÚœ˜[˜Úš[™È]È™\Ý[Ú]]ØZ]ˆœ˜[˜Ú\È™XÙZ]™H[ˆ[[]]X›BœÛ˜\ÚÝÙˆÝ\œ›Ý[™[™È˜[Y\È[™\™HY\™ÙY[ˆÛÝ\˜ÙHÜ™\ˆ™Y›Ü™H^XÝ][Û‚˜ÛÛ[Y\Ëˆ[ˆ\œ›Üˆ[ˆÛ™Hœ˜[˜Ú˜Z[ÈHÚÛH›ØÚÈY\ˆHÝ\Y˜œ˜[˜Ú\Èš[š\ÚˆH\HÚXÚÙ\ˆ™Z™XÝÈ]ØZ]Ý]ÚYHH\˜[[›ØÚË‚•HÝ\œ™[[[YH\Ù\ÈÛ™HÛÜšÙ\ˆ™XY\ˆœ˜[˜ÚÈØ[˜Ù[][Ûˆ[™™]X˜\ÙHÛÛ›™XÝ[Û‹\ÛÛ[YÜ˜][Ûˆ\™H›Ý[\[Y[YY]‚‚ˆÈÈMKˆÛÛ˜XÝÈ[™™\šYšXØ][Û‚‚¼'éêˆ™XÛÛ™][ÛœÈ[™ÜÝÛÛ™][ÛœÎ‚‚ŸŸŸž™[\˜B™›ˆ™\Ù\™JÝØÚÎˆ[[[Ý[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÂˆ[[Ý[ˆˆÝØÚÈH[[Ý[ˆBˆ[œÝ\™\ÈÂˆ™\Ý[Hˆ™\Ý[OHÝØÚÈH[[Ý[ˆBžÂˆ™]\›ˆÝØÚÈH[[Ý[ŸBŸŸŸ‚‚˜™\]Z\™\Ø[œÈ™Y›Ü™HH›ÙNÈ[œÝ\™\Ø[œÈY\Ø\™Ú]™\Ý[œ™\™\Ù[[™ÈH™]\›™Y˜[YK‚‚ŸŸŸ˜˜\Úž™[\˜H™\šYžH^[\\ËØÛÛ˜XÝËžž[ŸŸŸ‚‚”Ý]\Ù\Î‚‚ŸŸŸ^”“Õ‘S‚”•S•SQWÐÒPÒÂ•S”“Õ‘S‚‘RSQŸŸŸ‚‚“Û›H“Õ‘S˜YX[œÈ›Ý™[‹ˆ•S•SQWÐÒPÒØÙ\È›ÝÙX\ˆH˜ZÙH[Ý\ÝXÚH[™˜ÛZ[HÈ™HX][X]XÜË‚‚•H™\šYšY\ˆ[ÛÈÝ[[X\š^™\È›Ý[™Y[˜Ý[ÛˆØ[ËˆHØ[YHÚ]][\Bœ™]\›ˆ]ËÝXÚ\È[ˆXœÛÛ]K]˜[YH[˜Ý[Û‹ÛÛšX]\È]È]˜ÛÛ™][ÛœÈÚ[ˆHØ[\ˆ™]\›œÈ]Ø[ˆØ[YH™\]Z\™\ØÛ]\Ù\È\™B˜ÚXÚÙYY\ˆ\™Ý[Y[ÝXœÝ]][ÛŽÈØ[\ˆ™\]Z\™\ØÛ]\Ù\È\™H\ÜÝ[\[ÛœÂÚ[ˆ›Ýš[™ÈØ[\ˆ[œÝ\™\ØˆÛÛ\^™XÝ\œÚ]™KÜˆ[œ™\ÛÛ™YØ\Ù\È™[XZ[‚˜•S•SQWÐÒPÒØ‚‚“ØØ[Ý]H\È[˜ÛYY[ˆ\ÙHÝ[[X\šY\Ëˆ›Ý™^ˆ[H˜[YH
+ÈX[™HÛÛ˜Ú\ÙH™^H˜[YH
+ÈX›ÛÝÙYžH™]\›ˆ™^\™H[˜[^™YZÙHB™\™XÝ™]\›‹ˆÚ[\H[™X\ˆ]]X›H\ÜÚYÛ›Y[ÈÝXÚ\È™^H™^
+ÈX\™B˜[ÛÈ˜XÚÙYˆÝ]XØ[H›Ý[™YÛÜÈÚ]H[™X\ˆÛÝ[\ˆ\™H[™›ÛYÂ˜œ™XZØ^]ÈHÝ\œ™[ÛÜ[™ÛÛ[YXÝ\È]È™^]\˜][Ûˆ\ÂœÙ\\˜]HÞ[X›ÛXÈ]Ëˆ›Û›[™X\ˆ\ÜÚYÛ›Y[È[™[˜›Ý[™YÛÜÈÚ]Ý]Bœ›Ý™[ˆ[˜\šX[™[XZ[ˆÛÛœÙ\˜]]™K‚‚ˆÈÈÈÛÜ[˜\šX[Â‚HÚ[XÜˆ[˜ÛÛ™][Û˜[ÛÜX^HXÛ\™HÛ™HÜˆ[Ü™H^XÚ][˜\šX[Î‚‚ŸŸŸž™[\˜BÚ[HÝ\œ™[ˆˆ[˜\šX[ÈÝ\œ™[HBžÂˆÝ\œ™[HÝ\œ™[HBŸBŸŸŸ‚‚•H™\šYšY\ˆÚXÚÜÈH[˜\šX[][žH[™Y\ˆÝ\ÜY›ÙH]ËˆBœ›Ý™[ˆ[˜\šX[Ø[ˆÝ[[X\š^™H[ˆÝ\Ú\ÙH[˜›Ý[™Y[™X\ˆÚ[XÛÜÈ[‚[˜ÛÛ™][Û˜[ÛÜØ[ˆ\ÙH]Ú]H[Ù[Yœ™XZØ^]ˆ[[YH^XÝ][Û‚˜ÚXÚÜÈ]™Y›Ü™H[™Y\ˆXXÚ]\˜][Û‹ˆ[œÝ\ÜYÜˆ[œ›Ý™[ˆ[˜\šX[Âœ™[XZ[ˆÛÛœÙ\˜]]™H[™È›Ý›ÙXÙH“Õ‘S˜™\Ý[Ë‚‚˜™[\˜H™\šYžX™\ÜÈXXÚXÛ\™Y[˜\šX[Ù\\˜][KY\ˆH[˜Ý[Û‰ÜÂ˜[œÝ\™\Ø™\Ý[Ëˆ[˜\šX[[™^\È\™H™\›ËX˜\ÙY‚‚ŸŸŸ^”“Õ‘SˆÕ‹LWNˆ™YXÙK™[œÝ\™\ÖÌH
+Ü˜ËÜ™YXÙKžž[ŒÎKLÎŒŒJB”“Õ‘SˆÕ‹LWNˆ™YXÙKš[˜\šX[ÌH
+Ü˜ËÜ™YXÙKžž[ÎŒŒKMÎŒÌÊB‘RSQÕ‹LNˆ™YXÙKš[˜\šX[ÌWH
+Ü˜ËÜ™YXÙKžž[ŽŒŒKNŒÍ
+BŸŸŸ‚‚‘]™\žH™\Ý[[˜ÛY\ÈHÝX›HÛÙH[™HÛÝ\˜ÙH˜[™ÙH\Â˜
+š[Kžž[œÝ\[[™NœÝ\XÛÛ[[‹Y[™[[™N™[™XÛÛ[[ŠXˆHÛÙ\È\™B˜‹LX
+“Õ‘S˜
+K‹L˜
+•S•SQWÐÒPÒØ
+K‹LØ
+S”“Õ‘S˜
+K[™˜‹L
+RSQ
+Kˆ›ÜˆQ\È[™ÒK\ÙH™[\˜H™\šYžH\žž[KZœÛÛ˜ÈB’”ÓÓˆÝ]]ÛÛZ[œÈHØ[YH™\Ý[]KH[X[‹\™XYX›HY\ÜØYÙX[‚›Ü[Û˜[ÛÝ[\™^[\XØš™XÝ[™HÝXÝ\™YØØ][Û˜Øš™XÝˆB˜ÛÝ[\™^[\H\È[Z]YÛ›HÚ[ˆH›Ý[™YÙX\˜Ú™\šYšY\ÈHÛX[[™X\‚š[YÙ\ˆÚ]™\ÜËˆHÝ\œ™[ÙX\˜ÚÛÝ™\œÈ\È™YH[™X\ˆ˜\šXX›\È[ˆBœ˜[™ÙHLÌ‹‹LÌ˜[˜ÛY[™È˜Z[YÛÜZ[˜\šX[ÚXÚÜÎÈÝ\Ú\ÙH]\Â˜[ˆ^Ý]][ÛÈÚÝÜÈ[ˆ^[˜][Ûˆ[™HÛÝ\˜ÙK[[™H^Ù\œÚ]B˜Ø\™]X\šÙ\ˆ›Üˆ]™\žH™\Ý[‚‚˜RSQYX[œÈ]H[˜\šX[\È˜[ÙHÛˆH™X\ÚX›H[˜[^™Y]Üˆ\Â››Ý™\Ù\™YžHHÛÜ›ÙKˆ•S•SQWÐÒPÒØYX[œÈ][[YHÚXÚÚ[™Âš\È™\]Z\™Y™XØ]\ÙHHÞ[X›ÛXÈ™\šYšY\ˆØ[››ÝÛÛ\]HH›ÛÙ‹ˆÛ›B˜“Õ‘S˜\ÈHX][X]XØ[›ÛÙ‹‚‚ˆÈÈM‹ˆÛÛ™šYÝ\˜][Ûˆ[™ÙXÜ™]Â‚”›Ú™XÝÛÛ™šYÝ\˜][Ûˆ™[Û™ÜÈ[ˆ™[\˜KÛ[ÈÙXÜ™]ÈÈ›Ý‚‚ŸŸŸÛ[–Ü›Ú™XÝB›˜[YHH›XXÚ[™K[X[˜YÙ[Y[‚™\œÚ[ÛˆHŒŒKL‚ž™[\˜HHŒŒH‚‚–ØØ\Xš[]Y\×B™]X˜\ÙHHYB›™]ÛÜšÈH˜[ÙBŸŸŸ‚‚ÛÛ›™XÝ[ÛœÈ[™ÙXÜ™]È\™HÝ\YYšXH›ÝXÝY[š\›Û›Y[˜\šXX›\Î‚‚ŸŸŸ˜˜\Ú™^ÜUPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\Žœ\ÜÝÛÜ™LËŒŒŒNŒÌÌ‹Þ™[\˜WÙ[[ÉÂŸŸŸ‚‚”[\Î‚‹H™]™\ˆÛÛ[Z]™[˜È™\œÚ[ÛˆÛÛ›ÛÂ‹H™]™\ˆXÙH›ÙXÝ[ÛˆÜ™Y[X[È[ˆÛÙH^[\\ÎÂ‹HÈ›ÝÙÈÙXÜ™]ÎÂ‹HÙ\\˜]H]™[ÜY[\Ý[™›ÙXÝ[Ûˆ]X˜\Ù\ÎÂ‹H™]™\ˆ[ˆ\ÝXÝ]™H\ÝÈYØZ[œÝ›ÙXÝ[Û‹‚‚ˆÈÈÈÚ[\HY˜][ËÜ[Û˜[™X]\™HÝÚ]Ú\Â‚•H™YÚ[›™\ˆ]Ù\È›Ý™\]Z\™HH™X]\™HÛÛ™šYÝ\˜][Û‹ˆY˜[˜ÙY›Ú™XÝÝ\™˜XÙ\ÈØ[ˆ™HÙ[XÝY[ˆ™[\˜KÛ[Ú[H[š\›Û›Y[\ÜXÚYšXË›Û‹\ÙXÜ™]Ý™\œšY\ÈØ[ˆ™HXÙY[ˆ™[˜ÜˆH›ØÙ\ÜÈ[š\›Û›Y[‚‚ŸŸŸÛ[–Ù™X]\™\×BÙXˆHYB˜\HHYB˜ÜYHYB˜]]HYB˜]Y]HYBŸŸŸ‚‚ŸÝÚ]Ú™[˜È›ØÙ\ÜÈ˜\šXX›HY˜][YX[š[™ÈŸKK_KK_KKNŸKK_ŸÙX˜‘STWÑ‘PUT‘WÕÑP˜YXYÙ\Ë›Ü›\Ë[™ÙXˆ™\ÛÝ\˜Ù\ÈŸ\X‘STWÑ‘PUT‘WÐTXYX\XXÛ\˜][ÛœÈ[™THÝ\™˜XÙHŸÜY‘STWÑ‘PUT‘WÐÔ•QYXÜYXÛ\˜][ÛœÈ[™Ù[™\˜]YÔ•QÝ\™˜XÙHŸ]]‘STWÑ‘PUT‘WÐUUYX]]XÛ\˜][ÛœÈ[™]][XØ][ÛˆÝ\™˜XÙHŸ]Y]‘STWÑ‘PUT‘WÐUQUYX]Y]˜Z[ÛÛ™šYÝ\˜][Ûˆ‚”™XÙY[˜ÙHÜ™\Ž‚˜^”›ØÙ\ÜÈ[š\›Û›Y[8¡¤ˆ™[ˆ8¡¤ˆ™[\˜KÛ[8¡¤ˆØY™HY˜][Â˜‚•Ú[ˆÛÝ\˜ÙHÛÙH\Ù\ÈH\ØX›YÝ\™˜XÙKHÛÛ\[\ˆ™\ÜÈKQ‘PUT‘KLXˆ™X]\™HÝÚ]Ú\ÈØ[››Ý\ØX›H\HÚXÚÚ[™ËÔS˜[Y][Û‹Ø\Xš[]Y\ËÛÛ˜XÝËÔÔ‘ˆ›ÝXÝ[Û‹ÜˆÙXÝ\š]H[\Ë‚‚’[œÜXÝY™™XÝ]™HÛÛ™šYÝ\˜][ÛˆØY™[HÚ]Ý]^ÜÚ[™ÈÙXÜ™]Î‚‚ŸŸŸ˜˜\Úž™[\˜HÛÛ™šYÈXZ[‹žž[ž™[\˜HÛÛ™šYÈXZ[‹žž[KY›Ü›X]ZœÛÛ‚ŸŸŸ‚‚ˆÈÈÈÛÛ\]H™[˜™Y™\™[˜ÙH›ÜˆHÝ\œ™[ÛÙB‚Ÿ˜\šXX›HY˜][[ˆÙ[™\˜]Y›Ú™XÝ\ØYÙHÙXÜ™]ŸKK_KKNŸKK_KK_Ÿ‘STWÕÑP—ÔÔ•ÌÜÙˆ[\›˜[ÙXˆÙ\™\ˆ[œÚYHÛÛZ[™\ˆ›ÈŸ‘STWÒÔÕÔÔ•Ì
+Üˆ]]Ë\Ù[XÝYœ™YHÜ
+HØØ[HX›\ÚYÙXˆÜ›ÈŸ‘STWÑ—ÒÔÕÔÔ•ÌÌ˜
+Üˆ]]Ë\Ù[XÝYœ™YHÜ
+HØØ[HX›\ÚYX\šXQˆÜ›ÈŸUPTÑWÕT“›Ú™XÝY\[™[X\šXQˆÛÛ›™XÝ[ÛˆT’H
+X\šXYŽ‹ËÝ\Ù\Žœ\ÜÐÜÝœÜÙ˜
+HY\ÈŸPT’PQ—ÑUPTÑX™[\˜WØ\ÛÛ\ÜÙNˆ]X˜\ÙH˜[YH›ÈŸPT’PQ—ÕTÑT˜™[\˜XÛÛ\ÜÙNˆ\XØ][Ûˆ\Ù\ˆ›ÈŸPT’PQ—ÔTÔÕÓÔ‘˜[™Û[HÙ[™\˜]YÛÛ\ÜÙNˆ\Ù\ˆ\ÜÝÛÜ™Y\ÈŸPT’PQ—Ô“ÓÕÔTÔÕÓÔ‘˜[™Û[HÙ[™\˜]YÛÛ\ÜÙNˆ›ÛÝ\ÜÝÛÜ™Y\ÈŸ‘STWÐUUÕÒÑS˜›Û™HÜ[Û˜[ØØ[™X\™\ˆÚÙ[ˆ›Üˆ›ÝXÝY[™Ú[ÈY\ÈŸ‘STWÐUUÔT“RTÔÒSÓ”Ø[\H\ÝÛÛ[XK\Ù\\˜]YØØ[\›Z\ÜÚ[Ûˆ[ÝÛ\Ý›È‚ˆÈÈÈ\Ý[™ÒH˜\šXX›\Â‚•˜\šXX›\È™Yš^YÚ]‘STWÒS”ÕSÔ“ÓÕ‘STWÐ’S˜
+—ÑL‘WÊ˜[™ÑS‘TUQÊ˜Ù\™H[\›˜[ÒH[™ØØ[[YÜ˜][Ûˆ\ÝÈ
+ÝXÚ\È\ÝËÙÙ[™\˜]Y\›Ú™XÝYØÚÙ\‹YL™KœÚ\ÝËÜÜ[]KYL™KœÚ
+Kˆ^H\™H›Ý\XØ][ÛˆÛÛ™šYÝ\˜][Ûˆ[™]\Ý™]™\ˆÛÛZ[ˆ›ÙXÝ[ÛˆÙXÜ™]Ë‚‚ˆÈÈÈ[š\›Û›Y[XØÙ\ÜÈ[œÚYHH[™ÝXYÙB‚•šXHHZ[Z[ˆ[Š˜[YJX[˜Ý[Û‹™[\˜HÛÙHØ[ˆ™XY[š\›Û›Y[˜\šXX›\ÈYˆ\Ù\È[š\›Û›Y[[™ØØ\Xš[]Y\×H[š\›Û›Y[HYX\™HXÛ\™Y‚‚ŸŸŸž™[\˜B™›ˆÛÛ™šYÝ\™YÛ[ÙJ
+HOˆÝš[™ÏÈ\Ù\È[š\›Û›Y[Âˆ™]\›ˆ[Š–‘STWÓSÑHŠBŸBŸŸŸ‚‚˜UPTÑWÕT“[™Ù[œÚ]]™HÙXÜ™]È]\Ý™]™\ˆ™H^ÜÙYšXH[Š‹‹ŠXÈ[™\šYšYYÛÙK‚‚ˆÈÈMËˆXYÛ›ÜÝXÜÈ[™›ÝX›\ÚÛÝ[™Â‚–™[\˜HZ[\ÈÈ^Z[ˆ\œ›ÜœÈÚ]Ý]™\]Z\š[™È[ˆ\˜ÚY[ÛÙÚXØ[^Ø]˜][Û‚›ÝYÚHÝXÚÈ˜XÙK‚‚ˆÈÈÈ\ÝHÛÛ›™XÝ[Ûˆ[™\[™[B‚•\ÝX\šXQˆÚ]Ý]™[\˜Hš\œÝˆH\ÜÝÛÜ™\È™\]Y\ÝY[\˜XÝ]™[H[™š\È›ÝÜš][ˆ[ÈÚ[\ÝÜžN‚‚ŸŸŸ˜˜\Ú›X\šXYˆˆKZÜÝLLËŒŒŒHˆK\ÜLÌÌÈˆK]\Ù\^™[\˜HˆK\\ÜÝÛÜ™ˆY™\Ü×Ø›ÛÚÂŸŸŸ‚‚•[ˆ[ˆ™[\˜HØÝÜˆÜ˜ËÛXZ[‹žž[KZœÛÛ˜
+Ü[Û˜[HÚ]KY[‹Yš[H™[˜˜[™K\ÜN
+KH[\[Y[Y™[\˜H™XY[™\ÜÈ\Ýˆ\™H\È›Â˜™[\˜HˆÚXÚØÛÛ[X[™ˆØÝÜ˜ÚXÚÜÈÛÝ\˜ÙHÛÙKØÚ[XK‚˜ÛÛ›™XÝ]š]KØÚÙ\ˆÛÛ\ÜÙK[™ÜÝÜËˆÚ]Ý]UPTÑWÕT“ØÝÜ˜œ™\ÜÈHØ\›š[™ÎÈÚ][ˆ[œ™XXÚX›HT“]™\ÜÈH˜Z[\™KˆH[›š[™Â™]X˜\ÙHÛÛZ[™\ˆ[Û™HÙ\È›Ý›Ý™H]ÜÝÜ\Ù\‹[™]X˜\ÙB›X]Ú‚‚ˆÈÈÈØY™HXYÛ›ÜÝXÈÛÛ[X[™Â‚ŸŸŸ˜˜\ÚœÙ›È[B™ØÚÙ\ˆÛÛ\ÜÙHÂ™ØÚÙ\ˆÛÛ\ÜÙHÙÜÈX\šXY‚œÜÈ[‚›X\šXYˆK]™\œÚ[Û‚ŸŸŸ‚‚’[ˆÝÙ\”Ú[\ÙHÙ]SØØ][Û˜Ù]PÚ[][XØÚÙ\ˆÛÛ\ÜÙHØ[™˜X\šXYˆK]™\œÚ[Û˜\ÈHš\œÝÚXÚÜËˆ™]™\ˆš[UPTÑWÕT“ÜˆBœ\ÜÝÛÜ™[ˆXYÛ›ÜÝXÜË‚‚ˆÈÈÈÛÛ[[Ûˆ˜Z[\™\Â‚Ÿ\œ›ÜˆZÙ[HØ]\ÙHš^ŸKK_KK_KK_Ÿ\›Z\ÜÚ[Ûˆ[šYY[œÝY™šXÚY[š[H\›Z\ÜÚ[ÛœÈÜˆ›ÈXØÙ\ÜÈÈHÛY[[œÜXÝÈ[X\ÙHÚ[ÙŒ™[˜[™ÚXÚÈH[œÝ[]ŸXØÙ\ÜÈ[šYY›Üˆ\Ù\˜Ü›Û™È\ÜÝÛÜ™Üˆ\Ù\ˆ\ÈÜ˜[Y›Üˆ[›Ý\ˆÜÝ[œÜXÝÒÕÈÔS•È“Ôˆ	Þ™[\˜IÐ	ÌLËŒŒŒIÎØ[™›Ý]HH\ÜÝÛÜ™ŸÛÛ›™XÝ[Ûˆ™Y\ÙY›ÈÙ\šXÙH\Ý[œÈÛˆHÜÝÜÜ[œÜXÝØÚÙ\ˆÛÛ\ÜÙHØÜÈ[˜[™HX›\ÚYÜŸØ[‰ÝÛÛ›™XÝÈÙ\™\˜Ü›Û™ÈÜÝÜÜÜˆÛÛZ[™\ˆ\È›Ý™XYH[œÜXÝØÚÙ\ˆÛÛ\ÜÙHÙÜÈX\šXY˜È\ÙHLËŒŒŒNŒÌÌØœ›ÛHHÜÝ[™X\šXYŽŒÌÌ˜[œÚYHÛÛ\ÜÙHŸ[šÛ›ÝÛˆ]X˜\ÙXT“[™X\šXQˆ\ÙHY™™\™[]X˜\ÙH˜[Y\È[ˆÒÕÈUPTÑTÎØ[™ÛÜœ™XÝUPTÑWÕT“ŸÜ›Û™ÈÜÛÛ™\ÙYÜÝÌÌØÚ]ÛÛZ[™\ˆÌÌ˜ÜÝ\Ù\ÈÌÌØÈHÛÛ\ÜÙHÙ\šXÙH\Ù\ÈÌÌ˜ŸX\šXQˆÛÛZ[™\ˆ›ÝÝ\YÛÛ\ÜÙH\œ›Ü‹ØØÝ\YYÜÜˆ[šX[H›Û[YH[œÜXÝØÚÙ\ˆÛÛ\ÜÙHØ[™ØÚÙ\ˆÛÛ\ÜÙHÙÜÈX\šXY˜Ÿ\Ù\ˆÜ˜[YÛ›H›Üˆ[›Ý\ˆÜÝ	Þ™[\˜IÐ	ÛØØ[ÜÝ	Ø\È›Ý[Ø^\È	Þ™[\˜IÐ	ÌLËŒŒŒIØÜ˜[H^XÝÜÝ[™[œÜXÝÜ˜[ÈŸZ\ÜÚ[™È[š\›Û›Y[˜\šXX›HUPTÑWÕT“Ø\È›Ý^ÜYØY™[˜ÜˆÙ]H›ØÙ\ÜÈ˜\šXX›NÈ™[\˜HÙ\È›ÝØY]]Ù[ˆŸ™[˜›Ý›Ý[™Ü›Û™ÈÛÜšÚ[™È\™XÝÜžHÜˆ\ÜÝ[YY]]ÛX]XÈØY\ˆ\ÙHÙÈ[X[™^ÜH˜\šXX›H^XÚ]HŸ[˜[Y[Y\šXÈÜT’HÜ\È›Ý[Y\šXÈ\ÙHYÚ]ÈÝXÚ\ÈÌÌØÈÝ\Ú\ÙHT“\œÚ[™È˜Z[ÈŸÜ›Û™ÈÚ\œÙ]]X˜\ÙH\Ù\È[›Ý\ˆÚ\œÙ]ØÛÛ][Ûˆ[œÜXÝH]X˜\ÙNÈˆÙ]\\Ù\È]ŽXØ]ŽXÝ[šXÛÙWØÚXŸÈ\œ›Üˆ[œÝ\ÜYÈ\˜[Y]\œÈÙ\™H\[™YÈHT“\ÙHHÝ\œ™[T“›Ü›NÈÈÛÛ™šYÝ\˜][Ûˆ\È[›™YŸ\Ý]X˜\ÙH™Z™XÝY›ÜˆØY™]HH›ÝXÝ[ÛˆYXÚ[š\ÛH\È^XÝY]›Ý[\[Y[Y™[\˜HÙ\È›Ý]]ÛX]XØ[H™]™[›ÙXÝ[ÛˆXØÙ\ÜÈ[ˆ\ÝÎÈÚXÚÈ˜\šXX›\ÈX[X[HŸÜÝÜ™TÔSÔSÙ[ÈX\šXQˆÜ›Û™È˜XÚÙ[™Üˆ[˜ÛÛ\]X›H[œÜXÝHžž[˜XÚÙ[™[™™XY™[\˜HˆÜ™X]XÝ]]™Y›Ü™H\Z[™È‚’YˆX\šXY˜Ø[››Ý™HÝ\Y][™[\˜H™\ÜÈH^\›˜[›ØÙ\ÜÂœÝ\\œ›Ü‹ˆHÓHÙ\È›ÝÛÛZ[ˆ]ÈÝÛˆX\šXQˆš]™\‹‚‚ŸŸŸ˜˜\Úž™[\˜HÚXÚÈ\žž[ŸŸŸ‚‚ÛÛ[[Ûˆ\œ›ÜˆÛ\ÜÙ\È[˜ÛYH[šÛ›ÝÛˆ˜[Y\È[™\\Ë]]][ÛˆÙˆ[[]]X›B˜[Y\Ë[˜ÛÛ\]H]\›ˆX]Ú\Ë[šÛ›ÝÛˆX›\ÈÜˆÛÛ[[œËZ\ÜÚ[™ÈÔSœ\˜[Y]\œË[˜ÛÛ\]X›H™\Ý[X\[™ÜËZ\ÜÚ[™ÈØ\Xš[]Y\Ë[˜[Y›Ü›B™šY[Ë˜Z[YÛÛ˜XÝË[™[˜ÛÛ\]H\YÛ\È
+Ø
+K‚‚‘\š[™È]™[ÜY[[ÝHØ[ˆXÙHØ\ÈHXÙZÛ\ˆ›Üˆ[ˆ[™š[š\ÚY™^™\ÜÚ[Ûˆ
+\YÛJKˆÚ[H™[\˜HÚXÚØ[[[Û˜[H™Z™XÝÈ[˜ÛÛ\]B˜ÛÙH›ÜˆÛÛ\[][Û‹]™\ÜÈ[[ÛÛ^X[XYÛ›ÜÝXÜÎˆH^XÝY\Kš\ÚX›H˜\šXX›\È[™[˜Ý[ÛœËXÝ]™HØ\Xš[]Y\ËÛÛ˜XÝØ›YØ][ÛœË˜[™ÛÝ\˜ÙHÜ[œË‚‚“[™ÝXYÙK[Û›HÚXÚÜÈÛÜšÈÚ]Ý]UPTÑWÕT“ˆ]X˜\ÙHÜ\˜][ÛœÈ™\ÜB›Z\ÜÚ[™ÈÛÛ›™XÝ[Ûˆ[ˆHÛÛ›ÛYØ^KˆÚ]Ý]H˜\šXX›K[˜\Ù\ÈBœ\™H[[YNÈÙ\™XØ[ˆÝ\›Ý]\Ë]]X˜\ÙKX˜XÚÙYYÙ\È™]\›ˆB˜ÛÛ›ÛY\œ›Ü‹‚‚ˆÈÈNˆ\Ý[™È[™ÛÛšX][™Â‚™Y›Ü™H]™\žHÛÛ[Z]‚‚ŸŸŸ˜˜\Ú˜Ø\™ÛÈ›]KX[˜Ø\™ÛÈ\ÝK]ÛÜšÜÜXÙB˜Ø\™ÛÈÛ\HK]ÛÜšÜÜXÙHKX[]\™Ù]ÈKHQØ\›š[™ÜÂŸŸŸ‚‚H[™ÝXYÙH™X]\™H\ÈÛÛ\]HÛ›HÚ[ˆ]\ÈØÝ[Y[YÞ[^TÕÒT‚œÝ\ÜÝ]XÈÚXÚÜË\ÙY[XYÛ›ÜÝXÜËÜÚ]]™H[™™YØ]]™H\ÝËBœ[›˜X›H^[\K[™Þ[˜Ú›Ûš^™YÙ\›X[ˆ[™[™Û\ÚØÝ[Y[][Û‹‚‚•\ÝÈ]\™HÜ™Y[ˆÛ›H™XØ]\ÙH^H™]™\ˆ˜[ˆ\™HXÛÜ˜][Û‹‚‚ˆÈÈNKˆÚ]ÛÛY\È™^‚“XZ›Üˆ[›™Y\™X\È[˜ÛYN‚‚‹H[HÝ\ÝÛZ^˜X›H\YšY]ÈÛÛ\Û™[ÎÂ‹H[XZ[[\]\È[™ÓUÂ‹H[ˆ[‹X\XØ][Ûˆ›ÝYšXØ][ÛˆÙ[\ŽÂ‹H˜XÚÙÜ›Ý[™›ØœÈ[™H˜[œØXÝ[Û˜[Ý]›ÞÂ‹HXÝ]š]K]Y][™XÚšXØ[ÙÜÎÂ‹H\YÛÛ›™XÝ[ÛœÈ[™ÙXÜ™]›ÝšY\œÎÂ‹HÑÈ[™^\›˜[™XY[Û›H]X˜\Ù\ÎÂ‹HšXÚ\ˆÛXZ[‹Y\œ›Üˆ˜[Y\È™^[Û™\YTH^[ØYÈ[™Y˜[˜ÙY[[YBˆ™\]Y\ÝÜ™\ÜÛœÙH›ØÙ\ÜÚ[™ÎÂ‹HØ[˜Ù[][Ûˆ[™]X˜\ÙK\ÛÛ[YÜ˜][Ûˆ›ÜˆÝXÝ\™YÛÛ˜Ý\œ™[˜ÞNÂ‹Hœ›ØY\ˆ›Ü›X[™\šYšXØ][ÛŽÂ‹HÜ[Z^˜][Ûˆ[Ù[È›Üˆ™X[[›š[™È›Ø›[\Ë‚‚–™[\˜HÙY\ÈHÛÛ[[ÛˆØ\ÙHÚÜÚ]Ý]ØÚÚ[™ÈHÛÜˆÚ[ˆHÜXÚX[˜Ø\ÙH\œš]™\Î‚‚ˆ
+Š‘Ù[™\˜]YÚ[ˆÜÜÚX›KˆÝ\ÝÛHÚ\™H™YYYˆ™\šYšYY]™\ž]Ú\™KŠŠ‚‚“›ÝÈZ[HX›K™XYHÔS[™ÚXÚÈH˜XÚÝ\ˆ[ˆ]Ü™\‹‚‚ˆÈÈŒˆ™[\˜HÛÛ\\™YÚ]\Ý‚ˆÈÈÈH[ÜÝ[\Ü[Ý][Y[š\œÝ‚–™[\˜H\È]™[ÜYÚ]\ÝˆH™[\˜HÛÛ\[\‹[™ÝXYÙHÜ˜]\Ë[™\Â›ÙˆH[[YH\™H\ÝÜ˜]\È[ˆHÛÛ\[\ˆ™\ÜÚ]ÜžKˆ]Ù\È›ÝYX[‚]™[\˜HÚ[™Ù\È\ÝÜˆ]™[\˜H\XØ][ÛœÈ\™H\Ý›ÙÜ˜[\Ë‚‚ˆ
+Š–™[\˜H\È›Ý[ÙYšYY\Ýˆ™[\˜H\È[ˆ[™\[™[[™ÝXYÙHÚÜÙBˆÛÛ\[\ˆ[™[[YH\™H]™[ÜY[ˆ\ÝŠŠ‚‚•H\ÝÛÛ\[\ˆ\È›Ý›ÜšÙYÜˆ^[™YÚ]™[\˜HÙ^]ÛÜ™Ëˆ™[\˜H\È›Ý˜H\ÝXœ˜\žH[™›ÝH™\›ØÙ\ÜÛÜˆ]™]Üš]\ÈÜ™[˜\žH\ÝÛÙKˆB˜žž[š[H\È™XYžH™[\˜IÜÈÝÛˆ^\ˆ[™\œÙ\‹ÛÛ™\Y[È]ÈÝÛ‚TÕÒTˆÝXÝ\™\Ë\KXÚXÚÙY[™[ˆ›ØÙ\ÜÙYžHH™[\˜H[[YK‚‚”Ú[Z[\ˆÜ[[™È[ˆ›˜œ˜XÙ\ËY˜X]ÚÜˆÝ]XÈ\[™È\ÈH\ÚYÛ‚˜ÚÚXÙK›Ý›ÛÙˆÙˆY[]KˆÜ˜[[X\‹Ù[X[XÜË[™H›ÙÜ˜[[Z[™È[Ù[˜\™HÚ]X]\‹ˆ™[\˜H\ÈÝ[[ˆ^\š[Y[[›ÝÝ\NÈ]È[™\[™[˜ÙB™Ü›ÝÜÈ\È]ÈÝÛˆ\HÞ\Ý[KÔSÚXÚÚ[™Ë[[YK[™[™ÝXYÙHÛÛœÝXÝÂ˜\™H[\[Y[Y‚‚•HÝ][Y[È[ˆ\ÈÚ\\ˆÙ\™HÚXÚÙYYØZ[œÝHÝ\œ™[ÛÝ\˜ÙN‚H^\ˆ[™ÚÙ[’Ú[™Yš[™H™[\˜HÚÙ[œËH\œÙ\ˆ›ÙXÙ\È]ÈÝÛ‚TÕÝXÝ\™\Ë[™]\ˆ[Ù[\È\™›Ü›H™\ÛÛ][Û‹\HÚXÚÚ[™ËÛÛ˜XÝ˜ÚXÚÚ[™ËÔS[˜[\Ú\ËÙXˆ›ØÙ\ÜÚ[™Ë[™[[YH^XÝ][Û‹ˆHÓH[™™]X˜\ÙH[Ù[\ÈÙ\™H™]šY]ÙY\ÈÙ[ˆÚ\™HH™X]\™H^\ÝÈÛ›H\ÈHÚÙ[‹TÕ›ÙKÜˆ\™Ù]\ÚYÛ‹]\È›Ý™\Ù[Y\ÈH[H^XÝ]X›H[™ÝXYÙB™™X]\™K‚‚ˆÈÈÈÙ[™\˜[ÛÛ\\š\ÛÛ‚‚Ÿ\™XH\Ý™[\˜H\ÜÙ[X[Y™™\™[˜ÙH™[\˜HÝ]\ÈŸKK_KK_KK_KK_KK_Ÿ[™ÝXYÙHØ]YÛÜžHÙ[™\˜[\\œÜÙHÞ\Ý[\È[™\XØ][Ûˆ[™ÝXYÙH[™\[™[XÛ\˜]]™H[™ÝXYÙH›Üˆ\Ú[™\ÜÈ[™ÙXˆ\XØ][ÛœÈY™™\™[Ü˜[[X\ˆ[™Ù[X[XÜÈ<'éêˆŸXZ[ˆ\ÙHÞ\Ý[\ËÙ\šXÙ\ËÓK[X™YYÙX\ÜÙ[X›KÙXˆ]X˜\ÙKX˜XÚÙY\Ú[™\ÜÈ[™ÙXˆ\XØ][ÛœÈ™[\˜H[™\È\XØ][Ûˆ^Y\œÈ<'éêˆŸÛÛ\[\ˆ\ÝØ[™Ø\™ÛÈXÛÜÞ\Ý[H]ÈÝÛˆ\Ý›ÙÜ˜[H[ˆH™[\˜H™\ÜÚ]ÜžH\ÝÛÛ\[\ÈHÛÛ\[\ŽÈ\ÝØÙ\È›ÝÛÛ\[Hžž[8§!HŸ[[YH˜]]™H\ÝÜˆHÚÜÙ[ˆ[[YH]ÈÝÛˆ™[\˜H[[YK[\[Y[Y[ˆ\Ý™[\˜H^XÝ]\È]ÈÝÛˆ˜[Y\È[™[\È<'éêˆŸY[[ÜžHX[˜YÙ[Y[ÝÛ™\œÚ\›Üœ›ÝÚ[™ËY™][Y\È\™Ù[H]]ÛX]XËÚY[ˆ›Üˆ\XØ][ÛˆÛÙH›È\Ý›Üœ›ÝÈÚXÚÙ\ˆ[ˆžž[ÛÙH<'éêˆŸÝÛ™\œÚ\Ù[˜[\ÝÙ[X[XÜÈ›È\]Z]˜[[žž[ÛÛœÝXÝY[[ÜžH[\È\™H›ÝHØ[YH<'åî»î#ÈŸ›Üœ›ÝÚ[™È™Y™\™[˜Ù\È[™›Üœ›ÝÈÚXÚÙ\ˆ›È\]Z]˜[[žž[ÛÛœÝXÝ›È\Ý™Y™\™[˜ÙHÞ[^<'åî»î#ÈŸY™][Y\È^XÚ]Üˆ[™™\œ™YY™][Y\È›ÈY™][YHÞ[^™[\˜HÙ\È›Ý^ÜÙH\È^Y\ˆY]<'åî»î#ÈŸÝ]XÈ\[™ÈX]\™KÙ[™\šXË˜Z]X˜\ÙYÝÛˆÚXÚÙ\ˆÚ][Ýš[™ØÜ[Û˜™XÛÜ™Ë[™[Ü™H™[\˜H\\È\™H›Ý\Ý\\È8§!HŸ[Xš[]HÜ[Û˜ØÝXÚ\È[XZ[Ø™[\˜HØ[ˆ\š]™HØÚ[XKÙ›Ü›H[\È8§!HŸ\œ›Üˆ[™[™È™\Ý[O˜Ü[Û˜ØÜ\˜]Üˆ™\Ý[O˜ÛÛYXØ›Û™X[[YHXYÛ›ÜÝXÜÈ›È\ÝØÜ\˜]ÜˆÞ[^[ˆ™[\˜H8§!HŸ]X˜\ÙH[YÜ˜][Ûˆ^\›˜[Ü˜]\ÈÝXÚ\ÈÔSY\Ù[ÜˆÙXSÔ“H[[™Y\È\Ùˆ[™ÝXYÙKÓK[™[[YHY™™\™[[YÜ˜][Ûˆ[Ù[È^\›˜[ÛY[Ù^H<'éêˆŸÔSXœ˜\šY\ËXXÜ›ÜËÜˆÝš[™ÜÈ˜]]™HÜ[ˆÈ‹‹ˆXÚ]ØÚ[XKÜ\˜[Y]\ˆÚXÚÜÈ™[\˜HÛ›ÝÜÈÔS\È[ˆ^™\ÜÚ[Ûˆ8§!HŸX\šXQˆØÚ[XH›ÝH\Ý[[™ÝXYÙH™\ÜÛœÚXš[]HX›\È\™H\ØÜšX™Y[ˆ™[\˜HÙ[™\˜]Üˆš[Èš\ÚX›HÔS<'éêˆŸ›Ü›\ÈÛÛ›™XÝœ˜[Y]ÛÜšË[\]\Ë[™˜[Y][Ûˆ[Ý\œÙ[ˆ›Ü›XÛÛœÝXÝ[™X›H[\ÈHÝ[™\™]\È\ÙˆH[Ù[<'éêˆŸÔ•Q]\Ý™H›ÙÜ˜[[YYÜˆÙ[™\˜]YžHHœ˜[Y]ÛÜšÈXÛ\˜]]™HÜY˜[YHOˆX›XÚ]Ú\™YšY]ÈšY[›Ùš[HÝ\œ™[[[YHÙ\™\ÈÔ•Q›Ý]\È<'éêˆŸšY]ÜÈ^\›˜[Xœ˜\šY\ÈÜˆœ˜[Y]ÛÜšÜÈYÙXØ[˜[YYšY]Ø^[Ý]Ë\YÛÛ\Û™[›ØÚÜË[™˜[YYÛÝÈÚ]˜[˜XÚÜÈ^\Ý›È\Ý\]Z]˜[[Èœ™YHÝ[[™ÈÛÛ\Û™[È\™HÝ[Z\ÜÚ[™È<'éêˆŸÛÙH›Ü›X][™ÈØ\™ÛÈ›]\Ý›]™[\˜H›]š[Kžž[ˆËKXÚXÚ×X]\›Z[š\ÝXÈ™[\˜H›Ü›X]\‹›ÝXÝÈÔS[™S8§!HŸ™Y˜XÝÜš[™ËÚ[\XÝ\ÝX[˜[^™\˜ÛÛ\[\ˆT\È™[\˜H[\XÝ™[\˜HY]™\œÚ[Û™Y]ÛZXÈ”ÓÓˆXXÚ[™H[\™˜XÙ\È<'éêˆŸ]][XØ][Ûˆ^\›˜[ÙX‹Ø]]Ü˜]\È]]Yš[š][Û‹Ù\ÜÚ[ÛœË[™\›Z\ÜÚ[ÛˆÚXÚÜÈ[ˆÙXˆÜ˜]H™[\˜H[™\ÈHÝ[™\™Ø\ÙH<'éêˆŸ\›Z\ÜÚ[ÛœÈ\Ù\‹Y\ÚYÛ™Y\\È[™ZY]Ø\™H™\]Z\™\È]]\›Z]Ø[™Ô•QXÝ[Ûˆ\›Z\ÜÚ[ÛœÈXÛ\˜]]™H[\È\™HÚXÚÙYÙ\™\‹\ÚYH<'éêˆŸÛÛ˜XÝÈX[X[ÜˆXœ˜\žKX˜\ÙY˜]]™H™\]Z\™\ÈßX[™[œÝ\™\ÈßX\È™\šYžXÛÛ˜XÝÞ[^™[Û™ÜÈÈ™[\˜H8§!HŸØ\Xš[]Y\ÈT\È[™Xœ˜\šY\È™YÝ[]HY™™XÝÈ\Ù\È]X˜\ÙX\Ù\È™]ÛÜšØ[™[Ü™HY™™XÝXÛ\˜][ÛœÈ\™H[™ÝXYÙHÞ[^8§!HŸ[XZ[^\›˜[ÓUÛXZ[Ü˜]\È›È[YÜ˜]Y[XZ[ÛÛœÝXÝÈ›Ý[™[\Ù\È[XZ[8§cŸ›ØœÈ^\›˜[›Ø‹Ü]Y]YHÞ\Ý[\È›È˜XÚÙÜ›Ý[™Z›ØˆÛÛœÝXÝ›ÈÝX›H›ØˆÞ[^8§cŸ]Y]^\›˜[ÙÙÚ[™ËØ]Y]Ü˜]\È]Y]X›KÓH[œÜXÝ[Û‹[™Ü[Û˜[\ÚÚZ[ˆYYÈ]]ÐÔ•Q[™Ý[^\š[Y[[<'éêˆŸ\Þ[Y[Ø\™ÛËÛÛZ[™\œËÒK[™[™œ˜\ÝXÝ\™H\™Hœ™YHÚÚXÙ\ÈÙ[™\˜]YØÚÙ\‹ÐÛÛ\ÜÙH[\]H^\ÝÈ[\]H\ÈH]™[ÜY[Ý\›ÝH›ÙXÝ[Ûˆ]›Ü›H<'éêˆŸ›ÙXÝ[ÛˆX]\š]HÚY[H\ÙY[ˆ›ÙXÝ[Ûˆ™[\˜HÛÛ\[\ˆŒËŒ\È^\š[Y[[X]\š]H[™XÛÜÞ\Ý[H\™H›ÝÛÛ\\˜X›H<'éêˆŸXÛÜÞ\Ý[H™\žH\™ÙNˆÜ˜]\ËÛÛËœ˜[Y]ÛÜšÜÈÛX[™\ÜÚ]ÜžH[™™]È[YÜ˜][ÛœÈ™[\˜HØ[››Ý\™XÝH[\Ü\ÝÜ˜]\È<'éêˆ‚”\Ý\ÈHXÚšXØ[›Ý[™][Û‹›ÝH\XØ][Ûˆ[™ÝXYÙH™Z[™™[\˜KˆB”\ÝÝ\ÝÛY\˜ÝXÝ[™H™[\˜HÝ\ÝÛY\œØX›HX^H\ØÜšX™HÚ[Z[\ˆ]K˜]^HÈ›ÝÜ™X]HHØ[YH™Z]š[Ü‹‚‚ˆÈÈÈ]Z[YÞ[^ÛÛ\\š\ÛÛ‚‚’[ˆ\ÈÚ\\‹8§!XYX[œÈ]HÛÛœÝXÝ\È™\Ù[[ˆHÝ\œ™[ÛÝ\˜ÙB˜[™Ø\ÈÚXÚÙYÚ]H[œÝ[Y\ÝÛÛÚZ[ˆÜˆ™[\˜HÓKˆ<'éê˜<'åî»î#Ø[™˜8§cÛÛ[YHÈY[YžH[Z]Y[›™YÜˆÝ\œ™[H[˜]˜Z[X›H™X]\™\Ë‚‚Ÿ[™ÝXYÙH™X]\™H™[\˜HÞ[^\ÝÞ[^Ù[X[XÈY™™\™[˜ÙH™[\˜HÝ]\ÈŸKK_KK_KK_KK_KK_Ÿš[H^[œÚ[Ûˆ\žž[XZ[‹œœØÝÛˆ^\ˆ[™š[H\H8§!HŸ›ÙÜ˜[H[žH›ˆXZ[Š
+HÈ‹‹ˆX›ˆXZ[Š
+HÈ‹‹ˆXØ[YHÜ[[™ËY™™\™[[™ÝXYÙH8§!HŸ[˜Ý[ÛˆYš[š][Ûˆ›ˆY
+Nˆ[
+HOˆ[È‹‹ˆX›ˆY
+NˆM
+HOˆMÈ‹‹ˆXÝÛˆTÕ\\È8§!HŸ\˜[Y]\œÈ˜[YNˆÝš[™Ø˜[YNˆÝš[™ØÚ[Z[\ˆÜÚ][Û‹Y™™\™[\HÙ[X[XÜÈ8§!HŸ™]\›ˆ\HOˆ[OˆM™[\˜HXœÝ˜XÝÈH\Ú[™\ÜÈ\H8§!HŸ™]\›ˆ˜[YH™]\›ˆ˜[YX˜[YXÜˆ™]\›ˆ˜[YNØš[˜[\Ý^™\ÜÚ[Ûˆ™]\›œÈH˜[YH8§!HŸ[[]]X›H˜\šXX›H˜[YHHX]˜[YHHNØ™[\˜H\È[[]]X›HÚ]Ý]]]X›X8§!HŸ]]X›H˜\šXX›H]]X›H˜[YHHX]]]˜[YHHNØY™™\™[X\šÙ\ˆ›Üˆ]]][Ûˆ8§!HŸ[YÙ\ˆ[ÜˆR[LÌ˜MLÌ˜M\Ý™\]Z\™\ÈHÛÛ˜Ü™]HÚYÈ™[\˜HXœÝ˜XÝÈ]Ù^H8§!HŸXÚ[X[›Ø]ÜˆXÚ[X[ÜˆŒÌ˜™[\˜HÚY[™^XÝÝ™\™›ÝÈ[\È\™H›Ý[HÜXÚYšYY<'éêˆŸ›ÛÛX[ˆYX˜[ÙX›ÛÛYX˜[ÙX›ÛÛÝÛˆ˜\ÙK]\H[Ù[8§!HŸÝš[™ÈÝš[™Ø[™Ú\˜XÝ\ˆ]\˜[ÈÝš[™Ø	œÝ˜Ú\˜XÝ\ˆ]\˜[È\Ý\Ý[™ÝZ\Ú\ÈÝÛ™\œÚ\[™›Üœ›ÝÚ[™È8§!HŸÜ[Û˜[˜[YH[XZ[ØÜˆÜ[ÛÝš[™Ï˜Ü[ÛÝš[™Ï˜Ø\È™[\˜IÜÈÜ[ÛˆÚÜ[™8§!HŸZ\ÜÚ[™È˜[YH›Û™X›Û™XØ[YH˜[YH[ˆY™™\™[[[H[Ù[È8§!HŸ\ÝËØ\œ˜^\È[×XÌK‹×X™XÏM˜™XÈVÌK‹×X›È\ÝXXÜ›ÈÞ[^[ˆ™[\˜H8§!HŸ˜[YY]H\\È\HÝ\ÝÛY\’YHYÝXÝÝ\ÝÛY\ˆÈ‹‹ˆX\HÝ\ÝÛY\’YHMÝXÝÝ\ÝÛY\ˆÈ‹‹ˆX™XÛÜ™È[™ÝXÝÈ\™H›Ý[\˜Ú[™ÙXX›H8§!HŸÛÛ™][ÛœÈYˆÚÈÈ‹‹ˆXYˆÚÈÈ‹‹ˆX›ØÚÈ[™^™\ÜÚ[Ûˆ[\ÈY™™\ˆ8§!HŸ[ÙX[ÙHÈ‹‹ˆX[ÙHÈ‹‹ˆXÚ[Z[\ˆÛÛ›ÛY›ÝÈ›Ü›H8§!HŸX]ÚX]Ú˜[YHÈÛÛYJ
+HOˆ‹‹ˆ›Û™HOˆ‹‹ˆXX]Ú˜[YHÈÛÛYJ
+HOˆ‹‹‹›Û™HOˆ‹‹ˆX›Ý™\]Z\™H^]\Ý]™HØ\Ù\È8§!HŸÛÜÈ›Üˆ][H[ˆ][\ØÚ[XÛÜ›Üˆ][H[ˆ][\ØÚ[XÛÜ›È\Ý]\˜]Üˆ˜Z]È[ˆ™[\˜H8§!HŸ[˜Ý[ÛˆØ[Y
+KŠXY
+KŠXØ[YHÝ\™˜XÙKY™™\™[˜[YH™\ÛÛ][Ûˆ8§!HŸÝ]]š[
+˜[YJXš[ˆJžßH‹˜[YJNØ\Ý\Ù\ÈHXXÜ›ÈÚ]X8§!HŸÛÛ[Y[ÈËÈÛÛ[Y[ËÈÛÛ[Y[Êˆ‹‹ˆ
+‹ØÝ\œ™[™[\˜H^\ˆ\È[™HÛÛ[Y[È8§!HŸ™]Û[™\È\ÝX[HÙ\\˜]ÜœÎÈÛÛ[X][ÛˆY\ˆÜ\˜]ÜœÈ\ÝX[HÚ]\ÜXÙH\œÙ\ˆ[\È\™H[™\[™[8§!HŸÙ[ZXÛÛÛœÈXØÙ\Y\ÈÝ][Y[Ù\\˜]ÜœË›Ý™\]Z\™YÙ[ˆÝ][Y[Ù\\˜]ÜœÈ™[\˜H\È›ÝÙ[ZXÛÛÛ‹Y\[™[8§!HŸ›ØÚÜÈÈ‹‹ˆXÈ‹‹ˆXœ˜XÙ\È]\›Z[™H›ØÚÜÈ[ˆ›Ý8§!HŸ[™[][Ûˆ™XYXš[]K›Ý›ØÚÈÙ[X[XÜÈ™XYXš[]K›Ý›ØÚÈÙ[X[XÜÈÚ]\ÜXÙH\È›Ý]Û‹\Ý[HÝXÝ\™H8§!HŸ\œ›Üˆ[™[™È™\Ý[O˜ÛÛYXØ›Û™X™\Ý[O˜Ø[šXÈX™[\˜H\È›È\ÝØÜ\˜]Üˆ8§!HŸÝš[™È[\œÛ][ÛˆS›ÙY\ÈX^H\ÙHÛ˜[Y_X›Ü›X]JžÛ˜[Y_HŠXÜˆš[ˆJžßH‹˜[YJX›ÈÙ[™\˜[™[\˜HÝš[™È[\œÛ][Ûˆ<'éêˆŸ[Ù[\ÈXˆ›˜[™Ý\ˆXÛ\˜][ÛœÈ[ˆ[\ÜYš[\È
+]™[ÜY[œ˜[˜Ú
+H[Ù˜[YHßXš[\È[™[Ù[\È^\š[Y[[È™[X\ÙHŒËŒ\È›Û™K[™šY]ÜËØÛÛ\Û™[ÈÝ[XÚÈš\ÚXš[]H[ÙYšY\œÈ<'éêˆŸ[\ÜÈ[\ÜœÜ˜ËÛX]žž[ˆ\ÈX]X]Ž˜Y
+
+X
+]™[ÜY[œ˜[˜Ú
+H\ÙHÜ˜]NŽ›[Ù[NŽ’][NØ›Ú™XÝ[ØØ[[\ÜÎÈÚXÚØZ[[˜Ù\™XÛÛ^™\šYžX[™[\XÝØYHÜ˜\<'éêˆŸÙ[™\šXÜÈÜ[Û˜™\Ý[O˜[Z]YZ[Z[ˆ\H\™Ý[Y[ÈÙ[™\˜[Ù[™\šXÜÈ[™˜Z]È›È\Ù\‹YYš[™Y™[\˜HÙ[™\šXÜÈ<'éêˆŸ\Þ[˜È[˜Ý[ÛœÈ›È\Þ[˜È›˜È]ØZ]Ø\˜[[\™H[Z]Y\Þ[˜È›˜˜]ØZ]]\™\È›ÈÝX›H™[\˜H\Þ[˜È[Ù[<'éêˆŸX›\ÈX›HÝ\ÝÛY\œÈÈ‹‹ˆX›È[™ÝXYÙHÛÛœÝXÝ™[\˜HÛÛ›™XÝÈX›H[™ØÚ[XH8§!HŸ]X˜\ÙH\\ÈYÝš[™ÊL
+X[XZ[›ÛÛ\Ý\\È[™^\›˜[X\[™ÈÜ˜]\È™[\˜H[Z]ÈÔS\\Èœ›ÛHHX›H8§!HŸ™[][ÛœÚ\È\\Y[ˆ\\Y[™\]Z\™YšY[\È]Y\žKÛX\[™ÈÙÚXÈ™[\˜H\š]™\È›Ü™ZYÛˆÙ^\È8§!HŸÔS]Y\šY\ÈÜ[Ý\ÝÛY\–×OˆÈÑSPÕ‹‹ˆXÝš[™ËÛXXÜ›Èœ›ÛHHˆÜ˜]H™[\˜HÚXÚÜÈØÚ[XK\˜[Y]\œË™\Ý[8§!HŸ›Ü›\È›Ü›HÝ\ÝÛY\Ü™X]HOˆÝ\ÝÛY\œÈÈ‹‹ˆX›È˜]]™H›Ü›HÙXˆœ˜[Y]ÛÜšÈ[™˜[Y][Ûˆ™\]Z\™Y8§!HŸÔ•QÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œØ›È˜]]™HÔ•Q™[\˜H[[YHÙ\™\ÈÝ[™\™›Ý]\È<'éêˆŸšY]ÜÈYÙXšY]ÈÚ]TÚ[[™ÛÛ\Û™[˜YÙX›È˜]]™HšY]ÈÛÛœÝXÝ˜[YYšY]ÜËØÛÛ\Û™[È^\ÝÈ[œ]Ø™[™\˜ØÏØ™[XZ[ˆ\™Ù]Þ[^<'éêˆŸ™XÛÛ™][ÛœÈ™\]Z\™\ÈÈ[[Ý[ˆX›ÈZ[Z[ˆ\]Z]˜[[ÛÛ˜XÝ\È\ÙˆH™[\˜H[˜Ý[Ûˆ8§!HŸÜÝÛÛ™][ÛœÈ[œÝ\™\ÈÈ™\Ý[HX›ÈZ[Z[ˆ\]Z]˜[[™\šYšY\ˆ[™[[YHÛ›ÝÈ™[\˜HÛÛ˜XÝÈ8§!HŸÛ˜[Y\È›ÝY]ÜXÚYšYYÈÛ
+‹‹ŠX\È›Ý\œÙY›ÈÙ[™\˜[Z[Z[ˆÛÛ˜XÝÝ[™\™È›Ý[™[ÛÞ[^8§cŸØ\Xš[]Y\È\Ù\È]X˜\ÙX›ÈY[XØ[[™ÝXYÙHÛÛœÝXÝY™™XÝÈ\™HXÛ\™Yš\ÚX›H[ˆ™[\˜H8§!HŸ[XZ[›ÝY]ÜXÚYšYY^\›˜[Ü˜]KÐTH›È[XZ[Ø\Xš[]HÙ^H8§cŸ˜XÚÙÜ›Ý[™›ØœÈ›ÝY]ÜXÚYšYY^\›˜[]Y]YKÜ[[YHÜ˜]H›È›ØˆÞ[^8§cŸ]Y]]]\Ù\œÈÈ]Y]ˆ]]Ø]Y]ÛÙÈX^\›˜[ÙÙÚ[™ËØ]Y]Ü˜]H™[\˜HY\È]Y]È]][™Ô•Q]™[È<'éêˆŸTHYš[š][ÛœÈ\HÑU‹ØÝ\ÝÛY\œÈˆÈ‹‹ˆX›Ý]\‹[™\‹[™\\ÈÙ\\˜][H™[\˜H[™\È›Ý]H[™ÛÛ˜XÝ8§!H‚ˆÈÈÈ[˜Ý[ÛœÎˆØ[YHYXKY™™\™[[™ÝXYÙB‚›ÝÛš\]È^™\ÜÈHÛX[[˜Ý[Ûˆ[ˆZ\ˆÝÛˆ[™ÝXYÙKˆH™[\˜H›Ü›B\Ù\È[˜Ý[ÛˆÞ[^›ØÙ\ÜÙYžHH\œÙ\ˆ[™Ø\ÈÚXÚÙYÚ]HÝ\œ™[ÓK‚‚ŸŸŸž™[\˜B™›ˆY
+Nˆ[Žˆ[
+HOˆ[Âˆ™]\›ˆH
+È‚ŸBŸŸŸ‚‚ŸŸŸœ\Ý™›ˆY
+NˆMŽˆM
+HOˆMÂˆH
+È‚ŸBŸŸŸ‚‚”\Ý\Ù\ÈÛÛ˜Ü™]H[YÙ\ˆ\\ÈÝXÚ\ÈLÌ˜MLÌ˜ÜˆM‚–™[\˜HÙ™™\œÈ[›Üˆ\XØ[\Ú[™\ÜÈÙÚXÎÈ]ÈYš[š]]™HÚ^™KÝ™\™›ÝÂ˜™Z]š[Ü‹[™]X˜\ÙHX\[™ÈÝ[™YYÛÛ\]HÜXÚYšXØ][Û‹‚‚ˆÈÈÈšX›Û˜XØÚB‚ŸŸŸž™[\˜B™›ˆšX›Û˜XØÚJŽˆ[
+HOˆ[ÂˆYˆˆHHÂˆ™]\›ˆ‚ˆB‚ˆ™]\›ˆšX›Û˜XØÚJˆHJH
+ÈšX›Û˜XØÚJˆHŠBŸB‚™›ˆXZ[Š
+HÂˆš[
+šX›Û˜XØÚJL
+JBŸBŸŸŸ‚‚ŸŸŸœ\Ý™›ˆšX›Û˜XØÚJŽˆM
+HOˆMÂˆYˆˆHHÂˆ™]\›ˆŽÂˆB‚ˆšX›Û˜XØÚJˆHJH
+ÈšX›Û˜XØÚJˆHŠBŸB‚™›ˆXZ[Š
+HÂˆš[ˆJžßH‹šX›Û˜XØÚJL
+JNÂŸBŸŸŸ‚‚¸§!HH™[\˜H™\œÚ[Ûˆ\Ù\È[š[[™^XÚ]™]\›˜È\Ý\Ù\Â˜MHš[ˆXXXÜ›Ë[™Hš[˜[^™\ÜÚ[Ûˆ\ÈH™]\›ˆ˜[YKˆ\Ý›XXÜ›ÜÈØ\œžHXˆÙ[ZXÛÛÛœÈ\™H›Ý™\]Z\™Y[ˆ™[\˜Kˆœ˜XÙ\È]\›Z[™H›ØÚÂœÝXÝ\™H[ˆ›Ý^[\\ÎÈ[™[][Ûˆ\È›Üˆ™XYXš[]KˆH™]Û[™HY\ˆ
+Ø˜ÛÛ[Y\ÈH^™\ÜÚ[Ûˆ™XØ]\ÙHH\œÙ\ˆÚÚ\È]\™Kˆ™XÝ\œÚ[ÛˆÛÜšÜÈ[‚–™[\˜HÛ›H™XØ]\ÙH[˜Ý[Ûˆ™\ÛÛ][Ûˆ[™H[[YHÝ\Ü]ˆ\ÈÛÙBØ\È›Ý^XÝ]Y[ˆ\ÈÛÜšÈ[‹‚‚ˆÈÈÈÜ[Û˜[˜[Y\Â‚ŸŸŸž™[\˜B™[XZ[ˆ[XZ[ÂŸŸŸ‚‚ŸŸŸœ\Ý™[XZ[ˆÜ[ÛÝš[™Ï‚ŸŸŸ‚‚˜[XZ[Ø\ÈÚÜ\ˆ[™[ÛÈ^™\ÜÙ\ÈHÛXZ[ˆ\Kˆ\Ý\Ù\ÈHÙ[™\˜[™Ù[™\šXÈÜ[Û˜ˆ™[\˜HØ[ˆXØÛÝ[›Üˆ[XZ[Ø[ˆX›K›Ü›K[™ÔS˜ÚXÚÚ[™ÎÈHÙ[™\˜[]]ÛX]XÈšY]ËÝ˜[Y][Ûˆ\š]˜][Ûˆ\È›Ý]˜Z[X›H›Ü‚™]™\žHÝ\™˜XÙK‚‚ˆÈÈÈX›\Â‚ŸŸŸž™[\˜BX›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ[XZ[ˆ[XZ[ÂˆXÝ]™Nˆ›ÛÛY˜][YBŸBŸŸŸ‚‚ŸŸŸœ\ÝœÝXÝÝ\ÝÛY\ˆÂˆYˆMˆ˜[YNˆÝš[™Ëˆ[XZ[ˆÜ[ÛÝš[™Ï‹ˆXÝ]™Nˆ›ÛÛŸBŸŸŸ‚‚•H\ÝÝXÝÜ™X]\È›È]X˜\ÙHX›KÔSÛÛ[[œË˜[Y][Û‹›Ü›KÜ‚Ô•Q[\™˜XÙKˆ\Ý™YYÈY][Û˜[Ü˜]\ËXXÜ›ÜË]Y\šY\Ë[™\œË[™[\]\ËˆH™[\˜HX›H\È[˜ÛYY[ˆØÚ[XH\š]˜][Ûˆ[™Ú\™HHÙX‚™™X]\™\È^\Ý[ˆ›Ü›\È[™Ô•Q‚‚ˆÈÈÈÔ•Q‚ŸŸŸž™[\˜B˜ÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÂŸŸŸ‚‚”\Ý\È›È˜]]™H\]Z]˜[[ˆH\XØ[\Ý[\[Y[][ÛˆÛÛXš[™\ÈHÙX‚™œ˜[Y]ÛÜšË›Ý][™Ë]X˜\ÙHÜ˜]K]H[Ù[]Y\šY\Ë™\]Y\Ý\\Ë˜[Y][Û‹[™\œË[\]\ÈÜˆHœ›Û[™\œ›Üˆ[™[™Ë[™]]Üš^˜][Û‹‚–™[\˜H\œÙ\È\ÈXÛ\˜]]™HYš[š][Ûˆ[™HÝ\œ™[[[YHÙ\™\ÈÔ•Qœ›Ý]\Ë›Ü›\ËÙX\˜Úš[\œË[™ÔÔ‘‹\›ÝXÝYXÝ[ÛœËˆ\È\È^\š[Y[[Âš]\È›ÝHÝ]XÈœ›Û[™Ù[™\˜]Ü‹‚‚ˆÈÈÈÔS‚•H\™Ù]Þ[^œ›ÛHH™\]Y\Ý[˜ÛYYÚ]È‹‹ˆXˆ]\È›Ý[ˆB˜Ý\œ™[\œÙ\‹ˆ\˜[Y]\œÈÝ\œ™[H\œš]™H\È[˜Ý[Ûˆ\˜[Y]\œÎ‚‚ŸŸŸž™[\˜BœÝXÝÝ\ÝÛY\ˆÈYˆ[˜[YNˆÝš[™È[XZ[ˆ[XZ[ÈXÝ]™Nˆ›ÛÛB‚™›ˆXÝ]™WØÝ\ÝÛY\œÊXÝ]™Nˆ›ÛÛ
+HOˆÝ\ÝÛY\–×Bˆ\Ù\È]X˜\ÙBžÂˆ™]\›ˆÜ[Ý\ÝÛY\–×OˆÂˆÑSPÕY˜[YK[XZ[XÝ]™Bˆ”“ÓHÝ\ÝÛY\œÂˆÒT‘HXÝ]™HH˜XÝ]™BˆÔ‘Tˆ–H˜[YBˆBŸBŸŸŸ‚‚ŸŸŸœ\Ý›]Ý\ÝÛY\œÈHÜ[Žœ]Y\žWØ\ÈJˆÝ\ÝÛY\‹ˆˆÈ‚ˆÑSPÕY˜[YK[XZ[XÝ]™Bˆ”“ÓHÝ\ÝÛY\œÂˆÒT‘HXÝ]™HHÂˆÔ‘Tˆ–H˜[YBˆˆËˆYBŠB‹™™]ÚØ[
+	œÛÛ
+B‹˜]ØZ]ÎÂŸŸŸ‚‚”\ÝÙ\È›Ý]™HÔS\ÈH[™ÝXYÙH™X]\™NÈÔS[™Ý\ˆÜ˜]\ÈØ[ˆ›ÝšYB˜Y][Û˜[ÛÛ\[K][YHÚXÚÜËˆ™[\˜IÜÈÝ\œ™[ÔSÚXÚÙ\ˆ˜[Y]\ËÚ\™BœØÚ[XH[™\\È\™HÛ›ÝÛ‹X›\ËÛÛ[[œË[X\Ù\Ë\˜[Y]\œË[Xš[]Kœ™\Ý[X\[™Ë[™H]X˜\ÙXØ\Xš[]Kˆ\ÈÙ\È›Ý]]ÛX]XØ[HXZÙB–™[\˜H™]\ˆ[ˆÔSˆHÝ\œ™[X\šXQˆÙ[™\˜]Üˆ[™]ÈZ\ÜÚ[™ÈX›B›Ü[ÛœÈ™[XZ[ˆØÝ[Y[Y[ˆÙXÝ[ÛˆË‚‚ˆÈÈÈšY]ÜÎˆÝ\œ™[Þ[^›ÝH\™Ù][Ù[‚•H\™Ù]Þ[^Ú]šY]Ø[œ]™[™\˜ÛÛ\Û™[Ë[™ÏØ\È›Ý˜Ý\œ™[\œÙ\ˆÞ[^ˆHÝ\œ™[ÙXˆÛÜ™H\Ù\Î‚‚ŸŸŸž™[\˜BœYÙH‹ØÝ\ÝÛY\œËÞÛ˜[Y_HˆÂˆ[ÂˆOÝ\ÝÛY\ˆÛ˜[Y_OÚO‚ˆBŸBŸŸŸ‚‚”\Ý\È›ÈZ[Z[ˆSÜˆÛÛ\Û™[Þ[^È[\]\È[™ÙXˆœ˜[Y]ÛÜšÜÈ\™B˜YY^\›˜[Kˆ™[\˜IÜÈYÙXØ[›Ü›K˜[YYšY]ÜË[™\YÛÛ\Û™[Â™^\Ýˆ][\HÛÝË™\ÝYÛÛ\Û™[Ë[™H\™Ù][œ]Ø™[™\˜œÞ[^\™H›ÝÝX›HY]ÈÏØ\È›Ý[ˆ[\[Y[Y™[\˜HÜ\˜]Ü‹‚‚ˆÈÈÈÛÛ˜XÝÂ‚•H\™Ù]Þ[^™\]Z\™H[[Ý[ˆ[™Û
+‹‹ŠX\È›ÝÝ\œ™[Þ[^ˆBœ\œÙ\ˆXØÙ\È™\]Z\™\ÈßX[™[œÝ\™\ÈßX‚‚ŸŸŸž™[\˜B™›ˆ™\Ù\™JÝØÚÎˆ[[[Ý[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÂˆ[[Ý[ˆˆÝØÚÈH[[Ý[ˆBˆ[œÝ\™\ÈÂˆ™\Ý[Hˆ™\Ý[OHÝØÚÈH[[Ý[ˆBžÂˆ™]\›ˆÝØÚÈH[[Ý[ŸBŸŸŸ‚‚”\Ý\È›È\™XÝZ[Z[ˆ\]Z]˜[[ˆ™\]Z\™\Ø\ØÜšX™\È™XÛÛ™][ÛœÈ[™˜[œÝ\™\ØÜÝÛÛ™][ÛœËˆ[[YHÚXÚÜÈ[™›Ü›X[™\šYšXØ][ÛˆY™™\Ž‚˜™[\˜H™\šYžXØ[ˆ™\Ü“Õ‘S˜•S•SQWÐÒPÒØS”“Õ‘S˜ÜˆRSQ‚XØÙ\ÜÚ[™È[ˆÛ˜[YHÚ]Û
+‹‹ŠX\È›Ý[\[Y[Y‚‚ˆÈÈÈØ\Xš[]Y\Â‚ŸŸŸž™[\˜B™›ˆØYØÝ\ÝÛY\œÊ
+HOˆÝ\ÝÛY\–×H\Ù\È]X˜\ÙHÂˆ™]\›ˆÜ[Ý\ÝÛY\–×OˆÂˆÑSPÕY˜[YK[XZ[XÝ]™H”“ÓHÝ\ÝÛY\œÂˆBŸBŸŸŸ‚‚˜\Ù\ØXZÙ\È[ÝÙYÚYHY™™XÝÈš\ÚX›H[ˆHÚYÛ˜]\™Kˆ]X˜\ÙX™]ÛÜšØ˜š[TÞ\Ý[X[š\›Û›Y[›ØÙ\ÜØÛØÚØ˜[™ÛX[™ÛÛœÛÛX\™HÛ›ÝÛ‚˜Ø\Xš[]Y\È[ˆHÝ\œ™[[[YHÛÙKˆ\Ý\È›ÈY[XØ[Z[Z[‚˜Ø\Xš[]HÞ\Ý[NÈXØÙ\ÜÈ\È\ÝX[HÜ™Ø[š^™Y›ÝYÚ\\Ë˜[Y\Ë[™›Xœ˜\žHT\Ëˆ[XZ[\È›ÝH™[\˜HØ\Xš[]K‚‚ˆÈÈÈÚ]\Ý]™[Ü\œÈÚÝ[›ÝÛÚÈ›Üˆ[ˆ™[\˜B‚‘›Üˆ\XØ[\Ú[™\ÜÈ\XØ][ÛœË™[\˜H\È›Ý[[™YÈ™\]Z\™H^XÚ]›Y™][Y\È[ˆÜ™[˜\žH\XØ][ÛˆÛÙK›Üœ›ÝÚ[™ÈXYÈÙ\ÜÚ[ÛœÈ›ÜˆÚ[\B™›Ü›\ËÚÛÜÚ[™È[[Û™ÈX[žH[YÙ\ˆÚYËÜˆ\ÜÙ[X›[™ÈHÙXˆœ˜[Y]ÛÜšÈœ›ÛB›X[žHÜ˜]\Ëˆ]\È[ˆXœÝ˜XÝ[Û‹›ÝHÛZ[H]Y[[ÜžH[™[[YB˜ÛÛ˜Ù\›œÈ\Ø\X\‹‚‚–™[\˜H\È[œÜ\™YžHÝ]XÈ\[™Ë\ÙY[XYÛ›ÜÝXÜËØY™HY˜][Ë^XÚ]›]]][Û‹]\›ˆX]Ú[™Ë™XÛÜ™ËÙ[[\ËÛX\ˆ›Ý[™\šY\Ë™\›ÙXÚX›BÛÛ[™Ë[™›Ü›X[ÚXÚÜË‚‚ˆÈÈÈÚ]XZÙ\È™[\˜H]ÈÝÛˆ[™ÝXYÙB‚Ÿ™[\˜H™X]\™H™[™Yš]Ý]\ÈŸKK_KK_KK_ŸÛ™HÛXZ[ˆYš[š][Ûˆ™]Ù\ˆÛÛ˜YXÝÜžH\XØ]HYš[š][ÛœÈ<'éêˆŸ˜]]™HÚXÚÙYÔSØ]Ú]X˜\ÙH\œ›ÜœÈ™Y›Ü™H^XÝ][ÛˆÚ\™HÜÜÚX›H8§!HŸXÛ\˜]]™HÔ•QÝ[™\™YZ[š\Ý˜][ÛˆÚ]]HÛÙH<'éêˆŸYÙXØ[ÙXˆÛÜ™HÚ[\H\Y]˜[Y\È[™S™\ÜÛœÙ\È<'éêˆŸš\ÚX›HX\šXQˆÔS˜XÙXX›HØÚ[XHÚ[™Ù\È<'éêˆŸ™\]Z\™\Ø[™[œÝ\™\ØÝ]H\Ú[™\ÜÈ[\È^XÚ]H8§!HŸØ\Xš[]Y\ÈXZÙH[ÝÙYY™™XÝÈš\ÚX›H8§!HŸ[YÜ˜]Y]Y]˜XÙHÚ[™Ù\È<'éêˆ‚ˆÈÈÈÛ™\ÝÛÛ˜Û\Ú[Û‚‚ˆ™[\˜HÛÚÜÈÚ[Z[\ˆÈ\Ý[ˆXÙ\È™XØ]\ÙH›Ý\™H[Ù\›‹Ý]XØ[Bˆ\Y[™ÝXYÙ\ÈÚ]œ˜XÙ\È[™ÛX\ˆ[˜Ý[ÛˆÚYÛ˜]\™\Ëˆ™[\˜H™]™\[\ÜÂˆ›ÛÝÜÈHY™™\™[›ÙÜ˜[[Z[™È[Ù[ˆ]X˜\ÙKÔS›Ü›\ËÔ•QšY]ÜË[™ˆ\Ú[™\ÜÈ[\È\™H[[™YÈ™H\ÈÙˆÛ™H[™ÝXYÙHÞ\Ý[Kˆ\Ý\ÈBˆXÚšXØ[›Ý[™][ÛˆÙˆHÛÛ\[\¸ %›ÝH[™ÝXYÙH™[\˜H\XØ][Û‚ˆ]™[Ü\œÈÜš]K‚‚ˆ
+Š”Ý]\ÎŠŠˆ™[\˜H\ÈÝ\œ™[H[ˆ^\š[Y[[[™ÝXYÙH›ÝÝ\KˆÛÛYBˆ[™ÝXYÙH™X]\™\ÈÚÝÛˆ\™H\ØÜšX™HHš[™[™È\™Ù][™\™H›Ý[Bˆ[\[Y[YˆHÝ]\È™^ÈXXÚ^[\HÚÝÜÈÚ]^\ÝÈ[ˆÝ\œ™[ˆÛÝ\˜ÙH[™Ø\ÈÚXÚÙY[ˆ\ÈÛÜšÈ[‹‚‚‘\\ˆ™XY[™ÎˆÒ[›ÙXÝ[Û—JÌK]Ú][XZÙ\Ë^™[\˜KYY™™\™[
+KÛ[™ÝXYÙB˜˜\ÚXÜ×JÍK]˜\šXX›\Ë]\\ËX[™Y[˜Ý[ÛœÊKÓX\šXQ—JÍË[X\šXY‹X[™]X›\ÊK–ÔÔSJÎK[˜]]™K\Ü[
+KÙ›Ü›\×JÌLKY›Ü›\ÊKÝšY]ÜËÝÙXˆYÙ\×JÌL]ÙX‹\YÙ\ÊK–ÐÔ•QJÌL‹XÜY
+KØÛÛ˜XÝ×JÌMKXÛÛ˜XÝËX[™]™\šYšXØ][ÛŠK–ØØ\Xš[]Y\×JÌMXØ\Xš[]Y\ÊKÚ[\[Y[][ÛˆÝ]\×JÌMËYXYÛ›ÜÝXÜËX[™]›ÝX›\ÚÛÝ[™ÊK˜[™Ü›ØYX\JÌŒ‹\›ØYX\Yœ›ÛK]KXÝ\œ™[\™\ÜÚ]ÜžJKˆH]™H™\ÜÚ]ÜžHÝ]\È\È[ÛÈÚÝÛˆÛ‚HÜÝ]\ÈYÙWJÎ‹ËÜÚYY[X[›‹˜ÛÛKÙ[‹ÜÝ]\ÊK‚‚ˆÈÈŒKˆÜÚ][Ûš[™È[™Ý\œ™[]™[ÜY[Ý]\Â‚•HÝ\œ™[ØÜËÜÜÚ][Ûš[™Ë›Y\ØÜšX™\È™[\˜H\È[ˆ[™\[™[[™ÝXYÙB™›Üˆ]X˜\ÙKX˜XÚÙY\Ú[™\ÜÈ\XØ][ÛœËˆ]Ù\È›Ý™\XÙHÛÛ\[\ˆ\ÝÎÂš]^Z[œÈÝÈH[\[Y[YYXÙ\È\™H[[™YÈš]ÙÙ]\‹‚‚ˆÈÈÈÚ]XZÙ\È™[\˜H\Ý[˜Ý‚ŒKˆ
+Š“Û™HÛÝ\˜ÙHÙˆ]ŠŠˆØÚ[XK\\ËÔS›Ü›\ËÔ•QšY]ÜË[™T\ÂˆÚÝ[ÛÛYHœ›ÛHYš[š][ÛœÈ]Ø[ˆ™HÚXÚÙYÙÙ]\‹‚Œ‹ˆ
+Š”ÔSÝ^\Èš\œÝXÛ\ÜÎŠŠˆÔS\È›ÝY[ˆ™Z[™[ˆÔ“HXœÝ˜XÝ[ÛŽÈBˆ›ÙÜ˜[HØ[ˆÚXÚÈX›\Ë\˜[Y]\œË[™™\Ý[Ú\\Ë‚ŒËˆ
+Š\Ú[™\ÜÈ™X]\™\È\™H[™ÝXYÙHš[Z]]™\ÎŠŠˆX›\Ë›Ü›\ËÔ•QYÙ\Ëˆ]][XØ][Û‹\›Z\ÜÚ[ÛœË[™ÛÛ˜XÝÈ™[Û™ÈÈÛ™H[Ù[‚ˆ
+Š”ÙXÝ\™HY˜][È\™Hš\ÚX›NŠŠˆS\ØØ\[™Ë\˜[Y]\š^™YÔSÔÔ‘‚ˆ›ÝXÝ[Û‹[ØY™]K[™Ù\™\‹\ÚYH\›Z\ÜÚ[ÛœÈ\™H[Ü™H[ˆYšXÙK‚Kˆ
+Š”›ÛÙˆÛZ[\È\™HÛ™\ÝŠŠˆ“Õ‘S˜•S•SQWÐÒPÒØS”“Õ‘S˜[™ˆRSQ\Ý[™ÝZ\ÚÝ]XÈ›ÛÙœÈœ›ÛH[[YHÚXÚÜÈ[™Ü[ˆØ\Ù\Ë‚‹ˆ
+ŠHÚÜ][™H[[™ÝXYÙNŠŠˆHXÛ\˜]]™HÝ[™\™Ø\ÙH\ÈÚÜˆÚ[HÝ\ÝÛH[˜Ý[ÛœÈ[™˜]]™HÔS™[XZ[ˆ]˜Z[X›H›ÜˆÛXZ[ˆÙÚXË‚Ëˆ
+ŠHÛX[Ý\[™ÈÝXÚÎŠŠˆHZ[Z[ˆÙ\™\ˆ[™ÓHZ[HÈÝ\ÜØØ[ˆX\›š[™È[™]™[ÜY[Ú]Ý]\XÚKÜˆHX[™]ÜžHœ˜[Y]ÛÜšÈÙ]‚‚•H›Ú™XÝ\È™]™\[\ÜÈ[ˆ^\š[Y[[›ÝÝ\KˆHÝ]\ÈX\šÜÈ[™H›ØYX\\™Y›Ü™HX]\ˆ[Ü™H[ˆHœ›ØY›ÙXÝÛZ[K‚‚ˆÈÈŒ‹ˆ›ØYX\œ›ÛHHÝ\œ™[™\ÜÚ]ÜžB‚•\ÈÝ[[X\žHÛÛY\Èœ›ÛHØÜËÔ“ÐQPT›Y[ˆHÝ\œ™[™[\˜H™\ÜÚ]ÜžKˆ]š\ÈH]™[ÜY[[‹›ÝH™[X\ÙKY]H›ÛZ\ÙK‚‚Ÿ\™XHÝ\œ™[›ØÝ\ÈÜ[ˆ^[œÚ[ÛˆŸKK_KK_KK_Ÿ™YÚ[›™\ˆ^\šY[˜ÙH[™\ÝšX][ÛˆÛÝ\˜ÙH[™™[X\ÙH[œÝ[\œÈ
+[^ÕÚ[™ÝÜÈ—ÍšXHÒKLMŠK™[\˜H™]ËÚ[š]Ú]Ý\\ˆ[\]\È
+Z[š[X[X\šXY‹XÜYX\šXY‹X]]X\šXY‹X\Ú[™\ÜØ
+KØÚÙ\‹ÑˆÜË™[\˜HÙ]\™[\˜HØÝÜ˜L‘H\ÝÈÚYÛ™Yš[˜\šY\Ë[\˜XÝ]™HÛÛ›™XÝ[Ûˆ\ÜÚ\Ý[™]™\œÙK\›ÞH]]ÛX][ÛˆŸ[™ÝXYÙH[™ÛÛ\[\ˆ^\‹\œÙ\‹TÕÒT‹\HÚXÚÚ[™ËÜ[Û˜™\Ý[]\›ˆX]Ú[™Ë^™\ÜÚ[Ûˆ\YÛ\È
+Ø
+KØ[›ÛšXØ[™[\˜H›]È[Z]Y›Ú™XÝ[ØØ[[\ÜÈ\™H^\š[Y[[[ˆH[œ™[X\ÙYœ˜[˜Úœ›ØY\ˆ[Ù[Hš\ÚXš[]H[™ÛÛ[™È[YÜ˜][Û‹Ù[™\šXÜËXÛ\˜][ÛˆÛ\Ë[™ÛÛ\]H›Ü›X[™\šYšXØ][ÛˆŸ]X˜\ÙH]›Ü›HX\šXQ‹ÔS]K[™ÜÝÜ™TÔSØÚ[XHÓNÈ\YÔSœ›ØY\ˆØÚ[XHÛÝ™\˜YÙH[™Ý›Û™Ù\ˆ›ÙXÝ[ÛˆÛÜšÙ›ÝÜÈŸšY]ÜÈ[™ÙXˆYÙ\Ë˜[YYšY]ÜËÛÛ\Û™[ËY˜][[™˜[YYÛÝÈÚ]˜[˜XÚÈÛÛ[ØY™HÝ]][Y\ËšY]È[š\š][˜ÙKœ™YKY›Ü›HÝ[[™ÈÛÛ\Û™[ÈŸ›Ü›\È[™Ô•Q˜[Y][Û‹ÔÔ‘‹ÙX\˜Úš[\œËYÚ[˜][Û‹XÝ[ÛœËÛÙ[]KÚ\™YÔ•QšY]ÈšY[›Ùš[H
+šY]Ë™šY[Ø
+H\›X[™[[][Û‹™][[Û‹\˜Ú]š[™Ë[™œ›ØY\ˆšY]ÈÝ\ÝÛZ^˜][ÛˆŸ]][XØ][Ûˆ[™]Y]ÙÚ[‹Ù\ÜÚ[ÛœË›Û\Ë\›Z\ÜÚ[ÛœËœ›ÝÜÙ\ˆYZ[‹]Y][™\ÚÚZ[œÈÙ[‹\Ù\šXÙKœ›ØY\ˆÛXÞHX[˜YÙ[Y[[™\˜Ú]™HÝ˜]YÚY\ÈŸT\È[™[YÜ˜][Ûˆ\YT\ËÜ[TK\TØÜš\ÛY[[™ÓÔ”È™\œÚ[Ûš[™Ë˜]H[Z]Ë[™Ð]]Ú[YÜ˜][Ûˆ™X]\™\ÈŸ™\šYšXØ][Ûˆ[™Ü\˜][ÛœÈÛÛ˜XÝËØ\Xš[]HÚXÚÜË[™š\œÝÛÛ˜Ý\œ™[˜ÞHZ[[™È›ØÚÜÈØ[˜Ù[][Û‹[Y[Ý]Ë]X˜\ÙK\ÛÛ[YÜ˜][Û‹[™›ÙXÝ[Ûˆ\™›Ü›X[˜ÙHŸRK[˜]]™H[\™˜XÙ\È™[\˜H›]
+ÝYÙHˆ8§!JK^™\ÜÚ[ÛˆÛ\ÈØ
+ÝYÙHÈ<'éêŠK™[\˜H[\XÝÚ]K\Þ[X›Û
+ÝYÙH<'éêŠK™[\˜HY]™[˜[YH
+ÝYÙHH<'éêŠHXÛ\˜][ÛˆÛ\ËØÚ[XKÜ[[YH[\XÝÛÛ\^Y]Ü\˜][ÛœËRH™[˜ÚX\šÈŸ]X[]H[™ÛÝ™\›˜[˜ÙH\ÝËØÝ[Y[][Û‹[™™\›ÙXÚX›HÚXÚÜÈœ›ØY\ˆXØÙ\[˜ÙH\XØ][ÛœÈ[™›ÙXÝ[Ûˆ\™[š[™È‚‘È›ÝØÝ[Y[[XZ[Üˆ˜XÚÙÜ›Ý[™Z›ØˆÞ\Ý[\ËÛÛ\]H[Ù[\ËÚ[\ÜË›][K\ÛÝœ™YKY›Ü›HšY]ØÛÛ\Û™[ËÜˆ]]ÛX]XÈ›ÙXÝ[ÛˆZYÜ˜][ÛœÈ\Â˜]˜Z[X›KˆXXÚ™[XZ[œÈ<'åî»î#È[[HÝ\œ™[ÓH[™[[YH[\[Y[]‚‚‘›ÜˆHX\›š[™È›Ú™XÝH\ÙY[Ü™\ˆ\Î‚‚ŒKˆÚXÚØ[™[˜›Üˆ[™ÝXYÙH˜\ÚXÜÎÂŒ‹ˆˆÜ™X]Xˆ[œÜXÝˆ[˜[™H™]šY]ÙYˆ\XÂŒËˆHÛX[YÙX›Ü›XÜˆÜY\XØ][ÛŽÂˆÛ›H[ˆ]][XØ][Û‹›Û\Ë]Y][™TH[YÜ˜][Û‹‚‚ˆÈÈŒËˆRK[˜]]™H]™[ÜY[‚•HÝ\œ™[\˜Ú]XÝ\™H[™ÜXÚYšXØ][ÛˆØÝ[Y[ÈY[ˆ[\Ü[œš[˜Ú\N‚‚ˆ
+Š•HRHÜš]\Ëˆ™[\˜HÚXÚÜËŠŠ‚‚–™[\˜HÚÝ[™H\ÙY[È[X[œÈ[™RHÞ\Ý[\È[ZÙHÚ[H™[XZ[š[™È[Bš[™\[™[ÙˆRKˆHÛÛ\[\ˆ[™\ÝÈ\™HH\Ý›Ý[™\žNÈH]\ÚX›B›[Ù[^[˜][Ûˆ\È›Ý›ÛÙˆÙˆÛÜœ™XÝ™\ÜËˆ[X[‹]Üš][ˆ[™Ù[™\˜]Y˜ÛÙHÛÈ›ÝYÚHØ[YH^\‹\œÙ\‹˜[YK\KÔSØ\Xš[]KÛÛ˜XÝ\Ý[™[[YHÚXÚÜË‚‚ˆÈÈÈXXÚ[™H[\™˜XÙ\È]˜Z[X›HÙ^B‚¼'éêˆÛÛY˜XÚ[™È”ÓÓˆ\Ù\ÈHÛÛ[[Ûˆ[™[ÜHÚ]ØÚ[XWÝ™\œÚ[ÛŽˆŒH˜ˆ[X[‚›Ý]]™[XZ[œÈHY˜][È™\]Y\Ý”ÓÓˆ^XÚ]HÚ]KY›Ü›X]ZœÛÛ˜‚‚ŸŸŸšœÛÛ‚žÂˆœØÚ[XWÝ™\œÚ[ÛˆŽˆŒH‹ˆ˜ÛÛ[X[™Žˆ˜ÚXÚÈ‹ˆœÝXØÙ\ÜÈŽˆ˜[ÙKˆ™XYÛ›ÜÝXÜÈŽˆ×BŸBŸŸŸ‚‚“Ý]]\È]\›Z[š\ÝXËˆØÚ[XWÝ™\œÚ[Û˜\ÈX[™]ÜžNÈ™]ÈÜ[Û˜[šY[Â›X^H™HYYÚ][ˆH™\œÚ[Û‹Ú[H[˜ÛÛ\]X›HÚ[™Ù\È™\]Z\™HH™]Â™\œÚ[Û‹ˆ”ÓÓˆÛÙ\ÈÛ›HÈÝÝ]XÚšXØ[Y\ÜØYÙ\ÈÈÝ\œ˜ˆÛÝ\˜ÙBœÜ[œÈ\ÙH™\›ËX˜\ÙYU‹Nž]HÙ™œÙ]ËÛ™KX˜\ÙY[™KØž]HÛÛ[[œË[™Bš[‹[Ü[ˆ[\˜[ˆÙXÜ™]Ë[Y\Ý[\Ë˜[™ÛHQËXXÚ[™KY\[™[˜XœÛÛ]H]Ë[™]™H]X˜\ÙHÛÛ[ÈÈ›Ý™[Û™È[ˆ\ÙHÝ]]Ë‚‚ˆÈÈÈÈØ[›ÛšXØ[ÛÙH›Ü›X][™Â‚¸§!H™[\˜H›]š[Kžž[˜›ÙXÙ\È]\›Z[š\ÝXÈÛÙH›Ü›X][™ÈY\‚œÝXØÙ\ÜÙ[^[™È[™\œÚ[™Ëˆ™[\˜H›]š[Kžž[ˆKXÚXÚØÜš]\È›Èš[\Â˜[™™]\›œÈ[ˆ\œ›ÜˆÛÙHYˆ™Y›Ü›X][™È\È™\]Z\™Y[ÝÚ[™ÈÒHÈ[™›Ü˜ÙB˜Ø[›ÛšXØ[ÛÝ\˜ÙH›Ü›X][™Ë‚‚ŸŸŸ˜˜\Úž™[\˜H›]^[\\ËÙšX›Û˜XØÚKžž[ž™[\˜H›]^[\\ËÙšX›Û˜XØÚKžž[KXÚXÚÂŸŸŸ‚‚•H›Ü›X]\ˆ™\Ù\™\È[™HÛÛ[Y[È[™™X]ÈÔS[™S›ØÚÜÈ\ÈÜ\]YBœÛÝ\˜ÙKˆ]\ÈY[\Ý[ˆ›Ü›X][™È[ˆ[™XYH›Ü›X]YØÝ[Y[ZY[Â˜ž]KY›Ü‹Xž]HY[XØ[Ý]]‚‚ˆÈÈÈÈ\YÛ\Â‚¸§!H^™\ÜÚ[Ûˆ\YÛ\ÈÚ]Ø\™H]˜Z[X›H\È[ˆ[š]X[ØY™HÝYÙKˆB˜ÛÛ\[\ˆ™\ÜÈ^XÝYÛÛ^X[\\Ëš\ÚX›H˜[Y\È[™[˜Ý[ÛœËXÝ]™B˜Ø\Xš[]Y\ËÛÛ˜XÝØ›YØ][ÛœË[™ÛÝ\˜ÙHÜ[œÎ‚‚ŸŸŸž™[\˜B™›ˆÝX›Jˆ[
+HOˆ[Âˆ™]\›ˆÂŸBŸŸŸ‚‚˜™[\˜HÚXÚØ™\ÜÈXYÛ›ÜÚ\ÈKRÓKLXÚ]H^XÝY\H[[™š\ÚX›HY[YšY\œËˆZ[X›HÛÛ[X[™È
+Z[[˜Ù\™X
+H™Z™XÝš[˜ÛÛ\]HÛÙH™Y›Ü™HÝÙ\š[™È[™^XÝ][Û‹ˆXÛ\˜][Û‹[]™[Û\È™[XZ[‚œ[›™Y‚‚ˆÈÈÈÈÝXÝ\™Y›Ú™XÝÛÛ^‚¸§!HÛÛ^\È™XY[Û›Nˆ]Ù\È›ÝÛÛ›™XÝÈX\šXQ‹\ÙHH™]ÛÜšËÙ[™™[XZ[[ˆ›ØœËÜˆ^ÜÙHÙXÜ™]Î‚‚ŸŸŸ˜˜\Úž™[\˜HÛÛ^^[\\ËØ]]ØÜYØ\Kžž[KY›Ü›X]ZœÛÛ‚ŸŸŸ‚‚’]™\ÜÈXÛ\™Y[˜Ý[ÛœËX›\ËÔS]Y\šY\ËÔ•Q™\ÛÝ\˜Ù\Ë›Ü›\ËT\Ë˜[™ÛÝ\˜ÙHÜ[œË‚‚ˆÈÈÈÈ]\›Z[š\ÝXÈ[\XÝ[˜[\Ú\Â‚¼'éêˆÛÝ\˜ÙH\[™[˜ÚY\ÈØ[ˆ™H]\›Z[š\ÝXØ[H[˜[^™Y‚‚ŸŸŸ˜˜\Úž™[\˜H[\XÝ^[\\ËØ]]ØÜYØ\Kžž[KY›Ü›X]ZœÛÛ‚ž™[\˜H[\XÝ^[\\ËØ]]ØÜYØ\Kžž[K\Þ[X›ÛX›N˜Ý\ÝÛY\œÈKY›Ü›X]ZœÛÛ‚ŸŸŸ‚‚•H[\XÝ™\ÜÛœÙH™\ÜÈÛÝ\˜ÙKX˜\ÙYX›\ËÔS›Ü›\ËÔ•Q™\ÛÝ\˜Ù\ËšY]ÜËT\Ë\›Z\ÜÚ[ÛœËÛÛ˜XÝË[™H]\›Z[š\ÝXÈ™Y™\™[˜Ù\ØYÙB›\Ý›ÜˆÛ›ÝÛˆ™[][ÛœÚ\ËˆXXÚÛ›ÝÛˆYÙH[˜ÛY\ÈÛÝ\˜ÙK\™Ù]Ú[™˜[™ÛÝ\˜ÙHÜ[‹ˆ[XZ[›Ø‹\Ý[™]™HØÚ[XH[\XÝÈ™[XZ[ˆ^XÚ]B™[\HÜˆ[˜]˜Z[X›NÈHÛÛ[X[™™]™\ˆÛÛ›™XÝÈÈX\šXQ‹‚‚•\Ú[™ÈK\Þ[X›ÛÚ[™›˜[YO˜›ØÝ\Ù\ÈHÝ]]ÛˆHÛ›ÝÛˆ›ÙHÝXÚ\Â˜X›N˜Ý\ÝÛY\œØˆH›ØÝ\ÙY™\ÜÛœÙHÛÛZ[œÈÛ›H\™XÝHÛÛ›™XÝYœ™Y™\™[˜Ù\È[™™[]Y›ÙHQËˆ[šÛ›ÝÛˆ›Ù\È™]\›ˆKRSTPÕLX[™B››Û‹^™\›È^]ÛÙK‚‚ˆÈÈÈÈ]ÛZXÈÙ[X[XÈY]Â‚¼'éêˆH˜[Y]YÞ[X›Û™[˜[YHØ[ˆ™H™]šY]ÙYÚ]Ý][ÙYžZ[™ÈÛÝ\˜ÙN‚‚ŸŸŸšœÛÛ‚žÂˆœØÚ[XWÝ™\œÚ[ÛˆŽˆŒH‹ˆ™[žHŽˆ™^[\\ËÙšX›Û˜XØÚKžž[‹ˆ™^XÝYÜÛÝ\˜ÙWÙš[™Ù\œš[Žˆ™›ŒXMŒNŒÍYXØŒÙL™ŽNXÍ‹ˆ›Ü\˜][ÛœÈŽˆÂˆÈšÚ[™Žˆœ™[˜[YH‹œÞ[X›ÛŽˆ™[˜Ý[Ûˆ‹™œ›ÛHŽˆ™šX›Û˜XØÚH‹ÈŽˆ™šXˆŸBˆBŸBŸŸŸ‚‚”Ø]™H\È\ÈÚ[™ÙKšœÛÛ˜[™[Ž‚‚ŸŸŸ˜˜\Úž™[\˜HY]KY›Ü›X]ZœÛÛˆÚ[™ÙKšœÛÛ‚ŸŸŸ‚‚•H™\]Y\Ý\È™\œÚ[Û™Y[™]\ÝÚ[È[ˆ^\Ý[™Èžž[š[H[œÚYHBœ™\ÛÛ™Y™[\˜H›Ú™XÝ›ÛÝˆÛÝ\˜ÙHÛÙH™Y›Ü™H[™Y\ˆHÚ[™ÙH]\Ý\ÜÂ˜[ÛÛ\[\ˆÚXÚÜËˆH™\Ý[™\ÜÈ^XÝÚÙ[ˆÜ[œÈ[™H]\›Z[š\ÝXÂœÛÝ\˜ÙHš[™Ù\œš[‚‚•Ú[ˆ\Z[™ÈÚ[™Ù\ÈÚ]KX\XH™\]Y\Ý]\Ý[˜ÛYHHš[™Ù\œš[™œ›ÛHH™]šY]ÈÈ™]™[Ý™\Üš][™ÈÛÛ˜Ý\œ™[H[ÙYšYYš[\È
+Ý[K\ÛÝ\˜ÙBœ›ÝXÝ[ÛŠKˆÚ]Ý]H^XÚ]KX\X›YË]™[XZ[œÈH™]šY]Î‚‚ŸŸŸ˜˜\Úž™[\˜HY]KY›Ü›X]ZœÛÛˆKX\HÚ[™ÙKšœÛÛ‚ŸŸŸ‚‚™Y›Ü™H]ÛZXÈ™\XÙ[Y[HÛÝ\˜ÙH\È™K\\œÙY[™[H˜[Y]YÈ[‚š[˜[YÜˆÙ[X[XØ[H[œØY™HÚ[™ÙHÚ[›Ý™HÜš][‹‚‚”™[˜[Y\ÈÙˆ[˜Ý[ÛœË\\Ë[™™XÛÜ™È\™HTÕX˜\ÙYˆXÛ\˜][ÛœÈ[™Û›ÝÛ‚œ™Y™\™[˜Ù\È\™H\]YÚ[HØØ[š[™[™ÜÈÙˆHØ[YH˜[YH™[XZ[ˆ[ÝXÚY‚•X›KšY]Ë›Ü›K[™Ô•QXÛ\˜][ÛœÈ[™Z\ˆÝXÝ\™Y™Y™\™[˜Ù\È\™B˜[ÛÈÝ\ÜYˆX›H™[˜[Y\È\]HÚXÚÙYÔSX›HÜÚ][ÛœÈ
+”“ÓX˜“ÒS˜S•ØTUX
+HÚ[H™\Ù\š[™È]\˜[ËÛÛ[Y[Ë\˜[Y]\œË[™’SˆÛÛ\Û™[™[˜[Y\È\]H›ÝHXÛ\˜][Ûˆ[™Û›ÝÛˆÜ[š[™È[™˜ÛÜÚ[™ÈÛÛ\Û™[YÜÈ[ˆS›ÙY\Ë‚‚ˆÈÈÈØY™]H›Ý[™\žH[™™[˜ÚX\šÂ‚RHÛÛÈ]\Ý›ÝÚ[[HYØ\Xš[]Y\ËÚY[ˆ\›Z\ÜÚ[ÛœË^XÝ]B™\ÝXÝ]™HÔSÙXZÙ[ˆXYÛ›ÜÝXÜË\ØX›H\ÝËÜˆ™]™X[ÙXÜ™]Ë‚‘\ÝXÝ]™HØÚ[XHÚ[™Ù\È[™ÙXÝ\š]K\Ù[œÚ]]™HÚ[™Ù\È™\]Z\™Hš\ÚX›H[X[‚˜\›Ý˜[ˆ™[\˜HÙ\È›Ý]]ÛX]XØ[HÙ[™ÛÝ\˜ÙHÛÙHÈ^\›˜[RBœÙ\šXÙ\ÎÈ[›™Y[YÜ˜][ÛœÈÚÝ[™HÜ[‹ØØ[XØ\X›K™[™Ü‹[™]]˜[˜[™™\œÚ[Û™Y‚‚•H™]ÈRKX]]Üš[™È™[˜ÚX\šÈ\ÈHÜXÚYšXØ][Ûˆ[‚˜ØÜËØ™[˜ÚX\šÜËØZKX]]Üš[™Ë›YˆÚ]™\œÚ[Û™Yš^\™\È[™Y[XØ[\ÚÜËš]\È[[™YÈYX\Ý\™Hš\œÝ\\ÜÈÛÛ\[][Û‹ÛÜœ™XÝ[ÛˆÛÜË[YHÂœ\ÜÚ[™È\ÝËÚÙ[œËÙXÝ\š]H˜Z[\™\ËZ\ÜÙY\[™[˜ÚY\Ë[œØY™HØÚ[XB˜Ú[™Ù\Ë[™[X[ˆ™]šY]ÈY™›Üˆ›ÈÛÛ\\˜]]™H™\Ý[È]™H™Y[ˆX›\ÚY‚HÙXÜ™]XZÈÜˆ[˜\›Ý™Y\ÝXÝ]™HÚ[™ÙH\ÈHÙXÝ\š]H˜Z[\™H[™Ø[››Ý˜™H˜[[˜ÙYžHÛZ[YY›ÙXÝ]š]K‚‚ˆÈTS‘PÑTÂ‚‹KKB‚ˆÈÈˆ]]Üš]]]™HÛÝ\˜Ù\È[™ÛÛ\[\ˆ™\šYšXØ][Ûˆ
+ÛÝ\˜ÙH]]Üš]JB‚ˆ
+Š”š[˜Ú\NŠŠˆ™[\˜H\È]ÈÝÛˆ[™ÝXYÙKˆH\œÙ\ˆ[™™\šYšYY\ÝÈXÚYHÚ]^\ÝË‚‚•Ú[ˆÛÝ\˜Ù\È\ØYÜ™YK™\ÜH\ØYÜ™Y[Y[^XÚ]H[™\ÙH\È]]Üš]]]™HÜ™\Ž‚‚ŒKˆ
+Š–Ñ›Ü›X[[™ÝXYÙHÜXÚYšXØ][Û—JÜXÚYšXØ][Û‹›Y
+H[™\ÙHØÝ[Y[ÊŠ‚Œ‹ˆ
+ŠÛÛ\[\ˆ[\[Y[][ÛˆÛÙNŠŠˆ^\‹TÕ\œÙ\‹˜[YH™\ÛÛ][Û‹\HÚXÚÚ[™Ë[™Ù[X[XÈÛÛ\[\ˆÛÙHXÜ›ÜÜÈ^\˜\œÙ\˜\Ý\˜ÛX[[YX]X˜\ÙXÙX˜[™›Ü›\ØŒËˆ
+Š“Ù™šXÚX[]]ÛX]Y[™ÝXYÙH[™[YÜ˜][Ûˆ\ÝÎŠŠˆÛÜšÜÜXÙH\ÝÈ
+Ø\™ÛÈ\ÝK]ÛÜšÜÜXÙX
+KXXÚ[™KZ[\™˜XÙH\ÝË[™L‘HØÜš\È[ˆ\ÝËØˆ
+Š“Ù™šXÚX[Ý[™\™Xœ˜\žNŠŠˆ
+Û˜ÙH›Ü›X[H[›ÙXÙY
+BKˆ
+Š“Ù™šXÚX[™[\˜H^[\\ÎŠŠˆžž[š[\È[ˆ^[\\ËØ™\šYšYYžHHÝ\œ™[ÛÛ\[\‚‹ˆ
+Š‘ØÝ[Y[][Ûˆ[™[™›ÛÚÈ^[˜][ÛœÊŠ‚‚ˆÈÈÈ[˜\šX[È›Üˆ]™[Ü\œÈ[™RHYÙ[Â‚‹H
+Š”›ØYX\\È[›š[™Ë›ÝÞ[^ŠŠˆ]\™H\ÙH›ÜÜØ[È™XÛÛYH˜[YÞ[^Û›HY\ˆ[\[Y[][Ûˆ[ˆ^\ˆ[™\œÙ\‹‚‹H
+Š”\Ý\ÈH[\[Y[][Ûˆ[™ÝXYÙK›Ý™[\˜NŠŠˆ™[\˜H\È]™[ÜY[ˆ\Ý]\ÝÞ[^[ˆHžž[š[H\È[˜[Y[›\ÜÈ™[\˜IÜÈÜ˜[[X\ˆ^XÚ]HYš[™\È]‚‹H
+Š“›È[™[YÛÛ[X[™ÎŠŠˆ]™\žHÓHÛÛ[X[™]\Ý^\Ý[ˆÛKÜÜ˜ËÛXZ[‹œœØ‚‹H
+Š”]X[]HØ]NŠŠˆ]™\žH™X]\™H[™\™ÛÙ\È›Ü›X][™È
+Ø\™ÛÈ›]
+KÛÜšÜÜXÙHÚXÚÜÈ
+Ø\™ÛÈÚXÚØ
+KÛ\H[\ˆ
+Ø\™ÛÈÛ\X
+K[™\ÝÝZ]H^XÝ][Ûˆ
+Ø\™ÛÈ\Ý
+K‚‚‹KKB‚ˆÈÈ\[™^Nˆ]ZXÚÜÝ\ÈÚX]ÚY]
+Þ[^ÚX]ÚY]
+B‚ˆÈÈÈ˜\ÚXÈÞ[^˜™[\˜B‹ËÈ[˜Ý[ÛœÈÚ]ÛÛ˜XÝÂ™›ˆÝ[JNˆ[Žˆ[
+HOˆ[ˆ™\]Z\™\ÈÈHH	‰ˆˆHBˆ[œÝ\™\ÈÈ™\Ý[HBžÂˆ™]\›ˆH
+È‚ŸB‚‹ËÈ[žHÚ[[™˜\šXX›\Â™›ˆXZ[Š
+HÂˆHLËÈ\H[™™\™[˜ÙH
+[[]]X›JBˆ]]X›HÛÝ[\ˆHËÈ]]X›Bˆ˜[YNˆÝš[™ÈH–™[\˜HˆËÈ^XÚ]\B‚ˆš[
+Ý[JËÊJBŸB˜‚ˆÈÈÈ\\Â‹H[X™\œÎˆ[
+Xš]ÚYÛ™Y[YÙ\ŠKR[
+[œÚYÛ™Y[YÙ\ŠK›Ø]XÚ[X[
+š^Y\Ú[\š]Y]XÊB‹H^	ˆÚ\˜XÝ\œÎˆÝš[™ØÚ\˜‹H›ÛÛX[œÎˆ›ÛÛ
+YX˜[ÙX
+B‹HÛÛXÝ[ÛœÎˆ[×XÝš[™Ö×X‹HÜ[Û˜[]NˆÜ[Û˜
+ÛÛYJ
+X›Û™X
+KÚÜ[™Ø‹H\œ›Üˆ[™[™Îˆ™\Ý[O˜
+ÚÊ
+X\œŠJX
+B‹HÞ\Ý[H	ˆÚ›Û›ÛÙÞNˆ[Y\Ý[\]X[YX\˜][Û˜‚ˆÈÈÈÛÛ›Û›ÝÂ˜™[\˜B™›ˆÛÛ›ÛÙ›ÝÊˆ[
+HÂˆYˆˆLÂˆš[
+“\™ÙHŠBˆH[ÙHÂˆš[
+”ÛX[ŠBˆB‚ˆX]ÚÂˆHOˆÈš[
+“Û™HŠHBˆˆOˆÈš[
+•ÛÈŠHBˆÈOˆÈš[
+“Ý\ˆŠHBˆB‚ˆ]]X›HHHˆÚ[HHÈ[˜\šX[ÈHHHÂˆHHH
+ÈBˆB‚ˆ›Üˆˆ[ˆÌK‹×HÂˆš[
+ŠBˆBŸB‚™›ˆXZ[Š
+HÂˆÛÛ›ÛÙ›ÝÊJBŸB˜‚ˆÈÈÈ]X˜\ÙH	ˆÙX‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ˜\‚ŸB‚X›H][\ÈÂˆYˆYš[X\žH]]Âˆ\ØÜš\[ÛŽˆÝš[™È™\]Z\™YŸB‚œYÙH‹Ú][\ÈˆÂˆ[ÂˆO’][H\ÝÚO‚ˆBŸB˜‚‹KKB‚ˆÈÈ\[™^ŽˆÛÛ\]H™[\˜HXYÛ›ÜÝXÈ	ˆ\œ›ÜˆÛÙH™Y™\™[˜ÙB‚Ÿ\œ›ÜˆÛÙHØ]YÛÜžH\ØÜš\[Ûˆ\XØ[š^Ÿ‹KKH‹KKH‹KKH‹KKHŸKSVLX^\ˆ[™^XÝYÚ\˜XÝ\ˆÈ^XØ[\œ›Üˆ™[[Ý™H\ÙÜ˜\XØ[Üˆ[YØ[ÜXÚX[Ú\˜XÝ\œÈŸKTT”ÑKLX\œÙ\ˆÞ[^\œ›Üˆ
+K™ËˆZ\ÜÚ[™Èœ˜XÙK[˜[YÚÙ[ŠHÛÜœ™XÝÞ[^\ˆ™[\˜HÜ˜[[X\ˆŸKSSQKLX™\ÛÛ][Ûˆ[šÛ›ÝÛˆ˜[YHÈ˜\šXX›H›ÝXÛ\™YÚXÚÈXÛ\˜][ÛˆÜˆÛÜœ™XÝ\ÈŸKUTKLX\HÚXÚÚ[™È\HZ\ÛX]Ú
+K™ËˆÝš[™È\ÜÚYÛ™YÈ[
+H[YÛˆ\\ÈÜˆYÛÛ™\œÚ[ÛˆŸKQ‘PUT‘KLX™X]\™HÝÚ]ÚXØÙ\ÜÈÈ\ØX›Y[™ÝXYÙHÝ\™˜XÙH
+ÙX˜\XÜY]]]Y]
+H[˜X›H™X]\™H[ˆ™[\˜KÛ[Üˆ™[˜ŸKPÐTLXÈKPÐTL˜Ø\Xš[]Y\ÈZ\ÜÚ[™ÈØ\Xš[]H\›Z\ÜÚ[Ûˆ
+K™Ëˆ]X˜\ÙX™]ÛÜšØ
+HÜ˜[Ø\Xš[]H[ˆ™[\˜KÛ[[™\ˆØØ\Xš[]Y\×XŸKTÓPÖKLXÈ˜ÛXÞHÙXÝ\š]HÜˆ]Y]ÛXÞHš[Û][Ûˆ™]šY]ÈÙXÝ\š]HÛXÞHXÛ\˜][ÛœÈŸKQ‹LXHKQ‹LX]X˜\ÙH]X˜\ÙHÛÛ›™XÝ[ÛˆÜˆš]™\ˆ\œ›Üˆ™\šYžHUPTÑWÕT“[œÝ\™HX\šXQˆ\È[›š[™ÈŸKTÔSLXHKTÔSLÔS[˜[YÔSÈØÚ[XHZ\ÛX]ÚÈ[šÛ›ÝÛˆÛÛ[[ˆÚXÚÈÔSÝ][Y[YØZ[œÝX›HØÚ[XHŸKU’QUËLXHKU’QUËLXšY]ÜÈ	ˆYÙ\È\œ›Üˆ[ˆšY]È[\œÛ][Û‹ÛÝËÜˆ]Hš[™[™ÈÚXÚÈÛÝ˜[Y\È[™š[™[™È]H\\ÈŸKU’QUËLLHKU’QUËLMX]Y\žHÛÛ›ÛÈ[˜[YÙX\˜ÚÛÜYÚ[˜][Û‹Üˆš[\ˆšY[ÈÚXÚÈXÛ\™YÚ][\Ý
+ÙX\˜ÚÛÜš[\˜
+HŸKQ“Ô“KLXHKQ“Ô“KL›Ü›\È˜[Y][Ûˆ\œ›ÜˆÜˆ[˜[Y›Ü›HšY[\\È™]šY]È›Ü›HXÛ\˜][Ûˆ[™[œ]^[ØYŸKPÔ•QLXHKPÔ•QL˜Ô•Q[˜[YÔ•Q™\ÛÝ\˜ÙKØÚ[XHÛÛ™›XÝÜˆ^[Ý]\œ›Üˆ™\šYžHX›Hš[™[™È[™^[Ý]ÛÝÈŸKPUULXHKPUULŽ]][XØ][ÛˆÙ\ÜÚ[Û‹\ÜÝÛÜ™Üˆ\›Z\ÜÚ[ÛˆÛÛ™›XÝÚXÚÈ›Û\È
+\›Z]Ø
+K™\]Z\™\È]][™\ÜÝÛÜ™\Ú\ÈŸKPUQULXHKPUQULL]Y]˜Z[˜Z[\™H[ˆÜž\ÙÜ˜\XÈ\ÚÚZ[ˆÙˆ]Y]ÙÈ˜[Y]HÚXÚÜÝ[\È[™]Y]X›H[YÜš]HŸKTÑUTLXHKTÑUTL˜Ù]\›ÝÈÜÛÛ™›XÝÛØÚÙ]\œ›Ü‹ÜˆÛÛ\ÜÙH˜Z[\™HÚÛÜÙHœ™YHÜËÚXÚÈØÚÙ\ˆÛØÚÙ]\›Z\ÜÚ[ÛœÈŸKTÑUTUÑP‹LXÙXˆÙ]\[˜[YÜˆ^\™YÙ]\ÚÙ[ˆ™\Ý\Ù]\\ÜÚ\Ý[[™\ÙHÚÙ[š^™YT“ŸKRSTPÕLX[\XÝ[˜[\Ú\ÈÞXÛXØ[Üˆ[˜[Y\[™[˜ÚY\È[[™ÛHÛÙH\[™[˜ÚY\ÈŸKT•S•SQKLX[[YH[š[™Y[[YH\œ›ÜˆÚXÚÈÛÛ˜XÝÈ
+™\]Z\™\Ø[œÝ\™\Ø
+HÜˆ\œ›Üˆ˜[Y\È‚‹KKB‚ˆÈÈ\[™^Îˆ™[\˜HÓHÛÛ[X[™™Y™\™[˜ÙB‚ŸÛÛ[X[™Ü[ÛˆÈ›YÈ\ØÜš\[ÛˆŸ‹KKH‹KKH‹KKHŸ™[\˜HK]™\œÚ[Û˜Ý]]È[ÛÛ\[\ˆ[™XÚØYÙH™\œÚ[ÛˆŸ™[\˜H™]È\˜K][\]HZ[š[X[X\šXY‹XÜY‹‹˜Ü™X]\ÈH™]È™[\˜H›Ú™XÝÚ][\]HŸK[X\šXY˜Ù[™\˜]\ÈX\šXQˆ›Ú™XÝÚ]ÛÛ\ÜÙKØÚÙ\™š[K[™™[˜ŸK]ÙX‹\ÜˆKZÜÝ\ÜˆKY‹ZÜÝ\Ü˜ÛÛ™šYÝ\™\ÈÛÛZ[™\ˆ[™ÜÝÜÈŸ™[\˜H[š]ËK[X\šXY—X[š]X[^™\ÈÝ\œ™[\™XÝÜžH\È™[\˜H›Ú™XÝŸ™[\˜HÚXÚÈš[Kžž[˜ËKY›Ü›X]œÛÛ—XÝ]XØ[HÚXÚÜÈÞ[^\\ËÛÛ˜XÝË[™Ø\Xš[]Y\ÈŸ™[\˜H[ˆš[Kžž[˜ÛÛ\[\È[™^XÝ]\ÈH™[\˜H›ÙÜ˜[HŸ™[\˜HÙ\™Hš[Kžž[˜ÚÜÝœÜXÝ\ÈHZ[Z[ˆÙXˆÙ\™\ˆŸ™[\˜HÙ]\ËKY]X˜\ÙWXÝ\ÈØÚÙ\ˆÛÛ\ÜÙHÈX\šXQˆŸËK\ØÚ[XWXÝ\È[š\›Û›Y[[™\Y\È]X˜\ÙHØÚ[XHŸËKX[X^XÝ]\ÈÛÛ™šYÝ\˜][Û‹ÛÛZ[™\ˆÝ\\[™ØÚ[XHZYÜ˜][ÛˆŸËKZÜÝ\Ü—HËKY‹ZÜÝ\Ü—X[™›Ü˜Ù\È^XÝÜÝÜÈ›Üˆ™]È™[˜Ÿ™[\˜HÙ]\K]ÙX˜ËK\Ü—XÝ\ÈØØ[ÚÙ[‹\›ÝXÝYœ›ÝÜÙ\ˆÙ]\\ÜÚ\Ý[Ÿ™[\˜HÛÛ™šYÈš[Kžž[˜ËKY›Ü›X]œÛÛ—XØY™[H\Ü^\ÈY™™XÝ]™HÛÛ™šYÝ\˜][Ûˆ[™™X]\™HÝÚ]Ú\ÈŸ™[\˜HØÝÜˆš[Kžž[˜ËK\Ü—HËKZœÛÛ—XÚXÚÜÈÛÛÚZ[‹X\šXQ‹ØÚÙ\‹[™ÜÈ›Û‹Y\ÝXÝ]™[HŸËKY[‹Yš[Hš[O—X™XYÈUPTÑWÕT“œ›ÛHÜXÚYšYYš[HŸ™[\˜H›]š[Kžž[˜ËKXÚXÚ×X›Ü›X]ÈÛÝ\˜ÙHÛÙHXØÛÜ™[™ÈÈÙ™šXÚX[Ý[™\™ÈŸ™[\˜H™\šYžHš[Kžž[˜\™›Ü›\È›Ü›X[ÛÛ˜XÝ™\šYšXØ][ÛˆŸ™[\˜HØÈš[Kžž[˜K[Ü[˜\XÙ[™\˜]\ÈÜ[THËŒÜXÚYšXØ][ÛœÈŸK]\\ØÜš\Ù[™\˜]\È\Y\[™[˜ÞKYœ™YH\TØÜš\ÛY[Ÿ™[\˜Hˆ[š]š[Kžž[˜[š]X[^™\È]X˜\ÙH[™˜\ÙHX›\ÈŸ™[\˜HˆÙ]\š[Kžž[˜Ù]È\X\šXQˆ]X˜\ÙH[š]X[HŸ™[\˜Hˆ\Hš[Kžž[˜\Y\ÈØÚ[XHZYÜ˜][ÛœÈØY™[HŸ™[\˜H]]\Ú\\ÜÝÛÜ™ËK\Ý[—XÙ[™\˜]\ÈÙXÝ\™H\™ÛÛŒˆ\ÜÝÛÜ™\Ú\ÈŸ™[\˜H›Ü›H˜[Y]Hš[Oˆ›Ü›O˜\ÝÈ›Ü›\ÈÚ]Ø[\H˜[Y\ÈÛˆÛÛœÛÛHŸ™[\˜HÛÛ^š[Kžž[˜ËKY›Ü›X]œÛÛ—X[Z]ÈÙ[X[XÈÛÝ\˜ÙHÛÛ^›Üˆ]™[Ü\ˆÛÛÈŸ™[\˜H[Ù[H[ˆ[žOˆ[Ù[O˜ÚÝÜÈÛ›ÝÛˆ[\Ü[™™\ÛÝ\˜ÙK\™Y™\™[˜ÙHÛÜÝ\™NÈ›ÝH\Þ[Y[^Ü‚‹KKB‚ˆÈÈ\[™^ˆÝ[™\™Xœ˜\žHÝ™\šY]Â‚ˆÈÈÈ\™HÛÜ™H[˜Ý[ÛœÈ
+™\›ÈØ\Xš[]Y\È™\]Z\™Y
+B‹Hš[
+˜[YJXˆš[È[žH˜[YHÈÝ[™\™Ý]]‚‹H[Š\œ˜^JXˆ™]\›œÈH[X™\ˆÙˆ[[Y[È[ˆ[ˆ\œ˜^H\È[ˆ[‚‹H\[™
+\œ˜^K[[Y[
+Xˆ›ÙXÙ\ÈH™]È\œ˜^HÚ]H\[™Y˜[YK‚‹HÛÛZ[œÊ\œ˜^K[[Y[
+XOˆ›ÛÛˆÚXÚÜÈÚ]\ˆ[ˆ][H\È™\Ù[[ˆ[ˆ\œ˜^K‚‹Hš\œÝ
+\œ˜^JXOˆÜ[Û˜ˆ™]\›œÈHš\œÝ][HÜ˜\Y[ˆÛÛYXÜˆ›Û™X‚‹H\Ý
+\œ˜^JXOˆÜ[Û˜ˆ™]\›œÈHš[˜[][HÜ˜\Y[ˆÛÛYXÜˆ›Û™X‚‹HÙ]
+X\Ù^JXOˆÜ[Û˜ˆÛÚÜÈ\HÙ^HÚ][ˆHX\Ë˜‚‹H]
+X\Ù^K˜[YJXOˆX\Ë˜ˆ[œÙ\ÈÜˆ\]\ÈHÙ^K]˜[YHZ\ˆ[˜Ý[Û˜[K‚‹HÙ^\ÊX\
+XOˆÖ×Xˆ™]\›œÈ[Ù^\ÈÙˆHX\\È[ˆ\œ˜^K‚‹H˜[Y\ÊX\
+XOˆ–×Xˆ™]\›œÈ[˜[Y\ÈÙˆHX\\È[ˆ\œ˜^K‚‹HÛÛYJ˜[YJXÈ›Û™Xˆ˜[YHÛÛœÝXÝÜœÈ›ÜˆHÜ[Û˜\K‚‹HÚÊ˜[YJXÈ\œŠ\œ›ÜŠXˆ˜[YHÛÛœÝXÝÜœÈ›ÜˆH™\Ý[O˜\K‚‹HœÛÛ—Ù[˜ÛÙJ˜[YJXOˆÝš[™ØˆÙ\šX[^™\È\Y]H[ÈH”ÓÓˆÝš[™Ë‚‹HœÛÛ—ÙXÛÙOŠ^
+XOˆˆ\œÙ\È\Y”ÓÓŽÈ[˜[Y]H\™H™\ÜY\È[[YH\œ›ÜœË‚‚ˆÈÈÈØ\Xš[]KQÝX\™Y[˜Ý[ÛœÂ‹H\Ù\ÈÛÛœÛÛX‚ˆH™XYØÛÛœÛÛJ›Û\ˆÝš[™ÊXOˆÝš[™ÏØˆ\Ü^\ÈH›Û\[™™XYÈÛ™H[™NÈ›Û™X™\™\Ù[ÈSÑ‹‚‹H\Ù\ÈÛØÚØ‚ˆH›ÝÊ
+XOˆ[Y\Ý[\ˆ™]\›œÈÝ\œ™[Þ\Ý[H[Y\Ý[\‚‹H\Ù\È˜[™ÛX‚ˆH˜[™ÛWÚ[
+Z[Žˆ[X^ˆ[
+XOˆ[ˆÙ[™\˜]\È[ˆ[YÙ\ˆ[ˆHÚ]™[ˆ˜[™ÙK‚‹H\Ù\È[š\›Û›Y[‚ˆH[Š˜[YNˆÝš[™ÊXOˆÜ[ÛÝš[™Ï˜ˆ™XYÈHÜÝ[š\›Û›Y[˜\šXX›K‚‹H\Ù\Èš[TÞ\Ý[X‚ˆH™XYÝ^
+]ˆÝš[™ÊXOˆÝš[™Øˆ™XYÈš[HÛÛ[È\È^‚ˆHÜš]WÝ^
+]ˆÝš[™ËÛÛ[ˆÝš[™ÊXˆÜš]\È^ÛÛ[Èš[K‚ˆH[]WÙš[J]ˆÝš[™ÊXˆ[]\ÈH\™Ù]š[K‚ˆH\ÝÙ\Š\ŽˆÝš[™ÊXOˆÝš[™Ö×Xˆ\ÝÈ\™XÝÜžHš[[˜[Y\Ë‚‹H\Ù\È]X˜\ÙX‚ˆHÜ[×OˆÈÑSPÕ‹‹ˆXˆ^XÝ]\È\KXÚXÚÙYÔS]Y\šY\È™]\›š[™È[]H™XÛÜ™Ë‚ˆH˜[œØXÝ[ÛˆÈ‹‹ˆXˆÜ˜\È][\HÔSÜ\˜][ÛœÈ[œÚYH[ˆ]ÛZXÈ˜[œØXÝ[Û‹‚‚‹KKB‚ˆÈÈ\[™^NˆÔSÚX]ÚY]›Üˆ™[\˜H]™[Ü\œÂ‚”ÔSÝ][Y[È[X™YY\™XÝHÚ][ˆ™[\˜H\™H^XÝ]YÚ]Ü[×O˜ÜˆÜ[‚‚˜™[\˜B™]X˜\ÙHXZ[ˆÂˆ[™Ú[™NˆX\šXY‚ˆ]X˜\ÙNˆ˜\‚ŸB‚X›H\ÚÜÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™È™\]Z\™YˆÛÛ\]Yˆ›ÛÛY˜][˜[ÙBŸB‚™›ˆÜ[Ù^[\\Ê
+H\Ù\È]X˜\ÙHÂˆËÈKˆÑSPÕÚ]\Y™]\›ˆ\H[™ØY™H\˜[Y]\‚ˆÝ]\ÈH˜[ÙBˆš[\™YHÜ[\ÚÖ×OˆÂˆÑSPÕY˜[YKÛÛ\]Yˆ”“ÓH\ÚÜÂˆÒT‘HÛÛ\]YHœÝ]\ÂˆB‚ˆËÈ‹ˆS”ÑT•Ú][ˆH˜[œØXÝ[Û‚ˆ^H“™]È\ÚÈ‚ˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆS”ÑT•S•È\ÚÜÈ
+˜[YKÛÛ\]Y
+BˆSQTÈ
+^˜[ÙJBˆBˆB‚ˆËÈËˆTUBˆ\™Ù]ÚYHBˆ˜[œØXÝ[ÛˆÂˆÜ[ÂˆTUH\ÚÜÂˆÑUÛÛ\]YHYBˆÒT‘HYH\™Ù]ÚYˆBˆBŸB‚™›ˆXZ[Š
+H\Ù\È]X˜\ÙHÂˆš[
+”ÔSÚX]ÚY]˜[Y]YˆŠBŸB˜‚‹KKB‚ˆÈÈ\[™^ŽˆS[™ÙXˆ™Y™\™[˜ÙH[ˆ™[\˜B‚ˆÈÈÈÙXˆÝXÝ\™\È[™XÛ\˜][ÛœÂ‚Ÿ[[Y[XÛ\˜][Ûˆ\œÜÙHŸ‹KKH‹KKH‹KKHŸ
+Š”YÙJŠˆYÙH‹Ü]ÞÜ\˜[_HˆÈ‹‹ˆXYš[™\È[ˆÑU›Ý]HÚ]]\˜[Y]\œÈ[™S™\ÜÛœÙHŸ
+Š•šY]È^[Ý]
+ŠˆšY]È^[Ý]˜[YHÈ[È‹‹ˆÛÝÏˆ‹‹ˆHX™]\ØX›H^[Ý]Ú]Y˜][[™˜[YYÛÝÈŸ
+ŠÛÛ\Û™[
+ŠˆÛÛ\Û™[˜[YHÈ›ÜÈÈ‹‹ˆH[È‹‹ˆHX™]\ØX›HSÛÛ\Û™[Ú]\Y›Ü\Y\ÈŸ
+Š“˜[YYÛÝ
+ŠˆÛÝ˜[YOHšXY\ˆ‘˜[˜XÚÏÜÛÝ˜XÙZÛ\ˆ[ˆ^[Ý]ØÛÛ\Û™[Ú]Ü[Û˜[Y˜][ÛÛ[Ÿ
+Š”ÛÝ[š™XÝ[ÛŠŠˆÛÝ˜[YOHšXY\ˆÛÛ[ÜÛÝ˜\ÜÙ\ÈÚ[ÛÛ[[ÈX]Ú[™ÈÛÝŸ
+Š‘]HØY[™ÊŠˆØY][HHÜ[][OˆÈÑSPÕ‹‹ˆX\YØY[™ÈÙˆÚ[™ÛH™XÛÜ™Ú]šY[XØÙ\ÜÈÚ][K™šY[XŸ
+ŠÛÛXÝ[ÛˆÛÜ
+ŠŸ›Üˆ][H[ˆ][\ÈÈOžÚ][K›˜[Y_OÛOˆX\YÙ\™\‹\ÚYH]\˜][ÛˆÝ™\ˆØYYÛÛXÝ[ÛˆŸ
+Š”ÙX\˜ÚÛÛ›Û
+ŠˆÙX\˜ÚÈÛÛHÛÛˆXÚ][\ÝXÚXÚÙYT“ÙX\˜ÚÚ]\˜[Y]\š^™YRÑX]Y\žHŸ
+Š”ÛÜÛÛ›Û
+ŠˆÛÜÈÛÛHÛÛˆX\YÛÜ[™ÈšXHÜÛÜXÛÛ	›Ü™\X\Ø×\ØØŸ
+Š”YÚ[˜][ÛŠŠˆYÚ[˜]YXYÚ[˜][ÛˆÚ]SRUØÑ‘”ÑUYÙXYÙ\Ø[™Ý[Ÿ
+Š‘š[\ˆÛÛ›Û
+Šˆš[\ˆÈÛÛHÛÛˆX\Yš[\ˆÜ\˜]ÜœÈ
+\XÛÛZ[œØÝ\×ÝÚ]ÝX]ËŠHŸ
+ŠÔ•Q^[Ý]
+ŠˆÜY™\ÈÈX›H›^[Ý]ˆ^[Ý]˜[YHX[X™YÈÔ•QšY]ÜÈ[ÈÛÝÈ]X˜]˜ÛÛ[XÝ[ÛœØ‚‹KKB‚ˆÈÈ\[™^ÎˆÛÜÜØ\žHÙˆXÚšXØ[\›\Â‚‹H
+ŠTÕ
+XœÝ˜XÝÞ[^™YJNŠŠˆHY\˜\˜ÚXØ[™YH]HÝXÝ\™H™\™\Ù[[™ÈHÞ[XÝXÈ[[Y[ÈÙˆ[Ý\ˆÛÝ\˜ÙHÛÙH›ÛÝÚ[™È^XØ[[™Ü˜[[X]XØ[[˜[\Ú\Ë‚‹H
+ŠØ\Xš[]NŠŠˆ[ˆ^XÚ]\›Z\ÜÚ[ÛˆX\šÙ\ˆ
+\Ù\Èš[TÞ\Ý[X\Ù\È]X˜\ÙX]ËŠH™\]Z\™YÛˆH[˜Ý[Û‰ÜÈÚYÛ˜]\™H™Y›Ü™H]\È\›Z]YÈÝXÚÝX\™Y^\›˜[Þ\Ý[H™\ÛÝ\˜Ù\Ë‚‹H
+Š‘\ÚYÛˆžHÛÛ˜XÝŠŠˆH›Ü›X[ÛÙØ\™H\ÚYÛˆY]ÙÛÙÞHÚ\™H[˜Ý[ÛœÈ\ÝX›\ÚÝšXÝ™XÛÛ™][ÛœÈ
+™\]Z\™\Ø
+H[™ÜÝÛÛ™][ÛœÈ
+[œÝ\™\Ø
+H[™›Ü˜ÙYžHÝ]XÈ[˜[\Ú\È[™[[YHÚXÚÜË‚‹H
+Š’[[]]X›NŠŠˆ[˜Ú[™ÙXX›HY\ˆ[š]X[\ÜÚYÛ›Y[ˆ[ˆ™[\˜K[˜\šXX›\È\™H[[]]X›HžHY˜][[›\ÜÈ^XÚ]HXÛ\™YÚ]H]]X›XÙ^]ÛÜ™‚‹H
+Š’[˜\šX[ŠŠˆHÙÚXØ[ÛÛ™][Ûˆ
+ÝXÚ\È[ˆHÛÜ
+H]\ÈÝX\˜[YYÈ]˜[X]HÈYH™Y›Ü™H[™Y\ˆ]™\žH^XÝ][ÛˆÞXÛK‚‹H
+Š“Ü[ÛŽŠŠˆH[ÙXœ˜ZXÈ]H\H
+ÛÛYJŠXÜˆ›Û™X
+H™\™\Ù[[™ÈHÝ[X[XœÙ[˜ÙHÙˆH˜[Yx %™[\˜IÜÈ›Ø\Ý™\XÙ[Y[›Üˆ™XYY[\Ú[\ˆ^Ù\[ÛœË‚‹H
+Š”™\Ý[ŠŠˆH\H
+ÚÊŠXÜˆ\œŠJX
+H][˜Ø\Ý[]\ÈHÝ]ÛÛYHÙˆ[ˆÜ\˜][Ûˆ]ZYÚ˜Z[™X][™È\œ›ÜœÈ\Èš\œÝXÛ\ÜÈ™XÛÝ™\˜X›H˜[Y\È˜]\ˆ[ˆ[\Y^Ù\[ÛœË‚‹H
+Š•\YÛH
+Ø
+NŠŠˆHÛÛ\[\‹\Ý\ÜYXÙZÛ\ˆ[™XØ][™È[˜ÛÛ\]HÛÙKÚXÚÚYÛ˜[ÈHÛÛ\[\ˆ[™RHÛÛ[™ÈÈ\Ü^HH™\]Z\™Y\KØØ[ØÛÜK[™\XØX›HÛÛ˜XÝÈ›Üˆ]ØØ][Û‹‚‚‹KKB‚ˆÈÈ\[™^ˆÛÛ][ÛœÈÈÚ\\ˆ^\˜Ú\Ù\Â‚ˆÈÈÈÚ\\ˆNˆÜ™Y][™Â˜™[\˜B™›ˆXZ[Š
+HÂˆš[
+’[ÈÛÜ›œ›ÛH™[\˜HHŠBŸB˜‚ˆÈÈÈÚ\\ˆNˆØ[Ý[]H\ØÛÝ[šXÙB˜™[\˜B™›ˆØ[Ý[]WÙ\ØÛÝ[
+ÜšYÚ[˜[ˆ›Ø]\˜Ù[ˆ›Ø]
+HOˆ›Ø]Âˆ™]\›ˆÜšYÚ[˜[
+ˆ
+KŒH
+\˜Ù[ÈLŒ
+JBŸB‚™›ˆXZ[Š
+HÂˆš[
+Ø[Ý[]WÙ\ØÛÝ[
+LŒŒŒ
+JBŸB˜‚ˆÈÈÈÚ\\ˆLNˆÝX›H[X™\œÂ˜™[\˜B™›ˆÝX›WÛ[X™\Š[X™\Žˆ[
+HOˆ[Âˆ™]\›ˆ[X™\ˆ
+ˆ‚ŸB‚™›ˆXZ[Š
+HÂˆš[
+ÝX›WÛ[X™\ŠŒJJBŸB˜‚ˆÈÈÈÚ\\ˆLŽˆ™KH[™ÜÝÛÛ™][ÛœÂ˜™[\˜B™›ˆÛ[\
+˜[YNˆ[Z[—Ý˜[ˆ[X^Ý˜[ˆ[
+HOˆ[ˆ™\]Z\™\ÈÈZ[—Ý˜[HX^Ý˜[Bˆ[œÝ\™\ÈÈ™\Ý[HZ[—Ý˜[	‰ˆ™\Ý[HX^Ý˜[BžÂˆYˆ˜[YHZ[—Ý˜[È™]\›ˆZ[—Ý˜[BˆYˆ˜[YHˆX^Ý˜[È™]\›ˆX^Ý˜[Bˆ™]\›ˆ˜[YBŸB‚™›ˆXZ[Š
+HÂˆš[
+Û[\
+LŒL
+JBŸB˜‚ˆÈÈÈÚ\\ˆLÎˆÝ[H[ˆ\œ˜^B˜™[\˜B™›ˆÝ[WØ\œ˜^J[X™\œÎˆ[×JHOˆ[Âˆ]]X›HÝ[Hˆ›Üˆˆ[ˆ[X™\œÈÂˆÝ[HÝ[
+È‚ˆBˆ™]\›ˆÝ[ŸB‚™›ˆXZ[Š
+HÂˆ][\Îˆ[×HHÌK‹ËWBˆš[
+Ý[WØ\œ˜^J][\ÊJBŸB˜‚‹KKB‚ˆÈÈ\[™^Nˆœ™\]Y[H\ÚÙY]Y\Ý[ÛœÈ
+TJB‚ŠŠ”]Y\Ý[ÛŽˆÚH\È\™H›È[\ÜÝ][Y[[ˆ™[\˜HŒËŒÊŠ‚Š[œÝÙ\ŽŠˆHX›\ÚYŒËŒš[˜\žH\È›È[Ù[H[\ÜËˆHÓH[›ØØ][Û‚˜ÚXÚÜÈÛ›HH^XÚ]H˜[YYžž[ÛÝ\˜ÙHš[KˆHÝ\œ™[[œ™[X\ÙY™]™[ÜY[œ˜[˜Ú\È^\š[Y[[[\ÜÈ›Üˆ[˜Ý[ÛœË\\Ë™XÛÜ™ËX›\ËšY]ÜËÛÛ\Û™[Ë[™›Ú™XÝ]ÚYH]X˜\ÙHÛÛ™šYÝ\˜][Û‹ˆÛÛ[X[™Âš[˜ÛY[™ÈÙ\™XØ[ˆ\ÙHH[šÙY›Ú™XÝÜ˜\]ÛÛ\]HÝX›H[Ù[\Â˜[™XÚØYÙH^ÜÈ™[XZ[ˆ[›™YÛÜšË‚‚ŠŠ”]Y\Ý[ÛŽˆØ[ˆHZ[ÛÛ[X[™[[™H\XØ][ÛœÈÚ]™[\˜OÊŠ‚Š[œÝÙ\ŽŠˆY\Ëˆš[
+
+X[Z]È˜[Y\Ëˆ™XYØÛÛœÛÛJ”›Û\ˆŠX™XYÈH[™H[™™]\›œÈÝš[™ÏØÈH[˜Ý[Ûˆ™YYÈ\Ù\ÈÛÛœÛÛX[™H›Ú™XÝX^H[ÛÈ™YYÛÛœÛÛHHYX‚‚ŠŠ”]Y\Ý[ÛŽˆÚHÙ\È™[\˜H[\\Ú^™HX\šXQˆ\È]Èš[X\žH]X˜\ÙH[™Ú[™OÊŠ‚Š[œÝÙ\ŽŠˆX\šXQˆ›ÝšY\È^Ù\[Û˜[˜[œØXÝ[Û˜[\™›Ü›X[˜ÙKÜ[‹\ÛÝ\˜ÙHXÙ[œÚ[™Ë›Ø\ÝÛÝYÛÛ\]Xš[]K[™›ØÚË\ÛÛY™[XXš[]H›Üˆ[\œš\ÙHÙXˆ\XØ][ÛœË‚‚‹KKB‚ˆÈÈ\[™^Žˆ™^™\ÛÝ\˜Ù\È[™ÛÛ[][š]B‚‹H
+Š“Ù™šXÚX[Ú]Xˆ™\ÜÚ]ÜžNŠŠˆÚÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜WJÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜JB‹H
+Š‘ØÝ[Y[][Ûˆ	ˆÛ›[™H[™›ÛÚÎŠŠˆÚÎ‹ËÜÚYY[X[›‹˜ÛÛKÚ[™›ÛÚ×JÎ‹ËÜÚYY[X[›‹˜ÛÛKÚ[™›ÛÚÊHÈÚÎ‹ËÜÚYY[X[›‹˜ÛÛKÚ[™XÚJÎ‹ËÜÚYY[X[›‹˜ÛÛKÚ[™XÚ
+B‹H
+Š‘^[\\È	ˆ[\]\ÎŠŠˆÚXÚÈH^[\\ËØ\™XÝÜžH[ˆHÙ™šXÚX[™\ÜÚ]ÜžH›Üˆ[›˜X›H[\]\ÈÛÝ™\š[™È]][XØ][Û‹Ô•QšY]ÜË‘TÕT\Ë[™]X˜\ÙHZYÜ˜][ÛœË‚

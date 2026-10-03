@@ -233,11 +233,15 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
     assert_eq!(document["schema_version"], "1");
     assert_eq!(document["command"], "module plan");
     assert_eq!(document["success"], true);
-    assert_eq!(document["plan"]["kind"], "explicit-import-closure");
+    assert_eq!(
+        document["plan"]["kind"],
+        "known-semantic-dependency-closure"
+    );
     assert_eq!(
         document["plan"]["closure_semantics"],
-        "transitive-imports-only"
+        "explicit-imports-plus-statically-recognized-references"
     );
+    assert_eq!(document["plan"]["database"]["required"], false);
     assert_eq!(
         document["plan"]["source_files"],
         serde_json::json!(["src/invoices.zyl", "src/money.zyl"])
@@ -252,6 +256,109 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
         ["src/invoices.zyl", "src/money.zyl"]
     );
     assert_eq!(document["plan"]["complete_deployment"], false);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_adds_cross_module_views_components_and_database_tables() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nimport \"src/ui.zyl\" as ui\nimport \"src/models.zyl\" as models\nfn main() {}\n",
+        ),
+        (
+            "src/pages.zyl",
+            "page \"/invoices\" { view: InvoiceLayout load invoices = sql<Invoice[]> { SELECT id, customer_id FROM invoices } html { <InvoiceBadge label=\"Invoices\" /> } }\n",
+        ),
+        (
+            "src/ui.zyl",
+            "component InvoiceBadge { props { label: String } html { <strong>{label}</strong> } }\nview InvoiceLayout { html { <main><InvoiceBadge label=\"Title\" /><slot /></main> } }\n",
+        ),
+        (
+            "src/models.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\ntable invoices { id: Id primary auto customer: Customer required }\n",
+        ),
+    ]);
+    let result = run(&directory, &["module", "plan", "main.zyl", "src/pages.zyl"]);
+    let repeated = run(&directory, &["module", "plan", "main.zyl", "src/pages.zyl"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert_eq!(result.stdout, repeated.stdout);
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["source_files"],
+        serde_json::json!(["src/models.zyl", "src/pages.zyl", "src/ui.zyl"])
+    );
+    assert_eq!(document["plan"]["database"]["required"], true);
+    assert_eq!(
+        document["plan"]["database"]["configuration_sources"],
+        serde_json::json!([])
+    );
+    let dependencies = document["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap();
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "page:/invoices"
+            && dependency["to"] == "view:InvoiceLayout"
+            && dependency["kind"] == "view"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "page:/invoices"
+            && dependency["to"] == "component:InvoiceBadge"
+            && dependency["kind"] == "component"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "page:/invoices"
+            && dependency["to"] == "table:invoices"
+            && dependency["kind"] == "page_data_sql"
+    }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_includes_separate_database_configuration_source() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/pages.zyl",
+            "table invoices { id: Id primary auto }\npage \"/invoices\" { load invoices = sql<Invoice[]> { SELECT id FROM invoices } html { <p>Invoices</p> } }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"invoices\" }\n",
+        ),
+    ]);
+    let result = run(&directory, &["module", "plan", "main.zyl", "src/pages.zyl"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["source_files"],
+        serde_json::json!(["src/database.zyl", "src/pages.zyl"])
+    );
+    assert_eq!(document["plan"]["database"]["required"], true);
+    assert_eq!(
+        document["plan"]["database"]["configuration_sources"],
+        serde_json::json!(["src/database.zyl"])
+    );
+    assert!(document["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|dependency| {
+            dependency["from_module"] == "src/pages.zyl"
+                && dependency["to_module"] == "src/database.zyl"
+                && dependency["kind"] == "database_configuration"
+        }));
     fs::remove_dir_all(directory).unwrap();
 }
 

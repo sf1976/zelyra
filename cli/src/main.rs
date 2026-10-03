@@ -1,11364 +1,4177 @@
-use rand_core::{OsRng, RngCore};
-use serde_json::{json, Map, Value};
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    env,
-    fmt::Write as _,
-    fs,
-    io::Read,
-    net::TcpListener,
-    path::PathBuf,
-    process::Command,
-    process::ExitCode,
-    process::Stdio,
-    sync::{Arc, Mutex},
-};
-use zelyra_ast::Type;
-use zelyra_database::{
-    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_null_values,
-    create_mariadb_database, diff, inspect_mariadb, inspect_postgres, inspect_sqlite,
-    sql::check_program as check_sql_program, table_has_rows, Backend, Query, QueryResult,
-    QueryValue, Risk, Schema,
-};
-use zelyra_forms::{check_program as check_form_program, validate as validate_form};
-use zelyra_hir::lower;
-use zelyra_lexer::lex;
-use zelyra_parser::parse;
-use zelyra_runtime::{
-    check, check_apis, check_capabilities_with_grants,
-    execute_function_with_capabilities_and_policies, execute_with_capabilities_and_policies,
-    execute_with_database_and_capabilities_and_policies, verify as verify_program,
-    FileSystemPolicy, NetworkPolicy, ProcessPolicy, RuntimePolicy, Value as RuntimeValue,
-    VerificationResult, VerificationStatus, KNOWN_CAPABILITIES,
-};
-use zelyra_web::{
-    audit_insert_queries, html_escape, parse_urlencoded, serve_app, ApiRoute, AuthRoute,
-    CorsPolicy, CrudActionRoute, CrudRoute, CsrfProtection, FormRoute, ProjectUiCatalogs, Response,
-    Route, RouteData, RouteQuery, TableViewFilter, TableViewFilterKind, TableViewRoute, UiLanguage,
-    UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
-};
-
-mod edit;
-mod formatter;
-mod holes;
-mod impact;
-mod project;
-mod updater;
-use formatter::format_source;
-use holes::collect_typed_holes;
-use impact::{build_impact_with_sources, focus_impact};
-
-const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
-const MACHINE_MANAGEMENT_DEMO_DATA: &str =
-    include_str!("../../examples/machine_management_demo.sql");
-const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
-const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
-const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
-const PROJECT_THEME_TEMPLATE: &str = r#"/*
-Optional project-local overrides for the built-in Zelyra web design.
-Uncomment a token below and change its value. This file is sent to browsers;
-never put passwords, API keys, or private data here.
-
-Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
-*/
-:root {
-    /* --zelyra-color-accent: #7557f6; */
-    /* --zelyra-color-accent-strong: #665ce9; */
-    /* --zelyra-color-accent-text: #634ce0; */
-    /* --zelyra-color-accent-soft: #f8f6ff; */
-    /* --zelyra-color-ink: #172033; */
-    /* --zelyra-color-muted: #738097; */
-    /* --zelyra-color-border: #e8edf4; */
-    /* --zelyra-color-canvas: #f5f7fb; */
-    /* --zelyra-color-surface: #ffffff; */
-    /* --zelyra-color-surface-subtle: #f9faff; */
-    /* --zelyra-color-sidebar-start: #171c32; */
-    /* --zelyra-color-sidebar-middle: #202743; */
-    /* --zelyra-color-sidebar-end: #263958; */
-    /* --zelyra-color-sidebar-foreground: #f6f7ff; */
-    /* --zelyra-color-sidebar-muted: #bac4d8; */
-    /* --zelyra-color-hero-start: #262f52; */
-    /* --zelyra-color-hero-middle: #3e4381; */
-    /* --zelyra-color-hero-end: #6258bb; */
-    /* --zelyra-color-success-background: #effbf7; */
-    /* --zelyra-color-success-border: #bcebdd; */
-    /* --zelyra-color-success-ink: #17654f; */
-    /* --zelyra-color-danger-background: #fff5f5; */
-    /* --zelyra-color-danger-border: #f2c8cc; */
-    /* --zelyra-color-danger-ink: #8b303c; */
-    /* --zelyra-color-focus: #8f7aff; */
-    /* --zelyra-font-body: Inter, system-ui, sans-serif; */
-    /* --zelyra-radius-card: 16px; */
-    /* --zelyra-radius-control: 10px; */
-    /* --zelyra-content-max-width: 1180px; */
-}
-"#;
-
-fn usage() {
-    eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
-    eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl>` previews a source-only dependency closure");
-    eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
-    eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
-}
-
-fn version_command() -> ExitCode {
-    println!("zelyra {}", env!("CARGO_PKG_VERSION"));
-    ExitCode::SUCCESS
-}
-
-const MACHINE_SCHEMA_VERSION: &str = "1";
-
-struct JsonDiagnosticCollector {
-    path: String,
-    source: String,
-    diagnostics: Vec<Value>,
-}
-
-thread_local! {
-    static JSON_DIAGNOSTICS: RefCell<Option<JsonDiagnosticCollector>> = const { RefCell::new(None) };
-    static PROJECT_SOURCES: RefCell<Vec<project::ProjectSource>> = const { RefCell::new(Vec::new()) };
-    static PROJECT_MODULES: RefCell<Vec<project::ProjectModule>> = const { RefCell::new(Vec::new()) };
-}
-
-fn database_usage() {
-    eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
-    );
-}
-
-const DEFAULT_WEB_PORT: u16 = 3000;
-const DEFAULT_DATABASE_HOST_PORT: u16 = 3306;
-const DEFAULT_SETUP_WEB_PORT: u16 = 3030;
-const PROJECT_THEME_CSS_FILE: &str = "zelyra.theme.css";
-const PROJECT_THEME_CSS_MAX_BYTES: u64 = 128 * 1024;
-const PROJECT_LOCALE_DIRECTORY: &str = "locales";
-const PROJECT_LOCALE_MAX_BYTES: u64 = 256 * 1024;
-
-struct ProjectOptions {
-    allow_current_directory: bool,
-    with_mariadb: bool,
-    crud_template: bool,
-    auth_template: bool,
-    business_template: bool,
-    web_port: u16,
-    host_port: u16,
-    database_host_port: u16,
-    host_port_given: bool,
-    database_host_port_given: bool,
-}
-
-#[derive(Default)]
-struct SetupOptions {
-    host_port: Option<u16>,
-    database_host_port: Option<u16>,
-}
-
-struct LocalEnvSetup {
-    created: bool,
-    port_notes: Vec<String>,
-}
-
-fn parse_web_port(value: &str) -> Result<u16, String> {
-    parse_port(value, "web")
-}
-
-fn parse_database_host_port(value: &str) -> Result<u16, String> {
-    parse_port(value, "database host")
-}
-
-fn parse_port(value: &str, label: &str) -> Result<u16, String> {
-    let port = value
-        .parse::<u16>()
-        .map_err(|_| format!("{label} port `{value}` must be an integer between 1 and 65535"))?;
-    if port == 0 {
-        return Err(format!("{label} port must be between 1 and 65535"));
-    }
-    Ok(port)
-}
-
-fn port_is_available(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).is_ok()
-}
-
-fn find_free_port(start: u16, reserved: &[u16]) -> Option<u16> {
-    (start..=u16::MAX).find(|port| !reserved.contains(port) && port_is_available(*port))
-}
-
-fn resolve_host_port(
-    requested: u16,
-    explicitly_given: bool,
-    label: &str,
-    auto_select: bool,
-    reserved: &[u16],
-) -> Result<(u16, Option<String>), String> {
-    if !explicitly_given && !auto_select {
-        return Ok((requested, None));
-    }
-    if port_is_available(requested) && !reserved.contains(&requested) {
-        return Ok((requested, None));
-    }
-    if explicitly_given {
-        return Err(format!(
-            "{label} port {requested} is already in use; choose a different port"
-        ));
-    }
-    let selected = find_free_port(requested.saturating_add(1), reserved).ok_or_else(|| {
-        format!("could not find a free {label} port after {requested}; choose a port explicitly")
-    })?;
-    Ok((
-        selected,
-        Some(format!(
-            "{label} port {requested} is unavailable; selected free port {selected}"
-        )),
-    ))
-}
-
-fn resolve_project_host_ports(
-    path: &str,
-    options: &ProjectOptions,
-) -> Result<(u16, u16, Vec<String>), String> {
-    if !options.with_mariadb {
-        return Ok((options.host_port, options.database_host_port, Vec::new()));
-    }
-    let env_exists = std::path::Path::new(path).join(".env").is_file();
-    let auto_select = !env_exists;
-    let (host_port, host_note) = resolve_host_port(
-        options.host_port,
-        options.host_port_given,
-        "web host",
-        auto_select,
-        &[],
-    )?;
-    let (database_host_port, database_note) = resolve_host_port(
-        options.database_host_port,
-        options.database_host_port_given,
-        "MariaDB host",
-        auto_select,
-        &[host_port],
-    )?;
-    let notes = [host_note, database_note].into_iter().flatten().collect();
-    Ok((host_port, database_host_port, notes))
-}
-
-fn generate_local_secret() -> Result<String, String> {
-    let mut bytes = [0_u8; 24];
-    OsRng
-        .try_fill_bytes(&mut bytes)
-        .map_err(|error| format!("cannot generate a local secret: {error}"))?;
-    let mut secret = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(&mut secret, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    Ok(secret)
-}
-
-fn mariadb_env_template(web_port: u16, host_port: u16, database_host_port: u16) -> String {
-    format!(
-        r#"# Zelyra local MariaDB configuration.
-# This file is safe to edit locally but must never be committed.
-#
-# The active values below configure the generated MariaDB Compose project and
-# the default German, guided Zelyra experience. Change language to `en` or
-# level to `work` for the concise English work interface.
-# The database host port is active so the CLI and Compose always use the
-# selected port together.
-ZELYRA_DB_HOST_PORT={database_host_port}
-ZELYRA_LANGUAGE=de
-ZELYRA_LEVEL=learn
-ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
-DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
-MARIADB_DATABASE=zelyra_app
-MARIADB_USER=zelyra
-MARIADB_PASSWORD=change-me
-MARIADB_ROOT_PASSWORD=change-me-root
-
-# Optional web port overrides. The generated Compose file already contains
-# the selected defaults below, so these lines can remain commented out.
-# ZELYRA_WEB_PORT={web_port}
-# ZELYRA_HOST_PORT={host_port}
-
-# Optional public hostnames or IP addresses, comma-separated. Add the host
-# used in your browser when serving through a LAN address or reverse proxy.
-# ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1],app.example.com
-
-# Optional feature switches. They default to true and are normally not needed.
-# ZELYRA_FEATURE_WEB=true
-# ZELYRA_FEATURE_API=true
-# ZELYRA_FEATURE_CRUD=true
-# ZELYRA_FEATURE_AUTH=true
-# ZELYRA_FEATURE_AUDIT=true
-
-# Optional local request protection and application settings.
-# ZELYRA_AUTH_TOKEN=replace-with-a-local-token
-# ZELYRA_AUTH_PERMISSIONS=customers.view,customers.edit
-# ZELYRA_MODE=development
-
-# Optional CORS settings belong in zelyra.toml and should only be enabled with
-# an explicit project decision. Do not put production secrets in this file.
-"#
-    )
-}
-
-fn template_port(template: &str, key: &str, fallback: u16) -> u16 {
-    template
-        .lines()
-        .map(str::trim)
-        .map(|line| line.strip_prefix('#').unwrap_or(line).trim())
-        .find_map(|line| {
-            line.strip_prefix(&format!("{key}="))
-                .and_then(|value| parse_port(value.trim(), key).ok())
-        })
-        .unwrap_or(fallback)
-}
-
-fn replace_template_env_assignment(template: &str, key: &str, value: u16, active: bool) -> String {
-    let mut replaced = false;
-    let mut lines = template
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            let setting = trimmed.strip_prefix('#').unwrap_or(trimmed).trim_start();
-            if setting.starts_with(&format!("{key}=")) {
-                replaced = true;
-                let indentation = &line[..line.len() - trimmed.len()];
-                if active {
-                    format!("{indentation}{key}={value}")
-                } else {
-                    format!("{indentation}# {key}={value}")
-                }
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>();
-    if !replaced {
-        lines.push(if active {
-            format!("{key}={value}")
-        } else {
-            format!("# {key}={value}")
-        });
-    }
-    lines.join("\n") + "\n"
-}
-
-fn prepared_local_env_template(
-    directory: &std::path::Path,
-    options: &SetupOptions,
-) -> Result<(String, Vec<String>), String> {
-    let mut template = local_mariadb_template(directory)?;
-    let requested_host_port = options
-        .host_port
-        .unwrap_or_else(|| template_port(&template, "ZELYRA_HOST_PORT", DEFAULT_WEB_PORT));
-    let template_database_host_port =
-        template_port(&template, "ZELYRA_DB_HOST_PORT", DEFAULT_DATABASE_HOST_PORT);
-    let requested_database_host_port = options
-        .database_host_port
-        .unwrap_or(template_database_host_port);
-    let (host_port, host_note) = resolve_host_port(
-        requested_host_port,
-        options.host_port.is_some(),
-        "web host",
-        true,
-        &[],
-    )?;
-    let (database_host_port, database_note) = resolve_host_port(
-        requested_database_host_port,
-        options.database_host_port.is_some(),
-        "MariaDB host",
-        true,
-        &[host_port],
-    )?;
-    if database_host_port != template_database_host_port
-        && !template.contains("${ZELYRA_DB_HOST_PORT")
-    {
-        return Err(
-            "cannot safely select a MariaDB port because DATABASE_URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
-                .into(),
-        );
-    }
-    if options.host_port.is_some() || host_port != requested_host_port {
-        template = replace_template_env_assignment(&template, "ZELYRA_HOST_PORT", host_port, true);
-    }
-    template =
-        replace_template_env_assignment(&template, "ZELYRA_DB_HOST_PORT", database_host_port, true);
-    Ok((
-        template,
-        [host_note, database_note].into_iter().flatten().collect(),
-    ))
-}
-
-fn render_local_env(template: &str) -> Result<String, String> {
-    let database_password = generate_local_secret()?;
-    let root_password = generate_local_secret()?;
-    Ok(template
-        .replace(
-            "DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/zelyra_app",
-            &format!(
-                "DATABASE_URL=mariadb://zelyra:{database_password}@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app"
-            ),
-        )
-        .replace(
-            "MARIADB_PASSWORD=change-me",
-            &format!("MARIADB_PASSWORD={database_password}"),
-        )
-        .replace(
-            "MARIADB_ROOT_PASSWORD=change-me-root",
-            &format!("MARIADB_ROOT_PASSWORD={root_password}"),
-        ))
-}
-
-fn protect_env_file(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)
-            .map_err(|error| format!("cannot inspect `{}`: {error}", path.display()))?
-            .permissions();
-        permissions.set_mode(0o600);
-        fs::set_permissions(path, permissions)
-            .map_err(|error| format!("cannot protect `{}`: {error}", path.display()))?;
-    }
-    Ok(())
-}
-
-fn write_local_env_file(path: &std::path::Path, template: &str) -> Result<bool, String> {
-    if path.exists() {
-        return Ok(false);
-    }
-    let contents = render_local_env(template)?;
-    fs::write(path, contents)
-        .map_err(|error| format!("cannot write `{}`: {error}", path.display()))?;
-    protect_env_file(path)?;
-    Ok(true)
-}
-
-fn local_mariadb_template(directory: &std::path::Path) -> Result<String, String> {
-    let example_file = directory.join(".env.example");
-    if example_file.is_file() {
-        return fs::read_to_string(&example_file)
-            .map_err(|error| format!("cannot read `{}`: {error}", example_file.display()));
-    }
-    let config_file = directory.join("zelyra.toml");
-    let is_mariadb_project = fs::read_to_string(&config_file)
-        .ok()
-        .is_some_and(|config| config.contains("engine = \"mariadb\""));
-    if !is_mariadb_project {
-        return Err(format!(
-            "`{}` has no `.env.example` and no MariaDB project configuration; run `zelyra new <directory> --mariadb` first",
-            directory.display()
-        ));
-    }
-    Ok(mariadb_env_template(
-        DEFAULT_WEB_PORT,
-        DEFAULT_WEB_PORT,
-        DEFAULT_DATABASE_HOST_PORT,
-    ))
-}
-
-fn ensure_local_env_file(
-    directory: &std::path::Path,
-    options: &SetupOptions,
-) -> Result<LocalEnvSetup, String> {
-    let env_file = directory.join(".env");
-    if env_file.exists() {
-        if options.host_port.is_some() || options.database_host_port.is_some() {
-            return Err(
-                "an existing .env is never changed; update its ZELYRA_HOST_PORT or ZELYRA_DB_HOST_PORT manually"
-                    .into(),
-            );
-        }
-        return Ok(LocalEnvSetup {
-            created: false,
-            port_notes: Vec::new(),
-        });
-    }
-    let (template, port_notes) = prepared_local_env_template(directory, options)?;
-    let created = write_local_env_file(&env_file, &template)?;
-    Ok(LocalEnvSetup {
-        created,
-        port_notes,
-    })
-}
-
-fn setup_project(path: &str, options: &SetupOptions) -> ExitCode {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
-        return ExitCode::from(1);
-    }
-    let env_file = directory.join(".env");
-    let existed = env_file.exists();
-    if !existed && !directory.join(".env.example").is_file() {
-        println!("`.env.example` not found; using the safe built-in MariaDB defaults for `{path}`");
-    }
-    let setup = match ensure_local_env_file(directory, options) {
-        Ok(setup) => setup,
-        Err(error) => {
-            eprintln!("error[E-SETUP-001]: {error}");
-            return ExitCode::from(1);
-        }
-    };
-    for note in setup.port_notes {
-        println!("note: {note}");
-    }
-    if existed {
-        println!("kept existing {}", env_file.display());
-        println!("no credentials were changed or printed");
-        return ExitCode::SUCCESS;
-    }
-    if !setup.created {
-        eprintln!(
-            "error[E-SETUP-002]: could not create {}",
-            env_file.display()
-        );
-        return ExitCode::from(1);
-    }
-    println!(
-        "created {} with local MariaDB credentials",
-        env_file.display()
-    );
-    println!("credentials were generated locally and are not shown");
-    print_compose_start_hint();
-    if cfg!(windows) {
-        println!("then load .env in your shell and run: zelyra db setup main.zyl");
-    } else {
-        println!("then run: set -a; . ./.env; set +a; zelyra db setup main.zyl");
-    }
-    ExitCode::SUCCESS
-}
-
-fn create_project(path: &str, mut options: ProjectOptions) -> ExitCode {
-    let directory = std::path::Path::new(path);
-    if directory.exists() && !options.allow_current_directory {
-        eprintln!("error[E-INIT-001]: directory `{path}` already exists");
-        return ExitCode::from(1);
-    }
-    let (host_port, database_host_port, port_notes) =
-        match resolve_project_host_ports(path, &options) {
-            Ok(ports) => ports,
-            Err(error) => {
-                eprintln!("error[E-INIT-005]: {error}");
-                return ExitCode::from(2);
-            }
-        };
-    options.host_port = host_port;
-    options.database_host_port = database_host_port;
-    for note in port_notes {
-        println!("note: {note}");
-    }
-    if let Err(error) = fs::create_dir_all(directory) {
-        eprintln!("error[E-INIT-002]: cannot create `{path}`: {error}");
-        return ExitCode::from(1);
-    }
-    let database_section = if options.with_mariadb {
-        "[database.main]\nengine = \"mariadb\"\n"
-    } else {
-        ""
-    };
-    let project_config = format!(
-        r#"[project]
-name = "zelyra-app"
-version = "{version}"
-zelyra = "0.1"
-
-{database_section}
-
-[capabilities]
-database = true
-network = false
-console = false
-"#,
-        version = env!("CARGO_PKG_VERSION"),
-        database_section = database_section
-    );
-    let main_source = if options.business_template {
-        MARIADB_BUSINESS_TEMPLATE
-    } else if options.crud_template {
-        MARIADB_CRUD_TEMPLATE
-    } else if options.auth_template {
-        MARIADB_AUTH_TEMPLATE
-    } else if options.with_mariadb {
-        MARIADB_MINIMAL_TEMPLATE
-    } else {
-        r#"fn main() {
-    print("Hello from Zelyra")
-}
-"#
-    };
-    let mut files = vec![
-        ("zelyra.toml", project_config.to_owned()),
-        ("main.zyl", main_source.to_owned()),
-        (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
-        ("locales/de.json", "{}\n".to_owned()),
-        ("locales/en.json", "{}\n".to_owned()),
-    ];
-    if options.crud_template {
-        files.push((
-            "machine-management-demo.sql",
-            MACHINE_MANAGEMENT_DEMO_DATA.to_owned(),
-        ));
-    }
-    if options.with_mariadb {
-        let env_value = |name: &str| format!("{}{{{name}}}", '$');
-        let web_port_value = format!("{}{{ZELYRA_WEB_PORT:-{}}}", '$', options.web_port);
-        let host_port_value = format!("{}{{ZELYRA_HOST_PORT:-{}}}", '$', options.host_port);
-        let database_host_port_value = format!(
-            "{}{{ZELYRA_DB_HOST_PORT:-{}}}",
-            '$', options.database_host_port
-        );
-        files.extend([
-            (
-                ".env.example",
-                mariadb_env_template(
-                    options.web_port,
-                    options.host_port,
-                    options.database_host_port,
-                ),
-            ),
-            (
-                "docker-compose.mariadb.yml",
-                r#"services:
-  mariadb:
-    image: mariadb:11
-    restart: unless-stopped
-    environment:
-      MARIADB_DATABASE: __MARIADB_DATABASE__
-      MARIADB_USER: __MARIADB_USER__
-      MARIADB_PASSWORD: __MARIADB_PASSWORD__
-      MARIADB_ROOT_PASSWORD: __MARIADB_ROOT_PASSWORD__
-    ports:
-      - "127.0.0.1:__DATABASE_HOST_PORT__:3306"
-    volumes:
-      - zelyra_mariadb_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  web:
-    build: .
-    command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
-    environment:
-      DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
-      ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
-      ZELYRA_LEVEL: __ZELYRA_LEVEL__
-      ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:__HOST_PORT__:__WEB_PORT__"
-
-volumes:
-  zelyra_mariadb_data:
-"#
-                .replace("__MARIADB_DATABASE__", &env_value("MARIADB_DATABASE"))
-                .replace("__MARIADB_USER__", &env_value("MARIADB_USER"))
-                .replace("__MARIADB_PASSWORD__", &env_value("MARIADB_PASSWORD"))
-                .replace("__MARIADB_ROOT_PASSWORD__", &env_value("MARIADB_ROOT_PASSWORD"))
-                .replace(
-                    "__ZELYRA_LANGUAGE__",
-                    &format!("{}{{ZELYRA_LANGUAGE:-de}}", '$'),
-                )
-                .replace("__ZELYRA_LEVEL__", &format!("{}{{ZELYRA_LEVEL:-learn}}", '$'))
-                .replace(
-                    "__ZELYRA_ALLOWED_HOSTS__",
-                    &format!(
-                        "{}{{ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}}",
-                        '$'
-                    ),
-                )
-                .replace("__WEB_PORT__", &web_port_value)
-                .replace("__HOST_PORT__", &host_port_value)
-                .replace("__DATABASE_HOST_PORT__", &database_host_port_value),
-            ),
-            (
-                "Dockerfile",
-                r#"FROM rust:1-bookworm AS build
-ARG ZELYRA_REF=__ZELYRA_DEFAULT_REF__
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
-RUN cargo install --path /zelyra/cli --root /out
-
-FROM debian:bookworm-slim
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates mariadb-client \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
-COPY main.zyl zelyra.toml zelyra.theme.css ./
-COPY locales ./locales
-EXPOSE __WEB_PORT__
-CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
-"#
-                .replace("__ZELYRA_REF__", &env_value("ZELYRA_REF"))
-                .replace(
-                    "__ZELYRA_DEFAULT_REF__",
-                    &format!("v{}", env!("CARGO_PKG_VERSION")),
-                )
-                .replace("__WEB_PORT__", &options.web_port.to_string()),
-            ),
-            (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
-            (".gitignore", ".env\ntarget/\n".to_owned()),
-        ]);
-    }
-    for (name, contents) in files {
-        let file = directory.join(name);
-        if file.exists() && options.allow_current_directory {
-            continue;
-        }
-        if let Some(parent) = file.parent() {
-            if let Err(error) = fs::create_dir_all(parent) {
-                eprintln!(
-                    "error[E-INIT-003]: cannot create `{}`: {error}",
-                    parent.display()
-                );
-                return ExitCode::from(1);
-            }
-        }
-        let contents = contents.to_owned();
-        if let Err(error) = fs::write(&file, contents) {
-            eprintln!(
-                "error[E-INIT-003]: cannot write `{}`: {error}",
-                file.display()
-            );
-            return ExitCode::from(1);
-        }
-    }
-    println!("created Zelyra project in {}", directory.display());
-    if options.with_mariadb {
-        let env_file = directory.join(".env");
-        let env_example = directory.join(".env.example");
-        match write_local_env_file(
-            &env_file,
-            &mariadb_env_template(
-                options.web_port,
-                options.host_port,
-                options.database_host_port,
-            ),
-        ) {
-            Ok(true) => println!("created protected {}", env_file.display()),
-            Ok(false) => println!("kept existing {}", env_file.display()),
-            Err(error) => {
-                eprintln!("error[E-INIT-004]: {error}");
-                return ExitCode::from(1);
-            }
-        }
-        println!("reference template: {}", env_example.display());
-        println!("then start MariaDB with:");
-        print_compose_start_hint();
-        if cfg!(windows) {
-            println!("then load .env in your shell and run: zelyra db setup main.zyl");
-        } else {
-            println!("then run: set -a; . ./.env; set +a; zelyra db setup main.zyl");
-        }
-    } else {
-        println!("next: cd {} && zelyra run main.zyl", path);
-    }
-    ExitCode::SUCCESS
-}
-
-fn begin_json_diagnostics(path: &str, source: &str) {
-    JSON_DIAGNOSTICS.with(|collector| {
-        *collector.borrow_mut() = Some(JsonDiagnosticCollector {
-            path: context_entry(path),
-            source: source.into(),
-            diagnostics: Vec::new(),
-        });
-    });
-}
-
-fn finish_json_diagnostics() -> Vec<Value> {
-    JSON_DIAGNOSTICS.with(|collector| {
-        collector
-            .borrow_mut()
-            .take()
-            .map_or_else(Vec::new, |collector| collector.diagnostics)
-    })
-}
-
-fn source_offset(source: &str, line: usize, column: usize) -> usize {
-    if line == 0 {
-        return 0;
-    }
-    let mut current_line = 1;
-    let mut offset = 0;
-    for line_text in source.split_inclusive('\n') {
-        if current_line == line {
-            return offset
-                + column
-                    .saturating_sub(1)
-                    .min(line_text.trim_end_matches('\n').len());
-        }
-        offset += line_text.len();
-        current_line += 1;
-    }
-    if current_line == line {
-        offset
-            + column
-                .saturating_sub(1)
-                .min(source.len().saturating_sub(offset))
-    } else {
-        source.len()
-    }
-}
-
-fn point_span(source: &str, line: usize, column: usize) -> zelyra_ast::Span {
-    let start_offset = source_offset(source, line, column);
-    let end = if start_offset < source.len() {
-        start_offset
-            + source[start_offset..]
-                .chars()
-                .next()
-                .map_or(1, char::len_utf8)
-    } else {
-        start_offset
-    };
-    zelyra_ast::Span::new(start_offset, end, line, column)
-}
-
-fn span_value(source: &str, span: zelyra_ast::Span) -> Value {
-    let (end_line, end_column) = source_position(source, span.end);
-    json!({
-        "start": { "offset": span.start, "line": span.line, "column": span.column },
-        "end": { "offset": span.end, "line": end_line, "column": end_column }
-    })
-}
-
-fn diagnostic_with_span(path: &str, code: &str, message: &str, span: zelyra_ast::Span) {
-    let source =
-        PROJECT_SOURCES.with(|sources| sources.borrow().get(span.source_id as usize).cloned());
-    let captured = JSON_DIAGNOSTICS.with(|collector| {
-        let mut collector = collector.borrow_mut();
-        let Some(collector) = collector.as_mut() else {
-            return false;
-        };
-        let file = if span.source_id == 0 && !collector.path.is_empty() {
-            collector.path.clone()
-        } else {
-            source
-                .as_ref()
-                .map_or_else(|| path.to_owned(), |source| source.path.clone())
-        };
-        let source_text = source
-            .as_ref()
-            .map_or(collector.source.as_str(), |source| source.text.as_str());
-        collector.diagnostics.push(json!({
-            "code": code,
-            "severity": "error",
-            "message": message,
-            "file": file,
-            "span": span_value(source_text, span)
-        }));
-        true
-    });
-    if !captured {
-        eprintln!(
-            "error[{code}]: {message}\n\n --> {}:{}:{}",
-            source.as_ref().map_or(path, |source| source.path.as_str()),
-            span.line,
-            span.column
-        );
-    }
-}
-
-fn diagnostic(path: &str, code: &str, message: &str, line: usize, column: usize) {
-    let span = JSON_DIAGNOSTICS.with(|collector| {
-        collector
-            .borrow()
-            .as_ref()
-            .map(|collector| point_span(&collector.source, line, column))
-    });
-    diagnostic_with_span(
-        path,
-        code,
-        message,
-        span.unwrap_or_else(|| zelyra_ast::Span::new(0, 0, line, column)),
-    );
-}
-
-fn machine_document(
-    command: &str,
-    success: bool,
-    diagnostics: Vec<Value>,
-    fields: impl IntoIterator<Item = (String, Value)>,
-) -> Value {
-    let mut document = Map::new();
-    document.insert(
-        "schema_version".into(),
-        Value::String(MACHINE_SCHEMA_VERSION.into()),
-    );
-    document.insert("command".into(), Value::String(command.into()));
-    document.insert("success".into(), Value::Bool(success));
-    document.insert("diagnostics".into(), Value::Array(diagnostics));
-    for (key, value) in fields {
-        document.insert(key, value);
-    }
-    Value::Object(document)
-}
-
-fn print_machine_document(document: &Value) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(document).expect("machine document must be serializable")
-    );
-}
-
-fn load(path: &str) -> Result<zelyra_ast::Program, ()> {
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(error) => {
-            diagnostic(
-                path,
-                "E-IO-001",
-                &format!("cannot read `{path}`: {error}"),
-                1,
-                1,
-            );
-            return Err(());
-        }
-    };
-    parse_source(path, &source)
-}
-
-fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
-    let tokens = match lex(source) {
-        Ok(tokens) => tokens,
-        Err(error) => {
-            diagnostic_with_span(path, "E-LEX-001", &error.message, error.span);
-            return Err(());
-        }
-    };
-    match parse(&tokens) {
-        Ok(program) => Ok(program),
-        Err(error) => {
-            diagnostic_with_span(path, "E-PARSE-001", &error.message, error.span);
-            Err(())
-        }
-    }
-}
-
-fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
-    PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
-    PROJECT_MODULES.with(|modules| modules.borrow_mut().clear());
-    let loaded = match project::load(path) {
-        Ok(loaded) => loaded,
-        Err(error) => {
-            PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = error.sources.to_vec());
-            diagnostic_with_span(&error.path, error.code, &error.message, error.span);
-            return Err(());
-        }
-    };
-    PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = loaded.sources.clone());
-    PROJECT_MODULES.with(|modules| *modules.borrow_mut() = loaded.modules.clone());
-    Ok(loaded)
-}
-
-fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
-    let loaded = load_project(path)?;
-    let source = loaded
-        .sources
-        .first()
-        .map_or_else(String::new, |source| source.text.clone());
-    validate_program(path, &source, loaded.program)
-}
-
-fn validate_program(
-    path: &str,
-    source: &str,
-    program: zelyra_ast::Program,
-) -> Result<zelyra_ast::Program, ()> {
-    if !reject_typed_holes(source, path, &program) {
-        return Err(());
-    }
-    validate_project_features(path, &program)?;
-    if let Err(errors) = lower(&program) {
-        for error in errors {
-            diagnostic_with_span(path, "E-NAME-001", &error.message, error.span);
-        }
-        return Err(());
-    }
-    if !program.functions.is_empty() {
-        if let Err(errors) = check(&program) {
-            for error in errors {
-                diagnostic_with_span(path, "E-TYPE-001", &error.message, error.span);
-            }
-            return Err(());
-        }
-    }
-    if validate_capabilities(path, &program).is_err() {
-        return Err(());
-    }
-    if let Err(error) = project_filesystem_policy(path) {
-        diagnostic(path, "E-FS-002", &error, 1, 1);
-        return Err(());
-    }
-    if let Err(error) = project_network_policy(path) {
-        diagnostic(path, "E-NET-002", &error, 1, 1);
-        return Err(());
-    }
-    if let Err(error) = project_process_policy(path) {
-        diagnostic(path, "E-PROC-002", &error, 1, 1);
-        return Err(());
-    }
-    if let Err(error) = project_cors_policy(path) {
-        diagnostic(path, "E-WEB-004", &error, 1, 1);
-        return Err(());
-    }
-    if let Err(errors) = check_apis(&program) {
-        for error in errors {
-            diagnostic_with_span(path, "E-API-001", &error.message, error.span);
-        }
-        return Err(());
-    }
-    if !validate_views(path, &program) {
-        return Err(());
-    }
-    if !validate_page_inputs(path, &program) {
-        return Err(());
-    }
-    if !validate_page_data(path, &program) {
-        return Err(());
-    }
-    if !validate_components(path, &program) {
-        return Err(());
-    }
-    let schema = match build_schema(&program) {
-        Ok(schema) => schema,
-        Err(errors) => {
-            for error in errors {
-                diagnostic_with_span(path, "E-DB-001", &error.message, error.span);
-            }
-            return Err(());
-        }
-    };
-    {
-        if !validate_auth(path, &program, &schema) {
-            return Err(());
-        }
-        if !validate_cruds(path, &program, &schema) {
-            return Err(());
-        }
-        if !validate_tableviews(path, &program, &schema) {
-            return Err(());
-        }
-        if let Err(errors) = check_sql_program(&program, &schema) {
-            for error in errors {
-                diagnostic_with_span(path, "E-SQL-004", &error.message, error.span);
-            }
-            return Err(());
-        }
-        if let Err(errors) = check_form_program(&program, &schema) {
-            for error in errors {
-                diagnostic_with_span(path, "E-FORM-001", &error.message, error.span);
-            }
-            return Err(());
-        }
-    }
-    Ok(program)
-}
-
-fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -> bool {
-    let holes = collect_typed_holes(program);
-    for hole in &holes {
-        let expected = hole
-            .expected_type
-            .as_ref()
-            .map_or_else(|| "unknown".to_owned(), ToString::to_string);
-        let values = if hole.visible_values.is_empty() {
-            "none".to_owned()
-        } else {
-            hole.visible_values.join(", ")
-        };
-        let functions = if hole.visible_functions.is_empty() {
-            "none".to_owned()
-        } else {
-            hole.visible_functions.join(", ")
-        };
-        let capabilities = if hole.capabilities.is_empty() {
-            "none".to_owned()
-        } else {
-            hole.capabilities.join(", ")
-        };
-        let contracts = if hole.contract_spans.is_empty() {
-            "none".to_owned()
-        } else {
-            hole.contract_spans
-                .iter()
-                .filter_map(|span| {
-                    source_text_for_span(source, *span)
-                        .get(span.start..span.end)
-                        .map(str::to_owned)
-                })
-                .map(|contract| contract.replace(['\n', '\r'], " "))
-                .collect::<Vec<_>>()
-                .join("; ")
-        };
-        let message = format!(
-            "typed hole `_` is incomplete and cannot be built; expected type: {expected}; visible values: {values}; visible functions: {functions}; capabilities: {capabilities}; contract obligations: {contracts}"
-        );
-        diagnostic_with_span(path, "E-HOLE-001", &message, hole.span);
-    }
-    holes.is_empty()
-}
-
-fn source_text_for_span(fallback: &str, span: zelyra_ast::Span) -> String {
-    PROJECT_SOURCES.with(|sources| {
-        sources
-            .borrow()
-            .get(span.source_id as usize)
-            .map_or_else(|| fallback.to_owned(), |source| source.text.clone())
-    })
-}
-
-fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
-    let mut valid = true;
-    let mut names = HashSet::new();
-    for view in &program.views {
-        if !names.insert(view.name.as_str()) {
-            diagnostic_with_span(
-                path,
-                "E-VIEW-001",
-                &format!("duplicate view definition `{}`", view.name),
-                view.span,
-            );
-            valid = false;
-        }
-        let slots = match slot_invocations(&view.html) {
-            Ok(slots) => slots,
-            Err(message) => {
-                diagnostic_with_span(
-                    path,
-                    "E-VIEW-028",
-                    &format!("view `{}` has invalid slots: {message}", view.name),
-                    view.span,
-                );
-                valid = false;
-                Vec::new()
-            }
-        };
-        let default_slots = slots.iter().filter(|slot| slot.name.is_none()).count();
-        if default_slots != 1 {
-            diagnostic_with_span(
-                path,
-                "E-VIEW-002",
-                &format!(
-                    "view `{}` must contain exactly one default `<slot />` content slot (found {default_slots})",
-                    view.name,
-                ),
-                view.span,
-            );
-            valid = false;
-        }
-        let mut named_slots = HashSet::new();
-        for slot in slots.iter().filter_map(|slot| slot.name.as_deref()) {
-            if !named_slots.insert(slot) {
-                diagnostic_with_span(
-                    path,
-                    "E-VIEW-028",
-                    &format!(
-                        "view `{}` declares named slot `{slot}` more than once",
-                        view.name
-                    ),
-                    view.span,
-                );
-                valid = false;
-            }
-        }
-    }
-    for page in &program.pages {
-        if let Some(view_name) = &page.view {
-            let Some(view) = program.views.iter().find(|view| view.name == *view_name) else {
-                diagnostic(
-                    path,
-                    "E-VIEW-003",
-                    &format!("page `{}` refers to unknown view `{view_name}`", page.path),
-                    page.span.line,
-                    page.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            if let Err(message) = validate_view_content_slots(view, &page.html) {
-                diagnostic(
-                    path,
-                    "E-VIEW-029",
-                    &format!(
-                        "page `{}` has invalid slots for view `{view_name}`: {message}",
-                        page.path
-                    ),
-                    page.span.line,
-                    page.span.column,
-                );
-                valid = false;
-            }
-        } else {
-            match page_layout_slot_invocations(&page.html) {
-                Ok(slots) if !slots.is_empty() => {
-                    diagnostic(
-                        path,
-                        "E-VIEW-029",
-                        "page content slots require a `view: ...` layout",
-                        page.span.line,
-                        page.span.column,
-                    );
-                    valid = false;
-                }
-                Ok(_) => {}
-                Err(message) => {
-                    diagnostic(
-                        path,
-                        "E-VIEW-029",
-                        &format!("page `{}` has invalid slots: {message}", page.path),
-                        page.span.line,
-                        page.span.column,
-                    );
-                    valid = false;
-                }
-            }
-        }
-    }
-    for crud in &program.cruds {
-        if let Some(layout) = &crud.layout {
-            if let Some(view) = program.views.iter().find(|view| view.name == *layout) {
-                if let Err((slot_index, message)) =
-                    validate_crud_layout_slots(view, &crud.layout_slots)
-                {
-                    let span = crud
-                        .layout_slots
-                        .get(slot_index)
-                        .map(|slot| slot.span)
-                        .unwrap_or(crud.span);
-                    diagnostic(
-                        path,
-                        "E-VIEW-031",
-                        &format!(
-                            "CRUD `{}` has invalid content for layout `{layout}`: {message}",
-                            crud.name
-                        ),
-                        span.line,
-                        span.column,
-                    );
-                    valid = false;
-                }
-            } else {
-                diagnostic(
-                    path,
-                    "E-VIEW-030",
-                    &format!(
-                        "CRUD `{}` refers to unknown view layout `{layout}`",
-                        crud.name
-                    ),
-                    crud.span.line,
-                    crud.span.column,
-                );
-                valid = false;
-            }
-        } else if !crud.layout_slots.is_empty() {
-            let slot = &crud.layout_slots[0];
-            diagnostic(
-                path,
-                "E-VIEW-031",
-                &format!(
-                    "CRUD `{}` supplies layout slots but has no `layout: ...` reference",
-                    crud.name
-                ),
-                slot.span.line,
-                slot.span.column,
-            );
-            valid = false;
-        }
-    }
-    valid
-}
-
-fn validate_page_data(path: &str, program: &zelyra_ast::Program) -> bool {
-    let mut valid = true;
-    for page in &program.pages {
-        if page.page_size.is_some()
-            && !page
-                .data
-                .iter()
-                .any(|data| matches!(data.result_type, Type::Array(_)))
-        {
-            diagnostic(
-                path,
-                "E-VIEW-021",
-                "`paginated` requires at least one page collection loaded with an array result type",
-                page.span.line,
-                page.span.column,
-            );
-            valid = false;
-        }
-        let route_names = page_template_bindings(
-            &page.path,
-            &[],
-            &page.inputs,
-            page.page_size,
-            !page.sort.is_empty(),
-            !page.search.is_empty(),
-            &page.filters,
-        );
-        let mut names = HashSet::new();
-        for data in &page.data {
-            if !names.insert(data.name.as_str()) {
-                diagnostic(
-                    path,
-                    "E-VIEW-016",
-                    &format!("page data `{}` is declared more than once", data.name),
-                    data.span.line,
-                    data.span.column,
-                );
-                valid = false;
-            }
-            if route_names.contains_key(&data.name) {
-                diagnostic(
-                    path,
-                    "E-VIEW-016",
-                    &format!(
-                        "page data `{}` conflicts with a route parameter or page input",
-                        data.name
-                    ),
-                    data.span.line,
-                    data.span.column,
-                );
-                valid = false;
-            }
-            if !page_data_type_supported(program, &data.result_type) {
-                diagnostic(
-                    path,
-                    "E-VIEW-017",
-                    &format!(
-                        "page data `{}` must load a named record or table value, found `{}`",
-                        data.name, data.result_type
-                    ),
-                    data.span.line,
-                    data.span.column,
-                );
-                valid = false;
-            }
-        }
-        if !page.sort.is_empty() {
-            let collection_data = page
-                .data
-                .iter()
-                .filter(|data| matches!(data.result_type, Type::Array(_)))
-                .collect::<Vec<_>>();
-            if collection_data.is_empty() {
-                diagnostic(
-                    path,
-                    "E-VIEW-022",
-                    "page `sort` requires at least one collection loaded with an array result type",
-                    page.span.line,
-                    page.span.column,
-                );
-                valid = false;
-            } else {
-                let mut sort_fields = HashSet::new();
-                for field in &page.sort {
-                    if !sort_fields.insert(field.as_str()) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-022",
-                            &format!("page sort field `{field}` is declared more than once"),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                    if !collection_data.iter().all(|data| {
-                        page_collection_fields(program, &data.result_type)
-                            .is_some_and(|fields| fields.iter().any(|candidate| candidate == field))
-                    }) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-023",
-                            &format!(
-                                "page sort field `{field}` does not exist in every collection result type"
-                            ),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                }
-            }
-        }
-        if !page.search.is_empty() {
-            let collection_data = page
-                .data
-                .iter()
-                .filter(|data| matches!(data.result_type, Type::Array(_)))
-                .collect::<Vec<_>>();
-            if collection_data.is_empty() {
-                diagnostic(
-                    path,
-                    "E-VIEW-024",
-                    "page `search` requires at least one collection loaded with an array result type",
-                    page.span.line,
-                    page.span.column,
-                );
-                valid = false;
-            } else {
-                let mut search_fields = HashSet::new();
-                for field in &page.search {
-                    if !search_fields.insert(field.as_str()) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-024",
-                            &format!("page search field `{field}` is declared more than once"),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                    if !collection_data.iter().all(|data| {
-                        page_collection_fields(program, &data.result_type)
-                            .is_some_and(|fields| fields.iter().any(|candidate| candidate == field))
-                    }) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-025",
-                            &format!(
-                                "page search field `{field}` does not exist in every collection result type"
-                            ),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                }
-            }
-        }
-        if !page.filters.is_empty() {
-            let collection_data = page
-                .data
-                .iter()
-                .filter(|data| matches!(data.result_type, Type::Array(_)))
-                .collect::<Vec<_>>();
-            if collection_data.is_empty() {
-                diagnostic(
-                    path,
-                    "E-VIEW-026",
-                    "page `filter` requires at least one collection loaded with an array result type",
-                    page.span.line,
-                    page.span.column,
-                );
-                valid = false;
-            } else {
-                let mut filter_fields = HashSet::new();
-                for field in &page.filters {
-                    if !filter_fields.insert(field.as_str()) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-026",
-                            &format!("page filter field `{field}` is declared more than once"),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                    if !collection_data.iter().all(|data| {
-                        page_collection_fields(program, &data.result_type)
-                            .is_some_and(|fields| fields.iter().any(|candidate| candidate == field))
-                    }) {
-                        diagnostic(
-                            path,
-                            "E-VIEW-027",
-                            &format!(
-                                "page filter field `{field}` does not exist in every collection result type"
-                            ),
-                            page.span.line,
-                            page.span.column,
-                        );
-                        valid = false;
-                    }
-                }
-            }
-        }
-    }
-    valid
-}
-
-fn validate_page_inputs(path: &str, program: &zelyra_ast::Program) -> bool {
-    let mut valid = true;
-    for page in &program.pages {
-        let route_names =
-            page_template_bindings(&page.path, &[], &[], page.page_size, false, false, &[]);
-        let mut names = HashSet::new();
-        for input in &page.inputs {
-            if !names.insert(input.name.as_str()) {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!("page input `{}` is declared more than once", input.name),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if route_names.contains_key(&input.name) {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!(
-                        "page input `{}` conflicts with a route parameter",
-                        input.name
-                    ),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if page.page_size.is_some() && input.name == "page" {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    "page input `page` is reserved by `paginated`",
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if page.page_size.is_some()
-                && matches!(
-                    input.name.as_str(),
-                    "zelyra_page_limit" | "zelyra_page_offset"
-                )
-            {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!(
-                        "page input `{}` is reserved for pagination internals",
-                        input.name
-                    ),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if page.page_size.is_some() && matches!(input.name.as_str(), "total" | "pages") {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!("page input `{}` is reserved by `paginated`", input.name),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if !page.sort.is_empty() && matches!(input.name.as_str(), "sort" | "order") {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!("page input `{}` is reserved by `sort`", input.name),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if !page.search.is_empty() && input.name == "search" {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    "page input `search` is reserved by `search`",
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if !page.search.is_empty() && input.name == "zelyra_page_search" {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    "page input `zelyra_page_search` is reserved for search internals",
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if !page.filters.is_empty()
-                && page.filters.iter().any(|field| {
-                    input.name == format!("filter_{field}")
-                        || input.name == format!("filter_{field}__operator")
-                })
-            {
-                diagnostic(
-                    path,
-                    "E-VIEW-019",
-                    &format!("page input `{}` is reserved by `filter`", input.name),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-            if !page_input_type_supported(&input.ty) {
-                diagnostic(
-                    path,
-                    "E-VIEW-020",
-                    &format!(
-                        "page input `{}` must use a scalar or optional scalar type, found `{}`",
-                        input.name, input.ty
-                    ),
-                    input.span.line,
-                    input.span.column,
-                );
-                valid = false;
-            }
-        }
-    }
-    valid
-}
-
-fn page_input_type_supported(ty: &Type) -> bool {
-    let ty = match ty {
-        Type::Option(inner) => inner.as_ref(),
-        other => other,
-    };
-    matches!(
-        ty,
-        Type::Int
-            | Type::UInt
-            | Type::Float
-            | Type::Decimal
-            | Type::Bool
-            | Type::String
-            | Type::Char
-            | Type::Bytes
-            | Type::Timestamp
-            | Type::Date
-            | Type::Time
-            | Type::Duration
-            | Type::Named(_)
-    )
-}
-
-fn page_data_type_supported(program: &zelyra_ast::Program, ty: &Type) -> bool {
-    let ty = match ty {
-        Type::Array(inner) => inner.as_ref(),
-        other => other,
-    };
-    let Type::Named(name) = ty else {
-        return false;
-    };
-    program.records.iter().any(|record| record.name == *name)
-        || program.tables.iter().any(|table| {
-            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
-        })
-}
-
-fn page_collection_fields(program: &zelyra_ast::Program, ty: &Type) -> Option<Vec<String>> {
-    let Type::Array(inner) = ty else {
-        return None;
-    };
-    let Type::Named(name) = inner.as_ref() else {
-        return None;
-    };
-    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-        return Some(
-            record
-                .fields
-                .iter()
-                .map(|field| field.name.clone())
-                .collect(),
-        );
-    }
-    program
-        .tables
-        .iter()
-        .find(|table| {
-            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
-        })
-        .map(|table| {
-            table
-                .columns
-                .iter()
-                .map(|column| column.name.clone())
-                .collect()
-        })
-}
-
-fn page_collection_field_type(
-    program: &zelyra_ast::Program,
-    ty: &Type,
-    field_name: &str,
-) -> Option<Type> {
-    let Type::Array(inner) = ty else {
-        return None;
-    };
-    let Type::Named(name) = inner.as_ref() else {
-        return None;
-    };
-    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-        return record
-            .fields
-            .iter()
-            .find(|field| field.name == field_name)
-            .map(|field| field.ty.clone());
-    }
-    program
-        .tables
-        .iter()
-        .find(|table| {
-            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
-        })
-        .and_then(|table| {
-            table
-                .columns
-                .iter()
-                .find(|column| column.name == field_name)
-                .map(|column| column.ty.clone())
-        })
-}
-
-fn page_filter_kind(
-    program: &zelyra_ast::Program,
-    result_type: &Type,
-    field_name: &str,
-) -> TableViewFilterKind {
-    page_collection_field_type(program, result_type, field_name)
-        .map(|ty| tableview_type_filter_kind(&ty))
-        .unwrap_or(TableViewFilterKind::Other)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum OutputFormat {
-    Human,
-    Json,
-}
-
-fn parse_output_format(value: &str) -> Option<OutputFormat> {
-    match value {
-        "human" => Some(OutputFormat::Human),
-        "json" => Some(OutputFormat::Json),
-        _ => None,
-    }
-}
-
-fn check_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = arguments.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let mut format = OutputFormat::Human;
-    while let Some(argument) = arguments.next() {
-        if argument == "--format=json" {
-            format = OutputFormat::Json;
-        } else if argument == "--format=human" {
-            format = OutputFormat::Human;
-        } else if argument.starts_with("--format=") {
-            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-            return ExitCode::from(2);
-        } else if argument == "--format" {
-            format = match arguments.next().as_deref().and_then(parse_output_format) {
-                Some(format) => format,
-                None => {
-                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-                    return ExitCode::from(2);
-                }
-            };
-        } else {
-            eprintln!("error[E-CLI-001]: unknown check option `{argument}`");
-            return ExitCode::from(2);
-        }
-    }
-    if format == OutputFormat::Human {
-        return if validate(&path).is_ok() {
-            println!("ok: {path}");
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::from(1)
-        };
-    }
-    let source = fs::read_to_string(&path).unwrap_or_default();
-    begin_json_diagnostics(&path, &source);
-    let success = validate(&path).is_ok();
-    let diagnostics = finish_json_diagnostics();
-    print_machine_document(&machine_document(
-        "check",
-        success,
-        diagnostics,
-        std::iter::empty(),
-    ));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
-}
-
-fn fmt_command(arguments: impl Iterator<Item = String>) -> ExitCode {
-    let mut path = None;
-    let mut check_only = false;
-    for argument in arguments {
-        if argument == "--check" && !check_only {
-            check_only = true;
-        } else if !argument.starts_with('-') && path.is_none() {
-            path = Some(argument);
-        } else {
-            usage();
-            return ExitCode::from(2);
-        }
-    }
-    let Some(path) = path else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let source = match fs::read_to_string(&path) {
-        Ok(source) => source,
-        Err(error) => {
-            diagnostic(
-                &path,
-                "E-IO-001",
-                &format!("cannot read `{path}`: {error}"),
-                1,
-                1,
-            );
-            return ExitCode::from(1);
-        }
-    };
-    let tokens = match lex(&source) {
-        Ok(tokens) => tokens,
-        Err(error) => {
-            diagnostic_with_span(&path, "E-LEX-001", &error.message, error.span);
-            return ExitCode::from(1);
-        }
-    };
-    if let Err(error) = parse(&tokens) {
-        diagnostic_with_span(&path, "E-PARSE-001", &error.message, error.span);
-        return ExitCode::from(1);
-    }
-    let formatted = format_source(&source, &tokens);
-    if check_only {
-        if source == formatted {
-            println!("ok: {path}");
-            ExitCode::SUCCESS
-        } else {
-            eprintln!("would reformat: {path}");
-            ExitCode::from(1)
-        }
-    } else if source == formatted {
-        println!("already formatted: {path}");
-        ExitCode::SUCCESS
-    } else {
-        match fs::write(&path, formatted) {
-            Ok(()) => {
-                println!("formatted: {path}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("error[E-FMT-001]: cannot write `{path}`: {error}");
-                ExitCode::from(1)
-            }
-        }
-    }
-}
-
-fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = arguments.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let mut format = OutputFormat::Human;
-    let mut focus = None;
-    while let Some(argument) = arguments.next() {
-        if argument == "--format=json" {
-            format = OutputFormat::Json;
-        } else if argument == "--format=human" {
-            format = OutputFormat::Human;
-        } else if let Some(value) = argument.strip_prefix("--symbol=") {
-            if value.is_empty() || focus.replace(value.to_owned()).is_some() {
-                eprintln!("error[E-CLI-001]: impact accepts one non-empty `--symbol` value");
-                return ExitCode::from(2);
-            }
-        } else if argument == "--symbol" {
-            let Some(value) = arguments
-                .next()
-                .filter(|value| !value.is_empty() && !value.starts_with('-'))
-            else {
-                eprintln!("error[E-CLI-001]: `--symbol` requires a non-empty value");
-                return ExitCode::from(2);
-            };
-            if focus.replace(value).is_some() {
-                eprintln!("error[E-CLI-001]: impact accepts one `--symbol` value");
-                return ExitCode::from(2);
-            }
-        } else if argument == "--format" {
-            format = match arguments.next().as_deref().and_then(parse_output_format) {
-                Some(format) => format,
-                None => {
-                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-                    return ExitCode::from(2);
-                }
-            };
-        } else {
-            eprintln!("error[E-CLI-001]: unknown impact option `{argument}`");
-            return ExitCode::from(2);
-        }
-    }
-    if format == OutputFormat::Json {
-        let source = fs::read_to_string(&path).unwrap_or_default();
-        begin_json_diagnostics(&path, &source);
-        let project = load_project(&path);
-        let mut success = project.is_ok();
-        let impact = if let Ok(project) = project.as_ref() {
-            let fallback_source = project
-                .sources
-                .first()
-                .map_or(source.as_str(), |source| source.text.as_str());
-            let full_impact =
-                build_impact_with_sources(&project.program, &project.sources, fallback_source);
-            match focus.as_deref() {
-                Some(query) => match focus_impact(&full_impact, query) {
-                    Ok(focused) => focused,
-                    Err(error) => {
-                        diagnostic(&path, "E-IMPACT-001", &error, 1, 1);
-                        success = false;
-                        json!({})
-                    }
-                },
-                None => full_impact,
-            }
-        } else {
-            json!({})
-        };
-        let diagnostics = finish_json_diagnostics();
-        print_machine_document(&machine_document(
-            "impact",
-            success,
-            diagnostics,
-            [("entry".to_owned(), Value::String(context_entry(&path)))]
-                .into_iter()
-                .chain([("impact".to_owned(), impact)]),
-        ));
-        return if success {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::from(1)
-        };
-    }
-    let project = match load_project(&path) {
-        Ok(project) => project,
-        Err(()) => return ExitCode::from(1),
-    };
-    let source = fs::read_to_string(&path).unwrap_or_default();
-    let fallback_source = project
-        .sources
-        .first()
-        .map_or(source.as_str(), |source| source.text.as_str());
-    let impact = build_impact_with_sources(&project.program, &project.sources, fallback_source);
-    let impact = match focus.as_deref() {
-        Some(query) => match focus_impact(&impact, query) {
-            Ok(focused) => focused,
-            Err(error) => {
-                eprintln!("error[E-IMPACT-001]: {error}");
-                return ExitCode::from(1);
-            }
-        },
-        None => impact,
-    };
-    println!("impact: {path}");
-    if let Some(query) = focus {
-        println!("  focus: {query}");
-        println!(
-            "  references: {}",
-            impact["references"].as_array().map_or(0, Vec::len)
-        );
-        println!(
-            "  related: {}",
-            impact["related"].as_array().map_or(0, Vec::len)
-        );
-        return ExitCode::SUCCESS;
-    }
-    for category in [
-        "tables",
-        "sql",
-        "references",
-        "forms",
-        "crud",
-        "views",
-        "apis",
-        "permissions",
-        "contracts",
-        "emails",
-        "jobs",
-        "tests",
-    ] {
-        let count = impact[category].as_array().map_or(0, Vec::len);
-        println!("  {category}: {count}");
-    }
-    println!("  schema_changes: source-only");
-    ExitCode::SUCCESS
-}
-
-fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
-    let mut request_path = None;
-    let mut json_format = false;
-    let mut apply_requested = false;
-    for argument in arguments {
-        if argument == "--format=json" {
-            json_format = true;
-        } else if argument == "--apply" {
-            apply_requested = true;
-        } else if argument == "--format" {
-            eprintln!("error[E-CLI-001]: edit requires `--format=json`");
-            return ExitCode::from(2);
-        } else if argument.starts_with('-') {
-            eprintln!("error[E-CLI-001]: unknown edit option `{argument}`");
-            return ExitCode::from(2);
-        } else if request_path.replace(argument).is_some() {
-            eprintln!("error[E-CLI-001]: edit accepts one change request");
-            return ExitCode::from(2);
-        }
-    }
-    let Some(request_path) = request_path else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if !json_format {
-        eprintln!("error[E-CLI-001]: edit requires `--format=json`");
-        return ExitCode::from(2);
-    }
-
-    let request_source = match fs::read_to_string(&request_path) {
-        Ok(source) => source,
-        Err(error) => {
-            return edit_error_document(
-                &request_path,
-                "E-IO-001",
-                &format!("cannot read `{request_path}`: {error}"),
-            )
-        }
-    };
-    let request: Value = match serde_json::from_str(&request_source) {
-        Ok(request) => request,
-        Err(error) => {
-            return edit_error_document(
-                &request_path,
-                "E-EDIT-001",
-                &format!("invalid edit request JSON: {error}"),
-            )
-        }
-    };
-    if let Err(error) = edit::validate_request(&request) {
-        return edit_error_document(&request_path, "E-EDIT-001", &error);
-    }
-    let entry = match edit::request_entry(&request) {
-        Ok(entry) => entry,
-        Err(error) => return edit_error_document(&request_path, "E-EDIT-001", &error),
-    };
-    let (entry, entry_display) = match edit::resolve_entry(&entry) {
-        Ok(entry) => entry,
-        Err(error) => return edit_error_document(&entry, "E-EDIT-005", &error),
-    };
-    let source = match fs::read_to_string(&entry) {
-        Ok(source) => source,
-        Err(error) => {
-            return edit_error_document(
-                &entry,
-                "E-IO-001",
-                &format!("cannot read `{entry}`: {error}"),
-            )
-        }
-    };
-
-    begin_json_diagnostics(&entry, &source);
-    let mut success = false;
-    let mut preview = json!({"available": false});
-    let current_fingerprint = edit::source_fingerprint(&source);
-    let expected_fingerprint = request
-        .get("expected_source_fingerprint")
-        .and_then(Value::as_str);
-    if apply_requested && expected_fingerprint != Some(current_fingerprint.as_str()) {
-        diagnostic(
-            &entry,
-            "E-EDIT-004",
-            "--apply requires a matching `expected_source_fingerprint`; run a preview first",
-            1,
-            1,
-        );
-    } else {
-        match lex(&source) {
-            Ok(tokens) => match parse(&tokens) {
-                Ok(program) => {
-                    if validate_program(&entry, &source, program.clone()).is_ok() {
-                        match edit::preview(&program, &source, &tokens, &request) {
-                            Ok(result) => {
-                                let candidate_source = result.source.clone();
-                                let _ = finish_json_diagnostics();
-                                begin_json_diagnostics(&entry, &candidate_source);
-                                if let Ok(proposed_program) =
-                                    parse_source(&entry, &candidate_source)
-                                {
-                                    if validate_program(&entry, &candidate_source, proposed_program)
-                                        .is_ok()
-                                    {
-                                        let applied = if apply_requested {
-                                            match edit::apply_atomically(&entry, &result.source) {
-                                                Ok(()) => true,
-                                                Err(error) => {
-                                                    diagnostic(&entry, "E-EDIT-003", &error, 1, 1);
-                                                    false
-                                                }
-                                            }
-                                        } else {
-                                            false
-                                        };
-                                        success = !apply_requested || applied;
-                                        preview = json!({
-                                            "available": true,
-                                            "apply_requested": apply_requested,
-                                            "applied": applied,
-                                            "entry": entry_display.clone(),
-                                            "source_fingerprint": current_fingerprint,
-                                            "operations": result.operations,
-                                            "changes": result.changes,
-                                            "changed_tokens": result.changed_tokens,
-                                            "before_bytes": source.len(),
-                                            "after_bytes": result.source.len()
-                                        });
-                                    }
-                                }
-                            }
-                            Err(error) => diagnostic(&entry, "E-EDIT-001", &error, 1, 1),
-                        }
-                    }
-                }
-                Err(error) => {
-                    diagnostic_with_span(&entry, "E-PARSE-001", &error.message, error.span)
-                }
-            },
-            Err(error) => diagnostic_with_span(&entry, "E-LEX-001", &error.message, error.span),
-        }
-    }
-    let diagnostics = finish_json_diagnostics();
-    print_machine_document(&machine_document(
-        "edit",
-        success,
-        diagnostics,
-        [
-            ("request".into(), Value::String(request_path)),
-            ("entry".into(), Value::String(entry_display)),
-            ("preview".into(), preview),
-        ],
-    ));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
-}
-
-fn edit_error_document(path: &str, code: &str, message: &str) -> ExitCode {
-    begin_json_diagnostics(path, "");
-    diagnostic(path, code, message, 1, 1);
-    let diagnostics = finish_json_diagnostics();
-    print_machine_document(&machine_document(
-        "edit",
-        false,
-        diagnostics,
-        [("request".into(), Value::String(path.into()))],
-    ));
-    ExitCode::from(1)
-}
-
-fn context_span(fallback_source: &str, span: zelyra_ast::Span) -> Value {
-    let source =
-        PROJECT_SOURCES.with(|sources| sources.borrow().get(span.source_id as usize).cloned());
-    let source_text = source
-        .as_ref()
-        .map_or(fallback_source, |source| source.text.as_str());
-    let (end_line, end_column) = source_position(source_text, span.end);
-    json!({
-        "file": source.as_ref().map(|source| source.path.as_str()),
-        "start": { "offset": span.start, "line": span.line, "column": span.column },
-        "end": { "offset": span.end, "line": end_line, "column": end_column }
-    })
-}
-
-fn default_value_json(value: &zelyra_ast::DefaultValue) -> Value {
-    match value {
-        zelyra_ast::DefaultValue::Int(value) => json!(value),
-        zelyra_ast::DefaultValue::Bool(value) => json!(value),
-        zelyra_ast::DefaultValue::String(value) => json!(value),
-        zelyra_ast::DefaultValue::Ident(value) => json!(value),
-    }
-}
-
-fn project_name(path: &str) -> Option<String> {
-    let config_path = project_config_path(path).ok().flatten()?;
-    let contents = fs::read_to_string(config_path).ok()?;
-    let mut in_project = false;
-    for raw_line in contents.lines() {
-        let line = raw_line.split('#').next()?.trim();
-        if line.starts_with('[') && line.ends_with(']') {
-            in_project = line == "[project]";
-            continue;
-        }
-        if in_project {
-            let (key, value) = line.split_once('=')?;
-            if key.trim() == "name" {
-                return value
-                    .trim()
-                    .strip_prefix('"')
-                    .and_then(|value| value.strip_suffix('"'))
-                    .map(str::to_owned);
-            }
-        }
-    }
-    None
-}
-
-fn context_entry(path: &str) -> String {
-    let source_path = fs::canonicalize(path).ok();
-    let root = project_config_path(path)
-        .ok()
-        .flatten()
-        .and_then(|path| path.parent().map(PathBuf::from));
-    if let (Some(source_path), Some(root)) = (source_path, root) {
-        if let Ok(relative) = source_path.strip_prefix(root) {
-            return relative.to_string_lossy().replace('\\', "/");
-        }
-    }
-    path.replace('\\', "/")
-}
-
-fn context_view_slots(html: &str) -> Vec<Value> {
-    slot_invocations(html)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|slot| {
-            json!({
-                "name": slot.name.unwrap_or_else(|| "default".into()),
-                "fallback": slot.body.is_some()
-            })
-        })
-        .collect()
-}
-
-fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
-    let databases = program
-        .databases
-        .iter()
-        .map(|database| {
-            json!({
-                "name": database.name,
-                "engine": database.engine,
-                "database": database.database,
-                "span": context_span(source, database.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let tables = program
-        .tables
-        .iter()
-        .map(|table| {
-            let fields = table
-                .columns
-                .iter()
-                .map(|column| {
-                    json!({
-                        "name": column.name,
-                        "type": column.ty.to_string(),
-                        "optional": !column.required,
-                        "primary_key": column.primary_key,
-                        "auto_increment": column.auto,
-                        "unique": column.unique,
-                        "default": column.default.as_ref().map(default_value_json),
-                        "span": context_span(source, column.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            json!({
-                "name": table.name,
-                "fields": fields,
-                "span": context_span(source, table.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let cruds = program
-        .cruds
-        .iter()
-        .map(|crud| {
-            json!({
-                "name": crud.name,
-                "table": crud.table,
-                "layout": crud.layout,
-                "layout_slots": crud.layout_slots.iter().map(|slot| json!({
-                    "name": slot.name,
-                    "span": context_span(source, slot.span)
-                })).collect::<Vec<_>>(),
-                "view_fields": crud.view.fields,
-                "span": context_span(source, crud.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let views = program
-        .views
-        .iter()
-        .map(|view| {
-            json!({
-                "name": view.name,
-                "input_type": Value::Null,
-                "used_fields": Vec::<String>::new(),
-                "slots": context_view_slots(&view.html),
-                "span": context_span(source, view.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let components = program
-        .components
-        .iter()
-        .map(|component| {
-            json!({
-                "name": component.name,
-                "props": component.props.iter().map(|prop| json!({
-                    "name": prop.name,
-                    "type": prop.ty.to_string()
-                })).collect::<Vec<_>>(),
-                "slots": context_view_slots(&component.html),
-                "span": context_span(source, component.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let pages = program
-        .pages
-        .iter()
-        .map(|page| {
-            let data = page
-                .data
-                .iter()
-                .map(|binding| {
-                    json!({
-                        "name": binding.name,
-                        "type": binding.result_type.to_string(),
-                        "fields": page_data_fields(program, &binding.result_type),
-                        "span": context_span(source, binding.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            let inputs = page
-                .inputs
-                .iter()
-                .map(|input| {
-                    json!({
-                        "name": input.name,
-                        "type": input.ty.to_string(),
-                        "span": context_span(source, input.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            json!({
-                "path": page.path,
-                "view": page.view,
-                "inputs": inputs,
-                "page_size": page.page_size,
-                "sort": page.sort,
-                "search": page.search,
-                "filters": page.filters,
-                "data": data,
-                "span": context_span(source, page.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let tableviews = program
-        .tableviews
-        .iter()
-        .map(|view| {
-            json!({
-                "name": view.name,
-                "result_type": view.result_type.to_string(),
-                "fields": view.columns,
-                "span": context_span(source, view.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let forms = program
-        .forms
-        .iter()
-        .map(|form| {
-            json!({
-                "name": form.name,
-                "table": form.table,
-                "fields": form.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
-                "span": context_span(source, form.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let apis = program
-        .apis
-        .iter()
-        .map(|api| {
-            json!({
-                "method": api.method,
-                "path": api.path,
-                "input": api.input.iter().map(|field| json!({ "name": field.name, "type": field.ty.to_string() })).collect::<Vec<_>>(),
-                "output": api.output.to_string(),
-                "span": context_span(source, api.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let auth = program
-        .auth
-        .iter()
-        .map(|auth| {
-            json!({
-                "name": auth.name,
-                "table": auth.table,
-                "audit_table": auth.audit_table,
-                "audit_chain": auth.audit_chain,
-                "span": context_span(source, auth.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "databases": databases,
-        "tables": tables,
-        "cruds": cruds,
-        "pages": pages,
-        "views": views,
-        "components": components,
-        "tableviews": tableviews,
-        "forms": forms,
-        "apis": apis,
-        "auth": auth
-    })
-}
-
-fn empty_context_declarations() -> Value {
-    json!({
-        "databases": [],
-        "tables": [],
-        "cruds": [],
-        "pages": [],
-        "views": [],
-        "components": [],
-        "tableviews": [],
-        "forms": [],
-        "apis": [],
-        "auth": []
-    })
-}
-
-fn context_modules() -> Value {
-    PROJECT_MODULES.with(|modules| {
-        json!(modules
-            .borrow()
-            .iter()
-            .map(|module| json!({
-                "path": module.path,
-                "imports": module.imports.iter().map(|import| json!({
-                    "alias": import.alias,
-                    "path": import.path
-                })).collect::<Vec<_>>(),
-                "exports": module.exports.iter().map(|export| json!({
-                    "kind": export.kind,
-                    "name": export.name
-                })).collect::<Vec<_>>()
-            }))
-            .collect::<Vec<_>>())
-    })
-}
-
-fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    if arguments.next().as_deref() != Some("plan") {
-        usage();
-        return ExitCode::from(2);
-    }
-    let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if arguments.next().is_some() {
-        usage();
-        return ExitCode::from(2);
-    }
-
-    let source = fs::read_to_string(&entry).unwrap_or_default();
-    begin_json_diagnostics(&entry, &source);
-    let validation = validate(&entry);
-    let modules = PROJECT_MODULES.with(|modules| modules.borrow().clone());
-    let mut plan = None;
-    if validation.is_ok() {
-        let selected = selected.replace('\\', "/");
-        let by_path = modules
-            .iter()
-            .map(|module| (module.path.as_str(), module))
-            .collect::<HashMap<_, _>>();
-        if !by_path.contains_key(selected.as_str()) {
-            diagnostic(
-                &entry,
-                "E-MOD-013",
-                &format!("module `{selected}` is not reachable from this project entry"),
-                1,
-                1,
-            );
-        } else {
-            let mut pending = vec![selected.clone()];
-            let mut included = BTreeSet::new();
-            let mut graph_is_complete = true;
-            while let Some(path) = pending.pop() {
-                if !included.insert(path.clone()) {
-                    continue;
-                }
-                let Some(module) = by_path.get(path.as_str()) else {
-                    diagnostic(
-                        &entry,
-                        "E-MOD-014",
-                        &format!("module dependency `{path}` is missing from the loaded graph"),
-                        1,
-                        1,
-                    );
-                    graph_is_complete = false;
-                    break;
-                };
-                pending.extend(module.imports.iter().map(|import| import.path.clone()));
-            }
-            if graph_is_complete {
-                let closure = included
-                    .iter()
-                    .filter_map(|path| by_path.get(path.as_str()).copied())
-                    .collect::<Vec<_>>();
-                plan = Some(json!({
-                    "kind": "explicit-import-closure",
-                    "closure_semantics": "transitive-imports-only",
-                    "selected_module": selected,
-                    "entry": context_entry(&entry),
-                    "source_files": included,
-                    "modules": closure.iter().map(|module| json!({
-                        "path": module.path,
-                        "imports": module.imports.iter().map(|import| json!({
-                            "alias": import.alias,
-                            "path": import.path
-                        })).collect::<Vec<_>>(),
-                        "exports": module.exports.iter().map(|export| json!({
-                            "kind": export.kind,
-                            "name": export.name
-                        })).collect::<Vec<_>>()
-                    })).collect::<Vec<_>>(),
-                    "complete_deployment": false,
-                    "note": "This read-only preview follows explicit import edges only. It is not a complete semantic dependency analysis, runnable application, or Docker export."
-                }));
-            }
-        }
-    }
-    let diagnostics = finish_json_diagnostics();
-    let success = plan.is_some() && diagnostics.is_empty();
-    print_machine_document(&machine_document(
-        "module plan",
-        success,
-        diagnostics,
-        [("plan".into(), plan.unwrap_or(Value::Null))],
-    ));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
-}
-
-fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = arguments.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let mut format = OutputFormat::Human;
-    while let Some(argument) = arguments.next() {
-        if argument == "--format=json" {
-            format = OutputFormat::Json;
-        } else if argument == "--format=human" {
-            format = OutputFormat::Human;
-        } else if argument.starts_with("--format=") {
-            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-            return ExitCode::from(2);
-        } else if argument == "--format" {
-            format = match arguments.next().as_deref().and_then(parse_output_format) {
-                Some(format) => format,
-                None => {
-                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-                    return ExitCode::from(2);
-                }
-            };
-        } else {
-            eprintln!("error[E-CLI-001]: unknown context option `{argument}`");
-            return ExitCode::from(2);
-        }
-    }
-    if format == OutputFormat::Human {
-        return if validate(&path).is_ok() {
-            println!("context: {}", context_entry(&path));
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::from(1)
-        };
-    }
-    let source = fs::read_to_string(&path).unwrap_or_default();
-    begin_json_diagnostics(&path, &source);
-    let program = validate(&path);
-    let diagnostics = finish_json_diagnostics();
-    let success = program.is_ok();
-    let declarations = program.as_ref().map_or_else(
-        |_| empty_context_declarations(),
-        |program| context_declarations(program, &source),
-    );
-    let fields = [
-        (
-            "project".into(),
-            json!({
-                "name": project_name(&path),
-                "entry": context_entry(&path)
-            }),
-        ),
-        ("declarations".into(), declarations),
-        ("modules".into(), context_modules()),
-    ];
-    print_machine_document(&machine_document("context", success, diagnostics, fields));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
-}
-
-fn feature_settings_json(features: &ProjectFeatures) -> Value {
-    Value::Object(
-        features
-            .iter()
-            .map(|(name, setting)| {
-                (
-                    name.clone(),
-                    json!({
-                        "enabled": setting.enabled,
-                        "source": setting.source
-                    }),
-                )
-            })
-            .collect(),
-    )
-}
-
-fn config_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = arguments.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let mut format = OutputFormat::Human;
-    while let Some(argument) = arguments.next() {
-        if argument == "--format=json" {
-            format = OutputFormat::Json;
-        } else if argument == "--format=human" {
-            format = OutputFormat::Human;
-        } else if argument.starts_with("--format=") {
-            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-            return ExitCode::from(2);
-        } else if argument == "--format" {
-            format = match arguments.next().as_deref().and_then(parse_output_format) {
-                Some(format) => format,
-                None => {
-                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-                    return ExitCode::from(2);
-                }
-            };
-        } else {
-            eprintln!("error[E-CLI-001]: unknown config option `{argument}`");
-            return ExitCode::from(2);
-        }
-    }
-
-    let config_path = project_config_path(&path).ok().flatten();
-    let env_file = config_path
-        .as_ref()
-        .and_then(|path| path.parent())
-        .map(|path| path.join(".env"))
-        .filter(|path| path.is_file())
-        .is_some();
-    let result = project_features(&path);
-    if format == OutputFormat::Human {
-        let features = match result {
-            Ok(features) => features,
-            Err(error) => {
-                eprintln!("error[E-FEATURE-002]: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        println!(
-            "configuration: {}",
-            if config_path.is_some() {
-                "zelyra.toml"
-            } else {
-                "defaults"
-            }
-        );
-        println!(
-            "environment file: {}",
-            if env_file {
-                "loaded (feature flags only)"
-            } else {
-                "not present"
-            }
-        );
-        for (name, setting) in features {
-            println!(
-                "  {name}: {} ({})",
-                if setting.enabled {
-                    "enabled"
-                } else {
-                    "disabled"
-                },
-                setting.source
-            );
-        }
-        return ExitCode::SUCCESS;
-    }
-
-    begin_json_diagnostics(&path, "");
-    let (success, features) = match result {
-        Ok(features) => (true, feature_settings_json(&features)),
-        Err(error) => {
-            diagnostic(&path, "E-FEATURE-002", &error, 1, 1);
-            (false, Value::Object(Map::new()))
-        }
-    };
-    let diagnostics = finish_json_diagnostics();
-    print_machine_document(&machine_document(
-        "config",
-        success,
-        diagnostics,
-        [
-            (
-                "project".into(),
-                json!({
-                    "name": project_name(&path),
-                    "config_file": config_path.as_ref().map(|_| "zelyra.toml"),
-                    "env_file_present": env_file,
-                    "secrets": "not displayed"
-                }),
-            ),
-            ("features".into(), features),
-        ],
-    ));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
-}
-
-struct ComponentInvocation {
-    name: String,
-    attributes: String,
-    body: Option<String>,
-    start: usize,
-    end: usize,
-}
-
-fn component_invocations(html: &str) -> Result<Vec<ComponentInvocation>, String> {
-    let mut invocations = Vec::new();
-    let mut search_from = 0;
-    while let Some(relative_start) = html[search_from..].find('<') {
-        let start = search_from + relative_start;
-        let after_open = &html[start + 1..];
-        let Some(first) = after_open.chars().next() else {
-            break;
-        };
-        if !first.is_ascii_uppercase() {
-            search_from = start + 1;
-            continue;
-        }
-        let name_length = after_open
-            .chars()
-            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
-            .map(char::len_utf8)
-            .sum::<usize>();
-        let name = after_open[..name_length].to_owned();
-        let after_name = start + 1 + name_length;
-        let Some(relative_tag_end) = html[after_name..].find('>') else {
-            return Err(format!(
-                "component `<{name}>` has an unterminated opening tag"
-            ));
-        };
-        let tag_end = after_name + relative_tag_end;
-        let tag_content = &html[after_name..tag_end];
-        if tag_content.trim_end().ends_with('/') {
-            let attributes = tag_content.trim_end().trim_end_matches('/').trim_end();
-            let end = tag_end + 1;
-            invocations.push(ComponentInvocation {
-                name,
-                attributes: attributes.to_owned(),
-                body: None,
-                start,
-                end,
-            });
-            search_from = end;
-        } else {
-            let closing = format!("</{name}>");
-            let body_start = tag_end + 1;
-            let Some(relative_closing_start) = html[body_start..].find(&closing) else {
-                return Err(format!("component `<{name}>` is missing `{closing}`"));
-            };
-            let closing_start = body_start + relative_closing_start;
-            let end = closing_start + closing.len();
-            invocations.push(ComponentInvocation {
-                name,
-                attributes: tag_content.to_owned(),
-                body: Some(html[body_start..closing_start].to_owned()),
-                start,
-                end,
-            });
-            search_from = end;
-        }
-    }
-    Ok(invocations)
-}
-
-fn component_attributes(attributes: &str) -> Result<HashMap<String, String>, String> {
-    let mut values = HashMap::new();
-    let bytes = attributes.as_bytes();
-    let mut position = 0;
-    while position < bytes.len() {
-        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
-            position += 1;
-        }
-        if position == bytes.len() {
-            break;
-        }
-        let name_start = position;
-        while bytes
-            .get(position)
-            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-        {
-            position += 1;
-        }
-        if name_start == position {
-            return Err("component properties require a name".into());
-        }
-        let name = attributes[name_start..position].to_owned();
-        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
-            position += 1;
-        }
-        if bytes.get(position) != Some(&b'=') {
-            return Err(format!("component property `{name}` requires `=`"));
-        }
-        position += 1;
-        while bytes.get(position).is_some_and(u8::is_ascii_whitespace) {
-            position += 1;
-        }
-        if bytes.get(position) != Some(&b'"') {
-            return Err(format!(
-                "component property `{name}` must use a quoted value"
-            ));
-        }
-        position += 1;
-        let value_start = position;
-        while bytes.get(position).is_some_and(|byte| *byte != b'"') {
-            position += 1;
-        }
-        if position == bytes.len() {
-            return Err(format!(
-                "component property `{name}` has an unterminated value"
-            ));
-        }
-        let value = attributes[value_start..position].to_owned();
-        position += 1;
-        if values.insert(name.clone(), value).is_some() {
-            return Err(format!(
-                "component property `{name}` is specified more than once"
-            ));
-        }
-    }
-    Ok(values)
-}
-
-struct SlotInvocation {
-    name: Option<String>,
-    body: Option<String>,
-    start: usize,
-    end: usize,
-}
-
-fn slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, String> {
-    let mut slots = Vec::new();
-    let mut search_from = 0;
-    while let Some(relative_start) = html[search_from..].find("<slot") {
-        let start = search_from + relative_start;
-        let after_name = start + "<slot".len();
-        if html
-            .as_bytes()
-            .get(after_name)
-            .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-        {
-            search_from = after_name;
-            continue;
-        }
-        let Some(relative_tag_end) = html[after_name..].find('>') else {
-            return Err("slot has an unterminated opening tag".into());
-        };
-        let tag_end = after_name + relative_tag_end;
-        let tag_content = &html[after_name..tag_end];
-        let self_closing = tag_content.trim_end().ends_with('/');
-        let attributes = if self_closing {
-            tag_content.trim_end().trim_end_matches('/').trim_end()
-        } else {
-            tag_content
-        };
-        let attributes = component_attributes(attributes)
-            .map_err(|error| format!("invalid slot declaration: {error}"))?;
-        if attributes.keys().any(|name| name != "name") {
-            return Err("slot supports only the `name` attribute".into());
-        }
-        let name = attributes.get("name").cloned();
-        if self_closing {
-            let end = tag_end + 1;
-            slots.push(SlotInvocation {
-                name,
-                body: None,
-                start,
-                end,
-            });
-            search_from = end;
-        } else {
-            let Some(name) = name else {
-                return Err("content slot blocks require a `name` attribute".into());
-            };
-            let body_start = tag_end + 1;
-            let closing = "</slot>";
-            let Some(relative_closing_start) = html[body_start..].find(closing) else {
-                return Err("slot is missing `</slot>`".into());
-            };
-            let closing_start = body_start + relative_closing_start;
-            let end = closing_start + closing.len();
-            slots.push(SlotInvocation {
-                name: Some(name),
-                body: Some(html[body_start..closing_start].to_owned()),
-                start,
-                end,
-            });
-            search_from = end;
-        }
-    }
-    Ok(slots)
-}
-
-fn declared_component_slots(
-    component: &zelyra_ast::ComponentDef,
-) -> Result<(bool, HashSet<String>), String> {
-    let mut has_default = false;
-    let mut named = HashSet::new();
-    for slot in slot_invocations(&component.html)? {
-        if let Some(name) = slot.name {
-            if !named.insert(name) {
-                return Err("component declares the same named slot more than once".into());
-            }
-        } else if has_default {
-            return Err("component declares the default slot more than once".into());
-        } else {
-            has_default = true;
-        }
-    }
-    Ok((has_default, named))
-}
-
-fn split_component_body(body: &str) -> Result<(String, HashMap<String, String>), String> {
-    let slots = slot_invocations(body)?;
-    let mut named = HashMap::new();
-    let mut default_body = body.to_owned();
-    for slot in slots.into_iter().rev() {
-        let Some(slot_body) = slot.body else {
-            return Err("component content slots must use opening and closing tags".into());
-        };
-        let Some(name) = slot.name else {
-            return Err("component content slots require a `name` attribute".into());
-        };
-        if named.insert(name, slot_body).is_some() {
-            return Err("the same named slot is provided more than once".into());
-        }
-        default_body.replace_range(slot.start..slot.end, "");
-    }
-    Ok((default_body, named))
-}
-
-fn declared_view_slots(view: &zelyra_ast::ViewDef) -> Result<(bool, HashSet<String>), String> {
-    let mut has_default = false;
-    let mut named = HashSet::new();
-    for slot in slot_invocations(&view.html)? {
-        if let Some(name) = slot.name {
-            if !named.insert(name) {
-                return Err("view declares the same named slot more than once".into());
-            }
-        } else if has_default {
-            return Err("view declares the default slot more than once".into());
-        } else {
-            has_default = true;
-        }
-    }
-    Ok((has_default, named))
-}
-
-fn split_view_content(body: &str) -> Result<(String, HashMap<String, String>), String> {
-    let slots = slot_invocations(body)?;
-    let mut named = HashMap::new();
-    let mut default_body = body.to_owned();
-    for slot in slots.into_iter().rev() {
-        let Some(slot_body) = slot.body else {
-            return Err("view content slots must use opening and closing tags".into());
-        };
-        let Some(name) = slot.name else {
-            return Err("view content slots require a `name` attribute".into());
-        };
-        if named.insert(name, slot_body).is_some() {
-            return Err("the same named view slot is provided more than once".into());
-        }
-        default_body.replace_range(slot.start..slot.end, "");
-    }
-    Ok((default_body, named))
-}
-
-fn page_layout_slot_invocations(html: &str) -> Result<Vec<SlotInvocation>, String> {
-    let component_ranges = component_invocations(html)?
-        .into_iter()
-        .map(|component| component.start..component.end)
-        .collect::<Vec<_>>();
-    Ok(slot_invocations(html)?
-        .into_iter()
-        .filter(|slot| {
-            !component_ranges
-                .iter()
-                .any(|range| range.start <= slot.start && slot.end <= range.end)
-        })
-        .collect())
-}
-
-fn validate_view_content_slots(view: &zelyra_ast::ViewDef, body: &str) -> Result<(), String> {
-    let (_, declared_named) = declared_view_slots(view)?;
-    let (_, supplied_named) = split_view_content(body)?;
-    for name in supplied_named.keys() {
-        if !declared_named.contains(name) {
-            return Err(format!("view has no named slot `{name}`"));
-        }
-    }
-    Ok(())
-}
-
-fn validate_crud_layout_slots(
-    view: &zelyra_ast::ViewDef,
-    supplied_slots: &[zelyra_ast::CrudLayoutSlotDef],
-) -> Result<(), (usize, String)> {
-    let (_, declared_slots) = declared_view_slots(view).map_err(|message| (0, message))?;
-    let mut supplied_names = HashSet::new();
-    for (index, slot) in supplied_slots.iter().enumerate() {
-        if !declared_slots.contains(&slot.name) {
-            return Err((index, format!("view has no named slot `{}`", slot.name)));
-        }
-        if !supplied_names.insert(slot.name.as_str()) {
-            return Err((
-                index,
-                format!("named slot `{}` is supplied more than once", slot.name),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn component_prop_accepts(prop: &zelyra_ast::ComponentProp, value: &str) -> bool {
-    if value.starts_with('{') && value.ends_with('}') {
-        return value.len() > 2;
-    }
-    match &prop.ty {
-        Type::Option(inner) => component_prop_accepts(
-            &zelyra_ast::ComponentProp {
-                name: prop.name.clone(),
-                ty: (**inner).clone(),
-                span: prop.span,
-            },
-            value,
-        ),
-        Type::Int | Type::UInt => value.parse::<i64>().is_ok(),
-        Type::Float | Type::Decimal => value.parse::<f64>().is_ok(),
-        Type::Bool => matches!(value, "true" | "false"),
-        _ => true,
-    }
-}
-
-fn template_expressions(html: &str) -> Result<Vec<String>, String> {
-    let mut expressions = Vec::new();
-    let mut rest = html;
-    while let Some(open) = rest.find('{') {
-        let after_open = &rest[open + 1..];
-        let Some(close) = after_open.find('}') else {
-            return Err("view interpolation has an unterminated `{`".into());
-        };
-        let expression = after_open[..close].trim();
-        if expression.is_empty() {
-            return Err("view interpolation cannot be empty".into());
-        }
-        expressions.push(expression.to_owned());
-        rest = &after_open[close + 1..];
-    }
-    Ok(expressions)
-}
-
-fn is_template_identifier(expression: &str) -> bool {
-    !expression.is_empty()
-        && expression.chars().enumerate().all(|(index, character)| {
-            if index == 0 {
-                character.is_ascii_alphabetic() || character == '_'
-            } else {
-                character.is_ascii_alphanumeric() || character == '_'
-            }
-        })
-}
-
-fn is_template_expression(expression: &str) -> bool {
-    expression.split('.').all(is_template_identifier)
-}
-
-struct TemplateForBlock {
-    start: usize,
-    end: usize,
-    item: String,
-    collection: String,
-    body: String,
-}
-
-fn next_template_for_block(template: &str) -> Option<Result<TemplateForBlock, String>> {
-    let mut search_from = 0;
-    while let Some(relative_start) = template[search_from..].find("for ") {
-        let start = search_from + relative_start;
-        let line_start = template[..start].rfind('\n').map_or(0, |index| index + 1);
-        if !template[line_start..start].trim().is_empty() {
-            search_from = start + 4;
-            continue;
-        }
-        let Some(relative_open) = template[start..].find('{') else {
-            return Some(Err("view `for` block is missing `{`".into()));
-        };
-        let open = start + relative_open;
-        let header = template[start + 4..open].trim();
-        let parts = header.split_whitespace().collect::<Vec<_>>();
-        if parts.len() != 3
-            || parts[1] != "in"
-            || !is_template_identifier(parts[0])
-            || !is_template_identifier(parts[2])
-        {
-            return Some(Err(
-                "view `for` block must use `for item in collection { ... }`".into(),
-            ));
-        }
-        let mut depth = 1;
-        let mut position = open + 1;
-        while position < template.len() {
-            match template.as_bytes()[position] {
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(Ok(TemplateForBlock {
-                            start,
-                            end: position + 1,
-                            item: parts[0].into(),
-                            collection: parts[2].into(),
-                            body: template[open + 1..position].into(),
-                        }));
-                    }
-                }
-                _ => {}
-            }
-            position += 1;
-        }
-        return Some(Err("view `for` block is unterminated".into()));
-    }
-    None
-}
-
-fn resolve_template_type(
-    expression: &str,
-    bindings: &HashMap<String, Type>,
-    program: &zelyra_ast::Program,
-) -> Result<Type, String> {
-    let mut parts = expression.split('.');
-    let root = parts.next().unwrap_or_default();
-    let Some(mut ty) = bindings.get(root).cloned() else {
-        return Err(format!("unknown view value `{root}`"));
-    };
-    for field in parts {
-        ty = template_field_type(program, &ty, field)?;
-    }
-    Ok(ty)
-}
-
-fn template_field_type(
-    program: &zelyra_ast::Program,
-    ty: &Type,
-    field: &str,
-) -> Result<Type, String> {
-    let ty = match ty {
-        Type::Option(_) => {
-            return Err(format!(
-                "field `{field}` requires explicit handling of an optional value"
-            ));
-        }
-        Type::Named(name) => {
-            if let Some(definition) = program
-                .types
-                .iter()
-                .find(|definition| definition.name == *name)
-            {
-                return template_field_type(program, &definition.target, field);
-            }
-            ty
-        }
-        _ => ty,
-    };
-    if let Type::Named(name) = ty {
-        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-            return record
-                .fields
-                .iter()
-                .find(|candidate| candidate.name == field)
-                .map(|candidate| candidate.ty.clone())
-                .ok_or_else(|| format!("field `{field}` does not exist on `{name}`"));
-        }
-        if let Some(table) = program.tables.iter().find(|table| {
-            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
-        }) {
-            return table
-                .columns
-                .iter()
-                .find(|candidate| candidate.name == field)
-                .map(|candidate| candidate.ty.clone())
-                .ok_or_else(|| format!("field `{field}` does not exist on `{name}`"));
-        }
-    }
-    Err(format!("type `{ty}` has no field `{field}`"))
-}
-
-fn template_type_compatible(expected: &Type, actual: &Type) -> bool {
-    expected == actual
-        || matches!(expected, Type::Option(inner) if template_type_compatible(inner, actual))
-}
-
-fn validate_template_expressions(
-    path: &str,
-    html: &str,
-    program: &zelyra_ast::Program,
-    bindings: &HashMap<String, Type>,
-    line: usize,
-    column: usize,
-) -> bool {
-    if let Some(block) = next_template_for_block(html) {
-        let block = match block {
-            Ok(block) => block,
-            Err(message) => {
-                diagnostic(path, "E-VIEW-018", &message, line, column);
-                return false;
-            }
-        };
-        let mut valid = validate_template_interpolations(
-            path,
-            &html[..block.start],
-            program,
-            bindings,
-            line,
-            column,
-        );
-        let Some(collection_type) = bindings.get(&block.collection) else {
-            diagnostic(
-                path,
-                "E-VIEW-018",
-                &format!("unknown view collection `{}`", block.collection),
-                line,
-                column,
-            );
-            return false;
-        };
-        let Type::Array(item_type) = collection_type else {
-            diagnostic(
-                path,
-                "E-VIEW-018",
-                &format!(
-                    "view loop source `{}` must have an array type",
-                    block.collection
-                ),
-                line,
-                column,
-            );
-            return false;
-        };
-        if bindings.contains_key(&block.item) {
-            diagnostic(
-                path,
-                "E-VIEW-018",
-                &format!(
-                    "view loop variable `{}` conflicts with an existing value",
-                    block.item
-                ),
-                line,
-                column,
-            );
-            return false;
-        }
-        let mut loop_bindings = bindings.clone();
-        loop_bindings.insert(block.item, (**item_type).clone());
-        valid &=
-            validate_template_expressions(path, &block.body, program, &loop_bindings, line, column);
-        valid &= validate_template_expressions(
-            path,
-            &html[block.end..],
-            program,
-            bindings,
-            line,
-            column,
-        );
-        return valid;
-    }
-    validate_template_interpolations(path, html, program, bindings, line, column)
-}
-
-fn validate_template_interpolations(
-    path: &str,
-    html: &str,
-    program: &zelyra_ast::Program,
-    bindings: &HashMap<String, Type>,
-    line: usize,
-    column: usize,
-) -> bool {
-    let expressions = match template_expressions(html) {
-        Ok(expressions) => expressions,
-        Err(message) => {
-            diagnostic(path, "E-VIEW-013", &message, line, column);
-            return false;
-        }
-    };
-    let mut valid = true;
-    for expression in expressions {
-        if !is_template_expression(&expression) {
-            diagnostic(
-                path,
-                "E-VIEW-014",
-                &format!(
-                    "view expression must contain identifiers separated by `.`, found `{{{expression}}}`"
-                ),
-                line,
-                column,
-            );
-            valid = false;
-        } else if let Err(message) = resolve_template_type(&expression, bindings, program) {
-            let code = if expression.contains('.') {
-                "E-VIEW-016"
-            } else {
-                "E-VIEW-015"
-            };
-            diagnostic(path, code, &message, line, column);
-            valid = false;
-        }
-    }
-    valid
-}
-
-fn validate_component_template(
-    path: &str,
-    program: &zelyra_ast::Program,
-    html: &str,
-    line: usize,
-    column: usize,
-    bindings: &HashMap<String, Type>,
-) -> bool {
-    let mut valid = validate_template_expressions(path, html, program, bindings, line, column);
-    let invocations = match component_invocations(html) {
-        Ok(invocations) => invocations,
-        Err(message) => {
-            diagnostic(path, "E-VIEW-006", &message, line, column);
-            return false;
-        }
-    };
-    for invocation in invocations {
-        let ComponentInvocation {
-            name,
-            attributes,
-            body,
-            ..
-        } = invocation;
-        let Some(component) = program
-            .components
-            .iter()
-            .find(|component| component.name == name)
-        else {
-            diagnostic(
-                path,
-                "E-VIEW-007",
-                &format!("unknown view component `{name}`"),
-                line,
-                column,
-            );
-            valid = false;
-            continue;
-        };
-        let attributes = match component_attributes(&attributes) {
-            Ok(attributes) => attributes,
-            Err(message) => {
-                diagnostic(path, "E-VIEW-006", &message, line, column);
-                valid = false;
-                continue;
-            }
-        };
-        let (has_default_slot, named_slots) = match declared_component_slots(component) {
-            Ok(slots) => slots,
-            Err(message) => {
-                diagnostic(path, "E-VIEW-011", &message, line, column);
-                valid = false;
-                (false, HashSet::new())
-            }
-        };
-        if let Some(body) = body.as_deref() {
-            let (default_body, supplied_named_slots) = match split_component_body(body) {
-                Ok(slots) => slots,
-                Err(message) => {
-                    diagnostic(path, "E-VIEW-012", &message, line, column);
-                    valid = false;
-                    (body.to_owned(), HashMap::new())
-                }
-            };
-            if !default_body.trim().is_empty() && !has_default_slot {
-                diagnostic(
-                    path,
-                    "E-VIEW-011",
-                    &format!("component `{name}` receives content but has no `<slot />`"),
-                    line,
-                    column,
-                );
-                valid = false;
-            }
-            for slot_name in supplied_named_slots.keys() {
-                if !named_slots.contains(slot_name) {
-                    diagnostic(
-                        path,
-                        "E-VIEW-012",
-                        &format!("component `{name}` has no named slot `{slot_name}`"),
-                        line,
-                        column,
-                    );
-                    valid = false;
-                }
-            }
-            valid &= validate_component_template(path, program, body, line, column, bindings);
-        }
-        for attribute in attributes.keys() {
-            if !component.props.iter().any(|prop| prop.name == *attribute) {
-                diagnostic(
-                    path,
-                    "E-VIEW-008",
-                    &format!("component `{name}` has no property `{attribute}`"),
-                    line,
-                    column,
-                );
-                valid = false;
-            }
-        }
-        for prop in &component.props {
-            let Some(value) = attributes.get(&prop.name) else {
-                if !matches!(prop.ty, Type::Option(_)) {
-                    diagnostic(
-                        path,
-                        "E-VIEW-009",
-                        &format!(
-                            "component `{name}` is missing required property `{}`",
-                            prop.name
-                        ),
-                        line,
-                        column,
-                    );
-                    valid = false;
-                }
-                continue;
-            };
-            let dynamic_type_error = value
-                .strip_prefix('{')
-                .and_then(|value| value.strip_suffix('}'))
-                .map(str::trim)
-                .and_then(|expression| resolve_template_type(expression, bindings, program).ok())
-                .filter(|actual| !template_type_compatible(&prop.ty, actual));
-            if dynamic_type_error.is_some() || !component_prop_accepts(prop, value) {
-                diagnostic(
-                    path,
-                    "E-VIEW-010",
-                    &format!(
-                        "value `{value}` is incompatible with component property `{}` of type {}",
-                        prop.name, prop.ty
-                    ),
-                    line,
-                    column,
-                );
-                valid = false;
-            }
-        }
-    }
-    valid
-}
-
-fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
-    let mut valid = true;
-    let mut names = HashSet::new();
-    for component in &program.components {
-        if !component
-            .name
-            .chars()
-            .next()
-            .is_some_and(|character| character.is_ascii_uppercase())
-        {
-            diagnostic_with_span(
-                path,
-                "E-VIEW-004",
-                &format!(
-                    "view component `{}` must start with an uppercase letter",
-                    component.name
-                ),
-                component.span,
-            );
-            valid = false;
-        }
-        if !names.insert(component.name.as_str()) {
-            diagnostic_with_span(
-                path,
-                "E-VIEW-005",
-                &format!("duplicate view component `{}`", component.name),
-                component.span,
-            );
-            valid = false;
-        }
-        if let Err(message) = declared_component_slots(component) {
-            diagnostic_with_span(
-                path,
-                "E-VIEW-011",
-                &format!("component `{}`: {message}", component.name),
-                component.span,
-            );
-            valid = false;
-        }
-        let mut props = HashSet::new();
-        for prop in &component.props {
-            if !props.insert(prop.name.as_str()) {
-                diagnostic_with_span(
-                    path,
-                    "E-VIEW-005",
-                    &format!(
-                        "duplicate property `{}` in component `{}`",
-                        prop.name, component.name
-                    ),
-                    prop.span,
-                );
-                valid = false;
-            }
-        }
-        valid &= validate_component_template(
-            path,
-            program,
-            &component.html,
-            component.span.line,
-            component.span.column,
-            &component
-                .props
-                .iter()
-                .map(|prop| (prop.name.clone(), prop.ty.clone()))
-                .collect(),
-        );
-    }
-    for page in &program.pages {
-        let bindings = page_template_bindings(
-            &page.path,
-            &page.data,
-            &page.inputs,
-            page.page_size,
-            !page.sort.is_empty(),
-            !page.search.is_empty(),
-            &page.filters,
-        );
-        valid &= validate_component_template(
-            path,
-            program,
-            &page.html,
-            page.span.line,
-            page.span.column,
-            &bindings,
-        );
-        if let Some(view_name) = &page.view {
-            if let Some(view) = program.views.iter().find(|view| view.name == *view_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &view.html,
-                    view.span.line,
-                    view.span.column,
-                    &bindings,
-                );
-            }
-        }
-    }
-    for crud in &program.cruds {
-        if let Some(layout_name) = &crud.layout {
-            if let Some(layout) = program.views.iter().find(|view| view.name == *layout_name) {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &layout.html,
-                    layout.span.line,
-                    layout.span.column,
-                    &HashMap::new(),
-                );
-            }
-            for slot in &crud.layout_slots {
-                valid &= validate_component_template(
-                    path,
-                    program,
-                    &slot.html,
-                    slot.span.line,
-                    slot.span.column,
-                    &HashMap::new(),
-                );
-            }
-        }
-    }
-    valid
-}
-
-fn page_template_bindings(
-    path: &str,
-    data: &[zelyra_ast::PageDataDef],
-    inputs: &[zelyra_ast::PageInputDef],
-    page_size: Option<u32>,
-    sort_enabled: bool,
-    search_enabled: bool,
-    filter_names: &[String],
-) -> HashMap<String, Type> {
-    let mut bindings = path
-        .split('/')
-        .filter_map(|segment| {
-            segment
-                .strip_prefix('{')
-                .and_then(|segment| segment.strip_suffix('}'))
-                .filter(|name| is_template_identifier(name))
-                .map(|name| (name.to_owned(), Type::String))
-        })
-        .collect::<HashMap<_, _>>();
-    for input in inputs {
-        bindings.insert(input.name.clone(), input.ty.clone());
-    }
-    if page_size.is_some() {
-        bindings.insert("page".into(), Type::UInt);
-        bindings.insert("total".into(), Type::UInt);
-        bindings.insert("pages".into(), Type::UInt);
-    }
-    if sort_enabled {
-        bindings.insert("sort".into(), Type::String);
-        bindings.insert("order".into(), Type::String);
-    }
-    if search_enabled {
-        bindings.insert("search".into(), Type::String);
-    }
-    for filter_name in filter_names {
-        bindings.insert(format!("filter_{filter_name}"), Type::String);
-        bindings.insert(format!("filter_{filter_name}__operator"), Type::String);
-    }
-    for data in data {
-        bindings.insert(data.name.clone(), data.result_type.clone());
-    }
-    bindings
-}
-
-fn verify_command(path: &str, json: bool) -> ExitCode {
-    let program = match validate(path) {
-        Ok(program) => program,
-        Err(()) => return ExitCode::from(1),
-    };
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(error) => {
-            eprintln!("error[E-IO-001]: cannot read `{path}`: {error}");
-            return ExitCode::from(1);
-        }
-    };
-    let results = verify_program(&program);
-    let failed = results
-        .iter()
-        .any(|result| result.status == VerificationStatus::Failed);
-    if json {
-        println!("{}", format_verification_json(path, &source, &results));
-    } else {
-        for result in &results {
-            println!("{}", format_verification_result(path, &source, result));
-        }
-    }
-    if failed {
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
-    }
-}
-
-struct DoctorCheck {
-    name: &'static str,
-    status: &'static str,
-    message: String,
-}
-
-fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
-    let source =
-        fs::read_to_string(path).map_err(|error| format!("cannot read `{path}`: {error}"))?;
-    for line in source.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let line = line.strip_prefix("export ").unwrap_or(line);
-        let Some((name, value)) = line.split_once('=') else {
-            continue;
-        };
-        if name.trim() == key {
-            return Ok(Some(
-                value.trim().trim_matches('"').trim_matches('\'').to_owned(),
-            ));
-        }
-    }
-    Ok(None)
-}
-
-fn project_ui_setting(path: &str, key: &str, default: &str) -> Result<String, String> {
-    if let Ok(value) = env::var(key) {
-        return Ok(value);
-    }
-    let source_path = std::path::Path::new(path);
-    let project_directory = source_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
-    let env_path = project_directory.join(".env");
-    if !env_path.is_file() {
-        return Ok(default.to_owned());
-    }
-    let env_path_string = env_path.to_string_lossy();
-    Ok(read_env_value(&env_path_string, key)?.unwrap_or_else(|| default.to_owned()))
-}
-
-fn project_ui_settings(path: &str) -> Result<(UiLanguage, UiLevel), String> {
-    let language = project_ui_setting(path, "ZELYRA_LANGUAGE", "en")?;
-    let language = UiLanguage::parse(&language.to_ascii_lowercase())
-        .ok_or_else(|| "ZELYRA_LANGUAGE must be `en` or `de`".to_owned())?;
-    let level = project_ui_setting(path, "ZELYRA_LEVEL", "work")?;
-    let level = UiLevel::parse(&level.to_ascii_lowercase())
-        .ok_or_else(|| "ZELYRA_LEVEL must be `learn` or `work`".to_owned())?;
-    Ok((language, level))
-}
-
-fn project_allowed_hosts(path: &str) -> Result<Vec<String>, String> {
-    let configured = project_ui_setting(path, "ZELYRA_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")?;
-    let hosts = configured
-        .split(',')
-        .map(str::trim)
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    if hosts.is_empty() || hosts.iter().any(String::is_empty) {
-        return Err(
-            "ZELYRA_ALLOWED_HOSTS must contain comma-separated, non-empty hostnames or IP addresses".into(),
-        );
-    }
-    Ok(hosts)
-}
-
-fn project_theme_css(path: &str) -> Result<Option<String>, String> {
-    let source_path = std::path::Path::new(path);
-    let project_directory = source_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
-    let theme_path = project_directory.join(PROJECT_THEME_CSS_FILE);
-    let metadata = match fs::symlink_metadata(&theme_path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(format!("cannot inspect `{PROJECT_THEME_CSS_FILE}`")),
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(format!(
-            "`{PROJECT_THEME_CSS_FILE}` must be a regular project file, not a symbolic link"
-        ));
-    }
-    if metadata.len() > PROJECT_THEME_CSS_MAX_BYTES {
-        return Err(format!(
-            "`{PROJECT_THEME_CSS_FILE}` exceeds the 128 KiB size limit"
-        ));
-    }
-
-    let file = fs::File::open(&theme_path)
-        .map_err(|_| format!("cannot read `{PROJECT_THEME_CSS_FILE}`"))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.take(PROJECT_THEME_CSS_MAX_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| format!("cannot read `{PROJECT_THEME_CSS_FILE}`"))?;
-    if bytes.len() as u64 > PROJECT_THEME_CSS_MAX_BYTES {
-        return Err(format!(
-            "`{PROJECT_THEME_CSS_FILE}` exceeds the 128 KiB size limit"
-        ));
-    }
-    String::from_utf8(bytes)
-        .map(Some)
-        .map_err(|_| format!("`{PROJECT_THEME_CSS_FILE}` must contain UTF-8 text"))
-}
-
-fn project_ui_catalogs(path: &str) -> Result<ProjectUiCatalogs, String> {
-    let source_path = std::path::Path::new(path);
-    let project_directory = source_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
-    let locale_directory = project_directory.join(PROJECT_LOCALE_DIRECTORY);
-    let directory_metadata = match fs::symlink_metadata(&locale_directory) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(ProjectUiCatalogs::default());
-        }
-        Err(_) => return Err("cannot inspect project locale directory".to_owned()),
-    };
-    if directory_metadata.file_type().is_symlink() || !directory_metadata.is_dir() {
-        return Err("project `locales` must be a regular directory and not a symbolic link".into());
-    }
-
-    let mut catalogs = ProjectUiCatalogs::default();
-    for language in [UiLanguage::German, UiLanguage::English] {
-        let file_name = format!("{}.json", language.code());
-        let display_name = format!("{PROJECT_LOCALE_DIRECTORY}/{file_name}");
-        let catalog_path = locale_directory.join(&file_name);
-        let metadata = match fs::symlink_metadata(&catalog_path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(_) => return Err(format!("cannot inspect `{display_name}`")),
-        };
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(format!(
-                "`{display_name}` must be a regular file, not a symbolic link"
-            ));
-        }
-        if metadata.len() > PROJECT_LOCALE_MAX_BYTES {
-            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
-        }
-
-        let file =
-            fs::File::open(&catalog_path).map_err(|_| format!("cannot read `{display_name}`"))?;
-        let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        file.take(PROJECT_LOCALE_MAX_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| format!("cannot read `{display_name}`"))?;
-        if bytes.len() as u64 > PROJECT_LOCALE_MAX_BYTES {
-            return Err(format!("`{display_name}` exceeds the 256 KiB size limit"));
-        }
-        let source = String::from_utf8(bytes)
-            .map_err(|_| format!("`{display_name}` must contain UTF-8 text"))?;
-        catalogs
-            .set_json(language, &source)
-            .map_err(|error| format!("invalid `{display_name}`: {error}"))?;
-    }
-    Ok(catalogs)
-}
-
-fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
-    program
-        .pages
-        .iter()
-        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, PROJECT_THEME_CSS_PATH))
-        || program
-            .apis
-            .iter()
-            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, PROJECT_THEME_CSS_PATH))
-        || program.auth.iter().any(|auth| {
-            auth.admin_path.as_deref().is_some_and(|path| {
-                zelyra_web::route_pattern_matches_path(path, PROJECT_THEME_CSS_PATH)
-            })
-        })
-}
-
-fn docker_compose_check() -> DoctorCheck {
-    if let Some(command) = detect_docker_compose() {
-        return DoctorCheck {
-            name: "docker_compose",
-            status: "pass",
-            message: format!("{} is available", command.label()),
-        };
-    }
-    DoctorCheck {
-        name: "docker_compose",
-        status: "warn",
-        message: format!(
-            "{} The generated MariaDB stack cannot be started until Docker Compose is available.",
-            docker_compose_install_hint()
-        ),
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DockerComposeCommand {
-    Plugin,
-    Legacy,
-}
-
-impl DockerComposeCommand {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Plugin => "docker compose",
-            Self::Legacy => "docker-compose",
-        }
-    }
-}
-
-fn detect_docker_compose() -> Option<DockerComposeCommand> {
-    let plugin = Command::new("docker")
-        .args(["compose", "version"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .ok()
-        .is_some_and(|status| status.success());
-    if plugin {
-        return Some(DockerComposeCommand::Plugin);
-    }
-    let legacy = Command::new("docker-compose")
-        .arg("version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .ok()
-        .is_some_and(|status| status.success());
-    legacy.then_some(DockerComposeCommand::Legacy)
-}
-
-fn docker_compose_install_hint() -> String {
-    let (platform, url) = if cfg!(target_os = "linux") {
-        ("Linux", "https://docs.docker.com/engine/install/")
-    } else if cfg!(target_os = "windows") {
-        (
-            "Windows",
-            "https://docs.docker.com/desktop/setup/install/windows-install/",
-        )
-    } else if cfg!(target_os = "macos") {
-        (
-            "macOS",
-            "https://docs.docker.com/desktop/setup/install/mac-install/",
-        )
-    } else {
-        (
-            "your operating system",
-            "https://docs.docker.com/engine/install/",
-        )
-    };
-    format!(
-        "Docker Compose is unavailable. Install Docker for {platform} from:\n{url}\nAfter installation, verify with `docker compose version`, then run this step again."
-    )
-}
-
-fn print_compose_start_hint() {
-    match detect_docker_compose() {
-        Some(command) => println!(
-            "  {} --env-file .env -f docker-compose.mariadb.yml up -d --build",
-            command.label()
-        ),
-        None => println!("{}", docker_compose_install_hint()),
-    }
-}
-
-fn compose_command(directory: &std::path::Path, command: DockerComposeCommand) -> Command {
-    let mut process = match command {
-        DockerComposeCommand::Plugin => {
-            let mut process = Command::new("docker");
-            process.arg("compose");
-            process
-        }
-        DockerComposeCommand::Legacy => Command::new("docker-compose"),
-    };
-    process
-        .current_dir(directory)
-        .args(["--env-file", ".env", "-f", "docker-compose.mariadb.yml"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    process
-}
-
-fn compose_start_failure_message(command: DockerComposeCommand, details: &str) -> String {
-    let details = details.to_ascii_lowercase();
-    if details.contains("permission denied")
-        && (details.contains("docker.sock") || details.contains("docker"))
-    {
-        "Docker access was denied. On Linux, add the current user to the `docker` group with `sudo usermod -aG docker $USER`, then either fully sign out and sign in again or run these commands in the current terminal:\n  newgrp docker\n  id -nG\n  docker ps\nRetry setup when `docker` appears in the group list and `docker ps` succeeds. Opening another terminal window alone may not refresh group membership. Alternatively follow your distribution's Docker setup instructions.".into()
-    } else if details.contains("address already in use")
-        || details.contains("port is already allocated")
-        || details.contains("failed to bind")
-    {
-        "a published web or MariaDB port is already in use. For a newly created .env, run `zelyra setup` to select free defaults; for an existing .env, choose free ZELYRA_HOST_PORT and ZELYRA_DB_HOST_PORT values, then retry.".into()
-    } else {
-        format!(
-            "{} could not start the generated MariaDB application. Inspect the stack with `{} --env-file .env -f docker-compose.mariadb.yml logs`.",
-            command.label(),
-            command.label()
-        )
-    }
-}
-
-fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> {
-    if !directory.join("docker-compose.mariadb.yml").is_file() {
-        return Err(
-            "docker-compose.mariadb.yml is missing; use `zelyra init --mariadb` first".into(),
-        );
-    }
-    let Some(command) = detect_docker_compose() else {
-        return Err(docker_compose_install_hint());
-    };
-    let output = compose_command(directory, command)
-        .args(["up", "-d", "--build"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|error| format!("could not start {}: {error}", command.label()))?;
-    if output.status.success() {
-        Ok(format!(
-            "MariaDB and the application were started with {}",
-            command.label()
-        ))
-    } else {
-        let details = format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Err(compose_start_failure_message(command, &details))
-    }
-}
-
-fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
-    let env_path = directory.join(".env");
-    let url = read_env_value(env_path.to_str().unwrap_or(".env"), "DATABASE_URL")?
-        .ok_or_else(|| "`.env` does not define DATABASE_URL".to_owned())?;
-    let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
-        .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
-    Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
-}
-
-fn project_web_url(directory: &std::path::Path) -> Result<String, String> {
-    let env_path = directory.join(".env");
-    let env_path_string = env_path.to_string_lossy();
-    project_web_url_with_host_port(
-        directory,
-        env::var("ZELYRA_HOST_PORT").ok().as_deref(),
-        &env_path_string,
-    )
-}
-
-fn project_web_url_with_host_port(
-    directory: &std::path::Path,
-    host_port_override: Option<&str>,
-    env_path: &str,
-) -> Result<String, String> {
-    let port = match host_port_override.map(str::to_owned) {
-        Some(value) => Some(value),
-        None => read_env_value(env_path, "ZELYRA_HOST_PORT")?,
-    };
-    let port = match port {
-        Some(value) => parse_web_port(&value)?,
-        None => {
-            let template = local_mariadb_template(directory)?;
-            template_port(&template, "ZELYRA_HOST_PORT", DEFAULT_WEB_PORT)
-        }
-    };
-    Ok(format!("http://127.0.0.1:{port}"))
-}
-
-fn run_local_schema_setup(directory: &std::path::Path) -> Result<(), String> {
-    let database_url = expanded_database_url(directory)?;
-    let executable =
-        env::current_exe().map_err(|error| format!("cannot locate zelyra: {error}"))?;
-    let status = Command::new(executable)
-        .current_dir(directory)
-        .args(["db", "setup", "main.zyl"])
-        .env("DATABASE_URL", database_url)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|error| format!("could not run schema setup: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("schema setup failed; verify that MariaDB is reachable and the configured credentials are correct".into())
-    }
-}
-
-fn run_container_schema_setup(directory: &std::path::Path) -> Result<(), String> {
-    let Some(command) = detect_docker_compose() else {
-        return Err(docker_compose_install_hint());
-    };
-    for _attempt in 0..20 {
-        let status = compose_command(directory, command)
-            .args(["exec", "-T", "web", "zelyra", "db", "apply", "main.zyl"])
-            .status()
-            .map_err(|error| {
-                format!("could not run schema setup in the application container: {error}")
-            })?;
-        if status.success() {
-            return Ok(());
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-    Err("schema setup did not succeed after waiting for MariaDB; inspect the Compose logs and retry".into())
-}
-
-fn setup_action(path: &str, action: &str, options: &SetupOptions) -> Result<String, String> {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        return Err(format!("project directory `{path}` does not exist"));
-    }
-    let setup = ensure_local_env_file(directory, options)?;
-    let mut messages = setup
-        .port_notes
-        .into_iter()
-        .map(|note| format!("note: {note}"))
-        .collect::<Vec<_>>();
-    messages.push(if setup.created {
-        "created protected .env".to_owned()
-    } else {
-        "kept existing .env; credentials were not changed".to_owned()
-    });
-    if matches!(action, "database" | "schema" | "all") {
-        let web_url = project_web_url(directory)?;
-        messages.push(start_mariadb_compose(directory)?);
-        messages.push(format!("open: {web_url}"));
-    }
-    if matches!(action, "schema" | "all") {
-        let schema_result = if directory.join("docker-compose.mariadb.yml").is_file() {
-            run_container_schema_setup(directory)
-        } else {
-            run_local_schema_setup(directory)
-        };
-        schema_result?;
-        messages.push("database schema setup completed".into());
-    }
-    Ok(messages.join("\n"))
-}
-
-struct SetupWebState {
-    directory: PathBuf,
-    token: String,
-    message: String,
-}
-
-fn setup_web_token(
-    request: &zelyra_web::Request,
-    input: Option<&HashMap<String, String>>,
-) -> Option<String> {
-    if let Some(input) = input.and_then(|values| values.get("token")) {
-        return Some(input.clone());
-    }
-    request
-        .target
-        .split_once('?')
-        .and_then(|(_, query)| parse_urlencoded(query).ok())
-        .and_then(|values| values.get("token").cloned())
-}
-
-fn setup_web_html(state: &SetupWebState) -> String {
-    let directory = &state.directory;
-    let env_status = if directory.join(".env").is_file() {
-        "bereit"
-    } else {
-        "nicht angelegt"
-    };
-    let compose_status = if directory.join("docker-compose.mariadb.yml").is_file() {
-        match detect_docker_compose() {
-            Some(command) => format!("{} available", command.label()),
-            None => docker_compose_install_hint(),
-        }
-    } else {
-        "kein MariaDB-Compose-Projekt erkannt".into()
-    };
-    let project_status = if directory.join("main.zyl").is_file() {
-        "main.zyl gefunden"
-    } else {
-        "main.zyl fehlt"
-    };
-    let message = if state.message.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "<section><strong>Status</strong><pre>{}</pre></section>",
-            html_escape(&state.message)
-        )
-    };
-    format!(
-        "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Zelyra Setup</title><style>body{{font-family:system-ui,sans-serif;max-width:800px;margin:3rem auto;padding:0 1rem;color:#17202a;background:#f6f8fa}}main{{background:white;padding:2rem;border-radius:12px;box-shadow:0 4px 24px #0001}}button{{margin:.4rem .4rem .4rem 0;padding:.7rem 1rem;border:0;border-radius:7px;background:#1769aa;color:white;cursor:pointer}}section{{margin:1rem 0;padding:1rem;background:#eef6ff;border-left:4px solid #2675d8}}pre{{white-space:pre-wrap}}</style></head><body><main><h1>Zelyra Setup</h1><p>Lokaler Installationsassistent fÃ¼r <code>{directory}</code>.</p><p><small>Der Server bindet nur an 127.0.0.1. Docker selbst wird nicht mit Root-Rechten installiert.</small></p>{message}<h2>PrÃ¼fung</h2><ul><li>{project_status}</li><li>.env: {env_status}</li><li>Compose: {compose_status}</li></ul><h2>Aktionen</h2><form method=\"post\" action=\"/\"><input type=\"hidden\" name=\"token\" value=\"{token}\"><button name=\"action\" value=\"prepare\">Konfiguration vorbereiten</button><button name=\"action\" value=\"database\">MariaDB und Anwendung starten</button><button name=\"action\" value=\"schema\">Datenbankschema einrichten</button><button name=\"action\" value=\"all\">Alles ausfÃ¼hren</button></form><p><small>Fehlendes Docker wird mit einem Installationshinweis gemeldet. Zugangsdaten werden niemals angezeigt.</small></p></main></body></html>",
-        directory = html_escape(&directory.display().to_string()),
-        project_status = html_escape(project_status),
-        env_status = html_escape(env_status),
-        compose_status = html_escape(&compose_status),
-        message = message,
-        token = html_escape(&state.token),
-    )
-}
-
-fn setup_web_response(
-    state: &Arc<Mutex<SetupWebState>>,
-    request: &zelyra_web::Request,
-) -> Response {
-    let input = if request.method == "POST" {
-        match parse_urlencoded(&request.body) {
-            Ok(values) => Some(values),
-            Err(error) => {
-                return Response::html(
-                    400,
-                    format!(
-                        "<h1>400 Bad Request</h1><p>{}</p>",
-                        html_escape(&error.message)
-                    ),
-                )
-            }
-        }
-    } else {
-        None
-    };
-    let Ok(mut state) = state.lock() else {
-        return Response::html(500, "<h1>500 Internal Server Error</h1>");
-    };
-    if setup_web_token(request, input.as_ref()) != Some(state.token.clone()) {
-        return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid setup token.</p>");
-    }
-    if request.method == "POST" {
-        let action = input
-            .as_ref()
-            .and_then(|values| values.get("action"))
-            .map(String::as_str)
-            .unwrap_or("prepare");
-        state.message = match action {
-            "prepare" | "database" | "schema" | "all" => setup_action(
-                state.directory.to_str().unwrap_or("."),
-                action,
-                &SetupOptions::default(),
-            )
-            .unwrap_or_else(|error| format!("Fehler: {error}")),
-            _ => "Fehler: unbekannte Setup-Aktion".into(),
-        };
-    }
-    Response::html(200, setup_web_html(&state))
-}
-
-fn setup_web_command(path: &str, port: u16, port_given: bool) -> ExitCode {
-    let directory = std::path::Path::new(path);
-    if !directory.is_dir() {
-        eprintln!("error[E-SETUP-001]: project directory `{path}` does not exist");
-        return ExitCode::from(1);
-    }
-    let (port, port_note) = match resolve_host_port(port, port_given, "setup web", true, &[]) {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("error[E-SETUP-WEB-001]: {error}");
-            return ExitCode::from(2);
-        }
-    };
-    if let Some(note) = port_note {
-        println!("note: {note}");
-    }
-    let Ok(token) = generate_local_secret() else {
-        eprintln!("error[E-SETUP-WEB-001]: cannot create a secure setup token");
-        return ExitCode::from(1);
-    };
-    let address = format!("127.0.0.1:{port}");
-    let state = Arc::new(Mutex::new(SetupWebState {
-        directory: directory.to_path_buf(),
-        token: token.clone(),
-        message: String::new(),
-    }));
-    let get_state = Arc::clone(&state);
-    let post_state = Arc::clone(&state);
-    let routes = vec![
-        ApiRoute::new("GET", "/", move |request, _| {
-            setup_web_response(&get_state, request)
-        }),
-        ApiRoute::new("POST", "/", move |request, _| {
-            setup_web_response(&post_state, request)
-        }),
-    ];
-    println!("Zelyra setup web is running on http://{address}/");
-    println!("open: http://{address}/?token={token}");
-    println!("stop with Ctrl+C");
-    match serve_app(
-        WebApp::new(Vec::new(), Vec::new()).with_apis(routes),
-        &address,
-    ) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!(
-                "error[E-SETUP-WEB-002]: cannot start setup web server on {address}: {error}"
-            );
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
-    let failed = checks.iter().any(|check| check.status == "fail");
-    let warnings = checks.iter().filter(|check| check.status == "warn").count();
-    let checks = checks
-        .iter()
-        .map(|check| {
-            serde_json::json!({
-                "name": check.name,
-                "status": check.status,
-                "message": check.message,
-            })
-        })
-        .collect::<Vec<_>>();
-    serde_json::json!({
-        "version": env!("CARGO_PKG_VERSION"),
-        "project": path,
-        "status": if failed { "failed" } else { "ready" },
-        "warnings": warnings,
-        "checks": checks,
-    })
-    .to_string()
-}
-
-fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let mut path = "main.zyl".to_owned();
-    let mut path_given = false;
-    let mut port = DEFAULT_WEB_PORT;
-    let mut env_file = None;
-    let mut json = false;
-    while let Some(argument) = args.next() {
-        if argument == "--json" {
-            json = true;
-        } else if argument == "--port" {
-            let Some(value) = args.next() else {
-                usage();
-                return ExitCode::from(2);
-            };
-            port = match parse_web_port(&value) {
-                Ok(port) => port,
-                Err(error) => {
-                    eprintln!("error[E-DOCTOR-001]: {error}");
-                    return ExitCode::from(2);
-                }
-            };
-        } else if argument == "--env-file" {
-            let Some(value) = args.next() else {
-                usage();
-                return ExitCode::from(2);
-            };
-            env_file = Some(value);
-        } else if argument.starts_with('-') || path_given {
-            usage();
-            return ExitCode::from(2);
-        } else {
-            path = argument;
-            path_given = true;
-        }
-    }
-
-    let mut checks = Vec::new();
-    let file_database_url = if let Some(env_file) = env_file.as_deref() {
-        match read_env_value(env_file, "DATABASE_URL") {
-            Ok(Some(url)) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "pass",
-                    message: format!(
-                        "loaded DATABASE_URL from {env_file} without exposing credentials"
-                    ),
-                });
-                Some(url)
-            }
-            Ok(None) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "warn",
-                    message: format!("{env_file} does not define DATABASE_URL"),
-                });
-                None
-            }
-            Err(error) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "fail",
-                    message: error,
-                });
-                None
-            }
-        }
-    } else {
-        None
-    };
-    let program = if fs::metadata(&path).is_ok() {
-        checks.push(DoctorCheck {
-            name: "project_file",
-            status: "pass",
-            message: format!("{path} exists"),
-        });
-        match validate(&path) {
-            Ok(program) => {
-                checks.push(DoctorCheck {
-                    name: "static_checks",
-                    status: "pass",
-                    message: "source, types, APIs, SQL, and forms are valid".into(),
-                });
-                Some(program)
-            }
-            Err(()) => {
-                checks.push(DoctorCheck {
-                    name: "static_checks",
-                    status: "fail",
-                    message: "see diagnostics above".into(),
-                });
-                None
-            }
-        }
-    } else {
-        checks.push(DoctorCheck {
-            name: "project_file",
-            status: "fail",
-            message: format!("`{path}` does not exist"),
-        });
-        None
-    };
-
-    match Command::new("cargo").arg("--version").output() {
-        Ok(output) if output.status.success() => checks.push(DoctorCheck {
-            name: "rust_toolchain",
-            status: "pass",
-            message: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
-        }),
-        _ => checks.push(DoctorCheck {
-            name: "rust_toolchain",
-            status: "warn",
-            message: "cargo is unavailable".into(),
-        }),
-    }
-
-    if let Some(program) = &program {
-        match build_schema(program) {
-            Ok(schema) => {
-                let backend = schema.backend();
-                match file_database_url.or_else(|| env::var("DATABASE_URL").ok()) {
-                    Some(url) => match inspect_for_backend(backend, &url) {
-                        Ok(current) => checks.push(DoctorCheck {
-                            name: "database",
-                            status: "pass",
-                            message: format!(
-                                "{}: {}",
-                                backend.name(),
-                                current.summary().replace('\n', ", ")
-                            ),
-                        }),
-                        Err(error) => checks.push(DoctorCheck {
-                            name: "database",
-                            status: "fail",
-                            message: format!("{}: {error}", backend.name()),
-                        }),
-                    },
-                    None => checks.push(DoctorCheck {
-                        name: "database",
-                        status: "warn",
-                        message: format!("{}: DATABASE_URL is not set", backend.name()),
-                    }),
-                }
-            }
-            Err(errors) => checks.push(DoctorCheck {
-                name: "schema",
-                status: "fail",
-                message: errors
-                    .iter()
-                    .map(|error| error.message.as_str())
-                    .collect::<Vec<_>>()
-                    .join("; "),
-            }),
-        }
-    }
-
-    checks.push(docker_compose_check());
-
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(listener) => {
-            let actual_port = listener.local_addr().map_or(port, |address| address.port());
-            checks.push(DoctorCheck {
-                name: "web_port",
-                status: "pass",
-                message: format!("127.0.0.1:{actual_port} is available"),
-            });
-        }
-        Err(error) => checks.push(DoctorCheck {
-            name: "web_port",
-            status: "fail",
-            message: format!("127.0.0.1:{port} is unavailable ({error})"),
-        }),
-    }
-
-    let failed = checks.iter().any(|check| check.status == "fail");
-    if json {
-        println!("{}", format_doctor_json(&path, &checks));
-    } else {
-        println!("Zelyra doctor {}", env!("CARGO_PKG_VERSION"));
-        for check in &checks {
-            let label = match check.status {
-                "pass" => "PASS",
-                "warn" => "WARN",
-                _ => "FAIL",
-            };
-            println!("  [{label}] {}: {}", check.name, check.message);
-        }
-        let warnings = checks.iter().filter(|check| check.status == "warn").count();
-        println!(
-            "Doctor result: {} ({warnings} warning(s))",
-            if failed { "failed" } else { "ready" }
-        );
-    }
-    if failed {
-        ExitCode::from(1)
-    } else {
-        ExitCode::SUCCESS
-    }
-}
-
-fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let format = match args.next() {
-        None => "openapi",
-        Some(flag) if flag == "--openapi" => "openapi",
-        Some(flag) if flag == "--typescript" => "typescript",
-        Some(_) => {
-            usage();
-            return ExitCode::from(2);
-        }
-    };
-    if args.next().is_some() {
-        usage();
-        return ExitCode::from(2);
-    }
-    let program = match load_project(&path) {
-        Ok(project) => project.program,
-        Err(()) => return ExitCode::from(1),
-    };
-    if format == "typescript" {
-        println!("{}", format_typescript_client(&program));
-    } else {
-        println!("{}", format_openapi(&program));
-    }
-    ExitCode::SUCCESS
-}
-
-fn format_openapi(program: &zelyra_ast::Program) -> String {
-    let paths = program
-        .apis
-        .iter()
-        .map(|api| {
-            let method = api.method.to_ascii_lowercase();
-            let path_parameters = api
-                .input
-                .iter()
-                .filter(|field| api.path.contains(&format!("{{{}}}", field.name)))
-                .map(|field| {
-                    format!(
-                        "{{\"name\":\"{}\",\"in\":\"path\",\"required\":true,\"schema\":{}}}",
-                        json_escape(&field.name),
-                        openapi_schema(&field.ty)
-                    )
-                })
-                .collect::<Vec<_>>();
-            let query_parameters = if matches!(api.method.as_str(), "GET" | "DELETE") {
-                api.input
-                    .iter()
-                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-                    .map(|field| {
-                        format!(
-                            "{{\"name\":\"{}\",\"in\":\"query\",\"required\":{},\"schema\":{}}}",
-                            json_escape(&field.name),
-                            !matches!(field.ty, Type::Option(_)),
-                            openapi_schema(&field.ty)
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            let request_body = if matches!(api.method.as_str(), "GET" | "DELETE") {
-                String::new()
-            } else {
-                let properties = api
-                    .input
-                    .iter()
-                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-                    .map(|field| {
-                        format!(
-                            "\"{}\":{}",
-                            json_escape(&field.name),
-                            openapi_schema(&field.ty)
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let required = api
-                    .input
-                    .iter()
-                    .filter(|field| {
-                        !api.path.contains(&format!("{{{}}}", field.name))
-                            && !matches!(field.ty, Type::Option(_))
-                    })
-                    .map(|field| format!("\"{}\"", json_escape(&field.name)))
-                    .collect::<Vec<_>>();
-                if properties.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "\"requestBody\":{{\"required\":true,\"content\":{{\"application/json\":{{\"schema\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}}}}}}},",
-                        properties.join(","),
-                        required.join(",")
-                    )
-                }
-            };
-            let mut parameters = path_parameters;
-            parameters.extend(query_parameters);
-            let security = if api.requires_auth || !api.permissions.is_empty() {
-                format!(
-                    ",\"x-zelyra-requires-auth\":{},\"x-zelyra-permissions\":[{}]",
-                    api.requires_auth,
-                    api.permissions
-                        .iter()
-                        .map(|permission| format!("\"{}\"", json_escape(permission)))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            } else {
-                String::new()
-            };
-            let responses = std::iter::once(format!(
-                "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
-                openapi_schema(&api.output)
-            ))
-            .chain(api.errors.iter().map(|error| {
-                let response = if let Some(payload) = &error.payload {
-                    format!(
-                        "{{\"description\":\"{}\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
-                        json_escape(&error.name),
-                        openapi_error_schema(payload)
-                    )
-                } else {
-                    format!("{{\"description\":\"{}\"}}", json_escape(&error.name))
-                };
-                format!("\"{}\":{}", error.status, response)
-            }))
-            .collect::<Vec<_>>()
-            .join(",");
-            let operation_id = format!(
-                "{}_{}",
-                method,
-                api.path
-                    .trim_matches('/')
-                    .replace(['{', '}'], "")
-                    .replace('/', "_")
-            );
-            format!(
-                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}{}}}}}",
-                json_escape(&api.path),
-                method,
-                json_escape(&operation_id),
-                parameters.join(","),
-                request_body,
-                responses,
-                security
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let components = format_openapi_components(program);
-    let compiler_version = env!("CARGO_PKG_VERSION");
-    format!(
-        "{{\"openapi\":\"3.0.3\",\"info\":{{\"title\":\"Zelyra API\",\"version\":\"{compiler_version}\"}},\"paths\":{{{paths}}},\"components\":{{\"schemas\":{{{components}}}}}}}"
-    )
-}
-
-fn format_openapi_components(program: &zelyra_ast::Program) -> String {
-    let mut components = Vec::new();
-    for definition in &program.types {
-        components.push(format!(
-            "\"{}\":{}",
-            json_escape(&definition.name),
-            openapi_schema(&definition.target)
-        ));
-    }
-    for record in &program.records {
-        let properties = record
-            .fields
-            .iter()
-            .map(|field| {
-                format!(
-                    "\"{}\":{}",
-                    json_escape(&field.name),
-                    openapi_schema(&field.ty)
-                )
-            })
-            .collect::<Vec<_>>();
-        let required = record
-            .fields
-            .iter()
-            .filter(|field| !matches!(field.ty, Type::Option(_)))
-            .map(|field| format!("\"{}\"", json_escape(&field.name)))
-            .collect::<Vec<_>>();
-        components.push(format!(
-            "\"{}\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
-            json_escape(&record.name),
-            properties.join(","),
-            required.join(",")
-        ));
-    }
-    for table in &program.tables {
-        let properties = table
-            .columns
-            .iter()
-            .map(|column| {
-                format!(
-                    "\"{}\":{}",
-                    json_escape(&column.name),
-                    openapi_schema(&column.ty)
-                )
-            })
-            .collect::<Vec<_>>();
-        let required = table
-            .columns
-            .iter()
-            .filter(|column| column.required && !matches!(column.ty, Type::Option(_)))
-            .map(|column| format!("\"{}\"", json_escape(&column.name)))
-            .collect::<Vec<_>>();
-        let schema = format!(
-            "{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
-            properties.join(","),
-            required.join(",")
-        );
-        components.push(format!(
-            "\"{}\":{}",
-            json_escape(&table.name),
-            schema.clone()
-        ));
-        if let Some(singular) = singular_type_name(&table.name) {
-            components.push(format!("\"{}\":{}", json_escape(&singular), schema));
-        }
-    }
-    components.join(",")
-}
-
-fn format_typescript_client(program: &zelyra_ast::Program) -> String {
-    let mut output = String::new();
-    output.push_str("// Generated by Zelyra. Do not edit by hand.\n\n");
-    output.push_str("export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };\n\n");
-
-    let mut error_codes = program
-        .apis
-        .iter()
-        .flat_map(|api| api.errors.iter().map(|error| error.name.clone()))
-        .collect::<Vec<_>>();
-    error_codes.sort();
-    error_codes.dedup();
-    if error_codes.is_empty() {
-        output.push_str("export type ZelyraApiErrorCode = string;\n\n");
-    } else {
-        let codes = error_codes
-            .iter()
-            .map(|code| format!("\"{}\"", json_escape(code)))
-            .collect::<Vec<_>>()
-            .join(" | ");
-        writeln!(
-            output,
-            "export type ZelyraApiErrorCode = {} | (string & {{}});\n",
-            codes
-        )
-        .expect("writing to a String cannot fail");
-    }
-
-    let mut emitted = HashSet::new();
-    for definition in &program.types {
-        if emitted.insert(definition.name.clone()) {
-            writeln!(
-                output,
-                "export type {} = {};",
-                definition.name,
-                typescript_type(&definition.target)
-            )
-            .expect("writing to a String cannot fail");
-        }
-    }
-    for record in &program.records {
-        if emitted.insert(record.name.clone()) {
-            writeln!(output, "export interface {} {{", record.name)
-                .expect("writing to a String cannot fail");
-            for field in &record.fields {
-                let optional = matches!(field.ty, Type::Option(_));
-                writeln!(
-                    output,
-                    "  {}{}: {};",
-                    field.name,
-                    if optional { "?" } else { "" },
-                    typescript_type(&field.ty)
-                )
-                .expect("writing to a String cannot fail");
-            }
-            output.push_str("}\n\n");
-        }
-    }
-    for table in &program.tables {
-        let names = std::iter::once(table.name.clone()).chain(
-            singular_type_name(&table.name)
-                .into_iter()
-                .filter(|name| name != &table.name),
-        );
-        for name in names {
-            if emitted.insert(name.clone()) {
-                writeln!(output, "export interface {} {{", name)
-                    .expect("writing to a String cannot fail");
-                for column in &table.columns {
-                    let optional = !column.required || matches!(column.ty, Type::Option(_));
-                    writeln!(
-                        output,
-                        "  {}{}: {};",
-                        column.name,
-                        if optional { "?" } else { "" },
-                        typescript_type(&column.ty)
-                    )
-                    .expect("writing to a String cannot fail");
-                }
-                output.push_str("}\n\n");
-            }
-        }
-    }
-
-    let payload_types = program
-        .apis
-        .iter()
-        .flat_map(|api| {
-            api.errors.iter().filter_map(|error| {
-                error
-                    .payload
-                    .as_ref()
-                    .map(|payload| (error.name.clone(), typescript_type(payload)))
-            })
-        })
-        .collect::<HashMap<_, _>>();
-    if payload_types.is_empty() {
-        output.push_str("export type ZelyraApiErrorPayload = JsonValue;\n\n");
-    } else {
-        output.push_str("export interface ZelyraApiErrorPayloads {\n");
-        let mut payload_types = payload_types.into_iter().collect::<Vec<_>>();
-        payload_types.sort_by(|left, right| left.0.cmp(&right.0));
-        for (name, ty) in payload_types {
-            writeln!(output, "  \"{name}\": {ty};").expect("writing to a String cannot fail");
-        }
-        output.push_str("}\n\nexport type ZelyraApiErrorPayload = ZelyraApiErrorPayloads[keyof ZelyraApiErrorPayloads];\n\n");
-    }
-
-    output.push_str(
-        "export interface ZelyraClientOptions {\n  baseUrl: string;\n  fetch?: typeof fetch;\n  token?: string;\n}\n\n",
-    );
-    output.push_str(
-        "export class ZelyraApiError extends Error {\n  constructor(\n    public readonly status: number,\n    public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,\n    message: string,\n  ) {\n    super(message);\n  }\n\n  static async fromResponse(response: Response): Promise<ZelyraApiError> {\n    const body = await response.text();\n    let code: ZelyraApiErrorCode | undefined;\n    let message = `Zelyra API request failed (${response.status})`;\n    try {\n      const payload = JSON.parse(body) as { error?: { code?: unknown; message?: unknown } };\n      if (payload.error && typeof payload.error === \"object\") {\n        if (typeof payload.error.code === \"string\") code = payload.error.code;\n        if (typeof payload.error.message === \"string\") message = payload.error.message;\n      }\n    } catch {\n      // Keep the original response body when the server did not return JSON.
-    }\n    return new ZelyraApiError(response.status, code, body, message);\n  }\n}\n\n",
-    );
-    output.push_str(
-        "export class ZelyraClient {\n  private readonly baseUrl: string;\n  private readonly fetchImpl: typeof fetch;\n  private readonly token?: string;\n\n  constructor(options: ZelyraClientOptions) {\n    this.baseUrl = options.baseUrl.replace(/\\/$/, \"\");\n    this.fetchImpl = options.fetch ?? fetch;\n    this.token = options.token;\n  }\n\n",
-    );
-
-    for api in &program.apis {
-        format_typescript_operation(&mut output, api);
-    }
-    output = output
-        .replace(
-            "export class ZelyraApiError extends Error {",
-            "export class ZelyraApiError<Details = ZelyraApiErrorPayload> extends Error {",
-        )
-        .replace(
-            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,",
-            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly details: Details | undefined,\n    public readonly body: string,",
-        )
-        .replace(
-            "static async fromResponse(response: Response): Promise<ZelyraApiError> {",
-            "static async fromResponse<Details = ZelyraApiErrorPayload>(response: Response): Promise<ZelyraApiError<Details>> {",
-        )
-        .replace(
-            "let code: ZelyraApiErrorCode | undefined;\n    let message",
-            "let code: ZelyraApiErrorCode | undefined;\n    let details: Details | undefined;\n    let message",
-        )
-        .replace(
-            "{ error?: { code?: unknown; message?: unknown } }",
-            "{ error?: { code?: unknown; message?: unknown; details?: unknown } }",
-        )
-        .replace(
-            "if (typeof payload.error.message === \"string\") message = payload.error.message;",
-            "if (typeof payload.error.message === \"string\") message = payload.error.message;\n        details = payload.error.details as Details | undefined;",
-        )
-        .replace(
-            "new ZelyraApiError(response.status, code, body, message)",
-            "new ZelyraApiError(response.status, code, details, body, message)",
-        );
-    output.push_str("}\n");
-    output
-}
-
-fn format_typescript_operation(output: &mut String, api: &zelyra_ast::ApiDef) {
-    let method = api.method.to_ascii_uppercase();
-    let operation = typescript_operation_name(api);
-    let query_fields = if matches!(method.as_str(), "GET" | "DELETE") {
-        api.input
-            .iter()
-            .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let body_fields = if matches!(method.as_str(), "GET" | "DELETE") {
-        Vec::new()
-    } else {
-        api.input
-            .iter()
-            .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-            .collect::<Vec<_>>()
-    };
-    let has_params = !api.input.is_empty();
-    write!(output, "  async {}(", operation).expect("writing to a String cannot fail");
-    if has_params {
-        write!(output, "params: {{ ").expect("writing to a String cannot fail");
-        for (index, field) in api.input.iter().enumerate() {
-            if index > 0 {
-                output.push(' ');
-            }
-            let optional = matches!(field.ty, Type::Option(_));
-            write!(
-                output,
-                "{}{}: {};",
-                field.name,
-                if optional { "?" } else { "" },
-                typescript_type(&field.ty)
-            )
-            .expect("writing to a String cannot fail");
-        }
-        output.push_str(" }");
-    }
-    writeln!(output, "): Promise<{}> {{", typescript_type(&api.output))
-        .expect("writing to a String cannot fail");
-    let path = typescript_path_template(&api.path);
-    writeln!(output, "    let url = this.baseUrl + `{}`;", path)
-        .expect("writing to a String cannot fail");
-    if !query_fields.is_empty() {
-        output.push_str("    const query = new URLSearchParams();\n");
-        for field in query_fields {
-            writeln!(
-                output,
-                "    if (params.{} !== undefined && params.{} !== null) query.set(\"{}\", String(params.{}));",
-                field.name, field.name, field.name, field.name
-            )
-            .expect("writing to a String cannot fail");
-        }
-        output.push_str("    const queryString = query.toString();\n    if (queryString) url += `?${queryString}`;\n");
-    }
-    output.push_str("    const headers: Record<string, string> = {};\n    if (this.token) headers.Authorization = `Bearer ${this.token}`;\n");
-    if !body_fields.is_empty() {
-        output.push_str("    headers[\"Content-Type\"] = \"application/json\";\n");
-    }
-    writeln!(
-        output,
-        "    const response = await this.fetchImpl(url, {{ method: \"{}\", headers{} }});",
-        method,
-        if body_fields.is_empty() {
-            String::new()
-        } else {
-            format!(
-                ", body: JSON.stringify({{{}}})",
-                body_fields
-                    .iter()
-                    .map(|field| format!("{}: params.{}", field.name, field.name))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        }
-    )
-    .expect("writing to a String cannot fail");
-    output.push_str("    if (!response.ok) throw await ZelyraApiError.fromResponse(response);\n");
-    output.push_str("    return await response.json() as ");
-    output.push_str(&typescript_type(&api.output));
-    output.push_str(";\n  }\n\n");
-}
-
-fn typescript_type(ty: &Type) -> String {
-    match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => "number".into(),
-        Type::Bool => "boolean".into(),
-        Type::String
-        | Type::Char
-        | Type::Bytes
-        | Type::Timestamp
-        | Type::Date
-        | Type::Time
-        | Type::Duration => "string".into(),
-        Type::Unit => "void".into(),
-        Type::Option(inner) => format!("{} | null", typescript_type(inner)),
-        Type::Result(ok, _) => typescript_type(ok),
-        Type::Array(inner) => format!("Array<{}>", typescript_type(inner)),
-        Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
-        Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
-        Type::Named(name) => match name.as_str() {
-            "Id" => "number".into(),
-            "Email" | "Url" | "Uuid" | "Money" => "string".into(),
-            "Unit" => "void".into(),
-            _ => name.clone(),
-        },
-        Type::Unknown => "unknown".into(),
-    }
-}
-
-fn typescript_operation_name(api: &zelyra_ast::ApiDef) -> String {
-    let mut name = format!(
-        "{}_{}",
-        api.method.to_ascii_lowercase(),
-        api.path.trim_matches('/').replace(['{', '}'], "")
-    );
-    name = name
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '_' {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if name.ends_with('_') {
-        name.pop();
-    }
-    if name == api.method.to_ascii_lowercase() {
-        name.push_str("_root");
-    }
-    name
-}
-
-fn typescript_path_template(path: &str) -> String {
-    let mut result = String::new();
-    let mut rest = path;
-    while let Some(start) = rest.find('{') {
-        let (literal, after_start) = rest.split_at(start);
-        result.push_str(&escape_typescript_template(literal));
-        let Some(end) = after_start.find('}') else {
-            result.push_str(&escape_typescript_template(after_start));
-            return result;
-        };
-        let name = &after_start[1..end];
-        result.push_str("${encodeURIComponent(String(params.");
-        result.push_str(name);
-        result.push_str("))}");
-        rest = &after_start[end + 1..];
-    }
-    result.push_str(&escape_typescript_template(rest));
-    result
-}
-
-fn escape_typescript_template(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace("${", "\\${")
-}
-
-fn singular_type_name(table: &str) -> Option<String> {
-    let singular = if let Some(stem) = table.strip_suffix("ies") {
-        format!("{stem}y")
-    } else if let Some(stem) = table.strip_suffix('s') {
-        stem.to_owned()
-    } else {
-        table.to_owned()
-    };
-    let mut chars = singular.chars();
-    let first = chars.next()?.to_ascii_uppercase();
-    Some(std::iter::once(first).chain(chars).collect())
-}
-
-fn openapi_schema(ty: &Type) -> String {
-    match ty {
-        Type::Int | Type::UInt => "{\"type\":\"integer\"}".into(),
-        Type::Float | Type::Decimal => "{\"type\":\"number\"}".into(),
-        Type::Bool => "{\"type\":\"boolean\"}".into(),
-        Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
-        Type::Map(_, value) => format!(
-            "{{\"type\":\"object\",\"additionalProperties\":{}}}",
-            openapi_schema(value)
-        ),
-        Type::Option(inner) => openapi_schema(inner),
-        Type::Result(ok, _) => openapi_schema(ok),
-        Type::HttpResult(_) => "{\"type\":\"object\"}".into(),
-        Type::Named(name) => match name.as_str() {
-            "Id" => "{\"type\":\"integer\",\"format\":\"int64\"}".into(),
-            "Email" => "{\"type\":\"string\",\"format\":\"email\"}".into(),
-            "Url" => "{\"type\":\"string\",\"format\":\"uri\"}".into(),
-            "Uuid" => "{\"type\":\"string\",\"format\":\"uuid\"}".into(),
-            _ => format!(
-                "{{\"$ref\":\"#/components/schemas/{}\"}}",
-                json_escape(name)
-            ),
-        },
-        _ => "{\"type\":\"string\"}".into(),
-    }
-}
-
-fn openapi_error_schema(payload: &Type) -> String {
-    let details = serde_json::from_str(&openapi_schema(payload))
-        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
-    serde_json::json!({
-        "type": "object",
-        "required": ["error"],
-        "properties": {
-            "error": {
-                "type": "object",
-                "required": ["code", "message", "details"],
-                "properties": {
-                    "code": {"type": "string"},
-                    "message": {"type": "string"},
-                    "details": details,
-                }
-            }
-        }
-    })
-    .to_string()
-}
-
-fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
-    let (end_line, end_column) = source_position(source, result.span.end);
-    let header = format!(
-        "{} [{}]: {}.{}[{}] ({}:{}:{}-{}:{})\n  = {}",
-        result.status,
-        result.status.code(),
-        result.function,
-        result.kind,
-        result.index,
-        path,
-        result.span.line,
-        result.span.column,
-        end_line,
-        end_column,
-        result.message
-    );
-    match format_source_excerpt(source, result.span) {
-        Some(excerpt) => {
-            let counterexample = result
-                .counterexample
-                .as_ref()
-                .map(|values| format!("\n  = Counterexample: {}", format_counterexample(values)))
-                .unwrap_or_default();
-            format!("{header}{counterexample}\n{excerpt}")
-        }
-        None => match &result.counterexample {
-            Some(values) => format!(
-                "{header}\n  = Counterexample: {}",
-                format_counterexample(values)
-            ),
-            None => header,
-        },
-    }
-}
-
-fn format_verification_json(path: &str, source: &str, results: &[VerificationResult]) -> String {
-    let entries = results
-        .iter()
-        .map(|result| {
-            let (end_line, end_column) = source_position(source, result.span.end);
-            let counterexample = result
-                .counterexample
-                .as_ref()
-                .map(|values| format_counterexample_json(values))
-                .unwrap_or_else(|| "null".into());
-            format!(
-                "{{\"status\":\"{}\",\"code\":\"{}\",\"message\":\"{}\",\"function\":\"{}\",\"kind\":\"{}\",\"index\":{},\"counterexample\":{},\"location\":{{\"file\":\"{}\",\"start\":{{\"line\":{},\"column\":{}}},\"end\":{{\"line\":{},\"column\":{}}}}}}}",
-                result.status,
-                result.status.code(),
-                json_escape(&result.message),
-                json_escape(&result.function),
-                result.kind,
-                result.index,
-                counterexample,
-                json_escape(path),
-                result.span.line,
-                result.span.column,
-                end_line,
-                end_column
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("[{}]", entries.join(","))
-}
-
-fn format_counterexample(values: &[(String, i64)]) -> String {
-    values
-        .iter()
-        .map(|(name, value)| format!("{name} = {value}"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn format_counterexample_json(values: &[(String, i64)]) -> String {
-    let entries = values
-        .iter()
-        .map(|(name, value)| format!("\"{}\":{}", json_escape(name), value))
-        .collect::<Vec<_>>();
-    format!("{{{}}}", entries.join(","))
-}
-
-fn json_escape(value: &str) -> String {
-    value
-        .chars()
-        .flat_map(|character| match character {
-            '"' => "\\\"".chars().collect::<Vec<_>>(),
-            '\\' => "\\\\".chars().collect::<Vec<_>>(),
-            '\n' => "\\n".chars().collect::<Vec<_>>(),
-            '\r' => "\\r".chars().collect::<Vec<_>>(),
-            '\t' => "\\t".chars().collect::<Vec<_>>(),
-            character if character.is_control() => {
-                format!("\\u{:04x}", character as u32).chars().collect()
-            }
-            character => vec![character],
-        })
-        .collect()
-}
-
-fn format_source_excerpt(source: &str, span: zelyra_ast::Span) -> Option<String> {
-    let source_line = source
-        .split('\n')
-        .nth(span.line.checked_sub(1)?)?
-        .trim_end_matches('\r');
-    let start = span.column.checked_sub(1)?.min(source_line.len());
-    let (end_line, end_column) = source_position(source, span.end);
-    let width = if end_line == span.line {
-        end_column
-            .saturating_sub(span.column)
-            .max(1)
-            .min(source_line.len().saturating_sub(start).max(1))
-    } else {
-        source_line.len().saturating_sub(start).max(1)
-    };
-    let line_number = span.line.to_string();
-    let padding = " ".repeat(line_number.len());
-    let marker = format!("{}{}", " ".repeat(start), "^".repeat(width));
-    Some(format!(
-        "  {padding} |\n  {line_number} | {source_line}\n  {padding} | {marker}"
-    ))
-}
-
-fn source_position(source: &str, offset: usize) -> (usize, usize) {
-    let mut line = 1;
-    let mut column = 1;
-    let end = offset.min(source.len());
-    for byte in &source.as_bytes()[..end] {
-        if *byte == b'\n' {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-    (line, column)
-}
-
-fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
-    let grants = match project_capability_grants(path) {
-        Ok(grants) => grants,
-        Err(error) => {
-            diagnostic(path, "E-CAP-002", &error, 1, 1);
-            return Err(());
-        }
-    };
-    if let Err(errors) = check_capabilities_with_grants(program, grants.as_ref()) {
-        for error in errors {
-            diagnostic_with_span(path, "E-CAP-001", &error.message, error.span);
-        }
-        return Err(());
-    }
-    if grants
-        .as_ref()
-        .is_some_and(|grants| !grants.contains("Database"))
-        && program.pages.iter().any(|page| !page.data.is_empty())
-    {
-        if let Some(data) = program.pages.iter().flat_map(|page| &page.data).next() {
-            diagnostic(
-                path,
-                "E-CAP-001",
-                "page data loading requires the `Database` capability",
-                data.span.line,
-                data.span.column,
-            );
-        }
-        return Err(());
-    }
-    Ok(())
-}
-
-fn project_config_path(path: &str) -> Result<Option<PathBuf>, String> {
-    let source_path =
-        fs::canonicalize(path).map_err(|error| format!("cannot locate source: {error}"))?;
-    let mut directory = source_path
-        .parent()
-        .ok_or_else(|| "source has no parent directory".to_owned())?;
-    Ok(loop {
-        let candidate = directory.join("zelyra.toml");
-        if candidate.is_file() {
-            break Some(candidate);
-        }
-        let Some(parent) = directory.parent() else {
-            break None;
-        };
-        if parent == directory {
-            break None;
-        }
-        directory = parent;
-    })
-}
-
-const PROJECT_FEATURES: [&str; 5] = ["web", "api", "crud", "auth", "audit"];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct FeatureSetting {
-    enabled: bool,
-    source: String,
-}
-
-type ProjectFeatures = BTreeMap<String, FeatureSetting>;
-
-fn parse_bool_setting(value: &str, setting: &str) -> Result<bool, String> {
-    match value.trim().trim_matches('"') {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        value => Err(format!(
-            "feature setting `{setting}` must be true or false, found `{value}`"
-        )),
-    }
-}
-
-fn parse_feature_section(contents: &str) -> Result<BTreeMap<String, bool>, String> {
-    let mut values = BTreeMap::new();
-    let mut in_features = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_features = line == "[features]";
-            continue;
-        }
-        if !in_features {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!(
-                "invalid feature setting on line {}",
-                line_index + 1
-            ));
-        };
-        let key = raw_key.trim().to_ascii_lowercase();
-        if !PROJECT_FEATURES.contains(&key.as_str()) {
-            return Err(format!("unknown feature setting `{key}`"));
-        }
-        if values.contains_key(&key) {
-            return Err(format!(
-                "feature setting `{key}` is configured more than once"
-            ));
-        }
-        values.insert(key.clone(), parse_bool_setting(raw_value, &key)?);
-    }
-    Ok(values)
-}
-
-fn parse_env_feature_overrides(contents: &str) -> Result<BTreeMap<String, bool>, String> {
-    let mut values = BTreeMap::new();
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let line = line.strip_prefix("export ").unwrap_or(line);
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            continue;
-        };
-        let key = raw_key.trim();
-        let Some(feature) = key.strip_prefix("ZELYRA_FEATURE_") else {
-            continue;
-        };
-        let feature = feature.to_ascii_lowercase();
-        if !PROJECT_FEATURES.contains(&feature.as_str()) {
-            return Err(format!(
-                "unknown ZELYRA_FEATURE_ setting `{}` on line {}",
-                feature,
-                line_index + 1
-            ));
-        }
-        if values.contains_key(&feature) {
-            return Err(format!(
-                "environment feature `{feature}` is configured more than once"
-            ));
-        }
-        values.insert(
-            feature.clone(),
-            parse_bool_setting(
-                raw_value.split('#').next().unwrap_or(raw_value),
-                &format!("ZELYRA_FEATURE_{}", feature.to_ascii_uppercase()),
-            )?,
-        );
-    }
-    Ok(values)
-}
-
-fn feature_defaults() -> ProjectFeatures {
-    PROJECT_FEATURES
-        .into_iter()
-        .map(|feature| {
-            (
-                feature.to_owned(),
-                FeatureSetting {
-                    enabled: true,
-                    source: "default".into(),
-                },
-            )
-        })
-        .collect()
-}
-
-fn apply_feature_values(
-    features: &mut ProjectFeatures,
-    values: BTreeMap<String, bool>,
-    source: &str,
-) {
-    for (feature, enabled) in values {
-        if let Some(setting) = features.get_mut(&feature) {
-            setting.enabled = enabled;
-            setting.source = source.to_owned();
-        }
-    }
-}
-
-fn project_features(path: &str) -> Result<ProjectFeatures, String> {
-    let mut features = feature_defaults();
-    let config_path = project_config_path(path)?;
-    if let Some(config_path) = &config_path {
-        let contents = fs::read_to_string(config_path)
-            .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-        apply_feature_values(
-            &mut features,
-            parse_feature_section(&contents)?,
-            "zelyra.toml",
-        );
-
-        let env_path = config_path
-            .parent()
-            .ok_or_else(|| "project configuration has no parent directory".to_owned())?
-            .join(".env");
-        if env_path.is_file() {
-            let env_contents = fs::read_to_string(&env_path)
-                .map_err(|error| format!("cannot read {}: {error}", env_path.display()))?;
-            apply_feature_values(
-                &mut features,
-                parse_env_feature_overrides(&env_contents)?,
-                ".env",
-            );
-        }
-    }
-    for feature in PROJECT_FEATURES {
-        let variable = format!("ZELYRA_FEATURE_{}", feature.to_ascii_uppercase());
-        if let Ok(value) = env::var(&variable) {
-            let mut override_value = BTreeMap::new();
-            override_value.insert(feature.to_owned(), parse_bool_setting(&value, &variable)?);
-            apply_feature_values(&mut features, override_value, "environment");
-        }
-    }
-    Ok(features)
-}
-
-fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
-    features.get(feature).is_none_or(|setting| setting.enabled)
-}
-
-fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
-    let features = match project_features(path) {
-        Ok(features) => features,
-        Err(error) => {
-            diagnostic(path, "E-FEATURE-002", &error, 1, 1);
-            return Err(());
-        }
-    };
-    let web_used = !program.pages.is_empty()
-        || !program.forms.is_empty()
-        || !program.tableviews.is_empty()
-        || !program.cruds.is_empty()
-        || !program.apis.is_empty()
-        || !program.auth.is_empty();
-    if !feature_enabled(&features, "web") && web_used {
-        diagnostic(
-            path,
-            "E-FEATURE-001",
-            "the `web` feature is disabled, but this program declares web resources",
-            1,
-            1,
-        );
-        return Err(());
-    }
-    if !feature_enabled(&features, "api") && !program.apis.is_empty() {
-        diagnostic(
-            path,
-            "E-FEATURE-001",
-            "the `api` feature is disabled, but this program declares an API",
-            1,
-            1,
-        );
-        return Err(());
-    }
-    if !feature_enabled(&features, "crud") && !program.cruds.is_empty() {
-        diagnostic(
-            path,
-            "E-FEATURE-001",
-            "the `crud` feature is disabled, but this program declares CRUD resources",
-            1,
-            1,
-        );
-        return Err(());
-    }
-    if !feature_enabled(&features, "auth") && !program.auth.is_empty() {
-        diagnostic(
-            path,
-            "E-FEATURE-001",
-            "the `auth` feature is disabled, but this program declares authentication",
-            1,
-            1,
-        );
-        return Err(());
-    }
-    if !feature_enabled(&features, "audit")
-        && program
-            .auth
-            .iter()
-            .any(|auth| auth.audit_table.is_some() || auth.audit_chain)
-    {
-        diagnostic(
-            path,
-            "E-FEATURE-001",
-            "the `audit` feature is disabled, but audit logging is configured",
-            1,
-            1,
-        );
-        return Err(());
-    }
-    Ok(())
-}
-
-fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, String> {
-    let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
-    };
-    let contents = fs::read_to_string(&config_path)
-        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-    let mut grants = HashSet::new();
-    let mut seen = HashSet::new();
-    let mut in_capabilities = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_capabilities = line == "[capabilities]";
-            continue;
-        }
-        if !in_capabilities {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!(
-                "invalid capability setting on line {}",
-                line_index + 1
-            ));
-        };
-        let key = raw_key.trim().to_ascii_lowercase();
-        let capability = KNOWN_CAPABILITIES
-            .iter()
-            .copied()
-            .find(|capability| capability.to_ascii_lowercase() == key)
-            .ok_or_else(|| format!("unknown capability setting `{key}`"))?;
-        if !seen.insert(capability) {
-            return Err(format!("capability `{key}` is configured more than once"));
-        }
-        match raw_value.trim() {
-            "true" => {
-                grants.insert(capability.to_owned());
-            }
-            "false" => {}
-            value => {
-                return Err(format!(
-                    "capability `{key}` must be true or false, found `{value}`"
-                ));
-            }
-        }
-    }
-    Ok(Some(grants))
-}
-
-fn parse_string_array(value: &str) -> Result<Vec<String>, String> {
-    let value = value.trim();
-    if !value.starts_with('[') || !value.ends_with(']') {
-        return Err("value must be a TOML string array".into());
-    }
-    let inner = value[1..value.len() - 1].trim();
-    if inner.is_empty() {
-        return Ok(Vec::new());
-    }
-    inner
-        .split(',')
-        .map(|item| {
-            let item = item.trim();
-            let Some(item) = item
-                .strip_prefix('"')
-                .and_then(|item| item.strip_suffix('"'))
-            else {
-                return Err("string arrays must contain quoted strings".into());
-            };
-            Ok(item.replace("\\\\", "\\").replace("\\\"", "\""))
-        })
-        .collect()
-}
-
-fn project_filesystem_policy(path: &str) -> Result<Option<FileSystemPolicy>, String> {
-    let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
-    };
-    let contents = fs::read_to_string(&config_path)
-        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-    let mut read_roots = None;
-    let mut write_roots = None;
-    let mut seen = HashSet::new();
-    let mut in_filesystem = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_filesystem = line == "[filesystem]";
-            continue;
-        }
-        if !in_filesystem {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!(
-                "invalid filesystem setting on line {}",
-                line_index + 1
-            ));
-        };
-        let key = raw_key.trim();
-        if !seen.insert(key) {
-            return Err(format!(
-                "filesystem setting {key} is configured more than once"
-            ));
-        }
-        match key {
-            "read_roots" => read_roots = Some(parse_string_array(raw_value)?),
-            "write_roots" => write_roots = Some(parse_string_array(raw_value)?),
-            _ => return Err(format!("unknown filesystem setting {key}")),
-        }
-    }
-    let base_dir = config_path
-        .parent()
-        .ok_or_else(|| "project configuration has no parent directory".to_owned())?
-        .to_path_buf();
-    let canonical_root = |root: &str| {
-        let candidate = if PathBuf::from(root).is_absolute() {
-            PathBuf::from(root)
-        } else {
-            base_dir.join(root)
-        };
-        let canonical = fs::canonicalize(&candidate).map_err(|error| {
-            format!(
-                "filesystem root {} is not accessible: {error}",
-                candidate.display()
-            )
-        })?;
-        if !canonical.is_dir() {
-            return Err(format!(
-                "filesystem root {} is not a directory",
-                candidate.display()
-            ));
-        }
-        Ok(canonical)
-    };
-    let read_roots = read_roots
-        .unwrap_or_else(|| vec![".".into()])
-        .iter()
-        .map(String::as_str)
-        .map(canonical_root)
-        .collect::<Result<Vec<_>, _>>()?;
-    let write_roots = write_roots
-        .unwrap_or_default()
-        .iter()
-        .map(String::as_str)
-        .map(canonical_root)
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Some(FileSystemPolicy {
-        base_dir,
-        read_roots,
-        write_roots,
-    }))
-}
-
-fn project_network_policy(path: &str) -> Result<Option<NetworkPolicy>, String> {
-    let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
-    };
-    let contents = fs::read_to_string(&config_path)
-        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-    let mut allowed_hosts = None;
-    let mut timeout_ms = 5_000;
-    let mut max_response_bytes = 1_048_576;
-    let mut seen = HashSet::new();
-    let mut in_network = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_network = line == "[network]";
-            continue;
-        }
-        if !in_network {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!(
-                "invalid network setting on line {}",
-                line_index + 1
-            ));
-        };
-        let key = raw_key.trim();
-        if !seen.insert(key) {
-            return Err(format!(
-                "network setting {key} is configured more than once"
-            ));
-        }
-        match key {
-            "allowed_hosts" => allowed_hosts = Some(parse_string_array(raw_value)?),
-            "timeout_ms" => {
-                timeout_ms = raw_value.trim().parse().map_err(|_| {
-                    "network setting timeout_ms must be a positive integer".to_owned()
-                })?;
-                if timeout_ms == 0 {
-                    return Err("network setting timeout_ms must be positive".into());
-                }
-            }
-            "max_response_bytes" => {
-                max_response_bytes = raw_value.trim().parse().map_err(|_| {
-                    "network setting max_response_bytes must be a positive integer".to_owned()
-                })?;
-                if max_response_bytes == 0 {
-                    return Err("network setting max_response_bytes must be positive".into());
-                }
-            }
-            _ => return Err(format!("unknown network setting {key}")),
-        }
-    }
-    Ok(Some(NetworkPolicy {
-        allowed_hosts: allowed_hosts.unwrap_or_default(),
-        timeout_ms,
-        max_response_bytes,
-    }))
-}
-
-fn project_runtime_policy(path: &str) -> Result<Option<RuntimePolicy>, String> {
-    let filesystem = project_filesystem_policy(path)?;
-    let network = project_network_policy(path)?;
-    let process = project_process_policy(path)?;
-    if filesystem.is_none() && network.is_none() && process.is_none() {
-        Ok(None)
-    } else {
-        Ok(Some(RuntimePolicy {
-            filesystem,
-            network,
-            process,
-        }))
-    }
-}
-
-fn project_cors_policy(path: &str) -> Result<Option<CorsPolicy>, String> {
-    let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
-    };
-    let contents = fs::read_to_string(&config_path)
-        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-    let mut allowed_origins = None;
-    let mut allow_credentials = false;
-    let mut seen = HashSet::new();
-    let mut in_web = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_web = line == "[web]";
-            continue;
-        }
-        if !in_web {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!("invalid web setting on line {}", line_index + 1));
-        };
-        let key = raw_key.trim();
-        if !seen.insert(key) {
-            return Err(format!("web setting {key} is configured more than once"));
-        }
-        match key {
-            "allowed_origins" => allowed_origins = Some(parse_string_array(raw_value)?),
-            "allow_credentials" => {
-                allow_credentials = match raw_value.trim() {
-                    "true" => true,
-                    "false" => false,
-                    value => {
-                        return Err(format!(
-                            "web setting allow_credentials must be true or false, found `{value}`"
-                        ));
-                    }
-                };
-            }
-            _ => return Err(format!("unknown web setting {key}")),
-        }
-    }
-    let Some(allowed_origins) = allowed_origins else {
-        return Ok(None);
-    };
-    CorsPolicy::new(allowed_origins, allow_credentials)
-        .map(Some)
-        .map_err(|error| error.message)
-}
-
-fn project_process_policy(path: &str) -> Result<Option<ProcessPolicy>, String> {
-    let Some(config_path) = project_config_path(path)? else {
-        return Ok(None);
-    };
-    let contents = fs::read_to_string(&config_path)
-        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
-    let mut allowed_commands = None;
-    let mut timeout_ms = 5_000;
-    let mut max_output_bytes = 1_048_576;
-    let mut seen = HashSet::new();
-    let mut in_process = false;
-    for (line_index, raw_line) in contents.lines().enumerate() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            in_process = line == "[process]";
-            continue;
-        }
-        if !in_process {
-            continue;
-        }
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!(
-                "invalid process setting on line {}",
-                line_index + 1
-            ));
-        };
-        let key = raw_key.trim();
-        if !seen.insert(key) {
-            return Err(format!(
-                "process setting {key} is configured more than once"
-            ));
-        }
-        match key {
-            "allowed_commands" => allowed_commands = Some(parse_string_array(raw_value)?),
-            "timeout_ms" => {
-                timeout_ms = raw_value.trim().parse().map_err(|_| {
-                    "process setting timeout_ms must be a positive integer".to_owned()
-                })?;
-                if timeout_ms == 0 {
-                    return Err("process setting timeout_ms must be positive".into());
-                }
-            }
-            "max_output_bytes" => {
-                max_output_bytes = raw_value.trim().parse().map_err(|_| {
-                    "process setting max_output_bytes must be a positive integer".to_owned()
-                })?;
-                if max_output_bytes == 0 {
-                    return Err("process setting max_output_bytes must be positive".into());
-                }
-            }
-            _ => return Err(format!("unknown process setting {key}")),
-        }
-    }
-    Ok(Some(ProcessPolicy {
-        allowed_commands: allowed_commands.unwrap_or_default(),
-        timeout_ms,
-        max_output_bytes,
-    }))
-}
-
-fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
-    let mut valid = true;
-    let mut names = HashSet::new();
-    for auth in &program.auth {
-        if !names.insert(auth.name.clone()) {
-            diagnostic(
-                path,
-                "E-AUTH-002",
-                &format!("duplicate authentication definition {}", auth.name),
-                auth.span.line,
-                auth.span.column,
-            );
-            valid = false;
-        }
-        if !schema.tables.iter().any(|table| table.name == auth.table) {
-            diagnostic(
-                path,
-                "E-AUTH-001",
-                &format!("authentication refers to unknown user table {}", auth.table),
-                auth.span.line,
-                auth.span.column,
-            );
-            valid = false;
-            continue;
-        }
-        let Some(table) = schema.tables.iter().find(|table| table.name == auth.table) else {
-            continue;
-        };
-        for required_column in ["id", "email", "password_hash"] {
-            if !table
-                .columns
-                .iter()
-                .any(|column| column.name == required_column)
-            {
-                diagnostic(
-                    path,
-                    "E-AUTH-004",
-                    &format!(
-                        "authentication table {} requires column {}",
-                        auth.table, required_column
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-            }
-        }
-        if let Some(session_table_name) = &auth.session_table {
-            let Some(session_table) = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == *session_table_name)
-            else {
-                diagnostic(
-                    path,
-                    "E-AUTH-005",
-                    &format!(
-                        "authentication refers to unknown session table {}",
-                        session_table_name
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            for required_column in ["user_id", "token_hash", "expires_at"] {
-                if !session_table
-                    .columns
-                    .iter()
-                    .any(|column| column.name == required_column)
-                {
-                    diagnostic(
-                        path,
-                        "E-AUTH-006",
-                        &format!(
-                            "authentication session table {} requires column {}",
-                            session_table_name, required_column
-                        ),
-                        auth.span.line,
-                        auth.span.column,
-                    );
-                    valid = false;
-                }
-            }
-        }
-        if let Some(permissions_table_name) = &auth.permissions_table {
-            let Some(permissions_table) = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == *permissions_table_name)
-            else {
-                diagnostic(
-                    path,
-                    "E-AUTH-007",
-                    &format!(
-                        "authentication refers to unknown permissions table {}",
-                        permissions_table_name
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            for required_column in ["user_id", "permission"] {
-                if !permissions_table
-                    .columns
-                    .iter()
-                    .any(|column| column.name == required_column)
-                {
-                    diagnostic(
-                        path,
-                        "E-AUTH-008",
-                        &format!(
-                            "authentication permissions table {} requires column {}",
-                            permissions_table_name, required_column
-                        ),
-                        auth.span.line,
-                        auth.span.column,
-                    );
-                    valid = false;
-                }
-            }
-        }
-        if auth.roles_table.is_some() != auth.role_permissions_table.is_some() {
-            diagnostic(
-                path,
-                "E-AUTH-009",
-                "authentication roles require both roles and role_permissions options",
-                auth.span.line,
-                auth.span.column,
-            );
-            valid = false;
-        }
-        if let Some(roles_table_name) = &auth.roles_table {
-            let Some(roles_table) = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == *roles_table_name)
-            else {
-                diagnostic(
-                    path,
-                    "E-AUTH-010",
-                    &format!(
-                        "authentication refers to unknown roles table {}",
-                        roles_table_name
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            for required_column in ["user_id", "role"] {
-                if !roles_table
-                    .columns
-                    .iter()
-                    .any(|column| column.name == required_column)
-                {
-                    diagnostic(
-                        path,
-                        "E-AUTH-012",
-                        &format!(
-                            "authentication roles table {} requires column {}",
-                            roles_table_name, required_column
-                        ),
-                        auth.span.line,
-                        auth.span.column,
-                    );
-                    valid = false;
-                }
-            }
-        }
-        if let Some(role_permissions_table_name) = &auth.role_permissions_table {
-            let Some(role_permissions_table) = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == *role_permissions_table_name)
-            else {
-                diagnostic(
-                    path,
-                    "E-AUTH-011",
-                    &format!(
-                        "authentication refers to unknown role permissions table {}",
-                        role_permissions_table_name
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            for required_column in ["role", "permission"] {
-                if !role_permissions_table
-                    .columns
-                    .iter()
-                    .any(|column| column.name == required_column)
-                {
-                    diagnostic(
-                        path,
-                        "E-AUTH-013",
-                        &format!(
-                            "authentication role permissions table {} requires column {}",
-                            role_permissions_table_name, required_column
-                        ),
-                        auth.span.line,
-                        auth.span.column,
-                    );
-                    valid = false;
-                }
-            }
-        }
-        if let Some(audit_table_name) = &auth.audit_table {
-            let Some(audit_table) = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == *audit_table_name)
-            else {
-                diagnostic(
-                    path,
-                    "E-AUTH-025",
-                    &format!(
-                        "authentication refers to unknown audit table {}",
-                        audit_table_name
-                    ),
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            for required_column in [
-                "actor_user_id",
-                "event",
-                "target_user_id",
-                "details",
-                "created_at",
-            ] {
-                if !audit_table
-                    .columns
-                    .iter()
-                    .any(|column| column.name == required_column)
-                {
-                    diagnostic(
-                        path,
-                        "E-AUTH-026",
-                        &format!(
-                            "authentication audit table {} requires column {}",
-                            audit_table_name, required_column
-                        ),
-                        auth.span.line,
-                        auth.span.column,
-                    );
-                    valid = false;
-                }
-            }
-            if auth.audit_chain {
-                for required_column in ["id", "previous_hash", "entry_hash"] {
-                    if !audit_table
-                        .columns
-                        .iter()
-                        .any(|column| column.name == required_column)
-                    {
-                        diagnostic(
-                            path,
-                            "E-AUTH-027",
-                            &format!(
-                                "chained authentication audit table {} requires column {}",
-                                audit_table_name, required_column
-                            ),
-                            auth.span.line,
-                            auth.span.column,
-                        );
-                        valid = false;
-                    }
-                }
-            }
-        } else if auth.audit_chain {
-            diagnostic(
-                path,
-                "E-AUTH-028",
-                "audit_chain requires an audit: <table> option",
-                auth.span.line,
-                auth.span.column,
-            );
-            valid = false;
-        }
-        let admin_options = [
-            auth.admin_path.is_some(),
-            auth.admin_permission.is_some(),
-            auth.admin_role.is_some(),
-        ];
-        if admin_options.iter().any(|configured| *configured)
-            && !admin_options.iter().all(|configured| *configured)
-        {
-            diagnostic(
-                path,
-                "E-AUTH-021",
-                "authentication administration requires admin_path, admin_permission, and admin_role",
-                auth.span.line,
-                auth.span.column,
-            );
-            valid = false;
-        }
-        if let Some(admin_path) = &auth.admin_path {
-            if !admin_path.starts_with('/') || admin_path == "/login" || admin_path == "/logout" {
-                diagnostic(
-                    path,
-                    "E-AUTH-022",
-                    "authentication admin_path must be an application path other than /login or /logout",
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-            }
-        }
-        if let Some(admin_permission) = &auth.admin_permission {
-            if admin_permission.is_empty() {
-                diagnostic(
-                    path,
-                    "E-AUTH-023",
-                    "authentication admin_permission must not be empty",
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-            }
-        }
-        if let Some(admin_role) = &auth.admin_role {
-            if admin_role.is_empty() {
-                diagnostic(
-                    path,
-                    "E-AUTH-024",
-                    "authentication admin_role must not be empty",
-                    auth.span.line,
-                    auth.span.column,
-                );
-                valid = false;
-            }
-        }
-    }
-    let protected = program
-        .pages
-        .iter()
-        .any(|page| page.requires_auth || !page.permissions.is_empty())
-        || program.forms.iter().any(|form| {
-            form.actions
-                .iter()
-                .any(|action| action.requires_auth || !action.permissions.is_empty())
-        })
-        || program.cruds.iter().any(|crud| {
-            crud.requires_auth
-                || !crud.permissions.is_empty()
-                || !crud.create_permissions.is_empty()
-                || !crud.edit_permissions.is_empty()
-                || !crud.delete_permissions.is_empty()
-        })
-        || program
-            .tableviews
-            .iter()
-            .any(|tableview| tableview.requires_auth || !tableview.permissions.is_empty())
-        || program
-            .apis
-            .iter()
-            .any(|api| api.requires_auth || !api.permissions.is_empty());
-    if protected && program.auth.is_empty() {
-        diagnostic(
-            path,
-            "E-AUTH-003",
-            "protected routes require an auth definition",
-            1,
-            1,
-        );
-        valid = false;
-    }
-    valid
-}
-
-fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
-    let mut valid = true;
-    let mut names = HashSet::new();
-    let mut tables = HashSet::new();
-    for crud in &program.cruds {
-        if !names.insert(crud.name.clone()) {
-            diagnostic(
-                path,
-                "E-CRUD-002",
-                &format!("duplicate CRUD resource `{}`", crud.name),
-                crud.span.line,
-                crud.span.column,
-            );
-            valid = false;
-        }
-        if !tables.insert(crud.table.clone()) {
-            diagnostic(
-                path,
-                "E-CRUD-003",
-                &format!("table `{}` already has a CRUD resource", crud.table),
-                crud.span.line,
-                crud.span.column,
-            );
-            valid = false;
-        }
-        if !schema.tables.iter().any(|table| table.name == crud.table) {
-            diagnostic(
-                path,
-                "E-CRUD-001",
-                &format!("CRUD resource refers to unknown table `{}`", crud.table),
-                crud.span.line,
-                crud.span.column,
-            );
-            valid = false;
-            continue;
-        }
-        let configured_columns = crud
-            .view
-            .fields
-            .iter()
-            .chain(&crud.list)
-            .chain(&crud.search)
-            .chain(&crud.filters);
-        for column in configured_columns {
-            if !crud_column_exists(program, schema, crud, column) {
-                diagnostic(
-                    path,
-                    "E-CRUD-004",
-                    &format!(
-                        "CRUD column {column} does not exist in table {}",
-                        crud.table
-                    ),
-                    crud.span.line,
-                    crud.span.column,
-                );
-                valid = false;
-            }
-        }
-        if let Some(soft_delete) = &crud.soft_delete {
-            let Some(column) = schema
-                .tables
-                .iter()
-                .find(|table| table.name == crud.table)
-                .and_then(|table| {
-                    table
-                        .columns
-                        .iter()
-                        .find(|column| column.name == soft_delete.column)
-                })
-            else {
-                diagnostic(
-                    path,
-                    "E-CRUD-005",
-                    &format!(
-                        "soft_delete column `{}` does not exist in table {}",
-                        soft_delete.column, crud.table
-                    ),
-                    crud.span.line,
-                    crud.span.column,
-                );
-                valid = false;
-                continue;
-            };
-            let sql_type = column.sql_type.to_ascii_uppercase();
-            if !sql_type.contains("TIMESTAMP") && !sql_type.contains("DATETIME") {
-                diagnostic(
-                    path,
-                    "E-CRUD-006",
-                    &format!(
-                        "soft_delete column `{}` must use a timestamp-compatible type",
-                        soft_delete.column
-                    ),
-                    crud.span.line,
-                    crud.span.column,
-                );
-                valid = false;
-            }
-        }
-    }
-    valid
-}
-
-fn crud_column_exists(
-    program: &zelyra_ast::Program,
-    schema: &Schema,
-    crud: &zelyra_ast::CrudDef,
-    column: &str,
-) -> bool {
-    let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
-        return false;
-    };
-    let logical_exists = table
-        .columns
-        .iter()
-        .any(|candidate| candidate.name == column);
-    if !logical_exists
-        && !schema.tables.iter().any(|table| {
-            table.name == crud.table
-                && table
-                    .columns
-                    .iter()
-                    .any(|candidate| candidate.name == column)
-        })
-    {
-        return false;
-    }
-    let storage = storage_column_name(schema, &crud.table, column);
-    schema
-        .tables
-        .iter()
-        .find(|table| table.name == crud.table)
-        .is_some_and(|table| {
-            table
-                .columns
-                .iter()
-                .any(|candidate| candidate.name == storage)
-        })
-}
-
-fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
-    let mut valid = true;
-    let mut names = HashSet::new();
-    for tableview in &program.tableviews {
-        if !names.insert(tableview.name.clone()) {
-            diagnostic(
-                path,
-                "E-VIEW-004",
-                &format!("duplicate tableview {}", tableview.name),
-                tableview.span.line,
-                tableview.span.column,
-            );
-            valid = false;
-        }
-        let Some(result_fields) =
-            tableview_result_fields(&tableview.result_type, schema, &program.records)
-        else {
-            diagnostic(
-                path,
-                "E-VIEW-005",
-                &format!(
-                    "tableview {} requires a result type that maps to a declared table",
-                    tableview.name
-                ),
-                tableview.span.line,
-                tableview.span.column,
-            );
-            valid = false;
-            continue;
-        };
-        let mut columns = HashSet::new();
-        for column in &tableview.columns {
-            if !columns.insert(column.as_str()) {
-                diagnostic(
-                    path,
-                    "E-VIEW-006",
-                    &format!(
-                        "tableview {} contains column {} more than once",
-                        tableview.name, column
-                    ),
-                    tableview.span.line,
-                    tableview.span.column,
-                );
-                valid = false;
-            } else if !result_fields.iter().any(|candidate| *candidate == column) {
-                diagnostic(
-                    path,
-                    "E-VIEW-007",
-                    &format!(
-                        "tableview column {} does not exist in its result type",
-                        column
-                    ),
-                    tableview.span.line,
-                    tableview.span.column,
-                );
-                valid = false;
-            }
-        }
-        let mut filters = HashSet::new();
-        for column in &tableview.filters {
-            if !filters.insert(column.as_str()) {
-                diagnostic(
-                    path,
-                    "E-VIEW-008",
-                    &format!(
-                        "tableview {} contains filter column {} more than once",
-                        tableview.name, column
-                    ),
-                    tableview.span.line,
-                    tableview.span.column,
-                );
-                valid = false;
-            } else if !result_fields.iter().any(|candidate| *candidate == column) {
-                diagnostic(
-                    path,
-                    "E-VIEW-009",
-                    &format!(
-                        "tableview filter column {} does not exist in its result type",
-                        column
-                    ),
-                    tableview.span.line,
-                    tableview.span.column,
-                );
-                valid = false;
-            }
-        }
-    }
-    valid
-}
-
-fn tableview_result_fields<'a>(
-    result_type: &zelyra_ast::Type,
-    schema: &'a Schema,
-    records: &'a [zelyra_ast::RecordDef],
-) -> Option<Vec<&'a str>> {
-    let result_type = match result_type {
-        zelyra_ast::Type::Array(inner) | zelyra_ast::Type::Option(inner) => inner,
-        _ => result_type,
-    };
-    let zelyra_ast::Type::Named(name) = result_type else {
-        return None;
-    };
-    let snake = name.to_ascii_lowercase();
-    if let Some(table) = schema
-        .tables
-        .iter()
-        .find(|table| table.name == snake)
-        .or_else(|| {
-            let plural = if snake.ends_with('y') {
-                format!("{}ies", &snake[..snake.len() - 1])
-            } else {
-                format!("{snake}s")
-            };
-            schema.tables.iter().find(|table| table.name == plural)
-        })
-    {
-        return Some(
-            table
-                .columns
-                .iter()
-                .map(|column| column.name.as_str())
-                .collect(),
-        );
-    }
-    records
-        .iter()
-        .find(|record| record.name == *name)
-        .map(|record| {
-            record
-                .fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect()
-        })
-}
-
-fn tableview_filter_kind(
-    result_type: &Type,
-    column: &str,
-    schema: &Schema,
-    records: &[zelyra_ast::RecordDef],
-) -> TableViewFilterKind {
-    let result_type = match result_type {
-        Type::Array(inner) | Type::Option(inner) => inner,
-        _ => result_type,
-    };
-    let Type::Named(name) = result_type else {
-        return TableViewFilterKind::Other;
-    };
-    let snake = name.to_ascii_lowercase();
-    let table = schema
-        .tables
-        .iter()
-        .find(|table| table.name == snake)
-        .or_else(|| {
-            let plural = if snake.ends_with('y') {
-                format!("{}ies", &snake[..snake.len() - 1])
-            } else {
-                format!("{snake}s")
-            };
-            schema.tables.iter().find(|table| table.name == plural)
-        });
-    if let Some(table) = table {
-        if let Some(schema_column) = table
-            .columns
-            .iter()
-            .find(|candidate| candidate.name == column)
-        {
-            return tableview_sql_filter_kind(&schema_column.sql_type);
-        }
-    }
-    records
-        .iter()
-        .find(|record| record.name == *name)
-        .and_then(|record| record.fields.iter().find(|field| field.name == column))
-        .map(|field| tableview_type_filter_kind(&field.ty))
-        .unwrap_or(TableViewFilterKind::Other)
-}
-
-fn tableview_type_filter_kind(ty: &Type) -> TableViewFilterKind {
-    let ty = match ty {
-        Type::Option(inner) => inner.as_ref(),
-        _ => ty,
-    };
-    match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => TableViewFilterKind::Numeric,
-        Type::Bool => TableViewFilterKind::Bool,
-        Type::String | Type::Char => TableViewFilterKind::Text,
-        Type::Named(name) if matches!(name.as_str(), "Email" | "Url" | "Uuid") => {
-            TableViewFilterKind::Text
-        }
-        _ => TableViewFilterKind::Other,
-    }
-}
-
-fn tableview_sql_filter_kind(sql_type: &str) -> TableViewFilterKind {
-    let sql_type = sql_type.to_ascii_uppercase();
-    if sql_type.contains("BOOL") {
-        TableViewFilterKind::Bool
-    } else if sql_type.contains("CHAR") || sql_type.contains("TEXT") {
-        TableViewFilterKind::Text
-    } else if sql_type.contains("INT")
-        || sql_type.contains("DECIMAL")
-        || sql_type.contains("NUMERIC")
-        || sql_type.contains("DOUBLE")
-        || sql_type.contains("FLOAT")
-        || sql_type.contains("REAL")
-    {
-        TableViewFilterKind::Numeric
-    } else {
-        TableViewFilterKind::Other
-    }
-}
-
-fn configured_crud_columns(
-    program: &zelyra_ast::Program,
-    schema: &Schema,
-    crud: &zelyra_ast::CrudDef,
-    configured: &[String],
-    default: impl FnOnce(&zelyra_database::Table) -> Vec<String>,
-) -> Vec<String> {
-    let table = schema
-        .tables
-        .iter()
-        .find(|table| table.name == crud.table)
-        .expect("CRUD table was validated before route generation");
-    if configured.is_empty() {
-        return default(table);
-    }
-    configured
-        .iter()
-        .map(|column| storage_column_name(schema, &crud.table, column))
-        .filter(|column| crud_column_exists(program, schema, crud, column))
-        .collect()
-}
-
-fn configured_crud_filter_columns(
-    program: &zelyra_ast::Program,
-    schema: &Schema,
-    crud: &zelyra_ast::CrudDef,
-    configured: &[String],
-    default: impl FnOnce(&zelyra_database::Table) -> Vec<String>,
-) -> Vec<String> {
-    let table = schema
-        .tables
-        .iter()
-        .find(|table| table.name == crud.table)
-        .expect("CRUD table was validated before route generation");
-    if configured.is_empty() {
-        return default(table);
-    }
-    configured
-        .iter()
-        .filter(|column| crud_column_exists(program, schema, crud, column))
-        .cloned()
-        .collect()
-}
-
-fn load_schema(path: &str) -> Result<Schema, ()> {
-    let project = load_project(path)?;
-    match build_schema(&project.program) {
-        Ok(schema) => Ok(schema),
-        Err(errors) => {
-            for error in errors {
-                let source_path = PROJECT_SOURCES.with(|sources| {
-                    sources
-                        .borrow()
-                        .get(error.span.source_id as usize)
-                        .map_or_else(|| path.to_owned(), |source| source.path.clone())
-                });
-                diagnostic(
-                    &source_path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            }
-            Err(())
-        }
-    }
-}
-
-fn print_plan(plan: &zelyra_database::SchemaPlan) {
-    if plan.changes.is_empty() {
-        println!("No schema changes.");
-        return;
-    }
-    for check in &plan.nullability_preflights {
-        println!(
-            "[PREFLIGHT] verify `{}.{}` has no NULL values before applying any SQL",
-            check.table, check.column
-        );
-    }
-    for check in &plan.required_column_preflights {
-        println!(
-            "[PREFLIGHT] verify `{}` is empty before adding required column `{}` without a default",
-            check.table, check.column
-        );
-    }
-    for change in &plan.changes {
-        let risk = match change.risk {
-            Risk::Safe => "SAFE",
-            Risk::RequiresApproval => "REVIEW",
-            Risk::Destructive => "DESTRUCTIVE",
-            Risk::Unsupported => "UNSUPPORTED",
-        };
-        println!("[{risk}] {}\n{}\n", change.description, change.sql);
-    }
-}
-
-fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(subcommand) = args.next() else {
-        database_usage();
-        return ExitCode::from(2);
-    };
-    let path = args.next().unwrap_or_else(|| "main.zyl".into());
-    let remaining_args = args.collect::<Vec<_>>();
-    let allow_risky = remaining_args.iter().any(|arg| arg == "--allow-risky");
-    let allow_destructive = remaining_args
-        .iter()
-        .any(|arg| arg == "--allow-destructive");
-    let schema = match load_schema(&path) {
-        Ok(schema) => schema,
-        Err(()) => return ExitCode::from(1),
-    };
-    match subcommand.as_str() {
-        "create" => {
-            println!("{}", schema.create_sql());
-            ExitCode::SUCCESS
-        }
-        "setup" | "bootstrap" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
-                eprintln!(
-                    "error[E-DB-003]: DATABASE_URL is required for db {}",
-                    subcommand
-                );
-                if subcommand == "setup" {
-                    eprintln!("hint: set a MariaDB URL without committing it to source control");
-                    eprintln!(
-                        "  export DATABASE_URL='mariadb://user:<password>@127.0.0.1:3306/my_app'"
-                    );
-                    eprintln!("  # PowerShell: $env:DATABASE_URL = 'mariadb://user:<password>@127.0.0.1:3306/my_app'");
-                }
-                return ExitCode::from(1);
-            };
-            let result = match schema.backend() {
-                Backend::MariaDb => match inspect_mariadb(&url) {
-                    Ok(_) => apply_mariadb(&url, &schema.create_sql()),
-                    Err(_) => create_mariadb_database(&url)
-                        .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
-                },
-                Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
-                Backend::Postgres => Err(zelyra_database::DatabaseError {
-                    message: format!(
-                        "db {} currently supports mariadb and sqlite; use db apply for postgres",
-                        subcommand
-                    ),
-                }),
-            };
-            match result {
-                Ok(()) => {
-                    println!("database {} completed successfully", subcommand);
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error[E-DB-005]: {error}");
-                    ExitCode::from(1)
-                }
-            }
-        }
-        "inspect" => match env::var("DATABASE_URL") {
-            Ok(url) => match inspect_for_backend(schema.backend(), &url) {
-                Ok(current) => {
-                    println!("{}", current.summary());
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error[E-DB-002]: {error}");
-                    ExitCode::from(1)
-                }
-            },
-            Err(_) => {
-                eprintln!("error[E-DB-003]: DATABASE_URL is required for db inspect");
-                ExitCode::from(1)
-            }
-        },
-        "plan" => {
-            let current = match env::var("DATABASE_URL") {
-                Ok(url) => match inspect_for_backend(schema.backend(), &url) {
-                    Ok(current) => current,
-                    Err(error) => {
-                        eprintln!("error[E-DB-002]: {error}");
-                        return ExitCode::from(1);
-                    }
-                },
-                Err(_) => {
-                    eprintln!("note: DATABASE_URL is not set; planning against an empty database");
-                    Schema {
-                        database: None,
-                        tables: Vec::new(),
-                    }
-                }
-            };
-            print_plan(&diff(&schema, &current));
-            ExitCode::SUCCESS
-        }
-        "apply" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
-                eprintln!("error[E-DB-003]: DATABASE_URL is required for db apply");
-                return ExitCode::from(1);
-            };
-            let current = match inspect_for_backend(schema.backend(), &url) {
-                Ok(current) => current,
-                Err(error) => {
-                    eprintln!("error[E-DB-002]: {error}");
-                    return ExitCode::from(1);
-                }
-            };
-            let plan = diff(&schema, &current);
-            print_plan(&plan);
-            if plan.has_unsupported() {
-                eprintln!(
-                    "error[E-DB-006]: schema plan contains unsupported changes; no SQL was applied"
-                );
-                return ExitCode::from(1);
-            }
-            let has_review_changes = plan
-                .changes
-                .iter()
-                .any(|change| change.risk == Risk::RequiresApproval);
-            let legacy_approval_is_sufficient = allow_destructive && !has_review_changes;
-            if plan.requires_approval() && !allow_risky && !legacy_approval_is_sufficient {
-                eprintln!("error[E-DB-004]: schema changes requiring review were refused; review the plan and use --allow-risky to approve it");
-                return ExitCode::from(1);
-            }
-            if plan.changes.is_empty() {
-                return ExitCode::SUCCESS;
-            }
-            for check in &plan.nullability_preflights {
-                match count_null_values(&url, schema.backend(), &check.table, &check.column) {
-                    Ok(0) => {}
-                    Ok(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: cannot require `{}.{}` because existing rows contain NULL values; no schema SQL was applied",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                    Err(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: could not verify that `{}.{}` contains no NULL values; no schema SQL was applied",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                }
-            }
-            let mut table_row_presence = HashMap::new();
-            for check in &plan.required_column_preflights {
-                let has_rows = *table_row_presence
-                    .entry(check.table.as_str())
-                    .or_insert_with(|| {
-                        table_has_rows(&url, schema.backend(), &check.table).map_err(|_| ())
-                    });
-                match has_rows {
-                    Ok(false) => {}
-                    Ok(true) => {
-                        eprintln!(
-                            "error[E-DB-005]: cannot add required column `{}.{}` without a default because the table contains existing rows; no schema SQL was applied. Add a default or stage the change: add it as nullable, backfill the rows, then require it",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                    Err(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: could not verify that table `{}` is empty before adding required column `{}.{}`; no schema SQL was applied",
-                            check.table, check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                }
-            }
-            let mut sql = plan.sql();
-            if schema.backend() == Backend::MariaDb
-                && (!plan.nullability_preflights.is_empty()
-                    || !plan.required_column_preflights.is_empty())
-            {
-                sql = format!(
-                    "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{sql}"
-                );
-            }
-            let result = match schema.backend() {
-                Backend::Postgres => apply_postgres(&url, &sql),
-                Backend::MariaDb => apply_mariadb(&url, &sql),
-                Backend::Sqlite => apply_sqlite(&url, &sql),
-            };
-            match result {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("error[E-DB-005]: {error}");
-                    ExitCode::from(1)
-                }
-            }
-        }
-        _ => {
-            database_usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
-fn inspect_for_backend(
-    backend: Backend,
-    database_url: &str,
-) -> Result<Schema, zelyra_database::DatabaseError> {
-    match backend {
-        Backend::Postgres => inspect_postgres(database_url),
-        Backend::MariaDb => inspect_mariadb(database_url),
-        Backend::Sqlite => inspect_sqlite(database_url),
-    }
-}
-
-fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let address = args.next().unwrap_or_else(|| "127.0.0.1:3000".into());
-    if args.next().is_some() {
-        usage();
-        return ExitCode::from(2);
-    }
-    let (ui_language, ui_level) = match project_ui_settings(&path) {
-        Ok(settings) => settings,
-        Err(error) => {
-            diagnostic(&path, "E-ENV-001", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let allowed_hosts = match project_allowed_hosts(&path) {
-        Ok(hosts) => hosts,
-        Err(error) => {
-            diagnostic(&path, "E-ENV-001", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let theme_css = match project_theme_css(&path) {
-        Ok(theme_css) => theme_css,
-        Err(error) => {
-            diagnostic(&path, "E-THEME-001", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let ui_catalogs = match project_ui_catalogs(&path) {
-        Ok(catalogs) => catalogs,
-        Err(error) => {
-            diagnostic(&path, "E-I18N-001", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let program = match load_project(&path) {
-        Ok(project) => project.program,
-        Err(()) => return ExitCode::from(1),
-    };
-    if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
-        diagnostic(
-            &path,
-            "E-THEME-002",
-            &format!(
-                "route `{PROJECT_THEME_CSS_PATH}` is reserved for the project theme stylesheet"
-            ),
-            1,
-            1,
-        );
-        return ExitCode::from(1);
-    }
-    let source = fs::read_to_string(&path).unwrap_or_default();
-    if !reject_typed_holes(&source, &path, &program) {
-        return ExitCode::from(1);
-    }
-    if validate_capabilities(&path, &program).is_err() {
-        return ExitCode::from(1);
-    }
-    let capability_grants = match project_capability_grants(&path) {
-        Ok(grants) => grants,
-        Err(error) => {
-            diagnostic(&path, "E-CAP-002", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let runtime_policy = match project_runtime_policy(&path) {
-        Ok(policy) => policy,
-        Err(error) => {
-            diagnostic(&path, "E-POLICY-002", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let cors_policy = match project_cors_policy(&path) {
-        Ok(policy) => policy,
-        Err(error) => {
-            diagnostic(&path, "E-WEB-004", &error, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    if program.pages.is_empty()
-        && program.forms.is_empty()
-        && program.cruds.is_empty()
-        && program.tableviews.is_empty()
-        && program.apis.is_empty()
-    {
-        eprintln!("error[E-WEB-001]: {path} does not define a page, form, CRUD resource, or API");
-        return ExitCode::from(1);
-    }
-    if !validate_views(&path, &program)
-        || !validate_page_inputs(&path, &program)
-        || !validate_page_data(&path, &program)
-        || !validate_components(&path, &program)
-    {
-        return ExitCode::from(1);
-    }
-    let routes = program
-        .pages
-        .iter()
-        .map(|page| Route {
-            path: page.path.clone(),
-            html: compose_page_view(&program, page),
-            query: page
-                .inputs
-                .iter()
-                .map(|input| RouteQuery {
-                    name: input.name.clone(),
-                    ty: input.ty.clone(),
-                })
-                .collect(),
-            page_size: page.page_size,
-            sort_columns: page.sort.clone(),
-            search_columns: page.search.clone(),
-            filters: page
-                .data
-                .iter()
-                .find(|data| matches!(data.result_type, Type::Array(_)))
-                .map(|data| {
-                    page.filters
-                        .iter()
-                        .map(|name| TableViewFilter {
-                            name: name.clone(),
-                            kind: page_filter_kind(&program, &data.result_type, name),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            data: page
-                .data
-                .iter()
-                .map(|data| RouteData {
-                    name: data.name.clone(),
-                    query: data.query.clone(),
-                    fields: page_data_fields(&program, &data.result_type),
-                    collection: matches!(data.result_type, Type::Array(_)),
-                    optional: matches!(data.result_type, Type::Option(_)),
-                })
-                .collect(),
-            requires_auth: page.requires_auth,
-            permissions: page.permissions.clone(),
-        })
-        .collect();
-    let schema = match build_schema(&program) {
-        Ok(schema) => schema,
-        Err(errors) => {
-            for error in errors {
-                diagnostic(
-                    &path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            }
-            return ExitCode::from(1);
-        }
-    };
-    if !validate_auth(&path, &program, &schema) {
-        return ExitCode::from(1);
-    }
-    if !validate_cruds(&path, &program, &schema) {
-        return ExitCode::from(1);
-    }
-    if !validate_tableviews(&path, &program, &schema) {
-        return ExitCode::from(1);
-    }
-    if let Err(errors) = check_form_program(&program, &schema) {
-        for error in errors {
-            diagnostic(
-                &path,
-                "E-FORM-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
-        }
-        return ExitCode::from(1);
-    }
-    let mut form_routes = Vec::new();
-    let auth_route = if let Some(auth) = program.auth.first() {
-        let Some(csrf) = CsrfProtection::generate().ok() else {
-            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
-            return ExitCode::from(1);
-        };
-        Some(AuthRoute {
-            table: auth.table.clone(),
-            session_table: auth.session_table.clone(),
-            permissions_table: auth.permissions_table.clone(),
-            roles_table: auth.roles_table.clone(),
-            role_permissions_table: auth.role_permissions_table.clone(),
-            audit_table: auth.audit_table.clone(),
-            audit_chain: auth.audit_chain,
-            admin_path: auth.admin_path.clone(),
-            admin_permission: auth.admin_permission.clone(),
-            admin_role: auth.admin_role.clone(),
-            schema: schema.clone(),
-            csrf,
-        })
-    } else {
-        None
-    };
-    for form in &program.forms {
-        let Some(csrf) = CsrfProtection::generate().ok() else {
-            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
-            return ExitCode::from(1);
-        };
-        let table = form.table.as_deref().and_then(|table_name| {
-            program
-                .tables
-                .iter()
-                .find(|table| table.name == table_name)
-                .cloned()
-        });
-        form_routes.push(FormRoute {
-            path: format!("/forms/{}", form.name),
-            action: format!("/forms/{}", form.name),
-            form: form.clone(),
-            table,
-            schema: Some(schema.clone()),
-            requires_auth: false,
-            permissions: Vec::new(),
-            csrf,
-            form_view: zelyra_ast::CrudFormViewDef::default(),
-            post_only: false,
-            audit_table: None,
-            audit_event: None,
-            audit_chain: false,
-            layout_html: None,
-        });
-    }
-    for crud in &program.cruds {
-        let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
-            continue;
-        };
-        for edit in [false, true] {
-            let Some(csrf) = CsrfProtection::generate().ok() else {
-                eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
-                return ExitCode::from(1);
-            };
-            form_routes.push(generated_crud_form(
-                crud,
-                table,
-                &schema,
-                edit,
-                CrudGenerationContext {
-                    layout_html: crud_layout_html(&program, crud),
-                    csrf,
-                    audit_table: auth_route
-                        .as_ref()
-                        .and_then(|auth| auth.audit_table.clone()),
-                    audit_chain: auth_route.as_ref().is_some_and(|auth| auth.audit_chain),
-                },
-            ));
-        }
-    }
-    let mut crud_routes = Vec::new();
-    for crud in &program.cruds {
-        let Some(table) = program.tables.iter().find(|table| table.name == crud.table) else {
-            continue;
-        };
-        let Some(csrf) = CsrfProtection::generate().ok() else {
-            eprintln!("error[E-WEB-003]: cannot create a secure CSRF token");
-            return ExitCode::from(1);
-        };
-        let soft_delete_column = crud
-            .soft_delete
-            .as_ref()
-            .map(|definition| definition.column.as_str());
-        let view_fields = if crud.list.is_empty() {
-            &crud.view.fields
-        } else {
-            &crud.list
-        };
-        let list_columns = configured_crud_columns(&program, &schema, crud, view_fields, |table| {
-            table
-                .columns
-                .iter()
-                .filter(|column| Some(column.name.as_str()) != soft_delete_column)
-                .map(|column| column.name.clone())
-                .collect()
-        });
-        let search_columns =
-            configured_crud_columns(&program, &schema, crud, &crud.search, |table| {
-                table
-                    .columns
-                    .iter()
-                    .filter(|column| {
-                        let sql_type = column.sql_type.to_ascii_uppercase();
-                        sql_type.contains("CHAR") || sql_type.contains("TEXT")
-                    })
-                    .map(|column| column.name.clone())
-                    .collect()
-            });
-        let filter_columns =
-            configured_crud_filter_columns(&program, &schema, crud, &crud.filters, |table| {
-                table
-                    .columns
-                    .iter()
-                    .filter(|column| column.name != "id")
-                    .filter(|column| Some(column.name.as_str()) != soft_delete_column)
-                    .map(|column| column.name.clone())
-                    .collect()
-            });
-        let actions = crud
-            .actions
-            .iter()
-            .map(|action| {
-                generated_crud_action(
-                    crud,
-                    table,
-                    &schema,
-                    action,
-                    CrudGenerationContext {
-                        layout_html: crud_layout_html(&program, crud),
-                        csrf: csrf.clone(),
-                        audit_table: auth_route
-                            .as_ref()
-                            .and_then(|auth| auth.audit_table.clone()),
-                        audit_chain: auth_route.as_ref().is_some_and(|auth| auth.audit_chain),
-                    },
-                )
-            })
-            .collect();
-        crud_routes.push(CrudRoute {
-            path: format!("/{}", crud.table),
-            title: crud
-                .title
-                .clone()
-                .unwrap_or_else(|| zelyra_web::localized_identifier(ui_language, &crud.name)),
-            table: crud.table.clone(),
-            list_columns,
-            search_columns,
-            filter_columns,
-            list_view: crud.view.list.clone(),
-            detail_view: crud.view.detail.clone(),
-            delete_view: crud.view.delete.clone(),
-            loading_view: crud.view.loading.clone(),
-            error_view: crud.view.error.clone(),
-            layout_html: crud_layout_html(&program, crud),
-            soft_delete: crud.soft_delete.clone(),
-            actions,
-            requires_auth: crud.requires_auth,
-            permissions: crud.permissions.clone(),
-            create_permissions: effective_crud_permissions(
-                &crud.permissions,
-                &crud.create_permissions,
-            ),
-            edit_permissions: effective_crud_permissions(&crud.permissions, &crud.edit_permissions),
-            delete_permissions: effective_crud_permissions(
-                &crud.permissions,
-                &crud.delete_permissions,
-            ),
-            schema: schema.clone(),
-            csrf,
-        });
-    }
-    let tableview_routes = program
-        .tableviews
-        .iter()
-        .map(|tableview| TableViewRoute {
-            path: format!("/views/{}", tableview.name.to_ascii_lowercase()),
-            title: zelyra_web::localized_identifier(ui_language, &tableview.name),
-            source: tableview.source.clone(),
-            columns: tableview.columns.clone(),
-            filters: tableview
-                .filters
-                .iter()
-                .map(|name| TableViewFilter {
-                    name: name.clone(),
-                    kind: tableview_filter_kind(
-                        &tableview.result_type,
-                        name,
-                        &schema,
-                        &program.records,
-                    ),
-                })
-                .collect(),
-            searchable: tableview.searchable,
-            sortable: tableview.sortable,
-            page_size: tableview.page_size,
-            requires_auth: tableview.requires_auth,
-            permissions: tableview.permissions.clone(),
-        })
-        .collect();
-    let database_capability_granted = capability_grants
-        .as_ref()
-        .is_none_or(|grants| grants.contains("Database"));
-    let api_routes = generated_api_routes(
-        &program,
-        capability_grants.as_ref(),
-        runtime_policy.as_ref(),
-    );
-    eprintln!("Zelyra server listening on http://{address}");
-    let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
-        .with_ui_settings(ui_language, ui_level)
-        .with_project_theme_css(theme_css)
-        .with_project_ui_catalogs(ui_catalogs)
-        .with_database_capability(database_capability_granted)
-        .with_apis(api_routes)
-        .with_auth(
-            env::var("ZELYRA_AUTH_TOKEN").ok(),
-            env::var("ZELYRA_AUTH_PERMISSIONS")
-                .unwrap_or_default()
-                .split(',')
-                .map(str::trim)
-                .filter(|permission| !permission.is_empty())
-                .map(str::to_owned)
-                .collect(),
-        )
-        .with_cruds(crud_routes)
-        .with_tableviews(tableview_routes);
-    let app = match app.with_allowed_hosts(allowed_hosts) {
-        Ok(app) => app,
-        Err(error) => {
-            diagnostic(&path, "E-ENV-001", &error.message, 1, 1);
-            return ExitCode::from(1);
-        }
-    };
-    let app = if let Some(cors_policy) = cors_policy {
-        app.with_cors(cors_policy)
-    } else {
-        app
-    };
-    let app = if let Some(auth_route) = auth_route {
-        app.with_auth_route(auth_route)
-    } else {
-        app
-    };
-    match serve_app(app, &address) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("error[E-WEB-002]: cannot start server on {address}: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-struct CrudGenerationContext {
-    layout_html: Option<String>,
-    csrf: CsrfProtection,
-    audit_table: Option<String>,
-    audit_chain: bool,
-}
-
-fn generated_crud_form(
-    crud: &zelyra_ast::CrudDef,
-    table: &zelyra_ast::TableDef,
-    schema: &Schema,
-    edit: bool,
-    context: CrudGenerationContext,
-) -> FormRoute {
-    let permissions = if edit {
-        effective_crud_permissions(&crud.permissions, &crud.edit_permissions)
-    } else {
-        effective_crud_permissions(&crud.permissions, &crud.create_permissions)
-    };
-    let configured_fields = (!crud.view.fields.is_empty()).then_some(&crud.view.fields);
-    let fields = table
-        .columns
-        .iter()
-        .filter(|column| !column.primary_key && !column.auto)
-        .filter(|column| {
-            configured_fields.is_none_or(|fields| fields.iter().any(|name| name == &column.name))
-        })
-        .filter(|column| {
-            crud.soft_delete
-                .as_ref()
-                .is_none_or(|definition| definition.column != column.name)
-        })
-        .map(|column| zelyra_ast::FormField {
-            name: column.name.clone(),
-            ty: None,
-            label: None,
-            placeholder: None,
-            required: false,
-            max: None,
-            widget: None,
-            readonly: false,
-            span: column.span,
-        })
-        .collect::<Vec<_>>();
-    let storage_columns = fields
-        .iter()
-        .map(|field| storage_column_name(schema, &crud.table, &field.name))
-        .collect::<Vec<_>>();
-    let query = if edit {
-        let assignments = storage_columns
-            .iter()
-            .zip(&fields)
-            .map(|(column, field)| format!("{} = :{}", quote_identifier(column), field.name))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "UPDATE {} SET {} WHERE {} = :id",
-            quote_identifier(&crud.table),
-            assignments,
-            quote_identifier("id")
-        )
-    } else {
-        format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            quote_identifier(&crud.table),
-            storage_columns
-                .iter()
-                .map(|column| quote_identifier(column))
-                .collect::<Vec<_>>()
-                .join(", "),
-            fields
-                .iter()
-                .map(|field| format!(":{}", field.name))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-    let path = if edit {
-        format!("/{}/{{id}}/edit", crud.table)
-    } else {
-        format!("/{}/new", crud.table)
-    };
-    FormRoute {
-        path: path.clone(),
-        action: path,
-        form: zelyra_ast::FormDef {
-            name: format!("{}{}", crud.name, if edit { "Edit" } else { "Create" }),
-            table: Some(table.name.clone()),
-            fields,
-            actions: vec![zelyra_ast::FormAction {
-                name: "save".into(),
-                label: None,
-                icon: None,
-                confirm: None,
-                confirm_page: None,
-                success_page: None,
-                error_page: None,
-                fields: Vec::new(),
-                requires_auth: false,
-                permissions: Vec::new(),
-                statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
-                    kind: zelyra_ast::ExprKind::Sql {
-                        result_type: zelyra_ast::Type::Unit,
-                        query,
-                    },
-                    span: table.span,
-                })],
-                success: Some("@i18n:form.saved".into()),
-                redirect: Some(format!("/{}", crud.table)),
-                span: table.span,
-            }],
-            span: table.span,
-        },
-        table: Some(table.clone()),
-        schema: Some(schema.clone()),
-        requires_auth: crud.requires_auth,
-        permissions,
-        csrf: context.csrf,
-        form_view: crud.view.form.clone(),
-        post_only: false,
-        audit_table: context.audit_table,
-        audit_event: Some(if edit {
-            "crud.update".into()
-        } else {
-            "crud.create".into()
-        }),
-        audit_chain: context.audit_chain,
-        layout_html: context.layout_html,
-    }
-}
-
-fn generated_crud_action(
-    crud: &zelyra_ast::CrudDef,
-    table: &zelyra_ast::TableDef,
-    schema: &Schema,
-    action: &zelyra_ast::FormAction,
-    context: CrudGenerationContext,
-) -> CrudActionRoute {
-    let mut permissions = crud.permissions.clone();
-    permissions.extend(action.permissions.clone());
-    permissions.sort();
-    permissions.dedup();
-    let path = format!("/{}/{{id}}/{}", crud.table, action.name);
-    CrudActionRoute {
-        name: action.name.clone(),
-        label: action.label.clone().unwrap_or_else(|| action.name.clone()),
-        icon: action.icon.clone(),
-        confirm: action.confirm.clone(),
-        confirm_page: action.confirm_page.clone(),
-        form: FormRoute {
-            path: path.clone(),
-            action: path,
-            form: zelyra_ast::FormDef {
-                name: format!("{}{}", crud.name, action.name),
-                table: Some(table.name.clone()),
-                fields: action.fields.clone(),
-                actions: vec![action.clone()],
-                span: action.span,
-            },
-            table: Some(table.clone()),
-            schema: Some(schema.clone()),
-            requires_auth: crud.requires_auth || action.requires_auth,
-            permissions,
-            csrf: context.csrf,
-            form_view: zelyra_ast::CrudFormViewDef {
-                submit: action.label.clone(),
-                ..zelyra_ast::CrudFormViewDef::default()
-            },
-            post_only: true,
-            audit_table: context.audit_table,
-            audit_event: Some(format!("crud.action.{}", action.name)),
-            audit_chain: context.audit_chain,
-            layout_html: context.layout_html,
-        },
-    }
-}
-
-fn effective_crud_permissions(default: &[String], scoped: &[String]) -> Vec<String> {
-    if scoped.is_empty() {
-        default.to_vec()
-    } else {
-        scoped.to_vec()
-    }
-}
-
-fn generated_api_routes(
-    program: &zelyra_ast::Program,
-    capability_grants: Option<&HashSet<String>>,
-    runtime_policy: Option<&RuntimePolicy>,
-) -> Vec<ApiRoute> {
-    let database_url = env::var("DATABASE_URL").ok();
-    program
-        .apis
-        .iter()
-        .filter_map(|api| {
-            let handler = api.handler.as_ref()?.clone();
-            let api = api.clone();
-            let program = program.clone();
-            let database_url = database_url.clone();
-            let capability_grants = capability_grants.cloned();
-            let runtime_policy = runtime_policy.cloned();
-            let requires_auth = api.requires_auth;
-            let permissions = api.permissions.clone();
-            Some(
-                ApiRoute::new(
-                    api.method.clone(),
-                    api.path.clone(),
-                    move |request, path_params| {
-                        dispatch_api_with_capabilities(
-                            &program,
-                            &api,
-                            &handler,
-                            request,
-                            path_params,
-                            ApiRuntimeContext {
-                                database_url: database_url.as_deref(),
-                                capability_grants: capability_grants.as_ref(),
-                                runtime_policy: runtime_policy.as_ref(),
-                            },
-                        )
-                    },
-                )
-                .with_auth(requires_auth, permissions),
-            )
-        })
-        .collect()
-}
-
-#[cfg(test)]
-fn dispatch_api(
-    program: &zelyra_ast::Program,
-    api: &zelyra_ast::ApiDef,
-    handler: &str,
-    request: &zelyra_web::Request,
-    path_params: &HashMap<String, String>,
-    database_url: Option<&str>,
-) -> Response {
-    dispatch_api_with_capabilities(
-        program,
-        api,
-        handler,
-        request,
-        path_params,
-        ApiRuntimeContext {
-            database_url,
-            capability_grants: None,
-            runtime_policy: None,
-        },
-    )
-}
-
-#[derive(Clone, Copy)]
-struct ApiRuntimeContext<'a> {
-    database_url: Option<&'a str>,
-    capability_grants: Option<&'a HashSet<String>>,
-    runtime_policy: Option<&'a RuntimePolicy>,
-}
-
-fn dispatch_api_with_capabilities(
-    program: &zelyra_ast::Program,
-    api: &zelyra_ast::ApiDef,
-    handler: &str,
-    request: &zelyra_web::Request,
-    path_params: &HashMap<String, String>,
-    context: ApiRuntimeContext<'_>,
-) -> Response {
-    if !matches!(api.method.as_str(), "GET" | "DELETE") && !request.body.trim().is_empty() {
-        if let Some(content_type) = request.headers.get("content-type") {
-            let media_type = content_type
-                .split(';')
-                .next()
-                .map(str::trim)
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            if media_type != "application/json" && media_type != "application/x-www-form-urlencoded"
-            {
-                return api_error_response(
-                    415,
-                    "UnsupportedMediaType",
-                    "API request bodies must use application/json or application/x-www-form-urlencoded",
-                );
-            }
-        }
-    }
-    let values = if matches!(api.method.as_str(), "GET" | "DELETE") {
-        request.target.split_once('?').map_or_else(
-            || Ok(HashMap::new()),
-            |(_, query)| parse_api_url_values(query),
-        )
-    } else if request
-        .headers
-        .get("content-type")
-        .is_some_and(|content_type| content_type.starts_with("application/json"))
-    {
-        parse_api_json_object(&request.body).map_err(|message| zelyra_web::HttpError { message })
-    } else {
-        parse_api_url_values(&request.body)
-    };
-    let mut values = match values {
-        Ok(values) => values,
-        Err(error) => return api_error_response(400, "BadRequest", &error.to_string()),
-    };
-    for (name, value) in path_params {
-        values.insert(name.clone(), serde_json::Value::String(value.clone()));
-    }
-    let mut arguments = Vec::new();
-    for field in &api.input {
-        let Some(value) = values.get(&field.name) else {
-            if matches!(field.ty, Type::Option(_)) {
-                arguments.push(RuntimeValue::Option(None));
-                continue;
-            }
-            return api_error_response(
-                400,
-                "BadRequest",
-                &format!("missing API input `{}`", field.name),
-            );
-        };
-        match api_value_json(value, &field.ty, program) {
-            Ok(value) => arguments.push(value),
-            Err(error) => return api_error_response(400, "BadRequest", &error),
-        }
-    }
-    match execute_function_with_capabilities_and_policies(
-        program,
-        handler,
-        arguments,
-        context.database_url,
-        context.capability_grants,
-        context.runtime_policy,
-    ) {
-        Ok(value) => api_result_response(api, &value),
-        Err(error) => api_error_response(500, "InternalServerError", &error.message),
-    }
-}
-
-fn api_result_response(api: &zelyra_ast::ApiDef, value: &RuntimeValue) -> Response {
-    if let RuntimeValue::Result(Err(error)) = value {
-        let error_name = match &**error {
-            RuntimeValue::Object { type_name, .. } => type_name.clone(),
-            _ => error.output(),
-        };
-        if let Some(declaration) = api.errors.iter().find(|declaration| {
-            declaration.name == error_name
-                || declaration.payload.as_ref().is_some_and(|payload| {
-                    payload == &error.ty()
-                        || matches!(payload, Type::Named(name) if name == &error_name)
-                })
-        }) {
-            return api_error_response_with_details(
-                declaration.status,
-                &declaration.name,
-                &format!("API handler returned {}", declaration.name),
-                declaration.payload.as_ref().map(|_| &**error),
-            );
-        }
-        return api_error_response(
-            500,
-            "InternalServerError",
-            &format!("unmapped API error `{error_name}`"),
-        );
-    }
-    Response::json(200, api_json_value(value))
-}
-
-fn api_value_json(
-    value: &serde_json::Value,
-    ty: &Type,
-    program: &zelyra_ast::Program,
-) -> Result<RuntimeValue, String> {
-    if let Type::Option(inner) = ty {
-        if value.is_null() {
-            return Ok(RuntimeValue::Option(None));
-        }
-        return Ok(RuntimeValue::Option(Some(Box::new(api_value_json(
-            value, inner, program,
-        )?))));
-    }
-    if let Type::Named(name) = ty {
-        if let Some(definition) = program
-            .types
-            .iter()
-            .find(|definition| definition.name == *name)
-        {
-            return api_value_json(value, &definition.target, program);
-        }
-        if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-            return api_record_value(value, record, program);
-        }
-    }
-    match ty {
-        Type::Array(inner) => {
-            let Some(values) = value.as_array() else {
-                return Err("expected a JSON array".into());
-            };
-            values
-                .iter()
-                .map(|value| api_value_json(value, inner, program))
-                .collect::<Result<Vec<_>, _>>()
-                .map(RuntimeValue::Array)
-        }
-        Type::Map(key, value_type) => {
-            if **key != Type::String {
-                return Err("API JSON maps require String keys".into());
-            }
-            let Some(object) = value.as_object() else {
-                return Err("expected a JSON object for Map<String, Value>".into());
-            };
-            object
-                .iter()
-                .map(|(key, value)| {
-                    api_value_json(value, value_type, program)
-                        .map(|value| (RuntimeValue::String(key.clone()), value))
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map(RuntimeValue::Map)
-        }
-        Type::Int => value
-            .as_i64()
-            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(RuntimeValue::Int)
-            .ok_or_else(|| format!("invalid Int JSON value `{value}`")),
-        Type::UInt => value
-            .as_u64()
-            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(RuntimeValue::UInt)
-            .ok_or_else(|| format!("invalid UInt JSON value `{value}`")),
-        Type::Float | Type::Decimal => value
-            .as_f64()
-            .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
-            .map(RuntimeValue::Float)
-            .ok_or_else(|| format!("invalid numeric JSON value `{value}`")),
-        Type::Bool => value
-            .as_bool()
-            .or_else(|| {
-                value.as_str().and_then(|value| match value {
-                    "true" | "1" => Some(true),
-                    "false" | "0" => Some(false),
-                    _ => None,
-                })
-            })
-            .map(RuntimeValue::Bool)
-            .ok_or_else(|| format!("invalid Bool JSON value `{value}`")),
-        _ => value
-            .as_str()
-            .map(|value| RuntimeValue::String(value.to_owned()))
-            .or_else(|| {
-                if value.is_number() || value.is_boolean() {
-                    Some(RuntimeValue::String(value.to_string()))
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| format!("expected a scalar JSON value, found `{value}`")),
-    }
-}
-
-fn api_record_value(
-    value: &serde_json::Value,
-    record: &zelyra_ast::RecordDef,
-    program: &zelyra_ast::Program,
-) -> Result<RuntimeValue, String> {
-    let Some(object) = value.as_object() else {
-        return Err(format!("expected JSON object for record `{}`", record.name));
-    };
-    for field in object.keys() {
-        if !record
-            .fields
-            .iter()
-            .any(|candidate| candidate.name == *field)
-        {
-            return Err(format!(
-                "unknown field `{field}` in record `{}`",
-                record.name
-            ));
-        }
-    }
-    let mut fields = HashMap::new();
-    for field in &record.fields {
-        let Some(value) = object.get(&field.name) else {
-            if matches!(field.ty, Type::Option(_)) {
-                fields.insert(field.name.clone(), RuntimeValue::Option(None));
-                continue;
-            }
-            return Err(format!(
-                "missing field `{}` in record `{}`",
-                field.name, record.name
-            ));
-        };
-        fields.insert(
-            field.name.clone(),
-            api_value_json(value, &field.ty, program)?,
-        );
-    }
-    Ok(RuntimeValue::Object {
-        type_name: record.name.clone(),
-        fields,
-    })
-}
-
-fn api_json_value(value: &RuntimeValue) -> String {
-    api_json_value_node(value).to_string()
-}
-
-fn api_json_value_node(value: &RuntimeValue) -> serde_json::Value {
-    match value {
-        RuntimeValue::Int(value) => serde_json::Value::from(*value),
-        RuntimeValue::UInt(value) => serde_json::Value::from(*value),
-        RuntimeValue::Float(value) => serde_json::Number::from_f64(*value)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        RuntimeValue::Bool(value) => serde_json::Value::from(*value),
-        RuntimeValue::String(value) => serde_json::Value::String(value.clone()),
-        RuntimeValue::Char(value) => serde_json::Value::String(value.to_string()),
-        RuntimeValue::Timestamp(value) => serde_json::Value::from(*value),
-        RuntimeValue::Array(values) => {
-            serde_json::Value::Array(values.iter().map(api_json_value_node).collect())
-        }
-        RuntimeValue::Map(entries) => {
-            let object = entries
-                .iter()
-                .map(|(key, value)| (key.output(), api_json_value_node(value)))
-                .collect();
-            serde_json::Value::Object(object)
-        }
-        RuntimeValue::Object { fields, .. } => {
-            let object = fields
-                .iter()
-                .map(|(name, value)| (name.clone(), api_json_value_node(value)))
-                .collect();
-            serde_json::Value::Object(object)
-        }
-        RuntimeValue::Option(Some(value)) => api_json_value_node(value),
-        RuntimeValue::Option(None) => serde_json::Value::Null,
-        RuntimeValue::Result(Ok(value)) => api_json_value_node(value),
-        RuntimeValue::Result(Err(value)) => {
-            let mut object = serde_json::Map::new();
-            object.insert("error".into(), api_json_value_node(value));
-            serde_json::Value::Object(object)
-        }
-        RuntimeValue::Rows { columns, rows } => serde_json::Value::Array(
-            rows.iter()
-                .map(|row| {
-                    let object = columns
-                        .iter()
-                        .zip(row)
-                        .map(|(column, value)| {
-                            (column.clone(), serde_json::Value::String(value.clone()))
-                        })
-                        .collect();
-                    serde_json::Value::Object(object)
-                })
-                .collect(),
-        ),
-        RuntimeValue::Unit => serde_json::Value::Null,
-    }
-}
-
-fn api_error_response(status: u16, code: &str, message: &str) -> Response {
-    api_error_response_with_details(status, code, message, None)
-}
-
-fn api_error_response_with_details(
-    status: u16,
-    code: &str,
-    message: &str,
-    details: Option<&RuntimeValue>,
-) -> Response {
-    let mut error = serde_json::Map::new();
-    error.insert("code".into(), serde_json::Value::String(code.into()));
-    error.insert("message".into(), serde_json::Value::String(message.into()));
-    if let Some(details) = details {
-        error.insert("details".into(), api_json_value_node(details));
-    }
-    let mut response = serde_json::Map::new();
-    response.insert("error".into(), serde_json::Value::Object(error));
-    Response::json(status, serde_json::Value::Object(response).to_string())
-}
-
-fn parse_api_json_object(source: &str) -> Result<HashMap<String, serde_json::Value>, String> {
-    let value: serde_json::Value = serde_json::from_str(source)
-        .map_err(|error| format!("invalid JSON request body: {error}"))?;
-    let serde_json::Value::Object(object) = value else {
-        return Err("JSON request body must be an object".into());
-    };
-    object.into_iter().map(Ok).collect()
-}
-
-fn parse_api_url_values(
-    source: &str,
-) -> Result<HashMap<String, serde_json::Value>, zelyra_web::HttpError> {
-    parse_urlencoded(source).map(|values| {
-        values
-            .into_iter()
-            .map(|(name, value)| (name, serde_json::Value::String(value)))
-            .collect()
-    })
-}
-
-fn storage_column_name(schema: &Schema, table: &str, field: &str) -> String {
-    schema
-        .tables
-        .iter()
-        .find(|candidate| candidate.name == table)
-        .and_then(|candidate| {
-            candidate
-                .columns
-                .iter()
-                .find(|column| column.name == field || column.name == format!("{field}_id"))
-        })
-        .map(|column| column.name.clone())
-        .unwrap_or_else(|| field.into())
-}
-
-const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
-
-fn compose_view_html(program: &zelyra_ast::Program, view_name: &str, content: &str) -> String {
-    let (default_body, named_slots) =
-        split_view_content(content).expect("page view slots are validated before route generation");
-    compose_view_parts(program, view_name, &default_body, &named_slots)
-}
-
-fn compose_view_parts(
-    program: &zelyra_ast::Program,
-    view_name: &str,
-    default_body: &str,
-    named_slots: &HashMap<String, String>,
-) -> String {
-    let view = program
-        .views
-        .iter()
-        .find(|view| view.name == view_name)
-        .expect("page and CRUD views are validated before route generation");
-    let slots = slot_invocations(&view.html).expect("view slots are validated");
-    let mut composed = view.html.clone();
-    for slot in slots.into_iter().rev() {
-        let replacement = slot
-            .name
-            .as_deref()
-            .and_then(|name| named_slots.get(name))
-            .map_or_else(
-                || match slot.name {
-                    Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body,
-                },
-                String::as_str,
-            );
-        composed.replace_range(slot.start..slot.end, replacement);
-    }
-    expand_view_components(program, composed)
-}
-
-fn compose_page_view(program: &zelyra_ast::Program, page: &zelyra_ast::PageDef) -> String {
-    if let Some(view_name) = page.view.as_deref() {
-        compose_view_html(program, view_name, &page.html)
-    } else {
-        expand_view_components(program, page.html.clone())
-    }
-}
-
-fn crud_layout_html(program: &zelyra_ast::Program, crud: &zelyra_ast::CrudDef) -> Option<String> {
-    crud.layout.as_deref().map(|layout| {
-        let supplied_slots = crud
-            .layout_slots
-            .iter()
-            .map(|slot| (slot.name.clone(), slot.html.clone()))
-            .collect::<HashMap<_, _>>();
-        compose_view_parts(program, layout, CRUD_LAYOUT_CONTENT_MARKER, &supplied_slots)
-    })
-}
-
-fn page_data_fields(program: &zelyra_ast::Program, ty: &Type) -> Vec<String> {
-    let ty = match ty {
-        Type::Array(inner) | Type::Option(inner) => inner.as_ref(),
-        other => other,
-    };
-    let Type::Named(name) = ty else {
-        return Vec::new();
-    };
-    if let Some(record) = program.records.iter().find(|record| record.name == *name) {
-        return record
-            .fields
-            .iter()
-            .map(|field| field.name.clone())
-            .collect();
-    }
-    program
-        .tables
-        .iter()
-        .find(|table| {
-            table.name == *name || singular_type_name(&table.name).as_deref() == Some(name)
-        })
-        .map(|table| {
-            table
-                .columns
-                .iter()
-                .map(|column| column.name.clone())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn render_view_component(
-    component: &zelyra_ast::ComponentDef,
-    attributes: &str,
-    body: Option<&str>,
-) -> String {
-    let attributes = component_attributes(attributes).expect("view components are validated");
-    let (default_body, named_slots) = body
-        .map(split_component_body)
-        .transpose()
-        .expect("view component slots are validated")
-        .unwrap_or_default();
-    let mut template = component.html.clone();
-    let slots = slot_invocations(&template).expect("view component slots are validated");
-    for (index, slot) in slots.into_iter().enumerate().rev() {
-        let replacement = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
-        template.replace_range(slot.start..slot.end, &replacement);
-    }
-    let mut rendered = component.props.iter().fold(template, |html, prop| {
-        let value = attributes.get(&prop.name).map_or("", String::as_str);
-        let replacement = if value.starts_with('{') && value.ends_with('}') {
-            value.to_owned()
-        } else {
-            html_escape(value)
-        };
-        html.replace(&format!("{{{}}}", prop.name), &replacement)
-    });
-    let slots = slot_invocations(&component.html).expect("view component slots are validated");
-    for (index, slot) in slots.into_iter().enumerate() {
-        let marker = format!("\u{0}ZELYRA_SLOT_{index}\u{0}");
-        let replacement = slot
-            .name
-            .as_deref()
-            .and_then(|name| named_slots.get(name))
-            .map_or_else(
-                || match slot.name {
-                    Some(_) => slot.body.as_deref().unwrap_or(""),
-                    None => default_body.as_str(),
-                },
-                String::as_str,
-            );
-        rendered = rendered.replace(&marker, replacement);
-    }
-    rendered
-}
-
-fn expand_view_components(program: &zelyra_ast::Program, mut html: String) -> String {
-    for _ in 0..16 {
-        let Ok(invocations) = component_invocations(&html) else {
-            break;
-        };
-        let Some(invocation) = invocations.into_iter().next() else {
-            break;
-        };
-        let Some(component) = program
-            .components
-            .iter()
-            .find(|component| component.name == invocation.name)
-        else {
-            break;
-        };
-        let rendered = render_view_component(
-            component,
-            &invocation.attributes,
-            invocation.body.as_deref(),
-        );
-        html.replace_range(invocation.start..invocation.end, &rendered);
-    }
-    html
-}
-
-fn quote_identifier(identifier: &str) -> String {
-    format!("`{}`", identifier.replace('`', "``"))
-}
-
-fn form_usage() {
-    eprintln!("Usage: zelyra form validate <file.zyl> <FormName> [field=value ...]");
-}
-
-fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    if args.next().as_deref() != Some("validate") {
-        form_usage();
-        return ExitCode::from(2);
-    }
-    let Some(path) = args.next() else {
-        form_usage();
-        return ExitCode::from(2);
-    };
-    let Some(form_name) = args.next() else {
-        form_usage();
-        return ExitCode::from(2);
-    };
-    let mut input = std::collections::HashMap::new();
-    for argument in args {
-        let Some((field, value)) = argument.split_once('=') else {
-            eprintln!("error[E-FORM-002]: expected field=value, found `{argument}`");
-            return ExitCode::from(2);
-        };
-        if field.is_empty() {
-            eprintln!("error[E-FORM-002]: field name must not be empty");
-            return ExitCode::from(2);
-        }
-        input.insert(field.to_owned(), value.to_owned());
-    }
-    let program = match load(&path) {
-        Ok(program) => program,
-        Err(()) => return ExitCode::from(1),
-    };
-    let schema = match build_schema(&program) {
-        Ok(schema) => schema,
-        Err(errors) => {
-            for error in errors {
-                diagnostic(
-                    &path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            }
-            return ExitCode::from(1);
-        }
-    };
-    if let Err(errors) = check_form_program(&program, &schema) {
-        for error in errors {
-            diagnostic(
-                &path,
-                "E-FORM-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
-        }
-        return ExitCode::from(1);
-    }
-    let Some(form) = program.forms.iter().find(|form| form.name == form_name) else {
-        eprintln!("error[E-FORM-003]: form `{form_name}` was not found in `{path}`");
-        return ExitCode::from(1);
-    };
-    let table_definition = form
-        .table
-        .as_deref()
-        .and_then(|table_name| program.tables.iter().find(|table| table.name == table_name));
-    let result = validate_form(form, table_definition, Some(&schema), &input);
-    if result.is_valid() {
-        println!("valid: {form_name}");
-        ExitCode::SUCCESS
-    } else {
-        for error in result.errors {
-            eprintln!("error[E-FORM-004]: {}: {}", error.field, error.message);
-        }
-        ExitCode::from(1)
-    }
-}
-
-fn auth_usage() {
-    eprintln!(
-        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n  zelyra auth role grant <file.zyl> <user-id> <role>\n  zelyra auth role revoke <file.zyl> <user-id> <role>\n  zelyra auth role-permission grant <file.zyl> <role> <permission>\n  zelyra auth role-permission revoke <file.zyl> <role> <permission>\n\nRole commands use DATABASE_URL and the role tables declared in the first auth definition.\nThe interactive password form does not echo passwords. Use --stdin for automation."
-    );
-}
-
-#[derive(Clone, Debug)]
-struct AuthRoleTables {
-    assignments: String,
-    permissions: String,
-    audit: Option<String>,
-    audit_chain: bool,
-}
-
-fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
-    let program = match validate(path) {
-        Ok(program) => program,
-        Err(()) => return Err(ExitCode::from(1)),
-    };
-    let Some(auth) = program.auth.first() else {
-        eprintln!("error[E-AUTH-014]: role commands require an auth definition");
-        return Err(ExitCode::from(1));
-    };
-    let (Some(assignments), Some(permissions)) = (
-        auth.roles_table.clone(),
-        auth.role_permissions_table.clone(),
-    ) else {
-        eprintln!(
-            "error[E-AUTH-015]: role commands require roles and role_permissions in the auth definition"
-        );
-        return Err(ExitCode::from(1));
-    };
-    Ok(AuthRoleTables {
-        assignments,
-        permissions,
-        audit: auth.audit_table.clone(),
-        audit_chain: auth.audit_chain,
-    })
-}
-
-fn auth_role_database_url() -> Result<String, ExitCode> {
-    match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
-        Ok(_) => {
-            eprintln!("error[E-AUTH-016]: role commands require a MariaDB DATABASE_URL");
-            Err(ExitCode::from(1))
-        }
-        Err(_) => {
-            eprintln!("error[E-AUTH-017]: DATABASE_URL is required for role commands");
-            Err(ExitCode::from(1))
-        }
-    }
-}
-
-fn execute_auth_role_mutation(
-    database_url: &str,
-    sql: String,
-    params: Vec<(String, QueryValue)>,
-    audit: Option<(&str, bool)>,
-    event: &str,
-    target_user_id: Option<i64>,
-    details: String,
-) -> Result<(), zelyra_database::DatabaseError> {
-    let mut queries = vec![Query { sql, params }];
-    if let Some((audit_table, audit_chain)) = audit {
-        queries.extend(audit_insert_queries(
-            audit_table,
-            audit_chain,
-            None,
-            event,
-            target_user_id,
-            &details,
-        ));
-    }
-    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
-}
-
-fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(user_id) = args.next().and_then(|value| value.parse::<i64>().ok()) else {
-        eprintln!("error[E-AUTH-018]: user-id must be an integer");
-        return ExitCode::from(2);
-    };
-    let Some(role) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some() || role.is_empty() || !matches!(operation.as_str(), "grant" | "revoke")
-    {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let tables = match auth_role_tables(&path) {
-        Ok(tables) => tables,
-        Err(code) => return code,
-    };
-    let database_url = match auth_role_database_url() {
-        Ok(url) => url,
-        Err(code) => return code,
-    };
-    let (sql, message) = if operation == "grant" {
-        (
-            format!(
-                "INSERT INTO {} (user_id, role) SELECT :user_id, :role FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE user_id = :user_id AND role = :role)",
-                quote_identifier(&tables.assignments),
-                quote_identifier(&tables.assignments),
-            ),
-            "role granted",
-        )
-    } else {
-        (
-            format!(
-                "DELETE FROM {} WHERE user_id = :user_id AND role = :role",
-                quote_identifier(&tables.assignments),
-            ),
-            "role revoked",
-        )
-    };
-    let event = format!("role.{operation}");
-    let details = format!("source=cli;role={role}");
-    match execute_auth_role_mutation(
-        &database_url,
-        sql,
-        vec![
-            ("user_id".into(), QueryValue::Int(user_id)),
-            ("role".into(), QueryValue::String(role.clone())),
-        ],
-        tables
-            .audit
-            .as_deref()
-            .map(|table| (table, tables.audit_chain)),
-        &event,
-        Some(user_id),
-        details,
-    ) {
-        Ok(_) => {
-            println!("{message}: user {user_id} -> {role}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-019]: cannot change role assignment: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(role) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(permission) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some()
-        || role.is_empty()
-        || permission.is_empty()
-        || !matches!(operation.as_str(), "grant" | "revoke")
-    {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let tables = match auth_role_tables(&path) {
-        Ok(tables) => tables,
-        Err(code) => return code,
-    };
-    let database_url = match auth_role_database_url() {
-        Ok(url) => url,
-        Err(code) => return code,
-    };
-    let (sql, message) = if operation == "grant" {
-        (
-            format!(
-                "INSERT INTO {} (role, permission) SELECT :role, :permission FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE role = :role AND permission = :permission)",
-                quote_identifier(&tables.permissions),
-                quote_identifier(&tables.permissions),
-            ),
-            "permission granted",
-        )
-    } else {
-        (
-            format!(
-                "DELETE FROM {} WHERE role = :role AND permission = :permission",
-                quote_identifier(&tables.permissions),
-            ),
-            "permission revoked",
-        )
-    };
-    let event = format!("role_permission.{operation}");
-    let details = format!("source=cli;role={role};permission={permission}");
-    match execute_auth_role_mutation(
-        &database_url,
-        sql,
-        vec![
-            ("role".into(), QueryValue::String(role.clone())),
-            ("permission".into(), QueryValue::String(permission.clone())),
-        ],
-        tables
-            .audit
-            .as_deref()
-            .map(|table| (table, tables.audit_chain)),
-        &event,
-        None,
-        details,
-    ) {
-        Ok(_) => {
-            println!("{message}: {role} -> {permission}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-020]: cannot change role permission: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn audit_usage() {
-    eprintln!(
-        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000. Prune never changes data without --confirm."
-    );
-}
-
-fn audit_project(path: &str) -> Result<(String, String, bool), ExitCode> {
-    let program = match validate(path) {
-        Ok(program) => program,
-        Err(()) => return Err(ExitCode::from(1)),
-    };
-    let Some(auth) = program.auth.first() else {
-        eprintln!("error[E-AUDIT-001]: audit commands require an auth definition");
-        return Err(ExitCode::from(1));
-    };
-    let Some(audit_table) = auth.audit_table.clone() else {
-        eprintln!(
-            "error[E-AUDIT-001]: audit commands require audit: <table> in the auth definition"
-        );
-        return Err(ExitCode::from(1));
-    };
-    let database_url = match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
-        Ok(_) => {
-            eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB DATABASE_URL");
-            return Err(ExitCode::from(1));
-        }
-        Err(_) => {
-            eprintln!("error[E-AUDIT-003]: DATABASE_URL is required for audit commands");
-            return Err(ExitCode::from(1));
-        }
-    };
-    Ok((database_url, audit_table, auth.audit_chain))
-}
-
-fn audit_limit(value: &str) -> Result<usize, ExitCode> {
-    match value.parse::<usize>() {
-        Ok(limit) if (1..=10_000).contains(&limit) => Ok(limit),
-        _ => {
-            eprintln!("error[E-AUDIT-004]: limit must be an integer between 1 and 10000");
-            Err(ExitCode::from(2))
-        }
-    }
-}
-
-fn audit_rows(
-    database_url: &str,
-    audit_table: &str,
-    limit: usize,
-) -> Result<QueryResult, zelyra_database::DatabaseError> {
-    zelyra_database::execute_mariadb_query(
-        database_url,
-        &format!(
-            "SELECT actor_user_id, event, target_user_id, details, created_at FROM {} ORDER BY created_at DESC LIMIT {limit}",
-            quote_identifier(audit_table)
-        ),
-        Vec::new(),
-    )
-}
-
-fn audit_integrity(
-    database_url: &str,
-    audit_table: &str,
-    chain: bool,
-) -> Result<(u64, u64), zelyra_database::DatabaseError> {
-    let query = if chain {
-        format!(
-            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL OR previous_hash IS NULL OR entry_hash IS NULL OR previous_hash <> COALESCE(expected_previous_hash, '') OR entry_hash <> SHA2(CONCAT(COALESCE(previous_hash, ''), '|', COALESCE(actor_user_id, 'NULL'), '|', event, '|', COALESCE(target_user_id, 'NULL'), '|', details, '|', DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s')), 256) THEN 1 ELSE 0 END), 0) FROM (SELECT id, actor_user_id, event, target_user_id, details, created_at, previous_hash, entry_hash, LAG(entry_hash) OVER (ORDER BY id ASC) AS expected_previous_hash FROM {}) AS audit_rows",
-            quote_identifier(audit_table)
-        )
-    } else {
-        format!(
-            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL THEN 1 ELSE 0 END), 0) FROM {}",
-            quote_identifier(audit_table)
-        )
-    };
-    let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())?;
-    let row = result.rows.first().cloned().unwrap_or_default();
-    let total = row
-        .first()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
-    let invalid = row.get(1).and_then(|value| value.parse().ok()).unwrap_or(0);
-    Ok((total, invalid))
-}
-
-fn audit_prune_count(
-    database_url: &str,
-    audit_table: &str,
-    before: &str,
-) -> Result<u64, zelyra_database::DatabaseError> {
-    let result = zelyra_database::execute_mariadb_query(
-        database_url,
-        &format!(
-            "SELECT COUNT(*) FROM {} WHERE created_at < :before",
-            quote_identifier(audit_table)
-        ),
-        vec![("before".into(), QueryValue::String(before.into()))],
-    )?;
-    Ok(result
-        .rows
-        .first()
-        .and_then(|row| row.first())
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0))
-}
-
-fn audit_prune(
-    database_url: &str,
-    audit_table: &str,
-    before: &str,
-) -> Result<(), zelyra_database::DatabaseError> {
-    let details = format!("source=cli;before={before}");
-    let queries = vec![
-        Query {
-            sql: format!(
-                "DELETE FROM {} WHERE created_at < :before",
-                quote_identifier(audit_table)
-            ),
-            params: vec![("before".into(), QueryValue::String(before.into()))],
-        },
-        Query {
-            sql: format!(
-                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-                quote_identifier(audit_table)
-            ),
-            params: vec![
-                ("actor_user_id".into(), QueryValue::Null),
-                ("event".into(), QueryValue::String("audit.prune".into())),
-                ("target_user_id".into(), QueryValue::Null),
-                (
-                    "details".into(),
-                    QueryValue::String(details.chars().take(1000).collect()),
-                ),
-            ],
-        },
-    ];
-    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
-}
-
-fn audit_optional_value(row: &[String], index: usize) -> Option<&str> {
-    row.get(index)
-        .map(String::as_str)
-        .filter(|value| *value != "NULL")
-}
-
-fn audit_csv_value(value: Option<&str>) -> String {
-    let value = value.unwrap_or_default().replace('"', "\"\"");
-    format!("\"{value}\"")
-}
-
-fn audit_rows_csv(result: &QueryResult) -> String {
-    let mut output = String::from("actor_user_id,event,target_user_id,details,created_at\n");
-    for row in &result.rows {
-        let fields = (0..5)
-            .map(|index| audit_csv_value(audit_optional_value(row, index)))
-            .collect::<Vec<_>>();
-        let _ = writeln!(output, "{}", fields.join(","));
-    }
-    output
-}
-
-fn audit_json_number(value: Option<&str>) -> String {
-    value
-        .and_then(|value| value.parse::<i64>().ok())
-        .map_or_else(|| "null".into(), |value| value.to_string())
-}
-
-fn audit_rows_json(result: &QueryResult) -> String {
-    let rows = result
-        .rows
-        .iter()
-        .map(|row| {
-            format!(
-                "{{\"actor_user_id\":{},\"event\":{},\"target_user_id\":{},\"details\":{},\"created_at\":{}}}",
-                audit_json_number(audit_optional_value(row, 0)),
-                audit_optional_value(row, 1).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-                audit_json_number(audit_optional_value(row, 2)),
-                audit_optional_value(row, 3).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-                audit_optional_value(row, 4).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("[{}]", rows.join(","))
-}
-
-fn audit_rows_inspect(result: &QueryResult) -> String {
-    let mut output = format!(
-        "Audit log: {} entr{}\n",
-        result.rows.len(),
-        if result.rows.len() == 1 { "y" } else { "ies" }
-    );
-    output.push_str("actor_user_id | event | target_user_id | details | created_at\n");
-    for row in &result.rows {
-        let fields = (0..5)
-            .map(|index| {
-                audit_optional_value(row, index)
-                    .unwrap_or("-")
-                    .replace(['\n', '\r', '\t'], " ")
-            })
-            .collect::<Vec<_>>();
-        let _ = writeln!(output, "{}", fields.join(" | "));
-    }
-    output
-}
-
-fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        audit_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        audit_usage();
-        return ExitCode::from(2);
-    };
-    let mut limit = 100usize;
-    let mut limit_given = false;
-    let mut format = "inspect";
-    let mut before = None;
-    let mut confirm = false;
-    while let Some(argument) = args.next() {
-        match argument.as_str() {
-            "--limit" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                limit = match audit_limit(&value) {
-                    Ok(limit) => limit,
-                    Err(code) => return code,
-                };
-                limit_given = true;
-            }
-            "--format" if operation == "export" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                if !matches!(value.as_str(), "json" | "csv") {
-                    eprintln!("error[E-AUDIT-005]: format must be json or csv");
-                    return ExitCode::from(2);
-                }
-                format = if value == "json" { "json" } else { "csv" };
-            }
-            "--before" if operation == "prune" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                if value.is_empty() {
-                    eprintln!("error[E-AUDIT-007]: before timestamp must not be empty");
-                    return ExitCode::from(2);
-                }
-                before = Some(value);
-            }
-            "--confirm" if operation == "prune" => {
-                confirm = true;
-            }
-            _ => {
-                audit_usage();
-                return ExitCode::from(2);
-            }
-        }
-    }
-    if !matches!(
-        operation.as_str(),
-        "inspect" | "export" | "verify" | "prune"
-    ) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "inspect" && format != "inspect" {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "verify" && (format != "inspect" || before.is_some() || confirm || limit_given)
-    {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "prune" && (before.is_none() || format != "inspect" || limit_given) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation != "prune" && (before.is_some() || confirm) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    let (database_url, audit_table, audit_chain) = match audit_project(&path) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
-    if operation == "verify" {
-        let (total, invalid) = match audit_integrity(&database_url, &audit_table, audit_chain) {
-            Ok(result) => result,
-            Err(error) => {
-                eprintln!("error[E-AUDIT-006]: cannot verify audit log: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if invalid == 0 {
-            println!("Audit log verified: {total} entries, no invalid rows.");
-            return ExitCode::SUCCESS;
-        }
-        eprintln!("error[E-AUDIT-008]: audit log contains {invalid} invalid rows out of {total}");
-        return ExitCode::from(1);
-    }
-    if operation == "prune" {
-        if audit_chain {
-            eprintln!(
-                "error[E-AUDIT-010]: audit prune is disabled for chained audit logs because deleting entries would break the hash chain"
-            );
-            return ExitCode::from(1);
-        }
-        let before = before
-            .as_deref()
-            .expect("prune requires a before timestamp");
-        let count = match audit_prune_count(&database_url, &audit_table, before) {
-            Ok(count) => count,
-            Err(error) => {
-                eprintln!("error[E-AUDIT-006]: cannot plan audit prune: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if !confirm {
-            println!("Audit prune plan: {count} entries older than {before} would be removed.");
-            println!("No changes applied. Re-run with --confirm to apply this plan.");
-            return ExitCode::from(2);
-        }
-        if let Err(error) = audit_prune(&database_url, &audit_table, before) {
-            eprintln!("error[E-AUDIT-009]: cannot apply audit prune: {error}");
-            return ExitCode::from(1);
-        }
-        println!("Audit prune applied: {count} entries older than {before} removed.");
-        return ExitCode::SUCCESS;
-    }
-    let result = match audit_rows(&database_url, &audit_table, limit) {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("error[E-AUDIT-006]: cannot read audit log: {error}");
-            return ExitCode::from(1);
-        }
-    };
-    match operation.as_str() {
-        "inspect" => print!("{}", audit_rows_inspect(&result)),
-        "export" if format == "json" => println!("{}", audit_rows_json(&result)),
-        "export" => print!("{}", audit_rows_csv(&result)),
-        _ => unreachable!(),
-    }
-    ExitCode::SUCCESS
-}
-
-fn password_from_stdin() -> Result<String, String> {
-    let mut password = String::new();
-    std::io::stdin()
-        .read_line(&mut password)
-        .map_err(|error| format!("cannot read password from stdin: {error}"))?;
-    Ok(password.trim_end_matches(['\r', '\n']).to_owned())
-}
-
-fn auth_hash_password_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let use_stdin = match args.next().as_deref() {
-        None => false,
-        Some("--stdin") => true,
-        Some(_) => {
-            auth_usage();
-            return ExitCode::from(2);
-        }
-    };
-    if args.next().is_some() {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let password = if use_stdin {
-        match password_from_stdin() {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: {error}");
-                return ExitCode::from(1);
-            }
-        }
-    } else {
-        let password = match rpassword::prompt_password("Password: ") {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: cannot read password: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        let confirmation = match rpassword::prompt_password("Confirm password: ") {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: cannot read password confirmation: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if password != confirmation {
-            eprintln!("error[E-AUTH-002]: passwords do not match");
-            return ExitCode::from(1);
-        }
-        password
-    };
-    match zelyra_web::hash_password(&password) {
-        Ok(hash) => {
-            println!("{hash}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-003]: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    match args.next().as_deref() {
-        Some("hash-password") => auth_hash_password_command(args),
-        Some("role") => auth_role_command(args),
-        Some("role-permission") => auth_role_permission_command(args),
-        _ => {
-            auth_usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
-fn main() -> ExitCode {
-    let mut args = env::args().skip(1);
-    let Some(command) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if command == "--help" || command == "-h" {
-        usage();
-        return ExitCode::SUCCESS;
-    }
-    if command == "--version" || command == "-V" || command == "version" {
-        if args.next().is_some() {
-            usage();
-            return ExitCode::from(2);
-        }
-        return version_command();
-    }
-    if command == "update" {
-        let check_only = match (args.next(), args.next()) {
-            (None, None) => false,
-            (Some(flag), None) if flag == "--check" => true,
-            _ => {
-                usage();
-                return ExitCode::from(2);
-            }
-        };
-        return updater::command(check_only);
-    }
-    if command == "db" {
-        return database_command(args);
-    }
-    if command == "form" {
-        return form_command(args);
-    }
-    if command == "auth" {
-        return auth_command(args);
-    }
-    if command == "audit" {
-        return audit_command(args);
-    }
-    if command == "setup" {
-        let mut path = ".".to_owned();
-        let mut path_given = false;
-        let mut web = false;
-        let mut action = "prepare";
-        let mut web_port = DEFAULT_SETUP_WEB_PORT;
-        let mut web_port_given = false;
-        let mut setup_options = SetupOptions::default();
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--web" {
-                web = true;
-            } else if argument == "--database" {
-                action = "database";
-            } else if argument == "--schema" {
-                action = "schema";
-            } else if argument == "--all" {
-                action = "all";
-            } else if argument == "--port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-WEB-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                setup_options.host_port = match parse_web_port(&value) {
-                    Ok(port) => Some(port),
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-002]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                setup_options.database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => Some(port),
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-002]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if !argument.starts_with('-') && !path_given {
-                path = argument;
-                path_given = true;
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if web {
-            if setup_options.host_port.is_some() || setup_options.database_host_port.is_some() {
-                eprintln!(
-                    "error[E-SETUP-002]: --host-port and --db-host-port cannot be used with --web"
-                );
-                return ExitCode::from(2);
-            }
-            return setup_web_command(&path, web_port, web_port_given);
-        }
-        if web_port_given {
-            eprintln!("error[E-SETUP-002]: --port requires --web");
-            return ExitCode::from(2);
-        }
-        if action == "prepare" {
-            return setup_project(&path, &setup_options);
-        }
-        return match setup_action(&path, action, &setup_options) {
-            Ok(message) => {
-                println!("{message}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("error[E-SETUP-006]: {error}");
-                ExitCode::from(1)
-            }
-        };
-    }
-    if command == "new" {
-        let Some(path) = args.next() else {
-            usage();
-            return ExitCode::from(2);
-        };
-        let mut with_mariadb = false;
-        let mut crud_template = false;
-        let mut auth_template = false;
-        let mut business_template = false;
-        let mut web_port = DEFAULT_WEB_PORT;
-        let mut web_port_given = false;
-        let mut host_port = DEFAULT_WEB_PORT;
-        let mut host_port_given = false;
-        let mut database_host_port = DEFAULT_DATABASE_HOST_PORT;
-        let mut database_host_port_given = false;
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--mariadb" && !with_mariadb {
-                with_mariadb = true;
-            } else if argument == "--template" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --template requires a value");
-                    return ExitCode::from(2);
-                };
-                match value.as_str() {
-                    "minimal" => {
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-crud" => {
-                        with_mariadb = true;
-                        crud_template = true;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-auth" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = true;
-                        business_template = false;
-                    }
-                    "mariadb-business" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = true;
-                    }
-                    _ => {
-                        eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
-                        );
-                        return ExitCode::from(2);
-                    }
-                }
-            } else if argument == "--web-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --web-port requires a value");
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                host_port_given = true;
-                host_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --db-host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                database_host_port_given = true;
-                database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if (web_port_given || host_port_given || database_host_port_given) && !with_mariadb {
-            eprintln!(
-                "error[E-CLI-001]: --web-port, --host-port, and --db-host-port require --mariadb"
-            );
-            return ExitCode::from(2);
-        }
-        return create_project(
-            &path,
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb,
-                crud_template,
-                auth_template,
-                business_template,
-                web_port,
-                host_port,
-                database_host_port,
-                host_port_given,
-                database_host_port_given,
-            },
-        );
-    }
-    if command == "init" {
-        let mut path = ".".to_owned();
-        let mut path_given = false;
-        let mut with_mariadb = false;
-        let mut crud_template = false;
-        let mut auth_template = false;
-        let mut business_template = false;
-        let mut web_port = DEFAULT_WEB_PORT;
-        let mut web_port_given = false;
-        let mut host_port = DEFAULT_WEB_PORT;
-        let mut host_port_given = false;
-        let mut database_host_port = DEFAULT_DATABASE_HOST_PORT;
-        let mut database_host_port_given = false;
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--mariadb" && !with_mariadb {
-                with_mariadb = true;
-            } else if argument == "--template" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --template requires a value");
-                    return ExitCode::from(2);
-                };
-                match value.as_str() {
-                    "minimal" => {
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-crud" => {
-                        with_mariadb = true;
-                        crud_template = true;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-auth" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = true;
-                        business_template = false;
-                    }
-                    "mariadb-business" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = true;
-                    }
-                    _ => {
-                        eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
-                        );
-                        return ExitCode::from(2);
-                    }
-                }
-            } else if argument == "--web-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --web-port requires a value");
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                host_port_given = true;
-                host_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --db-host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                database_host_port_given = true;
-                database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if !argument.starts_with('-') && !path_given {
-                path = argument;
-                path_given = true;
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if (web_port_given || host_port_given || database_host_port_given) && !with_mariadb {
-            eprintln!(
-                "error[E-CLI-001]: --web-port, --host-port, and --db-host-port require --mariadb"
-            );
-            return ExitCode::from(2);
-        }
-        return create_project(
-            &path,
-            ProjectOptions {
-                allow_current_directory: true,
-                with_mariadb,
-                crud_template,
-                auth_template,
-                business_template,
-                web_port,
-                host_port,
-                database_host_port,
-                host_port_given,
-                database_host_port_given,
-            },
-        );
-    }
-    if command == "serve" {
-        return serve_command(args);
-    }
-    if command == "doctor" {
-        return doctor_command(args);
-    }
-    if command == "doc" {
-        return doc_command(args);
-    }
-    if command == "check" {
-        return check_command(args);
-    }
-    if command == "fmt" {
-        return fmt_command(args);
-    }
-    if command == "impact" {
-        return impact_command(args);
-    }
-    if command == "edit" {
-        return edit_command(args);
-    }
-    if command == "context" {
-        return context_command(args);
-    }
-    if command == "module" {
-        return module_command(args);
-    }
-    if command == "config" {
-        return config_command(args);
-    }
-    if command == "verify" {
-        let Some(path) = args.next() else {
-            usage();
-            return ExitCode::from(2);
-        };
-        let json = match args.next() {
-            None => false,
-            Some(flag) if flag == "--json" => true,
-            Some(_) => {
-                usage();
-                return ExitCode::from(2);
-            }
-        };
-        if args.next().is_some() {
-            usage();
-            return ExitCode::from(2);
-        }
-        return verify_command(&path, json);
-    }
-    let Some(path) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some() {
-        usage();
-        return ExitCode::from(2);
-    }
-    match command.as_str() {
-        "check" | "build" => {
-            if validate(&path).is_ok() {
-                println!("ok: {path}");
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(1)
-            }
-        }
-        "run" => match validate(&path).and_then(|program| {
-            let grants = match project_capability_grants(&path) {
-                Ok(grants) => grants,
-                Err(error) => {
-                    diagnostic(&path, "E-CAP-002", &error, 1, 1);
-                    return Err(());
-                }
-            };
-            let runtime_policy = match project_runtime_policy(&path) {
-                Ok(policy) => policy,
-                Err(error) => {
-                    diagnostic(&path, "E-POLICY-002", &error, 1, 1);
-                    return Err(());
-                }
-            };
-            let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => execute_with_database_and_capabilities_and_policies(
-                    &program,
-                    &database_url,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
-                Err(_) => execute_with_capabilities_and_policies(
-                    &program,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
-            };
-            result.map_err(|error| {
-                diagnostic(
-                    &path,
-                    "E-RUNTIME-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            })
-        }) {
-            Ok(output) => {
-                for line in output {
-                    println!("{line}");
-                }
-                ExitCode::SUCCESS
-            }
-            Err(()) => ExitCode::from(1),
-        },
-        _ => {
-            usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn feature_defaults_are_simple_and_enabled() {
-        let features = feature_defaults();
-        assert_eq!(features.len(), PROJECT_FEATURES.len());
-        assert!(features.values().all(|setting| setting.enabled));
-        assert!(features.values().all(|setting| setting.source == "default"));
-    }
-
-    #[test]
-    fn feature_settings_accept_known_manifest_values() {
-        let values = parse_feature_section(
-            "[project]\nname = \"demo\"\n\n[features]\napi = false\ncrud = true\n",
-        )
-        .expect("feature settings should parse");
-        assert_eq!(values.get("api"), Some(&false));
-        assert_eq!(values.get("crud"), Some(&true));
-        assert!(!values.contains_key("web"));
-    }
-
-    #[test]
-    fn project_environment_settings_use_process_then_dotenv_then_fallback() {
-        let directory = std::env::temp_dir().join(format!(
-            "zelyra-ui-settings-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        fs::write(directory.join(".env"), "ZELYRA_TEST_UI_LOCALE=de\n").unwrap();
-
-        let key = "ZELYRA_TEST_UI_LOCALE";
-        let previous = env::var_os(key);
-        env::remove_var(key);
-        assert_eq!(
-            project_ui_setting(source_path.to_str().unwrap(), key, "en").unwrap(),
-            "de"
-        );
-        env::set_var(key, "en");
-        assert_eq!(
-            project_ui_setting(source_path.to_str().unwrap(), key, "fallback").unwrap(),
-            "en"
-        );
-        env::remove_var(key);
-        assert_eq!(
-            project_ui_setting(
-                source_path.to_str().unwrap(),
-                "ZELYRA_TEST_UI_MISSING",
-                "work"
-            )
-            .unwrap(),
-            "work"
-        );
-        if let Some(previous) = previous {
-            env::set_var(key, previous);
-        }
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
-        let directory = std::env::temp_dir().join(format!(
-            "zelyra-allowed-hosts-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        fs::write(
-            directory.join(".env"),
-            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
-        )
-        .unwrap();
-
-        let previous = env::var_os("ZELYRA_ALLOWED_HOSTS");
-        env::remove_var("ZELYRA_ALLOWED_HOSTS");
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["localhost", "app.example"]
-        );
-        fs::remove_file(directory.join(".env")).unwrap();
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["localhost", "127.0.0.1", "[::1]"]
-        );
-        fs::write(
-            directory.join(".env"),
-            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
-        )
-        .unwrap();
-        env::set_var("ZELYRA_ALLOWED_HOSTS", "override.example, localhost");
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["override.example", "localhost"]
-        );
-        env::set_var("ZELYRA_ALLOWED_HOSTS", " , ");
-        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
-        env::set_var("ZELYRA_ALLOWED_HOSTS", "localhost, ");
-        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
-        if let Some(previous) = previous {
-            env::set_var("ZELYRA_ALLOWED_HOSTS", previous);
-        } else {
-            env::remove_var("ZELYRA_ALLOWED_HOSTS");
-        }
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_theme_css_is_optional_utf8_and_size_limited() {
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-theme-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        assert_eq!(
-            project_theme_css(source_path.to_str().unwrap()).unwrap(),
-            None
-        );
-
-        let theme_path = directory.join(PROJECT_THEME_CSS_FILE);
-        let theme = ":root { --zelyra-color-accent: #e04b67; }";
-        fs::write(&theme_path, theme).unwrap();
-        assert_eq!(
-            project_theme_css(source_path.to_str().unwrap()).unwrap(),
-            Some(theme.into())
-        );
-
-        fs::write(
-            &theme_path,
-            vec![b'x'; PROJECT_THEME_CSS_MAX_BYTES as usize + 1],
-        )
-        .unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("128 KiB size limit"));
-
-        fs::write(&theme_path, [0xff, 0xfe]).unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("UTF-8"));
-
-        fs::remove_file(&theme_path).unwrap();
-        fs::create_dir(&theme_path).unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("regular project file"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn project_theme_css_does_not_follow_symbolic_links() {
-        use std::os::unix::fs::symlink;
-
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-theme-link-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        let outside_file = directory.join("private.css");
-        fs::write(&source_path, "").unwrap();
-        fs::write(&outside_file, "private content").unwrap();
-        symlink(&outside_file, directory.join(PROJECT_THEME_CSS_FILE)).unwrap();
-
-        let error = project_theme_css(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("not a symbolic link"));
-        assert!(!error.contains("private content"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_locale_catalogs_are_optional_validated_and_size_limited() {
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-locales-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
-
-        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
-        fs::create_dir(&locale_directory).unwrap();
-        fs::write(
-            locale_directory.join("de.json"),
-            r#"{"custom.title":"Titel"}"#,
-        )
-        .unwrap();
-        fs::write(
-            locale_directory.join("en.json"),
-            r#"{"custom.title":"Title"}"#,
-        )
-        .unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
-
-        fs::write(locale_directory.join("de.json"), r#"{"custom.title":true}"#).unwrap();
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales/de.json"));
-        assert!(error.contains("string values"));
-        assert!(!error.contains("true"));
-
-        fs::write(
-            locale_directory.join("de.json"),
-            vec![b'x'; PROJECT_LOCALE_MAX_BYTES as usize + 1],
-        )
-        .unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("256 KiB size limit"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn project_locale_catalog_loader_does_not_follow_symbolic_links() {
-        use std::os::unix::fs::symlink;
-
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-locales-link-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        let outside_file = directory.join("outside.json");
-        fs::write(&outside_file, r#"{"title":"private"}"#).unwrap();
-        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
-        fs::create_dir(&locale_directory).unwrap();
-        symlink(&outside_file, locale_directory.join("de.json")).unwrap();
-
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales/de.json"));
-        assert!(error.contains("symbolic link"));
-        assert!(!error.contains("private"));
-
-        fs::remove_file(locale_directory.join("de.json")).unwrap();
-        fs::remove_dir(&locale_directory).unwrap();
-        let outside_directory = directory.join("outside-locales");
-        fs::create_dir(&outside_directory).unwrap();
-        symlink(&outside_directory, &locale_directory).unwrap();
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales"));
-        assert!(error.contains("symbolic link"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
-        let themed_program =
-            parse(&lex("page \"/__zelyra/theme.css\" { html { <main>Theme</main> } }").unwrap())
-                .unwrap();
-        let parameter_program =
-            parse(&lex("page \"/{namespace}/{asset}\" { html { <main>Asset</main> } }").unwrap())
-                .unwrap();
-        let ordinary_program = parse(&lex("fn main() { }").unwrap()).unwrap();
-
-        assert!(project_uses_reserved_theme_route(&themed_program));
-        assert!(project_uses_reserved_theme_route(&parameter_program));
-        assert!(!project_uses_reserved_theme_route(&ordinary_program));
-    }
-
-    #[test]
-    fn feature_settings_accept_only_known_env_overrides() {
-        let values = parse_env_feature_overrides(
-            "# optional\nZELYRA_FEATURE_API=false\nZELYRA_WEB_PORT=3000\n",
-        )
-        .expect("feature environment settings should parse");
-        assert_eq!(values.get("api"), Some(&false));
-        assert_eq!(values.len(), 1);
-    }
-
-    #[test]
-    fn feature_settings_reject_unknown_values() {
-        let error = parse_feature_section("[features]\nmagic = true\n")
-            .expect_err("unknown features must not be silently accepted");
-        assert!(error.contains("unknown feature setting"));
-        let error = parse_env_feature_overrides("ZELYRA_FEATURE_MAGIC=true\n")
-            .expect_err("unknown environment features must not be silently accepted");
-        assert!(error.contains("unknown ZELYRA_FEATURE_"));
-    }
-
-    #[test]
-    fn formats_verification_results_with_source_location() {
-        let result = VerificationResult {
-            function: "reduce".into(),
-            kind: zelyra_runtime::ContractKind::LoopInvariant,
-            index: 0,
-            status: VerificationStatus::Proven,
-            span: zelyra_ast::Span::new(6, 12, 2, 1),
-            message: "The verifier proved this condition for all analyzed paths.".into(),
-            counterexample: None,
-        };
-        assert_eq!(
-            format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
-            "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)\n  = The verifier proved this condition for all analyzed paths.\n    |\n  2 | second value\n    | ^^^^^^"
-        );
-    }
-
-    #[test]
-    fn doctor_rejects_invalid_port() {
-        let arguments = ["--port".to_owned(), "not-a-port".to_owned()];
-        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
-        let arguments = ["--port".to_owned(), "0".to_owned()];
-        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
-    }
-
-    #[test]
-    fn reads_database_url_from_an_env_file_without_normalizing_secrets() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-doctor-env-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::write(
-            &path,
-            "# local\nexport DATABASE_URL='mariadb://user:secret@127.0.0.1:3306/app'\n",
-        )
-        .unwrap();
-        assert_eq!(
-            read_env_value(path.to_str().unwrap(), "DATABASE_URL").unwrap(),
-            Some("mariadb://user:secret@127.0.0.1:3306/app".into())
-        );
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn formats_doctor_json_without_database_credentials() {
-        let checks = vec![
-            DoctorCheck {
-                name: "project_file",
-                status: "pass",
-                message: "app.zyl exists".into(),
-            },
-            DoctorCheck {
-                name: "database",
-                status: "warn",
-                message: "mariadb: DATABASE_URL is not set".into(),
-            },
-        ];
-        let document: serde_json::Value =
-            serde_json::from_str(&format_doctor_json("app.zyl", &checks)).unwrap();
-        assert_eq!(document["version"], env!("CARGO_PKG_VERSION"));
-        assert_eq!(document["status"], "ready");
-        assert_eq!(document["warnings"], 1);
-        assert_eq!(document["checks"][1]["status"], "warn");
-        assert!(!format_doctor_json("app.zyl", &checks).contains("password"));
-    }
-
-    #[test]
-    fn formats_verification_results_as_json() {
-        let result = VerificationResult {
-            function: "say\"hello".into(),
-            kind: zelyra_runtime::ContractKind::Ensures,
-            index: 1,
-            status: VerificationStatus::RuntimeCheck,
-            span: zelyra_ast::Span::new(6, 12, 2, 1),
-            message: "This postcondition needs a runtime check because not all return paths are symbolically modeled.".into(),
-            counterexample: Some(vec![("value".into(), 0)]),
-        };
-        assert_eq!(
-            format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
-        );
-    }
-
-    #[test]
-    fn formats_audit_rows_as_json_and_csv_without_losing_nulls() {
-        let result = QueryResult {
-            columns: vec![
-                "actor_user_id".into(),
-                "event".into(),
-                "target_user_id".into(),
-                "details".into(),
-                "created_at".into(),
-            ],
-            rows: vec![vec![
-                "NULL".into(),
-                "auth.login_failed".into(),
-                "NULL".into(),
-                "email=anna@example.test;note=\"unknown\"".into(),
-                "2026-09-17 12:00:00".into(),
-            ]],
-        };
-        let json: serde_json::Value = serde_json::from_str(&audit_rows_json(&result)).unwrap();
-        assert_eq!(json[0]["actor_user_id"], serde_json::Value::Null);
-        assert_eq!(json[0]["target_user_id"], serde_json::Value::Null);
-        assert_eq!(json[0]["event"], "auth.login_failed");
-        assert!(
-            audit_rows_csv(&result).contains("\"email=anna@example.test;note=\"\"unknown\"\"\"")
-        );
-    }
-
-    #[test]
-    fn composes_a_page_inside_its_named_view() {
-        let source = r#"
-            view Shell {
-                html { <body><slot /></body> }
-            }
-            page "/hello/{name}" {
-                view: Shell
-                html { <h1>Hello, {name}!</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<body>"));
-        assert!(html.contains("<h1>Hello, {name}!</h1>"));
-        assert!(!html.contains("<slot />"));
-    }
-
-    #[test]
-    fn composes_default_component_slots_and_nested_components() {
-        let source = r#"
-            component Panel {
-                html { <section class="panel"><slot /></section> }
-            }
-            component Badge {
-                props { text: String }
-                html { <strong>{text}</strong> }
-            }
-            page "/status" {
-                html {
-                    <Panel><Badge text="Ready" /></Panel>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<section class=\"panel\">"));
-        assert!(html.contains("<strong>Ready</strong>"));
-        assert!(!html.contains("<slot />"));
-    }
-
-    #[test]
-    fn validates_route_values_used_by_typed_view_components() {
-        let source = r#"
-            component Greeting {
-                props { text: String }
-                html { <strong>{text}</strong> }
-            }
-            page "/hello/{name}" {
-                html { <Greeting text="{name}" /> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_data_field_bindings() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers/{name}" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers WHERE name = :name
-                }
-                html { <h1>{customer.name}</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_typed_page_data_field() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers/{name}" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers WHERE name = :name
-                }
-                html { <h1>{customer.email}</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_collection_loops() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers" {
-                load customers = sql<Customer[]> {
-                    SELECT id, name FROM customers
-                }
-                html {
-                    <ul>
-                        for customer in customers {
-                            <li>{customer.name}</li>
-                        }
-                    </ul>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_filters_and_rejects_unknown_fields() {
-        let valid_source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-                active: Bool default true
-            }
-            page "/customers" {
-                filter { name active }
-                load customers = sql<Customer[]> {
-                    SELECT id, name, active FROM customers
-                }
-                html { <p>{filter_name}</p> }
-            }
-        "#;
-        let valid_program = parse(&lex(valid_source).unwrap()).unwrap();
-        assert!(validate_page_data("filters.zyl", &valid_program));
-        assert!(validate_components("filters.zyl", &valid_program));
-
-        let invalid_source = valid_source.replace("name active", "username active");
-        let invalid_program = parse(&lex(&invalid_source).unwrap()).unwrap();
-        assert!(!validate_page_data("filters.zyl", &invalid_program));
-    }
-
-    #[test]
-    fn rejects_non_array_page_collection_loops() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers
-                }
-                html {
-                    for customer in customer {
-                        <p>{customer.name}</p>
-                    }
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_view_values() {
-        let source = r#"
-            page "/hello" {
-                html { <p>{missing}</p> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_route_values_with_an_incompatible_component_property_type() {
-        let source = r#"
-            component Counter {
-                props { count: Int }
-                html { <strong>{count}</strong> }
-            }
-            page "/hello/{name}" {
-                html { <Counter count="{name}" /> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_component_content_without_a_default_slot() {
-        let source = r#"
-            component Panel {
-                html { <section /> }
-            }
-            page "/status" {
-                html { <Panel><p>Unexpected content</p></Panel> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("components.zyl", &program));
-    }
-
-    #[test]
-    fn composes_named_component_slots() {
-        let source = r#"
-            component Layout {
-                html {
-                    <header><slot name="header" /></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout>
-                        <slot name="header"><h1>Dashboard</h1></slot>
-                        <p>Content</p>
-                    </Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Dashboard</h1></header>"));
-        assert!(html.contains("<main>"));
-        assert!(html.contains("<p>Content</p>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn allows_component_slots_without_a_page_view_layout() {
-        let source = r#"
-            component DashboardPanel {
-                html {
-                    <section>
-                        <header><slot name="header"><h1>Dashboard</h1></slot></header>
-                        <main><slot /></main>
-                    </section>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <DashboardPanel>
-                        <slot name="header"><h1>Custom dashboard</h1></slot>
-                        <p>Reusable content.</p>
-                    </DashboardPanel>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("components.zyl", &program));
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("Custom dashboard"));
-        assert!(html.contains("Reusable content."));
-    }
-
-    #[test]
-    fn uses_named_component_slot_fallbacks_when_not_overridden() {
-        let source = r#"
-            component Layout {
-                html {
-                    <header><slot name="header"><h1>Default heading</h1></slot></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><p>Content</p></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Default heading</h1></header>"));
-        assert!(html.contains("<main><p>Content</p></main>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn supplied_named_component_slot_replaces_its_fallback() {
-        let source = r#"
-            component Layout {
-                html { <header><slot name="header"><h1>Default heading</h1></slot></header> }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><slot name="header"><h1>Custom heading</h1></slot></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
-        assert!(!html.contains("Default heading"));
-    }
-
-    #[test]
-    fn rejects_unknown_named_component_slots() {
-        let source = r#"
-            component Layout {
-                html { <main><slot name="content" /></main> }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><slot name="footer"><p>Footer</p></slot></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("components.zyl", &program));
-    }
-
-    #[test]
-    fn composes_named_view_slots_and_fallbacks() {
-        let source = r#"
-            view Shell {
-                html {
-                    <html>
-                        <body>
-                            <header><slot name="header"><h1>Default heading</h1></slot></header>
-                            <main><slot /></main>
-                            <footer><slot name="footer">Default footer</slot></footer>
-                        </body>
-                    </html>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="header"><h1>Custom heading</h1></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
-        assert!(html.contains("<main>"));
-        assert!(html.contains("<p>Dashboard content</p>"));
-        assert!(html.contains("<footer>Default footer</footer>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn rejects_unknown_named_view_slots() {
-        let source = r#"
-            view Shell {
-                html {
-                    <body>
-                        <header><slot name="header" /></header>
-                        <main><slot /></main>
-                    </body>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="footer"><p>Footer</p></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn composes_crud_layout_with_generated_content_marker() {
-        let source = r#"
-            component Badge {
-                props { label: String }
-                html { <strong>{label}</strong> }
-            }
-            view Shell {
-                html {
-                    <html><body>
-                        <header><slot name="heading"><h1>Customers</h1></slot></header>
-                        <main><slot /></main>
-                        <aside><slot name="help"><p>Default help</p></slot></aside>
-                        <footer><slot name="footer"><p>Default footer</p></slot></footer>
-                    </body></html>
-                }
-            }
-            table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers {
-                layout: Shell
-                slots {
-                    heading { html { <Badge label="Machine register" /> } }
-                    help { html { <p>Choose a machine to see its details.</p> } }
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-        let layout = crud_layout_html(&program, &program.cruds[0]).unwrap();
-        assert!(layout.contains("<strong>Machine register</strong>"));
-        assert!(layout.contains(CRUD_LAYOUT_CONTENT_MARKER));
-        assert!(layout.contains("<p>Choose a machine to see its details.</p>"));
-        assert!(!layout.contains("Default help"));
-        assert!(layout.contains("Default footer"));
-        assert!(!layout.contains("<slot"));
-    }
-
-    #[test]
-    fn rejects_crud_layout_slots_without_a_matching_layout() {
-        let source = r#"
-            view Shell {
-                html { <header><slot name="heading" /></header><main><slot /></main> }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots { missing { html { <p>Custom content</p> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-
-        let source_without_layout = r#"
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                slots { heading { html { <h1>Customers</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source_without_layout).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-
-        let duplicate_slots = r#"
-            view Shell {
-                html {
-                    <header><slot name="heading" /></header><main><slot /></main>
-                }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots {
-                    heading { html { <h1>First heading</h1> } }
-                    heading { html { <h1>Second heading</h1> } }
-                }
-            }
-        "#;
-        let program = parse(&lex(duplicate_slots).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn crud_layout_slot_content_cannot_read_crud_record_values() {
-        let source = r#"
-            view Shell {
-                html { <header><slot name="heading" /></header><main><slot /></main> }
-            }
-            table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers {
-                layout: Shell
-                slots { heading { html { <h1>{customer.name}</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn crud_layout_components_are_checked_even_without_a_page_using_the_view() {
-        let source = r#"
-            component BrandMark {
-                props { label: String }
-                html { <strong>{label}</strong> }
-            }
-            view Shell {
-                html {
-                    <header><slot name="heading" /><BrandMark /></header><main><slot /></main>
-                }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots { heading { html { <h1>Customers</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_crud_layout_view() {
-        let source = r#"
-            table customers { id: Id primary auto }
-            crud Customer -> customers { layout: MissingShell }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_duplicate_named_view_slots() {
-        let source = r#"
-            view Shell {
-                html {
-                    <header><slot name="header" /></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="header"><h1>First</h1></slot>
-                    <slot name="header"><h1>Second</h1></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_invalid_named_view_composition() {
-        let source = r#"
-            view Shell {
-                html { <body>No content slot</body> }
-            }
-            page "/customers" {
-                view: MissingShell
-                html { <h1>Customers</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn formats_api_declarations_as_openapi() {
-        let program = parse(
-            &lex(
-                "type CustomerId = Id table customers { id: CustomerId primary auto name: String(100) required } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let document = format_openapi(&program);
-        assert!(document.contains("\"openapi\":\"3.0.3\""));
-        assert!(document.contains("\"/customers/{id}\""));
-        assert!(document.contains("\"404\":{\"description\":\"NotFound\"}"));
-        assert!(document.contains("#/components/schemas/Customer"));
-    }
-
-    #[test]
-    fn formats_typed_typescript_client_from_api_and_records() {
-        let program = parse(
-            &lex(
-                "struct Address { city: String } api GET \"/customers/{id}\" { input { id: Id, term: String? } output Address errors { 404 NotFound } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let client = format_typescript_client(&program);
-        assert!(client.contains("export interface Address"));
-        assert!(client.contains("async get_customers_id"));
-        assert!(client.contains("encodeURIComponent(String(params.id))"));
-        assert!(client.contains("Promise<Address>"));
-        assert!(client.contains("new URLSearchParams()"));
-        assert!(client.contains("ZelyraApiError"));
-        assert!(client.contains("ZelyraApiErrorCode = \"NotFound\" | (string & {})"));
-        assert!(client.contains("fromResponse(response)"));
-        assert!(client.contains("payload.error.message"));
-    }
-
-    #[test]
-    fn formats_typed_api_error_payloads_for_openapi_and_typescript() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } api GET \"/fail\" { output Result<String, Problem> errors { 422 Validation: Problem } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let openapi = format_openapi(&program);
-        assert!(openapi.contains("\"details\""));
-        assert!(openapi.contains("#/components/schemas/Problem"));
-        let client = format_typescript_client(&program);
-        assert!(client.contains("ZelyraApiErrorPayloads"));
-        assert!(client.contains("\"Validation\": Problem"));
-        assert!(client.contains("details: Details | undefined"));
-    }
-
-    #[test]
-    fn dispatches_json_api_input_to_a_typed_handler() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n{\"value\":42}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-        assert_eq!(response.body, "42");
-    }
-
-    #[test]
-    fn dispatches_string_keyed_map_api_input_and_output() {
-        let program = parse(
-            &lex(
-                "api POST \"/settings\" { handler echo input { settings: Map<String, Int> } output Map<String, Int> } fn echo(settings: Map<String, Int>) -> Map<String, Int> { return settings } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /settings HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"settings\":{\"standard\":10,\"premium\":20}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body, serde_json::json!({"premium": 20, "standard": 10}));
-    }
-
-    #[test]
-    fn returns_structured_json_for_invalid_api_input() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-        assert!(response.body.contains("\"code\":\"BadRequest\""));
-        assert!(response.body.contains("missing API input"));
-    }
-
-    #[test]
-    fn rejects_unsupported_api_request_media_types() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: text/plain\r\n\r\nhello",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 415);
-        assert!(response.body.contains("UnsupportedMediaType"));
-    }
-
-    #[test]
-    fn decodes_json_strings_with_commas_colons_and_escapes() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":\"a,b: \\\"quoted\\\"\"}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "\"a,b: \\\"quoted\\\"\"");
-    }
-
-    #[test]
-    fn decodes_json_booleans_and_null_options() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { active: Bool? } output Bool? } fn echo(active: Bool?) -> Bool? { return active } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"active\":null}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "null");
-    }
-
-    #[test]
-    fn decodes_and_serializes_typed_json_arrays() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { values: Int[] } output Int[] } fn echo(values: Int[]) -> Int[] { return values } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"values\":[1,2,3]}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "[1,2,3]");
-    }
-
-    #[test]
-    fn decodes_and_serializes_nested_structured_api_objects() {
-        let program = parse(
-            &lex(
-                "struct Address { city: String } struct CustomerInput { name: String address: Address } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"address\":{\"city\":\"Berlin\"}}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body["name"], "Anna");
-        assert_eq!(body["address"]["city"], "Berlin");
-    }
-
-    #[test]
-    fn rejects_unknown_and_missing_record_fields() {
-        let program = parse(
-            &lex(
-                "struct CustomerInput { name: String email: Email? } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let unknown = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"unknown\":true}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &unknown, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("unknown field"));
-
-        let missing = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &missing, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("missing field"));
-    }
-
-    #[test]
-    fn maps_declared_result_errors_to_http_responses() {
-        let program = parse(
-            &lex(
-                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"NotFound\") } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 404);
-        assert!(response.body.contains("\"code\":\"NotFound\""));
-    }
-
-    #[test]
-    fn returns_internal_error_for_undeclared_result_errors() {
-        let program = parse(
-            &lex(
-                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"Other\") } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 500);
-        assert!(response.body.contains("InternalServerError"));
-        assert!(response.body.contains("unmapped API error"));
-    }
-
-    #[test]
-    fn returns_typed_details_for_declared_api_errors() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Problem } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid customer\" }) } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /fail HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "fail", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 422);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body["error"]["code"], "Validation");
-        assert_eq!(body["error"]["details"]["message"], "invalid customer");
-    }
-
-    #[test]
-    fn rejects_api_error_payload_that_does_not_match_result_error_type() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } struct Other { code: Int } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Other } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid\" }) } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let errors = check_apis(&program).unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|error| error.message.contains("does not match handler error type")));
-    }
-
-    #[test]
-    fn rejects_object_json_for_scalar_input() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":{\"nested\":true}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("scalar JSON value"));
-    }
-
-    #[test]
-    fn rejects_unknown_configured_crud_columns() {
-        let source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Machine -> machines {
-                view { fields { missing } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_cruds("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn shared_crud_view_fields_drive_list_and_form_defaults() {
-        let source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-                email: Email?
-                active: Bool default true
-            }
-
-            crud Customer -> customers {
-                view { fields { name email active } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(validate_cruds("test.zyl", &program, &schema));
-        let crud = &program.cruds[0];
-        let table = program
-            .tables
-            .iter()
-            .find(|table| table.name == "customers")
-            .unwrap();
-        let form = generated_crud_form(
-            crud,
-            table,
-            &schema,
-            false,
-            CrudGenerationContext {
-                layout_html: None,
-                csrf: CsrfProtection::new("test-csrf"),
-                audit_table: None,
-                audit_chain: false,
-            },
-        );
-        assert_eq!(
-            form.form
-                .fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>(),
-            ["name", "email", "active"]
-        );
-        let list = configured_crud_columns(&program, &schema, crud, &crud.view.fields, |table| {
-            table
-                .columns
-                .iter()
-                .map(|column| column.name.clone())
-                .collect()
-        });
-        assert_eq!(list, ["name", "email", "active"]);
-    }
-
-    #[test]
-    fn rejects_invalid_soft_delete_columns() {
-        let missing_source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Machine -> machines {
-                soft_delete { column: deleted_at }
-            }
-        "#;
-        let missing_program = parse(&lex(missing_source).unwrap()).unwrap();
-        let missing_schema = build_schema(&missing_program).unwrap();
-        assert!(!validate_cruds(
-            "test.zyl",
-            &missing_program,
-            &missing_schema
-        ));
-
-        let wrong_type_source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-                deleted_at: String?
-            }
-
-            crud Machine -> machines {
-                soft_delete { column: deleted_at }
-            }
-        "#;
-        let wrong_type_program = parse(&lex(wrong_type_source).unwrap()).unwrap();
-        let wrong_type_schema = build_schema(&wrong_type_program).unwrap();
-        assert!(!validate_cruds(
-            "test.zyl",
-            &wrong_type_program,
-            &wrong_type_schema
-        ));
-    }
-
-    #[test]
-    fn rejects_protected_routes_without_auth_definition() {
-        let source = r#"
-            page "/admin" {
-                requires auth
-                html {
-                    <h1>Admin</h1>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_scoped_crud_permissions_without_auth_definition() {
-        let source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Customer -> customers {
-                permits create "customers.create"
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_protected_form_action_without_auth_definition() {
-        let source = r#"
-            form CustomerForm {
-                field name: String {
-                    required
-                }
-                action save {
-                    requires auth
-                    permits "customers.save"
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_protected_api_without_auth_definition() {
-        let source = r#"
-            api GET "/admin" {
-                requires auth
-                output String
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn accepts_persistent_auth_tables() {
-        let source = r#"
-            auth users {
-                table: users
-                sessions: auth_sessions
-                permissions: user_permissions
-                roles: user_roles
-                role_permissions: role_permissions
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table auth_sessions {
-                id: Id primary auto
-                user: User required
-                token_hash: String(64) required
-                expires_at: Timestamp required
-            }
-
-            table user_permissions {
-                id: Id primary auto
-                user: User required
-                permission: String(100) required
-            }
-
-            table user_roles {
-                id: Id primary auto
-                user: User required
-                role: String(100) required
-            }
-
-            table role_permissions {
-                id: Id primary auto
-                role: String(100) required
-                permission: String(100) required
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_partial_auth_role_configuration() {
-        let source = r#"
-            auth users {
-                table: users
-                roles: user_roles
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table user_roles {
-                id: Id primary auto
-                user: User required
-                role: String(100) required
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_chained_audit_without_hash_columns() {
-        let source = r#"
-            auth users {
-                table: users
-                audit: audit_log
-                audit_chain: true
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table audit_log {
-                id: Id primary auto
-                actor_user_id: Int?
-                event: String(100) required
-                target_user_id: Int?
-                details: String(1000) required
-                created_at: Timestamp default now
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn reads_project_capability_grants() {
-        let grants = project_capability_grants("../examples/capabilities.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(grants.contains("Database"));
-        assert!(grants.contains("Network"));
-        assert!(grants.contains("Console"));
-    }
-
-    #[test]
-    fn defaults_project_file_system_policy_to_project_root() {
-        let policy = project_filesystem_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        let project_root = fs::canonicalize("..").unwrap();
-        assert!(policy.read_roots.iter().any(|root| root == &project_root));
-        assert!(policy.write_roots.is_empty());
-    }
-
-    #[test]
-    fn defaults_project_network_policy_to_no_allowed_hosts() {
-        let policy = project_network_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(policy.allowed_hosts.is_empty());
-        assert_eq!(policy.timeout_ms, 5_000);
-        assert_eq!(policy.max_response_bytes, 1_048_576);
-    }
-
-    #[test]
-    fn defaults_project_process_policy_to_no_allowed_commands() {
-        let policy = project_process_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(policy.allowed_commands.is_empty());
-        assert_eq!(policy.timeout_ms, 5_000);
-        assert_eq!(policy.max_output_bytes, 1_048_576);
-    }
-
-    #[test]
-    fn generates_project_with_target_release_version() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-template-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let status = create_project(
-            path.to_str().unwrap(),
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb: true,
-                crud_template: false,
-                auth_template: false,
-                business_template: false,
-                web_port: DEFAULT_WEB_PORT,
-                host_port: DEFAULT_WEB_PORT,
-                database_host_port: DEFAULT_DATABASE_HOST_PORT,
-                host_port_given: false,
-                database_host_port_given: false,
-            },
-        );
-        assert_eq!(status, ExitCode::SUCCESS);
-
-        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        let project_config = fs::read_to_string(path.join("zelyra.toml")).unwrap();
-        let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
-        assert!(dockerfile.contains(&format!("ARG ZELYRA_REF=v{}", env!("CARGO_PKG_VERSION"))));
-        assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
-        assert!(project_config.contains("console = false"));
-        assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
-        assert!(dockerfile.contains("COPY locales ./locales"));
-        assert!(path.join("locales/de.json").is_file());
-        assert!(path.join("locales/en.json").is_file());
-        for token in [
-            "--zelyra-color-accent",
-            "--zelyra-color-accent-strong",
-            "--zelyra-color-accent-text",
-            "--zelyra-color-accent-soft",
-            "--zelyra-color-ink",
-            "--zelyra-color-muted",
-            "--zelyra-color-border",
-            "--zelyra-color-canvas",
-            "--zelyra-color-surface",
-            "--zelyra-color-surface-subtle",
-            "--zelyra-color-sidebar-start",
-            "--zelyra-color-sidebar-middle",
-            "--zelyra-color-sidebar-end",
-            "--zelyra-color-sidebar-foreground",
-            "--zelyra-color-sidebar-muted",
-            "--zelyra-color-hero-start",
-            "--zelyra-color-hero-middle",
-            "--zelyra-color-hero-end",
-            "--zelyra-color-success-background",
-            "--zelyra-color-success-border",
-            "--zelyra-color-success-ink",
-            "--zelyra-color-danger-background",
-            "--zelyra-color-danger-border",
-            "--zelyra-color-danger-ink",
-            "--zelyra-color-focus",
-            "--zelyra-font-body",
-            "--zelyra-radius-card",
-            "--zelyra-radius-control",
-            "--zelyra-content-max-width",
-        ] {
-            assert!(
-                project_theme.contains(token),
-                "generated theme misses {token}"
-            );
-        }
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-crud-demo-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let status = create_project(
-            path.to_str().unwrap(),
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb: true,
-                crud_template: true,
-                auth_template: false,
-                business_template: false,
-                web_port: DEFAULT_WEB_PORT,
-                host_port: DEFAULT_WEB_PORT,
-                database_host_port: DEFAULT_DATABASE_HOST_PORT,
-                host_port_given: false,
-                database_host_port_given: false,
-            },
-        );
-        assert_eq!(status, ExitCode::SUCCESS);
-
-        let fixture = fs::read_to_string(path.join("machine-management-demo.sql")).unwrap();
-        assert!(fixture.contains("ZLY-DEMO-030"));
-        assert!(fixture.contains("INSERT IGNORE INTO machines"));
-        let source = fs::read_to_string(path.join("main.zyl")).unwrap();
-        assert!(source.contains("machines.resources.title"));
-        assert!(source.contains("mode: cards"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn generated_mariadb_template_uses_selected_web_port() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-port-template-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let mut selected_ports = None;
-        for _ in 0..8 {
-            let database_host_port = find_free_port(34_000, &[]).unwrap();
-            let host_port = find_free_port(35_000, &[database_host_port]).unwrap();
-            let status = create_project(
-                path.to_str().unwrap(),
-                ProjectOptions {
-                    allow_current_directory: false,
-                    with_mariadb: true,
-                    crud_template: false,
-                    auth_template: false,
-                    business_template: false,
-                    web_port: 8080,
-                    host_port,
-                    database_host_port,
-                    host_port_given: true,
-                    database_host_port_given: true,
-                },
-            );
-            if status == ExitCode::SUCCESS {
-                selected_ports = Some((host_port, database_host_port));
-                break;
-            }
-        }
-        let (host_port, database_host_port) =
-            selected_ports.expect("template test should acquire two free host ports");
-
-        let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
-        let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
-        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
-        let gitignore = fs::read_to_string(path.join(".gitignore")).unwrap();
-        assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
-        assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={host_port}")));
-        assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
-        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(compose.contains(&format!(
-            "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
-        )));
-        assert!(compose.contains(&format!(
-            "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
-        )));
-        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(dockerfile.contains("EXPOSE 8080"));
-        assert!(dockerfile.contains("0.0.0.0:8080"));
-        assert!(dockerignore.contains(".env"));
-        assert!(gitignore.contains(".env"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_accepts_mariadb_project_without_env_example() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-config-only-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-
-        assert_eq!(
-            setup_project(path.to_str().unwrap(), &SetupOptions::default()),
-            ExitCode::SUCCESS
-        );
-        let env_file = fs::read_to_string(path.join(".env")).unwrap();
-        assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
-        assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-action-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-
-        let first =
-            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
-        let contents = fs::read_to_string(path.join(".env")).unwrap();
-        let second =
-            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
-        assert!(first.contains("created protected .env"));
-        assert!(second.contains("kept existing .env"));
-        assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_web_url_uses_the_effective_host_port() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-web-url-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-        fs::write(
-            path.join(".env.example"),
-            "# ZELYRA_HOST_PORT=18080\nZELYRA_DB_HOST_PORT=3308\n",
-        )
-        .unwrap();
-        fs::write(path.join(".env"), "ZELYRA_HOST_PORT=18443\n").unwrap();
-
-        let env_path = path.join(".env");
-        let env_path = env_path.to_string_lossy();
-        assert_eq!(
-            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
-            "http://127.0.0.1:18443"
-        );
-
-        fs::write(path.join(".env"), "ZELYRA_DB_HOST_PORT=3308\n").unwrap();
-        assert_eq!(
-            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
-            "http://127.0.0.1:18080"
-        );
-
-        assert_eq!(
-            project_web_url_with_host_port(&path, Some("18444"), "unused.env").unwrap(),
-            "http://127.0.0.1:18444"
-        );
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_web_requires_the_token_and_renders_the_local_actions() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-web-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        let state = Arc::new(Mutex::new(SetupWebState {
-            directory: path.clone(),
-            token: "test-token".into(),
-            message: String::new(),
-        }));
-        let request = |target: &str| zelyra_web::Request {
-            method: "GET".into(),
-            target: target.into(),
-            path: "/".into(),
-            headers: HashMap::new(),
-            body: String::new(),
-        };
-
-        let forbidden = setup_web_response(&state, &request("/?token=wrong"));
-        assert_eq!(forbidden.status, 403);
-        let page = setup_web_response(&state, &request("/?token=test-token"));
-        assert_eq!(page.status, 200);
-        assert!(page.body.contains("Konfiguration vorbereiten"));
-        assert!(page.body.contains("MariaDB und Anwendung starten"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn web_port_validation_rejects_zero_and_non_numeric_values() {
-        assert_eq!(parse_web_port("1"), Ok(1));
-        assert_eq!(parse_web_port("65535"), Ok(65535));
-        assert!(parse_web_port("0").is_err());
-        assert!(parse_web_port("65536").is_err());
-        assert!(parse_web_port("web").is_err());
-        assert_eq!(parse_database_host_port("3308"), Ok(3308));
-        assert!(parse_database_host_port("0").is_err());
-        assert!(parse_database_host_port("database").is_err());
-    }
-
-    #[test]
-    fn docker_compose_hint_is_actionable_and_platform_specific() {
-        let hint = docker_compose_install_hint();
-        assert!(hint.contains("Docker Compose is unavailable"));
-        assert!(hint.contains("https://docs.docker.com/"));
-        assert!(hint.contains("docker compose version"));
-    }
-
-    #[test]
-    fn compose_start_errors_are_actionable_without_exposing_output() {
-        let secret = "mariadb://zelyra:secret-value@127.0.0.1:3306/zelyra_app";
-        let permission = compose_start_failure_message(
-            DockerComposeCommand::Legacy,
-            &format!("permission denied while connecting to docker.sock: {secret}"),
-        );
-        assert!(permission.contains("usermod -aG docker"));
-        assert!(permission.contains("\n  newgrp docker\n  id -nG\n  docker ps\n"));
-        assert!(permission.contains("Opening another terminal window alone"));
-        assert!(!permission.contains(secret));
-
-        let conflict = compose_start_failure_message(
-            DockerComposeCommand::Plugin,
-            "failed to bind host port: address already in use",
-        );
-        assert!(conflict.contains("port is already in use"));
-        assert!(!conflict.contains("failed to bind"));
-    }
-
-    #[test]
-    fn free_port_selection_skips_a_bound_port() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = listener.local_addr().unwrap().port();
-        let selected = find_free_port(occupied, &[]).unwrap();
-        assert_ne!(selected, occupied);
-    }
-
-    #[test]
-    fn explicit_port_conflicts_are_rejected() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = listener.local_addr().unwrap().port();
-        let error = resolve_host_port(occupied, true, "web host", true, &[])
-            .expect_err("an explicitly occupied port must be rejected");
-        assert!(error.contains("already in use"));
-        assert!(error.contains("choose a different port"));
-    }
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×|ó”èµ©hºÚn¶X§zÍ]\ÙH˜[™ØÛÜ™NŽžÓÜÔ›™Ë›™ÐÛÜ™_NÂ\ÙHÙ\™WÚœÛÛŽŽžÚœÛÛ‹X\˜[Y_NÂ\ÙHÝŽžÂˆÙ[Ž”™YÙ[ˆÛÛXÝ[ÛœÎŽžÐ•™YSX\•™YTÙ]\ÚX\\ÚÙ]Kˆ[‹ˆ›]Ž•Üš]H\ÈËˆœËˆ[ÎŽ”™XYˆ™]Ž•Ü\Ý[™\‹ˆ]Ž”]Y‹ˆ›ØÙ\ÜÎŽÛÛ[X[™ˆ›ØÙ\ÜÎŽ‘^]ÛÙKˆ›ØÙ\ÜÎŽ”Ý[ËˆÞ[˜ÎŽžÐ\˜Ë]]^KŸNÂ\ÙH™[\˜WØ\ÝŽ•\NÂ\ÙH™[\˜WÙ]X˜\ÙNŽžÂˆ\WÛX\šXY‹\WÜÜÝÜ™\Ë\WÜÜ[]KZ[ÜØÚ[XKÛÝ[Û[Ý˜[Y\ËˆÜ™X]WÛX\šXY—Ù]X˜\ÙKY™‹[œÜXÝÛX\šXY‹[œÜXÝÜÜÝÜ™\Ë[œÜXÝÜÜ[]KˆÜ[Ž˜ÚXÚ×Ü›ÙÜ˜[H\ÈÚXÚ×ÜÜ[Ü›ÙÜ˜[KX›WÚ\×Ü›ÝÜË˜XÚÙ[™]Y\žK]Y\žT™\Ý[ˆ]Y\žU˜[YKš\ÚËØÚ[XKŸNÂ\ÙH™[\˜WÙ›Ü›\ÎŽžØÚXÚ×Ü›ÙÜ˜[H\ÈÚXÚ×Ù›Ü›WÜ›ÙÜ˜[K˜[Y]H\È˜[Y]WÙ›Ü›_NÂ\ÙH™[\˜WÚ\ŽŽ›ÝÙ\ŽÂ\ÙH™[\˜WÛ^\ŽŽ›^Â\ÙH™[\˜WÜ\œÙ\ŽŽœ\œÙNÂ\ÙH™[\˜WÜ[[YNŽžÂˆÚXÚËÚXÚ×Ø\\ËÚXÚ×ØØ\Xš[]Y\×ÝÚ]ÙÜ˜[Ëˆ^XÝ]WÙ[˜Ý[Û—ÝÚ]ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Ë^XÝ]WÝÚ]ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Ëˆ^XÝ]WÝÚ]Ù]X˜\ÙWØ[™ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Ë™\šYžH\È™\šYžWÜ›ÙÜ˜[Kˆš[TÞ\Ý[TÛXÞK™]ÛÜšÔÛXÞK›ØÙ\ÜÔÛXÞK[[YTÛXÞK˜[YH\È[[YU˜[YKˆ™\šYšXØ][Û”™\Ý[™\šYšXØ][Û”Ý]\ËÓ“ÕÓ—ÐÐTP’SUQTËŸNÂ\ÙH™[\˜WÝÙXŽŽžÂˆ]Y]Ú[œÙ\Ü]Y\šY\Ë[Ù\ØØ\K\œÙWÝ\›[˜ÛÙYÙ\™WØ\\T›Ý]K]]›Ý]KˆÛÜœÔÛXÞKÜYXÝ[Û”›Ý]KÜY›Ý]KÜÜ™”›ÝXÝ[Û‹›Ü›T›Ý]K›Ú™XÝZPØ][ÙÜË™\ÜÛœÙKˆ›Ý]K›Ý]Q]K›Ý]T]Y\žKX›UšY]Ñš[\‹X›UšY]Ñš[\’Ú[™X›UšY]Ô›Ý]KZS[™ÝXYÙKˆZS]™[ÙX\“Ò‘PÕÕSQWÐÔÔ×ÔUŸNÂ‚›[ÙY]Â›[Ù›Ü›X]\ŽÂ›[ÙÛ\ÎÂ›[Ù[\XÝÂ›[Ù›Ú™XÝÂ›[Ù\]\ŽÂ\ÙH›Ü›X]\ŽŽ™›Ü›X]ÜÛÝ\˜ÙNÂ\ÙHÛ\ÎŽ˜ÛÛXÝÝ\YÚÛ\ÎÂ\ÙH[\XÝŽžØZ[Ú[\XÝÝÚ]ÜÛÝ\˜Ù\Ë›ØÝ\×Ú[\XÝNÂ‚˜ÛÛœÝPT’PQ—ÐÔ•QÕSTUNˆ	œÝˆH[˜ÛYWÜÝˆJ‹‹‹Ë‹‹Ù^[\\ËÛXXÚ[™WÙ›Ü›Kžž[ŠNÂ˜ÛÛœÝPPÒS‘WÓPSQÑSQS•ÑSS×ÑUNˆ	œÝˆBˆ[˜ÛYWÜÝˆJ‹‹‹Ë‹‹Ù^[\\ËÛXXÚ[™WÛX[˜YÙ[Y[Ù[[ËœÜ[ŠNÂ˜ÛÛœÝPT’PQ—ÓRS’SPSÕSTUNˆ	œÝˆH[˜ÛYWÜÝˆJ‹‹‹Ë‹‹Ù^[\\ËÛX\šXY—ÜÝ\\‹žž[ŠNÂ˜ÛÛœÝPT’PQ—ÐUUÕSTUNˆ	œÝˆH[˜ÛYWÜÝˆJ‹‹‹Ë‹‹Ù^[\\ËØ]]žž[ŠNÂ˜ÛÛœÝPT’PQ—Ð•TÒS‘TÔ×ÕSTUNˆ	œÝˆH[˜ÛYWÜÝˆJ‹‹‹Ë‹‹Ù^[\\ËØ]]ØÜYØ\Kžž[ŠNÂ˜ÛÛœÝ“Ò‘PÕÕSQWÕSTUNˆ	œÝˆHˆÈ‹Ê‚“Ü[Û˜[›Ú™XÝ[ØØ[Ý™\œšY\È›ÜˆHZ[Z[ˆ™[\˜HÙXˆ\ÚYÛ‹‚•[˜ÛÛ[Y[HÚÙ[ˆ™[ÝÈ[™Ú[™ÙH]È˜[YKˆ\Èš[H\ÈÙ[Èœ›ÝÜÙ\œÎÂ›™]™\ˆ]\ÜÝÛÜ™ËTHÙ^\ËÜˆš]˜]H]H\™K‚‚•ÚÙ[ˆ™Y™\™[˜ÙNˆÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜KØ›Ø‹ÛXZ[‹ÙØÜËÙ[‹›YŠ‹ÂŽœ›ÛÝÂˆÊˆK^™[\˜KXÛÛÜ‹XXØÙ[ˆÍÍMMÙŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹XXØÙ[\Ý›Û™ÎˆÍXÙNNÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹XXØÙ[]^ˆÍŒÍÙLÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹XXØÙ[\ÛÙˆÙŽ™™ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Z[šÎˆÌMÌŒÌÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹[]]YˆÍÌÎMÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹X›Ü™\ŽˆÙNYÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹XØ[˜\ÎˆÙYÙ˜ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\Ý\™˜XÙNˆÙ™™™™™ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\Ý\™˜XÙK\ÝXNˆÙŽY˜Y™ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÚYX˜\‹\Ý\ˆÌMÌXÌÌŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÚYX˜\‹[ZYNˆÌŒÍÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÚYX˜\‹Y[™ˆÌŒÎMNÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÚYX˜\‹Y›Ü™YÜ›Ý[™ˆÙ™Ù™ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÚYX˜\‹[]]YˆØ˜XÍÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Z\›Ë\Ý\ˆÌŒ™LŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Z\›Ë[ZYNˆÌÙMÎNÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Z\›ËY[™ˆÍŒN˜ŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËX˜XÚÙÜ›Ý[™ˆÙY™˜™ÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËX›Ü™\ŽˆØ˜ÙX™È
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËZ[šÎˆÌMÍMŽÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Y[™Ù\‹X˜XÚÙÜ›Ý[™ˆÙ™™YNÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Y[™Ù\‹X›Ü™\ŽˆÙŒ˜ÎØÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Y[™Ù\‹Z[šÎˆÎŒÌØÎÈ
+‹ÂˆÊˆK^™[\˜KXÛÛÜ‹Y›ØÝ\ÎˆÎØY™ŽÈ
+‹ÂˆÊˆK^™[\˜KY›ÛX›ÙNˆ[\‹Þ\Ý[K]ZKØ[œË\Ù\šYŽÈ
+‹ÂˆÊˆK^™[\˜K\˜Y]\ËXØ\™ˆMœÈ
+‹ÂˆÊˆK^™[\˜K\˜Y]\ËXÛÛ›ÛˆLÈ
+‹ÂˆÊˆK^™[\˜KXÛÛ[[X^]ÚYˆLNÈ
+‹ÂŸBˆˆÎÂ‚™›ˆ\ØYÙJ
+HÂˆ\š[ˆJˆ[\XÝ›ØÝ\Îˆ\ÙHK\Þ[X›ÛÚ[™›˜[YO˜È[œÜXÝÛ™HÛ›ÝÛˆ›ÙHŠNÂˆ\š[ˆJˆ[Ù[H[Žˆ™[\˜H[Ù[H[ˆ[žKžž[ˆ[Ù[Kžž[˜™]šY]ÜÈÛ›ÝÛˆ[\Ü[™Ù[X[XÈ\[™[˜ÚY\È
+›ÝH\Þ[Y[^Ü
+HŠNÂˆ\š[ˆJˆØÝÜˆÝ\ÜÈKY[‹Yš[H]˜›ÜˆÙ[™\˜]YX\šXQˆ›Ú™XÝÈŠNÂˆ\š[ˆJˆÙ]\Ý\ÜÈKY]X˜\ÙXK\ØÚ[XXKX[KZÜÝ\ÜKY‹ZÜÝ\Ü[™K]ÙXˆËK\ÜÜ—XŠNÂˆ\š[ˆJ–™[\˜HßW—•\ØYÙN—ˆ™[\˜HK]™\œÚ[Û—ˆ™[\˜H™\œÚ[Û—ˆ™[\˜H\]HËKXÚXÚ×Wˆ™[\˜H™]È\™XÝÜžOˆËK[X\šXY—HËK][\]HZ[š[X[X\šXY‹XÜYX\šXY‹X]]X\šXY‹X\Ú[™\Ü×HËK]ÙX‹\ÜÜ—HËKZÜÝ\ÜÜ—HËKY‹ZÜÝ\ÜÜ—Wˆ™[\˜H[š]Ù\™XÝÜžWHËK[X\šXY—HËK][\]HZ[š[X[X\šXY‹XÜYX\šXY‹X]]X\šXY‹X\Ú[™\Ü×HËK]ÙX‹\ÜÜ—HËKZÜÝ\ÜÜ—HËKY‹ZÜÝ\ÜÜ—Wˆ™[\˜HÙ]\Ù\™XÝÜžWHËKY]X˜\Ù_K\ØÚ[X_KX[HËKZÜÝ\ÜÜ—HËKY‹ZÜÝ\ÜÜ—Wˆ™[\˜HÙ]\Ù\™XÝÜžWHK]ÙXˆËK\ÜÜ—Wˆ™[\˜HÚXÚÈš[Kžž[ˆËKY›Ü›X][X[ŸœÛÛ—Wˆ™[\˜H›]š[Kžž[ˆËKXÚXÚ×Wˆ™[\˜H[\XÝš[Kžž[ˆËKY›Ü›X][X[ŸœÛÛ—Wˆ™[\˜HY]KY›Ü›X]ZœÛÛˆËKX\WHÚ[™ÙKšœÛÛ—ˆ™[\˜HÛÛ^š[Kžž[ˆËKY›Ü›X][X[ŸœÛÛ—Wˆ™[\˜HÛÛ™šYÈš[Kžž[ˆËKY›Ü›X][X[ŸœÛÛ—Wˆ™[\˜HZ[š[Kžž[—ˆ™[\˜H[ˆš[Kžž[—ˆ™[\˜HÙ\™Hš[Kžž[ˆØY™\Ü×Wˆ™[\˜HØÝÜˆÙš[Kžž[HËK\ÜÜ—HËKZœÛÛ—Wˆ™[\˜H™\šYžHš[Kžž[ˆËKZœÛÛ—Wˆ™[\˜HØÈš[Kžž[ˆËK[Ü[˜\_K]\\ØÜš\Wˆ™[\˜H]]\Ú\\ÜÝÛÜ™ËK\Ý[—Wˆ™[\˜H]]›ÛHÜ˜[™]›ÚÙOˆš[Kžž[ˆ\Ù\‹ZYˆ›ÛO—ˆ™[\˜H]]›ÛK\\›Z\ÜÚ[ÛˆÜ˜[™]›ÚÙOˆš[Kžž[ˆ›ÛOˆ\›Z\ÜÚ[Û—ˆ™[\˜H]Y][œÜXÝš[Kžž[ˆËK[[Z]—Wˆ™[\˜H]Y]^Üš[Kžž[ˆËK[[Z]—HËKY›Ü›X]œÛÛŸÜÝ—Wˆ™[\˜H]Y]™\šYžHš[Kžž[—ˆ™[\˜H]Y][™Hš[Kžž[ˆKX™Y›Ü™H[Y\Ý[\ˆËKXÛÛ™š\›WWˆ™[\˜H›Ü›H˜[Y]Hš[Kžž[ˆ›Ü›S˜[YOˆÙšY[]˜[YH‹‹—Wˆ™[\˜HˆÜ™X]_Ù]\›ÛÝÝ˜\[œÜXÝ[Ÿ\Oˆš[Kžž[ˆ‹[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJNÂŸB‚™›ˆ™\œÚ[Û—ØÛÛ[X[™
+
+HOˆ^]ÛÙHÂˆš[ˆJž™[\˜HßH‹[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂŸB‚˜ÛÛœÝPPÒS‘WÔÐÒSPWÕ‘T”ÒSÓŽˆ	œÝˆHŒHŽÂ‚œÝXÝœÛÛ‘XYÛ›ÜÝXÐÛÛXÝÜˆÂˆ]ˆÝš[™ËˆÛÝ\˜ÙNˆÝš[™ËˆXYÛ›ÜÝXÜÎˆ™XÏ˜[YO‹ŸB‚™XYÛØØ[HÂˆÝ]XÈ”ÓÓ—ÑPQÓ“ÔÕPÔÎˆ™YÙ[Ü[ÛœÛÛ‘XYÛ›ÜÝXÐÛÛXÝÜˆHÛÛœÝÈ™YÙ[Ž›™]Ê›Û™JHNÂˆÝ]XÈ“Ò‘PÕÔÓÕTÑTÎˆ™YÙ[™XÏ›Ú™XÝŽ”›Ú™XÝÛÝ\˜ÙOˆHÛÛœÝÈ™YÙ[Ž›™]Ê™XÎŽ›™]Ê
+JHNÂˆÝ]XÈ“Ò‘PÕÓSÑSTÎˆ™YÙ[™XÏ›Ú™XÝŽ”›Ú™XÝ[Ù[OˆHÛÛœÝÈ™YÙ[Ž›™]Ê™XÎŽ›™]Ê
+JHNÂŸB‚™›ˆ]X˜\ÙWÝ\ØYÙJ
+HÂˆ\š[ˆJˆ•\ØYÙN—ˆ™[\˜HˆÜ™X]Hš[Kžž[—ˆ™[\˜HˆÙ]\š[Kžž[—ˆ™[\˜Hˆ›ÛÝÝ˜\š[Kžž[—ˆ™[\˜Hˆ[œÜXÝš[Kžž[—ˆ™[\˜Hˆ[ˆš[Kžž[—ˆ™[\˜Hˆ\Hš[Kžž[ˆËKX[ÝË\š\ÚÞWW—‹KX[ÝËY\ÝXÝ]™H™[XZ[œÈ]˜Z[X›H›ÜˆTÕ•PÕU‘H[œÈÛ›K—‘UPTÑWÕT“\È\ÙYžHÙ]\›ÛÝÝ˜\[œÜXÝ[‹[™\Kˆ‚ˆ
+NÂŸB‚˜ÛÛœÝQUSÕÑP—ÔÔ•ˆLMˆHÌÂ˜ÛÛœÝQUSÑUPTÑWÒÔÕÔÔ•ˆLMˆHÌÌŽÂ˜ÛÛœÝQUSÔÑUTÕÑP—ÔÔ•ˆLMˆHÌÌÂ˜ÛÛœÝ“Ò‘PÕÕSQWÐÔÔ×Ñ’SNˆ	œÝˆHž™[\˜K[YK˜ÜÜÈŽÂ˜ÛÛœÝ“Ò‘PÕÕSQWÐÔÔ×ÓPVÐ–UTÎˆMHLŽ
+ˆLÂ˜ÛÛœÝ“Ò‘PÕÓÐÐSWÑT‘PÕÔ–Nˆ	œÝˆH›ØØ[\ÈŽÂ˜ÛÛœÝ“Ò‘PÕÓÐÐSWÓPVÐ–UTÎˆMHMˆ
+ˆLÂ‚œÝXÝ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆ›ÛÛˆÚ]ÛX\šXYŽˆ›ÛÛˆÜYÝ[\]Nˆ›ÛÛˆ]]Ý[\]Nˆ›ÛÛˆ\Ú[™\Ü×Ý[\]Nˆ›ÛÛˆÙX—ÜÜˆLM‹ˆÜÝÜÜˆLM‹ˆ]X˜\ÙWÚÜÝÜÜˆLM‹ˆÜÝÜÜÙÚ]™[Žˆ›ÛÛˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[Žˆ›ÛÛŸB‚ˆÖÙ\š]™JY˜][
+WBœÝXÝÙ]\Ü[ÛœÈÂˆÜÝÜÜˆÜ[ÛLM‹ˆ]X˜\ÙWÚÜÝÜÜˆÜ[ÛLM‹ŸB‚œÝXÝØØ[[”Ù]\ÂˆÜ™X]Yˆ›ÛÛˆÜÛ›Ý\Îˆ™XÏÝš[™Ï‹ŸB‚™›ˆ\œÙWÝÙX—ÜÜ
+˜[YNˆ	œÝŠHOˆ™\Ý[LM‹Ýš[™ÏˆÂˆ\œÙWÜÜ
+˜[YKÙXˆŠBŸB‚™›ˆ\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+˜[YNˆ	œÝŠHOˆ™\Ý[LM‹Ýš[™ÏˆÂˆ\œÙWÜÜ
+˜[YK™]X˜\ÙHÜÝŠBŸB‚™›ˆ\œÙWÜÜ
+˜[YNˆ	œÝ‹X™[ˆ	œÝŠHOˆ™\Ý[LM‹Ýš[™ÏˆÂˆ]ÜH˜[YBˆœ\œÙNŽLMŠ
+Bˆ›X\Ù\œŠß›Ü›X]JžÛX™[HÜÝ˜[Y_X]\Ý™H[ˆ[YÙ\ˆ™]ÙY[ˆH[™MLÍHŠJOÎÂˆYˆÜOHÂˆ™]\›ˆ\œŠ›Ü›X]JžÛX™[HÜ]\Ý™H™]ÙY[ˆH[™MLÍHŠJNÂˆBˆÚÊÜ
+BŸB‚™›ˆÜÚ\×Ø]˜Z[X›JÜˆLMŠHOˆ›ÛÛÂˆÜ\Ý[™\ŽŽ˜š[™
+
+ŒLËŒŒŒH‹Ü
+JKš\×ÛÚÊ
+BŸB‚™›ˆš[™Ùœ™YWÜÜ
+Ý\ˆLM‹™\Ù\™Yˆ	–ÝLM—JHOˆÜ[ÛLMˆÂˆ
+Ý\‹]LMŽŽ“PV
+K™š[™
+Ü\™\Ù\™Y˜ÛÛZ[œÊÜ
+H	‰ˆÜÚ\×Ø]˜Z[X›J
+œÜ
+JBŸB‚™›ˆ™\ÛÛ™WÚÜÝÜÜ
+ˆ™\]Y\ÝYˆLM‹ˆ^XÚ]WÙÚ]™[Žˆ›ÛÛˆX™[ˆ	œÝ‹ˆ]]×ÜÙ[XÝˆ›ÛÛˆ™\Ù\™Yˆ	–ÝLM—KŠHOˆ™\Ý[
+LM‹Ü[ÛÝš[™ÏŠKÝš[™ÏˆÂˆYˆY^XÚ]WÙÚ]™[ˆ	‰ˆX]]×ÜÙ[XÝÂˆ™]\›ˆÚÊ
+™\]Y\ÝY›Û™JJNÂˆBˆYˆÜÚ\×Ø]˜Z[X›J™\]Y\ÝY
+H	‰ˆ\™\Ù\™Y˜ÛÛZ[œÊ	œ™\]Y\ÝY
+HÂˆ™]\›ˆÚÊ
+™\]Y\ÝY›Û™JJNÂˆBˆYˆ^XÚ]WÙÚ]™[ˆÂˆ™]\›ˆ\œŠ›Ü›X]JˆžÛX™[HÜÜ™\]Y\ÝYH\È[™XYH[ˆ\ÙNÈÚÛÜÙHHY™™\™[Ü‚ˆ
+JNÂˆBˆ]Ù[XÝYHš[™Ùœ™YWÜÜ
+™\]Y\ÝYœØ]\˜][™×ØY
+JK™\Ù\™Y
+K›Ú×ÛÜ—Ù[ÙJÂˆ›Ü›X]J˜ÛÝ[›Ýš[™Hœ™YHÛX™[HÜY\ˆÜ™\]Y\ÝYNÈÚÛÜÙHHÜ^XÚ]HŠBˆJOÎÂˆÚÊ
+ˆÙ[XÝYˆÛÛYJ›Ü›X]JˆžÛX™[HÜÜ™\]Y\ÝYH\È[˜]˜Z[X›NÈÙ[XÝYœ™YHÜÜÙ[XÝYH‚ˆ
+JKˆ
+JBŸB‚™›ˆ™\ÛÛ™WÜ›Ú™XÝÚÜÝÜÜÊˆ]ˆ	œÝ‹ˆÜ[ÛœÎˆ	”›Ú™XÝÜ[ÛœËŠHOˆ™\Ý[
+LM‹LM‹™XÏÝš[™ÏŠKÝš[™ÏˆÂˆYˆ[Ü[ÛœËÚ]ÛX\šXYˆÂˆ™]\›ˆÚÊ
+Ü[ÛœËšÜÝÜÜÜ[ÛœË™]X˜\ÙWÚÜÝÜÜ™XÎŽ›™]Ê
+JJNÂˆBˆ][—Ù^\ÝÈHÝŽœ]Ž”]Ž›™]Ê]
+Kš›Ú[Š‹™[ˆŠKš\×Ùš[J
+NÂˆ]]]×ÜÙ[XÝHY[—Ù^\ÝÎÂˆ]
+ÜÝÜÜÜÝÛ›ÝJHH™\ÛÛ™WÚÜÝÜÜ
+ˆÜ[ÛœËšÜÝÜÜˆÜ[ÛœËšÜÝÜÜÙÚ]™[‹ˆÙXˆÜÝ‹ˆ]]×ÜÙ[XÝˆ	–×Kˆ
+OÎÂˆ]
+]X˜\ÙWÚÜÝÜÜ]X˜\ÙWÛ›ÝJHH™\ÛÛ™WÚÜÝÜÜ
+ˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜÙÚ]™[‹ˆ“X\šXQˆÜÝ‹ˆ]]×ÜÙ[XÝˆ	–ÚÜÝÜÜKˆ
+OÎÂˆ]›Ý\ÈHÚÜÝÛ›ÝK]X˜\ÙWÛ›ÝWKš[×Ú]\Š
+K™›][Š
+K˜ÛÛXÝ
+
+NÂˆÚÊ
+ÜÝÜÜ]X˜\ÙWÚÜÝÜÜ›Ý\ÊJBŸB‚™›ˆÙ[™\˜]WÛØØ[ÜÙXÜ™]
+
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆ]]]ž]\ÈHÌÝNÈNÂˆÜÔ›™ÂˆžWÙš[Øž]\Ê	›]]ž]\ÊBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››ÝÙ[™\˜]HHØØ[ÙXÜ™]ˆÙ\œ›ÜŸHŠJOÎÂˆ]]]ÙXÜ™]HÝš[™ÎŽÚ]ØØ\XÚ]Jž]\Ë›[Š
+H
+ˆŠNÂˆ›Üˆž]H[ˆž]\ÈÂˆÜš]HJ	›]]ÙXÜ™]žØž]NŒžHŠK™^XÝ
+Üš][™ÈÈHÝš[™ÈØ[››Ý˜Z[ŠNÂˆBˆÚÊÙXÜ™]
+BŸB‚™›ˆX\šXY—Ù[—Ý[\]JÙX—ÜÜˆLM‹ÜÝÜÜˆLM‹]X˜\ÙWÚÜÝÜÜˆLMŠHOˆÝš[™ÈÂˆ›Ü›X]JˆˆÈˆÈ™[\˜HØØ[X\šXQˆÛÛ™šYÝ\˜][Û‹‚ˆÈ\Èš[H\ÈØY™HÈY]ØØ[H]]\Ý™]™\ˆ™HÛÛ[Z]Y‚ˆÂˆÈHXÝ]™H˜[Y\È™[ÝÈÛÛ™šYÝ\™HHÙ[™\˜]YX\šXQˆÛÛ\ÜÙH›Ú™XÝ[™ˆÈHY˜][Ù\›X[‹ÝZYY™[\˜H^\šY[˜ÙKˆÚ[™ÙH[™ÝXYÙHÈ[˜Ü‚ˆÈ]™[ÈÛÜšØ›ÜˆHÛÛ˜Ú\ÙH[™Û\ÚÛÜšÈ[\™˜XÙK‚ˆÈH]X˜\ÙHÜÝÜ\ÈXÝ]™HÛÈHÓH[™ÛÛ\ÜÙH[Ø^\È\ÙHBˆÈÙ[XÝYÜÙÙ]\‹‚–‘STWÑ—ÒÔÕÔÔ•^Ù]X˜\ÙWÚÜÝÜÜB–‘STWÓS‘ÕPQÑOYB–‘STWÓU‘S[X\›‚–‘STWÐSÕÑQÒÔÕÏ[ØØ[ÜÝLËŒŒŒKÎŽŒWB‘UPTÑWÕT“[X\šXYŽ‹ËÞ™[\˜N˜Ú[™ÙK[YPLËŒŒŒN‰ÞÖ‘STWÑ—ÒÔÕÔÔ•‹LÌÌŸ_KÞ™[\˜WØ\“PT’PQ—ÑUPTÑO^™[\˜WØ\“PT’PQ—ÕTÑT^™[\˜B“PT’PQ—ÔTÔÕÓÔ‘XÚ[™ÙK[YB“PT’PQ—Ô“ÓÕÔTÔÕÓÔ‘XÚ[™ÙK[YK\›ÛÝ‚ˆÈÜ[Û˜[ÙXˆÜÝ™\œšY\ËˆHÙ[™\˜]YÛÛ\ÜÙHš[H[™XYHÛÛZ[œÂˆÈHÙ[XÝYY˜][È™[ÝËÛÈ\ÙH[™\ÈØ[ˆ™[XZ[ˆÛÛ[Y[YÝ]‚ˆÈ‘STWÕÑP—ÔÔ•^ÝÙX—ÜÜBˆÈ‘STWÒÔÕÔÔ•^ÚÜÝÜÜB‚ˆÈÜ[Û˜[X›XÈÜÝ˜[Y\ÈÜˆTY™\ÜÙ\ËÛÛ[XK\Ù\\˜]YˆYHÜÝˆÈ\ÙY[ˆ[Ý\ˆœ›ÝÜÙ\ˆÚ[ˆÙ\š[™È›ÝYÚHSˆY™\ÜÈÜˆ™]™\œÙH›ÞK‚ˆÈ‘STWÐSÕÑQÒÔÕÏ[ØØ[ÜÝLËŒŒŒKÎŽŒWK\™^[\K˜ÛÛB‚ˆÈÜ[Û˜[™X]\™HÝÚ]Ú\Ëˆ^HY˜][ÈYH[™\™H›Ü›X[H›Ý™YYY‚ˆÈ‘STWÑ‘PUT‘WÕÑP]YBˆÈ‘STWÑ‘PUT‘WÐTO]YBˆÈ‘STWÑ‘PUT‘WÐÔ•Q]YBˆÈ‘STWÑ‘PUT‘WÐUU]YBˆÈ‘STWÑ‘PUT‘WÐUQU]YB‚ˆÈÜ[Û˜[ØØ[™\]Y\Ý›ÝXÝ[Ûˆ[™\XØ][ÛˆÙ][™ÜË‚ˆÈ‘STWÐUUÕÒÑS\™\XÙK]Ú]XK[ØØ[]ÚÙ[‚ˆÈ‘STWÐUUÔT“RTÔÒSÓ”ÏXÝ\ÝÛY\œËšY]ËÝ\ÝÛY\œË™Y]ˆÈ‘STWÓSÑOY]™[ÜY[‚ˆÈÜ[Û˜[ÓÔ”ÈÙ][™ÜÈ™[Û™È[ˆ™[\˜KÛ[[™ÚÝ[Û›H™H[˜X›YÚ]ˆÈ[ˆ^XÚ]›Ú™XÝXÚ\Ú[Û‹ˆÈ›Ý]›ÙXÝ[ÛˆÙXÜ™]È[ˆ\Èš[K‚ˆˆÂˆ
+BŸB‚™›ˆ[\]WÜÜ
+[\]Nˆ	œÝ‹Ù^Nˆ	œÝ‹˜[˜XÚÎˆLMŠHOˆLMˆÂˆ[\]Bˆ›[™\Ê
+Bˆ›X\
+ÝŽŽš[JBˆ›X\
+[™_[™KœÝš\Ü™Yš^
+	ÈÉÊK[Ü˜\ÛÜŠ[™JKš[J
+JBˆ™š[™ÛX\
+[™_Âˆ[™KœÝš\Ü™Yš^
+	™›Ü›X]JžÚÙ^_OHŠJBˆ˜[™Ý[Š˜[Y_\œÙWÜÜ
+˜[YKš[J
+KÙ^JK›ÚÊ
+JBˆJBˆ[Ü˜\ÛÜŠ˜[˜XÚÊBŸB‚™›ˆ™\XÙWÝ[\]WÙ[—Ø\ÜÚYÛ›Y[
+[\]Nˆ	œÝ‹Ù^Nˆ	œÝ‹˜[YNˆLM‹XÝ]™Nˆ›ÛÛ
+HOˆÝš[™ÈÂˆ]]]™\XÙYH˜[ÙNÂˆ]]][™\ÈH[\]Bˆ›[™\Ê
+Bˆ›X\
+[™_Âˆ]š[[YYH[™Kš[WÜÝ\
+
+NÂˆ]Ù][™ÈHš[[YYœÝš\Ü™Yš^
+	ÈÉÊK[Ü˜\ÛÜŠš[[YY
+Kš[WÜÝ\
+
+NÂˆYˆÙ][™ËœÝ\×ÝÚ]
+	™›Ü›X]JžÚÙ^_OHŠJHÂˆ™\XÙYHYNÂˆ][™[][ÛˆH	›[™VË‹›[™K›[Š
+HHš[[YY›[Š
+WNÂˆYˆXÝ]™HÂˆ›Ü›X]JžÚ[™[][ÛŸ^ÚÙ^_O^Ý˜[Y_HŠBˆH[ÙHÂˆ›Ü›X]JžÚ[™[][ÛŸHÈÚÙ^_O^Ý˜[Y_HŠBˆBˆH[ÙHÂˆ[™K×ÛÝÛ™Y
+
+BˆBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆ\™\XÙYÂˆ[™\Ëœ\Ú
+YˆXÝ]™HÂˆ›Ü›X]JžÚÙ^_O^Ý˜[Y_HŠBˆH[ÙHÂˆ›Ü›X]JˆÈÚÙ^_O^Ý˜[Y_HŠBˆJNÂˆBˆ[™\Ëš›Ú[Š—ˆŠH
+È—ˆ‚ŸB‚™›ˆ™\\™YÛØØ[Ù[—Ý[\]Jˆ\™XÝÜžNˆ	œÝŽœ]Ž”]ˆÜ[ÛœÎˆ	”Ù]\Ü[ÛœËŠHOˆ™\Ý[
+Ýš[™Ë™XÏÝš[™ÏŠKÝš[™ÏˆÂˆ]]][\]HHØØ[ÛX\šXY—Ý[\]J\™XÝÜžJOÎÂˆ]™\]Y\ÝYÚÜÝÜÜHÜ[ÛœÂˆšÜÝÜÜˆ[Ü˜\ÛÜ—Ù[ÙJ[\]WÜÜ
+	[\]K–‘STWÒÔÕÔÔ•‹QUSÕÑP—ÔÔ•
+JNÂˆ][\]WÙ]X˜\ÙWÚÜÝÜÜBˆ[\]WÜÜ
+	[\]K–‘STWÑ—ÒÔÕÔÔ•‹QUSÑUPTÑWÒÔÕÔÔ•
+NÂˆ]™\]Y\ÝYÙ]X˜\ÙWÚÜÝÜÜHÜ[ÛœÂˆ™]X˜\ÙWÚÜÝÜÜˆ[Ü˜\ÛÜŠ[\]WÙ]X˜\ÙWÚÜÝÜÜ
+NÂˆ]
+ÜÝÜÜÜÝÛ›ÝJHH™\ÛÛ™WÚÜÝÜÜ
+ˆ™\]Y\ÝYÚÜÝÜÜˆÜ[ÛœËšÜÝÜÜš\×ÜÛÛYJ
+KˆÙXˆÜÝ‹ˆYKˆ	–×Kˆ
+OÎÂˆ]
+]X˜\ÙWÚÜÝÜÜ]X˜\ÙWÛ›ÝJHH™\ÛÛ™WÚÜÝÜÜ
+ˆ™\]Y\ÝYÙ]X˜\ÙWÚÜÝÜÜˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜš\×ÜÛÛYJ
+Kˆ“X\šXQˆÜÝ‹ˆYKˆ	–ÚÜÝÜÜKˆ
+OÎÂˆYˆ]X˜\ÙWÚÜÝÜÜOH[\]WÙ]X˜\ÙWÚÜÝÜÜˆ	‰ˆ][\]K˜ÛÛZ[œÊ‰Ö‘STWÑ—ÒÔÕÔÔ•ŠBˆÂˆ™]\›ˆ\œŠˆ˜Ø[››ÝØY™[HÙ[XÝHX\šXQˆÜ™XØ]\ÙHUPTÑWÕT“Ù\È›Ý\ÙH	Ö‘STWÑ—ÒÔÕÔÔ•‹K‹‹ŸNÈ\]HH[\]H^XÚ]HÜˆÚÛÜÙHHX]Ú[™Èœ™YHÜ‚ˆš[Ê
+Kˆ
+NÂˆBˆYˆÜ[ÛœËšÜÝÜÜš\×ÜÛÛYJ
+HÜÝÜÜOH™\]Y\ÝYÚÜÝÜÜÂˆ[\]HH™\XÙWÝ[\]WÙ[—Ø\ÜÚYÛ›Y[
+	[\]K–‘STWÒÔÕÔÔ•‹ÜÝÜÜYJNÂˆBˆ[\]HBˆ™\XÙWÝ[\]WÙ[—Ø\ÜÚYÛ›Y[
+	[\]K–‘STWÑ—ÒÔÕÔÔ•‹]X˜\ÙWÚÜÝÜÜYJNÂˆÚÊ
+ˆ[\]KˆÚÜÝÛ›ÝK]X˜\ÙWÛ›ÝWKš[×Ú]\Š
+K™›][Š
+K˜ÛÛXÝ
+
+Kˆ
+JBŸB‚™›ˆ™[™\—ÛØØ[Ù[Š[\]Nˆ	œÝŠHOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆ]]X˜\ÙWÜ\ÜÝÛÜ™HÙ[™\˜]WÛØØ[ÜÙXÜ™]
+
+OÎÂˆ]›ÛÝÜ\ÜÝÛÜ™HÙ[™\˜]WÛØØ[ÜÙXÜ™]
+
+OÎÂˆÚÊ[\]Bˆœ™\XÙJˆ‘UPTÑWÕT“[X\šXYŽ‹ËÞ™[\˜N˜Ú[™ÙK[YPLËŒŒŒN‰Ö‘STWÑ—ÒÔÕÔÔ•‹LÌÌŸKÞ™[\˜WØ\‹ˆ	™›Ü›X]Jˆ‘UPTÑWÕT“[X\šXYŽ‹ËÞ™[\˜NžÙ]X˜\ÙWÜ\ÜÝÛÜ™PLËŒŒŒN‰ÞÖ‘STWÑ—ÒÔÕÔÔ•‹LÌÌŸ_KÞ™[\˜WØ\‚ˆ
+Kˆ
+Bˆœ™\XÙJˆ“PT’PQ—ÔTÔÕÓÔ‘XÚ[™ÙK[YH‹ˆ	™›Ü›X]J“PT’PQ—ÔTÔÕÓÔ‘^Ù]X˜\ÙWÜ\ÜÝÛÜ™HŠKˆ
+Bˆœ™\XÙJˆ“PT’PQ—Ô“ÓÕÔTÔÕÓÔ‘XÚ[™ÙK[YK\›ÛÝ‹ˆ	™›Ü›X]J“PT’PQ—Ô“ÓÕÔTÔÕÓÔ‘^Ü›ÛÝÜ\ÜÝÛÜ™HŠKˆ
+JBŸB‚™›ˆ›ÝXÝÙ[—Ùš[J]ˆ	œÝŽœ]Ž”]
+HOˆ™\Ý[
+
+KÝš[™ÏˆÂˆÖØÙ™Ê[š^
+WBˆÂˆ\ÙHÝŽ›ÜÎŽ[š^Ž™œÎŽ”\›Z\ÜÚ[ÛœÑ^Âˆ]]]\›Z\ÜÚ[ÛœÈHœÎŽ›Y]Y]J]
+Bˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››Ý[œÜXÝßXˆÙ\œ›ÜŸH‹]™\Ü^J
+JJOÂˆœ\›Z\ÜÚ[ÛœÊ
+NÂˆ\›Z\ÜÚ[ÛœËœÙ]Û[ÙJÍŒ
+NÂˆœÎŽœÙ]Ü\›Z\ÜÚ[ÛœÊ]\›Z\ÜÚ[ÛœÊBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››Ý›ÝXÝßXˆÙ\œ›ÜŸH‹]™\Ü^J
+JJOÎÂˆBˆÚÊ
+
+JBŸB‚™›ˆÜš]WÛØØ[Ù[—Ùš[J]ˆ	œÝŽœ]Ž”][\]Nˆ	œÝŠHOˆ™\Ý[›ÛÛÝš[™ÏˆÂˆYˆ]™^\ÝÊ
+HÂˆ™]\›ˆÚÊ˜[ÙJNÂˆBˆ]ÛÛ[ÈH™[™\—ÛØØ[Ù[Š[\]JOÎÂˆœÎŽÜš]J]ÛÛ[ÊBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››ÝÜš]HßXˆÙ\œ›ÜŸH‹]™\Ü^J
+JJOÎÂˆ›ÝXÝÙ[—Ùš[J]
+OÎÂˆÚÊYJBŸB‚™›ˆØØ[ÛX\šXY—Ý[\]J\™XÝÜžNˆ	œÝŽœ]Ž”]
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆ]^[\WÙš[HH\™XÝÜžKš›Ú[Š‹™[‹™^[\HŠNÂˆYˆ^[\WÙš[Kš\×Ùš[J
+HÂˆ™]\›ˆœÎŽœ™XYÝ×ÜÝš[™Ê	™^[\WÙš[JBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››Ý™XYßXˆÙ\œ›ÜŸH‹^[\WÙš[K™\Ü^J
+JJNÂˆBˆ]ÛÛ™šY×Ùš[HH\™XÝÜžKš›Ú[Šž™[\˜KÛ[ŠNÂˆ]\×ÛX\šXY—Ü›Ú™XÝHœÎŽœ™XYÝ×ÜÝš[™Ê	˜ÛÛ™šY×Ùš[JBˆ›ÚÊ
+Bˆš\×ÜÛÛYWØ[™
+ÛÛ™šYßÛÛ™šYË˜ÛÛZ[œÊ™[™Ú[™HH›X\šXY—ˆŠJNÂˆYˆZ\×ÛX\šXY—Ü›Ú™XÝÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜ßX\È›È™[‹™^[\X[™›ÈX\šXQˆ›Ú™XÝÛÛ™šYÝ\˜][ÛŽÈ[ˆ™[\˜H™]È\™XÝÜžOˆK[X\šXY˜š\œÝ‹ˆ\™XÝÜžK™\Ü^J
+Bˆ
+JNÂˆBˆÚÊX\šXY—Ù[—Ý[\]JˆQUSÕÑP—ÔÔ•ˆQUSÕÑP—ÔÔ•ˆQUSÑUPTÑWÒÔÕÔÔ•ˆ
+JBŸB‚™›ˆ[œÝ\™WÛØØ[Ù[—Ùš[Jˆ\™XÝÜžNˆ	œÝŽœ]Ž”]ˆÜ[ÛœÎˆ	”Ù]\Ü[ÛœËŠHOˆ™\Ý[ØØ[[”Ù]\Ýš[™ÏˆÂˆ][—Ùš[HH\™XÝÜžKš›Ú[Š‹™[ˆŠNÂˆYˆ[—Ùš[K™^\ÝÊ
+HÂˆYˆÜ[ÛœËšÜÝÜÜš\×ÜÛÛYJ
+HÜ[ÛœË™]X˜\ÙWÚÜÝÜÜš\×ÜÛÛYJ
+HÂˆ™]\›ˆ\œŠˆ˜[ˆ^\Ý[™È™[ˆ\È™]™\ˆÚ[™ÙYÈ\]H]È‘STWÒÔÕÔÔ•Üˆ‘STWÑ—ÒÔÕÔÔ•X[X[H‚ˆš[Ê
+Kˆ
+NÂˆBˆ™]\›ˆÚÊØØ[[”Ù]\ÂˆÜ™X]Yˆ˜[ÙKˆÜÛ›Ý\Îˆ™XÎŽ›™]Ê
+KˆJNÂˆBˆ]
+[\]KÜÛ›Ý\ÊHH™\\™YÛØØ[Ù[—Ý[\]J\™XÝÜžKÜ[ÛœÊOÎÂˆ]Ü™X]YHÜš]WÛØØ[Ù[—Ùš[J	™[—Ùš[K	[\]JOÎÂˆÚÊØØ[[”Ù]\ÂˆÜ™X]YˆÜÛ›Ý\ËˆJBŸB‚™›ˆÙ]\Ü›Ú™XÝ
+]ˆ	œÝ‹Ü[ÛœÎˆ	”Ù]\Ü[ÛœÊHOˆ^]ÛÙHÂˆ]\™XÝÜžHHÝŽœ]Ž”]Ž›™]Ê]
+NÂˆYˆY\™XÝÜžKš\×Ù\Š
+HÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTLWNˆ›Ú™XÝ\™XÝÜžHÜ]XÙ\È›Ý^\ÝŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ][—Ùš[HH\™XÝÜžKš›Ú[Š‹™[ˆŠNÂˆ]^\ÝYH[—Ùš[K™^\ÝÊ
+NÂˆYˆY^\ÝY	‰ˆY\™XÝÜžKš›Ú[Š‹™[‹™^[\HŠKš\×Ùš[J
+HÂˆš[ˆJ˜™[‹™^[\X›Ý›Ý[™È\Ú[™ÈHØY™HZ[Z[ˆX\šXQˆY˜][È›ÜˆÜ]XŠNÂˆBˆ]Ù]\HX]Ú[œÝ\™WÛØØ[Ù[—Ùš[J\™XÝÜžKÜ[ÛœÊHÂˆÚÊÙ]\
+HOˆÙ]\ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆ›Üˆ›ÝH[ˆÙ]\œÜÛ›Ý\ÈÂˆš[ˆJ››ÝNˆÛ›Ý_HŠNÂˆBˆYˆ^\ÝYÂˆš[ˆJšÙ\^\Ý[™ÈßH‹[—Ùš[K™\Ü^J
+JNÂˆš[ˆJ››ÈÜ™Y[X[ÈÙ\™HÚ[™ÙYÜˆš[YŠNÂˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆBˆYˆ\Ù]\˜Ü™X]YÂˆ\š[ˆJˆ™\œ›Ü–ÑKTÑUTL—NˆÛÝ[›ÝÜ™X]HßH‹ˆ[—Ùš[K™\Ü^J
+Bˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆš[ˆJˆ˜Ü™X]YßHÚ]ØØ[X\šXQˆÜ™Y[X[È‹ˆ[—Ùš[K™\Ü^J
+Bˆ
+NÂˆš[ˆJ˜Ü™Y[X[ÈÙ\™HÙ[™\˜]YØØ[H[™\™H›ÝÚÝÛˆŠNÂˆš[ØÛÛ\ÜÙWÜÝ\Ú[
+
+NÂˆYˆÙ™ÈJÚ[™ÝÜÊHÂˆš[ˆJ[ˆØY™[ˆ[ˆ[Ý\ˆÚ[[™[Žˆ™[\˜HˆÙ]\XZ[‹žž[ŠNÂˆH[ÙHÂˆš[ˆJ[ˆ[ŽˆÙ]XNÈˆ‹Ë™[ŽÈÙ]
+ØNÈ™[\˜HˆÙ]\XZ[‹žž[ŠNÂˆBˆ^]ÛÙNŽ”ÕPÐÑTÔÂŸB‚™›ˆÜ™X]WÜ›Ú™XÝ
+]ˆ	œÝ‹]]Ü[ÛœÎˆ›Ú™XÝÜ[ÛœÊHOˆ^]ÛÙHÂˆ]\™XÝÜžHHÝŽœ]Ž”]Ž›™]Ê]
+NÂˆYˆ\™XÝÜžK™^\ÝÊ
+H	‰ˆ[Ü[ÛœË˜[Ý×ØÝ\œ™[Ù\™XÝÜžHÂˆ\š[ˆJ™\œ›Ü–ÑKRS’ULWNˆ\™XÝÜžHÜ]X[™XYH^\ÝÈŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ]
+ÜÝÜÜ]X˜\ÙWÚÜÝÜÜÜÛ›Ý\ÊHBˆX]Ú™\ÛÛ™WÜ›Ú™XÝÚÜÝÜÜÊ]	›Ü[ÛœÊHÂˆÚÊÜÊHOˆÜËˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKRS’ULWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆÜ[ÛœËšÜÝÜÜHÜÝÜÜÂˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜH]X˜\ÙWÚÜÝÜÜÂˆ›Üˆ›ÝH[ˆÜÛ›Ý\ÈÂˆš[ˆJ››ÝNˆÛ›Ý_HŠNÂˆBˆYˆ]\œŠ\œ›ÜŠHHœÎŽ˜Ü™X]WÙ\—Ø[
+\™XÝÜžJHÂˆ\š[ˆJ™\œ›Ü–ÑKRS’UL—NˆØ[››ÝÜ™X]HÜ]XˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ]]X˜\ÙWÜÙXÝ[ÛˆHYˆÜ[ÛœËÚ]ÛX\šXYˆÂˆ–Ù]X˜\ÙK›XZ[—W™[™Ú[™HH›X\šXY——ˆ‚ˆH[ÙHÂˆˆ‚ˆNÂˆ]›Ú™XÝØÛÛ™šYÈH›Ü›X]JˆˆÈ–Ü›Ú™XÝB›˜[YHHž™[\˜KX\‚™\œÚ[ÛˆHžÝ™\œÚ[ÛŸH‚ž™[\˜HHŒŒH‚‚žÙ]X˜\ÙWÜÙXÝ[ÛŸB‚–ØØ\Xš[]Y\×B™]X˜\ÙHHYB›™]ÛÜšÈH˜[ÙB˜ÛÛœÛÛHH˜[ÙBˆˆËˆ™\œÚ[ÛˆH[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠKˆ]X˜\ÙWÜÙXÝ[ÛˆH]X˜\ÙWÜÙXÝ[Û‚ˆ
+NÂˆ]XZ[—ÜÛÝ\˜ÙHHYˆÜ[ÛœË˜\Ú[™\Ü×Ý[\]HÂˆPT’PQ—Ð•TÒS‘TÔ×ÕSTUBˆH[ÙHYˆÜ[ÛœË˜ÜYÝ[\]HÂˆPT’PQ—ÐÔ•QÕSTUBˆH[ÙHYˆÜ[ÛœË˜]]Ý[\]HÂˆPT’PQ—ÐUUÕSTUBˆH[ÙHYˆÜ[ÛœËÚ]ÛX\šXYˆÂˆPT’PQ—ÓRS’SPSÕSTUBˆH[ÙHÂˆˆÈ™›ˆXZ[Š
+HÂˆš[
+’[Èœ›ÛH™[\˜HŠBŸBˆˆÂˆNÂˆ]]]š[\ÈH™XÈVÂˆ
+ž™[\˜KÛ[‹›Ú™XÝØÛÛ™šYË×ÛÝÛ™Y
+
+JKˆ
+›XZ[‹žž[‹XZ[—ÜÛÝ\˜ÙK×ÛÝÛ™Y
+
+JKˆ
+“Ò‘PÕÕSQWÐÔÔ×Ñ’SK“Ò‘PÕÕSQWÕSTUK×ÛÝÛ™Y
+
+JKˆ
+›ØØ[\ËÙKšœÛÛˆ‹žßWˆ‹×ÛÝÛ™Y
+
+JKˆ
+›ØØ[\ËÙ[‹šœÛÛˆ‹žßWˆ‹×ÛÝÛ™Y
+
+JKˆNÂˆYˆÜ[ÛœË˜ÜYÝ[\]HÂˆš[\Ëœ\Ú
+
+ˆ›XXÚ[™K[X[˜YÙ[Y[Y[[ËœÜ[‹ˆPPÒS‘WÓPSQÑSQS•ÑSS×ÑUK×ÛÝÛ™Y
+
+Kˆ
+JNÂˆBˆYˆÜ[ÛœËÚ]ÛX\šXYˆÂˆ][—Ý˜[YHH˜[YNˆ	œÝŸ›Ü›X]Jžß^ÞÞÛ˜[Y___H‹	É	ÊNÂˆ]ÙX—ÜÜÝ˜[YHH›Ü›X]Jžß^ÞÖ‘STWÕÑP—ÔÔ•‹^ß__H‹	É	ËÜ[ÛœËÙX—ÜÜ
+NÂˆ]ÜÝÜÜÝ˜[YHH›Ü›X]Jžß^ÞÖ‘STWÒÔÕÔÔ•‹^ß__H‹	É	ËÜ[ÛœËšÜÝÜÜ
+NÂˆ]]X˜\ÙWÚÜÝÜÜÝ˜[YHH›Ü›X]Jˆžß^ÞÖ‘STWÑ—ÒÔÕÔÔ•‹^ß__H‹ˆ	É	ËÜ[ÛœË™]X˜\ÙWÚÜÝÜÜˆ
+NÂˆš[\Ë™^[™
+Âˆ
+ˆ‹™[‹™^[\H‹ˆX\šXY—Ù[—Ý[\]JˆÜ[ÛœËÙX—ÜÜˆÜ[ÛœËšÜÝÜÜˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜˆ
+Kˆ
+Kˆ
+ˆ™ØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[‹ˆˆÈœÙ\šXÙ\Î‚ˆX\šXYŽ‚ˆ[XYÙNˆX\šXYŽŒLBˆ™\Ý\ˆ[›\ÜË\ÝÜYˆ[š\›Û›Y[‚ˆPT’PQ—ÑUPTÑNˆ×ÓPT’PQ—ÑUPTÑW×ÂˆPT’PQ—ÕTÑTŽˆ×ÓPT’PQ—ÕTÑT—×ÂˆPT’PQ—ÔTÔÕÓÔ‘ˆ×ÓPT’PQ—ÔTÔÕÓÔ‘×ÂˆPT’PQ—Ô“ÓÕÔTÔÕÓÔ‘ˆ×ÓPT’PQ—Ô“ÓÕÔTÔÕÓÔ‘×ÂˆÜÎ‚ˆHŒLËŒŒŒN—×ÑUPTÑWÒÔÕÔÔ•×ÎŒÌÌˆ‚ˆ›Û[Y\Î‚ˆH™[\˜WÛX\šXY—Ù]N‹Ý˜\‹ÛX‹Û^\Ü[ˆX[ÚXÚÎ‚ˆ\ÝˆÈÓQ‹šX[ÚXÚËœÚ‹‹KXÛÛ›™XÝ‹‹KZ[››Ù—Ú[š]X[^™Y—Bˆ[\˜[ˆ\Âˆ[Y[Ý]ˆ\Âˆ™]šY\ÎˆŒ‚ˆÙXŽ‚ˆZ[ˆ‚ˆÛÛ[X[™ˆÈž™[\˜H‹œÙ\™H‹›XZ[‹žž[‹ŒŒŒŒ—×ÕÑP—ÔÔ•×È—Bˆ[š\›Û›Y[‚ˆUPTÑWÕT“ˆX\šXYŽ‹Ë××ÓPT’PQ—ÕTÑT—×Î—×ÓPT’PQ—ÔTÔÕÓÔ‘×ÐX\šXYŽŒÌÌ‹××ÓPT’PQ—ÑUPTÑW×Âˆ‘STWÓS‘ÕPQÑNˆ×Ö‘STWÓS‘ÕPQÑW×Âˆ‘STWÓU‘Sˆ×Ö‘STWÓU‘S×Âˆ‘STWÐSÕÑQÒÔÕÎˆ—×Ö‘STWÐSÕÑQÒÔÕ××È‚ˆ\[™×ÛÛŽ‚ˆX\šXYŽ‚ˆÛÛ™][ÛŽˆÙ\šXÙWÚX[BˆÜÎ‚ˆHŒLËŒŒŒN—×ÒÔÕÔÔ•×Î—×ÕÑP—ÔÔ•×È‚‚›Û[Y\Î‚ˆ™[\˜WÛX\šXY—Ù]N‚ˆˆÂˆœ™\XÙJ—×ÓPT’PQ—ÑUPTÑW×È‹	™[—Ý˜[YJ“PT’PQ—ÑUPTÑHŠJBˆœ™\XÙJ—×ÓPT’PQ—ÕTÑT—×È‹	™[—Ý˜[YJ“PT’PQ—ÕTÑTˆŠJBˆœ™\XÙJ—×ÓPT’PQ—ÔTÔÕÓÔ‘×È‹	™[—Ý˜[YJ“PT’PQ—ÔTÔÕÓÔ‘ŠJBˆœ™\XÙJ—×ÓPT’PQ—Ô“ÓÕÔTÔÕÓÔ‘×È‹	™[—Ý˜[YJ“PT’PQ—Ô“ÓÕÔTÔÕÓÔ‘ŠJBˆœ™\XÙJˆ—×Ö‘STWÓS‘ÕPQÑW×È‹ˆ	™›Ü›X]Jžß^ÞÖ‘STWÓS‘ÕPQÑN‹Y__H‹	É	ÊKˆ
+Bˆœ™\XÙJ—×Ö‘STWÓU‘S×È‹	™›Ü›X]Jžß^ÞÖ‘STWÓU‘S‹[X\›Ÿ_H‹	É	ÊJBˆœ™\XÙJˆ—×Ö‘STWÐSÕÑQÒÔÕ××È‹ˆ	™›Ü›X]Jˆžß^ÞÖ‘STWÐSÕÑQÒÔÕÎ‹[ØØ[ÜÝLËŒŒŒKÎŽŒW__H‹ˆ	É	Âˆ
+Kˆ
+Bˆœ™\XÙJ—×ÕÑP—ÔÔ•×È‹	ÙX—ÜÜÝ˜[YJBˆœ™\XÙJ—×ÒÔÕÔÔ•×È‹	šÜÝÜÜÝ˜[YJBˆœ™\XÙJ—×ÑUPTÑWÒÔÕÔÔ•×È‹	™]X˜\ÙWÚÜÝÜÜÝ˜[YJKˆ
+Kˆ
+ˆ‘ØÚÙ\™š[H‹ˆˆÈ‘”“ÓH\ÝŒKX›ÛÚÝÛÜ›HTÈZ[T‘È‘STWÔ‘QW×Ö‘STWÑQUSÔ‘Q—×Â”•Sˆ\YÙ]\]Hˆ	‰ˆ\YÙ][œÝ[^HK[›ËZ[œÝ[\™XÛÛ[Y[™ÈØKXÙ\YšXØ]\ÈÚ]ˆ	‰ˆ›H\™ˆÝ˜\‹ÛX‹Ø\Û\ÝËÊ‚”•SˆÚ]ÛÛ™HKY\HKXœ˜[˜Ú×Ö‘STWÔ‘Q—×ÈÎ‹ËÙÚ]X‹˜ÛÛKÜÙŒNMÍ‹Þ™[\˜K™Ú]Þ™[\˜B”•SˆØ\™ÛÈ[œÝ[K\]Þ™[\˜KØÛHK\›ÛÝÛÝ]‚‘”“ÓHXšX[Ž˜›ÛÚÝÛÜ›K\Û[B”•Sˆ\YÙ]\]Hˆ	‰ˆ\YÙ][œÝ[^HK[›ËZ[œÝ[\™XÛÛ[Y[™ÈØKXÙ\YšXØ]\ÈX\šXY‹XÛY[ˆ	‰ˆ›H\™ˆÝ˜\‹ÛX‹Ø\Û\ÝËÊ‚ÓÔHKYœ›ÛOXZ[ÛÝ]Øš[‹Þ™[\˜HÝ\Ü‹ÛØØ[Øš[‹Þ™[\˜BÓÔHXZ[‹žž[™[\˜KÛ[™[\˜K[YK˜ÜÜÈ‹ÂÓÔHØØ[\È‹ÛØØ[\Â‘VÔÑH×ÕÑP—ÔÔ•×ÂÓQÈž™[\˜H‹œÙ\™H‹›XZ[‹žž[‹ŒŒŒŒ—×ÕÑP—ÔÔ•×È—BˆˆÂˆœ™\XÙJ—×Ö‘STWÔ‘Q—×È‹	™[—Ý˜[YJ–‘STWÔ‘QˆŠJBˆœ™\XÙJˆ—×Ö‘STWÑQUSÔ‘Q—×È‹ˆ	™›Ü›X]JžßH‹[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJKˆ
+Bˆœ™\XÙJ—×ÕÑP—ÔÔ•×È‹	›Ü[ÛœËÙX—ÜÜ×ÜÝš[™Ê
+JKˆ
+Kˆ
+‹™ØÚÙ\šYÛ›Ü™H‹‹™Ú]\™Ù]‹™[—Š‹œÜ[]L×ˆ‹×ÛÝÛ™Y
+
+JKˆ
+‹™Ú]YÛ›Ü™H‹‹™[—\™Ù]×ˆ‹×ÛÝÛ™Y
+
+JKˆJNÂˆBˆ›Üˆ
+˜[YKÛÛ[ÊH[ˆš[\ÈÂˆ]š[HH\™XÝÜžKš›Ú[Š˜[YJNÂˆYˆš[K™^\ÝÊ
+H	‰ˆÜ[ÛœË˜[Ý×ØÝ\œ™[Ù\™XÝÜžHÂˆÛÛ[YNÂˆBˆYˆ]ÛÛYJ\™[
+HHš[Kœ\™[
+
+HÂˆYˆ]\œŠ\œ›ÜŠHHœÎŽ˜Ü™X]WÙ\—Ø[
+\™[
+HÂˆ\š[ˆJˆ™\œ›Ü–ÑKRS’UL×NˆØ[››ÝÜ™X]HßXˆÙ\œ›ÜŸH‹ˆ\™[™\Ü^J
+Bˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆBˆ]ÛÛ[ÈHÛÛ[Ë×ÛÝÛ™Y
+
+NÂˆYˆ]\œŠ\œ›ÜŠHHœÎŽÜš]J	™š[KÛÛ[ÊHÂˆ\š[ˆJˆ™\œ›Ü–ÑKRS’UL×NˆØ[››ÝÜš]HßXˆÙ\œ›ÜŸH‹ˆš[K™\Ü^J
+Bˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆBˆš[ˆJ˜Ü™X]Y™[\˜H›Ú™XÝ[ˆßH‹\™XÝÜžK™\Ü^J
+JNÂˆYˆÜ[ÛœËÚ]ÛX\šXYˆÂˆ][—Ùš[HH\™XÝÜžKš›Ú[Š‹™[ˆŠNÂˆ][—Ù^[\HH\™XÝÜžKš›Ú[Š‹™[‹™^[\HŠNÂˆX]ÚÜš]WÛØØ[Ù[—Ùš[Jˆ	™[—Ùš[Kˆ	›X\šXY—Ù[—Ý[\]JˆÜ[ÛœËÙX—ÜÜˆÜ[ÛœËšÜÝÜÜˆÜ[ÛœË™]X˜\ÙWÚÜÝÜÜˆ
+Kˆ
+HÂˆÚÊYJHOˆš[ˆJ˜Ü™X]Y›ÝXÝYßH‹[—Ùš[K™\Ü^J
+JKˆÚÊ˜[ÙJHOˆš[ˆJšÙ\^\Ý[™ÈßH‹[—Ùš[K™\Ü^J
+JKˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKRS’ULNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆBˆš[ˆJœ™Y™\™[˜ÙH[\]NˆßH‹[—Ù^[\K™\Ü^J
+JNÂˆš[ˆJ[ˆÝ\X\šXQˆÚ]ˆŠNÂˆš[ØÛÛ\ÜÙWÜÝ\Ú[
+
+NÂˆYˆÙ™ÈJÚ[™ÝÜÊHÂˆš[ˆJ[ˆØY™[ˆ[ˆ[Ý\ˆÚ[[™[Žˆ™[\˜HˆÙ]\XZ[‹žž[ŠNÂˆH[ÙHÂˆš[ˆJ[ˆ[ŽˆÙ]XNÈˆ‹Ë™[ŽÈÙ]
+ØNÈ™[\˜HˆÙ]\XZ[‹žž[ŠNÂˆBˆH[ÙHÂˆš[ˆJ›™^ˆÙßH	‰ˆ™[\˜H[ˆXZ[‹žž[‹]
+NÂˆBˆ^]ÛÙNŽ”ÕPÐÑTÔÂŸB‚™›ˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ]ˆ	œÝ‹ÛÝ\˜ÙNˆ	œÝŠHÂˆ”ÓÓ—ÑPQÓ“ÔÕPÔËÚ]
+ÛÛXÝÜŸÂˆ
+˜ÛÛXÝÜ‹˜›Üœ›Ý×Û]]
+
+HHÛÛYJœÛÛ‘XYÛ›ÜÝXÐÛÛXÝÜˆÂˆ]ˆÛÛ^Ù[žJ]
+KˆÛÝ\˜ÙNˆÛÝ\˜ÙKš[Ê
+KˆXYÛ›ÜÝXÜÎˆ™XÎŽ›™]Ê
+KˆJNÂˆJNÂŸB‚™›ˆš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+HOˆ™XÏ˜[YOˆÂˆ”ÓÓ—ÑPQÓ“ÔÕPÔËÚ]
+ÛÛXÝÜŸÂˆÛÛXÝÜ‚ˆ˜›Üœ›Ý×Û]]
+
+BˆZÙJ
+Bˆ›X\ÛÜ—Ù[ÙJ™XÎŽ›™]ËÛÛXÝÜŸÛÛXÝÜ‹™XYÛ›ÜÝXÜÊBˆJBŸB‚™›ˆÛÝ\˜ÙWÛÙ™œÙ]
+ÛÝ\˜ÙNˆ	œÝ‹[™Nˆ\Ú^™KÛÛ[[Žˆ\Ú^™JHOˆ\Ú^™HÂˆYˆ[™HOHÂˆ™]\›ˆÂˆBˆ]]]Ý\œ™[Û[™HHNÂˆ]]]Ù™œÙ]HÂˆ›Üˆ[™WÝ^[ˆÛÝ\˜ÙKœÜ]Ú[˜Û\Ú]™J	×‰ÊHÂˆYˆÝ\œ™[Û[™HOH[™HÂˆ™]\›ˆÙ™œÙ]ˆ
+ÈÛÛ[[‚ˆœØ]\˜][™×ÜÝXŠJBˆ›Z[Š[™WÝ^š[WÙ[™ÛX]Ú\Ê	×‰ÊK›[Š
+JNÂˆBˆÙ™œÙ]
+ÏH[™WÝ^›[Š
+NÂˆÝ\œ™[Û[™H
+ÏHNÂˆBˆYˆÝ\œ™[Û[™HOH[™HÂˆÙ™œÙ]ˆ
+ÈÛÛ[[‚ˆœØ]\˜][™×ÜÝXŠJBˆ›Z[ŠÛÝ\˜ÙK›[Š
+KœØ]\˜][™×ÜÝXŠÙ™œÙ]
+JBˆH[ÙHÂˆÛÝ\˜ÙK›[Š
+BˆBŸB‚™›ˆÚ[ÜÜ[ŠÛÝ\˜ÙNˆ	œÝ‹[™Nˆ\Ú^™KÛÛ[[Žˆ\Ú^™JHOˆ™[\˜WØ\ÝŽ”Ü[ˆÂˆ]Ý\ÛÙ™œÙ]HÛÝ\˜ÙWÛÙ™œÙ]
+ÛÝ\˜ÙK[™KÛÛ[[ŠNÂˆ][™HYˆÝ\ÛÙ™œÙ]ÛÝ\˜ÙK›[Š
+HÂˆÝ\ÛÙ™œÙ]ˆ
+ÈÛÝ\˜ÙVÜÝ\ÛÙ™œÙ]‹—Bˆ˜Ú\œÊ
+Bˆ›™^
+
+Bˆ›X\ÛÜŠKÚ\ŽŽ›[—Ý]Ž
+BˆH[ÙHÂˆÝ\ÛÙ™œÙ]ˆNÂˆ™[\˜WØ\ÝŽ”Ü[ŽŽ›™]ÊÝ\ÛÙ™œÙ][™[™KÛÛ[[ŠBŸB‚™›ˆÜ[—Ý˜[YJÛÝ\˜ÙNˆ	œÝ‹Ü[Žˆ™[\˜WØ\ÝŽ”Ü[ŠHOˆ˜[YHÂˆ]
+[™Û[™K[™ØÛÛ[[ŠHHÛÝ\˜ÙWÜÜÚ][ÛŠÛÝ\˜ÙKÜ[‹™[™
+NÂˆœÛÛˆJÂˆœÝ\ŽˆÈ›Ù™œÙ]ŽˆÜ[‹œÝ\›[™HŽˆÜ[‹›[™K˜ÛÛ[[ˆŽˆÜ[‹˜ÛÛ[[ˆKˆ™[™ŽˆÈ›Ù™œÙ]ŽˆÜ[‹™[™›[™HŽˆ[™Û[™K˜ÛÛ[[ˆŽˆ[™ØÛÛ[[ˆBˆJBŸB‚™›ˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]ˆ	œÝ‹ÛÙNˆ	œÝ‹Y\ÜØYÙNˆ	œÝ‹Ü[Žˆ™[\˜WØ\ÝŽ”Ü[ŠHÂˆ]ÛÝ\˜ÙHBˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÛÝ\˜Ù\Ë˜›Üœ›ÝÊ
+K™Ù]
+Ü[‹œÛÝ\˜ÙWÚY\È\Ú^™JK˜ÛÛ™Y
+
+JNÂˆ]Ø\\™YH”ÓÓ—ÑPQÓ“ÔÕPÔËÚ]
+ÛÛXÝÜŸÂˆ]]]ÛÛXÝÜˆHÛÛXÝÜ‹˜›Üœ›Ý×Û]]
+
+NÂˆ]ÛÛYJÛÛXÝÜŠHHÛÛXÝÜ‹˜\×Û]]
+
+H[ÙHÂˆ™]\›ˆ˜[ÙNÂˆNÂˆ]š[HHYˆÜ[‹œÛÝ\˜ÙWÚYOH	‰ˆXÛÛXÝÜ‹œ]š\×Ù[\J
+HÂˆÛÛXÝÜ‹œ]˜ÛÛ™J
+BˆH[ÙHÂˆÛÝ\˜ÙBˆ˜\×Ü™YŠ
+Bˆ›X\ÛÜ—Ù[ÙJ]×ÛÝÛ™Y
+
+KÛÝ\˜Ù_ÛÝ\˜ÙKœ]˜ÛÛ™J
+JBˆNÂˆ]ÛÝ\˜ÙWÝ^HÛÝ\˜ÙBˆ˜\×Ü™YŠ
+Bˆ›X\ÛÜŠÛÛXÝÜ‹œÛÝ\˜ÙK˜\×ÜÝŠ
+KÛÝ\˜Ù_ÛÝ\˜ÙK^˜\×ÜÝŠ
+JNÂˆÛÛXÝÜ‹™XYÛ›ÜÝXÜËœ\Ú
+œÛÛˆJÂˆ˜ÛÙHŽˆÛÙKˆœÙ]™\š]HŽˆ™\œ›Üˆ‹ˆ›Y\ÜØYÙHŽˆY\ÜØYÙKˆ™š[HŽˆš[KˆœÜ[ˆŽˆÜ[—Ý˜[YJÛÝ\˜ÙWÝ^Ü[ŠBˆJJNÂˆYBˆJNÂˆYˆXØ\\™YÂˆ\š[ˆJˆ™\œ›Ü–ÞØÛÙ_WNˆÛY\ÜØYÙ_W—ˆKOˆßNžßNžßH‹ˆÛÝ\˜ÙK˜\×Ü™YŠ
+K›X\ÛÜŠ]ÛÝ\˜Ù_ÛÝ\˜ÙKœ]˜\×ÜÝŠ
+JKˆÜ[‹›[™KˆÜ[‹˜ÛÛ[[‚ˆ
+NÂˆBŸB‚™›ˆXYÛ›ÜÝXÊ]ˆ	œÝ‹ÛÙNˆ	œÝ‹Y\ÜØYÙNˆ	œÝ‹[™Nˆ\Ú^™KÛÛ[[Žˆ\Ú^™JHÂˆ]Ü[ˆH”ÓÓ—ÑPQÓ“ÔÕPÔËÚ]
+ÛÛXÝÜŸÂˆÛÛXÝÜ‚ˆ˜›Üœ›ÝÊ
+Bˆ˜\×Ü™YŠ
+Bˆ›X\
+ÛÛXÝÜŸÚ[ÜÜ[Š	˜ÛÛXÝÜ‹œÛÝ\˜ÙK[™KÛÛ[[ŠJBˆJNÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆÛÙKˆY\ÜØYÙKˆÜ[‹[Ü˜\ÛÜ—Ù[ÙJ™[\˜WØ\ÝŽ”Ü[ŽŽ›™]Ê[™KÛÛ[[ŠJKˆ
+NÂŸB‚™›ˆXXÚ[™WÙØÝ[Y[
+ˆÛÛ[X[™ˆ	œÝ‹ˆÝXØÙ\ÜÎˆ›ÛÛˆXYÛ›ÜÝXÜÎˆ™XÏ˜[YO‹ˆšY[Îˆ[\[Ò]\˜]Ü][HH
+Ýš[™Ë˜[YJO‹ŠHOˆ˜[YHÂˆ]]]ØÝ[Y[HX\Ž›™]Ê
+NÂˆØÝ[Y[š[œÙ\
+ˆœØÚ[XWÝ™\œÚ[Ûˆ‹š[Ê
+Kˆ˜[YNŽ”Ýš[™ÊPPÒS‘WÔÐÒSPWÕ‘T”ÒSÓ‹š[Ê
+JKˆ
+NÂˆØÝ[Y[š[œÙ\
+˜ÛÛ[X[™‹š[Ê
+K˜[YNŽ”Ýš[™ÊÛÛ[X[™š[Ê
+JJNÂˆØÝ[Y[š[œÙ\
+œÝXØÙ\ÜÈ‹š[Ê
+K˜[YNŽ›ÛÛ
+ÝXØÙ\ÜÊJNÂˆØÝ[Y[š[œÙ\
+™XYÛ›ÜÝXÜÈ‹š[Ê
+K˜[YNŽ\œ˜^JXYÛ›ÜÝXÜÊJNÂˆ›Üˆ
+Ù^K˜[YJH[ˆšY[ÈÂˆØÝ[Y[š[œÙ\
+Ù^K˜[YJNÂˆBˆ˜[YNŽ“Øš™XÝ
+ØÝ[Y[
+BŸB‚™›ˆš[ÛXXÚ[™WÙØÝ[Y[
+ØÝ[Y[ˆ	•˜[YJHÂˆš[ˆJˆžßH‹ˆÙ\™WÚœÛÛŽŽ×ÜÝš[™×Ü™]JØÝ[Y[
+K™^XÝ
+›XXÚ[™HØÝ[Y[]\Ý™HÙ\šX[^˜X›HŠBˆ
+NÂŸB‚™›ˆØY
+]ˆ	œÝŠHOˆ™\Ý[™[\˜WØ\ÝŽ”›ÙÜ˜[K
+
+OˆÂˆ]ÛÝ\˜ÙHHX]ÚœÎŽœ™XYÝ×ÜÝš[™Ê]
+HÂˆÚÊÛÝ\˜ÙJHOˆÛÝ\˜ÙKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KRSËLH‹ˆ	™›Ü›X]J˜Ø[››Ý™XYÜ]XˆÙ\œ›ÜŸHŠKˆKˆKˆ
+NÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆ\œÙWÜÛÝ\˜ÙJ]	œÛÝ\˜ÙJBŸB‚™›ˆ\œÙWÜÛÝ\˜ÙJ]ˆ	œÝ‹ÛÝ\˜ÙNˆ	œÝŠHOˆ™\Ý[™[\˜WØ\ÝŽ”›ÙÜ˜[K
+
+OˆÂˆ]ÚÙ[œÈHX]Ú^
+ÛÝ\˜ÙJHÂˆÚÊÚÙ[œÊHOˆÚÙ[œËˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KSVLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆX]Ú\œÙJ	ÚÙ[œÊHÂˆÚÊ›ÙÜ˜[JHOˆÚÊ›ÙÜ˜[JKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KTT”ÑKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆ\œŠ
+
+JBˆBˆBŸB‚™›ˆØYÜ›Ú™XÝ
+]ˆ	œÝŠHOˆ™\Ý[›Ú™XÝŽ“ØYY›Ú™XÝ
+
+OˆÂˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÛÝ\˜Ù\Ë˜›Üœ›Ý×Û]]
+
+K˜ÛX\Š
+JNÂˆ“Ò‘PÕÓSÑSTËÚ]
+[Ù[\ß[Ù[\Ë˜›Üœ›Ý×Û]]
+
+K˜ÛX\Š
+JNÂˆ]ØYYHX]Ú›Ú™XÝŽ›ØY
+]
+HÂˆÚÊØYY
+HOˆØYYˆ\œŠ\œ›ÜŠHOˆÂˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ß
+œÛÝ\˜Ù\Ë˜›Üœ›Ý×Û]]
+
+HH\œ›Ü‹œÛÝ\˜Ù\Ë×Ý™XÊ
+JNÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š	™\œ›Ü‹œ]\œ›Ü‹˜ÛÙK	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ß
+œÛÝ\˜Ù\Ë˜›Üœ›Ý×Û]]
+
+HHØYYœÛÝ\˜Ù\Ë˜ÛÛ™J
+JNÂˆ“Ò‘PÕÓSÑSTËÚ]
+[Ù[\ß
+›[Ù[\Ë˜›Üœ›Ý×Û]]
+
+HHØYY›[Ù[\Ë˜ÛÛ™J
+JNÂˆÚÊØYY
+BŸB‚™›ˆ˜[Y]J]ˆ	œÝŠHOˆ™\Ý[™[\˜WØ\ÝŽ”›ÙÜ˜[K
+
+OˆÂˆ]ØYYHØYÜ›Ú™XÝ
+]
+OÎÂˆ]ÛÝ\˜ÙHHØYYˆœÛÝ\˜Ù\Âˆ™š\œÝ
+
+Bˆ›X\ÛÜ—Ù[ÙJÝš[™ÎŽ›™]ËÛÝ\˜Ù_ÛÝ\˜ÙK^˜ÛÛ™J
+JNÂˆ˜[Y]WÜ›ÙÜ˜[J]	œÛÝ\˜ÙKØYYœ›ÙÜ˜[JBŸB‚™›ˆ˜[Y]WÜ›ÙÜ˜[Jˆ]ˆ	œÝ‹ˆÛÝ\˜ÙNˆ	œÝ‹ˆ›ÙÜ˜[Nˆ™[\˜WØ\ÝŽ”›ÙÜ˜[KŠHOˆ™\Ý[™[\˜WØ\ÝŽ”›ÙÜ˜[K
+
+OˆÂˆYˆ\™Z™XÝÝ\YÚÛ\ÊÛÝ\˜ÙK]	œ›ÙÜ˜[JHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆ˜[Y]WÜ›Ú™XÝÙ™X]\™\Ê]	œ›ÙÜ˜[JOÎÂˆYˆ]\œŠ\œ›ÜœÊHHÝÙ\Š	œ›ÙÜ˜[JHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KSSQKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ\›ÙÜ˜[K™[˜Ý[ÛœËš\×Ù[\J
+HÂˆYˆ]\œŠ\œ›ÜœÊHHÚXÚÊ	œ›ÙÜ˜[JHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KUTKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆBˆYˆ˜[Y]WØØ\Xš[]Y\Ê]	œ›ÙÜ˜[JKš\×Ù\œŠ
+HÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜŠHH›Ú™XÝÙš[\Þ\Ý[WÜÛXÞJ]
+HÂˆXYÛ›ÜÝXÊ]‘KQ”ËLˆ‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜŠHH›Ú™XÝÛ™]ÛÜš×ÜÛXÞJ]
+HÂˆXYÛ›ÜÝXÊ]‘KS‘ULˆ‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜŠHH›Ú™XÝÜ›ØÙ\Ü×ÜÛXÞJ]
+HÂˆXYÛ›ÜÝXÊ]‘KT“ÐËLˆ‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜŠHH›Ú™XÝØÛÜœ×ÜÛXÞJ]
+HÂˆXYÛ›ÜÝXÊ]‘KUÑP‹L‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜœÊHHÚXÚ×Ø\\Ê	œ›ÙÜ˜[JHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KPTKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WÝšY]ÜÊ]	œ›ÙÜ˜[JHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WÜYÙWÚ[œ]Ê]	œ›ÙÜ˜[JHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WÜYÙWÙ]J]	œ›ÙÜ˜[JHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WØÛÛ\Û™[Ê]	œ›ÙÜ˜[JHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆ]ØÚ[XHHX]ÚZ[ÜØÚ[XJ	œ›ÙÜ˜[JHÂˆÚÊØÚ[XJHOˆØÚ[XKˆ\œŠ\œ›ÜœÊHOˆÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KQ‹LH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆÂˆYˆ]˜[Y]WØ]]
+]	œ›ÙÜ˜[K	œØÚ[XJHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WØÜYÊ]	œ›ÙÜ˜[K	œØÚ[XJHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]˜[Y]WÝX›]šY]ÜÊ]	œ›ÙÜ˜[K	œØÚ[XJHÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜœÊHHÚXÚ×ÜÜ[Ü›ÙÜ˜[J	œ›ÙÜ˜[K	œØÚ[XJHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KTÔSL‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆYˆ]\œŠ\œ›ÜœÊHHÚXÚ×Ù›Ü›WÜ›ÙÜ˜[J	œ›ÙÜ˜[K	œØÚ[XJHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KQ“Ô“KLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆBˆ™]\›ˆ\œŠ
+
+JNÂˆBˆBˆÚÊ›ÙÜ˜[JBŸB‚™›ˆ™Z™XÝÝ\YÚÛ\ÊÛÝ\˜ÙNˆ	œÝ‹]ˆ	œÝ‹›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ]Û\ÈHÛÛXÝÝ\YÚÛ\Ê›ÙÜ˜[JNÂˆ›ÜˆÛH[ˆ	šÛ\ÈÂˆ]^XÝYHÛBˆ™^XÝYÝ\Bˆ˜\×Ü™YŠ
+Bˆ›X\ÛÜ—Ù[ÙJ[šÛ›ÝÛˆ‹×ÛÝÛ™Y
+
+KÔÝš[™ÎŽ×ÜÝš[™ÊNÂˆ]˜[Y\ÈHYˆÛKš\ÚX›WÝ˜[Y\Ëš\×Ù[\J
+HÂˆ››Û™H‹×ÛÝÛ™Y
+
+BˆH[ÙHÂˆÛKš\ÚX›WÝ˜[Y\Ëš›Ú[Š‹ŠBˆNÂˆ][˜Ý[ÛœÈHYˆÛKš\ÚX›WÙ[˜Ý[ÛœËš\×Ù[\J
+HÂˆ››Û™H‹×ÛÝÛ™Y
+
+BˆH[ÙHÂˆÛKš\ÚX›WÙ[˜Ý[ÛœËš›Ú[Š‹ŠBˆNÂˆ]Ø\Xš[]Y\ÈHYˆÛK˜Ø\Xš[]Y\Ëš\×Ù[\J
+HÂˆ››Û™H‹×ÛÝÛ™Y
+
+BˆH[ÙHÂˆÛK˜Ø\Xš[]Y\Ëš›Ú[Š‹ŠBˆNÂˆ]ÛÛ˜XÝÈHYˆÛK˜ÛÛ˜XÝÜÜ[œËš\×Ù[\J
+HÂˆ››Û™H‹×ÛÝÛ™Y
+
+BˆH[ÙHÂˆÛK˜ÛÛ˜XÝÜÜ[œÂˆš]\Š
+Bˆ™š[\—ÛX\
+Ü[ŸÂˆÛÝ\˜ÙWÝ^Ù›Ü—ÜÜ[ŠÛÝ\˜ÙK
+œÜ[ŠBˆ™Ù]
+Ü[‹œÝ\‹œÜ[‹™[™
+Bˆ›X\
+ÝŽŽ×ÛÝÛ™Y
+BˆJBˆ›X\
+ÛÛ˜XÝÛÛ˜XÝœ™\XÙJÉ×‰Ë	×‰×KˆŠJBˆ˜ÛÛXÝŽ™XÏÏŠ
+Bˆš›Ú[ŠŽÈŠBˆNÂˆ]Y\ÜØYÙHH›Ü›X]Jˆ\YÛHØ\È[˜ÛÛ\]H[™Ø[››Ý™HZ[È^XÝY\NˆÙ^XÝYNÈš\ÚX›H˜[Y\ÎˆÝ˜[Y\ßNÈš\ÚX›H[˜Ý[ÛœÎˆÙ[˜Ý[ÛœßNÈØ\Xš[]Y\ÎˆØØ\Xš[]Y\ßNÈÛÛ˜XÝØ›YØ][ÛœÎˆØÛÛ˜XÝßH‚ˆ
+NÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š]‘KRÓKLH‹	›Y\ÜØYÙKÛKœÜ[ŠNÂˆBˆÛ\Ëš\×Ù[\J
+BŸB‚™›ˆÛÝ\˜ÙWÝ^Ù›Ü—ÜÜ[Š˜[˜XÚÎˆ	œÝ‹Ü[Žˆ™[\˜WØ\ÝŽ”Ü[ŠHOˆÝš[™ÈÂˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÂˆÛÝ\˜Ù\Âˆ˜›Üœ›ÝÊ
+Bˆ™Ù]
+Ü[‹œÛÝ\˜ÙWÚY\È\Ú^™JBˆ›X\ÛÜ—Ù[ÙJ˜[˜XÚË×ÛÝÛ™Y
+
+KÛÝ\˜Ù_ÛÝ\˜ÙK^˜ÛÛ™J
+JBˆJBŸB‚™›ˆ˜[Y]WÝšY]ÜÊ]ˆ	œÝ‹›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ]]]˜[YHYNÂˆ]]]˜[Y\ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆšY]È[ˆ	œ›ÙÜ˜[KšY]ÜÈÂˆYˆ[˜[Y\Ëš[œÙ\
+šY]Ë›˜[YK˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLH‹ˆ	™›Ü›X]J™\XØ]HšY]ÈYš[š][ÛˆßX‹šY]Ë›˜[YJKˆšY]ËœÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆ]ÛÝÈHX]ÚÛÝÚ[›ØØ][ÛœÊ	šY]Ëš[
+HÂˆÚÊÛÝÊHOˆÛÝËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLŽ‹ˆ	™›Ü›X]JšY]ÈßX\È[˜[YÛÝÎˆÛY\ÜØYÙ_H‹šY]Ë›˜[YJKˆšY]ËœÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆ™XÎŽ›™]Ê
+BˆBˆNÂˆ]Y˜][ÜÛÝÈHÛÝËš]\Š
+K™š[\ŠÛÝÛÝ›˜[YKš\×Û›Û™J
+JK˜ÛÝ[
+
+NÂˆYˆY˜][ÜÛÝÈOHHÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLˆ‹ˆ	™›Ü›X]JˆšY]ÈßX]\ÝÛÛZ[ˆ^XÝHÛ™HY˜][ÛÝÏ˜ÛÛ[ÛÝ
+›Ý[™ÙY˜][ÜÛÝßJH‹ˆšY]Ë›˜[YKˆ
+KˆšY]ËœÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆ]]]˜[YYÜÛÝÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆÛÝ[ˆÛÝËš]\Š
+K™š[\—ÛX\
+ÛÝÛÝ›˜[YK˜\×Ù\™YŠ
+JHÂˆYˆ[˜[YYÜÛÝËš[œÙ\
+ÛÝ
+HÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLŽ‹ˆ	™›Ü›X]JˆšY]ÈßXXÛ\™\È˜[YYÛÝÜÛÝX[Ü™H[ˆÛ˜ÙH‹ˆšY]Ë›˜[YBˆ
+KˆšY]ËœÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆ›ÜˆYÙH[ˆ	œ›ÙÜ˜[KœYÙ\ÈÂˆYˆ]ÛÛYJšY]×Û˜[YJHH	œYÙKšY]ÈÂˆ]ÛÛYJšY]ÊHH›ÙÜ˜[KšY]ÜËš]\Š
+K™š[™
+šY]ßšY]Ë›˜[YHOH
+šY]×Û˜[YJH[ÙHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÈ‹ˆ	™›Ü›X]JœYÙHßX™Y™\œÈÈ[šÛ›ÝÛˆšY]ÈÝšY]×Û˜[Y_X‹YÙKœ]
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆÛÛ[YNÂˆNÂˆYˆ]\œŠY\ÜØYÙJHH˜[Y]WÝšY]×ØÛÛ[ÜÛÝÊšY]Ë	œYÙKš[
+HÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŽH‹ˆ	™›Ü›X]JˆœYÙHßX\È[˜[YÛÝÈ›ÜˆšY]ÈÝšY]×Û˜[Y_XˆÛY\ÜØYÙ_H‹ˆYÙKœ]ˆ
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆH[ÙHÂˆX]ÚYÙWÛ^[Ý]ÜÛÝÚ[›ØØ][ÛœÊ	œYÙKš[
+HÂˆÚÊÛÝÊHYˆ\ÛÝËš\×Ù[\J
+HOˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŽH‹ˆœYÙHÛÛ[ÛÝÈ™\]Z\™HHšY]Îˆ‹‹˜^[Ý]‹ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆÚÊÊHOˆßBˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŽH‹ˆ	™›Ü›X]JœYÙHßX\È[˜[YÛÝÎˆÛY\ÜØYÙ_H‹YÙKœ]
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆBˆ›ÜˆÜY[ˆ	œ›ÙÜ˜[K˜ÜYÈÂˆYˆ]ÛÛYJ^[Ý]
+HH	˜ÜY›^[Ý]ÂˆYˆ]ÛÛYJšY]ÊHH›ÙÜ˜[KšY]ÜËš]\Š
+K™š[™
+šY]ßšY]Ë›˜[YHOH
+›^[Ý]
+HÂˆYˆ]\œŠ
+ÛÝÚ[™^Y\ÜØYÙJJHBˆ˜[Y]WØÜYÛ^[Ý]ÜÛÝÊšY]Ë	˜ÜY›^[Ý]ÜÛÝÊBˆÂˆ]Ü[ˆHÜYˆ›^[Ý]ÜÛÝÂˆ™Ù]
+ÛÝÚ[™^
+Bˆ›X\
+ÛÝÛÝœÜ[ŠBˆ[Ü˜\ÛÜŠÜYœÜ[ŠNÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÌH‹ˆ	™›Ü›X]JˆÔ•QßX\È[˜[YÛÛ[›Üˆ^[Ý]Û^[Ý]XˆÛY\ÜØYÙ_H‹ˆÜY›˜[YBˆ
+KˆÜ[‹›[™KˆÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆH[ÙHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÌ‹ˆ	™›Ü›X]JˆÔ•QßX™Y™\œÈÈ[šÛ›ÝÛˆšY]È^[Ý]Û^[Ý]X‹ˆÜY›˜[YBˆ
+KˆÜYœÜ[‹›[™KˆÜYœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆH[ÙHYˆXÜY›^[Ý]ÜÛÝËš\×Ù[\J
+HÂˆ]ÛÝH	˜ÜY›^[Ý]ÜÛÝÖÌNÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÌH‹ˆ	™›Ü›X]JˆÔ•QßXÝ\Y\È^[Ý]ÛÝÈ]\È›È^[Ý]ˆ‹‹˜™Y™\™[˜ÙH‹ˆÜY›˜[YBˆ
+KˆÛÝœÜ[‹›[™KˆÛÝœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆ˜[YŸB‚™›ˆ˜[Y]WÜYÙWÙ]J]ˆ	œÝ‹›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ]]]˜[YHYNÂˆ›ÜˆYÙH[ˆ	œ›ÙÜ˜[KœYÙ\ÈÂˆYˆYÙKœYÙWÜÚ^™Kš\×ÜÛÛYJ
+Bˆ	‰ˆ\YÙBˆ™]Bˆš]\Š
+Bˆ˜[žJ]_X]Ú\ÈJ]Kœ™\Ý[Ý\K\NŽ\œ˜^JÊJJBˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŒH‹ˆ˜YÚ[˜]Y™\]Z\™\È]X\ÝÛ™HYÙHÛÛXÝ[ÛˆØYYÚ][ˆ\œ˜^H™\Ý[\H‹ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆ]›Ý]WÛ˜[Y\ÈHYÙWÝ[\]WØš[™[™ÜÊˆ	œYÙKœ]ˆ	–×Kˆ	œYÙKš[œ]ËˆYÙKœYÙWÜÚ^™Kˆ\YÙKœÛÜš\×Ù[\J
+Kˆ\YÙKœÙX\˜Úš\×Ù[\J
+Kˆ	œYÙK™š[\œËˆ
+NÂˆ]]]˜[Y\ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›Üˆ]H[ˆ	œYÙK™]HÂˆYˆ[˜[Y\Ëš[œÙ\
+]K›˜[YK˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLMˆ‹ˆ	™›Ü›X]JœYÙH]HßX\ÈXÛ\™Y[Ü™H[ˆÛ˜ÙH‹]K›˜[YJKˆ]KœÜ[‹›[™Kˆ]KœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ›Ý]WÛ˜[Y\Ë˜ÛÛZ[œ×ÚÙ^J	™]K›˜[YJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLMˆ‹ˆ	™›Ü›X]JˆœYÙH]HßXÛÛ™›XÝÈÚ]H›Ý]H\˜[Y]\ˆÜˆYÙH[œ]‹ˆ]K›˜[YBˆ
+Kˆ]KœÜ[‹›[™Kˆ]KœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙWÙ]WÝ\WÜÝ\ÜY
+›ÙÜ˜[K	™]Kœ™\Ý[Ý\JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLMÈ‹ˆ	™›Ü›X]JˆœYÙH]HßX]\ÝØYH˜[YY™XÛÜ™ÜˆX›H˜[YK›Ý[™ßX‹ˆ]K›˜[YK]Kœ™\Ý[Ý\Bˆ
+Kˆ]KœÜ[‹›[™Kˆ]KœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆYˆ\YÙKœÛÜš\×Ù[\J
+HÂˆ]ÛÛXÝ[Û—Ù]HHYÙBˆ™]Bˆš]\Š
+Bˆ™š[\Š]_X]Ú\ÈJ]Kœ™\Ý[Ý\K\NŽ\œ˜^JÊJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆÛÛXÝ[Û—Ù]Kš\×Ù[\J
+HÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŒˆ‹ˆœYÙHÛÜ™\]Z\™\È]X\ÝÛ™HÛÛXÝ[ÛˆØYYÚ][ˆ\œ˜^H™\Ý[\H‹ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆH[ÙHÂˆ]]]ÛÜÙšY[ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆšY[[ˆ	œYÙKœÛÜÂˆYˆ\ÛÜÙšY[Ëš[œÙ\
+šY[˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŒˆ‹ˆ	™›Ü›X]JœYÙHÛÜšY[ÙšY[X\ÈXÛ\™Y[Ü™H[ˆÛ˜ÙHŠKˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆXÛÛXÝ[Û—Ù]Kš]\Š
+K˜[
+]_ÂˆYÙWØÛÛXÝ[Û—ÙšY[Ê›ÙÜ˜[K	™]Kœ™\Ý[Ý\JBˆš\×ÜÛÛYWØ[™
+šY[ßšY[Ëš]\Š
+K˜[žJØ[™Y]_Ø[™Y]HOHšY[
+JBˆJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŒÈ‹ˆ	™›Ü›X]JˆœYÙHÛÜšY[ÙšY[XÙ\È›Ý^\Ý[ˆ]™\žHÛÛXÝ[Ûˆ™\Ý[\H‚ˆ
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆBˆYˆ\YÙKœÙX\˜Úš\×Ù[\J
+HÂˆ]ÛÛXÝ[Û—Ù]HHYÙBˆ™]Bˆš]\Š
+Bˆ™š[\Š]_X]Ú\ÈJ]Kœ™\Ý[Ý\K\NŽ\œ˜^JÊJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆÛÛXÝ[Û—Ù]Kš\×Ù[\J
+HÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËL‹ˆœYÙHÙX\˜Ú™\]Z\™\È]X\ÝÛ™HÛÛXÝ[ÛˆØYYÚ][ˆ\œ˜^H™\Ý[\H‹ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆH[ÙHÂˆ]]]ÙX\˜ÚÙšY[ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆšY[[ˆ	œYÙKœÙX\˜ÚÂˆYˆ\ÙX\˜ÚÙšY[Ëš[œÙ\
+šY[˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËL‹ˆ	™›Ü›X]JœYÙHÙX\˜ÚšY[ÙšY[X\ÈXÛ\™Y[Ü™H[ˆÛ˜ÙHŠKˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆXÛÛXÝ[Û—Ù]Kš]\Š
+K˜[
+]_ÂˆYÙWØÛÛXÝ[Û—ÙšY[Ê›ÙÜ˜[K	™]Kœ™\Ý[Ý\JBˆš\×ÜÛÛYWØ[™
+šY[ßšY[Ëš]\Š
+K˜[žJØ[™Y]_Ø[™Y]HOHšY[
+JBˆJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLH‹ˆ	™›Ü›X]JˆœYÙHÙX\˜ÚšY[ÙšY[XÙ\È›Ý^\Ý[ˆ]™\žHÛÛXÝ[Ûˆ™\Ý[\H‚ˆ
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆBˆYˆ\YÙK™š[\œËš\×Ù[\J
+HÂˆ]ÛÛXÝ[Û—Ù]HHYÙBˆ™]Bˆš]\Š
+Bˆ™š[\Š]_X]Ú\ÈJ]Kœ™\Ý[Ý\K\NŽ\œ˜^JÊJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆÛÛXÝ[Û—Ù]Kš\×Ù[\J
+HÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLˆ‹ˆœYÙHš[\˜™\]Z\™\È]X\ÝÛ™HÛÛXÝ[ÛˆØYYÚ][ˆ\œ˜^H™\Ý[\H‹ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆH[ÙHÂˆ]]]š[\—ÙšY[ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆšY[[ˆ	œYÙK™š[\œÈÂˆYˆYš[\—ÙšY[Ëš[œÙ\
+šY[˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLˆ‹ˆ	™›Ü›X]JœYÙHš[\ˆšY[ÙšY[X\ÈXÛ\™Y[Ü™H[ˆÛ˜ÙHŠKˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆXÛÛXÝ[Û—Ù]Kš]\Š
+K˜[
+]_ÂˆYÙWØÛÛXÝ[Û—ÙšY[Ê›ÙÜ˜[K	™]Kœ™\Ý[Ý\JBˆš\×ÜÛÛYWØ[™
+šY[ßšY[Ëš]\Š
+K˜[žJØ[™Y]_Ø[™Y]HOHšY[
+JBˆJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÈ‹ˆ	™›Ü›X]JˆœYÙHš[\ˆšY[ÙšY[XÙ\È›Ý^\Ý[ˆ]™\žHÛÛXÝ[Ûˆ™\Ý[\H‚ˆ
+KˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆBˆBˆ˜[YŸB‚™›ˆ˜[Y]WÜYÙWÚ[œ]Ê]ˆ	œÝ‹›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ]]]˜[YHYNÂˆ›ÜˆYÙH[ˆ	œ›ÙÜ˜[KœYÙ\ÈÂˆ]›Ý]WÛ˜[Y\ÈBˆYÙWÝ[\]WØš[™[™ÜÊ	œYÙKœ]	–×K	–×KYÙKœYÙWÜÚ^™K˜[ÙK˜[ÙK	–×JNÂˆ]]]˜[Y\ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›Üˆ[œ][ˆ	œYÙKš[œ]ÈÂˆYˆ[˜[Y\Ëš[œÙ\
+[œ]›˜[YK˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JœYÙH[œ]ßX\ÈXÛ\™Y[Ü™H[ˆÛ˜ÙH‹[œ]›˜[YJKˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ›Ý]WÛ˜[Y\Ë˜ÛÛZ[œ×ÚÙ^J	š[œ]›˜[YJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JˆœYÙH[œ]ßXÛÛ™›XÝÈÚ]H›Ý]H\˜[Y]\ˆ‹ˆ[œ]›˜[YBˆ
+Kˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆYÙKœYÙWÜÚ^™Kš\×ÜÛÛYJ
+H	‰ˆ[œ]›˜[YHOHœYÙHˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆœYÙH[œ]YÙX\È™\Ù\™YžHYÚ[˜]Y‹ˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆYÙKœYÙWÜÚ^™Kš\×ÜÛÛYJ
+Bˆ	‰ˆX]Ú\ÈJˆ[œ]›˜[YK˜\×ÜÝŠ
+Kˆž™[\˜WÜYÙWÛ[Z]ˆž™[\˜WÜYÙWÛÙ™œÙ]‚ˆ
+BˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JˆœYÙH[œ]ßX\È™\Ù\™Y›ÜˆYÚ[˜][Ûˆ[\›˜[È‹ˆ[œ]›˜[YBˆ
+Kˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆYÙKœYÙWÜÚ^™Kš\×ÜÛÛYJ
+H	‰ˆX]Ú\ÈJ[œ]›˜[YK˜\×ÜÝŠ
+KÝ[ˆœYÙ\ÈŠHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JœYÙH[œ]ßX\È™\Ù\™YžHYÚ[˜]Y‹[œ]›˜[YJKˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙKœÛÜš\×Ù[\J
+H	‰ˆX]Ú\ÈJ[œ]›˜[YK˜\×ÜÝŠ
+KœÛÜˆ›Ü™\ˆŠHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JœYÙH[œ]ßX\È™\Ù\™YžHÛÜ‹[œ]›˜[YJKˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙKœÙX\˜Úš\×Ù[\J
+H	‰ˆ[œ]›˜[YHOHœÙX\˜ÚˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆœYÙH[œ]ÙX\˜Ú\È™\Ù\™YžHÙX\˜Ú‹ˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙKœÙX\˜Úš\×Ù[\J
+H	‰ˆ[œ]›˜[YHOHž™[\˜WÜYÙWÜÙX\˜ÚˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆœYÙH[œ]™[\˜WÜYÙWÜÙX\˜Ú\È™\Ù\™Y›ÜˆÙX\˜Ú[\›˜[È‹ˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙK™š[\œËš\×Ù[\J
+Bˆ	‰ˆYÙK™š[\œËš]\Š
+K˜[žJšY[Âˆ[œ]›˜[YHOH›Ü›X]J™š[\—ÞÙšY[HŠBˆ[œ]›˜[YHOH›Ü›X]J™š[\—ÞÙšY[W×ÛÜ\˜]ÜˆŠBˆJBˆÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLNH‹ˆ	™›Ü›X]JœYÙH[œ]ßX\È™\Ù\™YžHš[\˜‹[œ]›˜[YJKˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ\YÙWÚ[œ]Ý\WÜÝ\ÜY
+	š[œ]JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLŒ‹ˆ	™›Ü›X]JˆœYÙH[œ]ßX]\Ý\ÙHHØØ[\ˆÜˆÜ[Û˜[ØØ[\ˆ\K›Ý[™ßX‹ˆ[œ]›˜[YK[œ]Bˆ
+Kˆ[œ]œÜ[‹›[™Kˆ[œ]œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆ˜[YŸB‚™›ˆYÙWÚ[œ]Ý\WÜÝ\ÜY
+Nˆ	•\JHOˆ›ÛÛÂˆ]HHX]ÚHÂˆ\NŽ“Ü[ÛŠ[›™\ŠHOˆ[›™\‹˜\×Ü™YŠ
+KˆÝ\ˆOˆÝ\‹ˆNÂˆX]Ú\ÈJˆKˆ\NŽ’[ˆ\NŽ•R[ˆ\NŽ‘›Ø]ˆ\NŽ‘XÚ[X[ˆ\NŽ›ÛÛˆ\NŽ”Ýš[™Âˆ\NŽÚ\‚ˆ\NŽž]\Âˆ\NŽ•[Y\Ý[\ˆ\NŽ‘]Bˆ\NŽ•[YBˆ\NŽ‘\˜][Û‚ˆ\NŽ“˜[YY
+ÊBˆ
+BŸB‚™›ˆYÙWÙ]WÝ\WÜÝ\ÜY
+›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KNˆ	•\JHOˆ›ÛÛÂˆ]HHX]ÚHÂˆ\NŽ\œ˜^J[›™\ŠHOˆ[›™\‹˜\×Ü™YŠ
+KˆÝ\ˆOˆÝ\‹ˆNÂˆ]\NŽ“˜[YY
+˜[YJHHH[ÙHÂˆ™]\›ˆ˜[ÙNÂˆNÂˆ›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K˜[žJ™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJBˆ›ÙÜ˜[KX›\Ëš]\Š
+K˜[žJX›_ÂˆX›K›˜[YHOH
+›˜[YHÚ[™Ý[\—Ý\WÛ˜[YJ	X›K›˜[YJK˜\×Ù\™YŠ
+HOHÛÛYJ˜[YJBˆJBŸB‚™›ˆYÙWØÛÛXÝ[Û—ÙšY[Ê›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KNˆ	•\JHOˆÜ[Û™XÏÝš[™ÏˆÂˆ]\NŽ\œ˜^J[›™\ŠHHH[ÙHÂˆ™]\›ˆ›Û™NÂˆNÂˆ]\NŽ“˜[YY
+˜[YJHH[›™\‹˜\×Ü™YŠ
+H[ÙHÂˆ™]\›ˆ›Û™NÂˆNÂˆYˆ]ÛÛYJ™XÛÜ™
+HH›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K™š[™
+™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJHÂˆ™]\›ˆÛÛYJˆ™XÛÜ™ˆ™šY[Âˆš]\Š
+Bˆ›X\
+šY[šY[›˜[YK˜ÛÛ™J
+JBˆ˜ÛÛXÝ
+
+Kˆ
+NÂˆBˆ›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ™š[™
+X›_ÂˆX›K›˜[YHOH
+›˜[YHÚ[™Ý[\—Ý\WÛ˜[YJ	X›K›˜[YJK˜\×Ù\™YŠ
+HOHÛÛYJ˜[YJBˆJBˆ›X\
+X›_ÂˆX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ›X\
+ÛÛ[[ŸÛÛ[[‹›˜[YK˜ÛÛ™J
+JBˆ˜ÛÛXÝ
+
+BˆJBŸB‚™›ˆYÙWØÛÛXÝ[Û—ÙšY[Ý\Jˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KˆNˆ	•\KˆšY[Û˜[YNˆ	œÝ‹ŠHOˆÜ[Û\OˆÂˆ]\NŽ\œ˜^J[›™\ŠHHH[ÙHÂˆ™]\›ˆ›Û™NÂˆNÂˆ]\NŽ“˜[YY
+˜[YJHH[›™\‹˜\×Ü™YŠ
+H[ÙHÂˆ™]\›ˆ›Û™NÂˆNÂˆYˆ]ÛÛYJ™XÛÜ™
+HH›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K™š[™
+™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJHÂˆ™]\›ˆ™XÛÜ™ˆ™šY[Âˆš]\Š
+Bˆ™š[™
+šY[šY[›˜[YHOHšY[Û˜[YJBˆ›X\
+šY[šY[K˜ÛÛ™J
+JNÂˆBˆ›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ™š[™
+X›_ÂˆX›K›˜[YHOH
+›˜[YHÚ[™Ý[\—Ý\WÛ˜[YJ	X›K›˜[YJK˜\×Ù\™YŠ
+HOHÛÛYJ˜[YJBˆJBˆ˜[™Ý[ŠX›_ÂˆX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ™š[™
+ÛÛ[[ŸÛÛ[[‹›˜[YHOHšY[Û˜[YJBˆ›X\
+ÛÛ[[ŸÛÛ[[‹K˜ÛÛ™J
+JBˆJBŸB‚™›ˆYÙWÙš[\—ÚÚ[™
+ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆ™\Ý[Ý\Nˆ	•\KˆšY[Û˜[YNˆ	œÝ‹ŠHOˆX›UšY]Ñš[\’Ú[™ÂˆYÙWØÛÛXÝ[Û—ÙšY[Ý\J›ÙÜ˜[K™\Ý[Ý\KšY[Û˜[YJBˆ›X\
+_X›]šY]×Ý\WÙš[\—ÚÚ[™
+	JJBˆ[Ü˜\ÛÜŠX›UšY]Ñš[\’Ú[™Ž“Ý\ŠBŸB‚ˆÖÙ\š]™JÛÛ™KÛÜKXYË\X[\K\JWB™[[HÝ]]›Ü›X]Âˆ[X[‹ˆœÛÛ‹ŸB‚™›ˆ\œÙWÛÝ]]Ù›Ü›X]
+˜[YNˆ	œÝŠHOˆÜ[ÛÝ]]›Ü›X]ˆÂˆX]Ú˜[YHÂˆš[X[ˆˆOˆÛÛYJÝ]]›Ü›X]Ž’[X[ŠKˆšœÛÛˆˆOˆÛÛYJÝ]]›Ü›X]Ž’œÛÛŠKˆÈOˆ›Û™KˆBŸB‚™›ˆÚXÚ×ØÛÛ[X[™
+]]\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJ]
+HH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]]›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹KY›Ü›X]ZœÛÛˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’œÛÛŽÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]Z[X[ˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆH[ÙHYˆ\™Ý[Y[œÝ\×ÝÚ]
+‹KY›Ü›X]HŠHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]ˆÂˆ›Ü›X]HX]Ú\™Ý[Y[Ë›™^
+
+K˜\×Ù\™YŠ
+K˜[™Ý[Š\œÙWÛÝ]]Ù›Ü›X]
+HÂˆÛÛYJ›Ü›X]
+HOˆ›Ü›X]ˆ›Û™HOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆÚXÚÈÜ[ÛˆØ\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆ›Ü›X]OHÝ]]›Ü›X]Ž’[X[ˆÂˆ™]\›ˆYˆ˜[Y]J	œ]
+Kš\×ÛÚÊ
+HÂˆš[ˆJ›ÚÎˆÜ]HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆNÂˆBˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê	œ]
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	œ]	œÛÝ\˜ÙJNÂˆ]ÝXØÙ\ÜÈH˜[Y]J	œ]
+Kš\×ÛÚÊ
+NÂˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆ˜ÚXÚÈ‹ˆÝXØÙ\ÜËˆXYÛ›ÜÝXÜËˆÝŽš]\ŽŽ™[\J
+Kˆ
+JNÂˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚™›ˆ›]ØÛÛ[X[™
+\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]]]]H›Û™NÂˆ]]]ÚXÚ×ÛÛ›HH˜[ÙNÂˆ›Üˆ\™Ý[Y[[ˆ\™Ý[Y[ÈÂˆYˆ\™Ý[Y[OH‹KXÚXÚÈˆ	‰ˆXÚXÚ×ÛÛ›HÂˆÚXÚ×ÛÛ›HHYNÂˆH[ÙHYˆX\™Ý[Y[œÝ\×ÝÚ]
+	ËIÊH	‰ˆ]š\×Û›Û™J
+HÂˆ]HÛÛYJ\™Ý[Y[
+NÂˆH[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆ]ÛÛYJ]
+HH][ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÝ\˜ÙHHX]ÚœÎŽœ™XYÝ×ÜÝš[™Ê	œ]
+HÂˆÚÊÛÝ\˜ÙJHOˆÛÝ\˜ÙKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊˆ	œ]ˆ‘KRSËLH‹ˆ	™›Ü›X]J˜Ø[››Ý™XYÜ]XˆÙ\œ›ÜŸHŠKˆKˆKˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆ]ÚÙ[œÈHX]Ú^
+	œÛÝ\˜ÙJHÂˆÚÊÚÙ[œÊHOˆÚÙ[œËˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š	œ]‘KSVLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆYˆ]\œŠ\œ›ÜŠHH\œÙJ	ÚÙ[œÊHÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š	œ]‘KTT”ÑKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ]›Ü›X]YH›Ü›X]ÜÛÝ\˜ÙJ	œÛÝ\˜ÙK	ÚÙ[œÊNÂˆYˆÚXÚ×ÛÛ›HÂˆYˆÛÝ\˜ÙHOH›Ü›X]YÂˆš[ˆJ›ÚÎˆÜ]HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ\š[ˆJÛÝ[™Y›Ü›X]ˆÜ]HŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆH[ÙHYˆÛÝ\˜ÙHOH›Ü›X]YÂˆš[ˆJ˜[™XYH›Ü›X]YˆÜ]HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆX]ÚœÎŽÜš]J	œ]›Ü›X]Y
+HÂˆÚÊ
+
+JHOˆÂˆš[ˆJ™›Ü›X]YˆÜ]HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKQ“ULWNˆØ[››ÝÜš]HÜ]XˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBˆBŸB‚™›ˆ[\XÝØÛÛ[X[™
+]]\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJ]
+HH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]]›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆ]]]›ØÝ\ÈH›Û™NÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹KY›Ü›X]ZœÛÛˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’œÛÛŽÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]Z[X[ˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆH[ÙHYˆ]ÛÛYJ˜[YJHH\™Ý[Y[œÝš\Ü™Yš^
+‹K\Þ[X›ÛHŠHÂˆYˆ˜[YKš\×Ù[\J
+H›ØÝ\Ëœ™\XÙJ˜[YK×ÛÝÛ™Y
+
+JKš\×ÜÛÛYJ
+HÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[\XÝXØÙ\ÈÛ™H›Û‹Y[\HK\Þ[X›Û˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆH[ÙHYˆ\™Ý[Y[OH‹K\Þ[X›ÛˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Âˆ›™^
+
+Bˆ™š[\Š˜[Y_]˜[YKš\×Ù[\J
+H	‰ˆ]˜[YKœÝ\×ÝÚ]
+	ËIÊJBˆ[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆK\Þ[X›Û™\]Z\™\ÈH›Û‹Y[\H˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ›ØÝ\Ëœ™\XÙJ˜[YJKš\×ÜÛÛYJ
+HÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[\XÝXØÙ\ÈÛ™HK\Þ[X›Û˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]ˆÂˆ›Ü›X]HX]Ú\™Ý[Y[Ë›™^
+
+K˜\×Ù\™YŠ
+K˜[™Ý[Š\œÙWÛÝ]]Ù›Ü›X]
+HÂˆÛÛYJ›Ü›X]
+HOˆ›Ü›X]ˆ›Û™HOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆ[\XÝÜ[ÛˆØ\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆ›Ü›X]OHÝ]]›Ü›X]Ž’œÛÛˆÂˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê	œ]
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	œ]	œÛÝ\˜ÙJNÂˆ]›Ú™XÝHØYÜ›Ú™XÝ
+	œ]
+NÂˆ]]]ÝXØÙ\ÜÈH›Ú™XÝš\×ÛÚÊ
+NÂˆ][\XÝHYˆ]ÚÊ›Ú™XÝ
+HH›Ú™XÝ˜\×Ü™YŠ
+HÂˆ]˜[˜XÚ×ÜÛÝ\˜ÙHH›Ú™XÝˆœÛÝ\˜Ù\Âˆ™š\œÝ
+
+Bˆ›X\ÛÜŠÛÝ\˜ÙK˜\×ÜÝŠ
+KÛÝ\˜Ù_ÛÝ\˜ÙK^˜\×ÜÝŠ
+JNÂˆ][Ú[\XÝBˆZ[Ú[\XÝÝÚ]ÜÛÝ\˜Ù\Ê	œ›Ú™XÝœ›ÙÜ˜[K	œ›Ú™XÝœÛÝ\˜Ù\Ë˜[˜XÚ×ÜÛÝ\˜ÙJNÂˆX]Ú›ØÝ\Ë˜\×Ù\™YŠ
+HÂˆÛÛYJ]Y\žJHOˆX]Ú›ØÝ\×Ú[\XÝ
+	™[Ú[\XÝ]Y\žJHÂˆÚÊ›ØÝ\ÙY
+HOˆ›ØÝ\ÙYˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	œ]‘KRSTPÕLH‹	™\œ›Ü‹KJNÂˆÝXØÙ\ÜÈH˜[ÙNÂˆœÛÛˆJßJBˆBˆKˆ›Û™HOˆ[Ú[\XÝˆBˆH[ÙHÂˆœÛÛˆJßJBˆNÂˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆš[\XÝ‹ˆÝXØÙ\ÜËˆXYÛ›ÜÝXÜËˆÊ™[žH‹×ÛÝÛ™Y
+
+K˜[YNŽ”Ýš[™ÊÛÛ^Ù[žJ	œ]
+JJWBˆš[×Ú]\Š
+Bˆ˜ÚZ[ŠÊš[\XÝ‹×ÛÝÛ™Y
+
+K[\XÝ
+WJKˆ
+JNÂˆ™]\›ˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆNÂˆBˆ]›Ú™XÝHX]ÚØYÜ›Ú™XÝ
+	œ]
+HÂˆÚÊ›Ú™XÝ
+HOˆ›Ú™XÝˆ\œŠ
+
+JHOˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJKˆNÂˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê	œ]
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ]˜[˜XÚ×ÜÛÝ\˜ÙHH›Ú™XÝˆœÛÝ\˜Ù\Âˆ™š\œÝ
+
+Bˆ›X\ÛÜŠÛÝ\˜ÙK˜\×ÜÝŠ
+KÛÝ\˜Ù_ÛÝ\˜ÙK^˜\×ÜÝŠ
+JNÂˆ][\XÝHZ[Ú[\XÝÝÚ]ÜÛÝ\˜Ù\Ê	œ›Ú™XÝœ›ÙÜ˜[K	œ›Ú™XÝœÛÝ\˜Ù\Ë˜[˜XÚ×ÜÛÝ\˜ÙJNÂˆ][\XÝHX]Ú›ØÝ\Ë˜\×Ù\™YŠ
+HÂˆÛÛYJ]Y\žJHOˆX]Ú›ØÝ\×Ú[\XÝ
+	š[\XÝ]Y\žJHÂˆÚÊ›ØÝ\ÙY
+HOˆ›ØÝ\ÙYˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKRSTPÕLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆKˆ›Û™HOˆ[\XÝˆNÂˆš[ˆJš[\XÝˆÜ]HŠNÂˆYˆ]ÛÛYJ]Y\žJHH›ØÝ\ÈÂˆš[ˆJˆ›ØÝ\ÎˆÜ]Y\ž_HŠNÂˆš[ˆJˆˆ™Y™\™[˜Ù\ÎˆßH‹ˆ[\XÝÈœ™Y™\™[˜Ù\È—K˜\×Ø\œ˜^J
+K›X\ÛÜŠ™XÎŽ›[ŠBˆ
+NÂˆš[ˆJˆˆ™[]YˆßH‹ˆ[\XÝÈœ™[]Y—K˜\×Ø\œ˜^J
+K›X\ÛÜŠ™XÎŽ›[ŠBˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆBˆ›ÜˆØ]YÛÜžH[ˆÂˆX›\È‹ˆœÜ[‹ˆœ™Y™\™[˜Ù\È‹ˆ™›Ü›\È‹ˆ˜ÜY‹ˆšY]ÜÈ‹ˆ˜\\È‹ˆœ\›Z\ÜÚ[ÛœÈ‹ˆ˜ÛÛ˜XÝÈ‹ˆ™[XZ[È‹ˆš›ØœÈ‹ˆ\ÝÈ‹ˆHÂˆ]ÛÝ[H[\XÝØØ]YÛÜžWK˜\×Ø\œ˜^J
+K›X\ÛÜŠ™XÎŽ›[ŠNÂˆš[ˆJˆØØ]YÛÜž_NˆØÛÝ[HŠNÂˆBˆš[ˆJˆØÚ[XWØÚ[™Ù\ÎˆÛÝ\˜ÙK[Û›HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂŸB‚™›ˆY]ØÛÛ[X[™
+\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]]]™\]Y\ÝÜ]H›Û™NÂˆ]]]œÛÛ—Ù›Ü›X]H˜[ÙNÂˆ]]]\WÜ™\]Y\ÝYH˜[ÙNÂˆ›Üˆ\™Ý[Y[[ˆ\™Ý[Y[ÈÂˆYˆ\™Ý[Y[OH‹KY›Ü›X]ZœÛÛˆˆÂˆœÛÛ—Ù›Ü›X]HYNÂˆH[ÙHYˆ\™Ý[Y[OH‹KX\HˆÂˆ\WÜ™\]Y\ÝYHYNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]ˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆY]™\]Z\™\ÈKY›Ü›X]ZœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆH[ÙHYˆ\™Ý[Y[œÝ\×ÝÚ]
+	ËIÊHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆY]Ü[ÛˆØ\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆH[ÙHYˆ™\]Y\ÝÜ]œ™\XÙJ\™Ý[Y[
+Kš\×ÜÛÛYJ
+HÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆY]XØÙ\ÈÛ™HÚ[™ÙH™\]Y\ÝŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆ]ÛÛYJ™\]Y\ÝÜ]
+HH™\]Y\ÝÜ][ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆZœÛÛ—Ù›Ü›X]Âˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆY]™\]Z\™\ÈKY›Ü›X]ZœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆB‚ˆ]™\]Y\ÝÜÛÝ\˜ÙHHX]ÚœÎŽœ™XYÝ×ÜÝš[™Ê	œ™\]Y\ÝÜ]
+HÂˆÚÊÛÝ\˜ÙJHOˆÛÝ\˜ÙKˆ\œŠ\œ›ÜŠHOˆÂˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+ˆ	œ™\]Y\ÝÜ]ˆ‘KRSËLH‹ˆ	™›Ü›X]J˜Ø[››Ý™XYÜ™\]Y\ÝÜ]XˆÙ\œ›ÜŸHŠKˆ
+BˆBˆNÂˆ]™\]Y\Ýˆ˜[YHHX]ÚÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	œ™\]Y\ÝÜÛÝ\˜ÙJHÂˆÚÊ™\]Y\Ý
+HOˆ™\]Y\Ýˆ\œŠ\œ›ÜŠHOˆÂˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+ˆ	œ™\]Y\ÝÜ]ˆ‘KQQULH‹ˆ	™›Ü›X]Jš[˜[YY]™\]Y\Ý”ÓÓŽˆÙ\œ›ÜŸHŠKˆ
+BˆBˆNÂˆYˆ]\œŠ\œ›ÜŠHHY]Ž˜[Y]WÜ™\]Y\Ý
+	œ™\]Y\Ý
+HÂˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+	œ™\]Y\ÝÜ]‘KQQULH‹	™\œ›ÜŠNÂˆBˆ][žHHX]ÚY]Žœ™\]Y\ÝÙ[žJ	œ™\]Y\Ý
+HÂˆÚÊ[žJHOˆ[žKˆ\œŠ\œ›ÜŠHOˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+	œ™\]Y\ÝÜ]‘KQQULH‹	™\œ›ÜŠKˆNÂˆ]
+[žK[žWÙ\Ü^JHHX]ÚY]Žœ™\ÛÛ™WÙ[žJ	™[žJHÂˆÚÊ[žJHOˆ[žKˆ\œŠ\œ›ÜŠHOˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+	™[žK‘KQQULH‹	™\œ›ÜŠKˆNÂˆ]ÛÝ\˜ÙHHX]ÚœÎŽœ™XYÝ×ÜÝš[™Ê	™[žJHÂˆÚÊÛÝ\˜ÙJHOˆÛÝ\˜ÙKˆ\œŠ\œ›ÜŠHOˆÂˆ™]\›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+ˆ	™[žKˆ‘KRSËLH‹ˆ	™›Ü›X]J˜Ø[››Ý™XYÙ[ž_XˆÙ\œ›ÜŸHŠKˆ
+BˆBˆNÂ‚ˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	™[žK	œÛÝ\˜ÙJNÂˆ]]]ÝXØÙ\ÜÈH˜[ÙNÂˆ]]]™]šY]ÈHœÛÛˆJÈ˜]˜Z[X›HŽˆ˜[Ù_JNÂˆ]Ý\œ™[Ùš[™Ù\œš[HY]ŽœÛÝ\˜ÙWÙš[™Ù\œš[
+	œÛÝ\˜ÙJNÂˆ]^XÝYÙš[™Ù\œš[H™\]Y\Ýˆ™Ù]
+™^XÝYÜÛÝ\˜ÙWÙš[™Ù\œš[ŠBˆ˜[™Ý[Š˜[YNŽ˜\×ÜÝŠNÂˆYˆ\WÜ™\]Y\ÝY	‰ˆ^XÝYÙš[™Ù\œš[OHÛÛYJÝ\œ™[Ùš[™Ù\œš[˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ	™[žKˆ‘KQQUL‹ˆ‹KX\H™\]Z\™\ÈHX]Ú[™È^XÝYÜÛÝ\˜ÙWÙš[™Ù\œš[È[ˆH™]šY]Èš\œÝ‹ˆKˆKˆ
+NÂˆH[ÙHÂˆX]Ú^
+	œÛÝ\˜ÙJHÂˆÚÊÚÙ[œÊHOˆX]Ú\œÙJ	ÚÙ[œÊHÂˆÚÊ›ÙÜ˜[JHOˆÂˆYˆ˜[Y]WÜ›ÙÜ˜[J	™[žK	œÛÝ\˜ÙK›ÙÜ˜[K˜ÛÛ™J
+JKš\×ÛÚÊ
+HÂˆX]ÚY]Žœ™]šY]Ê	œ›ÙÜ˜[K	œÛÝ\˜ÙK	ÚÙ[œË	œ™\]Y\Ý
+HÂˆÚÊ™\Ý[
+HOˆÂˆ]Ø[™Y]WÜÛÝ\˜ÙHH™\Ý[œÛÝ\˜ÙK˜ÛÛ™J
+NÂˆ]ÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	™[žK	˜Ø[™Y]WÜÛÝ\˜ÙJNÂˆYˆ]ÚÊ›ÜÜÙYÜ›ÙÜ˜[JHBˆ\œÙWÜÛÝ\˜ÙJ	™[žK	˜Ø[™Y]WÜÛÝ\˜ÙJBˆÂˆYˆ˜[Y]WÜ›ÙÜ˜[J	™[žK	˜Ø[™Y]WÜÛÝ\˜ÙK›ÜÜÙYÜ›ÙÜ˜[JBˆš\×ÛÚÊ
+BˆÂˆ]\YYHYˆ\WÜ™\]Y\ÝYÂˆX]ÚY]Ž˜\WØ]ÛZXØ[J	™[žK	œ™\Ý[œÛÝ\˜ÙJHÂˆÚÊ
+
+JHOˆYKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	™[žK‘KQQULÈ‹	™\œ›Ü‹KJNÂˆ˜[ÙBˆBˆBˆH[ÙHÂˆ˜[ÙBˆNÂˆÝXØÙ\ÜÈHX\WÜ™\]Y\ÝY\YYÂˆ™]šY]ÈHœÛÛˆJÂˆ˜]˜Z[X›HŽˆYKˆ˜\WÜ™\]Y\ÝYŽˆ\WÜ™\]Y\ÝYˆ˜\YYŽˆ\YYˆ™[žHŽˆ[žWÙ\Ü^K˜ÛÛ™J
+KˆœÛÝ\˜ÙWÙš[™Ù\œš[ŽˆÝ\œ™[Ùš[™Ù\œš[ˆ›Ü\˜][ÛœÈŽˆ™\Ý[›Ü\˜][ÛœËˆ˜Ú[™Ù\ÈŽˆ™\Ý[˜Ú[™Ù\Ëˆ˜Ú[™ÙYÝÚÙ[œÈŽˆ™\Ý[˜Ú[™ÙYÝÚÙ[œËˆ˜™Y›Ü™WØž]\ÈŽˆÛÝ\˜ÙK›[Š
+Kˆ˜Y\—Øž]\ÈŽˆ™\Ý[œÛÝ\˜ÙK›[Š
+BˆJNÂˆBˆBˆBˆ\œŠ\œ›ÜŠHOˆXYÛ›ÜÝXÊ	™[žK‘KQQULH‹	™\œ›Ü‹KJKˆBˆBˆBˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š	™[žK‘KTT”ÑKLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠBˆBˆKˆ\œŠ\œ›ÜŠHOˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Š	™[žK‘KSVLH‹	™\œ›Ü‹›Y\ÜØYÙK\œ›Ü‹œÜ[ŠKˆBˆBˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆ™Y]‹ˆÝXØÙ\ÜËˆXYÛ›ÜÝXÜËˆÂˆ
+œ™\]Y\Ý‹š[Ê
+K˜[YNŽ”Ýš[™Ê™\]Y\ÝÜ]
+JKˆ
+™[žH‹š[Ê
+K˜[YNŽ”Ýš[™Ê[žWÙ\Ü^JJKˆ
+œ™]šY]È‹š[Ê
+K™]šY]ÊKˆKˆ
+JNÂˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚™›ˆY]Ù\œ›Ü—ÙØÝ[Y[
+]ˆ	œÝ‹ÛÙNˆ	œÝ‹Y\ÜØYÙNˆ	œÝŠHOˆ^]ÛÙHÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ]ˆŠNÂˆXYÛ›ÜÝXÊ]ÛÙKY\ÜØYÙKKJNÂˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆ™Y]‹ˆ˜[ÙKˆXYÛ›ÜÝXÜËˆÊœ™\]Y\Ý‹š[Ê
+K˜[YNŽ”Ýš[™Ê]š[Ê
+JJWKˆ
+JNÂˆ^]ÛÙNŽ™œ›ÛJJBŸB‚™›ˆÛÛ^ÜÜ[Š˜[˜XÚ×ÜÛÝ\˜ÙNˆ	œÝ‹Ü[Žˆ™[\˜WØ\ÝŽ”Ü[ŠHOˆ˜[YHÂˆ]ÛÝ\˜ÙHBˆ“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÛÝ\˜Ù\Ë˜›Üœ›ÝÊ
+K™Ù]
+Ü[‹œÛÝ\˜ÙWÚY\È\Ú^™JK˜ÛÛ™Y
+
+JNÂˆ]ÛÝ\˜ÙWÝ^HÛÝ\˜ÙBˆ˜\×Ü™YŠ
+Bˆ›X\ÛÜŠ˜[˜XÚ×ÜÛÝ\˜ÙKÛÝ\˜Ù_ÛÝ\˜ÙK^˜\×ÜÝŠ
+JNÂˆ]
+[™Û[™K[™ØÛÛ[[ŠHHÛÝ\˜ÙWÜÜÚ][ÛŠÛÝ\˜ÙWÝ^Ü[‹™[™
+NÂˆœÛÛˆJÂˆ™š[HŽˆÛÝ\˜ÙK˜\×Ü™YŠ
+K›X\
+ÛÝ\˜Ù_ÛÝ\˜ÙKœ]˜\×ÜÝŠ
+JKˆœÝ\ŽˆÈ›Ù™œÙ]ŽˆÜ[‹œÝ\›[™HŽˆÜ[‹›[™K˜ÛÛ[[ˆŽˆÜ[‹˜ÛÛ[[ˆKˆ™[™ŽˆÈ›Ù™œÙ]ŽˆÜ[‹™[™›[™HŽˆ[™Û[™K˜ÛÛ[[ˆŽˆ[™ØÛÛ[[ˆBˆJBŸB‚™›ˆY˜][Ý˜[YWÚœÛÛŠ˜[YNˆ	ž™[\˜WØ\ÝŽ‘Y˜][˜[YJHOˆ˜[YHÂˆX]Ú˜[YHÂˆ™[\˜WØ\ÝŽ‘Y˜][˜[YNŽ’[
+˜[YJHOˆœÛÛˆJ˜[YJKˆ™[\˜WØ\ÝŽ‘Y˜][˜[YNŽ›ÛÛ
+˜[YJHOˆœÛÛˆJ˜[YJKˆ™[\˜WØ\ÝŽ‘Y˜][˜[YNŽ”Ýš[™Ê˜[YJHOˆœÛÛˆJ˜[YJKˆ™[\˜WØ\ÝŽ‘Y˜][˜[YNŽ’Y[
+˜[YJHOˆœÛÛˆJ˜[YJKˆBŸB‚™›ˆ›Ú™XÝÛ˜[YJ]ˆ	œÝŠHOˆÜ[ÛÝš[™ÏˆÂˆ]ÛÛ™šY×Ü]H›Ú™XÝØÛÛ™šY×Ü]
+]
+K›ÚÊ
+K™›][Š
+OÎÂˆ]ÛÛ[ÈHœÎŽœ™XYÝ×ÜÝš[™ÊÛÛ™šY×Ü]
+K›ÚÊ
+OÎÂˆ]]][—Ü›Ú™XÝH˜[ÙNÂˆ›Üˆ˜]×Û[™H[ˆÛÛ[Ë›[™\Ê
+HÂˆ][™HH˜]×Û[™KœÜ]
+	ÈÉÊK›™^
+
+OËš[J
+NÂˆYˆ[™KœÝ\×ÝÚ]
+	ÖÉÊH	‰ˆ[™K™[™×ÝÚ]
+	×IÊHÂˆ[—Ü›Ú™XÝH[™HOH–Ü›Ú™XÝHŽÂˆÛÛ[YNÂˆBˆYˆ[—Ü›Ú™XÝÂˆ]
+Ù^K˜[YJHH[™KœÜ]ÛÛ˜ÙJ	ÏIÊOÎÂˆYˆÙ^Kš[J
+HOH›˜[YHˆÂˆ™]\›ˆ˜[YBˆš[J
+BˆœÝš\Ü™Yš^
+	È‰ÊBˆ˜[™Ý[Š˜[Y_˜[YKœÝš\ÜÝY™š^
+	È‰ÊJBˆ›X\
+ÝŽŽ×ÛÝÛ™Y
+NÂˆBˆBˆBˆ›Û™BŸB‚™›ˆÛÛ^Ù[žJ]ˆ	œÝŠHOˆÝš[™ÈÂˆ]ÛÝ\˜ÙWÜ]HœÎŽ˜Ø[›ÛšXØ[^™J]
+K›ÚÊ
+NÂˆ]›ÛÝH›Ú™XÝØÛÛ™šY×Ü]
+]
+Bˆ›ÚÊ
+Bˆ™›][Š
+Bˆ˜[™Ý[Š]]œ\™[
+
+K›X\
+]YŽŽ™œ›ÛJJNÂˆYˆ]
+ÛÛYJÛÝ\˜ÙWÜ]
+KÛÛYJ›ÛÝ
+JHH
+ÛÝ\˜ÙWÜ]›ÛÝ
+HÂˆYˆ]ÚÊ™[]]™JHHÛÝ\˜ÙWÜ]œÝš\Ü™Yš^
+›ÛÝ
+HÂˆ™]\›ˆ™[]]™K×ÜÝš[™×ÛÜÜÞJ
+Kœ™\XÙJ	×	Ë‹ÈŠNÂˆBˆBˆ]œ™\XÙJ	×	Ë‹ÈŠBŸB‚™›ˆÛÛ^ÝšY]×ÜÛÝÊ[ˆ	œÝŠHOˆ™XÏ˜[YOˆÂˆÛÝÚ[›ØØ][ÛœÊ[
+Bˆ[Ü˜\ÛÜ—ÙY˜][
+
+Bˆš[×Ú]\Š
+Bˆ›X\
+ÛÝÂˆœÛÛˆJÂˆ›˜[YHŽˆÛÝ›˜[YK[Ü˜\ÛÜ—Ù[ÙJ™Y˜][‹š[Ê
+JKˆ™˜[˜XÚÈŽˆÛÝ˜›ÙKš\×ÜÛÛYJ
+BˆJBˆJBˆ˜ÛÛXÝ
+
+BŸB‚™›ˆÛÛ^ÙXÛ\˜][ÛœÊ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KÛÝ\˜ÙNˆ	œÝŠHOˆ˜[YHÂˆ]]X˜\Ù\ÈH›ÙÜ˜[Bˆ™]X˜\Ù\Âˆš]\Š
+Bˆ›X\
+]X˜\Ù_ÂˆœÛÛˆJÂˆ›˜[YHŽˆ]X˜\ÙK›˜[YKˆ™[™Ú[™HŽˆ]X˜\ÙK™[™Ú[™Kˆ™]X˜\ÙHŽˆ]X˜\ÙK™]X˜\ÙKˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙK]X˜\ÙKœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]X›\ÈH›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ›X\
+X›_Âˆ]šY[ÈHX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ›X\
+ÛÛ[[ŸÂˆœÛÛˆJÂˆ›˜[YHŽˆÛÛ[[‹›˜[YKˆ\HŽˆÛÛ[[‹K×ÜÝš[™Ê
+Kˆ›Ü[Û˜[ŽˆXÛÛ[[‹œ™\]Z\™Yˆœš[X\žWÚÙ^HŽˆÛÛ[[‹œš[X\žWÚÙ^Kˆ˜]]×Ú[˜Ü™[Y[ŽˆÛÛ[[‹˜]]Ëˆ[š\]YHŽˆÛÛ[[‹[š\]YKˆ™Y˜][ŽˆÛÛ[[‹™Y˜][˜\×Ü™YŠ
+K›X\
+Y˜][Ý˜[YWÚœÛÛŠKˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKÛÛ[[‹œÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆœÛÛˆJÂˆ›˜[YHŽˆX›K›˜[YKˆ™šY[ÈŽˆšY[ËˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKX›KœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]ÜYÈH›ÙÜ˜[Bˆ˜ÜYÂˆš]\Š
+Bˆ›X\
+ÜYÂˆœÛÛˆJÂˆ›˜[YHŽˆÜY›˜[YKˆX›HŽˆÜYX›Kˆ›^[Ý]ŽˆÜY›^[Ý]ˆ›^[Ý]ÜÛÝÈŽˆÜY›^[Ý]ÜÛÝËš]\Š
+K›X\
+ÛÝœÛÛˆJÂˆ›˜[YHŽˆÛÝ›˜[YKˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKÛÝœÜ[ŠBˆJJK˜ÛÛXÝŽ™XÏÏŠ
+KˆšY]×ÙšY[ÈŽˆÜYšY]Ë™šY[ËˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKÜYœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]šY]ÜÈH›ÙÜ˜[BˆšY]ÜÂˆš]\Š
+Bˆ›X\
+šY]ßÂˆœÛÛˆJÂˆ›˜[YHŽˆšY]Ë›˜[YKˆš[œ]Ý\HŽˆ˜[YNŽ“[ˆ\ÙYÙšY[ÈŽˆ™XÎŽÝš[™ÏŽŽ›™]Ê
+KˆœÛÝÈŽˆÛÛ^ÝšY]×ÜÛÝÊ	šY]Ëš[
+KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKšY]ËœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]ÛÛ\Û™[ÈH›ÙÜ˜[Bˆ˜ÛÛ\Û™[Âˆš]\Š
+Bˆ›X\
+ÛÛ\Û™[ÂˆœÛÛˆJÂˆ›˜[YHŽˆÛÛ\Û™[›˜[YKˆœ›ÜÈŽˆÛÛ\Û™[œ›ÜËš]\Š
+K›X\
+›ÜœÛÛˆJÂˆ›˜[YHŽˆ›Ü›˜[YKˆ\HŽˆ›ÜK×ÜÝš[™Ê
+BˆJJK˜ÛÛXÝŽ™XÏÏŠ
+KˆœÛÝÈŽˆÛÛ^ÝšY]×ÜÛÝÊ	˜ÛÛ\Û™[š[
+KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKÛÛ\Û™[œÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]YÙ\ÈH›ÙÜ˜[BˆœYÙ\Âˆš]\Š
+Bˆ›X\
+YÙ_Âˆ]]HHYÙBˆ™]Bˆš]\Š
+Bˆ›X\
+š[™[™ßÂˆœÛÛˆJÂˆ›˜[YHŽˆš[™[™Ë›˜[YKˆ\HŽˆš[™[™Ëœ™\Ý[Ý\K×ÜÝš[™Ê
+Kˆ™šY[ÈŽˆYÙWÙ]WÙšY[Ê›ÙÜ˜[K	˜š[™[™Ëœ™\Ý[Ý\JKˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKš[™[™ËœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ][œ]ÈHYÙBˆš[œ]Âˆš]\Š
+Bˆ›X\
+[œ]ÂˆœÛÛˆJÂˆ›˜[YHŽˆ[œ]›˜[YKˆ\HŽˆ[œ]K×ÜÝš[™Ê
+KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙK[œ]œÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆœÛÛˆJÂˆœ]ŽˆYÙKœ]ˆšY]ÈŽˆYÙKšY]Ëˆš[œ]ÈŽˆ[œ]ËˆœYÙWÜÚ^™HŽˆYÙKœYÙWÜÚ^™KˆœÛÜŽˆYÙKœÛÜˆœÙX\˜ÚŽˆYÙKœÙX\˜Úˆ™š[\œÈŽˆYÙK™š[\œËˆ™]HŽˆ]KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKYÙKœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]X›]šY]ÜÈH›ÙÜ˜[BˆX›]šY]ÜÂˆš]\Š
+Bˆ›X\
+šY]ßÂˆœÛÛˆJÂˆ›˜[YHŽˆšY]Ë›˜[YKˆœ™\Ý[Ý\HŽˆšY]Ëœ™\Ý[Ý\K×ÜÝš[™Ê
+Kˆ™šY[ÈŽˆšY]Ë˜ÛÛ[[œËˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙKšY]ËœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]›Ü›\ÈH›ÙÜ˜[Bˆ™›Ü›\Âˆš]\Š
+Bˆ›X\
+›Ü›_ÂˆœÛÛˆJÂˆ›˜[YHŽˆ›Ü›K›˜[YKˆX›HŽˆ›Ü›KX›Kˆ™šY[ÈŽˆ›Ü›K™šY[Ëš]\Š
+K›X\
+šY[šY[›˜[YK˜ÛÛ™J
+JK˜ÛÛXÝŽ™XÏÏŠ
+KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙK›Ü›KœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]\\ÈH›ÙÜ˜[Bˆ˜\\Âˆš]\Š
+Bˆ›X\
+\_ÂˆœÛÛˆJÂˆ›Y]ÙŽˆ\K›Y]Ùˆœ]Žˆ\Kœ]ˆš[œ]Žˆ\Kš[œ]š]\Š
+K›X\
+šY[œÛÛˆJÈ›˜[YHŽˆšY[›˜[YK\HŽˆšY[K×ÜÝš[™Ê
+HJJK˜ÛÛXÝŽ™XÏÏŠ
+Kˆ›Ý]]Žˆ\K›Ý]]×ÜÝš[™Ê
+KˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙK\KœÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]]]H›ÙÜ˜[Bˆ˜]]ˆš]\Š
+Bˆ›X\
+]]ÂˆœÛÛˆJÂˆ›˜[YHŽˆ]]›˜[YKˆX›HŽˆ]]X›Kˆ˜]Y]ÝX›HŽˆ]]˜]Y]ÝX›Kˆ˜]Y]ØÚZ[ˆŽˆ]]˜]Y]ØÚZ[‹ˆœÜ[ˆŽˆÛÛ^ÜÜ[ŠÛÝ\˜ÙK]]œÜ[ŠBˆJBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆœÛÛˆJÂˆ™]X˜\Ù\ÈŽˆ]X˜\Ù\ËˆX›\ÈŽˆX›\Ëˆ˜ÜYÈŽˆÜYËˆœYÙ\ÈŽˆYÙ\ËˆšY]ÜÈŽˆšY]ÜËˆ˜ÛÛ\Û™[ÈŽˆÛÛ\Û™[ËˆX›]šY]ÜÈŽˆX›]šY]ÜËˆ™›Ü›\ÈŽˆ›Ü›\Ëˆ˜\\ÈŽˆ\\Ëˆ˜]]Žˆ]]ˆJBŸB‚™›ˆ[\WØÛÛ^ÙXÛ\˜][ÛœÊ
+HOˆ˜[YHÂˆœÛÛˆJÂˆ™]X˜\Ù\ÈŽˆ×KˆX›\ÈŽˆ×Kˆ˜ÜYÈŽˆ×KˆœYÙ\ÈŽˆ×KˆšY]ÜÈŽˆ×Kˆ˜ÛÛ\Û™[ÈŽˆ×KˆX›]šY]ÜÈŽˆ×Kˆ™›Ü›\ÈŽˆ×Kˆ˜\\ÈŽˆ×Kˆ˜]]Žˆ×BˆJBŸB‚™›ˆÛÛ^Û[Ù[\Ê
+HOˆ˜[YHÂˆ“Ò‘PÕÓSÑSTËÚ]
+[Ù[\ßÂˆœÛÛˆJ[Ù[\Âˆ˜›Üœ›ÝÊ
+Bˆš]\Š
+Bˆ›X\
+[Ù[_œÛÛˆJÂˆœ]Žˆ[Ù[Kœ]ˆš[\ÜÈŽˆ[Ù[Kš[\ÜËš]\Š
+K›X\
+[\ÜœÛÛˆJÂˆ˜[X\ÈŽˆ[\Ü˜[X\Ëˆœ]Žˆ[\Üœ]ˆJJK˜ÛÛXÝŽ™XÏÏŠ
+Kˆ™^ÜÈŽˆ[Ù[K™^ÜËš]\Š
+K›X\
+^ÜœÛÛˆJÂˆšÚ[™Žˆ^ÜšÚ[™ˆ›˜[YHŽˆ^Ü›˜[YBˆJJK˜ÛÛXÝŽ™XÏÏŠ
+BˆJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+JBˆJBŸB‚™›ˆ[Ù[WÙXÛ\˜][Û—ÛÝÛ™\œÊ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ\ÚX\Ýš[™ËÝš[™ÏˆÂˆ]ÛÝ\˜ÙWÜ]ÈH“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÂˆÛÝ\˜Ù\Âˆ˜›Üœ›ÝÊ
+Bˆš]\Š
+Bˆ›X\
+ÛÝ\˜Ù_ÛÝ\˜ÙKœ]˜ÛÛ™J
+JBˆ˜ÛÛXÝŽ™XÏÏŠ
+BˆJNÂˆ]]]ÝÛ™\œÈH\ÚX\Ž›™]Ê
+NÂˆ]]][œÙ\H˜[YNˆÝš[™ËÜ[Žˆ™[\˜WØ\ÝŽ”Ü[ŸÂˆYˆ]ÛÛYJ]
+HHÛÝ\˜ÙWÜ]Ë™Ù]
+Ü[‹œÛÝ\˜ÙWÚY\È\Ú^™JHÂˆÝÛ™\œËš[œÙ\
+˜[YK]˜ÛÛ™J
+JNÂˆBˆNÂˆ›Üˆ]X˜\ÙH[ˆ	œ›ÙÜ˜[K™]X˜\Ù\ÈÂˆ[œÙ\
+›Ü›X]J™]X˜\ÙNžßH‹]X˜\ÙK›˜[YJK]X˜\ÙKœÜ[ŠNÂˆBˆ›ÜˆX›H[ˆ	œ›ÙÜ˜[KX›\ÈÂˆ[œÙ\
+›Ü›X]JX›NžßH‹X›K›˜[YJKX›KœÜ[ŠNÂˆBˆ›ÜˆX›]šY]È[ˆ	œ›ÙÜ˜[KX›]šY]ÜÈÂˆ[œÙ\
+›Ü›X]JX›]šY]ÎžßH‹X›]šY]Ë›˜[YJKX›]šY]ËœÜ[ŠNÂˆBˆ›ÜˆYÙH[ˆ	œ›ÙÜ˜[KœYÙ\ÈÂˆ[œÙ\
+›Ü›X]JœYÙNžßH‹YÙKœ]
+KYÙKœÜ[ŠNÂˆBˆ›ÜˆšY]È[ˆ	œ›ÙÜ˜[KšY]ÜÈÂˆ[œÙ\
+›Ü›X]JšY]ÎžßH‹šY]Ë›˜[YJKšY]ËœÜ[ŠNÂˆBˆ›ÜˆÛÛ\Û™[[ˆ	œ›ÙÜ˜[K˜ÛÛ\Û™[ÈÂˆ[œÙ\
+›Ü›X]J˜ÛÛ\Û™[žßH‹ÛÛ\Û™[›˜[YJKÛÛ\Û™[œÜ[ŠNÂˆBˆ›Üˆ[˜Ý[Ûˆ[ˆ	œ›ÙÜ˜[K™[˜Ý[ÛœÈÂˆ[œÙ\
+›Ü›X]J™[˜Ý[ÛŽžßH‹[˜Ý[Û‹›˜[YJK[˜Ý[Û‹œÜ[ŠNÂˆBˆ›Üˆ›Ü›H[ˆ	œ›ÙÜ˜[K™›Ü›\ÈÂˆ[œÙ\
+›Ü›X]J™›Ü›NžßH‹›Ü›K›˜[YJK›Ü›KœÜ[ŠNÂˆBˆ›ÜˆÜY[ˆ	œ›ÙÜ˜[K˜ÜYÈÂˆ[œÙ\
+›Ü›X]J˜ÜYžßH‹ÜY›˜[YJKÜYœÜ[ŠNÂˆBˆ›Üˆ\H[ˆ	œ›ÙÜ˜[K˜\\ÈÂˆ[œÙ\
+›Ü›X]J˜\NžßHßH‹\K›Y]Ù\Kœ]
+K\KœÜ[ŠNÂˆBˆ›Üˆ]][ˆ	œ›ÙÜ˜[K˜]]Âˆ[œÙ\
+›Ü›X]J˜]]žßH‹]]›˜[YJK]]œÜ[ŠNÂˆBˆÝÛ™\œÂŸB‚™›ˆ[Ù[WÝ\Ù\×Ù]X˜\ÙJˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆ[Ù[WÜ]ˆ	œÝ‹ˆÝÛ™\œÎˆ	’\ÚX\Ýš[™ËÝš[™Ï‹ŠHOˆ›ÛÛÂˆ]ÝÛ™YH›ÙNˆ	œÝŸÝÛ™\œË™Ù]
+›ÙJKš\×ÜÛÛYWØ[™
+]]OH[Ù[WÜ]
+NÂˆ›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ˜[žJX›_ÝÛ™Y
+	™›Ü›X]JX›NžßH‹X›K›˜[YJJJBˆ›ÙÜ˜[BˆX›]šY]ÜÂˆš]\Š
+Bˆ˜[žJšY]ßÝÛ™Y
+	™›Ü›X]JX›]šY]ÎžßH‹šY]Ë›˜[YJJJBˆ›ÙÜ˜[BˆœYÙ\Âˆš]\Š
+Bˆ˜[žJYÙ_\YÙK™]Kš\×Ù[\J
+H	‰ˆÝÛ™Y
+	™›Ü›X]JœYÙNžßH‹YÙKœ]
+JJBˆ›ÙÜ˜[Bˆ™›Ü›\Âˆš]\Š
+Bˆ˜[žJ›Ü›_ÝÛ™Y
+	™›Ü›X]J™›Ü›NžßH‹›Ü›K›˜[YJJJBˆ›ÙÜ˜[Bˆ˜ÜYÂˆš]\Š
+Bˆ˜[žJÜYÝÛ™Y
+	™›Ü›X]J˜ÜYžßH‹ÜY›˜[YJJJBˆ›ÙÜ˜[Bˆ˜]]ˆš]\Š
+Bˆ˜[žJ]]ÝÛ™Y
+	™›Ü›X]J˜]]žßH‹]]›˜[YJJJBˆ›ÙÜ˜[K™[˜Ý[ÛœËš]\Š
+K˜[žJ[˜Ý[ÛŸÂˆÝÛ™Y
+	™›Ü›X]J™[˜Ý[ÛŽžßH‹[˜Ý[Û‹›˜[YJJBˆ	‰ˆ[˜Ý[Û‚ˆ˜Ø\Xš[]Y\Âˆš]\Š
+Bˆ˜[žJØ\Xš[]_Ø\Xš[]KœÝ\×ÝÚ]
+‘]X˜\ÙHŠJBˆJBŸB‚™›ˆ[Ù[WØÛÛ[X[™
+]]\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆYˆ\™Ý[Y[Ë›™^
+
+K˜\×Ù\™YŠ
+HOHÛÛYJœ[ˆŠHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]
+ÛÛYJ[žJKÛÛYJÙ[XÝY
+JHH
+\™Ý[Y[Ë›™^
+
+K\™Ý[Y[Ë›™^
+
+JH[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ\™Ý[Y[Ë›™^
+
+Kš\×ÜÛÛYJ
+HÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆB‚ˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê	™[žJK[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	™[žK	œÛÝ\˜ÙJNÂˆ]˜[Y][ÛˆH˜[Y]J	™[žJNÂˆ][Ù[\ÈH“Ò‘PÕÓSÑSTËÚ]
+[Ù[\ß[Ù[\Ë˜›Üœ›ÝÊ
+K˜ÛÛ™J
+JNÂˆ]]][ˆH›Û™NÂˆYˆ]ÚÊ›ÙÜ˜[JHH˜[Y][ÛˆÂˆ]Ù[XÝYHÙ[XÝYœ™\XÙJ	×	Ë‹ÈŠNÂˆ]žWÜ]H[Ù[\Âˆš]\Š
+Bˆ›X\
+[Ù[_
+[Ù[Kœ]˜\×ÜÝŠ
+K[Ù[JJBˆ˜ÛÛXÝŽ\ÚX\ËÏŠ
+NÂˆYˆXžWÜ]˜ÛÛZ[œ×ÚÙ^JÙ[XÝY˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝXÊˆ	™[žKˆ‘KSSÑLLÈ‹ˆ	™›Ü›X]J›[Ù[HÜÙ[XÝYX\È›Ý™XXÚX›Hœ›ÛH\È›Ú™XÝ[žHŠKˆKˆKˆ
+NÂˆH[ÙHÂˆ]›Ú™XÝÜÛÝ\˜Ù\ÈH“Ò‘PÕÔÓÕTÑTËÚ]
+ÛÝ\˜Ù\ßÛÝ\˜Ù\Ë˜›Üœ›ÝÊ
+K˜ÛÛ™J
+JNÂˆ]ÝÛ™\œÈH[Ù[WÙXÛ\˜][Û—ÛÝÛ™\œÊ	œ›ÙÜ˜[JNÂˆ][\XÝHZ[Ú[\XÝÝÚ]ÜÛÝ\˜Ù\Ê	œ›ÙÜ˜[K	œ›Ú™XÝÜÛÝ\˜Ù\Ë	œÛÝ\˜ÙJNÂˆ]™Y™\™[˜Ù\ÈH[\XÝˆ™Ù]
+œ™Y™\™[˜Ù\ÈŠBˆ˜[™Ý[Š˜[YNŽ˜\×Ø\œ˜^JBˆ˜ÛÛ™Y
+
+Bˆ[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ]]][™[™ÈH™XÈVÜÙ[XÝY˜ÛÛ™J
+WNÂˆ]]][˜ÛYYH•™YTÙ]Ž›™]Ê
+NÂˆ]]]Ü˜\Ú\×ØÛÛ\]HHYNÂˆ]]][œ™\ÛÛ™YÜ™Y™\™[˜Ù\ÈH•™YTÙ]Ž›™]Ê
+NÂˆ]]]]X˜\ÙWÜ™\]Z\™YH˜[ÙNÂˆÚ[H]ÛÛYJ]
+HH[™[™ËœÜ
+
+HÂˆYˆZ[˜ÛYYš[œÙ\
+]˜ÛÛ™J
+JHÂˆÛÛ[YNÂˆBˆ]ÛÛYJ[Ù[JHHžWÜ]™Ù]
+]˜\×ÜÝŠ
+JH[ÙHÂˆXYÛ›ÜÝXÊˆ	™[žKˆ‘KSSÑLM‹ˆ	™›Ü›X]J›[Ù[H\[™[˜ÞHÜ]X\ÈZ\ÜÚ[™Èœ›ÛHHØYYÜ˜\ŠKˆKˆKˆ
+NÂˆÜ˜\Ú\×ØÛÛ\]HH˜[ÙNÂˆœ™XZÎÂˆNÂˆ[™[™Ë™^[™
+[Ù[Kš[\ÜËš]\Š
+K›X\
+[\Ü[\Üœ]˜ÛÛ™J
+JJNÂˆYˆ[Ù[WÝ\Ù\×Ù]X˜\ÙJ	œ›ÙÜ˜[K	œ]	›ÝÛ™\œÊHÂˆ]X˜\ÙWÜ™\]Z\™YHYNÂˆ›Üˆ]X˜\ÙH[ˆ	œ›ÙÜ˜[K™]X˜\Ù\ÈÂˆYˆ]ÛÛYJ]X˜\ÙWÜ]
+HBˆÝÛ™\œË™Ù]
+	™›Ü›X]J™]X˜\ÙNžßH‹]X˜\ÙK›˜[YJJBˆÂˆ[™[™Ëœ\Ú
+]X˜\ÙWÜ]˜ÛÛ™J
+JNÂˆBˆBˆBˆ›Üˆ™Y™\™[˜ÙH[ˆ	œ™Y™\™[˜Ù\ÈÂˆ]ÛÛYJœ›ÛJHH™Y™\™[˜ÙK™Ù]
+™œ›ÛHŠK˜[™Ý[Š˜[YNŽ˜\×ÜÝŠH[ÙHÂˆÛÛ[YNÂˆNÂˆYˆÝÛ™\œË™Ù]
+œ›ÛJK›X\
+Ýš[™ÎŽ˜\×ÜÝŠHOHÛÛYJ]˜\×ÜÝŠ
+JHÂˆÛÛ[YNÂˆBˆ]ÛÛYJÊHH™Y™\™[˜ÙK™Ù]
+ÈŠK˜[™Ý[Š˜[YNŽ˜\×ÜÝŠH[ÙHÂˆÛÛ[YNÂˆNÂˆYˆ]ÛÛYJ\[™[˜ÞWÜ]
+HHÝÛ™\œË™Ù]
+ÊHÂˆ[™[™Ëœ\Ú
+\[™[˜ÞWÜ]˜ÛÛ™J
+JNÂˆH[ÙHÂˆ[œ™\ÛÛ™YÜ™Y™\™[˜Ù\Ëš[œÙ\
+
+ˆ]˜ÛÛ™J
+Kˆœ›ÛK×ÛÝÛ™Y
+
+KˆË×ÛÝÛ™Y
+
+Kˆ
+JNÂˆBˆBˆBˆYˆÜ˜\Ú\×ØÛÛ\]HÂˆ]ÛÜÝ\™HH[˜ÛYYˆš]\Š
+Bˆ™š[\—ÛX\
+]žWÜ]™Ù]
+]˜\×ÜÝŠ
+JK˜ÛÜYY
+
+JBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]]]™\ÛÝ\˜ÙWÙ\[™[˜ÚY\ÈH•™YSX\Ž›™]Ê
+NÂˆ›Üˆ™Y™\™[˜ÙH[ˆ	œ™Y™\™[˜Ù\ÈÂˆ]ÛÛYJœ›ÛJHH™Y™\™[˜ÙK™Ù]
+™œ›ÛHŠK˜[™Ý[Š˜[YNŽ˜\×ÜÝŠH[ÙHÂˆÛÛ[YNÂˆNÂˆ]ÛÛYJœ›ÛWÜ]
+HHÝÛ™\œË™Ù]
+œ›ÛJH[ÙHÂˆÛÛ[YNÂˆNÂˆ]ÛÛYJÊHH™Y™\™[˜ÙK™Ù]
+ÈŠK˜[™Ý[Š˜[YNŽ˜\×ÜÝŠH[ÙHÂˆÛÛ[YNÂˆNÂˆ]ÛÛYJ×Ü]
+HHÝÛ™\œË™Ù]
+ÊH[ÙHÂˆÛÛ[YNÂˆNÂˆYˆœ›ÛWÜ]OH×Ü]ˆZ[˜ÛYY˜ÛÛZ[œÊœ›ÛWÜ]
+BˆZ[˜ÛYY˜ÛÛZ[œÊ×Ü]
+BˆÂˆÛÛ[YNÂˆBˆ]Ú[™H™Y™\™[˜ÙBˆ™Ù]
+šÚ[™ŠBˆ˜[™Ý[Š˜[YNŽ˜\×ÜÝŠBˆ[Ü˜\ÛÜŠœ™Y™\™[˜ÙHŠNÂˆ]Ù^HH
+ˆœ›ÛWÜ]˜ÛÛ™J
+Kˆœ›ÛK×ÛÝÛ™Y
+
+Kˆ×Ü]˜ÛÛ™J
+KˆË×ÛÝÛ™Y
+
+KˆÚ[™×ÛÝÛ™Y
+
+Kˆ
+NÂˆ™\ÛÝ\˜ÙWÙ\[™[˜ÚY\Ëš[œÙ\
+ˆÙ^KˆœÛÛˆJÂˆ™œ›ÛWÛ[Ù[HŽˆœ›ÛWÜ]ˆ™œ›ÛHŽˆœ›ÛKˆ×Û[Ù[HŽˆ×Ü]ˆÈŽˆËˆšÚ[™ŽˆÚ[™ˆœÜ[ˆŽˆ™Y™\™[˜ÙK™Ù]
+œÜ[ˆŠBˆJKˆ
+NÂˆBˆYˆ]X˜\ÙWÜ™\]Z\™YÂˆ›Üˆ[Ù[WÜ][ˆ	š[˜ÛYYÂˆYˆ[[Ù[WÝ\Ù\×Ù]X˜\ÙJ	œ›ÙÜ˜[K[Ù[WÜ]	›ÝÛ™\œÊHÂˆÛÛ[YNÂˆBˆ›Üˆ]X˜\ÙH[ˆ	œ›ÙÜ˜[K™]X˜\Ù\ÈÂˆ]]X˜\ÙWÛ›ÙHH›Ü›X]J™]X˜\ÙNžßH‹]X˜\ÙK›˜[YJNÂˆ]ÛÛYJ]X˜\ÙWÜ]
+HHÝÛ™\œË™Ù]
+	™]X˜\ÙWÛ›ÙJH[ÙHÂˆÛÛ[YNÂˆNÂˆYˆ[Ù[WÜ]OH]X˜\ÙWÜ]ÂˆÛÛ[YNÂˆBˆ]Ù^HH
+ˆ[Ù[WÜ]˜ÛÛ™J
+Kˆ™]X˜\ÙNœ[[YH‹š[Ê
+Kˆ]X˜\ÙWÜ]˜ÛÛ™J
+Kˆ]X˜\ÙWÛ›ÙK˜ÛÛ™J
+Kˆ™]X˜\ÙWØÛÛ™šYÝ\˜][Ûˆ‹š[Ê
+Kˆ
+NÂˆ™\ÛÝ\˜ÙWÙ\[™[˜ÚY\Ëš[œÙ\
+ˆÙ^KˆœÛÛˆJÂˆ™œ›ÛWÛ[Ù[HŽˆ[Ù[WÜ]ˆ™œ›ÛHŽˆ™]X˜\ÙNœ[[YH‹ˆ×Û[Ù[HŽˆ]X˜\ÙWÜ]ˆÈŽˆ]X˜\ÙWÛ›ÙKˆšÚ[™Žˆ™]X˜\ÙWØÛÛ™šYÝ\˜][Ûˆ‚ˆJKˆ
+NÂˆBˆBˆBˆ]]X˜\ÙWØÛÛ™šYÝ\˜][Û—ÜÛÝ\˜Ù\ÈH›ÙÜ˜[Bˆ™]X˜\Ù\Âˆš]\Š
+Bˆ™š[\—ÛX\
+]X˜\Ù_ÝÛ™\œË™Ù]
+	™›Ü›X]J™]X˜\ÙNžßH‹]X˜\ÙK›˜[YJJJBˆ™š[\Š][˜ÛYY˜ÛÛZ[œÊ
+œ]
+JBˆ˜ÛÛ™Y
+
+Bˆ˜ÛÛXÝŽ•™YTÙ]ÏŠ
+NÂˆ[ˆHÛÛYJœÛÛˆJÂˆšÚ[™ŽˆšÛ›ÝÛ‹\Ù[X[XËY\[™[˜ÞKXÛÜÝ\™H‹ˆ˜ÛÜÝ\™WÜÙ[X[XÜÈŽˆ™^XÚ]Z[\ÜË\\Ë\Ý]XØ[K\™XÛÙÛš^™Y\™Y™\™[˜Ù\È‹ˆœÙ[XÝYÛ[Ù[HŽˆÙ[XÝYˆ™[žHŽˆÛÛ^Ù[žJ	™[žJKˆœÛÝ\˜ÙWÙš[\ÈŽˆ[˜ÛYYˆ›[Ù[\ÈŽˆÛÜÝ\™Kš]\Š
+K›X\
+[Ù[_œÛÛˆJÂˆœ]Žˆ[Ù[Kœ]ˆš[\ÜÈŽˆ[Ù[Kš[\ÜËš]\Š
+K›X\
+[\ÜœÛÛˆJÂˆ˜[X\ÈŽˆ[\Ü˜[X\Ëˆœ]Žˆ[\Üœ]ˆJJK˜ÛÛXÝŽ™XÏÏŠ
+Kˆ™^ÜÈŽˆ[Ù[K™^ÜËš]\Š
+K›X\
+^ÜœÛÛˆJÂˆšÚ[™Žˆ^ÜšÚ[™ˆ›˜[YHŽˆ^Ü›˜[YBˆJJK˜ÛÛXÝŽ™XÏÏŠ
+BˆJJK˜ÛÛXÝŽ™XÏÏŠ
+Kˆœ™\ÛÝ\˜ÙWÙ\[™[˜ÚY\ÈŽˆ™\ÛÝ\˜ÙWÙ\[™[˜ÚY\Ë˜[Y\Ê
+K˜ÛÛ™Y
+
+K˜ÛÛXÝŽ™XÏÏŠ
+Kˆ[œ™\ÛÛ™YÜ™Y™\™[˜Ù\ÈŽˆ[œ™\ÛÛ™YÜ™Y™\™[˜Ù\Ëš]\Š
+K›X\
+
+[Ù[Kœ›ÛKÊ_œÛÛˆJÂˆ™œ›ÛWÛ[Ù[HŽˆ[Ù[Kˆ™œ›ÛHŽˆœ›ÛKˆÈŽˆÂˆJJK˜ÛÛXÝŽ™XÏÏŠ
+Kˆ™]X˜\ÙHŽˆÂˆœ™\]Z\™YŽˆ]X˜\ÙWÜ™\]Z\™Yˆ˜ÛÛ™šYÝ\˜][Û—ÜÛÝ\˜Ù\ÈŽˆ]X˜\ÙWØÛÛ™šYÝ\˜][Û—ÜÛÝ\˜Ù\ÂˆKˆ˜ÛÛ\]WÙ\Þ[Y[Žˆ˜[ÙKˆ›[Z]][ÛœÈŽˆÂˆ“Û›H\[™[˜ÞHÚ[™È™XÛÙÛš^™YžHHÝ\œ™[Ý]XÈ[\XÝÜ˜\\™H›ÛÝÙYˆ‹ˆ”›Ú™XÝÛÛ™šYÝ\˜][Û‹[[YHY\\œË\ÜÙ]Ë^\›˜[Ù\šXÙHÛÛ˜XÝË[™ØÚÙ\ˆ\Y˜XÝÈ\™H›Ý[˜ÛYYˆ‚ˆKˆ››ÝHŽˆ•\È™XY[Û›H™]šY]È\È›ÝHÛÛ\]H\Þ[Y[X[šY™\Ý[›˜X›H\XØ][Û‹ÜˆØÚÙ\ˆ^Üˆ‚ˆJJNÂˆBˆBˆBˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆ]ÝXØÙ\ÜÈH[‹š\×ÜÛÛYJ
+H	‰ˆXYÛ›ÜÝXÜËš\×Ù[\J
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆ›[Ù[H[ˆ‹ˆÝXØÙ\ÜËˆXYÛ›ÜÝXÜËˆÊœ[ˆ‹š[Ê
+K[‹[Ü˜\ÛÜŠ˜[YNŽ“[
+JWKˆ
+JNÂˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚™›ˆÛÛ^ØÛÛ[X[™
+]]\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJ]
+HH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]]›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹KY›Ü›X]ZœÛÛˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’œÛÛŽÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]Z[X[ˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆH[ÙHYˆ\™Ý[Y[œÝ\×ÝÚ]
+‹KY›Ü›X]HŠHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]ˆÂˆ›Ü›X]HX]Ú\™Ý[Y[Ë›™^
+
+K˜\×Ù\™YŠ
+K˜[™Ý[Š\œÙWÛÝ]]Ù›Ü›X]
+HÂˆÛÛYJ›Ü›X]
+HOˆ›Ü›X]ˆ›Û™HOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆÛÛ^Ü[ÛˆØ\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆ›Ü›X]OHÝ]]›Ü›X]Ž’[X[ˆÂˆ™]\›ˆYˆ˜[Y]J	œ]
+Kš\×ÛÚÊ
+HÂˆš[ˆJ˜ÛÛ^ˆßH‹ÛÛ^Ù[žJ	œ]
+JNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆNÂˆBˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê	œ]
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	œ]	œÛÝ\˜ÙJNÂˆ]›ÙÜ˜[HH˜[Y]J	œ]
+NÂˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆ]ÝXØÙ\ÜÈH›ÙÜ˜[Kš\×ÛÚÊ
+NÂˆ]XÛ\˜][ÛœÈH›ÙÜ˜[K˜\×Ü™YŠ
+K›X\ÛÜ—Ù[ÙJˆß[\WØÛÛ^ÙXÛ\˜][ÛœÊ
+Kˆ›ÙÜ˜[_ÛÛ^ÙXÛ\˜][ÛœÊ›ÙÜ˜[K	œÛÝ\˜ÙJKˆ
+NÂˆ]šY[ÈHÂˆ
+ˆœ›Ú™XÝ‹š[Ê
+KˆœÛÛˆJÂˆ›˜[YHŽˆ›Ú™XÝÛ˜[YJ	œ]
+Kˆ™[žHŽˆÛÛ^Ù[žJ	œ]
+BˆJKˆ
+Kˆ
+™XÛ\˜][ÛœÈ‹š[Ê
+KXÛ\˜][ÛœÊKˆ
+›[Ù[\È‹š[Ê
+KÛÛ^Û[Ù[\Ê
+JKˆNÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+˜ÛÛ^‹ÝXØÙ\ÜËXYÛ›ÜÝXÜËšY[ÊJNÂˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚™›ˆ™X]\™WÜÙ][™Ü×ÚœÛÛŠ™X]\™\Îˆ	”›Ú™XÝ™X]\™\ÊHOˆ˜[YHÂˆ˜[YNŽ“Øš™XÝ
+ˆ™X]\™\Âˆš]\Š
+Bˆ›X\
+
+˜[YKÙ][™Ê_Âˆ
+ˆ˜[YK˜ÛÛ™J
+KˆœÛÛˆJÂˆ™[˜X›YŽˆÙ][™Ë™[˜X›YˆœÛÝ\˜ÙHŽˆÙ][™ËœÛÝ\˜ÙBˆJKˆ
+BˆJBˆ˜ÛÛXÝ
+
+Kˆ
+BŸB‚™›ˆÛÛ™šY×ØÛÛ[X[™
+]]\™Ý[Y[Îˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJ]
+HH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]]›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹KY›Ü›X]ZœÛÛˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’œÛÛŽÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]Z[X[ˆˆÂˆ›Ü›X]HÝ]]›Ü›X]Ž’[X[ŽÂˆH[ÙHYˆ\™Ý[Y[œÝ\×ÝÚ]
+‹KY›Ü›X]HŠHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY›Ü›X]ˆÂˆ›Ü›X]HX]Ú\™Ý[Y[Ë›™^
+
+K˜\×Ù\™YŠ
+K˜[™Ý[Š\œÙWÛÝ]]Ù›Ü›X]
+HÂˆÛÛYJ›Ü›X]
+HOˆ›Ü›X]ˆ›Û™HOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ›Ü›X]]\Ý™H[X[˜ÜˆœÛÛ˜ŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆÛÛ™šYÈÜ[ÛˆØ\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆB‚ˆ]ÛÛ™šY×Ü]H›Ú™XÝØÛÛ™šY×Ü]
+	œ]
+K›ÚÊ
+K™›][Š
+NÂˆ][—Ùš[HHÛÛ™šY×Ü]ˆ˜\×Ü™YŠ
+Bˆ˜[™Ý[Š]]œ\™[
+
+JBˆ›X\
+]]š›Ú[Š‹™[ˆŠJBˆ™š[\Š]]š\×Ùš[J
+JBˆš\×ÜÛÛYJ
+NÂˆ]™\Ý[H›Ú™XÝÙ™X]\™\Ê	œ]
+NÂˆYˆ›Ü›X]OHÝ]]›Ü›X]Ž’[X[ˆÂˆ]™X]\™\ÈHX]Ú™\Ý[ÂˆÚÊ™X]\™\ÊHOˆ™X]\™\Ëˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKQ‘PUT‘KL—NˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆš[ˆJˆ˜ÛÛ™šYÝ\˜][ÛŽˆßH‹ˆYˆÛÛ™šY×Ü]š\×ÜÛÛYJ
+HÂˆž™[\˜KÛ[‚ˆH[ÙHÂˆ™Y˜][È‚ˆBˆ
+NÂˆš[ˆJˆ™[š\›Û›Y[š[NˆßH‹ˆYˆ[—Ùš[HÂˆ›ØYY
+™X]\™H›YÜÈÛ›JH‚ˆH[ÙHÂˆ››Ý™\Ù[‚ˆBˆ
+NÂˆ›Üˆ
+˜[YKÙ][™ÊH[ˆ™X]\™\ÈÂˆš[ˆJˆˆÛ˜[Y_NˆßH
+ßJH‹ˆYˆÙ][™Ë™[˜X›YÂˆ™[˜X›Y‚ˆH[ÙHÂˆ™\ØX›Y‚ˆKˆÙ][™ËœÛÝ\˜ÙBˆ
+NÂˆBˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆB‚ˆ™YÚ[—ÚœÛÛ—ÙXYÛ›ÜÝXÜÊ	œ]ˆŠNÂˆ]
+ÝXØÙ\ÜË™X]\™\ÊHHX]Ú™\Ý[ÂˆÚÊ™X]\™\ÊHOˆ
+YK™X]\™WÜÙ][™Ü×ÚœÛÛŠ	™™X]\™\ÊJKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	œ]‘KQ‘PUT‘KLˆ‹	™\œ›Ü‹KJNÂˆ
+˜[ÙK˜[YNŽ“Øš™XÝ
+X\Ž›™]Ê
+JJBˆBˆNÂˆ]XYÛ›ÜÝXÜÈHš[š\ÚÚœÛÛ—ÙXYÛ›ÜÝXÜÊ
+NÂˆš[ÛXXÚ[™WÙØÝ[Y[
+	›XXÚ[™WÙØÝ[Y[
+ˆ˜ÛÛ™šYÈ‹ˆÝXØÙ\ÜËˆXYÛ›ÜÝXÜËˆÂˆ
+ˆœ›Ú™XÝ‹š[Ê
+KˆœÛÛˆJÂˆ›˜[YHŽˆ›Ú™XÝÛ˜[YJ	œ]
+Kˆ˜ÛÛ™šY×Ùš[HŽˆÛÛ™šY×Ü]˜\×Ü™YŠ
+K›X\
+ßž™[\˜KÛ[ŠKˆ™[—Ùš[WÜ™\Ù[Žˆ[—Ùš[KˆœÙXÜ™]ÈŽˆ››Ý\Ü^YY‚ˆJKˆ
+Kˆ
+™™X]\™\È‹š[Ê
+K™X]\™\ÊKˆKˆ
+JNÂˆYˆÝXØÙ\ÜÈÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚œÝXÝÛÛ\Û™[[›ØØ][ÛˆÂˆ˜[YNˆÝš[™Ëˆ]šX]\ÎˆÝš[™Ëˆ›ÙNˆÜ[ÛÝš[™Ï‹ˆÝ\ˆ\Ú^™Kˆ[™ˆ\Ú^™KŸB‚™›ˆÛÛ\Û™[Ú[›ØØ][ÛœÊ[ˆ	œÝŠHOˆ™\Ý[™XÏÛÛ\Û™[[›ØØ][Û‹Ýš[™ÏˆÂˆ]]][›ØØ][ÛœÈH™XÎŽ›™]Ê
+NÂˆ]]]ÙX\˜ÚÙœ›ÛHHÂˆÚ[H]ÛÛYJ™[]]™WÜÝ\
+HH[ÜÙX\˜ÚÙœ›ÛK‹—K™š[™
+	Ï	ÊHÂˆ]Ý\HÙX\˜ÚÙœ›ÛH
+È™[]]™WÜÝ\Âˆ]Y\—ÛÜ[ˆH	š[ÜÝ\
+ÈK‹—NÂˆ]ÛÛYJš\œÝ
+HHY\—ÛÜ[‹˜Ú\œÊ
+K›™^
+
+H[ÙHÂˆœ™XZÎÂˆNÂˆYˆYš\œÝš\×Ø\ØÚZWÝ\\˜Ø\ÙJ
+HÂˆÙX\˜ÚÙœ›ÛHHÝ\
+ÈNÂˆÛÛ[YNÂˆBˆ]˜[YWÛ[™ÝHY\—ÛÜ[‚ˆ˜Ú\œÊ
+BˆZÙWÝÚ[JÚ\˜XÝ\ŸÚ\˜XÝ\‹š\×Ø\ØÚZWØ[[[Y\šXÊ
+H
+˜Ú\˜XÝ\ˆOH	×ÉÊBˆ›X\
+Ú\ŽŽ›[—Ý]Ž
+BˆœÝ[NŽ\Ú^™OŠ
+NÂˆ]˜[YHHY\—ÛÜ[–Ë‹›˜[YWÛ[™ÝK×ÛÝÛ™Y
+
+NÂˆ]Y\—Û˜[YHHÝ\
+ÈH
+È˜[YWÛ[™ÝÂˆ]ÛÛYJ™[]]™WÝY×Ù[™
+HH[ØY\—Û˜[YK‹—K™š[™
+	Ï‰ÊH[ÙHÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜ÛÛ\Û™[Û˜[Y_O˜\È[ˆ[\›Z[˜]YÜ[š[™ÈYÈ‚ˆ
+JNÂˆNÂˆ]Y×Ù[™HY\—Û˜[YH
+È™[]]™WÝY×Ù[™Âˆ]Y×ØÛÛ[H	š[ØY\—Û˜[YK‹Y×Ù[™NÂˆYˆY×ØÛÛ[š[WÙ[™
+
+K™[™×ÝÚ]
+	ËÉÊHÂˆ]]šX]\ÈHY×ØÛÛ[š[WÙ[™
+
+Kš[WÙ[™ÛX]Ú\Ê	ËÉÊKš[WÙ[™
+
+NÂˆ][™HY×Ù[™
+ÈNÂˆ[›ØØ][ÛœËœ\Ú
+ÛÛ\Û™[[›ØØ][ÛˆÂˆ˜[YKˆ]šX]\Îˆ]šX]\Ë×ÛÝÛ™Y
+
+Kˆ›ÙNˆ›Û™KˆÝ\ˆ[™ˆJNÂˆÙX\˜ÚÙœ›ÛHH[™ÂˆH[ÙHÂˆ]ÛÜÚ[™ÈH›Ü›X]JÞÛ˜[Y_OˆŠNÂˆ]›ÙWÜÝ\HY×Ù[™
+ÈNÂˆ]ÛÛYJ™[]]™WØÛÜÚ[™×ÜÝ\
+HH[Ø›ÙWÜÝ\‹—K™š[™
+	˜ÛÜÚ[™ÊH[ÙHÂˆ™]\›ˆ\œŠ›Ü›X]J˜ÛÛ\Û™[Û˜[Y_O˜\ÈZ\ÜÚ[™ÈØÛÜÚ[™ßXŠJNÂˆNÂˆ]ÛÜÚ[™×ÜÝ\H›ÙWÜÝ\
+È™[]]™WØÛÜÚ[™×ÜÝ\Âˆ][™HÛÜÚ[™×ÜÝ\
+ÈÛÜÚ[™Ë›[Š
+NÂˆ[›ØØ][ÛœËœ\Ú
+ÛÛ\Û™[[›ØØ][ÛˆÂˆ˜[YKˆ]šX]\ÎˆY×ØÛÛ[×ÛÝÛ™Y
+
+Kˆ›ÙNˆÛÛYJ[Ø›ÙWÜÝ\‹˜ÛÜÚ[™×ÜÝ\K×ÛÝÛ™Y
+
+JKˆÝ\ˆ[™ˆJNÂˆÙX\˜ÚÙœ›ÛHH[™ÂˆBˆBˆÚÊ[›ØØ][ÛœÊBŸB‚™›ˆÛÛ\Û™[Ø]šX]\Ê]šX]\Îˆ	œÝŠHOˆ™\Ý[\ÚX\Ýš[™ËÝš[™Ï‹Ýš[™ÏˆÂˆ]]]˜[Y\ÈH\ÚX\Ž›™]Ê
+NÂˆ]ž]\ÈH]šX]\Ë˜\×Øž]\Ê
+NÂˆ]]]ÜÚ][ÛˆHÂˆÚ[HÜÚ][Ûˆž]\Ë›[Š
+HÂˆÚ[Hž]\Ë™Ù]
+ÜÚ][ÛŠKš\×ÜÛÛYWØ[™
+NŽš\×Ø\ØÚZWÝÚ]\ÜXÙJHÂˆÜÚ][Ûˆ
+ÏHNÂˆBˆYˆÜÚ][ÛˆOHž]\Ë›[Š
+HÂˆœ™XZÎÂˆBˆ]˜[YWÜÝ\HÜÚ][ÛŽÂˆÚ[Hž]\Âˆ™Ù]
+ÜÚ][ÛŠBˆš\×ÜÛÛYWØ[™
+ž]_ž]Kš\×Ø\ØÚZWØ[[[Y\šXÊ
+H
+˜ž]HOH‰×ÉÊBˆÂˆÜÚ][Ûˆ
+ÏHNÂˆBˆYˆ˜[YWÜÝ\OHÜÚ][ÛˆÂˆ™]\›ˆ\œŠ˜ÛÛ\Û™[›Ü\Y\È™\]Z\™HH˜[YH‹š[Ê
+JNÂˆBˆ]˜[YHH]šX]\ÖÛ˜[YWÜÝ\‹œÜÚ][Û—K×ÛÝÛ™Y
+
+NÂˆÚ[Hž]\Ë™Ù]
+ÜÚ][ÛŠKš\×ÜÛÛYWØ[™
+NŽš\×Ø\ØÚZWÝÚ]\ÜXÙJHÂˆÜÚ][Ûˆ
+ÏHNÂˆBˆYˆž]\Ë™Ù]
+ÜÚ][ÛŠHOHÛÛYJ	˜‰ÏIÊHÂˆ™]\›ˆ\œŠ›Ü›X]J˜ÛÛ\Û™[›Ü\HÛ˜[Y_X™\]Z\™\ÈXŠJNÂˆBˆÜÚ][Ûˆ
+ÏHNÂˆÚ[Hž]\Ë™Ù]
+ÜÚ][ÛŠKš\×ÜÛÛYWØ[™
+NŽš\×Ø\ØÚZWÝÚ]\ÜXÙJHÂˆÜÚ][Ûˆ
+ÏHNÂˆBˆYˆž]\Ë™Ù]
+ÜÚ][ÛŠHOHÛÛYJ	˜‰È‰ÊHÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜ÛÛ\Û™[›Ü\HÛ˜[Y_X]\Ý\ÙHH][ÝY˜[YH‚ˆ
+JNÂˆBˆÜÚ][Ûˆ
+ÏHNÂˆ]˜[YWÜÝ\HÜÚ][ÛŽÂˆÚ[Hž]\Ë™Ù]
+ÜÚ][ÛŠKš\×ÜÛÛYWØ[™
+ž]_
+˜ž]HOH‰È‰ÊHÂˆÜÚ][Ûˆ
+ÏHNÂˆBˆYˆÜÚ][ÛˆOHž]\Ë›[Š
+HÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜ÛÛ\Û™[›Ü\HÛ˜[Y_X\È[ˆ[\›Z[˜]Y˜[YH‚ˆ
+JNÂˆBˆ]˜[YHH]šX]\ÖÝ˜[YWÜÝ\‹œÜÚ][Û—K×ÛÝÛ™Y
+
+NÂˆÜÚ][Ûˆ
+ÏHNÂˆYˆ˜[Y\Ëš[œÙ\
+˜[YK˜ÛÛ™J
+K˜[YJKš\×ÜÛÛYJ
+HÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜ÛÛ\Û™[›Ü\HÛ˜[Y_X\ÈÜXÚYšYY[Ü™H[ˆÛ˜ÙH‚ˆ
+JNÂˆBˆBˆÚÊ˜[Y\ÊBŸB‚œÝXÝÛÝ[›ØØ][ÛˆÂˆ˜[YNˆÜ[ÛÝš[™Ï‹ˆ›ÙNˆÜ[ÛÝš[™Ï‹ˆÝ\ˆ\Ú^™Kˆ[™ˆ\Ú^™KŸB‚™›ˆÛÝÚ[›ØØ][ÛœÊ[ˆ	œÝŠHOˆ™\Ý[™XÏÛÝ[›ØØ][Û‹Ýš[™ÏˆÂˆ]]]ÛÝÈH™XÎŽ›™]Ê
+NÂˆ]]]ÙX\˜ÚÙœ›ÛHHÂˆÚ[H]ÛÛYJ™[]]™WÜÝ\
+HH[ÜÙX\˜ÚÙœ›ÛK‹—K™š[™
+ÛÝŠHÂˆ]Ý\HÙX\˜ÚÙœ›ÛH
+È™[]]™WÜÝ\Âˆ]Y\—Û˜[YHHÝ\
+ÈÛÝ‹›[Š
+NÂˆYˆ[ˆ˜\×Øž]\Ê
+Bˆ™Ù]
+Y\—Û˜[YJBˆš\×ÜÛÛYWØ[™
+ž]_ž]Kš\×Ø\ØÚZWØ[[[Y\šXÊ
+H
+˜ž]HOH‰×ÉÊBˆÂˆÙX\˜ÚÙœ›ÛHHY\—Û˜[YNÂˆÛÛ[YNÂˆBˆ]ÛÛYJ™[]]™WÝY×Ù[™
+HH[ØY\—Û˜[YK‹—K™š[™
+	Ï‰ÊH[ÙHÂˆ™]\›ˆ\œŠœÛÝ\È[ˆ[\›Z[˜]YÜ[š[™ÈYÈ‹š[Ê
+JNÂˆNÂˆ]Y×Ù[™HY\—Û˜[YH
+È™[]]™WÝY×Ù[™Âˆ]Y×ØÛÛ[H	š[ØY\—Û˜[YK‹Y×Ù[™NÂˆ]Ù[—ØÛÜÚ[™ÈHY×ØÛÛ[š[WÙ[™
+
+K™[™×ÝÚ]
+	ËÉÊNÂˆ]]šX]\ÈHYˆÙ[—ØÛÜÚ[™ÈÂˆY×ØÛÛ[š[WÙ[™
+
+Kš[WÙ[™ÛX]Ú\Ê	ËÉÊKš[WÙ[™
+
+BˆH[ÙHÂˆY×ØÛÛ[ˆNÂˆ]]šX]\ÈHÛÛ\Û™[Ø]šX]\Ê]šX]\ÊBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]Jš[˜[YÛÝXÛ\˜][ÛŽˆÙ\œ›ÜŸHŠJOÎÂˆYˆ]šX]\ËšÙ^\Ê
+K˜[žJ˜[Y_˜[YHOH›˜[YHŠHÂˆ™]\›ˆ\œŠœÛÝÝ\ÜÈÛ›HH˜[YX]šX]H‹š[Ê
+JNÂˆBˆ]˜[YHH]šX]\Ë™Ù]
+›˜[YHŠK˜ÛÛ™Y
+
+NÂˆYˆÙ[—ØÛÜÚ[™ÈÂˆ][™HY×Ù[™
+ÈNÂˆÛÝËœ\Ú
+ÛÝ[›ØØ][ÛˆÂˆ˜[YKˆ›ÙNˆ›Û™KˆÝ\ˆ[™ˆJNÂˆÙX\˜ÚÙœ›ÛHH[™ÂˆH[ÙHÂˆ]ÛÛYJ˜[YJHH˜[YH[ÙHÂˆ™]\›ˆ\œŠ˜ÛÛ[ÛÝ›ØÚÜÈ™\]Z\™HH˜[YX]šX]H‹š[Ê
+JNÂˆNÂˆ]›ÙWÜÝ\HY×Ù[™
+ÈNÂˆ]ÛÜÚ[™ÈHÜÛÝˆŽÂˆ]ÛÛYJ™[]]™WØÛÜÚ[™×ÜÝ\
+HH[Ø›ÙWÜÝ\‹—K™š[™
+ÛÜÚ[™ÊH[ÙHÂˆ™]\›ˆ\œŠœÛÝ\ÈZ\ÜÚ[™ÈÜÛÝ˜‹š[Ê
+JNÂˆNÂˆ]ÛÜÚ[™×ÜÝ\H›ÙWÜÝ\
+È™[]]™WØÛÜÚ[™×ÜÝ\Âˆ][™HÛÜÚ[™×ÜÝ\
+ÈÛÜÚ[™Ë›[Š
+NÂˆÛÝËœ\Ú
+ÛÝ[›ØØ][ÛˆÂˆ˜[YNˆÛÛYJ˜[YJKˆ›ÙNˆÛÛYJ[Ø›ÙWÜÝ\‹˜ÛÜÚ[™×ÜÝ\K×ÛÝÛ™Y
+
+JKˆÝ\ˆ[™ˆJNÂˆÙX\˜ÚÙœ›ÛHH[™ÂˆBˆBˆÚÊÛÝÊBŸB‚™›ˆXÛ\™YØÛÛ\Û™[ÜÛÝÊˆÛÛ\Û™[ˆ	ž™[\˜WØ\ÝŽÛÛ\Û™[Y‹ŠHOˆ™\Ý[
+›ÛÛ\ÚÙ]Ýš[™ÏŠKÝš[™ÏˆÂˆ]]]\×ÙY˜][H˜[ÙNÂˆ]]]˜[YYH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆÛÝ[ˆÛÝÚ[›ØØ][ÛœÊ	˜ÛÛ\Û™[š[
+OÈÂˆYˆ]ÛÛYJ˜[YJHHÛÝ›˜[YHÂˆYˆ[˜[YYš[œÙ\
+˜[YJHÂˆ™]\›ˆ\œŠ˜ÛÛ\Û™[XÛ\™\ÈHØ[YH˜[YYÛÝ[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆBˆH[ÙHYˆ\×ÙY˜][Âˆ™]\›ˆ\œŠ˜ÛÛ\Û™[XÛ\™\ÈHY˜][ÛÝ[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆH[ÙHÂˆ\×ÙY˜][HYNÂˆBˆBˆÚÊ
+\×ÙY˜][˜[YY
+JBŸB‚™›ˆÜ]ØÛÛ\Û™[Ø›ÙJ›ÙNˆ	œÝŠHOˆ™\Ý[
+Ýš[™Ë\ÚX\Ýš[™ËÝš[™ÏŠKÝš[™ÏˆÂˆ]ÛÝÈHÛÝÚ[›ØØ][ÛœÊ›ÙJOÎÂˆ]]]˜[YYH\ÚX\Ž›™]Ê
+NÂˆ]]]Y˜][Ø›ÙHH›ÙK×ÛÝÛ™Y
+
+NÂˆ›ÜˆÛÝ[ˆÛÝËš[×Ú]\Š
+Kœ™]Š
+HÂˆ]ÛÛYJÛÝØ›ÙJHHÛÝ˜›ÙH[ÙHÂˆ™]\›ˆ\œŠ˜ÛÛ\Û™[ÛÛ[ÛÝÈ]\Ý\ÙHÜ[š[™È[™ÛÜÚ[™ÈYÜÈ‹š[Ê
+JNÂˆNÂˆ]ÛÛYJ˜[YJHHÛÝ›˜[YH[ÙHÂˆ™]\›ˆ\œŠ˜ÛÛ\Û™[ÛÛ[ÛÝÈ™\]Z\™HH˜[YX]šX]H‹š[Ê
+JNÂˆNÂˆYˆ˜[YYš[œÙ\
+˜[YKÛÝØ›ÙJKš\×ÜÛÛYJ
+HÂˆ™]\›ˆ\œŠHØ[YH˜[YYÛÝ\È›ÝšYY[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆBˆY˜][Ø›ÙKœ™\XÙWÜ˜[™ÙJÛÝœÝ\‹œÛÝ™[™ˆŠNÂˆBˆÚÊ
+Y˜][Ø›ÙK˜[YY
+JBŸB‚™›ˆXÛ\™YÝšY]×ÜÛÝÊšY]Îˆ	ž™[\˜WØ\ÝŽ•šY]ÑYŠHOˆ™\Ý[
+›ÛÛ\ÚÙ]Ýš[™ÏŠKÝš[™ÏˆÂˆ]]]\×ÙY˜][H˜[ÙNÂˆ]]]˜[YYH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆÛÝ[ˆÛÝÚ[›ØØ][ÛœÊ	šY]Ëš[
+OÈÂˆYˆ]ÛÛYJ˜[YJHHÛÝ›˜[YHÂˆYˆ[˜[YYš[œÙ\
+˜[YJHÂˆ™]\›ˆ\œŠšY]ÈXÛ\™\ÈHØ[YH˜[YYÛÝ[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆBˆH[ÙHYˆ\×ÙY˜][Âˆ™]\›ˆ\œŠšY]ÈXÛ\™\ÈHY˜][ÛÝ[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆH[ÙHÂˆ\×ÙY˜][HYNÂˆBˆBˆÚÊ
+\×ÙY˜][˜[YY
+JBŸB‚™›ˆÜ]ÝšY]×ØÛÛ[
+›ÙNˆ	œÝŠHOˆ™\Ý[
+Ýš[™Ë\ÚX\Ýš[™ËÝš[™ÏŠKÝš[™ÏˆÂˆ]ÛÝÈHÛÝÚ[›ØØ][ÛœÊ›ÙJOÎÂˆ]]]˜[YYH\ÚX\Ž›™]Ê
+NÂˆ]]]Y˜][Ø›ÙHH›ÙK×ÛÝÛ™Y
+
+NÂˆ›ÜˆÛÝ[ˆÛÝËš[×Ú]\Š
+Kœ™]Š
+HÂˆ]ÛÛYJÛÝØ›ÙJHHÛÝ˜›ÙH[ÙHÂˆ™]\›ˆ\œŠšY]ÈÛÛ[ÛÝÈ]\Ý\ÙHÜ[š[™È[™ÛÜÚ[™ÈYÜÈ‹š[Ê
+JNÂˆNÂˆ]ÛÛYJ˜[YJHHÛÝ›˜[YH[ÙHÂˆ™]\›ˆ\œŠšY]ÈÛÛ[ÛÝÈ™\]Z\™HH˜[YX]šX]H‹š[Ê
+JNÂˆNÂˆYˆ˜[YYš[œÙ\
+˜[YKÛÝØ›ÙJKš\×ÜÛÛYJ
+HÂˆ™]\›ˆ\œŠHØ[YH˜[YYšY]ÈÛÝ\È›ÝšYY[Ü™H[ˆÛ˜ÙH‹š[Ê
+JNÂˆBˆY˜][Ø›ÙKœ™\XÙWÜ˜[™ÙJÛÝœÝ\‹œÛÝ™[™ˆŠNÂˆBˆÚÊ
+Y˜][Ø›ÙK˜[YY
+JBŸB‚™›ˆYÙWÛ^[Ý]ÜÛÝÚ[›ØØ][ÛœÊ[ˆ	œÝŠHOˆ™\Ý[™XÏÛÝ[›ØØ][Û‹Ýš[™ÏˆÂˆ]ÛÛ\Û™[Ü˜[™Ù\ÈHÛÛ\Û™[Ú[›ØØ][ÛœÊ[
+OÂˆš[×Ú]\Š
+Bˆ›X\
+ÛÛ\Û™[ÛÛ\Û™[œÝ\‹˜ÛÛ\Û™[™[™
+Bˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆÚÊÛÝÚ[›ØØ][ÛœÊ[
+OÂˆš[×Ú]\Š
+Bˆ™š[\ŠÛÝÂˆXÛÛ\Û™[Ü˜[™Ù\Âˆš]\Š
+Bˆ˜[žJ˜[™Ù_˜[™ÙKœÝ\HÛÝœÝ\	‰ˆÛÝ™[™H˜[™ÙK™[™
+BˆJBˆ˜ÛÛXÝ
+
+JBŸB‚™›ˆ˜[Y]WÝšY]×ØÛÛ[ÜÛÝÊšY]Îˆ	ž™[\˜WØ\ÝŽ•šY]ÑY‹›ÙNˆ	œÝŠHOˆ™\Ý[
+
+KÝš[™ÏˆÂˆ]
+ËXÛ\™YÛ˜[YY
+HHXÛ\™YÝšY]×ÜÛÝÊšY]ÊOÎÂˆ]
+ËÝ\YYÛ˜[YY
+HHÜ]ÝšY]×ØÛÛ[
+›ÙJOÎÂˆ›Üˆ˜[YH[ˆÝ\YYÛ˜[YYšÙ^\Ê
+HÂˆYˆYXÛ\™YÛ˜[YY˜ÛÛZ[œÊ˜[YJHÂˆ™]\›ˆ\œŠ›Ü›X]JšY]È\È›È˜[YYÛÝÛ˜[Y_XŠJNÂˆBˆBˆÚÊ
+
+JBŸB‚™›ˆ˜[Y]WØÜYÛ^[Ý]ÜÛÝÊˆšY]Îˆ	ž™[\˜WØ\ÝŽ•šY]ÑY‹ˆÝ\YYÜÛÝÎˆ	–Þ™[\˜WØ\ÝŽÜY^[Ý]ÛÝY—KŠHOˆ™\Ý[
+
+K
+\Ú^™KÝš[™ÊOˆÂˆ]
+ËXÛ\™YÜÛÝÊHHXÛ\™YÝšY]×ÜÛÝÊšY]ÊK›X\Ù\œŠY\ÜØYÙ_
+Y\ÜØYÙJJOÎÂˆ]]]Ý\YYÛ˜[Y\ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›Üˆ
+[™^ÛÝ
+H[ˆÝ\YYÜÛÝËš]\Š
+K™[[Y\˜]J
+HÂˆYˆYXÛ\™YÜÛÝË˜ÛÛZ[œÊ	œÛÝ›˜[YJHÂˆ™]\›ˆ\œŠ
+[™^›Ü›X]JšY]È\È›È˜[YYÛÝßX‹ÛÝ›˜[YJJJNÂˆBˆYˆ\Ý\YYÛ˜[Y\Ëš[œÙ\
+ÛÝ›˜[YK˜\×ÜÝŠ
+JHÂˆ™]\›ˆ\œŠ
+ˆ[™^ˆ›Ü›X]J›˜[YYÛÝßX\ÈÝ\YY[Ü™H[ˆÛ˜ÙH‹ÛÝ›˜[YJKˆ
+JNÂˆBˆBˆÚÊ
+
+JBŸB‚™›ˆÛÛ\Û™[Ü›ÜØXØÙ\Ê›Üˆ	ž™[\˜WØ\ÝŽÛÛ\Û™[›Ü˜[YNˆ	œÝŠHOˆ›ÛÛÂˆYˆ˜[YKœÝ\×ÝÚ]
+	ÞÉÊH	‰ˆ˜[YK™[™×ÝÚ]
+	ßIÊHÂˆ™]\›ˆ˜[YK›[Š
+HˆŽÂˆBˆX]Ú	œ›ÜHÂˆ\NŽ“Ü[ÛŠ[›™\ŠHOˆÛÛ\Û™[Ü›ÜØXØÙ\Êˆ	ž™[\˜WØ\ÝŽÛÛ\Û™[›ÜÂˆ˜[YNˆ›Ü›˜[YK˜ÛÛ™J
+KˆNˆ
+
+Šš[›™\ŠK˜ÛÛ™J
+KˆÜ[Žˆ›ÜœÜ[‹ˆKˆ˜[YKˆ
+Kˆ\NŽ’[\NŽ•R[Oˆ˜[YKœ\œÙNŽMŠ
+Kš\×ÛÚÊ
+Kˆ\NŽ‘›Ø]\NŽ‘XÚ[X[Oˆ˜[YKœ\œÙNŽŠ
+Kš\×ÛÚÊ
+Kˆ\NŽ›ÛÛOˆX]Ú\ÈJ˜[YKYHˆ™˜[ÙHŠKˆÈOˆYKˆBŸB‚™›ˆ[\]WÙ^™\ÜÚ[ÛœÊ[ˆ	œÝŠHOˆ™\Ý[™XÏÝš[™Ï‹Ýš[™ÏˆÂˆ]]]^™\ÜÚ[ÛœÈH™XÎŽ›™]Ê
+NÂˆ]]]™\ÝH[ÂˆÚ[H]ÛÛYJÜ[ŠHH™\Ý™š[™
+	ÞÉÊHÂˆ]Y\—ÛÜ[ˆH	œ™\ÝÛÜ[ˆ
+ÈK‹—NÂˆ]ÛÛYJÛÜÙJHHY\—ÛÜ[‹™š[™
+	ßIÊH[ÙHÂˆ™]\›ˆ\œŠšY]È[\œÛ][Ûˆ\È[ˆ[\›Z[˜]YØ‹š[Ê
+JNÂˆNÂˆ]^™\ÜÚ[ÛˆHY\—ÛÜ[–Ë‹˜ÛÜÙWKš[J
+NÂˆYˆ^™\ÜÚ[Û‹š\×Ù[\J
+HÂˆ™]\›ˆ\œŠšY]È[\œÛ][ÛˆØ[››Ý™H[\H‹š[Ê
+JNÂˆBˆ^™\ÜÚ[ÛœËœ\Ú
+^™\ÜÚ[Û‹×ÛÝÛ™Y
+
+JNÂˆ™\ÝH	˜Y\—ÛÜ[–ØÛÜÙH
+ÈK‹—NÂˆBˆÚÊ^™\ÜÚ[ÛœÊBŸB‚™›ˆ\×Ý[\]WÚY[YšY\Š^™\ÜÚ[ÛŽˆ	œÝŠHOˆ›ÛÛÂˆY^™\ÜÚ[Û‹š\×Ù[\J
+Bˆ	‰ˆ^™\ÜÚ[Û‹˜Ú\œÊ
+K™[[Y\˜]J
+K˜[
+
+[™^Ú\˜XÝ\Š_ÂˆYˆ[™^OHÂˆÚ\˜XÝ\‹š\×Ø\ØÚZWØ[X™]XÊ
+HÚ\˜XÝ\ˆOH	×ÉÂˆH[ÙHÂˆÚ\˜XÝ\‹š\×Ø\ØÚZWØ[[[Y\šXÊ
+HÚ\˜XÝ\ˆOH	×ÉÂˆBˆJBŸB‚™›ˆ\×Ý[\]WÙ^™\ÜÚ[ÛŠ^™\ÜÚ[ÛŽˆ	œÝŠHOˆ›ÛÛÂˆ^™\ÜÚ[Û‹œÜ]
+	Ë‰ÊK˜[
+\×Ý[\]WÚY[YšY\ŠBŸB‚œÝXÝ[\]Q›Ü›ØÚÈÂˆÝ\ˆ\Ú^™Kˆ[™ˆ\Ú^™Kˆ][NˆÝš[™ËˆÛÛXÝ[ÛŽˆÝš[™Ëˆ›ÙNˆÝš[™ËŸB‚™›ˆ™^Ý[\]WÙ›Ü—Ø›ØÚÊ[\]Nˆ	œÝŠHOˆÜ[Û™\Ý[[\]Q›Ü›ØÚËÝš[™ÏˆÂˆ]]]ÙX\˜ÚÙœ›ÛHHÂˆÚ[H]ÛÛYJ™[]]™WÜÝ\
+HH[\]VÜÙX\˜ÚÙœ›ÛK‹—K™š[™
+™›ÜˆŠHÂˆ]Ý\HÙX\˜ÚÙœ›ÛH
+È™[]]™WÜÝ\Âˆ][™WÜÝ\H[\]VË‹œÝ\Kœ™š[™
+	×‰ÊK›X\ÛÜŠ[™^[™^
+ÈJNÂˆYˆ][\]VÛ[™WÜÝ\‹œÝ\Kš[J
+Kš\×Ù[\J
+HÂˆÙX\˜ÚÙœ›ÛHHÝ\
+ÈÂˆÛÛ[YNÂˆBˆ]ÛÛYJ™[]]™WÛÜ[ŠHH[\]VÜÝ\‹—K™š[™
+	ÞÉÊH[ÙHÂˆ™]\›ˆÛÛYJ\œŠšY]È›Ü˜›ØÚÈ\ÈZ\ÜÚ[™ÈØ‹š[Ê
+JJNÂˆNÂˆ]Ü[ˆHÝ\
+È™[]]™WÛÜ[ŽÂˆ]XY\ˆH[\]VÜÝ\
+È‹›Ü[—Kš[J
+NÂˆ]\ÈHXY\‹œÜ]ÝÚ]\ÜXÙJ
+K˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆ\Ë›[Š
+HOHÂˆ\ÖÌWHOHš[ˆ‚ˆZ\×Ý[\]WÚY[YšY\Š\ÖÌJBˆZ\×Ý[\]WÚY[YšY\Š\ÖÌ—JBˆÂˆ™]\›ˆÛÛYJ\œŠˆšY]È›Ü˜›ØÚÈ]\Ý\ÙH›Üˆ][H[ˆÛÛXÝ[ÛˆÈ‹‹ˆX‹š[Ê
+Kˆ
+JNÂˆBˆ]]]\HNÂˆ]]]ÜÚ][ÛˆHÜ[ˆ
+ÈNÂˆÚ[HÜÚ][Ûˆ[\]K›[Š
+HÂˆX]Ú[\]K˜\×Øž]\Ê
+VÜÜÚ][Û—HÂˆ‰ÞÉÈOˆ\
+ÏHKˆ‰ßIÈOˆÂˆ\OHNÂˆYˆ\OHÂˆ™]\›ˆÛÛYJÚÊ[\]Q›Ü›ØÚÈÂˆÝ\ˆ[™ˆÜÚ][Ûˆ
+ÈKˆ][Nˆ\ÖÌKš[Ê
+KˆÛÛXÝ[ÛŽˆ\ÖÌ—Kš[Ê
+Kˆ›ÙNˆ[\]VÛÜ[ˆ
+ÈK‹œÜÚ][Û—Kš[Ê
+KˆJJNÂˆBˆBˆÈOˆßBˆBˆÜÚ][Ûˆ
+ÏHNÂˆBˆ™]\›ˆÛÛYJ\œŠšY]È›Ü˜›ØÚÈ\È[\›Z[˜]Y‹š[Ê
+JJNÂˆBˆ›Û™BŸB‚™›ˆ™\ÛÛ™WÝ[\]WÝ\Jˆ^™\ÜÚ[ÛŽˆ	œÝ‹ˆš[™[™ÜÎˆ	’\ÚX\Ýš[™Ë\O‹ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KŠHOˆ™\Ý[\KÝš[™ÏˆÂˆ]]]\ÈH^™\ÜÚ[Û‹œÜ]
+	Ë‰ÊNÂˆ]›ÛÝH\Ë›™^
+
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ]ÛÛYJ]]JHHš[™[™ÜË™Ù]
+›ÛÝ
+K˜ÛÛ™Y
+
+H[ÙHÂˆ™]\›ˆ\œŠ›Ü›X]J[šÛ›ÝÛˆšY]È˜[YHÜ›ÛÝXŠJNÂˆNÂˆ›ÜˆšY[[ˆ\ÈÂˆHH[\]WÙšY[Ý\J›ÙÜ˜[K	KšY[
+OÎÂˆBˆÚÊJBŸB‚™›ˆ[\]WÙšY[Ý\Jˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KˆNˆ	•\KˆšY[ˆ	œÝ‹ŠHOˆ™\Ý[\KÝš[™ÏˆÂˆ]HHX]ÚHÂˆ\NŽ“Ü[ÛŠÊHOˆÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ™šY[ÙšY[X™\]Z\™\È^XÚ][™[™ÈÙˆ[ˆÜ[Û˜[˜[YH‚ˆ
+JNÂˆBˆ\NŽ“˜[YY
+˜[YJHOˆÂˆYˆ]ÛÛYJYš[š][ÛŠHH›ÙÜ˜[Bˆ\\Âˆš]\Š
+Bˆ™š[™
+Yš[š][ÛŸYš[š][Û‹›˜[YHOH
+›˜[YJBˆÂˆ™]\›ˆ[\]WÙšY[Ý\J›ÙÜ˜[K	™Yš[š][Û‹\™Ù]šY[
+NÂˆBˆBˆBˆÈOˆKˆNÂˆYˆ]\NŽ“˜[YY
+˜[YJHHHÂˆYˆ]ÛÛYJ™XÛÜ™
+HH›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K™š[™
+™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJHÂˆ™]\›ˆ™XÛÜ™ˆ™šY[Âˆš]\Š
+Bˆ™š[™
+Ø[™Y]_Ø[™Y]K›˜[YHOHšY[
+Bˆ›X\
+Ø[™Y]_Ø[™Y]KK˜ÛÛ™J
+JBˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]J™šY[ÙšY[XÙ\È›Ý^\ÝÛˆÛ˜[Y_XŠJNÂˆBˆYˆ]ÛÛYJX›JHH›ÙÜ˜[KX›\Ëš]\Š
+K™š[™
+X›_ÂˆX›K›˜[YHOH
+›˜[YHÚ[™Ý[\—Ý\WÛ˜[YJ	X›K›˜[YJK˜\×Ù\™YŠ
+HOHÛÛYJ˜[YJBˆJHÂˆ™]\›ˆX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ™š[™
+Ø[™Y]_Ø[™Y]K›˜[YHOHšY[
+Bˆ›X\
+Ø[™Y]_Ø[™Y]KK˜ÛÛ™J
+JBˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]J™šY[ÙšY[XÙ\È›Ý^\ÝÛˆÛ˜[Y_XŠJNÂˆBˆBˆ\œŠ›Ü›X]J\HÝ_X\È›ÈšY[ÙšY[XŠJBŸB‚™›ˆ[\]WÝ\WØÛÛ\]X›J^XÝYˆ	•\KXÝX[ˆ	•\JHOˆ›ÛÛÂˆ^XÝYOHXÝX[ˆX]Ú\ÈJ^XÝY\NŽ“Ü[ÛŠ[›™\ŠHYˆ[\]WÝ\WØÛÛ\]X›J[›™\‹XÝX[
+JBŸB‚™›ˆ˜[Y]WÝ[\]WÙ^™\ÜÚ[ÛœÊˆ]ˆ	œÝ‹ˆ[ˆ	œÝ‹ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆš[™[™ÜÎˆ	’\ÚX\Ýš[™Ë\O‹ˆ[™Nˆ\Ú^™KˆÛÛ[[Žˆ\Ú^™KŠHOˆ›ÛÛÂˆYˆ]ÛÛYJ›ØÚÊHH™^Ý[\]WÙ›Ü—Ø›ØÚÊ[
+HÂˆ]›ØÚÈHX]Ú›ØÚÈÂˆÚÊ›ØÚÊHOˆ›ØÚËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLN‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ™]\›ˆ˜[ÙNÂˆBˆNÂˆ]]]˜[YH˜[Y]WÝ[\]WÚ[\œÛ][ÛœÊˆ]ˆ	š[Ë‹˜›ØÚËœÝ\Kˆ›ÙÜ˜[Kˆš[™[™ÜËˆ[™KˆÛÛ[[‹ˆ
+NÂˆ]ÛÛYJÛÛXÝ[Û—Ý\JHHš[™[™ÜË™Ù]
+	˜›ØÚË˜ÛÛXÝ[ÛŠH[ÙHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLN‹ˆ	™›Ü›X]J[šÛ›ÝÛˆšY]ÈÛÛXÝ[ÛˆßX‹›ØÚË˜ÛÛXÝ[ÛŠKˆ[™KˆÛÛ[[‹ˆ
+NÂˆ™]\›ˆ˜[ÙNÂˆNÂˆ]\NŽ\œ˜^J][WÝ\JHHÛÛXÝ[Û—Ý\H[ÙHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLN‹ˆ	™›Ü›X]JˆšY]ÈÛÜÛÝ\˜ÙHßX]\Ý]™H[ˆ\œ˜^H\H‹ˆ›ØÚË˜ÛÛXÝ[Û‚ˆ
+Kˆ[™KˆÛÛ[[‹ˆ
+NÂˆ™]\›ˆ˜[ÙNÂˆNÂˆYˆš[™[™ÜË˜ÛÛZ[œ×ÚÙ^J	˜›ØÚËš][JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLN‹ˆ	™›Ü›X]JˆšY]ÈÛÜ˜\šXX›HßXÛÛ™›XÝÈÚ][ˆ^\Ý[™È˜[YH‹ˆ›ØÚËš][Bˆ
+Kˆ[™KˆÛÛ[[‹ˆ
+NÂˆ™]\›ˆ˜[ÙNÂˆBˆ]]]ÛÜØš[™[™ÜÈHš[™[™ÜË˜ÛÛ™J
+NÂˆÛÜØš[™[™ÜËš[œÙ\
+›ØÚËš][K
+
+Šš][WÝ\JK˜ÛÛ™J
+JNÂˆ˜[Y	Bˆ˜[Y]WÝ[\]WÙ^™\ÜÚ[ÛœÊ]	˜›ØÚË˜›ÙK›ÙÜ˜[K	›ÛÜØš[™[™ÜË[™KÛÛ[[ŠNÂˆ˜[Y	H˜[Y]WÝ[\]WÙ^™\ÜÚ[ÛœÊˆ]ˆ	š[Ø›ØÚË™[™‹—Kˆ›ÙÜ˜[Kˆš[™[™ÜËˆ[™KˆÛÛ[[‹ˆ
+NÂˆ™]\›ˆ˜[YÂˆBˆ˜[Y]WÝ[\]WÚ[\œÛ][ÛœÊ][›ÙÜ˜[Kš[™[™ÜË[™KÛÛ[[ŠBŸB‚™›ˆ˜[Y]WÝ[\]WÚ[\œÛ][ÛœÊˆ]ˆ	œÝ‹ˆ[ˆ	œÝ‹ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆš[™[™ÜÎˆ	’\ÚX\Ýš[™Ë\O‹ˆ[™Nˆ\Ú^™KˆÛÛ[[Žˆ\Ú^™KŠHOˆ›ÛÛÂˆ]^™\ÜÚ[ÛœÈHX]Ú[\]WÙ^™\ÜÚ[ÛœÊ[
+HÂˆÚÊ^™\ÜÚ[ÛœÊHOˆ^™\ÜÚ[ÛœËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLLÈ‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ™]\›ˆ˜[ÙNÂˆBˆNÂˆ]]]˜[YHYNÂˆ›Üˆ^™\ÜÚ[Ûˆ[ˆ^™\ÜÚ[ÛœÈÂˆYˆZ\×Ý[\]WÙ^™\ÜÚ[ÛŠ	™^™\ÜÚ[ÛŠHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLM‹ˆ	™›Ü›X]JˆšY]È^™\ÜÚ[Ûˆ]\ÝÛÛZ[ˆY[YšY\œÈÙ\\˜]YžH˜›Ý[™ÞÞÙ^™\ÜÚ[ÛŸ__X‚ˆ
+Kˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆH[ÙHYˆ]\œŠY\ÜØYÙJHH™\ÛÛ™WÝ[\]WÝ\J	™^™\ÜÚ[Û‹š[™[™ÜË›ÙÜ˜[JHÂˆ]ÛÙHHYˆ^™\ÜÚ[Û‹˜ÛÛZ[œÊ	Ë‰ÊHÂˆ‘KU’QUËLMˆ‚ˆH[ÙHÂˆ‘KU’QUËLMH‚ˆNÂˆXYÛ›ÜÝXÊ]ÛÙK	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ˜[YH˜[ÙNÂˆBˆBˆ˜[YŸB‚™›ˆ˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ	œÝ‹ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆ[ˆ	œÝ‹ˆ[™Nˆ\Ú^™KˆÛÛ[[Žˆ\Ú^™Kˆš[™[™ÜÎˆ	’\ÚX\Ýš[™Ë\O‹ŠHOˆ›ÛÛÂˆ]]]˜[YH˜[Y]WÝ[\]WÙ^™\ÜÚ[ÛœÊ][›ÙÜ˜[Kš[™[™ÜË[™KÛÛ[[ŠNÂˆ][›ØØ][ÛœÈHX]ÚÛÛ\Û™[Ú[›ØØ][ÛœÊ[
+HÂˆÚÊ[›ØØ][ÛœÊHOˆ[›ØØ][ÛœËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLˆ‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ™]\›ˆ˜[ÙNÂˆBˆNÂˆ›Üˆ[›ØØ][Ûˆ[ˆ[›ØØ][ÛœÈÂˆ]ÛÛ\Û™[[›ØØ][ÛˆÂˆ˜[YKˆ]šX]\Ëˆ›ÙKˆ‹‚ˆHH[›ØØ][ÛŽÂˆ]ÛÛYJÛÛ\Û™[
+HH›ÙÜ˜[Bˆ˜ÛÛ\Û™[Âˆš]\Š
+Bˆ™š[™
+ÛÛ\Û™[ÛÛ\Û™[›˜[YHOH˜[YJBˆ[ÙHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLÈ‹ˆ	™›Ü›X]J[šÛ›ÝÛˆšY]ÈÛÛ\Û™[Û˜[Y_XŠKˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆÛÛ[YNÂˆNÂˆ]]šX]\ÈHX]ÚÛÛ\Û™[Ø]šX]\Ê	˜]šX]\ÊHÂˆÚÊ]šX]\ÊHOˆ]šX]\Ëˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLˆ‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ˜[YH˜[ÙNÂˆÛÛ[YNÂˆBˆNÂˆ]
+\×ÙY˜][ÜÛÝ˜[YYÜÛÝÊHHX]ÚXÛ\™YØÛÛ\Û™[ÜÛÝÊÛÛ\Û™[
+HÂˆÚÊÛÝÊHOˆÛÝËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLLH‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ˜[YH˜[ÙNÂˆ
+˜[ÙK\ÚÙ]Ž›™]Ê
+JBˆBˆNÂˆYˆ]ÛÛYJ›ÙJHH›ÙK˜\×Ù\™YŠ
+HÂˆ]
+Y˜][Ø›ÙKÝ\YYÛ˜[YYÜÛÝÊHHX]ÚÜ]ØÛÛ\Û™[Ø›ÙJ›ÙJHÂˆÚÊÛÝÊHOˆÛÝËˆ\œŠY\ÜØYÙJHOˆÂˆXYÛ›ÜÝXÊ]‘KU’QUËLLˆ‹	›Y\ÜØYÙK[™KÛÛ[[ŠNÂˆ˜[YH˜[ÙNÂˆ
+›ÙK×ÛÝÛ™Y
+
+K\ÚX\Ž›™]Ê
+JBˆBˆNÂˆYˆYY˜][Ø›ÙKš[J
+Kš\×Ù[\J
+H	‰ˆZ\×ÙY˜][ÜÛÝÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLLH‹ˆ	™›Ü›X]J˜ÛÛ\Û™[Û˜[Y_X™XÙZ]™\ÈÛÛ[]\È›ÈÛÝÏ˜ŠKˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆ›ÜˆÛÝÛ˜[YH[ˆÝ\YYÛ˜[YYÜÛÝËšÙ^\Ê
+HÂˆYˆ[˜[YYÜÛÝË˜ÛÛZ[œÊÛÝÛ˜[YJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLLˆ‹ˆ	™›Ü›X]J˜ÛÛ\Û™[Û˜[Y_X\È›È˜[YYÛÝÜÛÝÛ˜[Y_XŠKˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]J]›ÙÜ˜[K›ÙK[™KÛÛ[[‹š[™[™ÜÊNÂˆBˆ›Üˆ]šX]H[ˆ]šX]\ËšÙ^\Ê
+HÂˆYˆXÛÛ\Û™[œ›ÜËš]\Š
+K˜[žJ›Ü›Ü›˜[YHOH
+˜]šX]JHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËL‹ˆ	™›Ü›X]J˜ÛÛ\Û™[Û˜[Y_X\È›È›Ü\HØ]šX]_XŠKˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆ›Üˆ›Ü[ˆ	˜ÛÛ\Û™[œ›ÜÈÂˆ]ÛÛYJ˜[YJHH]šX]\Ë™Ù]
+	œ›Ü›˜[YJH[ÙHÂˆYˆ[X]Ú\ÈJ›ÜK\NŽ“Ü[ÛŠÊJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLH‹ˆ	™›Ü›X]Jˆ˜ÛÛ\Û™[Û˜[Y_X\ÈZ\ÜÚ[™È™\]Z\™Y›Ü\HßX‹ˆ›Ü›˜[YBˆ
+Kˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆÛÛ[YNÂˆNÂˆ][˜[ZX×Ý\WÙ\œ›ÜˆH˜[YBˆœÝš\Ü™Yš^
+	ÞÉÊBˆ˜[™Ý[Š˜[Y_˜[YKœÝš\ÜÝY™š^
+	ßIÊJBˆ›X\
+ÝŽŽš[JBˆ˜[™Ý[Š^™\ÜÚ[ÛŸ™\ÛÛ™WÝ[\]WÝ\J^™\ÜÚ[Û‹š[™[™ÜË›ÙÜ˜[JK›ÚÊ
+JBˆ™š[\ŠXÝX[][\]WÝ\WØÛÛ\]X›J	œ›ÜKXÝX[
+JNÂˆYˆ[˜[ZX×Ý\WÙ\œ›Ü‹š\×ÜÛÛYJ
+HXÛÛ\Û™[Ü›ÜØXØÙ\Ê›Ü˜[YJHÂˆXYÛ›ÜÝXÊˆ]ˆ‘KU’QUËLL‹ˆ	™›Ü›X]Jˆ˜[YHÝ˜[Y_X\È[˜ÛÛ\]X›HÚ]ÛÛ\Û™[›Ü\HßXÙˆ\HßH‹ˆ›Ü›˜[YK›ÜBˆ
+Kˆ[™KˆÛÛ[[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆBˆ˜[YŸB‚™›ˆ˜[Y]WØÛÛ\Û™[Ê]ˆ	œÝ‹›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ]]]˜[YHYNÂˆ]]]˜[Y\ÈH\ÚÙ]Ž›™]Ê
+NÂˆ›ÜˆÛÛ\Û™[[ˆ	œ›ÙÜ˜[K˜ÛÛ\Û™[ÈÂˆYˆXÛÛ\Û™[ˆ›˜[YBˆ˜Ú\œÊ
+Bˆ›™^
+
+Bˆš\×ÜÛÛYWØ[™
+Ú\˜XÝ\ŸÚ\˜XÝ\‹š\×Ø\ØÚZWÝ\\˜Ø\ÙJ
+JBˆÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËL‹ˆ	™›Ü›X]JˆšY]ÈÛÛ\Û™[ßX]\ÝÝ\Ú][ˆ\\˜Ø\ÙH]\ˆ‹ˆÛÛ\Û™[›˜[YBˆ
+KˆÛÛ\Û™[œÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ[˜[Y\Ëš[œÙ\
+ÛÛ\Û™[›˜[YK˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLH‹ˆ	™›Ü›X]J™\XØ]HšY]ÈÛÛ\Û™[ßX‹ÛÛ\Û™[›˜[YJKˆÛÛ\Û™[œÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆYˆ]\œŠY\ÜØYÙJHHXÛ\™YØÛÛ\Û™[ÜÛÝÊÛÛ\Û™[
+HÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLLH‹ˆ	™›Ü›X]J˜ÛÛ\Û™[ßXˆÛY\ÜØYÙ_H‹ÛÛ\Û™[›˜[YJKˆÛÛ\Û™[œÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆ]]]›ÜÈH\ÚÙ]Ž›™]Ê
+NÂˆ›Üˆ›Ü[ˆ	˜ÛÛ\Û™[œ›ÜÈÂˆYˆ\›ÜËš[œÙ\
+›Ü›˜[YK˜\×ÜÝŠ
+JHÂˆXYÛ›ÜÝX×ÝÚ]ÜÜ[Šˆ]ˆ‘KU’QUËLH‹ˆ	™›Ü›X]Jˆ™\XØ]H›Ü\HßX[ˆÛÛ\Û™[ßX‹ˆ›Ü›˜[YKÛÛ\Û™[›˜[YBˆ
+Kˆ›ÜœÜ[‹ˆ
+NÂˆ˜[YH˜[ÙNÂˆBˆBˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ›ÙÜ˜[Kˆ	˜ÛÛ\Û™[š[ˆÛÛ\Û™[œÜ[‹›[™KˆÛÛ\Û™[œÜ[‹˜ÛÛ[[‹ˆ	˜ÛÛ\Û™[ˆœ›ÜÂˆš]\Š
+Bˆ›X\
+›Ü
+›Ü›˜[YK˜ÛÛ™J
+K›ÜK˜ÛÛ™J
+JJBˆ˜ÛÛXÝ
+
+Kˆ
+NÂˆBˆ›ÜˆYÙH[ˆ	œ›ÙÜ˜[KœYÙ\ÈÂˆ]š[™[™ÜÈHYÙWÝ[\]WØš[™[™ÜÊˆ	œYÙKœ]ˆ	œYÙK™]Kˆ	œYÙKš[œ]ËˆYÙKœYÙWÜÚ^™Kˆ\YÙKœÛÜš\×Ù[\J
+Kˆ\YÙKœÙX\˜Úš\×Ù[\J
+Kˆ	œYÙK™š[\œËˆ
+NÂˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ›ÙÜ˜[Kˆ	œYÙKš[ˆYÙKœÜ[‹›[™KˆYÙKœÜ[‹˜ÛÛ[[‹ˆ	˜š[™[™ÜËˆ
+NÂˆYˆ]ÛÛYJšY]×Û˜[YJHH	œYÙKšY]ÈÂˆYˆ]ÛÛYJšY]ÊHH›ÙÜ˜[KšY]ÜËš]\Š
+K™š[™
+šY]ßšY]Ë›˜[YHOH
+šY]×Û˜[YJHÂˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ›ÙÜ˜[Kˆ	šY]Ëš[ˆšY]ËœÜ[‹›[™KˆšY]ËœÜ[‹˜ÛÛ[[‹ˆ	˜š[™[™ÜËˆ
+NÂˆBˆBˆBˆ›ÜˆÜY[ˆ	œ›ÙÜ˜[K˜ÜYÈÂˆYˆ]ÛÛYJ^[Ý]Û˜[YJHH	˜ÜY›^[Ý]ÂˆYˆ]ÛÛYJ^[Ý]
+HH›ÙÜ˜[KšY]ÜËš]\Š
+K™š[™
+šY]ßšY]Ë›˜[YHOH
+›^[Ý]Û˜[YJHÂˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ›ÙÜ˜[Kˆ	›^[Ý]š[ˆ^[Ý]œÜ[‹›[™Kˆ^[Ý]œÜ[‹˜ÛÛ[[‹ˆ	’\ÚX\Ž›™]Ê
+Kˆ
+NÂˆBˆ›ÜˆÛÝ[ˆ	˜ÜY›^[Ý]ÜÛÝÈÂˆ˜[Y	H˜[Y]WØÛÛ\Û™[Ý[\]Jˆ]ˆ›ÙÜ˜[Kˆ	œÛÝš[ˆÛÝœÜ[‹›[™KˆÛÝœÜ[‹˜ÛÛ[[‹ˆ	’\ÚX\Ž›™]Ê
+Kˆ
+NÂˆBˆBˆBˆ˜[YŸB‚™›ˆYÙWÝ[\]WØš[™[™ÜÊˆ]ˆ	œÝ‹ˆ]Nˆ	–Þ™[\˜WØ\ÝŽ”YÙQ]QY—Kˆ[œ]Îˆ	–Þ™[\˜WØ\ÝŽ”YÙR[œ]Y—KˆYÙWÜÚ^™NˆÜ[ÛLÌ‹ˆÛÜÙ[˜X›Yˆ›ÛÛˆÙX\˜ÚÙ[˜X›Yˆ›ÛÛˆš[\—Û˜[Y\Îˆ	–ÔÝš[™×KŠHOˆ\ÚX\Ýš[™Ë\OˆÂˆ]]]š[™[™ÜÈH]ˆœÜ]
+	ËÉÊBˆ™š[\—ÛX\
+ÙYÛY[ÂˆÙYÛY[ˆœÝš\Ü™Yš^
+	ÞÉÊBˆ˜[™Ý[ŠÙYÛY[ÙYÛY[œÝš\ÜÝY™š^
+	ßIÊJBˆ™š[\Š˜[Y_\×Ý[\]WÚY[YšY\Š˜[YJJBˆ›X\
+˜[Y_
+˜[YK×ÛÝÛ™Y
+
+K\NŽ”Ýš[™ÊJBˆJBˆ˜ÛÛXÝŽ\ÚX\ËÏŠ
+NÂˆ›Üˆ[œ][ˆ[œ]ÈÂˆš[™[™ÜËš[œÙ\
+[œ]›˜[YK˜ÛÛ™J
+K[œ]K˜ÛÛ™J
+JNÂˆBˆYˆYÙWÜÚ^™Kš\×ÜÛÛYJ
+HÂˆš[™[™ÜËš[œÙ\
+œYÙH‹š[Ê
+K\NŽ•R[
+NÂˆš[™[™ÜËš[œÙ\
+Ý[‹š[Ê
+K\NŽ•R[
+NÂˆš[™[™ÜËš[œÙ\
+œYÙ\È‹š[Ê
+K\NŽ•R[
+NÂˆBˆYˆÛÜÙ[˜X›YÂˆš[™[™ÜËš[œÙ\
+œÛÜ‹š[Ê
+K\NŽ”Ýš[™ÊNÂˆš[™[™ÜËš[œÙ\
+›Ü™\ˆ‹š[Ê
+K\NŽ”Ýš[™ÊNÂˆBˆYˆÙX\˜ÚÙ[˜X›YÂˆš[™[™ÜËš[œÙ\
+œÙX\˜Ú‹š[Ê
+K\NŽ”Ýš[™ÊNÂˆBˆ›Üˆš[\—Û˜[YH[ˆš[\—Û˜[Y\ÈÂˆš[™[™ÜËš[œÙ\
+›Ü›X]J™š[\—ÞÙš[\—Û˜[Y_HŠK\NŽ”Ýš[™ÊNÂˆš[™[™ÜËš[œÙ\
+›Ü›X]J™š[\—ÞÙš[\—Û˜[Y_W×ÛÜ\˜]ÜˆŠK\NŽ”Ýš[™ÊNÂˆBˆ›Üˆ]H[ˆ]HÂˆš[™[™ÜËš[œÙ\
+]K›˜[YK˜ÛÛ™J
+K]Kœ™\Ý[Ý\K˜ÛÛ™J
+JNÂˆBˆš[™[™ÜÂŸB‚™›ˆ™\šYžWØÛÛ[X[™
+]ˆ	œÝ‹œÛÛŽˆ›ÛÛ
+HOˆ^]ÛÙHÂˆ]›ÙÜ˜[HHX]Ú˜[Y]J]
+HÂˆÚÊ›ÙÜ˜[JHOˆ›ÙÜ˜[Kˆ\œŠ
+
+JHOˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJKˆNÂˆ]ÛÝ\˜ÙHHX]ÚœÎŽœ™XYÝ×ÜÝš[™Ê]
+HÂˆÚÊÛÝ\˜ÙJHOˆÛÝ\˜ÙKˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKRSËLWNˆØ[››Ý™XYÜ]XˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆ]™\Ý[ÈH™\šYžWÜ›ÙÜ˜[J	œ›ÙÜ˜[JNÂˆ]˜Z[YH™\Ý[Âˆš]\Š
+Bˆ˜[žJ™\Ý[™\Ý[œÝ]\ÈOH™\šYšXØ][Û”Ý]\ÎŽ‘˜Z[Y
+NÂˆYˆœÛÛˆÂˆš[ˆJžßH‹›Ü›X]Ý™\šYšXØ][Û—ÚœÛÛŠ]	œÛÝ\˜ÙK	œ™\Ý[ÊJNÂˆH[ÙHÂˆ›Üˆ™\Ý[[ˆ	œ™\Ý[ÈÂˆš[ˆJžßH‹›Ü›X]Ý™\šYšXØ][Û—Ü™\Ý[
+]	œÛÝ\˜ÙK™\Ý[
+JNÂˆBˆBˆYˆ˜Z[YÂˆ^]ÛÙNŽ™œ›ÛJJBˆH[ÙHÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBŸB‚œÝXÝØÝÜÚXÚÈÂˆ˜[YNˆ	‰ÜÝ]XÈÝ‹ˆÝ]\Îˆ	‰ÜÝ]XÈÝ‹ˆY\ÜØYÙNˆÝš[™ËŸB‚™›ˆ™XYÙ[—Ý˜[YJ]ˆ	œÝ‹Ù^Nˆ	œÝŠHOˆ™\Ý[Ü[ÛÝš[™Ï‹Ýš[™ÏˆÂˆ]ÛÝ\˜ÙHBˆœÎŽœ™XYÝ×ÜÝš[™Ê]
+K›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››Ý™XYÜ]XˆÙ\œ›ÜŸHŠJOÎÂˆ›Üˆ[™H[ˆÛÝ\˜ÙK›[™\Ê
+HÂˆ][™HH[™Kš[J
+NÂˆYˆ[™Kš\×Ù[\J
+H[™KœÝ\×ÝÚ]
+	ÈÉÊHÂˆÛÛ[YNÂˆBˆ][™HH[™KœÝš\Ü™Yš^
+™^ÜŠK[Ü˜\ÛÜŠ[™JNÂˆ]ÛÛYJ
+˜[YK˜[YJJHH[™KœÜ]ÛÛ˜ÙJ	ÏIÊH[ÙHÂˆÛÛ[YNÂˆNÂˆYˆ˜[YKš[J
+HOHÙ^HÂˆ™]\›ˆÚÊÛÛYJˆ˜[YKš[J
+Kš[WÛX]Ú\Ê	È‰ÊKš[WÛX]Ú\Ê	×	ÉÊK×ÛÝÛ™Y
+
+Kˆ
+JNÂˆBˆBˆÚÊ›Û™JBŸB‚™›ˆ›Ú™XÝÝZWÜÙ][™Ê]ˆ	œÝ‹Ù^Nˆ	œÝ‹Y˜][ˆ	œÝŠHOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆYˆ]ÚÊ˜[YJHH[ŽŽ˜\ŠÙ^JHÂˆ™]\›ˆÚÊ˜[YJNÂˆBˆ]ÛÝ\˜ÙWÜ]HÝŽœ]Ž”]Ž›™]Ê]
+NÂˆ]›Ú™XÝÙ\™XÝÜžHHÛÝ\˜ÙWÜ]ˆœ\™[
+
+Bˆ™š[\Š\™[\\™[˜\×ÛÜ×ÜÝŠ
+Kš\×Ù[\J
+JBˆ[Ü˜\ÛÜ—Ù[ÙJÝŽœ]Ž”]Ž›™]Ê‹ˆŠJNÂˆ][—Ü]H›Ú™XÝÙ\™XÝÜžKš›Ú[Š‹™[ˆŠNÂˆYˆY[—Ü]š\×Ùš[J
+HÂˆ™]\›ˆÚÊY˜][×ÛÝÛ™Y
+
+JNÂˆBˆ][—Ü]ÜÝš[™ÈH[—Ü]×ÜÝš[™×ÛÜÜÞJ
+NÂˆÚÊ™XYÙ[—Ý˜[YJ	™[—Ü]ÜÝš[™ËÙ^JOË[Ü˜\ÛÜ—Ù[ÙJY˜][×ÛÝÛ™Y
+
+JJBŸB‚™›ˆ›Ú™XÝÝZWÜÙ][™ÜÊ]ˆ	œÝŠHOˆ™\Ý[
+ZS[™ÝXYÙKZS]™[
+KÝš[™ÏˆÂˆ][™ÝXYÙHH›Ú™XÝÝZWÜÙ][™Ê]–‘STWÓS‘ÕPQÑH‹™[ˆŠOÎÂˆ][™ÝXYÙHHZS[™ÝXYÙNŽœ\œÙJ	›[™ÝXYÙK×Ø\ØÚZWÛÝÙ\˜Ø\ÙJ
+JBˆ›Ú×ÛÜ—Ù[ÙJ–‘STWÓS‘ÕPQÑH]\Ý™H[˜ÜˆX‹×ÛÝÛ™Y
+
+JOÎÂˆ]]™[H›Ú™XÝÝZWÜÙ][™Ê]–‘STWÓU‘S‹ÛÜšÈŠOÎÂˆ]]™[HZS]™[Žœ\œÙJ	›]™[×Ø\ØÚZWÛÝÙ\˜Ø\ÙJ
+JBˆ›Ú×ÛÜ—Ù[ÙJ–‘STWÓU‘S]\Ý™HX\›˜ÜˆÛÜšØ‹×ÛÝÛ™Y
+
+JOÎÂˆÚÊ
+[™ÝXYÙK]™[
+JBŸB‚™›ˆ›Ú™XÝØ[ÝÙYÚÜÝÊ]ˆ	œÝŠHOˆ™\Ý[™XÏÝš[™Ï‹Ýš[™ÏˆÂˆ]ÛÛ™šYÝ\™YH›Ú™XÝÝZWÜÙ][™Ê]–‘STWÐSÕÑQÒÔÕÈ‹›ØØ[ÜÝLËŒŒŒKÎŽŒWHŠOÎÂˆ]ÜÝÈHÛÛ™šYÝ\™YˆœÜ]
+	Ë	ÊBˆ›X\
+ÝŽŽš[JBˆ›X\
+ÝŽŽ×ÛÝÛ™Y
+Bˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆYˆÜÝËš\×Ù[\J
+HÜÝËš]\Š
+K˜[žJÝš[™ÎŽš\×Ù[\JHÂˆ™]\›ˆ\œŠˆ–‘STWÐSÕÑQÒÔÕÈ]\ÝÛÛZ[ˆÛÛ[XK\Ù\\˜]Y›Û‹Y[\HÜÝ˜[Y\ÈÜˆTY™\ÜÙ\È‹š[Ê
+Kˆ
+NÂˆBˆÚÊÜÝÊBŸB‚™›ˆ›Ú™XÝÝ[YWØÜÜÊ]ˆ	œÝŠHOˆ™\Ý[Ü[ÛÝš[™Ï‹Ýš[™ÏˆÂˆ]ÛÝ\˜ÙWÜ]HÝŽœ]Ž”]Ž›™]Ê]
+NÂˆ]›Ú™XÝÙ\™XÝÜžHHÛÝ\˜ÙWÜ]ˆœ\™[
+
+Bˆ™š[\Š\™[\\™[˜\×ÛÜ×ÜÝŠ
+Kš\×Ù[\J
+JBˆ[Ü˜\ÛÜ—Ù[ÙJÝŽœ]Ž”]Ž›™]Ê‹ˆŠJNÂˆ][YWÜ]H›Ú™XÝÙ\™XÝÜžKš›Ú[Š“Ò‘PÕÕSQWÐÔÔ×Ñ’SJNÂˆ]Y]Y]HHX]ÚœÎŽœÞ[[[š×ÛY]Y]J	[YWÜ]
+HÂˆÚÊY]Y]JHOˆY]Y]Kˆ\œŠ\œ›ÜŠHYˆ\œ›Ü‹šÚ[™
+
+HOHÝŽš[ÎŽ‘\œ›Ü’Ú[™Ž“›Ý›Ý[™Oˆ™]\›ˆÚÊ›Û™JKˆ\œŠÊHOˆ™]\›ˆ\œŠ›Ü›X]J˜Ø[››Ý[œÜXÝÔ“Ò‘PÕÕSQWÐÔÔ×Ñ’S_XŠJKˆNÂˆYˆY]Y]K™š[WÝ\J
+Kš\×ÜÞ[[[šÊ
+H[Y]Y]Kš\×Ùš[J
+HÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜Ô“Ò‘PÕÕSQWÐÔÔ×Ñ’S_X]\Ý™HH™YÝ[\ˆ›Ú™XÝš[K›ÝHÞ[X›ÛXÈ[šÈ‚ˆ
+JNÂˆBˆYˆY]Y]K›[Š
+Hˆ“Ò‘PÕÕSQWÐÔÔ×ÓPVÐ–UTÈÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜Ô“Ò‘PÕÕSQWÐÔÔ×Ñ’S_X^ÙYYÈHLŽÚPˆÚ^™H[Z]‚ˆ
+JNÂˆB‚ˆ]š[HHœÎŽ‘š[NŽ›Ü[Š	[YWÜ]
+Bˆ›X\Ù\œŠß›Ü›X]J˜Ø[››Ý™XYÔ“Ò‘PÕÕSQWÐÔÔ×Ñ’S_XŠJOÎÂˆ]]]ž]\ÈH™XÎŽÚ]ØØ\XÚ]JY]Y]K›[Š
+H\È\Ú^™JNÂˆš[KZÙJ“Ò‘PÕÕSQWÐÔÔ×ÓPVÐ–UTÈ
+ÈJBˆœ™XYÝ×Ù[™
+	›]]ž]\ÊBˆ›X\Ù\œŠß›Ü›X]J˜Ø[››Ý™XYÔ“Ò‘PÕÕSQWÐÔÔ×Ñ’S_XŠJOÎÂˆYˆž]\Ë›[Š
+H\ÈMˆ“Ò‘PÕÕSQWÐÔÔ×ÓPVÐ–UTÈÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜Ô“Ò‘PÕÕSQWÐÔÔ×Ñ’S_X^ÙYYÈHLŽÚPˆÚ^™H[Z]‚ˆ
+JNÂˆBˆÝš[™ÎŽ™œ›ÛWÝ]Ž
+ž]\ÊBˆ›X\
+ÛÛYJBˆ›X\Ù\œŠß›Ü›X]J˜Ô“Ò‘PÕÕSQWÐÔÔ×Ñ’S_X]\ÝÛÛZ[ˆU‹N^ŠJBŸB‚™›ˆ›Ú™XÝÝZWØØ][ÙÜÊ]ˆ	œÝŠHOˆ™\Ý[›Ú™XÝZPØ][ÙÜËÝš[™ÏˆÂˆ]ÛÝ\˜ÙWÜ]HÝŽœ]Ž”]Ž›™]Ê]
+NÂˆ]›Ú™XÝÙ\™XÝÜžHHÛÝ\˜ÙWÜ]ˆœ\™[
+
+Bˆ™š[\Š\™[\\™[˜\×ÛÜ×ÜÝŠ
+Kš\×Ù[\J
+JBˆ[Ü˜\ÛÜ—Ù[ÙJÝŽœ]Ž”]Ž›™]Ê‹ˆŠJNÂˆ]ØØ[WÙ\™XÝÜžHH›Ú™XÝÙ\™XÝÜžKš›Ú[Š“Ò‘PÕÓÐÐSWÑT‘PÕÔ–JNÂˆ]\™XÝÜžWÛY]Y]HHX]ÚœÎŽœÞ[[[š×ÛY]Y]J	›ØØ[WÙ\™XÝÜžJHÂˆÚÊY]Y]JHOˆY]Y]Kˆ\œŠ\œ›ÜŠHYˆ\œ›Ü‹šÚ[™
+
+HOHÝŽš[ÎŽ‘\œ›Ü’Ú[™Ž“›Ý›Ý[™OˆÂˆ™]\›ˆÚÊ›Ú™XÝZPØ][ÙÜÎŽ™Y˜][
+
+JNÂˆBˆ\œŠÊHOˆ™]\›ˆ\œŠ˜Ø[››Ý[œÜXÝ›Ú™XÝØØ[H\™XÝÜžH‹×ÛÝÛ™Y
+
+JKˆNÂˆYˆ\™XÝÜžWÛY]Y]K™š[WÝ\J
+Kš\×ÜÞ[[[šÊ
+HY\™XÝÜžWÛY]Y]Kš\×Ù\Š
+HÂˆ™]\›ˆ\œŠœ›Ú™XÝØØ[\Ø]\Ý™HH™YÝ[\ˆ\™XÝÜžH[™›ÝHÞ[X›ÛXÈ[šÈ‹š[Ê
+JNÂˆB‚ˆ]]]Ø][ÙÜÈH›Ú™XÝZPØ][ÙÜÎŽ™Y˜][
+
+NÂˆ›Üˆ[™ÝXYÙH[ˆÕZS[™ÝXYÙNŽ‘Ù\›X[‹ZS[™ÝXYÙNŽ‘[™Û\ÚHÂˆ]š[WÛ˜[YHH›Ü›X]JžßKšœÛÛˆ‹[™ÝXYÙK˜ÛÙJ
+JNÂˆ]\Ü^WÛ˜[YHH›Ü›X]JžÔ“Ò‘PÕÓÐÐSWÑT‘PÕÔ–_KÞÙš[WÛ˜[Y_HŠNÂˆ]Ø][Ù×Ü]HØØ[WÙ\™XÝÜžKš›Ú[Š	™š[WÛ˜[YJNÂˆ]Y]Y]HHX]ÚœÎŽœÞ[[[š×ÛY]Y]J	˜Ø][Ù×Ü]
+HÂˆÚÊY]Y]JHOˆY]Y]Kˆ\œŠ\œ›ÜŠHYˆ\œ›Ü‹šÚ[™
+
+HOHÝŽš[ÎŽ‘\œ›Ü’Ú[™Ž“›Ý›Ý[™OˆÛÛ[YKˆ\œŠÊHOˆ™]\›ˆ\œŠ›Ü›X]J˜Ø[››Ý[œÜXÝÙ\Ü^WÛ˜[Y_XŠJKˆNÂˆYˆY]Y]K™š[WÝ\J
+Kš\×ÜÞ[[[šÊ
+H[Y]Y]Kš\×Ùš[J
+HÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ˜Ù\Ü^WÛ˜[Y_X]\Ý™HH™YÝ[\ˆš[K›ÝHÞ[X›ÛXÈ[šÈ‚ˆ
+JNÂˆBˆYˆY]Y]K›[Š
+Hˆ“Ò‘PÕÓÐÐSWÓPVÐ–UTÈÂˆ™]\›ˆ\œŠ›Ü›X]J˜Ù\Ü^WÛ˜[Y_X^ÙYYÈHMˆÚPˆÚ^™H[Z]ŠJNÂˆB‚ˆ]š[HBˆœÎŽ‘š[NŽ›Ü[Š	˜Ø][Ù×Ü]
+K›X\Ù\œŠß›Ü›X]J˜Ø[››Ý™XYÙ\Ü^WÛ˜[Y_XŠJOÎÂˆ]]]ž]\ÈH™XÎŽÚ]ØØ\XÚ]JY]Y]K›[Š
+H\È\Ú^™JNÂˆš[KZÙJ“Ò‘PÕÓÐÐSWÓPVÐ–UTÈ
+ÈJBˆœ™XYÝ×Ù[™
+	›]]ž]\ÊBˆ›X\Ù\œŠß›Ü›X]J˜Ø[››Ý™XYÙ\Ü^WÛ˜[Y_XŠJOÎÂˆYˆž]\Ë›[Š
+H\ÈMˆ“Ò‘PÕÓÐÐSWÓPVÐ–UTÈÂˆ™]\›ˆ\œŠ›Ü›X]J˜Ù\Ü^WÛ˜[Y_X^ÙYYÈHMˆÚPˆÚ^™H[Z]ŠJNÂˆBˆ]ÛÝ\˜ÙHHÝš[™ÎŽ™œ›ÛWÝ]Ž
+ž]\ÊBˆ›X\Ù\œŠß›Ü›X]J˜Ù\Ü^WÛ˜[Y_X]\ÝÛÛZ[ˆU‹N^ŠJOÎÂˆØ][ÙÜÂˆœÙ]ÚœÛÛŠ[™ÝXYÙK	œÛÝ\˜ÙJBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]Jš[˜[YÙ\Ü^WÛ˜[Y_XˆÙ\œ›ÜŸHŠJOÎÂˆBˆÚÊØ][ÙÜÊBŸB‚™›ˆ›Ú™XÝÝ\Ù\×Ü™\Ù\™YÝ[YWÜ›Ý]J›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[JHOˆ›ÛÛÂˆ›ÙÜ˜[BˆœYÙ\Âˆš]\Š
+Bˆ˜[žJYÙ_™[\˜WÝÙXŽŽœ›Ý]WÜ]\›—ÛX]Ú\×Ü]
+	œYÙKœ]“Ò‘PÕÕSQWÐÔÔ×ÔU
+JBˆ›ÙÜ˜[Bˆ˜\\Âˆš]\Š
+Bˆ˜[žJ\_™[\˜WÝÙXŽŽœ›Ý]WÜ]\›—ÛX]Ú\×Ü]
+	˜\Kœ]“Ò‘PÕÕSQWÐÔÔ×ÔU
+JBˆ›ÙÜ˜[K˜]]š]\Š
+K˜[žJ]]Âˆ]]˜YZ[—Ü]˜\×Ù\™YŠ
+Kš\×ÜÛÛYWØ[™
+]Âˆ™[\˜WÝÙXŽŽœ›Ý]WÜ]\›—ÛX]Ú\×Ü]
+]“Ò‘PÕÕSQWÐÔÔ×ÔU
+BˆJBˆJBŸB‚™›ˆØÚÙ\—ØÛÛ\ÜÙWØÚXÚÊ
+HOˆØÝÜÚXÚÈÂˆYˆ]ÛÛYJÛÛ[X[™
+HH]XÝÙØÚÙ\—ØÛÛ\ÜÙJ
+HÂˆ™]\›ˆØÝÜÚXÚÈÂˆ˜[YNˆ™ØÚÙ\—ØÛÛ\ÜÙH‹ˆÝ]\Îˆœ\ÜÈ‹ˆY\ÜØYÙNˆ›Ü›X]JžßH\È]˜Z[X›H‹ÛÛ[X[™›X™[
+
+JKˆNÂˆBˆØÝÜÚXÚÈÂˆ˜[YNˆ™ØÚÙ\—ØÛÛ\ÜÙH‹ˆÝ]\ÎˆØ\›ˆ‹ˆY\ÜØYÙNˆ›Ü›X]JˆžßHHÙ[™\˜]YX\šXQˆÝXÚÈØ[››Ý™HÝ\Y[[ØÚÙ\ˆÛÛ\ÜÙH\È]˜Z[X›Kˆ‹ˆØÚÙ\—ØÛÛ\ÜÙWÚ[œÝ[Ú[
+
+Bˆ
+KˆBŸB‚ˆÖÙ\š]™JÛÛ™KÛÜKXYË\X[\K\JWB™[[HØÚÙ\ÛÛ\ÜÙPÛÛ[X[™ÂˆYÚ[‹ˆYØXÞKŸB‚š[\ØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Âˆ›ˆX™[
+Ù[ŠHOˆ	‰ÜÝ]XÈÝˆÂˆX]ÚÙ[ˆÂˆÙ[ŽŽ”YÚ[ˆOˆ™ØÚÙ\ˆÛÛ\ÜÙH‹ˆÙ[ŽŽ“YØXÞHOˆ™ØÚÙ\‹XÛÛ\ÜÙH‹ˆBˆBŸB‚™›ˆ]XÝÙØÚÙ\—ØÛÛ\ÜÙJ
+HOˆÜ[ÛØÚÙ\ÛÛ\ÜÙPÛÛ[X[™ˆÂˆ]YÚ[ˆHÛÛ[X[™Ž›™]Ê™ØÚÙ\ˆŠBˆ˜\™ÜÊÈ˜ÛÛ\ÜÙH‹™\œÚ[Ûˆ—JBˆœÝÝ]
+Ý[ÎŽ›[
+
+JBˆœÝ\œŠÝ[ÎŽ›[
+
+JBˆœÝ]\Ê
+Bˆ›ÚÊ
+Bˆš\×ÜÛÛYWØ[™
+Ý]\ßÝ]\ËœÝXØÙ\ÜÊ
+JNÂˆYˆYÚ[ˆÂˆ™]\›ˆÛÛYJØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž”YÚ[ŠNÂˆBˆ]YØXÞHHÛÛ[X[™Ž›™]Ê™ØÚÙ\‹XÛÛ\ÜÙHŠBˆ˜\™Ê™\œÚ[ÛˆŠBˆœÝÝ]
+Ý[ÎŽ›[
+
+JBˆœÝ\œŠÝ[ÎŽ›[
+
+JBˆœÝ]\Ê
+Bˆ›ÚÊ
+Bˆš\×ÜÛÛYWØ[™
+Ý]\ßÝ]\ËœÝXØÙ\ÜÊ
+JNÂˆYØXÞK[—ÜÛÛYJØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž“YØXÞJBŸB‚™›ˆØÚÙ\—ØÛÛ\ÜÙWÚ[œÝ[Ú[
+
+HOˆÝš[™ÈÂˆ]
+]›Ü›K\›
+HHYˆÙ™ÈJ\™Ù]ÛÜÈH›[^ŠHÂˆ
+“[^‹šÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ[™Ú[™KÚ[œÝ[ÈŠBˆH[ÙHYˆÙ™ÈJ\™Ù]ÛÜÈHÚ[™ÝÜÈŠHÂˆ
+ˆ•Ú[™ÝÜÈ‹ˆšÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÝÚ[™ÝÜËZ[œÝ[È‹ˆ
+BˆH[ÙHYˆÙ™ÈJ\™Ù]ÛÜÈH›XXÛÜÈŠHÂˆ
+ˆ›XXÓÔÈ‹ˆšÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ\ÚÝÜÜÙ]\Ú[œÝ[ÛXXËZ[œÝ[È‹ˆ
+BˆH[ÙHÂˆ
+ˆž[Ý\ˆÜ\˜][™ÈÞ\Ý[H‹ˆšÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÙ[™Ú[™KÚ[œÝ[È‹ˆ
+BˆNÂˆ›Ü›X]Jˆ‘ØÚÙ\ˆÛÛ\ÜÙH\È[˜]˜Z[X›Kˆ[œÝ[ØÚÙ\ˆ›ÜˆÜ]›Ü›_Hœ›ÛN—žÝ\›WY\ˆ[œÝ[][Û‹™\šYžHÚ]ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[Û˜[ˆ[ˆ\ÈÝ\YØZ[‹ˆ‚ˆ
+BŸB‚™›ˆš[ØÛÛ\ÜÙWÜÝ\Ú[
+
+HÂˆX]Ú]XÝÙØÚÙ\—ØÛÛ\ÜÙJ
+HÂˆÛÛYJÛÛ[X[™
+HOˆš[ˆJˆˆßHKY[‹Yš[H™[ˆYˆØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[\YKXZ[‹ˆÛÛ[X[™›X™[
+
+Bˆ
+Kˆ›Û™HOˆš[ˆJžßH‹ØÚÙ\—ØÛÛ\ÜÙWÚ[œÝ[Ú[
+
+JKˆBŸB‚™›ˆÛÛ\ÜÙWØÛÛ[X[™
+\™XÝÜžNˆ	œÝŽœ]Ž”]ÛÛ[X[™ˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™
+HOˆÛÛ[X[™Âˆ]]]›ØÙ\ÜÈHX]ÚÛÛ[X[™ÂˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž”YÚ[ˆOˆÂˆ]]]›ØÙ\ÜÈHÛÛ[X[™Ž›™]Ê™ØÚÙ\ˆŠNÂˆ›ØÙ\ÜË˜\™Ê˜ÛÛ\ÜÙHŠNÂˆ›ØÙ\ÜÂˆBˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž“YØXÞHOˆÛÛ[X[™Ž›™]Ê™ØÚÙ\‹XÛÛ\ÜÙHŠKˆNÂˆ›ØÙ\ÜÂˆ˜Ý\œ™[Ù\Š\™XÝÜžJBˆ˜\™ÜÊÈ‹KY[‹Yš[H‹‹™[ˆ‹‹Yˆ‹™ØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[—JBˆœÝÝ]
+Ý[ÎŽ›[
+
+JBˆœÝ\œŠÝ[ÎŽ›[
+
+JNÂˆ›ØÙ\ÜÂŸB‚™›ˆÛÛ\ÜÙWÜÝ\Ù˜Z[\™WÛY\ÜØYÙJÛÛ[X[™ˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™]Z[Îˆ	œÝŠHOˆÝš[™ÈÂˆ]]Z[ÈH]Z[Ë×Ø\ØÚZWÛÝÙ\˜Ø\ÙJ
+NÂˆYˆ]Z[Ë˜ÛÛZ[œÊœ\›Z\ÜÚ[Ûˆ[šYYŠBˆ	‰ˆ
+]Z[Ë˜ÛÛZ[œÊ™ØÚÙ\‹œÛØÚÈŠH]Z[Ë˜ÛÛZ[œÊ™ØÚÙ\ˆŠJBˆÂˆ‘ØÚÙ\ˆXØÙ\ÜÈØ\È[šYYˆÛˆ[^YHÝ\œ™[\Ù\ˆÈHØÚÙ\˜Ü›Ý\Ú]ÝYÈ\Ù\›[ÙXQÈØÚÙ\ˆ	TÑT˜[ˆZ]\ˆ[HÚYÛˆÝ][™ÚYÛˆ[ˆYØZ[ˆÜˆ[ˆ\ÙHÛÛ[X[™È[ˆHÝ\œ™[\›Z[˜[—ˆ™]ÙÜœØÚÙ\—ˆY[‘×ˆØÚÙ\ˆ×”™]žHÙ]\Ú[ˆØÚÙ\˜\X\œÈ[ˆHÜ›Ý\\Ý[™ØÚÙ\ˆØÝXØÙYYËˆÜ[š[™È[›Ý\ˆ\›Z[˜[Ú[™ÝÈ[Û™HX^H›Ý™Yœ™\ÚÜ›Ý\Y[X™\œÚ\ˆ[\›˜]]™[H›ÛÝÈ[Ý\ˆ\ÝšX][Û‰ÜÈØÚÙ\ˆÙ]\[œÝXÝ[ÛœËˆ‹š[Ê
+BˆH[ÙHYˆ]Zw÷Ï9¶‰žËkºwµçY]ÎˆÜYšY]Ë›\Ý˜ÛÛ™J
+Kˆ]Z[ÝšY]ÎˆÜYšY]Ë™]Z[˜ÛÛ™J
+Kˆ[]WÝšY]ÎˆÜYšY]Ë™[]K˜ÛÛ™J
+KˆØY[™×ÝšY]ÎˆÜYšY]Ë›ØY[™Ë˜ÛÛ™J
+Kˆ\œ›Ü—ÝšY]ÎˆÜYšY]Ë™\œ›Ü‹˜ÛÛ™J
+Kˆ^[Ý]Ú[ˆÜYÛ^[Ý]Ú[
+	œ›ÙÜ˜[KÜY
+KˆÛÙÙ[]NˆÜYœÛÙÙ[]K˜ÛÛ™J
+KˆXÝ[ÛœËˆ™\]Z\™\×Ø]]ˆÜYœ™\]Z\™\×Ø]]ˆ\›Z\ÜÚ[ÛœÎˆÜYœ\›Z\ÜÚ[ÛœË˜ÛÛ™J
+KˆÜ™X]WÜ\›Z\ÜÚ[ÛœÎˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊˆ	˜ÜYœ\›Z\ÜÚ[ÛœËˆ	˜ÜY˜Ü™X]WÜ\›Z\ÜÚ[ÛœËˆ
+KˆY]Ü\›Z\ÜÚ[ÛœÎˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊ	˜ÜYœ\›Z\ÜÚ[ÛœË	˜ÜY™Y]Ü\›Z\ÜÚ[ÛœÊKˆ[]WÜ\›Z\ÜÚ[ÛœÎˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊˆ	˜ÜYœ\›Z\ÜÚ[ÛœËˆ	˜ÜY™[]WÜ\›Z\ÜÚ[ÛœËˆ
+KˆØÚ[XNˆØÚ[XK˜ÛÛ™J
+KˆÜÜ™‹ˆJNÂˆBˆ]X›]šY]×Ü›Ý]\ÈH›ÙÜ˜[BˆX›]šY]ÜÂˆš]\Š
+Bˆ›X\
+X›]šY]ßX›UšY]Ô›Ý]HÂˆ]ˆ›Ü›X]J‹ÝšY]ÜËÞßH‹X›]šY]Ë›˜[YK×Ø\ØÚZWÛÝÙ\˜Ø\ÙJ
+JKˆ]Nˆ™[\˜WÝÙXŽŽ›ØØ[^™YÚY[YšY\ŠZWÛ[™ÝXYÙK	X›]šY]Ë›˜[YJKˆÛÝ\˜ÙNˆX›]šY]ËœÛÝ\˜ÙK˜ÛÛ™J
+KˆÛÛ[[œÎˆX›]šY]Ë˜ÛÛ[[œË˜ÛÛ™J
+Kˆš[\œÎˆX›]šY]Âˆ™š[\œÂˆš]\Š
+Bˆ›X\
+˜[Y_X›UšY]Ñš[\ˆÂˆ˜[YNˆ˜[YK˜ÛÛ™J
+KˆÚ[™ˆX›]šY]×Ùš[\—ÚÚ[™
+ˆ	X›]šY]Ëœ™\Ý[Ý\Kˆ˜[YKˆ	œØÚ[XKˆ	œ›ÙÜ˜[Kœ™XÛÜ™Ëˆ
+KˆJBˆ˜ÛÛXÝ
+
+KˆÙX\˜ÚX›NˆX›]šY]ËœÙX\˜ÚX›KˆÛÜX›NˆX›]šY]ËœÛÜX›KˆYÙWÜÚ^™NˆX›]šY]ËœYÙWÜÚ^™Kˆ™\]Z\™\×Ø]]ˆX›]šY]Ëœ™\]Z\™\×Ø]]ˆ\›Z\ÜÚ[ÛœÎˆX›]šY]Ëœ\›Z\ÜÚ[ÛœË˜ÛÛ™J
+KˆJBˆ˜ÛÛXÝ
+
+NÂˆ]]X˜\ÙWØØ\Xš[]WÙÜ˜[YHØ\Xš[]WÙÜ˜[Âˆ˜\×Ü™YŠ
+Bˆš\×Û›Û™WÛÜŠÜ˜[ßÜ˜[Ë˜ÛÛZ[œÊ‘]X˜\ÙHŠJNÂˆ]\WÜ›Ý]\ÈHÙ[™\˜]YØ\WÜ›Ý]\Êˆ	œ›ÙÜ˜[KˆØ\Xš[]WÙÜ˜[Ë˜\×Ü™YŠ
+Kˆ[[YWÜÛXÞK˜\×Ü™YŠ
+Kˆ
+NÂˆ\š[ˆJ–™[\˜HÙ\™\ˆ\Ý[š[™ÈÛˆ‹ËÞØY™\ÜßHŠNÂˆ]\HÙX\ŽÚ]Ù]X˜\ÙWÝ\›
+›Ý]\Ë›Ü›WÜ›Ý]\Ë[ŽŽ˜\Š‘UPTÑWÕT“ŠK›ÚÊ
+JBˆÚ]ÝZWÜÙ][™ÜÊZWÛ[™ÝXYÙKZWÛ]™[
+BˆÚ]Ü›Ú™XÝÝ[YWØÜÜÊ[YWØÜÜÊBˆÚ]Ü›Ú™XÝÝZWØØ][ÙÜÊZWØØ][ÙÜÊBˆÚ]Ù]X˜\ÙWØØ\Xš[]J]X˜\ÙWØØ\Xš[]WÙÜ˜[Y
+BˆÚ]Ø\\Ê\WÜ›Ý]\ÊBˆÚ]Ø]]
+ˆ[ŽŽ˜\Š–‘STWÐUUÕÒÑSˆŠK›ÚÊ
+Kˆ[ŽŽ˜\Š–‘STWÐUUÔT“RTÔÒSÓ”ÈŠBˆ[Ü˜\ÛÜ—ÙY˜][
+
+BˆœÜ]
+	Ë	ÊBˆ›X\
+ÝŽŽš[JBˆ™š[\Š\›Z\ÜÚ[ÛŸ\\›Z\ÜÚ[Û‹š\×Ù[\J
+JBˆ›X\
+ÝŽŽ×ÛÝÛ™Y
+Bˆ˜ÛÛXÝ
+
+Kˆ
+BˆÚ]ØÜYÊÜYÜ›Ý]\ÊBˆÚ]ÝX›]šY]ÜÊX›]šY]×Ü›Ý]\ÊNÂˆ]\HX]Ú\Ú]Ø[ÝÙYÚÜÝÊ[ÝÙYÚÜÝÊHÂˆÚÊ\
+HOˆ\ˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	œ]‘KQS•‹LH‹	™\œ›Ü‹›Y\ÜØYÙKKJNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆ]\HYˆ]ÛÛYJÛÜœ×ÜÛXÞJHHÛÜœ×ÜÛXÞHÂˆ\Ú]ØÛÜœÊÛÜœ×ÜÛXÞJBˆH[ÙHÂˆ\ˆNÂˆ]\HYˆ]ÛÛYJ]]Ü›Ý]JHH]]Ü›Ý]HÂˆ\Ú]Ø]]Ü›Ý]J]]Ü›Ý]JBˆH[ÙHÂˆ\ˆNÂˆX]ÚÙ\™WØ\
+\	˜Y™\ÜÊHÂˆÚÊ
+
+JHOˆ^]ÛÙNŽ”ÕPÐÑTÔËˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKUÑP‹L—NˆØ[››ÝÝ\Ù\™\ˆÛˆØY™\ÜßNˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBŸB‚œÝXÝÜYÙ[™\˜][ÛÛÛ^Âˆ^[Ý]Ú[ˆÜ[ÛÝš[™Ï‹ˆÜÜ™ŽˆÜÜ™”›ÝXÝ[Û‹ˆ]Y]ÝX›NˆÜ[ÛÝš[™Ï‹ˆ]Y]ØÚZ[Žˆ›ÛÛŸB‚™›ˆÙ[™\˜]YØÜYÙ›Ü›JˆÜYˆ	ž™[\˜WØ\ÝŽÜYY‹ˆX›Nˆ	ž™[\˜WØ\ÝŽ•X›QY‹ˆØÚ[XNˆ	”ØÚ[XKˆY]ˆ›ÛÛˆÛÛ^ˆÜYÙ[™\˜][ÛÛÛ^ŠHOˆ›Ü›T›Ý]HÂˆ]\›Z\ÜÚ[ÛœÈHYˆY]ÂˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊ	˜ÜYœ\›Z\ÜÚ[ÛœË	˜ÜY™Y]Ü\›Z\ÜÚ[ÛœÊBˆH[ÙHÂˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊ	˜ÜYœ\›Z\ÜÚ[ÛœË	˜ÜY˜Ü™X]WÜ\›Z\ÜÚ[ÛœÊBˆNÂˆ]ÛÛ™šYÝ\™YÙšY[ÈH
+XÜYšY]Ë™šY[Ëš\×Ù[\J
+JK[—ÜÛÛYJ	˜ÜYšY]Ë™šY[ÊNÂˆ]šY[ÈHX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ™š[\ŠÛÛ[[ŸXÛÛ[[‹œš[X\žWÚÙ^H	‰ˆXÛÛ[[‹˜]]ÊBˆ™š[\ŠÛÛ[[ŸÂˆÛÛ™šYÝ\™YÙšY[Ëš\×Û›Û™WÛÜŠšY[ßšY[Ëš]\Š
+K˜[žJ˜[Y_˜[YHOH	˜ÛÛ[[‹›˜[YJJBˆJBˆ™š[\ŠÛÛ[[ŸÂˆÜYœÛÙÙ[]Bˆ˜\×Ü™YŠ
+Bˆš\×Û›Û™WÛÜŠYš[š][ÛŸYš[š][Û‹˜ÛÛ[[ˆOHÛÛ[[‹›˜[YJBˆJBˆ›X\
+ÛÛ[[Ÿ™[\˜WØ\ÝŽ‘›Ü›QšY[Âˆ˜[YNˆÛÛ[[‹›˜[YK˜ÛÛ™J
+KˆNˆ›Û™KˆX™[ˆ›Û™KˆXÙZÛ\Žˆ›Û™Kˆ™\]Z\™Yˆ˜[ÙKˆX^ˆ›Û™KˆÚYÙ]ˆ›Û™Kˆ™XYÛ›Nˆ˜[ÙKˆÜ[ŽˆÛÛ[[‹œÜ[‹ˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]ÝÜ˜YÙWØÛÛ[[œÈHšY[Âˆš]\Š
+Bˆ›X\
+šY[ÝÜ˜YÙWØÛÛ[[—Û˜[YJØÚ[XK	˜ÜYX›K	™šY[›˜[YJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]]Y\žHHYˆY]Âˆ]\ÜÚYÛ›Y[ÈHÝÜ˜YÙWØÛÛ[[œÂˆš]\Š
+Bˆžš\
+	™šY[ÊBˆ›X\
+
+ÛÛ[[‹šY[
+_›Ü›X]JžßHHžßH‹][ÝWÚY[YšY\ŠÛÛ[[ŠKšY[›˜[YJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+Bˆš›Ú[Š‹ŠNÂˆ›Ü›X]Jˆ•TUHßHÑUßHÒT‘HßHHšY‹ˆ][ÝWÚY[YšY\Š	˜ÜYX›JKˆ\ÜÚYÛ›Y[Ëˆ][ÝWÚY[YšY\ŠšYŠBˆ
+BˆH[ÙHÂˆ›Ü›X]Jˆ’S”ÑT•S•ÈßH
+ßJHSQTÈ
+ßJH‹ˆ][ÝWÚY[YšY\Š	˜ÜYX›JKˆÝÜ˜YÙWØÛÛ[[œÂˆš]\Š
+Bˆ›X\
+ÛÛ[[Ÿ][ÝWÚY[YšY\ŠÛÛ[[ŠJBˆ˜ÛÛXÝŽ™XÏÏŠ
+Bˆš›Ú[Š‹ŠKˆšY[Âˆš]\Š
+Bˆ›X\
+šY[›Ü›X]JŽžßH‹šY[›˜[YJJBˆ˜ÛÛXÝŽ™XÏÏŠ
+Bˆš›Ú[Š‹ŠBˆ
+BˆNÂˆ]]HYˆY]Âˆ›Ü›X]J‹ÞßKÞÞÚY_KÙY]‹ÜYX›JBˆH[ÙHÂˆ›Ü›X]J‹ÞßKÛ™]È‹ÜYX›JBˆNÂˆ›Ü›T›Ý]HÂˆ]ˆ]˜ÛÛ™J
+KˆXÝ[ÛŽˆ]ˆ›Ü›Nˆ™[\˜WØ\ÝŽ‘›Ü›QYˆÂˆ˜[YNˆ›Ü›X]Jžß^ßH‹ÜY›˜[YKYˆY]È‘Y]ˆH[ÙHÈÜ™X]HˆJKˆX›NˆÛÛYJX›K›˜[YK˜ÛÛ™J
+JKˆšY[ËˆXÝ[ÛœÎˆ™XÈVÞ™[\˜WØ\ÝŽ‘›Ü›PXÝ[ÛˆÂˆ˜[YNˆœØ]™H‹š[Ê
+KˆX™[ˆ›Û™KˆXÛÛŽˆ›Û™KˆÛÛ™š\›Nˆ›Û™KˆÛÛ™š\›WÜYÙNˆ›Û™KˆÝXØÙ\Ü×ÜYÙNˆ›Û™Kˆ\œ›Ü—ÜYÙNˆ›Û™KˆšY[Îˆ™XÎŽ›™]Ê
+Kˆ™\]Z\™\×Ø]]ˆ˜[ÙKˆ\›Z\ÜÚ[ÛœÎˆ™XÎŽ›™]Ê
+KˆÝ][Y[Îˆ™XÈVÞ™[\˜WØ\ÝŽ”Ý]Ž‘^Š™[\˜WØ\ÝŽ‘^ˆÂˆÚ[™ˆ™[\˜WØ\ÝŽ‘^’Ú[™Ž”Ü[Âˆ™\Ý[Ý\Nˆ™[\˜WØ\ÝŽ•\NŽ•[š]ˆ]Y\žKˆKˆÜ[ŽˆX›KœÜ[‹ˆJWKˆÝXØÙ\ÜÎˆÛÛYJLNŽ™›Ü›KœØ]™Y‹š[Ê
+JKˆ™Y\™XÝˆÛÛYJ›Ü›X]J‹ÞßH‹ÜYX›JJKˆÜ[ŽˆX›KœÜ[‹ˆWKˆÜ[ŽˆX›KœÜ[‹ˆKˆX›NˆÛÛYJX›K˜ÛÛ™J
+JKˆØÚ[XNˆÛÛYJØÚ[XK˜ÛÛ™J
+JKˆ™\]Z\™\×Ø]]ˆÜYœ™\]Z\™\×Ø]]ˆ\›Z\ÜÚ[ÛœËˆÜÜ™ŽˆÛÛ^˜ÜÜ™‹ˆ›Ü›WÝšY]ÎˆÜYšY]Ë™›Ü›K˜ÛÛ™J
+KˆÜÝÛÛ›Nˆ˜[ÙKˆ]Y]ÝX›NˆÛÛ^˜]Y]ÝX›Kˆ]Y]Ù]™[ˆÛÛYJYˆY]Âˆ˜ÜY\]H‹š[Ê
+BˆH[ÙHÂˆ˜ÜY˜Ü™X]H‹š[Ê
+BˆJKˆ]Y]ØÚZ[ŽˆÛÛ^˜]Y]ØÚZ[‹ˆ^[Ý]Ú[ˆÛÛ^›^[Ý]Ú[ˆBŸB‚™›ˆÙ[™\˜]YØÜYØXÝ[ÛŠˆÜYˆ	ž™[\˜WØ\ÝŽÜYY‹ˆX›Nˆ	ž™[\˜WØ\ÝŽ•X›QY‹ˆØÚ[XNˆ	”ØÚ[XKˆXÝ[ÛŽˆ	ž™[\˜WØ\ÝŽ‘›Ü›PXÝ[Û‹ˆÛÛ^ˆÜYÙ[™\˜][ÛÛÛ^ŠHOˆÜYXÝ[Û”›Ý]HÂˆ]]]\›Z\ÜÚ[ÛœÈHÜYœ\›Z\ÜÚ[ÛœË˜ÛÛ™J
+NÂˆ\›Z\ÜÚ[ÛœË™^[™
+XÝ[Û‹œ\›Z\ÜÚ[ÛœË˜ÛÛ™J
+JNÂˆ\›Z\ÜÚ[ÛœËœÛÜ
+
+NÂˆ\›Z\ÜÚ[ÛœË™Y\
+
+NÂˆ]]H›Ü›X]J‹ÞßKÞÞÚY_KÞßH‹ÜYX›KXÝ[Û‹›˜[YJNÂˆÜYXÝ[Û”›Ý]HÂˆ˜[YNˆXÝ[Û‹›˜[YK˜ÛÛ™J
+KˆX™[ˆXÝ[Û‹›X™[˜ÛÛ™J
+K[Ü˜\ÛÜ—Ù[ÙJXÝ[Û‹›˜[YK˜ÛÛ™J
+JKˆXÛÛŽˆXÝ[Û‹šXÛÛ‹˜ÛÛ™J
+KˆÛÛ™š\›NˆXÝ[Û‹˜ÛÛ™š\›K˜ÛÛ™J
+KˆÛÛ™š\›WÜYÙNˆXÝ[Û‹˜ÛÛ™š\›WÜYÙK˜ÛÛ™J
+Kˆ›Ü›Nˆ›Ü›T›Ý]HÂˆ]ˆ]˜ÛÛ™J
+KˆXÝ[ÛŽˆ]ˆ›Ü›Nˆ™[\˜WØ\ÝŽ‘›Ü›QYˆÂˆ˜[YNˆ›Ü›X]Jžß^ßH‹ÜY›˜[YKXÝ[Û‹›˜[YJKˆX›NˆÛÛYJX›K›˜[YK˜ÛÛ™J
+JKˆšY[ÎˆXÝ[Û‹™šY[Ë˜ÛÛ™J
+KˆXÝ[ÛœÎˆ™XÈVØXÝ[Û‹˜ÛÛ™J
+WKˆÜ[ŽˆXÝ[Û‹œÜ[‹ˆKˆX›NˆÛÛYJX›K˜ÛÛ™J
+JKˆØÚ[XNˆÛÛYJØÚ[XK˜ÛÛ™J
+JKˆ™\]Z\™\×Ø]]ˆÜYœ™\]Z\™\×Ø]]XÝ[Û‹œ™\]Z\™\×Ø]]ˆ\›Z\ÜÚ[ÛœËˆÜÜ™ŽˆÛÛ^˜ÜÜ™‹ˆ›Ü›WÝšY]Îˆ™[\˜WØ\ÝŽÜY›Ü›UšY]ÑYˆÂˆÝX›Z]ˆXÝ[Û‹›X™[˜ÛÛ™J
+Kˆ‹ž™[\˜WØ\ÝŽÜY›Ü›UšY]ÑYŽŽ™Y˜][
+
+BˆKˆÜÝÛÛ›NˆYKˆ]Y]ÝX›NˆÛÛ^˜]Y]ÝX›Kˆ]Y]Ù]™[ˆÛÛYJ›Ü›X]J˜ÜY˜XÝ[Û‹žßH‹XÝ[Û‹›˜[YJJKˆ]Y]ØÚZ[ŽˆÛÛ^˜]Y]ØÚZ[‹ˆ^[Ý]Ú[ˆÛÛ^›^[Ý]Ú[ˆKˆBŸB‚™›ˆY™™XÝ]™WØÜYÜ\›Z\ÜÚ[ÛœÊY˜][ˆ	–ÔÝš[™×KØÛÜYˆ	–ÔÝš[™×JHOˆ™XÏÝš[™ÏˆÂˆYˆØÛÜYš\×Ù[\J
+HÂˆY˜][×Ý™XÊ
+BˆH[ÙHÂˆØÛÜY×Ý™XÊ
+BˆBŸB‚™›ˆÙ[™\˜]YØ\WÜ›Ý]\Êˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KˆØ\Xš[]WÙÜ˜[ÎˆÜ[Û	’\ÚÙ]Ýš[™Ï‹ˆ[[YWÜÛXÞNˆÜ[Û	”[[YTÛXÞO‹ŠHOˆ™XÏ\T›Ý]OˆÂˆ]]X˜\ÙWÝ\›H[ŽŽ˜\Š‘UPTÑWÕT“ŠK›ÚÊ
+NÂˆ›ÙÜ˜[Bˆ˜\\Âˆš]\Š
+Bˆ™š[\—ÛX\
+\_Âˆ][™\ˆH\Kš[™\‹˜\×Ü™YŠ
+OË˜ÛÛ™J
+NÂˆ]\HH\K˜ÛÛ™J
+NÂˆ]›ÙÜ˜[HH›ÙÜ˜[K˜ÛÛ™J
+NÂˆ]]X˜\ÙWÝ\›H]X˜\ÙWÝ\›˜ÛÛ™J
+NÂˆ]Ø\Xš[]WÙÜ˜[ÈHØ\Xš[]WÙÜ˜[Ë˜ÛÛ™Y
+
+NÂˆ][[YWÜÛXÞHH[[YWÜÛXÞK˜ÛÛ™Y
+
+NÂˆ]™\]Z\™\×Ø]]H\Kœ™\]Z\™\×Ø]]Âˆ]\›Z\ÜÚ[ÛœÈH\Kœ\›Z\ÜÚ[ÛœË˜ÛÛ™J
+NÂˆÛÛYJˆ\T›Ý]NŽ›™]Êˆ\K›Y]Ù˜ÛÛ™J
+Kˆ\Kœ]˜ÛÛ™J
+Kˆ[Ý™H™\]Y\Ý]Ü\˜[\ßÂˆ\Ü]ÚØ\WÝÚ]ØØ\Xš[]Y\Êˆ	œ›ÙÜ˜[Kˆ	˜\Kˆ	š[™\‹ˆ™\]Y\Ýˆ]Ü\˜[\Ëˆ\T[[YPÛÛ^Âˆ]X˜\ÙWÝ\›ˆ]X˜\ÙWÝ\›˜\×Ù\™YŠ
+KˆØ\Xš[]WÙÜ˜[ÎˆØ\Xš[]WÙÜ˜[Ë˜\×Ü™YŠ
+Kˆ[[YWÜÛXÞNˆ[[YWÜÛXÞK˜\×Ü™YŠ
+KˆKˆ
+BˆKˆ
+BˆÚ]Ø]]
+™\]Z\™\×Ø]]\›Z\ÜÚ[ÛœÊKˆ
+BˆJBˆ˜ÛÛXÝ
+
+BŸB‚ˆÖØÙ™Ê\Ý
+WB™›ˆ\Ü]ÚØ\Jˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆ\Nˆ	ž™[\˜WØ\ÝŽ\QY‹ˆ[™\Žˆ	œÝ‹ˆ™\]Y\Ýˆ	ž™[\˜WÝÙXŽŽ”™\]Y\Ýˆ]Ü\˜[\Îˆ	’\ÚX\Ýš[™ËÝš[™Ï‹ˆ]X˜\ÙWÝ\›ˆÜ[Û	œÝ‹ŠHOˆ™\ÜÛœÙHÂˆ\Ü]ÚØ\WÝÚ]ØØ\Xš[]Y\Êˆ›ÙÜ˜[Kˆ\Kˆ[™\‹ˆ™\]Y\Ýˆ]Ü\˜[\Ëˆ\T[[YPÛÛ^Âˆ]X˜\ÙWÝ\›ˆØ\Xš[]WÙÜ˜[Îˆ›Û™Kˆ[[YWÜÛXÞNˆ›Û™KˆKˆ
+BŸB‚ˆÖÙ\š]™JÛÛ™KÛÜJWBœÝXÝ\T[[YPÛÛ^	ØOˆÂˆ]X˜\ÙWÝ\›ˆÜ[Û	‰ØHÝ‹ˆØ\Xš[]WÙÜ˜[ÎˆÜ[Û	‰ØH\ÚÙ]Ýš[™Ï‹ˆ[[YWÜÛXÞNˆÜ[Û	‰ØH[[YTÛXÞO‹ŸB‚™›ˆ\Ü]ÚØ\WÝÚ]ØØ\Xš[]Y\Êˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[Kˆ\Nˆ	ž™[\˜WØ\ÝŽ\QY‹ˆ[™\Žˆ	œÝ‹ˆ™\]Y\Ýˆ	ž™[\˜WÝÙXŽŽ”™\]Y\Ýˆ]Ü\˜[\Îˆ	’\ÚX\Ýš[™ËÝš[™Ï‹ˆÛÛ^ˆ\T[[YPÛÛ^	×Ï‹ŠHOˆ™\ÜÛœÙHÂˆYˆ[X]Ú\ÈJ\K›Y]Ù˜\×ÜÝŠ
+K‘ÑUˆ‘SUHŠH	‰ˆ\™\]Y\Ý˜›ÙKš[J
+Kš\×Ù[\J
+HÂˆYˆ]ÛÛYJÛÛ[Ý\JHH™\]Y\ÝšXY\œË™Ù]
+˜ÛÛ[]\HŠHÂˆ]YYXWÝ\HHÛÛ[Ý\BˆœÜ]
+	ÎÉÊBˆ›™^
+
+Bˆ›X\
+ÝŽŽš[JBˆ[Ü˜\ÛÜ—ÙY˜][
+
+Bˆ×Ø\ØÚZWÛÝÙ\˜Ø\ÙJ
+NÂˆYˆYYXWÝ\HOH˜\XØ][Û‹ÚœÛÛˆˆ	‰ˆYYXWÝ\HOH˜\XØ][Û‹Þ]ÝÝËY›Ü›K]\›[˜ÛÙY‚ˆÂˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJˆMKˆ•[œÝ\ÜYYYXU\H‹ˆTH™\]Y\Ý›ÙY\È]\Ý\ÙH\XØ][Û‹ÚœÛÛˆÜˆ\XØ][Û‹Þ]ÝÝËY›Ü›K]\›[˜ÛÙY‹ˆ
+NÂˆBˆBˆBˆ]˜[Y\ÈHYˆX]Ú\ÈJ\K›Y]Ù˜\×ÜÝŠ
+K‘ÑUˆ‘SUHŠHÂˆ™\]Y\Ý\™Ù]œÜ]ÛÛ˜ÙJ	ÏÉÊK›X\ÛÜ—Ù[ÙJˆÚÊ\ÚX\Ž›™]Ê
+JKˆ
+Ë]Y\žJ_\œÙWØ\WÝ\›Ý˜[Y\Ê]Y\žJKˆ
+BˆH[ÙHYˆ™\]Y\ÝˆšXY\œÂˆ™Ù]
+˜ÛÛ[]\HŠBˆš\×ÜÛÛYWØ[™
+ÛÛ[Ý\_ÛÛ[Ý\KœÝ\×ÝÚ]
+˜\XØ][Û‹ÚœÛÛˆŠJBˆÂˆ\œÙWØ\WÚœÛÛ—ÛØš™XÝ
+	œ™\]Y\Ý˜›ÙJK›X\Ù\œŠY\ÜØYÙ_™[\˜WÝÙXŽŽ’\œ›ÜˆÈY\ÜØYÙHJBˆH[ÙHÂˆ\œÙWØ\WÝ\›Ý˜[Y\Ê	œ™\]Y\Ý˜›ÙJBˆNÂˆ]]]˜[Y\ÈHX]Ú˜[Y\ÈÂˆÚÊ˜[Y\ÊHOˆ˜[Y\Ëˆ\œŠ\œ›ÜŠHOˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJ˜Y™\]Y\Ý‹	™\œ›Ü‹×ÜÝš[™Ê
+JKˆNÂˆ›Üˆ
+˜[YK˜[YJH[ˆ]Ü\˜[\ÈÂˆ˜[Y\Ëš[œÙ\
+˜[YK˜ÛÛ™J
+KÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™Ê˜[YK˜ÛÛ™J
+JJNÂˆBˆ]]]\™Ý[Y[ÈH™XÎŽ›™]Ê
+NÂˆ›ÜˆšY[[ˆ	˜\Kš[œ]Âˆ]ÛÛYJ˜[YJHH˜[Y\Ë™Ù]
+	™šY[›˜[YJH[ÙHÂˆYˆX]Ú\ÈJšY[K\NŽ“Ü[ÛŠÊJHÂˆ\™Ý[Y[Ëœ\Ú
+[[YU˜[YNŽ“Ü[ÛŠ›Û™JJNÂˆÛÛ[YNÂˆBˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJˆˆ˜Y™\]Y\Ý‹ˆ	™›Ü›X]J›Z\ÜÚ[™ÈTH[œ]ßX‹šY[›˜[YJKˆ
+NÂˆNÂˆX]Ú\WÝ˜[YWÚœÛÛŠ˜[YK	™šY[K›ÙÜ˜[JHÂˆÚÊ˜[YJHOˆ\™Ý[Y[Ëœ\Ú
+˜[YJKˆ\œŠ\œ›ÜŠHOˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJ˜Y™\]Y\Ý‹	™\œ›ÜŠKˆBˆBˆX]Ú^XÝ]WÙ[˜Ý[Û—ÝÚ]ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Êˆ›ÙÜ˜[Kˆ[™\‹ˆ\™Ý[Y[ËˆÛÛ^™]X˜\ÙWÝ\›ˆÛÛ^˜Ø\Xš[]WÙÜ˜[ËˆÛÛ^œ[[YWÜÛXÞKˆ
+HÂˆÚÊ˜[YJHOˆ\WÜ™\Ý[Ü™\ÜÛœÙJ\K	˜[YJKˆ\œŠ\œ›ÜŠHOˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJL’[\›˜[Ù\™\‘\œ›Üˆ‹	™\œ›Ü‹›Y\ÜØYÙJKˆBŸB‚™›ˆ\WÜ™\Ý[Ü™\ÜÛœÙJ\Nˆ	ž™[\˜WØ\ÝŽ\QY‹˜[YNˆ	”[[YU˜[YJHOˆ™\ÜÛœÙHÂˆYˆ][[YU˜[YNŽ”™\Ý[
+\œŠ\œ›ÜŠJHH˜[YHÂˆ]\œ›Ü—Û˜[YHHX]Ú	ŠŠ™\œ›ÜˆÂˆ[[YU˜[YNŽ“Øš™XÝÈ\WÛ˜[YK‹ˆHOˆ\WÛ˜[YK˜ÛÛ™J
+KˆÈOˆ\œ›Ü‹›Ý]]
+
+KˆNÂˆYˆ]ÛÛYJXÛ\˜][ÛŠHH\K™\œ›ÜœËš]\Š
+K™š[™
+XÛ\˜][ÛŸÂˆXÛ\˜][Û‹›˜[YHOH\œ›Ü—Û˜[YBˆXÛ\˜][Û‹œ^[ØY˜\×Ü™YŠ
+Kš\×ÜÛÛYWØ[™
+^[ØYÂˆ^[ØYOH	™\œ›Ü‹J
+BˆX]Ú\ÈJ^[ØY\NŽ“˜[YY
+˜[YJHYˆ˜[YHOH	™\œ›Ü—Û˜[YJBˆJBˆJHÂˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙWÝÚ]Ù]Z[ÊˆXÛ\˜][Û‹œÝ]\Ëˆ	™XÛ\˜][Û‹›˜[YKˆ	™›Ü›X]JTH[™\ˆ™]\›™YßH‹XÛ\˜][Û‹›˜[YJKˆXÛ\˜][Û‹œ^[ØY˜\×Ü™YŠ
+K›X\
+ß	ŠŠ™\œ›ÜŠKˆ
+NÂˆBˆ™]\›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJˆLˆ’[\›˜[Ù\™\‘\œ›Üˆ‹ˆ	™›Ü›X]J[›X\YTH\œ›ÜˆÙ\œ›Ü—Û˜[Y_XŠKˆ
+NÂˆBˆ™\ÜÛœÙNŽšœÛÛŠŒ\WÚœÛÛ—Ý˜[YJ˜[YJJBŸB‚™›ˆ\WÝ˜[YWÚœÛÛŠˆ˜[YNˆ	œÙ\™WÚœÛÛŽŽ•˜[YKˆNˆ	•\Kˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KŠHOˆ™\Ý[[[YU˜[YKÝš[™ÏˆÂˆYˆ]\NŽ“Ü[ÛŠ[›™\ŠHHHÂˆYˆ˜[YKš\×Û[
+
+HÂˆ™]\›ˆÚÊ[[YU˜[YNŽ“Ü[ÛŠ›Û™JJNÂˆBˆ™]\›ˆÚÊ[[YU˜[YNŽ“Ü[ÛŠÛÛYJ›ÞŽ›™]Ê\WÝ˜[YWÚœÛÛŠˆ˜[YK[›™\‹›ÙÜ˜[Kˆ
+OÊJJJNÂˆBˆYˆ]\NŽ“˜[YY
+˜[YJHHHÂˆYˆ]ÛÛYJYš[š][ÛŠHH›ÙÜ˜[Bˆ\\Âˆš]\Š
+Bˆ™š[™
+Yš[š][ÛŸYš[š][Û‹›˜[YHOH
+›˜[YJBˆÂˆ™]\›ˆ\WÝ˜[YWÚœÛÛŠ˜[YK	™Yš[š][Û‹\™Ù]›ÙÜ˜[JNÂˆBˆYˆ]ÛÛYJ™XÛÜ™
+HH›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K™š[™
+™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJHÂˆ™]\›ˆ\WÜ™XÛÜ™Ý˜[YJ˜[YK™XÛÜ™›ÙÜ˜[JNÂˆBˆBˆX]ÚHÂˆ\NŽ\œ˜^J[›™\ŠHOˆÂˆ]ÛÛYJ˜[Y\ÊHH˜[YK˜\×Ø\œ˜^J
+H[ÙHÂˆ™]\›ˆ\œŠ™^XÝYH”ÓÓˆ\œ˜^H‹š[Ê
+JNÂˆNÂˆ˜[Y\Âˆš]\Š
+Bˆ›X\
+˜[Y_\WÝ˜[YWÚœÛÛŠ˜[YK[›™\‹›ÙÜ˜[JJBˆ˜ÛÛXÝŽ™\Ý[™XÏÏ‹ÏŠ
+Bˆ›X\
+[[YU˜[YNŽ\œ˜^JBˆBˆ\NŽ“X\
+Ù^K˜[YWÝ\JHOˆÂˆYˆ
+ŠšÙ^HOH\NŽ”Ýš[™ÈÂˆ™]\›ˆ\œŠTH”ÓÓˆX\È™\]Z\™HÝš[™ÈÙ^\È‹š[Ê
+JNÂˆBˆ]ÛÛYJØš™XÝ
+HH˜[YK˜\×ÛØš™XÝ
+
+H[ÙHÂˆ™]\›ˆ\œŠ™^XÝYH”ÓÓˆØš™XÝ›ÜˆX\Ýš[™Ë˜[YOˆ‹š[Ê
+JNÂˆNÂˆØš™XÝˆš]\Š
+Bˆ›X\
+
+Ù^K˜[YJ_Âˆ\WÝ˜[YWÚœÛÛŠ˜[YK˜[YWÝ\K›ÙÜ˜[JBˆ›X\
+˜[Y_
+[[YU˜[YNŽ”Ýš[™ÊÙ^K˜ÛÛ™J
+JK˜[YJJBˆJBˆ˜ÛÛXÝŽ™\Ý[™XÏÏ‹ÏŠ
+Bˆ›X\
+[[YU˜[YNŽ“X\
+BˆBˆ\NŽ’[Oˆ˜[YBˆ˜\×ÚM
+
+Bˆ›Ü—Ù[ÙJ˜[YK˜\×ÜÝŠ
+K˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JJBˆ›X\
+[[YU˜[YNŽ’[
+Bˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]Jš[˜[Y[”ÓÓˆ˜[YHÝ˜[Y_XŠJKˆ\NŽ•R[Oˆ˜[YBˆ˜\×ÝM
+
+Bˆ›Ü—Ù[ÙJ˜[YK˜\×ÜÝŠ
+K˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JJBˆ›X\
+[[YU˜[YNŽ•R[
+Bˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]Jš[˜[YR[”ÓÓˆ˜[YHÝ˜[Y_XŠJKˆ\NŽ‘›Ø]\NŽ‘XÚ[X[Oˆ˜[YBˆ˜\×Ù
+
+Bˆ›Ü—Ù[ÙJ˜[YK˜\×ÜÝŠ
+K˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JJBˆ›X\
+[[YU˜[YNŽ‘›Ø]
+Bˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]Jš[˜[Y[Y\šXÈ”ÓÓˆ˜[YHÝ˜[Y_XŠJKˆ\NŽ›ÛÛOˆ˜[YBˆ˜\×Ø›ÛÛ
+
+Bˆ›Ü—Ù[ÙJÂˆ˜[YK˜\×ÜÝŠ
+K˜[™Ý[Š˜[Y_X]Ú˜[YHÂˆYHˆŒHˆOˆÛÛYJYJKˆ™˜[ÙHˆŒˆOˆÛÛYJ˜[ÙJKˆÈOˆ›Û™KˆJBˆJBˆ›X\
+[[YU˜[YNŽ›ÛÛ
+Bˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]Jš[˜[Y›ÛÛ”ÓÓˆ˜[YHÝ˜[Y_XŠJKˆÈOˆ˜[YBˆ˜\×ÜÝŠ
+Bˆ›X\
+˜[Y_[[YU˜[YNŽ”Ýš[™Ê˜[YK×ÛÝÛ™Y
+
+JJBˆ›Ü—Ù[ÙJÂˆYˆ˜[YKš\×Û[X™\Š
+H˜[YKš\×Ø›ÛÛX[Š
+HÂˆÛÛYJ[[YU˜[YNŽ”Ýš[™Ê˜[YK×ÜÝš[™Ê
+JJBˆH[ÙHÂˆ›Û™BˆBˆJBˆ›Ú×ÛÜ—Ù[ÙJ›Ü›X]J™^XÝYHØØ[\ˆ”ÓÓˆ˜[YK›Ý[™Ý˜[Y_XŠJKˆBŸB‚™›ˆ\WÜ™XÛÜ™Ý˜[YJˆ˜[YNˆ	œÙ\™WÚœÛÛŽŽ•˜[YKˆ™XÛÜ™ˆ	ž™[\˜WØ\ÝŽ”™XÛÜ™Y‹ˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KŠHOˆ™\Ý[[[YU˜[YKÝš[™ÏˆÂˆ]ÛÛYJØš™XÝ
+HH˜[YK˜\×ÛØš™XÝ
+
+H[ÙHÂˆ™]\›ˆ\œŠ›Ü›X]J™^XÝY”ÓÓˆØš™XÝ›Üˆ™XÛÜ™ßX‹™XÛÜ™›˜[YJJNÂˆNÂˆ›ÜˆšY[[ˆØš™XÝšÙ^\Ê
+HÂˆYˆ\™XÛÜ™ˆ™šY[Âˆš]\Š
+Bˆ˜[žJØ[™Y]_Ø[™Y]K›˜[YHOH
+™šY[
+BˆÂˆ™]\›ˆ\œŠ›Ü›X]Jˆ[šÛ›ÝÛˆšY[ÙšY[X[ˆ™XÛÜ™ßX‹ˆ™XÛÜ™›˜[YBˆ
+JNÂˆBˆBˆ]]]šY[ÈH\ÚX\Ž›™]Ê
+NÂˆ›ÜˆšY[[ˆ	œ™XÛÜ™™šY[ÈÂˆ]ÛÛYJ˜[YJHHØš™XÝ™Ù]
+	™šY[›˜[YJH[ÙHÂˆYˆX]Ú\ÈJšY[K\NŽ“Ü[ÛŠÊJHÂˆšY[Ëš[œÙ\
+šY[›˜[YK˜ÛÛ™J
+K[[YU˜[YNŽ“Ü[ÛŠ›Û™JJNÂˆÛÛ[YNÂˆBˆ™]\›ˆ\œŠ›Ü›X]Jˆ›Z\ÜÚ[™ÈšY[ßX[ˆ™XÛÜ™ßX‹ˆšY[›˜[YK™XÛÜ™›˜[YBˆ
+JNÂˆNÂˆšY[Ëš[œÙ\
+ˆšY[›˜[YK˜ÛÛ™J
+Kˆ\WÝ˜[YWÚœÛÛŠ˜[YK	™šY[K›ÙÜ˜[JOËˆ
+NÂˆBˆÚÊ[[YU˜[YNŽ“Øš™XÝÂˆ\WÛ˜[YNˆ™XÛÜ™›˜[YK˜ÛÛ™J
+KˆšY[ËˆJBŸB‚™›ˆ\WÚœÛÛ—Ý˜[YJ˜[YNˆ	”[[YU˜[YJHOˆÝš[™ÈÂˆ\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJK×ÜÝš[™Ê
+BŸB‚™›ˆ\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YNˆ	”[[YU˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YHÂˆX]Ú˜[YHÂˆ[[YU˜[YNŽ’[
+˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ™œ›ÛJ
+˜[YJKˆ[[YU˜[YNŽ•R[
+˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ™œ›ÛJ
+˜[YJKˆ[[YU˜[YNŽ‘›Ø]
+˜[YJHOˆÙ\™WÚœÛÛŽŽ“[X™\ŽŽ™œ›ÛWÙ
+
+˜[YJBˆ›X\
+Ù\™WÚœÛÛŽŽ•˜[YNŽ“[X™\ŠBˆ[Ü˜\ÛÜŠÙ\™WÚœÛÛŽŽ•˜[YNŽ“[
+Kˆ[[YU˜[YNŽ›ÛÛ
+˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ™œ›ÛJ
+˜[YJKˆ[[YU˜[YNŽ”Ýš[™Ê˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™Ê˜[YK˜ÛÛ™J
+JKˆ[[YU˜[YNŽÚ\Š˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™Ê˜[YK×ÜÝš[™Ê
+JKˆ[[YU˜[YNŽ•[Y\Ý[\
+˜[YJHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ™œ›ÛJ
+˜[YJKˆ[[YU˜[YNŽ\œ˜^J˜[Y\ÊHOˆÂˆÙ\™WÚœÛÛŽŽ•˜[YNŽ\œ˜^J˜[Y\Ëš]\Š
+K›X\
+\WÚœÛÛ—Ý˜[YWÛ›ÙJK˜ÛÛXÝ
+
+JBˆBˆ[[YU˜[YNŽ“X\
+[šY\ÊHOˆÂˆ]Øš™XÝH[šY\Âˆš]\Š
+Bˆ›X\
+
+Ù^K˜[YJ_
+Ù^K›Ý]]
+
+K\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJJJBˆ˜ÛÛXÝ
+
+NÂˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+Øš™XÝ
+BˆBˆ[[YU˜[YNŽ“Øš™XÝÈšY[Ë‹ˆHOˆÂˆ]Øš™XÝHšY[Âˆš]\Š
+Bˆ›X\
+
+˜[YK˜[YJ_
+˜[YK˜ÛÛ™J
+K\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJJJBˆ˜ÛÛXÝ
+
+NÂˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+Øš™XÝ
+BˆBˆ[[YU˜[YNŽ“Ü[ÛŠÛÛYJ˜[YJJHOˆ\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJKˆ[[YU˜[YNŽ“Ü[ÛŠ›Û™JHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“[ˆ[[YU˜[YNŽ”™\Ý[
+ÚÊ˜[YJJHOˆ\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJKˆ[[YU˜[YNŽ”™\Ý[
+\œŠ˜[YJJHOˆÂˆ]]]Øš™XÝHÙ\™WÚœÛÛŽŽ“X\Ž›™]Ê
+NÂˆØš™XÝš[œÙ\
+™\œ›Üˆ‹š[Ê
+K\WÚœÛÛ—Ý˜[YWÛ›ÙJ˜[YJJNÂˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+Øš™XÝ
+BˆBˆ[[YU˜[YNŽ”›ÝÜÈÈÛÛ[[œË›ÝÜÈHOˆÙ\™WÚœÛÛŽŽ•˜[YNŽ\œ˜^Jˆ›ÝÜËš]\Š
+Bˆ›X\
+›ÝßÂˆ]Øš™XÝHÛÛ[[œÂˆš]\Š
+Bˆžš\
+›ÝÊBˆ›X\
+
+ÛÛ[[‹˜[YJ_Âˆ
+ÛÛ[[‹˜ÛÛ™J
+KÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™Ê˜[YK˜ÛÛ™J
+JJBˆJBˆ˜ÛÛXÝ
+
+NÂˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+Øš™XÝ
+BˆJBˆ˜ÛÛXÝ
+
+Kˆ
+Kˆ[[YU˜[YNŽ•[š]OˆÙ\™WÚœÛÛŽŽ•˜[YNŽ“[ˆBŸB‚™›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙJÝ]\ÎˆLM‹ÛÙNˆ	œÝ‹Y\ÜØYÙNˆ	œÝŠHOˆ™\ÜÛœÙHÂˆ\WÙ\œ›Ü—Ü™\ÜÛœÙWÝÚ]Ù]Z[ÊÝ]\ËÛÙKY\ÜØYÙK›Û™JBŸB‚™›ˆ\WÙ\œ›Ü—Ü™\ÜÛœÙWÝÚ]Ù]Z[ÊˆÝ]\ÎˆLM‹ˆÛÙNˆ	œÝ‹ˆY\ÜØYÙNˆ	œÝ‹ˆ]Z[ÎˆÜ[Û	”[[YU˜[YO‹ŠHOˆ™\ÜÛœÙHÂˆ]]]\œ›ÜˆHÙ\™WÚœÛÛŽŽ“X\Ž›™]Ê
+NÂˆ\œ›Ü‹š[œÙ\
+˜ÛÙH‹š[Ê
+KÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™ÊÛÙKš[Ê
+JJNÂˆ\œ›Ü‹š[œÙ\
+›Y\ÜØYÙH‹š[Ê
+KÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™ÊY\ÜØYÙKš[Ê
+JJNÂˆYˆ]ÛÛYJ]Z[ÊHH]Z[ÈÂˆ\œ›Ü‹š[œÙ\
+™]Z[È‹š[Ê
+K\WÚœÛÛ—Ý˜[YWÛ›ÙJ]Z[ÊJNÂˆBˆ]]]™\ÜÛœÙHHÙ\™WÚœÛÛŽŽ“X\Ž›™]Ê
+NÂˆ™\ÜÛœÙKš[œÙ\
+™\œ›Üˆ‹š[Ê
+KÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+\œ›ÜŠJNÂˆ™\ÜÛœÙNŽšœÛÛŠÝ]\ËÙ\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+™\ÜÛœÙJK×ÜÝš[™Ê
+JBŸB‚™›ˆ\œÙWØ\WÚœÛÛ—ÛØš™XÝ
+ÛÝ\˜ÙNˆ	œÝŠHOˆ™\Ý[\ÚX\Ýš[™ËÙ\™WÚœÛÛŽŽ•˜[YO‹Ýš[™ÏˆÂˆ]˜[YNˆÙ\™WÚœÛÛŽŽ•˜[YHHÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠÛÝ\˜ÙJBˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]Jš[˜[Y”ÓÓˆ™\]Y\Ý›ÙNˆÙ\œ›ÜŸHŠJOÎÂˆ]Ù\™WÚœÛÛŽŽ•˜[YNŽ“Øš™XÝ
+Øš™XÝ
+HH˜[YH[ÙHÂˆ™]\›ˆ\œŠ’”ÓÓˆ™\]Y\Ý›ÙH]\Ý™H[ˆØš™XÝ‹š[Ê
+JNÂˆNÂˆØš™XÝš[×Ú]\Š
+K›X\
+ÚÊK˜ÛÛXÝ
+
+BŸB‚™›ˆ\œÙWØ\WÝ\›Ý˜[Y\ÊˆÛÝ\˜ÙNˆ	œÝ‹ŠHOˆ™\Ý[\ÚX\Ýš[™ËÙ\™WÚœÛÛŽŽ•˜[YO‹™[\˜WÝÙXŽŽ’\œ›ÜˆÂˆ\œÙWÝ\›[˜ÛÙY
+ÛÝ\˜ÙJK›X\
+˜[Y\ßÂˆ˜[Y\Âˆš[×Ú]\Š
+Bˆ›X\
+
+˜[YK˜[YJ_
+˜[YKÙ\™WÚœÛÛŽŽ•˜[YNŽ”Ýš[™Ê˜[YJJJBˆ˜ÛÛXÝ
+
+BˆJBŸB‚™›ˆÝÜ˜YÙWØÛÛ[[—Û˜[YJØÚ[XNˆ	”ØÚ[XKX›Nˆ	œÝ‹šY[ˆ	œÝŠHOˆÝš[™ÈÂˆØÚ[XBˆX›\Âˆš]\Š
+Bˆ™š[™
+Ø[™Y]_Ø[™Y]K›˜[YHOHX›JBˆ˜[™Ý[ŠØ[™Y]_ÂˆØ[™Y]Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ™š[™
+ÛÛ[[ŸÛÛ[[‹›˜[YHOHšY[ÛÛ[[‹›˜[YHOH›Ü›X]JžÙšY[WÚYŠJBˆJBˆ›X\
+ÛÛ[[ŸÛÛ[[‹›˜[YK˜ÛÛ™J
+JBˆ[Ü˜\ÛÜ—Ù[ÙJšY[š[Ê
+JBŸB‚˜ÛÛœÝÔ•QÓVSÕUÐÓÓ•S•ÓPT’ÑTŽˆ	œÝˆH—^ÌV‘STWÐÔ•QÐÓÓ•S•^ÌHŽÂ‚™›ˆÛÛ\ÜÙWÝšY]×Ú[
+›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KšY]×Û˜[YNˆ	œÝ‹ÛÛ[ˆ	œÝŠHOˆÝš[™ÈÂˆ]
+Y˜][Ø›ÙK˜[YYÜÛÝÊHBˆÜ]ÝšY]×ØÛÛ[
+ÛÛ[
+K™^XÝ
+œYÙHšY]ÈÛÝÈ\™H˜[Y]Y™Y›Ü™H›Ý]HÙ[™\˜][ÛˆŠNÂˆÛÛ\ÜÙWÝšY]×Ü\Ê›ÙÜ˜[KšY]×Û˜[YK	™Y˜][Ø›ÙK	›˜[YYÜÛÝÊBŸB‚™›ˆÛÛ\ÜÙWÝšY]×Ü\Êˆ›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KˆšY]×Û˜[YNˆ	œÝ‹ˆY˜][Ø›ÙNˆ	œÝ‹ˆ˜[YYÜÛÝÎˆ	’\ÚX\Ýš[™ËÝš[™Ï‹ŠHOˆÝš[™ÈÂˆ]šY]ÈH›ÙÜ˜[BˆšY]ÜÂˆš]\Š
+Bˆ™š[™
+šY]ßšY]Ë›˜[YHOHšY]×Û˜[YJBˆ™^XÝ
+œYÙH[™Ô•QšY]ÜÈ\™H˜[Y]Y™Y›Ü™H›Ý]HÙ[™\˜][ÛˆŠNÂˆ]ÛÝÈHÛÝÚ[›ØØ][ÛœÊ	šY]Ëš[
+K™^XÝ
+šY]ÈÛÝÈ\™H˜[Y]YŠNÂˆ]]]ÛÛ\ÜÙYHšY]Ëš[˜ÛÛ™J
+NÂˆ›ÜˆÛÝ[ˆÛÝËš[×Ú]\Š
+Kœ™]Š
+HÂˆ]™\XÙ[Y[HÛÝˆ›˜[YBˆ˜\×Ù\™YŠ
+Bˆ˜[™Ý[Š˜[Y_˜[YYÜÛÝË™Ù]
+˜[YJJBˆ›X\ÛÜ—Ù[ÙJˆX]ÚÛÝ›˜[YHÂˆÛÛYJÊHOˆÛÝ˜›ÙK˜\×Ù\™YŠ
+K[Ü˜\ÛÜŠˆŠKˆ›Û™HOˆY˜][Ø›ÙKˆKˆÝš[™ÎŽ˜\×ÜÝ‹ˆ
+NÂˆÛÛ\ÜÙYœ™\XÙWÜ˜[™ÙJÛÝœÝ\‹œÛÝ™[™™\XÙ[Y[
+NÂˆBˆ^[™ÝšY]×ØÛÛ\Û™[Ê›ÙÜ˜[KÛÛ\ÜÙY
+BŸB‚™›ˆÛÛ\ÜÙWÜYÙWÝšY]Ê›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KYÙNˆ	ž™[\˜WØ\ÝŽ”YÙQYŠHOˆÝš[™ÈÂˆYˆ]ÛÛYJšY]×Û˜[YJHHYÙKšY]Ë˜\×Ù\™YŠ
+HÂˆÛÛ\ÜÙWÝšY]×Ú[
+›ÙÜ˜[KšY]×Û˜[YK	œYÙKš[
+BˆH[ÙHÂˆ^[™ÝšY]×ØÛÛ\Û™[Ê›ÙÜ˜[KYÙKš[˜ÛÛ™J
+JBˆBŸB‚™›ˆÜYÛ^[Ý]Ú[
+›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KÜYˆ	ž™[\˜WØ\ÝŽÜYYŠHOˆÜ[ÛÝš[™ÏˆÂˆÜY›^[Ý]˜\×Ù\™YŠ
+K›X\
+^[Ý]Âˆ]Ý\YYÜÛÝÈHÜYˆ›^[Ý]ÜÛÝÂˆš]\Š
+Bˆ›X\
+ÛÝ
+ÛÝ›˜[YK˜ÛÛ™J
+KÛÝš[˜ÛÛ™J
+JJBˆ˜ÛÛXÝŽ\ÚX\ËÏŠ
+NÂˆÛÛ\ÜÙWÝšY]×Ü\Ê›ÙÜ˜[K^[Ý]Ô•QÓVSÕUÐÓÓ•S•ÓPT’ÑT‹	œÝ\YYÜÛÝÊBˆJBŸB‚™›ˆYÙWÙ]WÙšY[Ê›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[KNˆ	•\JHOˆ™XÏÝš[™ÏˆÂˆ]HHX]ÚHÂˆ\NŽ\œ˜^J[›™\ŠH\NŽ“Ü[ÛŠ[›™\ŠHOˆ[›™\‹˜\×Ü™YŠ
+KˆÝ\ˆOˆÝ\‹ˆNÂˆ]\NŽ“˜[YY
+˜[YJHHH[ÙHÂˆ™]\›ˆ™XÎŽ›™]Ê
+NÂˆNÂˆYˆ]ÛÛYJ™XÛÜ™
+HH›ÙÜ˜[Kœ™XÛÜ™Ëš]\Š
+K™š[™
+™XÛÜ™™XÛÜ™›˜[YHOH
+›˜[YJHÂˆ™]\›ˆ™XÛÜ™ˆ™šY[Âˆš]\Š
+Bˆ›X\
+šY[šY[›˜[YK˜ÛÛ™J
+JBˆ˜ÛÛXÝ
+
+NÂˆBˆ›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ™š[™
+X›_ÂˆX›K›˜[YHOH
+›˜[YHÚ[™Ý[\—Ý\WÛ˜[YJ	X›K›˜[YJK˜\×Ù\™YŠ
+HOHÛÛYJ˜[YJBˆJBˆ›X\
+X›_ÂˆX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ›X\
+ÛÛ[[ŸÛÛ[[‹›˜[YK˜ÛÛ™J
+JBˆ˜ÛÛXÝ
+
+BˆJBˆ[Ü˜\ÛÜ—ÙY˜][
+
+BŸB‚™›ˆ™[™\—ÝšY]×ØÛÛ\Û™[
+ˆÛÛ\Û™[ˆ	ž™[\˜WØ\ÝŽÛÛ\Û™[Y‹ˆ]šX]\Îˆ	œÝ‹ˆ›ÙNˆÜ[Û	œÝ‹ŠHOˆÝš[™ÈÂˆ]]šX]\ÈHÛÛ\Û™[Ø]šX]\Ê]šX]\ÊK™^XÝ
+šY]ÈÛÛ\Û™[È\™H˜[Y]YŠNÂˆ]
+Y˜][Ø›ÙK˜[YYÜÛÝÊHH›ÙBˆ›X\
+Ü]ØÛÛ\Û™[Ø›ÙJBˆ˜[œÜÜÙJ
+Bˆ™^XÝ
+šY]ÈÛÛ\Û™[ÛÝÈ\™H˜[Y]YŠBˆ[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ]]][\]HHÛÛ\Û™[š[˜ÛÛ™J
+NÂˆ]ÛÝÈHÛÝÚ[›ØØ][ÛœÊ	[\]JK™^XÝ
+šY]ÈÛÛ\Û™[ÛÝÈ\™H˜[Y]YŠNÂˆ›Üˆ
+[™^ÛÝ
+H[ˆÛÝËš[×Ú]\Š
+K™[[Y\˜]J
+Kœ™]Š
+HÂˆ]™\XÙ[Y[H›Ü›X]J—^ÌV‘STWÔÓÕÞÚ[™^W^ÌHŠNÂˆ[\]Kœ™\XÙWÜ˜[™ÙJÛÝœÝ\‹œÛÝ™[™	œ™\XÙ[Y[
+NÂˆBˆ]]]™[™\™YHÛÛ\Û™[œ›ÜËš]\Š
+K™›Û
+[\]K[›ÜÂˆ]˜[YHH]šX]\Ë™Ù]
+	œ›Ü›˜[YJK›X\ÛÜŠˆ‹Ýš[™ÎŽ˜\×ÜÝŠNÂˆ]™\XÙ[Y[HYˆ˜[YKœÝ\×ÝÚ]
+	ÞÉÊH	‰ˆ˜[YK™[™×ÝÚ]
+	ßIÊHÂˆ˜[YK×ÛÝÛ™Y
+
+BˆH[ÙHÂˆ[Ù\ØØ\J˜[YJBˆNÂˆ[œ™\XÙJ	™›Ü›X]JžÞÞß__H‹›Ü›˜[YJK	œ™\XÙ[Y[
+BˆJNÂˆ]ÛÝÈHÛÝÚ[›ØØ][ÛœÊ	˜ÛÛ\Û™[š[
+K™^XÝ
+šY]ÈÛÛ\Û™[ÛÝÈ\™H˜[Y]YŠNÂˆ›Üˆ
+[™^ÛÝ
+H[ˆÛÝËš[×Ú]\Š
+K™[[Y\˜]J
+HÂˆ]X\šÙ\ˆH›Ü›X]J—^ÌV‘STWÔÓÕÞÚ[™^W^ÌHŠNÂˆ]™\XÙ[Y[HÛÝˆ›˜[YBˆ˜\×Ù\™YŠ
+Bˆ˜[™Ý[Š˜[Y_˜[YYÜÛÝË™Ù]
+˜[YJJBˆ›X\ÛÜ—Ù[ÙJˆX]ÚÛÝ›˜[YHÂˆÛÛYJÊHOˆÛÝ˜›ÙK˜\×Ù\™YŠ
+K[Ü˜\ÛÜŠˆŠKˆ›Û™HOˆY˜][Ø›ÙK˜\×ÜÝŠ
+KˆKˆÝš[™ÎŽ˜\×ÜÝ‹ˆ
+NÂˆ™[™\™YH™[™\™Yœ™\XÙJ	›X\šÙ\‹™\XÙ[Y[
+NÂˆBˆ™[™\™YŸB‚™›ˆ^[™ÝšY]×ØÛÛ\Û™[Ê›ÙÜ˜[Nˆ	ž™[\˜WØ\ÝŽ”›ÙÜ˜[K]][ˆÝš[™ÊHOˆÝš[™ÈÂˆ›ÜˆÈ[ˆ‹ŒMˆÂˆ]ÚÊ[›ØØ][ÛœÊHHÛÛ\Û™[Ú[›ØØ][ÛœÊ	š[
+H[ÙHÂˆœ™XZÎÂˆNÂˆ]ÛÛYJ[›ØØ][ÛŠHH[›ØØ][ÛœËš[×Ú]\Š
+K›™^
+
+H[ÙHÂˆœ™XZÎÂˆNÂˆ]ÛÛYJÛÛ\Û™[
+HH›ÙÜ˜[Bˆ˜ÛÛ\Û™[Âˆš]\Š
+Bˆ™š[™
+ÛÛ\Û™[ÛÛ\Û™[›˜[YHOH[›ØØ][Û‹›˜[YJBˆ[ÙHÂˆœ™XZÎÂˆNÂˆ]™[™\™YH™[™\—ÝšY]×ØÛÛ\Û™[
+ˆÛÛ\Û™[ˆ	š[›ØØ][Û‹˜]šX]\Ëˆ[›ØØ][Û‹˜›ÙK˜\×Ù\™YŠ
+Kˆ
+NÂˆ[œ™\XÙWÜ˜[™ÙJ[›ØØ][Û‹œÝ\‹š[›ØØ][Û‹™[™	œ™[™\™Y
+NÂˆBˆ[ŸB‚™›ˆ][ÝWÚY[YšY\ŠY[YšY\Žˆ	œÝŠHOˆÝš[™ÈÂˆ›Ü›X]J˜ßX‹Y[YšY\‹œ™\XÙJ	Ø	Ë˜ŠJBŸB‚™›ˆ›Ü›WÝ\ØYÙJ
+HÂˆ\š[ˆJ•\ØYÙNˆ™[\˜H›Ü›H˜[Y]Hš[Kžž[ˆ›Ü›S˜[YOˆÙšY[]˜[YH‹‹—HŠNÂŸB‚™›ˆ›Ü›WØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆYˆ\™ÜË›™^
+
+K˜\×Ù\™YŠ
+HOHÛÛYJ˜[Y]HŠHÂˆ›Ü›WÝ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ›Ü›WÝ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ›Ü›WÛ˜[YJHH\™ÜË›™^
+
+H[ÙHÂˆ›Ü›WÝ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]][œ]HÝŽ˜ÛÛXÝ[ÛœÎŽ’\ÚX\Ž›™]Ê
+NÂˆ›Üˆ\™Ý[Y[[ˆ\™ÜÈÂˆ]ÛÛYJ
+šY[˜[YJJHH\™Ý[Y[œÜ]ÛÛ˜ÙJ	ÏIÊH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKQ“Ô“KL—Nˆ^XÝYšY[]˜[YK›Ý[™Ø\™Ý[Y[XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆšY[š\×Ù[\J
+HÂˆ\š[ˆJ™\œ›Ü–ÑKQ“Ô“KL—NˆšY[˜[YH]\Ý›Ý™H[\HŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ[œ]š[œÙ\
+šY[×ÛÝÛ™Y
+
+K˜[YK×ÛÝÛ™Y
+
+JNÂˆBˆ]›ÙÜ˜[HHX]ÚØY
+	œ]
+HÂˆÚÊ›ÙÜ˜[JHOˆ›ÙÜ˜[Kˆ\œŠ
+
+JHOˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJKˆNÂˆ]ØÚ[XHHX]ÚZ[ÜØÚ[XJ	œ›ÙÜ˜[JHÂˆÚÊØÚ[XJHOˆØÚ[XKˆ\œŠ\œ›ÜœÊHOˆÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝXÊˆ	œ]ˆ‘KQ‹LH‹ˆ	™\œ›Ü‹›Y\ÜØYÙKˆ\œ›Ü‹œÜ[‹›[™Kˆ\œ›Ü‹œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆBˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆYˆ]\œŠ\œ›ÜœÊHHÚXÚ×Ù›Ü›WÜ›ÙÜ˜[J	œ›ÙÜ˜[K	œØÚ[XJHÂˆ›Üˆ\œ›Üˆ[ˆ\œ›ÜœÈÂˆXYÛ›ÜÝXÊˆ	œ]ˆ‘KQ“Ô“KLH‹ˆ	™\œ›Ü‹›Y\ÜØYÙKˆ\œ›Ü‹œÜ[‹›[™Kˆ\œ›Ü‹œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆBˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ]ÛÛYJ›Ü›JHH›ÙÜ˜[K™›Ü›\Ëš]\Š
+K™š[™
+›Ü›_›Ü›K›˜[YHOH›Ü›WÛ˜[YJH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKQ“Ô“KL×Nˆ›Ü›HÙ›Ü›WÛ˜[Y_XØ\È›Ý›Ý[™[ˆÜ]XŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆNÂˆ]X›WÙYš[š][ÛˆH›Ü›BˆX›Bˆ˜\×Ù\™YŠ
+Bˆ˜[™Ý[ŠX›WÛ˜[Y_›ÙÜ˜[KX›\Ëš]\Š
+K™š[™
+X›_X›K›˜[YHOHX›WÛ˜[YJJNÂˆ]™\Ý[H˜[Y]WÙ›Ü›J›Ü›KX›WÙYš[š][Û‹ÛÛYJ	œØÚ[XJK	š[œ]
+NÂˆYˆ™\Ý[š\×Ý˜[Y
+
+HÂˆš[ˆJ˜[YˆÙ›Ü›WÛ˜[Y_HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ›Üˆ\œ›Üˆ[ˆ™\Ý[™\œ›ÜœÈÂˆ\š[ˆJ™\œ›Ü–ÑKQ“Ô“KLNˆßNˆßH‹\œ›Ü‹™šY[\œ›Ü‹›Y\ÜØYÙJNÂˆBˆ^]ÛÙNŽ™œ›ÛJJBˆBŸB‚™›ˆ]]Ý\ØYÙJ
+HÂˆ\š[ˆJˆ•\ØYÙN—ˆ™[\˜H]]\Ú\\ÜÝÛÜ™ˆ™[\˜H]]\Ú\\ÜÝÛÜ™K\Ý[—ˆ™[\˜H]]›ÛHÜ˜[š[Kžž[ˆ\Ù\‹ZYˆ›ÛO—ˆ™[\˜H]]›ÛH™]›ÚÙHš[Kžž[ˆ\Ù\‹ZYˆ›ÛO—ˆ™[\˜H]]›ÛK\\›Z\ÜÚ[ÛˆÜ˜[š[Kžž[ˆ›ÛOˆ\›Z\ÜÚ[Û—ˆ™[\˜H]]›ÛK\\›Z\ÜÚ[Ûˆ™]›ÚÙHš[Kžž[ˆ›ÛOˆ\›Z\ÜÚ[Û——”›ÛHÛÛ[X[™È\ÙHUPTÑWÕT“[™H›ÛHX›\ÈXÛ\™Y[ˆHš\œÝ]]Yš[š][Û‹—•H[\˜XÝ]™H\ÜÝÛÜ™›Ü›HÙ\È›ÝXÚÈ\ÜÝÛÜ™Ëˆ\ÙHK\Ý[ˆ›Üˆ]]ÛX][Û‹ˆ‚ˆ
+NÂŸB‚ˆÖÙ\š]™JÛÛ™KXYÊWBœÝXÝ]]›ÛUX›\ÈÂˆ\ÜÚYÛ›Y[ÎˆÝš[™Ëˆ\›Z\ÜÚ[ÛœÎˆÝš[™Ëˆ]Y]ˆÜ[ÛÝš[™Ï‹ˆ]Y]ØÚZ[Žˆ›ÛÛŸB‚™›ˆ]]Ü›ÛWÝX›\Ê]ˆ	œÝŠHOˆ™\Ý[]]›ÛUX›\Ë^]ÛÙOˆÂˆ]›ÙÜ˜[HHX]Ú˜[Y]J]
+HÂˆÚÊ›ÙÜ˜[JHOˆ›ÙÜ˜[Kˆ\œŠ
+
+JHOˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJKˆNÂˆ]ÛÛYJ]]
+HH›ÙÜ˜[K˜]]™š\œÝ
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPUULMNˆ›ÛHÛÛ[X[™È™\]Z\™H[ˆ]]Yš[š][ÛˆŠNÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆNÂˆ]
+ÛÛYJ\ÜÚYÛ›Y[ÊKÛÛYJ\›Z\ÜÚ[ÛœÊJHH
+ˆ]]œ›Û\×ÝX›K˜ÛÛ™J
+Kˆ]]œ›ÛWÜ\›Z\ÜÚ[Ûœ×ÝX›K˜ÛÛ™J
+Kˆ
+H[ÙHÂˆ\š[ˆJˆ™\œ›Ü–ÑKPUULMWNˆ›ÛHÛÛ[X[™È™\]Z\™H›Û\È[™›ÛWÜ\›Z\ÜÚ[ÛœÈ[ˆH]]Yš[š][Ûˆ‚ˆ
+NÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆNÂˆÚÊ]]›ÛUX›\ÈÂˆ\ÜÚYÛ›Y[Ëˆ\›Z\ÜÚ[ÛœËˆ]Y]ˆ]]˜]Y]ÝX›K˜ÛÛ™J
+Kˆ]Y]ØÚZ[Žˆ]]˜]Y]ØÚZ[‹ˆJBŸB‚™›ˆ]]Ü›ÛWÙ]X˜\ÙWÝ\›
+
+HOˆ™\Ý[Ýš[™Ë^]ÛÙOˆÂˆX]Ú[ŽŽ˜\Š‘UPTÑWÕT“ŠHÂˆÚÊ\›
+HYˆ\›œÝ\×ÝÚ]
+›X\šXYŽ‹ËÈŠH\›œÝ\×ÝÚ]
+›^\Ü[‹ËÈŠHOˆÚÊ\›
+KˆÚÊÊHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULM—Nˆ›ÛHÛÛ[X[™È™\]Z\™HHX\šXQˆUPTÑWÕT“ŠNÂˆ\œŠ^]ÛÙNŽ™œ›ÛJJJBˆBˆ\œŠÊHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULM×NˆUPTÑWÕT“\È™\]Z\™Y›Üˆ›ÛHÛÛ[X[™ÈŠNÂˆ\œŠ^]ÛÙNŽ™œ›ÛJJJBˆBˆBŸB‚™›ˆ^XÝ]WØ]]Ü›ÛWÛ]]][ÛŠˆ]X˜\ÙWÝ\›ˆ	œÝ‹ˆÜ[ˆÝš[™Ëˆ\˜[\Îˆ™XÏ
+Ýš[™Ë]Y\žU˜[YJO‹ˆ]Y]ˆÜ[Û
+	œÝ‹›ÛÛ
+O‹ˆ]™[ˆ	œÝ‹ˆ\™Ù]Ý\Ù\—ÚYˆÜ[ÛM‹ˆ]Z[ÎˆÝš[™ËŠHOˆ™\Ý[
+
+K™[\˜WÙ]X˜\ÙNŽ‘]X˜\ÙQ\œ›ÜˆÂˆ]]]]Y\šY\ÈH™XÈVÔ]Y\žHÈÜ[\˜[\ÈWNÂˆYˆ]ÛÛYJ
+]Y]ÝX›K]Y]ØÚZ[ŠJHH]Y]Âˆ]Y\šY\Ë™^[™
+]Y]Ú[œÙ\Ü]Y\šY\Êˆ]Y]ÝX›Kˆ]Y]ØÚZ[‹ˆ›Û™Kˆ]™[ˆ\™Ù]Ý\Ù\—ÚYˆ	™]Z[Ëˆ
+JNÂˆBˆ™[\˜WÙ]X˜\ÙNŽ™^XÝ]WÛX\šXY—Ü]Y\šY\Ê]X˜\ÙWÝ\›	œ]Y\šY\ËYJK›X\
+ß
+
+JBŸB‚™›ˆ]]Ü›ÛWØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJÜ\˜][ÛŠHH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ\Ù\—ÚY
+HH\™ÜË›™^
+
+K˜[™Ý[Š˜[Y_˜[YKœ\œÙNŽMŠ
+K›ÚÊ
+JH[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPUULNNˆ\Ù\‹ZY]\Ý™H[ˆ[YÙ\ˆŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ›ÛJHH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+H›ÛKš\×Ù[\J
+H[X]Ú\ÈJÜ\˜][Û‹˜\×ÜÝŠ
+K™Ü˜[ˆœ™]›ÚÙHŠBˆÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]X›\ÈHX]Ú]]Ü›ÛWÝX›\Ê	œ]
+HÂˆÚÊX›\ÊHOˆX›\Ëˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆ]]X˜\ÙWÝ\›HX]Ú]]Ü›ÛWÙ]X˜\ÙWÝ\›
+
+HÂˆÚÊ\›
+HOˆ\›ˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆ]
+Ü[Y\ÜØYÙJHHYˆÜ\˜][ÛˆOH™Ü˜[ˆÂˆ
+ˆ›Ü›X]Jˆ’S”ÑT•S•ÈßH
+\Ù\—ÚY›ÛJHÑSPÕ\Ù\—ÚYœ›ÛH”“ÓHPSÒT‘H“ÕVTÕÈ
+ÑSPÕH”“ÓHßHÒT‘H\Ù\—ÚYH\Ù\—ÚYS‘›ÛHHœ›ÛJH‹ˆ][ÝWÚY[YšY\Š	X›\Ë˜\ÜÚYÛ›Y[ÊKˆ][ÝWÚY[YšY\Š	X›\Ë˜\ÜÚYÛ›Y[ÊKˆ
+Kˆœ›ÛHÜ˜[Y‹ˆ
+BˆH[ÙHÂˆ
+ˆ›Ü›X]Jˆ‘SUH”“ÓHßHÒT‘H\Ù\—ÚYH\Ù\—ÚYS‘›ÛHHœ›ÛH‹ˆ][ÝWÚY[YšY\Š	X›\Ë˜\ÜÚYÛ›Y[ÊKˆ
+Kˆœ›ÛH™]›ÚÙY‹ˆ
+BˆNÂˆ]]™[H›Ü›X]Jœ›ÛKžÛÜ\˜][ÛŸHŠNÂˆ]]Z[ÈH›Ü›X]JœÛÝ\˜ÙOXÛNÜ›ÛO^Ü›Û_HŠNÂˆX]Ú^XÝ]WØ]]Ü›ÛWÛ]]][ÛŠˆ	™]X˜\ÙWÝ\›ˆÜ[ˆ™XÈVÂˆ
+\Ù\—ÚY‹š[Ê
+K]Y\žU˜[YNŽ’[
+\Ù\—ÚY
+JKˆ
+œ›ÛH‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê›ÛK˜ÛÛ™J
+JJKˆKˆX›\Âˆ˜]Y]ˆ˜\×Ù\™YŠ
+Bˆ›X\
+X›_
+X›KX›\Ë˜]Y]ØÚZ[ŠJKˆ	™]™[ˆÛÛYJ\Ù\—ÚY
+Kˆ]Z[Ëˆ
+HÂˆÚÊÊHOˆÂˆš[ˆJžÛY\ÜØYÙ_Nˆ\Ù\ˆÝ\Ù\—ÚYHOˆÜ›Û_HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULNWNˆØ[››ÝÚ[™ÙH›ÛH\ÜÚYÛ›Y[ˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBŸB‚™›ˆ]]Ü›ÛWÜ\›Z\ÜÚ[Û—ØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJÜ\˜][ÛŠHH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ›ÛJHH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ\›Z\ÜÚ[ÛŠHH\™ÜË›™^
+
+H[ÙHÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+Bˆ›ÛKš\×Ù[\J
+Bˆ\›Z\ÜÚ[Û‹š\×Ù[\J
+Bˆ[X]Ú\ÈJÜ\˜][Û‹˜\×ÜÝŠ
+K™Ü˜[ˆœ™]›ÚÙHŠBˆÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]X›\ÈHX]Ú]]Ü›ÛWÝX›\Ê	œ]
+HÂˆÚÊX›\ÊHOˆX›\Ëˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆ]]X˜\ÙWÝ\›HX]Ú]]Ü›ÛWÙ]X˜\ÙWÝ\›
+
+HÂˆÚÊ\›
+HOˆ\›ˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆ]
+Ü[Y\ÜØYÙJHHYˆÜ\˜][ÛˆOH™Ü˜[ˆÂˆ
+ˆ›Ü›X]Jˆ’S”ÑT•S•ÈßH
+›ÛK\›Z\ÜÚ[ÛŠHÑSPÕœ›ÛKœ\›Z\ÜÚ[Ûˆ”“ÓHPSÒT‘H“ÕVTÕÈ
+ÑSPÕH”“ÓHßHÒT‘H›ÛHHœ›ÛHS‘\›Z\ÜÚ[ÛˆHœ\›Z\ÜÚ[ÛŠH‹ˆ][ÝWÚY[YšY\Š	X›\Ëœ\›Z\ÜÚ[ÛœÊKˆ][ÝWÚY[YšY\Š	X›\Ëœ\›Z\ÜÚ[ÛœÊKˆ
+Kˆœ\›Z\ÜÚ[ÛˆÜ˜[Y‹ˆ
+BˆH[ÙHÂˆ
+ˆ›Ü›X]Jˆ‘SUH”“ÓHßHÒT‘H›ÛHHœ›ÛHS‘\›Z\ÜÚ[ÛˆHœ\›Z\ÜÚ[Ûˆ‹ˆ][ÝWÚY[YšY\Š	X›\Ëœ\›Z\ÜÚ[ÛœÊKˆ
+Kˆœ\›Z\ÜÚ[Ûˆ™]›ÚÙY‹ˆ
+BˆNÂˆ]]™[H›Ü›X]Jœ›ÛWÜ\›Z\ÜÚ[Û‹žÛÜ\˜][ÛŸHŠNÂˆ]]Z[ÈH›Ü›X]JœÛÝ\˜ÙOXÛNÜ›ÛO^Ü›Û_NÜ\›Z\ÜÚ[Û^Ü\›Z\ÜÚ[ÛŸHŠNÂˆX]Ú^XÝ]WØ]]Ü›ÛWÛ]]][ÛŠˆ	™]X˜\ÙWÝ\›ˆÜ[ˆ™XÈVÂˆ
+œ›ÛH‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê›ÛK˜ÛÛ™J
+JJKˆ
+œ\›Z\ÜÚ[Ûˆ‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê\›Z\ÜÚ[Û‹˜ÛÛ™J
+JJKˆKˆX›\Âˆ˜]Y]ˆ˜\×Ù\™YŠ
+Bˆ›X\
+X›_
+X›KX›\Ë˜]Y]ØÚZ[ŠJKˆ	™]™[ˆ›Û™Kˆ]Z[Ëˆ
+HÂˆÚÊÊHOˆÂˆš[ˆJžÛY\ÜØYÙ_NˆÜ›Û_HOˆÜ\›Z\ÜÚ[ÛŸHŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULŒNˆØ[››ÝÚ[™ÙH›ÛH\›Z\ÜÚ[ÛŽˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBŸB‚™›ˆ]Y]Ý\ØYÙJ
+HÂˆ\š[ˆJˆ•\ØYÙN—ˆ™[\˜H]Y][œÜXÝš[Kžž[ˆËK[[Z]—Wˆ™[\˜H]Y]^Üš[Kžž[ˆËK[[Z]—HËKY›Ü›X]œÛÛŸÜÝ—Wˆ™[\˜H]Y]™\šYžHš[Kžž[—ˆ™[\˜H]Y][™Hš[Kžž[ˆKX™Y›Ü™H[Y\Ý[\ˆËKXÛÛ™š\›WW—]Y]ÛÛ[X[™È\ÙHUPTÑWÕT“[™H]Y]X›HXÛ\™Y[ˆHš\œÝ]]Yš[š][Û‹ˆHY˜][[Z]\ÈL[™HX^[][H\ÈLˆ[™H™]™\ˆÚ[™Ù\È]HÚ]Ý]KXÛÛ™š\›Kˆ‚ˆ
+NÂŸB‚™›ˆ]Y]Ü›Ú™XÝ
+]ˆ	œÝŠHOˆ™\Ý[
+Ýš[™ËÝš[™Ë›ÛÛ
+K^]ÛÙOˆÂˆ]›ÙÜ˜[HHX]Ú˜[Y]J]
+HÂˆÚÊ›ÙÜ˜[JHOˆ›ÙÜ˜[Kˆ\œŠ
+
+JHOˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJKˆNÂˆ]ÛÛYJ]]
+HH›ÙÜ˜[K˜]]™š\œÝ
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPUQULWNˆ]Y]ÛÛ[X[™È™\]Z\™H[ˆ]]Yš[š][ÛˆŠNÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆNÂˆ]ÛÛYJ]Y]ÝX›JHH]]˜]Y]ÝX›K˜ÛÛ™J
+H[ÙHÂˆ\š[ˆJˆ™\œ›Ü–ÑKPUQULWNˆ]Y]ÛÛ[X[™È™\]Z\™H]Y]ˆX›Oˆ[ˆH]]Yš[š][Ûˆ‚ˆ
+NÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆNÂˆ]]X˜\ÙWÝ\›HX]Ú[ŽŽ˜\Š‘UPTÑWÕT“ŠHÂˆÚÊ\›
+HYˆ\›œÝ\×ÝÚ]
+›X\šXYŽ‹ËÈŠH\›œÝ\×ÝÚ]
+›^\Ü[‹ËÈŠHOˆ\›ˆÚÊÊHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL—Nˆ]Y]ÛÛ[X[™È™\]Z\™HHX\šXQˆUPTÑWÕT“ŠNÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆBˆ\œŠÊHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL×NˆUPTÑWÕT“\È™\]Z\™Y›Üˆ]Y]ÛÛ[X[™ÈŠNÂˆ™]\›ˆ\œŠ^]ÛÙNŽ™œ›ÛJJJNÂˆBˆNÂˆÚÊ
+]X˜\ÙWÝ\›]Y]ÝX›K]]˜]Y]ØÚZ[ŠJBŸB‚™›ˆ]Y]Û[Z]
+˜[YNˆ	œÝŠHOˆ™\Ý[\Ú^™K^]ÛÙOˆÂˆX]Ú˜[YKœ\œÙNŽ\Ú^™OŠ
+HÂˆÚÊ[Z]
+HYˆ
+K‹LLÌ
+K˜ÛÛZ[œÊ	›[Z]
+HOˆÚÊ[Z]
+KˆÈOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQULNˆ[Z]]\Ý™H[ˆ[YÙ\ˆ™]ÙY[ˆH[™LŠNÂˆ\œŠ^]ÛÙNŽ™œ›ÛJŠJBˆBˆBŸB‚™›ˆ]Y]Ü›ÝÜÊˆ]X˜\ÙWÝ\›ˆ	œÝ‹ˆ]Y]ÝX›Nˆ	œÝ‹ˆ[Z]ˆ\Ú^™KŠHOˆ™\Ý[]Y\žT™\Ý[™[\˜WÙ]X˜\ÙNŽ‘]X˜\ÙQ\œ›ÜˆÂˆ™[\˜WÙ]X˜\ÙNŽ™^XÝ]WÛX\šXY—Ü]Y\žJˆ]X˜\ÙWÝ\›ˆ	™›Ü›X]Jˆ”ÑSPÕXÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ËÜ™X]YØ]”“ÓHßHÔ‘Tˆ–HÜ™X]YØ]TÐÈSRUÛ[Z]H‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+Kˆ™XÎŽ›™]Ê
+Kˆ
+BŸB‚™›ˆ]Y]Ú[YÜš]Jˆ]X˜\ÙWÝ\›ˆ	œÝ‹ˆ]Y]ÝX›Nˆ	œÝ‹ˆÚZ[Žˆ›ÛÛŠHOˆ™\Ý[
+MM
+K™[\˜WÙ]X˜\ÙNŽ‘]X˜\ÙQ\œ›ÜˆÂˆ]]Y\žHHYˆÚZ[ˆÂˆ›Ü›X]Jˆ”ÑSPÕÓÕS•
+
+ŠKÓÐSTÐÑJÕSJÐTÑHÒSˆ]™[TÈ•SÔˆ]™[H	ÉÈÔˆ]Z[ÈTÈ•SÔˆÜ™X]YØ]TÈ•SÔˆ™]š[Ý\×Ú\ÚTÈ•SÔˆ[žWÚ\ÚTÈ•SÔˆ™]š[Ý\×Ú\ÚˆÓÐSTÐÑJ^XÝYÜ™]š[Ý\×Ú\Ú	ÉÊHÔˆ[žWÚ\ÚˆÒLŠÓÓÐU
+ÓÐSTÐÑJ™]š[Ý\×Ú\Ú	ÉÊK	ß	ËÓÐSTÐÑJXÝÜ—Ý\Ù\—ÚY	Ó•S	ÊK	ß	Ë]™[	ß	ËÓÐSTÐÑJ\™Ù]Ý\Ù\—ÚY	Ó•S	ÊK	ß	Ë]Z[Ë	ß	ËUWÑ“Ô“PU
+Ü™X]YØ]	ÉVKI[KIY	R‰ZN‰\ÉÊJKMŠHSˆHSÑHS‘
+K
+H”“ÓH
+ÑSPÕYXÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ËÜ™X]YØ]™]š[Ý\×Ú\Ú[žWÚ\ÚQÊ[žWÚ\Ú
+HÕ‘Tˆ
+Ô‘Tˆ–HYTÐÊHTÈ^XÝYÜ™]š[Ý\×Ú\Ú”“ÓHßJHTÈ]Y]Ü›ÝÜÈ‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+BˆH[ÙHÂˆ›Ü›X]Jˆ”ÑSPÕÓÕS•
+
+ŠKÓÐSTÐÑJÕSJÐTÑHÒSˆ]™[TÈ•SÔˆ]™[H	ÉÈÔˆ]Z[ÈTÈ•SÔˆÜ™X]YØ]TÈ•SSˆHSÑHS‘
+K
+H”“ÓHßH‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+BˆNÂˆ]™\Ý[H™[\˜WÙ]X˜\ÙNŽ™^XÝ]WÛX\šXY—Ü]Y\žJ]X˜\ÙWÝ\›	œ]Y\žK™XÎŽ›™]Ê
+JOÎÂˆ]›ÝÈH™\Ý[œ›ÝÜË™š\œÝ
+
+K˜ÛÛ™Y
+
+K[Ü˜\ÛÜ—ÙY˜][
+
+NÂˆ]Ý[H›ÝÂˆ™š\œÝ
+
+Bˆ˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JBˆ[Ü˜\ÛÜŠ
+NÂˆ][˜[YH›ÝË™Ù]
+JK˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JK[Ü˜\ÛÜŠ
+NÂˆÚÊ
+Ý[[˜[Y
+JBŸB‚™›ˆ]Y]Ü[™WØÛÝ[
+ˆ]X˜\ÙWÝ\›ˆ	œÝ‹ˆ]Y]ÝX›Nˆ	œÝ‹ˆ™Y›Ü™Nˆ	œÝ‹ŠHOˆ™\Ý[M™[\˜WÙ]X˜\ÙNŽ‘]X˜\ÙQ\œ›ÜˆÂˆ]™\Ý[H™[\˜WÙ]X˜\ÙNŽ™^XÝ]WÛX\šXY—Ü]Y\žJˆ]X˜\ÙWÝ\›ˆ	™›Ü›X]Jˆ”ÑSPÕÓÕS•
+
+ŠH”“ÓHßHÒT‘HÜ™X]YØ]˜™Y›Ü™H‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+Kˆ™XÈVÊ˜™Y›Ü™H‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê™Y›Ü™Kš[Ê
+JJWKˆ
+OÎÂˆÚÊ™\Ý[ˆœ›ÝÜÂˆ™š\œÝ
+
+Bˆ˜[™Ý[Š›Ýß›ÝË™š\œÝ
+
+JBˆ˜[™Ý[Š˜[Y_˜[YKœ\œÙJ
+K›ÚÊ
+JBˆ[Ü˜\ÛÜŠ
+JBŸB‚™›ˆ]Y]Ü[™Jˆ]X˜\ÙWÝ\›ˆ	œÝ‹ˆ]Y]ÝX›Nˆ	œÝ‹ˆ™Y›Ü™Nˆ	œÝ‹ŠHOˆ™\Ý[
+
+K™[\˜WÙ]X˜\ÙNŽ‘]X˜\ÙQ\œ›ÜˆÂˆ]]Z[ÈH›Ü›X]JœÛÝ\˜ÙOXÛNØ™Y›Ü™O^Ø™Y›Ü™_HŠNÂˆ]]Y\šY\ÈH™XÈVÂˆ]Y\žHÂˆÜ[ˆ›Ü›X]Jˆ‘SUH”“ÓHßHÒT‘HÜ™X]YØ]˜™Y›Ü™H‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+Kˆ\˜[\Îˆ™XÈVÊ˜™Y›Ü™H‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê™Y›Ü™Kš[Ê
+JJWKˆKˆ]Y\žHÂˆÜ[ˆ›Ü›X]Jˆ’S”ÑT•S•ÈßH
+XÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ÊHSQTÈ
+˜XÝÜ—Ý\Ù\—ÚY™]™[\™Ù]Ý\Ù\—ÚY™]Z[ÊH‹ˆ][ÝWÚY[YšY\Š]Y]ÝX›JBˆ
+Kˆ\˜[\Îˆ™XÈVÂˆ
+˜XÝÜ—Ý\Ù\—ÚY‹š[Ê
+K]Y\žU˜[YNŽ“[
+Kˆ
+™]™[‹š[Ê
+K]Y\žU˜[YNŽ”Ýš[™Ê˜]Y]œ[™H‹š[Ê
+JJKˆ
+\™Ù]Ý\Ù\—ÚY‹š[Ê
+K]Y\žU˜[YNŽ“[
+Kˆ
+ˆ™]Z[È‹š[Ê
+Kˆ]Y\žU˜[YNŽ”Ýš[™Ê]Z[Ë˜Ú\œÊ
+KZÙJL
+K˜ÛÛXÝ
+
+JKˆ
+KˆKˆKˆNÂˆ™[\˜WÙ]X˜\ÙNŽ™^XÝ]WÛX\šXY—Ü]Y\šY\Ê]X˜\ÙWÝ\›	œ]Y\šY\ËYJK›X\
+ß
+
+JBŸB‚™›ˆ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝÎˆ	–ÔÝš[™×K[™^ˆ\Ú^™JHOˆÜ[Û	œÝˆÂˆ›ÝË™Ù]
+[™^
+Bˆ›X\
+Ýš[™ÎŽ˜\×ÜÝŠBˆ™š[\Š˜[Y_
+˜[YHOH“•SŠBŸB‚™›ˆ]Y]ØÜÝ—Ý˜[YJ˜[YNˆÜ[Û	œÝŠHOˆÝš[™ÈÂˆ]˜[YHH˜[YK[Ü˜\ÛÜ—ÙY˜][
+
+Kœ™\XÙJ	È‰Ë——ˆŠNÂˆ›Ü›X]J—žÝ˜[Y_WˆŠBŸB‚™›ˆ]Y]Ü›ÝÜ×ØÜÝŠ™\Ý[ˆ	”]Y\žT™\Ý[
+HOˆÝš[™ÈÂˆ]]]Ý]]HÝš[™ÎŽ™œ›ÛJ˜XÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ËÜ™X]YØ]ˆŠNÂˆ›Üˆ›ÝÈ[ˆ	œ™\Ý[œ›ÝÜÈÂˆ]šY[ÈH
+‹JBˆ›X\
+[™^]Y]ØÜÝ—Ý˜[YJ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝË[™^
+JJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]ÈHÜš][ˆJÝ]]žßH‹šY[Ëš›Ú[Š‹ŠJNÂˆBˆÝ]]ŸB‚™›ˆ]Y]ÚœÛÛ—Û[X™\Š˜[YNˆÜ[Û	œÝŠHOˆÝš[™ÈÂˆ˜[YBˆ˜[™Ý[Š˜[Y_˜[YKœ\œÙNŽMŠ
+K›ÚÊ
+JBˆ›X\ÛÜ—Ù[ÙJ›[‹š[Ê
+K˜[Y_˜[YK×ÜÝš[™Ê
+JBŸB‚™›ˆ]Y]Ü›ÝÜ×ÚœÛÛŠ™\Ý[ˆ	”]Y\žT™\Ý[
+HOˆÝš[™ÈÂˆ]›ÝÜÈH™\Ý[ˆœ›ÝÜÂˆš]\Š
+Bˆ›X\
+›ÝßÂˆ›Ü›X]JˆžÞ×˜XÝÜ—Ý\Ù\—ÚYŽžßK™]™[ŽžßK\™Ù]Ý\Ù\—ÚYŽžßK™]Z[×ŽžßK˜Ü™X]YØ]Žžß__H‹ˆ]Y]ÚœÛÛ—Û[X™\Š]Y]ÛÜ[Û˜[Ý˜[YJ›ÝË
+JKˆ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝËJK›X\ÛÜ—Ù[ÙJ›[‹š[Ê
+K˜[Y_›Ü›X]J—žßWˆ‹œÛÛ—Ù\ØØ\J˜[YJJJKˆ]Y]ÚœÛÛ—Û[X™\Š]Y]ÛÜ[Û˜[Ý˜[YJ›ÝËŠJKˆ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝËÊK›X\ÛÜ—Ù[ÙJ›[‹š[Ê
+K˜[Y_›Ü›X]J—žßWˆ‹œÛÛ—Ù\ØØ\J˜[YJJJKˆ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝË
+K›X\ÛÜ—Ù[ÙJ›[‹š[Ê
+K˜[Y_›Ü›X]J—žßWˆ‹œÛÛ—Ù\ØØ\J˜[YJJJKˆ
+BˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ›Ü›X]J–ÞßWH‹›ÝÜËš›Ú[Š‹ŠJBŸB‚™›ˆ]Y]Ü›ÝÜ×Ú[œÜXÝ
+™\Ý[ˆ	”]Y\žT™\Ý[
+HOˆÝš[™ÈÂˆ]]]Ý]]H›Ü›X]Jˆ]Y]ÙÎˆßH[žßWˆ‹ˆ™\Ý[œ›ÝÜË›[Š
+KˆYˆ™\Ý[œ›ÝÜË›[Š
+HOHHÈžHˆH[ÙHÈšY\ÈˆBˆ
+NÂˆÝ]]œ\ÚÜÝŠ˜XÝÜ—Ý\Ù\—ÚY]™[\™Ù]Ý\Ù\—ÚY]Z[ÈÜ™X]YØ]ˆŠNÂˆ›Üˆ›ÝÈ[ˆ	œ™\Ý[œ›ÝÜÈÂˆ]šY[ÈH
+‹JBˆ›X\
+[™^Âˆ]Y]ÛÜ[Û˜[Ý˜[YJ›ÝË[™^
+Bˆ[Ü˜\ÛÜŠ‹HŠBˆœ™\XÙJÉ×‰Ë	×‰Ë	×	×KˆŠBˆJBˆ˜ÛÛXÝŽ™XÏÏŠ
+NÂˆ]ÈHÜš][ˆJÝ]]žßH‹šY[Ëš›Ú[ŠˆŠJNÂˆBˆÝ]]ŸB‚™›ˆ]Y]ØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]ÛÛYJÜ\˜][ÛŠHH\™ÜË›™^
+
+H[ÙHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]][Z]HL\Ú^™NÂˆ]]][Z]ÙÚ]™[ˆH˜[ÙNÂˆ]]]›Ü›X]Hš[œÜXÝŽÂˆ]]]™Y›Ü™HH›Û™NÂˆ]]]ÛÛ™š\›HH˜[ÙNÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™ÜË›™^
+
+HÂˆX]Ú\™Ý[Y[˜\×ÜÝŠ
+HÂˆ‹K[[Z]ˆOˆÂˆ]ÛÛYJ˜[YJHH\™ÜË›™^
+
+H[ÙHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ[Z]HX]Ú]Y]Û[Z]
+	˜[YJHÂˆÚÊ[Z]
+HOˆ[Z]ˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆ[Z]ÙÚ]™[ˆHYNÂˆBˆ‹KY›Ü›X]ˆYˆÜ\˜][ÛˆOH™^ÜˆOˆÂˆ]ÛÛYJ˜[YJHH\™ÜË›™^
+
+H[ÙHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ[X]Ú\ÈJ˜[YK˜\×ÜÝŠ
+KšœÛÛˆˆ˜ÜÝˆŠHÂˆ\š[ˆJ™\œ›Ü–ÑKPUQULWNˆ›Ü›X]]\Ý™HœÛÛˆÜˆÜÝˆŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ›Ü›X]HYˆ˜[YHOHšœÛÛˆˆÈšœÛÛˆˆH[ÙHÈ˜ÜÝˆˆNÂˆBˆ‹KX™Y›Ü™HˆYˆÜ\˜][ÛˆOHœ[™HˆOˆÂˆ]ÛÛYJ˜[YJHH\™ÜË›™^
+
+H[ÙHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ˜[YKš\×Ù[\J
+HÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL×Nˆ™Y›Ü™H[Y\Ý[\]\Ý›Ý™H[\HŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™Y›Ü™HHÛÛYJ˜[YJNÂˆBˆ‹KXÛÛ™š\›HˆYˆÜ\˜][ÛˆOHœ[™HˆOˆÂˆÛÛ™š\›HHYNÂˆBˆÈOˆÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆBˆYˆ[X]Ú\ÈJˆÜ\˜][Û‹˜\×ÜÝŠ
+Kˆš[œÜXÝˆ™^Üˆ™\šYžHˆœ[™H‚ˆ
+HÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆÜ\˜][ÛˆOHš[œÜXÝˆ	‰ˆ›Ü›X]OHš[œÜXÝˆÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆÜ\˜][ÛˆOH™\šYžHˆ	‰ˆ
+›Ü›X]OHš[œÜXÝˆ™Y›Ü™Kš\×ÜÛÛYJ
+HÛÛ™š\›H[Z]ÙÚ]™[ŠBˆÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆÜ\˜][ÛˆOHœ[™Hˆ	‰ˆ
+™Y›Ü™Kš\×Û›Û™J
+H›Ü›X]OHš[œÜXÝˆ[Z]ÙÚ]™[ŠHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆÜ\˜][ÛˆOHœ[™Hˆ	‰ˆ
+™Y›Ü™Kš\×ÜÛÛYJ
+HÛÛ™š\›JHÂˆ]Y]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]
+]X˜\ÙWÝ\›]Y]ÝX›K]Y]ØÚZ[ŠHHX]Ú]Y]Ü›Ú™XÝ
+	œ]
+HÂˆÚÊ›Ú™XÝ
+HOˆ›Ú™XÝˆ\œŠÛÙJHOˆ™]\›ˆÛÙKˆNÂˆYˆÜ\˜][ÛˆOH™\šYžHˆÂˆ]
+Ý[[˜[Y
+HHX]Ú]Y]Ú[YÜš]J	™]X˜\ÙWÝ\›	˜]Y]ÝX›K]Y]ØÚZ[ŠHÂˆÚÊ™\Ý[
+HOˆ™\Ý[ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL—NˆØ[››Ý™\šYžH]Y]ÙÎˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆYˆ[˜[YOHÂˆš[ˆJ]Y]ÙÈ™\šYšYYˆÝÝ[H[šY\Ë›È[˜[Y›ÝÜËˆŠNÂˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆBˆ\š[ˆJ™\œ›Ü–ÑKPUQULNˆ]Y]ÙÈÛÛZ[œÈÚ[˜[YH[˜[Y›ÝÜÈÝ]ÙˆÝÝ[HŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆYˆÜ\˜][ÛˆOHœ[™HˆÂˆYˆ]Y]ØÚZ[ˆÂˆ\š[ˆJˆ™\œ›Ü–ÑKPUQULLNˆ]Y][™H\È\ØX›Y›ÜˆÚZ[™Y]Y]ÙÜÈ™XØ]\ÙH[][™È[šY\ÈÛÝ[œ™XZÈH\ÚÚZ[ˆ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ]™Y›Ü™HH™Y›Ü™Bˆ˜\×Ù\™YŠ
+Bˆ™^XÝ
+œ[™H™\]Z\™\ÈH™Y›Ü™H[Y\Ý[\ŠNÂˆ]ÛÝ[HX]Ú]Y]Ü[™WØÛÝ[
+	™]X˜\ÙWÝ\›	˜]Y]ÝX›K™Y›Ü™JHÂˆÚÊÛÝ[
+HOˆÛÝ[ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL—NˆØ[››Ý[ˆ]Y][™NˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆYˆXÛÛ™š\›HÂˆš[ˆJ]Y][™H[ŽˆØÛÝ[H[šY\ÈÛ\ˆ[ˆØ™Y›Ü™_HÛÝ[™H™[[Ý™YˆŠNÂˆš[ˆJ“›ÈÚ[™Ù\È\YYˆ™K\[ˆÚ]KXÛÛ™š\›HÈ\H\È[‹ˆŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆ]\œŠ\œ›ÜŠHH]Y]Ü[™J	™]X˜\ÙWÝ\›	˜]Y]ÝX›K™Y›Ü™JHÂˆ\š[ˆJ™\œ›Ü–ÑKPUQULWNˆØ[››Ý\H]Y][™NˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆš[ˆJ]Y][™H\YYˆØÛÝ[H[šY\ÈÛ\ˆ[ˆØ™Y›Ü™_H™[[Ý™YˆŠNÂˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆBˆ]™\Ý[HX]Ú]Y]Ü›ÝÜÊ	™]X˜\ÙWÝ\›	˜]Y]ÝX›K[Z]
+HÂˆÚÊ™\Ý[
+HOˆ™\Ý[ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUQUL—NˆØ[››Ý™XY]Y]ÙÎˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆX]ÚÜ\˜][Û‹˜\×ÜÝŠ
+HÂˆš[œÜXÝˆOˆš[JžßH‹]Y]Ü›ÝÜ×Ú[œÜXÝ
+	œ™\Ý[
+JKˆ™^ÜˆYˆ›Ü›X]OHšœÛÛˆˆOˆš[ˆJžßH‹]Y]Ü›ÝÜ×ÚœÛÛŠ	œ™\Ý[
+JKˆ™^ÜˆOˆš[JžßH‹]Y]Ü›ÝÜ×ØÜÝŠ	œ™\Ý[
+JKˆÈOˆ[œ™XXÚX›HJ
+KˆBˆ^]ÛÙNŽ”ÕPÐÑTÔÂŸB‚™›ˆ\ÜÝÛÜ™Ùœ›ÛWÜÝ[Š
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÂˆ]]]\ÜÝÛÜ™HÝš[™ÎŽ›™]Ê
+NÂˆÝŽš[ÎŽœÝ[Š
+Bˆœ™XYÛ[™J	›]]\ÜÝÛÜ™
+Bˆ›X\Ù\œŠ\œ›ÜŸ›Ü›X]J˜Ø[››Ý™XY\ÜÝÛÜ™œ›ÛHÝ[ŽˆÙ\œ›ÜŸHŠJOÎÂˆÚÊ\ÜÝÛÜ™š[WÙ[™ÛX]Ú\ÊÉ×‰Ë	×‰×JK×ÛÝÛ™Y
+
+JBŸB‚™›ˆ]]Ú\ÚÜ\ÜÝÛÜ™ØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆ]\ÙWÜÝ[ˆHX]Ú\™ÜË›™^
+
+K˜\×Ù\™YŠ
+HÂˆ›Û™HOˆ˜[ÙKˆÛÛYJ‹K\Ý[ˆŠHOˆYKˆÛÛYJÊHOˆÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+HÂˆ]]Ý\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ]\ÜÝÛÜ™HYˆ\ÙWÜÝ[ˆÂˆX]Ú\ÜÝÛÜ™Ùœ›ÛWÜÝ[Š
+HÂˆÚÊ\ÜÝÛÜ™
+HOˆ\ÜÝÛÜ™ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆBˆH[ÙHÂˆ]\ÜÝÛÜ™HX]Úœ\ÜÝÛÜ™Žœ›Û\Ü\ÜÝÛÜ™
+”\ÜÝÛÜ™ˆŠHÂˆÚÊ\ÜÝÛÜ™
+HOˆ\ÜÝÛÜ™ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULWNˆØ[››Ý™XY\ÜÝÛÜ™ˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆ]ÛÛ™š\›X][ÛˆHX]Úœ\ÜÝÛÜ™Žœ›Û\Ü\ÜÝÛÜ™
+ÛÛ™š\›H\ÜÝÛÜ™ˆŠHÂˆÚÊ\ÜÝÛÜ™
+HOˆ\ÜÝÛÜ™ˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUULWNˆØ[››Ý™XY\ÜÝÛÜ™ÛÛ™š\›X][ÛŽˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆNÂˆYˆ\ÜÝÛÜ™OHÛÛ™š\›X][ÛˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUUL—Nˆ\ÜÝÛÜ™ÈÈ›ÝX]ÚŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJJNÂˆBˆ\ÜÝÛÜ™ˆNÂˆX]Ú™[\˜WÝÙXŽŽš\ÚÜ\ÜÝÛÜ™
+	œ\ÜÝÛÜ™
+HÂˆÚÊ\Ú
+HOˆÂˆš[ˆJžÚ\ÚHŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPUUL×NˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBŸB‚™›ˆ]]ØÛÛ[X[™
+]]\™ÜÎˆ[\]\˜]Ü][HHÝš[™ÏŠHOˆ^]ÛÙHÂˆX]Ú\™ÜË›™^
+
+K˜\×Ù\™YŠ
+HÂˆÛÛYJš\Ú\\ÜÝÛÜ™ŠHOˆ]]Ú\ÚÜ\ÜÝÛÜ™ØÛÛ[X[™
+\™ÜÊKˆÛÛYJœ›ÛHŠHOˆ]]Ü›ÛWØÛÛ[X[™
+\™ÜÊKˆÛÛYJœ›ÛK\\›Z\ÜÚ[ÛˆŠHOˆ]]Ü›ÛWÜ\›Z\ÜÚ[Û—ØÛÛ[X[™
+\™ÜÊKˆÈOˆÂˆ]]Ý\ØYÙJ
+NÂˆ^]ÛÙNŽ™œ›ÛJŠBˆBˆBŸB‚™›ˆXZ[Š
+HOˆ^]ÛÙHÂˆ]]]\™ÜÈH[ŽŽ˜\™ÜÊ
+KœÚÚ\
+JNÂˆ]ÛÛYJÛÛ[X[™
+HH\™ÜË›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆÛÛ[X[™OH‹KZ[ˆÛÛ[X[™OH‹ZˆÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ”ÕPÐÑTÔÎÂˆBˆYˆÛÛ[X[™OH‹K]™\œÚ[ÛˆˆÛÛ[X[™OH‹UˆˆÛÛ[X[™OH™\œÚ[ÛˆˆÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+HÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™]\›ˆ™\œÚ[Û—ØÛÛ[X[™
+
+NÂˆBˆYˆÛÛ[X[™OH\]HˆÂˆ]ÚXÚ×ÛÛ›HHX]Ú
+\™ÜË›™^
+
+K\™ÜË›™^
+
+JHÂˆ
+›Û™K›Û™JHOˆ˜[ÙKˆ
+ÛÛYJ›YÊK›Û™JHYˆ›YÈOH‹KXÚXÚÈˆOˆYKˆÈOˆÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆ™]\›ˆ\]\ŽŽ˜ÛÛ[X[™
+ÚXÚ×ÛÛ›JNÂˆBˆYˆÛÛ[X[™OH™ˆˆÂˆ™]\›ˆ]X˜\ÙWØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™›Ü›HˆÂˆ™]\›ˆ›Ü›WØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH˜]]ˆÂˆ™]\›ˆ]]ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH˜]Y]ˆÂˆ™]\›ˆ]Y]ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OHœÙ]\ˆÂˆ]]]]H‹ˆ‹×ÛÝÛ™Y
+
+NÂˆ]]]]ÙÚ]™[ˆH˜[ÙNÂˆ]]]ÙXˆH˜[ÙNÂˆ]]]XÝ[ÛˆHœ™\\™HŽÂˆ]]]ÙX—ÜÜHQUSÔÑUTÕÑP—ÔÔ•Âˆ]]]ÙX—ÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]Ù]\ÛÜ[ÛœÈHÙ]\Ü[ÛœÎŽ™Y˜][
+
+NÂˆ]]]\™Ý[Y[ÈH\™ÜÎÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹K]ÙXˆˆÂˆÙXˆHYNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY]X˜\ÙHˆÂˆXÝ[ÛˆH™]X˜\ÙHŽÂˆH[ÙHYˆ\™Ý[Y[OH‹K\ØÚ[XHˆÂˆXÝ[ÛˆHœØÚ[XHŽÂˆH[ÙHYˆ\™Ý[Y[OH‹KX[ˆÂˆXÝ[ÛˆH˜[ŽÂˆH[ÙHYˆ\™Ý[Y[OH‹K\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÙX—ÜÜÙÚ]™[ˆHYNÂˆÙX—ÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTUÑP‹LWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÙ]\ÛÜ[ÛœËšÜÝÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÛÛYJÜ
+Kˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTL—NˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY‹ZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÙ]\ÛÜ[ÛœË™]X˜\ÙWÚÜÝÜÜHX]Ú\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÛÛYJÜ
+Kˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTL—NˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆX\™Ý[Y[œÝ\×ÝÚ]
+	ËIÊH	‰ˆ\]ÙÚ]™[ˆÂˆ]H\™Ý[Y[Âˆ]ÙÚ]™[ˆHYNÂˆH[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆÙXˆÂˆYˆÙ]\ÛÜ[ÛœËšÜÝÜÜš\×ÜÛÛYJ
+HÙ]\ÛÜ[ÛœË™]X˜\ÙWÚÜÝÜÜš\×ÜÛÛYJ
+HÂˆ\š[ˆJˆ™\œ›Ü–ÑKTÑUTL—NˆKZÜÝ\Ü[™KY‹ZÜÝ\ÜØ[››Ý™H\ÙYÚ]K]ÙXˆ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™]\›ˆÙ]\ÝÙX—ØÛÛ[X[™
+	œ]ÙX—ÜÜÙX—ÜÜÙÚ]™[ŠNÂˆBˆYˆÙX—ÜÜÙÚ]™[ˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTL—NˆK\Ü™\]Z\™\ÈK]ÙXˆŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆYˆXÝ[ÛˆOHœ™\\™HˆÂˆ™]\›ˆÙ]\Ü›Ú™XÝ
+	œ]	œÙ]\ÛÜ[ÛœÊNÂˆBˆ™]\›ˆX]ÚÙ]\ØXÝ[ÛŠ	œ]XÝ[Û‹	œÙ]\ÛÜ[ÛœÊHÂˆÚÊY\ÜØYÙJHOˆÂˆš[ˆJžÛY\ÜØYÙ_HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKTÑUTL—NˆÙ\œ›ÜŸHŠNÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆNÂˆBˆYˆÛÛ[X[™OH›™]ÈˆÂˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]]]Ú]ÛX\šXYˆH˜[ÙNÂˆ]]]ÜYÝ[\]HH˜[ÙNÂˆ]]]]]Ý[\]HH˜[ÙNÂˆ]]]\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆ]]]ÙX—ÜÜHQUSÕÑP—ÔÔ•Âˆ]]]ÙX—ÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]ÜÝÜÜHQUSÕÑP—ÔÔ•Âˆ]]]ÜÝÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]]X˜\ÙWÚÜÝÜÜHQUSÑUPTÑWÒÔÕÔÔ•Âˆ]]]]X˜\ÙWÚÜÝÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]\™Ý[Y[ÈH\™ÜÎÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹K[X\šXYˆˆ	‰ˆ]Ú]ÛX\šXYˆÂˆÚ]ÛX\šXYˆHYNÂˆH[ÙHYˆ\™Ý[Y[OH‹K][\]HˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆK][\]H™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆX]Ú˜[YK˜\×ÜÝŠ
+HÂˆ›Z[š[X[ˆOˆÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹XÜYˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HHYNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹X]]ˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HHYNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹X\Ú[™\ÜÈˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HHYNÂˆBˆÈOˆÂˆ\š[ˆJˆ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆ[\]HÝ˜[Y_XÈ^XÝYZ[š[X[X\šXY‹XÜYX\šXY‹X]]ÜˆX\šXY‹X\Ú[™\ÜØ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆH[ÙHYˆ\™Ý[Y[OH‹K]ÙX‹\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆK]ÙX‹\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÙX—ÜÜÙÚ]™[ˆHYNÂˆÙX—ÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆKZÜÝ\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÜÝÜÜÙÚ]™[ˆHYNÂˆÜÝÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY‹ZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆKY‹ZÜÝ\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[ˆHYNÂˆ]X˜\ÙWÚÜÝÜÜHX]Ú\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆ
+ÙX—ÜÜÙÚ]™[ˆÜÝÜÜÙÚ]™[ˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[ŠH	‰ˆ]Ú]ÛX\šXYˆÂˆ\š[ˆJˆ™\œ›Ü–ÑKPÓKLWNˆK]ÙX‹\ÜKZÜÝ\Ü[™KY‹ZÜÝ\Ü™\]Z\™HK[X\šXYˆ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™]\›ˆÜ™X]WÜ›Ú™XÝ
+ˆ	œ]ˆ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆ˜[ÙKˆÚ]ÛX\šXY‹ˆÜYÝ[\]Kˆ]]Ý[\]Kˆ\Ú[™\Ü×Ý[\]KˆÙX—ÜÜˆÜÝÜÜˆ]X˜\ÙWÚÜÝÜÜˆÜÝÜÜÙÚ]™[‹ˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[‹ˆKˆ
+NÂˆBˆYˆÛÛ[X[™OHš[š]ˆÂˆ]]]]H‹ˆ‹×ÛÝÛ™Y
+
+NÂˆ]]]]ÙÚ]™[ˆH˜[ÙNÂˆ]]]Ú]ÛX\šXYˆH˜[ÙNÂˆ]]]ÜYÝ[\]HH˜[ÙNÂˆ]]]]]Ý[\]HH˜[ÙNÂˆ]]]\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆ]]]ÙX—ÜÜHQUSÕÑP—ÔÔ•Âˆ]]]ÙX—ÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]ÜÝÜÜHQUSÕÑP—ÔÔ•Âˆ]]]ÜÝÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]]X˜\ÙWÚÜÝÜÜHQUSÑUPTÑWÒÔÕÔÔ•Âˆ]]]]X˜\ÙWÚÜÝÜÜÙÚ]™[ˆH˜[ÙNÂˆ]]]\™Ý[Y[ÈH\™ÜÎÂˆÚ[H]ÛÛYJ\™Ý[Y[
+HH\™Ý[Y[Ë›™^
+
+HÂˆYˆ\™Ý[Y[OH‹K[X\šXYˆˆ	‰ˆ]Ú]ÛX\šXYˆÂˆÚ]ÛX\šXYˆHYNÂˆH[ÙHYˆ\™Ý[Y[OH‹K][\]HˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆK][\]H™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆX]Ú˜[YK˜\×ÜÝŠ
+HÂˆ›Z[š[X[ˆOˆÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹XÜYˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HHYNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹X]]ˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HHYNÂˆ\Ú[™\Ü×Ý[\]HH˜[ÙNÂˆBˆ›X\šXY‹X\Ú[™\ÜÈˆOˆÂˆÚ]ÛX\šXYˆHYNÂˆÜYÝ[\]HH˜[ÙNÂˆ]]Ý[\]HH˜[ÙNÂˆ\Ú[™\Ü×Ý[\]HHYNÂˆBˆÈOˆÂˆ\š[ˆJˆ™\œ›Ü–ÑKPÓKLWNˆ[šÛ›ÝÛˆ[\]HÝ˜[Y_XÈ^XÝYZ[š[X[X\šXY‹XÜYX\šXY‹X]]ÜˆX\šXY‹X\Ú[™\ÜØ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆH[ÙHYˆ\™Ý[Y[OH‹K]ÙX‹\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆK]ÙX‹\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÙX—ÜÜÙÚ]™[ˆHYNÂˆÙX—ÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆKZÜÝ\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆÜÝÜÜÙÚ]™[ˆHYNÂˆÜÝÜÜHX]Ú\œÙWÝÙX—ÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆ\™Ý[Y[OH‹KY‹ZÜÝ\ÜˆÂˆ]ÛÛYJ˜[YJHH\™Ý[Y[Ë›™^
+
+H[ÙHÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆKY‹ZÜÝ\Ü™\]Z\™\ÈH˜[YHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[ˆHYNÂˆ]X˜\ÙWÚÜÝÜÜHX]Ú\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+	˜[YJHÂˆÚÊÜ
+HOˆÜˆ\œŠ\œ›ÜŠHOˆÂˆ\š[ˆJ™\œ›Ü–ÑKPÓKLWNˆÙ\œ›ÜŸHŠNÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆH[ÙHYˆX\™Ý[Y[œÝ\×ÝÚ]
+	ËIÊH	‰ˆ\]ÙÚ]™[ˆÂˆ]H\™Ý[Y[Âˆ]ÙÚ]™[ˆHYNÂˆH[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆBˆYˆ
+ÙX—ÜÜÙÚ]™[ˆÜÝÜÜÙÚ]™[ˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[ŠH	‰ˆ]Ú]ÛX\šXYˆÂˆ\š[ˆJˆ™\œ›Ü–ÑKPÓKLWNˆK]ÙX‹\ÜKZÜÝ\Ü[™KY‹ZÜÝ\Ü™\]Z\™HK[X\šXYˆ‚ˆ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™]\›ˆÜ™X]WÜ›Ú™XÝ
+ˆ	œ]ˆ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆYKˆÚ]ÛX\šXY‹ˆÜYÝ[\]Kˆ]]Ý[\]Kˆ\Ú[™\Ü×Ý[\]KˆÙX—ÜÜˆÜÝÜÜˆ]X˜\ÙWÚÜÝÜÜˆÜÝÜÜÙÚ]™[‹ˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[‹ˆKˆ
+NÂˆBˆYˆÛÛ[X[™OHœÙ\™HˆÂˆ™]\›ˆÙ\™WØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™ØÝÜˆˆÂˆ™]\›ˆØÝÜ—ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™ØÈˆÂˆ™]\›ˆØ×ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH˜ÚXÚÈˆÂˆ™]\›ˆÚXÚ×ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™›]ˆÂˆ™]\›ˆ›]ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OHš[\XÝˆÂˆ™]\›ˆ[\XÝØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™Y]ˆÂˆ™]\›ˆY]ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH˜ÛÛ^ˆÂˆ™]\›ˆÛÛ^ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH›[Ù[HˆÂˆ™]\›ˆ[Ù[WØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH˜ÛÛ™šYÈˆÂˆ™]\›ˆÛÛ™šY×ØÛÛ[X[™
+\™ÜÊNÂˆBˆYˆÛÛ[X[™OH™\šYžHˆÂˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆ]œÛÛˆHX]Ú\™ÜË›™^
+
+HÂˆ›Û™HOˆ˜[ÙKˆÛÛYJ›YÊHYˆ›YÈOH‹KZœÛÛˆˆOˆYKˆÛÛYJÊHOˆÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆNÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+HÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆ™]\›ˆ™\šYžWØÛÛ[X[™
+	œ]œÛÛŠNÂˆBˆ]ÛÛYJ]
+HH\™ÜË›™^
+
+H[ÙHÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆNÂˆYˆ\™ÜË›™^
+
+Kš\×ÜÛÛYJ
+HÂˆ\ØYÙJ
+NÂˆ™]\›ˆ^]ÛÙNŽ™œ›ÛJŠNÂˆBˆX]ÚÛÛ[X[™˜\×ÜÝŠ
+HÂˆ˜ÚXÚÈˆ˜Z[ˆOˆÂˆYˆ˜[Y]J	œ]
+Kš\×ÛÚÊ
+HÂˆš[ˆJ›ÚÎˆÜ]HŠNÂˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆH[ÙHÂˆ^]ÛÙNŽ™œ›ÛJJBˆBˆBˆœ[ˆˆOˆX]Ú˜[Y]J	œ]
+K˜[™Ý[Š›ÙÜ˜[_Âˆ]Ü˜[ÈHX]Ú›Ú™XÝØØ\Xš[]WÙÜ˜[Ê	œ]
+HÂˆÚÊÜ˜[ÊHOˆÜ˜[Ëˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	œ]‘KPÐTLˆ‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆ][[YWÜÛXÞHHX]Ú›Ú™XÝÜ[[YWÜÛXÞJ	œ]
+HÂˆÚÊÛXÞJHOˆÛXÞKˆ\œŠ\œ›ÜŠHOˆÂˆXYÛ›ÜÝXÊ	œ]‘KTÓPÖKLˆ‹	™\œ›Ü‹KJNÂˆ™]\›ˆ\œŠ
+
+JNÂˆBˆNÂˆ]™\Ý[HX]Ú[ŽŽ˜\Š‘UPTÑWÕT“ŠHÂˆÚÊ]X˜\ÙWÝ\›
+HOˆ^XÝ]WÝÚ]Ù]X˜\ÙWØ[™ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Êˆ	œ›ÙÜ˜[Kˆ	™]X˜\ÙWÝ\›ˆÜ˜[Ë˜\×Ü™YŠ
+Kˆ[[YWÜÛXÞK˜\×Ü™YŠ
+Kˆ
+Kˆ\œŠÊHOˆ^XÝ]WÝÚ]ØØ\Xš[]Y\×Ø[™ÜÛXÚY\Êˆ	œ›ÙÜ˜[KˆÜ˜[Ë˜\×Ü™YŠ
+Kˆ[[YWÜÛXÞK˜\×Ü™YŠ
+Kˆ
+KˆNÂˆ™\Ý[›X\Ù\œŠ\œ›ÜŸÂˆXYÛ›ÜÝXÊˆ	œ]ˆ‘KT•S•SQKLH‹ˆ	™\œ›Ü‹›Y\ÜØYÙKˆ\œ›Ü‹œÜ[‹›[™Kˆ\œ›Ü‹œÜ[‹˜ÛÛ[[‹ˆ
+NÂˆJBˆJHÂˆÚÊÝ]]
+HOˆÂˆ›Üˆ[™H[ˆÝ]]Âˆš[ˆJžÛ[™_HŠNÂˆBˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆBˆ\œŠ
+
+JHOˆ^]ÛÙNŽ™œ›ÛJJKˆKˆÈOˆÂˆ\ØYÙJ
+NÂˆ^]ÛÙNŽ™œ›ÛJŠBˆBˆBŸB‚ˆÖØÙ™Ê\Ý
+WB›[Ù\ÝÈÂˆ\ÙHÝ\\ŽŽŠŽÂ‚ˆÖÝ\ÝBˆ›ˆ™X]\™WÙY˜][×Ø\™WÜÚ[\WØ[™Ù[˜X›Y
+
+HÂˆ]™X]\™\ÈH™X]\™WÙY˜][Ê
+NÂˆ\ÜÙ\Ù\HJ™X]\™\Ë›[Š
+K“Ò‘PÕÑ‘PUT‘TË›[Š
+JNÂˆ\ÜÙ\J™X]\™\Ë˜[Y\Ê
+K˜[
+Ù][™ßÙ][™Ë™[˜X›Y
+JNÂˆ\ÜÙ\J™X]\™\Ë˜[Y\Ê
+K˜[
+Ù][™ßÙ][™ËœÛÝ\˜ÙHOH™Y˜][ŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™X]\™WÜÙ][™Ü×ØXØÙ\ÚÛ›ÝÛ—ÛX[šY™\ÝÝ˜[Y\Ê
+HÂˆ]˜[Y\ÈH\œÙWÙ™X]\™WÜÙXÝ[ÛŠˆ–Ü›Ú™XÝW›˜[YHH™[[×——–Ù™X]\™\×W˜\HH˜[ÙW˜ÜYHYWˆ‹ˆ
+Bˆ™^XÝ
+™™X]\™HÙ][™ÜÈÚÝ[\œÙHŠNÂˆ\ÜÙ\Ù\HJ˜[Y\Ë™Ù]
+˜\HŠKÛÛYJ	™˜[ÙJJNÂˆ\ÜÙ\Ù\HJ˜[Y\Ë™Ù]
+˜ÜYŠKÛÛYJ	YJJNÂˆ\ÜÙ\J]˜[Y\Ë˜ÛÛZ[œ×ÚÙ^JÙXˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ú™XÝÙ[š\›Û›Y[ÜÙ][™Ü×Ý\ÙWÜ›ØÙ\Ü×Ý[—ÙÝ[—Ý[—Ù˜[˜XÚÊ
+HÂˆ]\™XÝÜžHHÝŽ™[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜K]ZK\Ù][™ÜË^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆœÎŽÜš]J\™XÝÜžKš›Ú[Š‹™[ˆŠK–‘STWÕTÕÕRWÓÐÐSOYWˆŠK[Ü˜\
+
+NÂ‚ˆ]Ù^HH–‘STWÕTÕÕRWÓÐÐSHŽÂˆ]™]š[Ý\ÈH[ŽŽ˜\—ÛÜÊÙ^JNÂˆ[ŽŽœ™[[Ý™WÝ˜\ŠÙ^JNÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝZWÜÙ][™ÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+KÙ^K™[ˆŠK[Ü˜\
+
+Kˆ™H‚ˆ
+NÂˆ[ŽŽœÙ]Ý˜\ŠÙ^K™[ˆŠNÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝZWÜÙ][™ÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+KÙ^K™˜[˜XÚÈŠK[Ü˜\
+
+Kˆ™[ˆ‚ˆ
+NÂˆ[ŽŽœ™[[Ý™WÝ˜\ŠÙ^JNÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝZWÜÙ][™ÊˆÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+Kˆ–‘STWÕTÕÕRWÓRTÔÒS‘È‹ˆÛÜšÈ‚ˆ
+Bˆ[Ü˜\
+
+KˆÛÜšÈ‚ˆ
+NÂˆYˆ]ÛÛYJ™]š[Ý\ÊHH™]š[Ý\ÈÂˆ[ŽŽœÙ]Ý˜\ŠÙ^K™]š[Ý\ÊNÂˆBˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ[ÝÙYÚÜÝ×Ý\ÙWÜ›ØÙ\Ü×Ý[—Ü›Ú™XÝÙ[—Ý[—ÛÛÜ˜XÚ×Ù˜[˜XÚÊ
+HÂˆ]\™XÝÜžHHÝŽ™[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KX[ÝÙYZÜÝË^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆœÎŽÜš]Jˆ\™XÝÜžKš›Ú[Š‹™[ˆŠKˆ–‘STWÐSÕÑQÒÔÕÏ[ØØ[ÜÝ\™^[\Wˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂ‚ˆ]™]š[Ý\ÈH[ŽŽ˜\—ÛÜÊ–‘STWÐSÕÑQÒÔÕÈŠNÂˆ[ŽŽœ™[[Ý™WÝ˜\Š–‘STWÐSÕÑQÒÔÕÈŠNÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝØ[ÝÙYÚÜÝÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\
+
+KˆÈ›ØØ[ÜÝ‹˜\™^[\H—Bˆ
+NÂˆœÎŽœ™[[Ý™WÙš[J\™XÝÜžKš›Ú[Š‹™[ˆŠJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝØ[ÝÙYÚÜÝÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\
+
+KˆÈ›ØØ[ÜÝ‹ŒLËŒŒŒH‹–ÎŽŒWH—Bˆ
+NÂˆœÎŽÜš]Jˆ\™XÝÜžKš›Ú[Š‹™[ˆŠKˆ–‘STWÐSÕÑQÒÔÕÏ[ØØ[ÜÝ\™^[\Wˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ[ŽŽœÙ]Ý˜\Š–‘STWÐSÕÑQÒÔÕÈ‹›Ý™\œšYK™^[\KØØ[ÜÝŠNÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝØ[ÝÙYÚÜÝÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\
+
+KˆÈ›Ý™\œšYK™^[\H‹›ØØ[ÜÝ—Bˆ
+NÂˆ[ŽŽœÙ]Ý˜\Š–‘STWÐSÕÑQÒÔÕÈ‹ˆŠNÂˆ\ÜÙ\J›Ú™XÝØ[ÝÙYÚÜÝÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JKš\×Ù\œŠ
+JNÂˆ[ŽŽœÙ]Ý˜\Š–‘STWÐSÕÑQÒÔÕÈ‹›ØØ[ÜÝŠNÂˆ\ÜÙ\J›Ú™XÝØ[ÝÙYÚÜÝÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JKš\×Ù\œŠ
+JNÂˆYˆ]ÛÛYJ™]š[Ý\ÊHH™]š[Ý\ÈÂˆ[ŽŽœÙ]Ý˜\Š–‘STWÐSÕÑQÒÔÕÈ‹™]š[Ý\ÊNÂˆH[ÙHÂˆ[ŽŽœ™[[Ý™WÝ˜\Š–‘STWÐSÕÑQÒÔÕÈŠNÂˆBˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ú™XÝÝ[YWØÜÜ×Ú\×ÛÜ[Û˜[Ý]ŽØ[™ÜÚ^™WÛ[Z]Y
+
+HÂˆ]\™XÝÜžHH[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜K\›Ú™XÝ][YK^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\
+
+Kˆ›Û™Bˆ
+NÂ‚ˆ][YWÜ]H\™XÝÜžKš›Ú[Š“Ò‘PÕÕSQWÐÔÔ×Ñ’SJNÂˆ][YHHŽœ›ÛÝÈK^™[\˜KXÛÛÜ‹XXØÙ[ˆÙLÎÈHŽÂˆœÎŽÜš]J	[YWÜ][YJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\
+
+KˆÛÛYJ[YKš[Ê
+JBˆ
+NÂ‚ˆœÎŽÜš]Jˆ	[YWÜ]ˆ™XÈVØ‰Þ	ÎÈ“Ò‘PÕÕSQWÐÔÔ×ÓPVÐ–UTÈ\È\Ú^™H
+ÈWKˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JBˆ[Ü˜\Ù\œŠ
+Bˆ˜ÛÛZ[œÊŒLŽÚPˆÚ^™H[Z]ŠJNÂ‚ˆœÎŽÜš]J	[YWÜ]Ì™‹™WJK[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JBˆ[Ü˜\Ù\œŠ
+Bˆ˜ÛÛZ[œÊ•U‹NŠJNÂ‚ˆœÎŽœ™[[Ý™WÙš[J	[YWÜ]
+K[Ü˜\
+
+NÂˆœÎŽ˜Ü™X]WÙ\Š	[YWÜ]
+K[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JBˆ[Ü˜\Ù\œŠ
+Bˆ˜ÛÛZ[œÊœ™YÝ[\ˆ›Ú™XÝš[HŠJNÂˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖØÙ™Ê[š^
+WBˆÖÝ\ÝBˆ›ˆ›Ú™XÝÝ[YWØÜÜ×ÙÙ\×Û›ÝÙ›ÛÝ×ÜÞ[X›ÛX×Û[šÜÊ
+HÂˆ\ÙHÝŽ›ÜÎŽ[š^Ž™œÎŽœÞ[[[šÎÂ‚ˆ]\™XÝÜžHH[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜K\›Ú™XÝ][YK[[šË^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆ]Ý]ÚYWÙš[HH\™XÝÜžKš›Ú[Šœš]˜]K˜ÜÜÈŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆœÎŽÜš]J	›Ý]ÚYWÙš[Kœš]˜]HÛÛ[ŠK[Ü˜\
+
+NÂˆÞ[[[šÊ	›Ý]ÚYWÙš[K\™XÝÜžKš›Ú[Š“Ò‘PÕÕSQWÐÔÔ×Ñ’SJJK[Ü˜\
+
+NÂ‚ˆ]\œ›ÜˆH›Ú™XÝÝ[YWØÜÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\Ù\œŠ
+NÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ››ÝHÞ[X›ÛXÈ[šÈŠJNÂˆ\ÜÙ\JY\œ›Ü‹˜ÛÛZ[œÊœš]˜]HÛÛ[ŠJNÂˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ú™XÝÛØØ[WØØ][ÙÜ×Ø\™WÛÜ[Û˜[Ý˜[Y]YØ[™ÜÚ^™WÛ[Z]Y
+
+HÂˆ]\™XÝÜžHH[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜K\›Ú™XÝ[ØØ[\Ë^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JKš\×ÛÚÊ
+JNÂ‚ˆ]ØØ[WÙ\™XÝÜžHH\™XÝÜžKš›Ú[Š“Ò‘PÕÓÐÐSWÑT‘PÕÔ–JNÂˆœÎŽ˜Ü™X]WÙ\Š	›ØØ[WÙ\™XÝÜžJK[Ü˜\
+
+NÂˆœÎŽÜš]JˆØØ[WÙ\™XÝÜžKš›Ú[Š™KšœÛÛˆŠKˆˆÈžÈ˜Ý\ÝÛK]HŽˆ•][ŸHˆËˆ
+Bˆ[Ü˜\
+
+NÂˆœÎŽÜš]JˆØØ[WÙ\™XÝÜžKš›Ú[Š™[‹šœÛÛˆŠKˆˆÈžÈ˜Ý\ÝÛK]HŽˆ•]HŸHˆËˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JKš\×ÛÚÊ
+JNÂ‚ˆœÎŽÜš]JØØ[WÙ\™XÝÜžKš›Ú[Š™KšœÛÛˆŠKˆÈžÈ˜Ý\ÝÛK]HŽY_HˆÊK[Ü˜\
+
+NÂˆ]\œ›ÜˆH›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\Ù\œŠ
+NÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ›ØØ[\ËÙKšœÛÛˆŠJNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊœÝš[™È˜[Y\ÈŠJNÂˆ\ÜÙ\JY\œ›Ü‹˜ÛÛZ[œÊYHŠJNÂ‚ˆœÎŽÜš]JˆØØ[WÙ\™XÝÜžKš›Ú[Š™KšœÛÛˆŠKˆ™XÈVØ‰Þ	ÎÈ“Ò‘PÕÓÐÐSWÓPVÐ–UTÈ\È\Ú^™H
+ÈWKˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\J›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JBˆ[Ü˜\Ù\œŠ
+Bˆ˜ÛÛZ[œÊŒMˆÚPˆÚ^™H[Z]ŠJNÂˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖØÙ™Ê[š^
+WBˆÖÝ\ÝBˆ›ˆ›Ú™XÝÛØØ[WØØ][Ù×ÛØY\—ÙÙ\×Û›ÝÙ›ÛÝ×ÜÞ[X›ÛX×Û[šÜÊ
+HÂˆ\ÙHÝŽ›ÜÎŽ[š^Ž™œÎŽœÞ[[[šÎÂ‚ˆ]\™XÝÜžHH[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜K\›Ú™XÝ[ØØ[\Ë[[šË^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	™\™XÝÜžJK[Ü˜\
+
+NÂˆ]ÛÝ\˜ÙWÜ]H\™XÝÜžKš›Ú[Š›XZ[‹žž[ŠNÂˆœÎŽÜš]J	œÛÝ\˜ÙWÜ]ˆŠK[Ü˜\
+
+NÂˆ]Ý]ÚYWÙš[HH\™XÝÜžKš›Ú[Š›Ý]ÚYKšœÛÛˆŠNÂˆœÎŽÜš]J	›Ý]ÚYWÙš[KˆÈžÈ]HŽˆœš]˜]HŸHˆÊK[Ü˜\
+
+NÂˆ]ØØ[WÙ\™XÝÜžHH\™XÝÜžKš›Ú[Š“Ò‘PÕÓÐÐSWÑT‘PÕÔ–JNÂˆœÎŽ˜Ü™X]WÙ\Š	›ØØ[WÙ\™XÝÜžJK[Ü˜\
+
+NÂˆÞ[[[šÊ	›Ý]ÚYWÙš[KØØ[WÙ\™XÝÜžKš›Ú[Š™KšœÛÛˆŠJK[Ü˜\
+
+NÂ‚ˆ]\œ›ÜˆH›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\Ù\œŠ
+NÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ›ØØ[\ËÙKšœÛÛˆŠJNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊœÞ[X›ÛXÈ[šÈŠJNÂˆ\ÜÙ\JY\œ›Ü‹˜ÛÛZ[œÊœš]˜]HŠJNÂ‚ˆœÎŽœ™[[Ý™WÙš[JØØ[WÙ\™XÝÜžKš›Ú[Š™KšœÛÛˆŠJK[Ü˜\
+
+NÂˆœÎŽœ™[[Ý™WÙ\Š	›ØØ[WÙ\™XÝÜžJK[Ü˜\
+
+NÂˆ]Ý]ÚYWÙ\™XÝÜžHH\™XÝÜžKš›Ú[Š›Ý]ÚYK[ØØ[\ÈŠNÂˆœÎŽ˜Ü™X]WÙ\Š	›Ý]ÚYWÙ\™XÝÜžJK[Ü˜\
+
+NÂˆÞ[[[šÊ	›Ý]ÚYWÙ\™XÝÜžK	›ØØ[WÙ\™XÝÜžJK[Ü˜\
+
+NÂˆ]\œ›ÜˆH›Ú™XÝÝZWØØ][ÙÜÊÛÝ\˜ÙWÜ]×ÜÝŠ
+K[Ü˜\
+
+JK[Ü˜\Ù\œŠ
+NÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ›ØØ[\ÈŠJNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊœÞ[X›ÛXÈ[šÈŠJNÂˆœÎŽœ™[[Ý™WÙ\—Ø[
+\™XÝÜžJK[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ú™XÝÝ[YWÜÝ[\ÚY]Ü›Ý]WÚ\×Ü™\Ù\™YÛÛ›WØžWÝ[YWÜ›Ú™XÝÊ
+HÂˆ][YYÜ›ÙÜ˜[HBˆ\œÙJ	›^
+œYÙH‹××Þ™[\˜KÝ[YK˜ÜÜ×ˆÈ[ÈXZ[•[YOÛXZ[ˆHHŠK[Ü˜\
+
+JBˆ[Ü˜\
+
+NÂˆ]\˜[Y]\—Ü›ÙÜ˜[HBˆ\œÙJ	›^
+œYÙH‹ÞÛ˜[Y\ÜXÙ_KÞØ\ÜÙ]WˆÈ[ÈXZ[\ÜÙ]ÛXZ[ˆHHŠK[Ü˜\
+
+JBˆ[Ü˜\
+
+NÂˆ]Ü™[˜\žWÜ›ÙÜ˜[HH\œÙJ	›^
+™›ˆXZ[Š
+HÈHŠK[Ü˜\
+
+JK[Ü˜\
+
+NÂ‚ˆ\ÜÙ\J›Ú™XÝÝ\Ù\×Ü™\Ù\™YÝ[YWÜ›Ý]J	[YYÜ›ÙÜ˜[JJNÂˆ\ÜÙ\J›Ú™XÝÝ\Ù\×Ü™\Ù\™YÝ[YWÜ›Ý]J	œ\˜[Y]\—Ü›ÙÜ˜[JJNÂˆ\ÜÙ\J\›Ú™XÝÝ\Ù\×Ü™\Ù\™YÝ[YWÜ›Ý]J	›Ü™[˜\žWÜ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™X]\™WÜÙ][™Ü×ØXØÙ\ÛÛ›WÚÛ›ÝÛ—Ù[—ÛÝ™\œšY\Ê
+HÂˆ]˜[Y\ÈH\œÙWÙ[—Ù™X]\™WÛÝ™\œšY\ÊˆˆÈÜ[Û˜[–‘STWÑ‘PUT‘WÐTOY˜[ÙW–‘STWÕÑP—ÔÔ•LÌˆ‹ˆ
+Bˆ™^XÝ
+™™X]\™H[š\›Û›Y[Ù][™ÜÈÚÝ[\œÙHŠNÂˆ\ÜÙ\Ù\HJ˜[Y\Ë™Ù]
+˜\HŠKÛÛYJ	™˜[ÙJJNÂˆ\ÜÙ\Ù\HJ˜[Y\Ë›[Š
+KJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™X]\™WÜÙ][™Ü×Ü™Z™XÝÝ[šÛ›ÝÛ—Ý˜[Y\Ê
+HÂˆ]\œ›ÜˆH\œÙWÙ™X]\™WÜÙXÝ[ÛŠ–Ù™X]\™\×W›XYÚXÈHYWˆŠBˆ™^XÝÙ\œŠ[šÛ›ÝÛˆ™X]\™\È]\Ý›Ý™HÚ[[HXØÙ\YŠNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ[šÛ›ÝÛˆ™X]\™HÙ][™ÈŠJNÂˆ]\œ›ÜˆH\œÙWÙ[—Ù™X]\™WÛÝ™\œšY\Ê–‘STWÑ‘PUT‘WÓPQÒPÏ]YWˆŠBˆ™^XÝÙ\œŠ[šÛ›ÝÛˆ[š\›Û›Y[™X]\™\È]\Ý›Ý™HÚ[[HXØÙ\YŠNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ[šÛ›ÝÛˆ‘STWÑ‘PUT‘WÈŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ý™\šYšXØ][Û—Ü™\Ý[×ÝÚ]ÜÛÝ\˜ÙWÛØØ][ÛŠ
+HÂˆ]™\Ý[H™\šYšXØ][Û”™\Ý[Âˆ[˜Ý[ÛŽˆœ™YXÙH‹š[Ê
+KˆÚ[™ˆ™[\˜WÜ[[YNŽÛÛ˜XÝÚ[™Ž“ÛÜ[˜\šX[ˆ[™^ˆˆÝ]\Îˆ™\šYšXØ][Û”Ý]\ÎŽ”›Ý™[‹ˆÜ[Žˆ™[\˜WØ\ÝŽ”Ü[ŽŽ›™]Ê‹L‹‹JKˆY\ÜØYÙNˆ•H™\šYšY\ˆ›Ý™Y\ÈÛÛ™][Ûˆ›Üˆ[[˜[^™Y]Ëˆ‹š[Ê
+KˆÛÝ[\™^[\Nˆ›Û™KˆNÂˆ\ÜÙ\Ù\HJˆ›Ü›X]Ý™\šYšXØ][Û—Ü™\Ý[
+œÜ˜ËÜ™YXÙKžž[‹™š\œÝœÙXÛÛ™˜[YWˆ‹	œ™\Ý[
+Kˆ”“Õ‘SˆÕ‹LWNˆ™YXÙKš[˜\šX[ÌH
+Ü˜ËÜ™YXÙKžž[ŒŽŒKLŽÊWˆHH™\šYšY\ˆ›Ý™Y\ÈÛÛ™][Ûˆ›Üˆ[[˜[^™Y]Ë—ˆˆˆÙXÛÛ™˜[YWˆ—————ˆ‚ˆ
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆØÝÜ—Ü™Z™XÝ×Ú[˜[YÜÜ
+
+HÂˆ]\™Ý[Y[ÈHÈ‹K\Ü‹×ÛÝÛ™Y
+
+K››ÝXK\Ü‹×ÛÝÛ™Y
+
+WNÂˆ\ÜÙ\Ù\HJØÝÜ—ØÛÛ[X[™
+\™Ý[Y[Ëš[×Ú]\Š
+JK^]ÛÙNŽ™œ›ÛJŠJNÂˆ]\™Ý[Y[ÈHÈ‹K\Ü‹×ÛÝÛ™Y
+
+KŒ‹×ÛÝÛ™Y
+
+WNÂˆ\ÜÙ\Ù\HJØÝÜ—ØÛÛ[X[™
+\™Ý[Y[Ëš[×Ú]\Š
+JK^]ÛÙNŽ™œ›ÛJŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™XY×Ù]X˜\ÙWÝ\›Ùœ›ÛWØ[—Ù[—Ùš[WÝÚ]Ý]Û›Ü›X[^š[™×ÜÙXÜ™]Ê
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KYØÝÜ‹Y[‹^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽÜš]Jˆ	œ]ˆˆÈØØ[™^ÜUPTÑWÕT“IÛX\šXYŽ‹ËÝ\Ù\ŽœÙXÜ™]LËŒŒŒNŒÌÌ‹Ø\	×ˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJˆ™XYÙ[—Ý˜[YJ]×ÜÝŠ
+K[Ü˜\
+
+K‘UPTÑWÕT“ŠK[Ü˜\
+
+KˆÛÛYJ›X\šXYŽ‹ËÝ\Ù\ŽœÙXÜ™]LËŒŒŒNŒÌÌ‹Ø\‹š[Ê
+JBˆ
+NÂˆœÎŽœ™[[Ý™WÙš[J]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×ÙØÝÜ—ÚœÛÛ—ÝÚ]Ý]Ù]X˜\ÙWØÜ™Y[X[Ê
+HÂˆ]ÚXÚÜÈH™XÈVÂˆØÝÜÚXÚÈÂˆ˜[YNˆœ›Ú™XÝÙš[H‹ˆÝ]\Îˆœ\ÜÈ‹ˆY\ÜØYÙNˆ˜\žž[^\ÝÈ‹š[Ê
+KˆKˆØÝÜÚXÚÈÂˆ˜[YNˆ™]X˜\ÙH‹ˆÝ]\ÎˆØ\›ˆ‹ˆY\ÜØYÙNˆ›X\šXYŽˆUPTÑWÕT“\È›ÝÙ]‹š[Ê
+KˆKˆNÂˆ]ØÝ[Y[ˆÙ\™WÚœÛÛŽŽ•˜[YHBˆÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	™›Ü›X]ÙØÝÜ—ÚœÛÛŠ˜\žž[‹	˜ÚXÚÜÊJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJØÝ[Y[È™\œÚ[Ûˆ—K[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJNÂˆ\ÜÙ\Ù\HJØÝ[Y[ÈœÝ]\È—Kœ™XYHŠNÂˆ\ÜÙ\Ù\HJØÝ[Y[ÈØ\›š[™ÜÈ—KJNÂˆ\ÜÙ\Ù\HJØÝ[Y[È˜ÚXÚÜÈ—VÌWVÈœÝ]\È—KØ\›ˆŠNÂˆ\ÜÙ\JY›Ü›X]ÙØÝÜ—ÚœÛÛŠ˜\žž[‹	˜ÚXÚÜÊK˜ÛÛZ[œÊœ\ÜÝÛÜ™ŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ý™\šYšXØ][Û—Ü™\Ý[×Ø\×ÚœÛÛŠ
+HÂˆ]™\Ý[H™\šYšXØ][Û”™\Ý[Âˆ[˜Ý[ÛŽˆœØ^Wš[È‹š[Ê
+KˆÚ[™ˆ™[\˜WÜ[[YNŽÛÛ˜XÝÚ[™Ž‘[œÝ\™\Ëˆ[™^ˆKˆÝ]\Îˆ™\šYšXØ][Û”Ý]\ÎŽ”[[YPÚXÚËˆÜ[Žˆ™[\˜WØ\ÝŽ”Ü[ŽŽ›™]Ê‹L‹‹JKˆY\ÜØYÙNˆ•\ÈÜÝÛÛ™][Ûˆ™YYÈH[[YHÚXÚÈ™XØ]\ÙH›Ý[™]\›ˆ]È\™HÞ[X›ÛXØ[H[Ù[Yˆ‹š[Ê
+KˆÛÝ[\™^[\NˆÛÛYJ™XÈVÊ˜[YH‹š[Ê
+K
+WJKˆNÂˆ\ÜÙ\Ù\HJˆ›Ü›X]Ý™\šYšXØ][Û—ÚœÛÛŠœÜ˜ËÙš[Kžž[‹™š\œÝœÙXÛÛ™˜[YWˆ‹	–Ü™\Ý[JKˆˆÈ–ÞÈœÝ]\ÈŽˆ”•S•SQWÐÒPÒÈ‹˜ÛÙHŽˆ•‹Lˆ‹›Y\ÜØYÙHŽˆ•\ÈÜÝÛÛ™][Ûˆ™YYÈH[[YHÚXÚÈ™XØ]\ÙH›Ý[™]\›ˆ]È\™HÞ[X›ÛXØ[H[Ù[Yˆ‹™[˜Ý[ÛˆŽˆœØ^Wš[È‹šÚ[™Žˆ™[œÝ\™\È‹š[™^ŽŒK˜ÛÝ[\™^[\HŽžÈ˜[YHŽŒK›ØØ][ÛˆŽžÈ™š[HŽˆœÜ˜ËÙš[Kžž[‹œÝ\ŽžÈ›[™HŽŒ‹˜ÛÛ[[ˆŽŒ_K™[™ŽžÈ›[™HŽŒ‹˜ÛÛ[[ˆŽß__WHˆÂˆ
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ø]Y]Ü›ÝÜ×Ø\×ÚœÛÛ—Ø[™ØÜÝ—ÝÚ]Ý]ÛÜÚ[™×Û[Ê
+HÂˆ]™\Ý[H]Y\žT™\Ý[ÂˆÛÛ[[œÎˆ™XÈVÂˆ˜XÝÜ—Ý\Ù\—ÚY‹š[Ê
+Kˆ™]™[‹š[Ê
+Kˆ\™Ù]Ý\Ù\—ÚY‹š[Ê
+Kˆ™]Z[È‹š[Ê
+Kˆ˜Ü™X]YØ]‹š[Ê
+KˆKˆ›ÝÜÎˆ™XÈVÝ™XÈVÂˆ“•S‹š[Ê
+Kˆ˜]]›ÙÚ[—Ù˜Z[Y‹š[Ê
+Kˆ“•S‹š[Ê
+Kˆ™[XZ[X[›˜P^[\K\ÝÛ›ÝOW[šÛ›ÝÛ—ˆ‹š[Ê
+KˆŒŒ‹LKLMÈLŽŒŒ‹š[Ê
+KˆWKˆNÂˆ]œÛÛŽˆÙ\™WÚœÛÛŽŽ•˜[YHHÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	˜]Y]Ü›ÝÜ×ÚœÛÛŠ	œ™\Ý[
+JK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJœÛÛ–ÌVÈ˜XÝÜ—Ý\Ù\—ÚY—KÙ\™WÚœÛÛŽŽ•˜[YNŽ“[
+NÂˆ\ÜÙ\Ù\HJœÛÛ–ÌVÈ\™Ù]Ý\Ù\—ÚY—KÙ\™WÚœÛÛŽŽ•˜[YNŽ“[
+NÂˆ\ÜÙ\Ù\HJœÛÛ–ÌVÈ™]™[—K˜]]›ÙÚ[—Ù˜Z[YŠNÂˆ\ÜÙ\Jˆ]Y]Ü›ÝÜ×ØÜÝŠ	œ™\Ý[
+K˜ÛÛZ[œÊ—™[XZ[X[›˜P^[\K\ÝÛ›ÝOW—[šÛ›ÝÛ———ˆŠBˆ
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙ\×ØWÜYÙWÚ[œÚYWÚ]×Û˜[YYÝšY]Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[È›ÙOÛÝÏØ›ÙOˆBˆBˆYÙH‹Ú[ËÞÛ˜[Y_HˆÂˆšY]ÎˆÚ[ˆ[ÈO’[ËÛ˜[Y_HOÚOˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊ›ÙOˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊO’[ËÛ˜[Y_HOÚOˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊÛÝÏˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙ\×ÙY˜][ØÛÛ\Û™[ÜÛÝ×Ø[™Û™\ÝYØÛÛ\Û™[Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[[™[Âˆ[ÈÙXÝ[ÛˆÛ\ÜÏHœ[™[ÛÝÏÜÙXÝ[ÛˆBˆBˆÛÛ\Û™[˜YÙHÂˆ›ÜÈÈ^ˆÝš[™ÈBˆ[ÈÝ›Û™ÏžÝ^OÜÝ›Û™ÏˆBˆBˆYÙH‹ÜÝ]\ÈˆÂˆ[Âˆ[™[˜YÙH^H”™XYHˆÏÔ[™[‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊÙXÝ[ÛˆÛ\ÜÏWœ[™[ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊÝ›Û™Ï”™XYOÜÝ›Û™ÏˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊÛÝÏˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ˜[Y]\×Ü›Ý]WÝ˜[Y\×Ý\ÙYØžWÝ\YÝšY]×ØÛÛ\Û™[Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[Ü™Y][™ÈÂˆ›ÜÈÈ^ˆÝš[™ÈBˆ[ÈÝ›Û™ÏžÝ^OÜÝ›Û™ÏˆBˆBˆYÙH‹Ú[ËÞÛ˜[Y_HˆÂˆ[ÈÜ™Y][™È^HžÛ˜[Y_HˆÏˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ˜[Y]\×Ý\YÜYÙWÙ]WÙšY[Øš[™[™ÜÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆYÙH‹ØÝ\ÝÛY\œËÞÛ˜[Y_HˆÂˆØYÝ\ÝÛY\ˆHÜ[Ý\ÝÛY\ˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÈÒT‘H˜[YHH›˜[YBˆBˆ[ÈOžØÝ\ÝÛY\‹›˜[Y_OÚOˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÜYÙWÙ]JšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—Ý\YÜYÙWÙ]WÙšY[
+
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆYÙH‹ØÝ\ÝÛY\œËÞÛ˜[Y_HˆÂˆØYÝ\ÝÛY\ˆHÜ[Ý\ÝÛY\ˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÈÒT‘H˜[YHH›˜[YBˆBˆ[ÈOžØÝ\ÝÛY\‹™[XZ[OÚOˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÜYÙWÙ]JšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ˜[Y]\×Ý\YÜYÙWØÛÛXÝ[Û—ÛÛÜÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆYÙH‹ØÝ\ÝÛY\œÈˆÂˆØYÝ\ÝÛY\œÈHÜ[Ý\ÝÛY\–×OˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÂˆBˆ[Âˆ[‚ˆ›ÜˆÝ\ÝÛY\ˆ[ˆÝ\ÝÛY\œÈÂˆOžØÝ\ÝÛY\‹›˜[Y_OÛO‚ˆBˆÝ[‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÜYÙWÙ]JšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ˜[Y]\×Ý\YÜYÙWÙš[\œ×Ø[™Ü™Z™XÝ×Ý[šÛ›ÝÛ—ÙšY[Ê
+HÂˆ]˜[YÜÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆXÝ]™Nˆ›ÛÛY˜][YBˆBˆYÙH‹ØÝ\ÝÛY\œÈˆÂˆš[\ˆÈ˜[YHXÝ]™HBˆØYÝ\ÝÛY\œÈHÜ[Ý\ÝÛY\–×OˆÂˆÑSPÕY˜[YKXÝ]™H”“ÓHÝ\ÝÛY\œÂˆBˆ[ÈžÙš[\—Û˜[Y_OÜˆBˆBˆˆÎÂˆ]˜[YÜ›ÙÜ˜[HH\œÙJ	›^
+˜[YÜÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÜYÙWÙ]J™š[\œËžž[‹	˜[YÜ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê™š[\œËžž[‹	˜[YÜ›ÙÜ˜[JJNÂ‚ˆ][˜[YÜÛÝ\˜ÙHH˜[YÜÛÝ\˜ÙKœ™\XÙJ›˜[YHXÝ]™H‹\Ù\›˜[YHXÝ]™HŠNÂˆ][˜[YÜ›ÙÜ˜[HH\œÙJ	›^
+	š[˜[YÜÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÜYÙWÙ]J™š[\œËžž[‹	š[˜[YÜ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Û›Û—Ø\œ˜^WÜYÙWØÛÛXÝ[Û—ÛÛÜÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆYÙH‹ØÝ\ÝÛY\œÈˆÂˆØYÝ\ÝÛY\ˆHÜ[Ý\ÝÛY\ˆÂˆÑSPÕY˜[YH”“ÓHÝ\ÝÛY\œÂˆBˆ[Âˆ›ÜˆÝ\ÝÛY\ˆ[ˆÝ\ÝÛY\ˆÂˆžØÝ\ÝÛY\‹›˜[Y_OÜ‚ˆBˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÜYÙWÙ]JšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—ÝšY]×Ý˜[Y\Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆYÙH‹Ú[ÈˆÂˆ[ÈžÛZ\ÜÚ[™ßOÜˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ü›Ý]WÝ˜[Y\×ÝÚ]Ø[—Ú[˜ÛÛ\]X›WØÛÛ\Û™[Ü›Ü\WÝ\J
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[ÛÝ[\ˆÂˆ›ÜÈÈÛÝ[ˆ[Bˆ[ÈÝ›Û™ÏžØÛÝ[OÜÝ›Û™ÏˆBˆBˆYÙH‹Ú[ËÞÛ˜[Y_HˆÂˆ[ÈÛÝ[\ˆÛÝ[HžÛ˜[Y_HˆÏˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×ØÛÛ\Û™[ØÛÛ[ÝÚ]Ý]ØWÙY˜][ÜÛÝ
+
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[[™[Âˆ[ÈÙXÝ[ÛˆÏˆBˆBˆYÙH‹ÜÝ]\ÈˆÂˆ[È[™[•[™^XÝYÛÛ[ÜÔ[™[ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙ\×Û˜[YYØÛÛ\Û™[ÜÛÝÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[^[Ý]Âˆ[ÂˆXY\ÛÝ˜[YOHšXY\ˆˆÏÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ^[Ý]‚ˆÛÝ˜[YOHšXY\ˆO‘\Ú›Ø\™ÚOÜÛÝ‚ˆÛÛ[Ü‚ˆÓ^[Ý]‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXY\O‘\Ú›Ø\™ÚOÚXY\ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXZ[ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊÛÛ[ÜˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊÛÝŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ[ÝÜ×ØÛÛ\Û™[ÜÛÝ×ÝÚ]Ý]ØWÜYÙWÝšY]×Û^[Ý]
+
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[\Ú›Ø\™[™[Âˆ[ÂˆÙXÝ[Û‚ˆXY\ÛÝ˜[YOHšXY\ˆO‘\Ú›Ø\™ÚOÜÛÝÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆÜÙXÝ[Û‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ\Ú›Ø\™[™[‚ˆÛÝ˜[YOHšXY\ˆOÝ\ÝÛH\Ú›Ø\™ÚOÜÛÝ‚ˆ”™]\ØX›HÛÛ[Ü‚ˆÑ\Ú›Ø\™[™[‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊ˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊÝ\ÝÛH\Ú›Ø\™ŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊ”™]\ØX›HÛÛ[ˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ\Ù\×Û˜[YYØÛÛ\Û™[ÜÛÝÙ˜[˜XÚÜ×ÝÚ[—Û›ÝÛÝ™\œšY[Š
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[^[Ý]Âˆ[ÂˆXY\ÛÝ˜[YOHšXY\ˆO‘Y˜][XY[™ÏÚOÜÛÝÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ^[Ý]ÛÛ[ÜÓ^[Ý]‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXY\O‘Y˜][XY[™ÏÚOÚXY\ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXZ[ÛÛ[ÜÛXZ[ˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊÛÝŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÝ\YYÛ˜[YYØÛÛ\Û™[ÜÛÝÜ™\XÙ\×Ú]×Ù˜[˜XÚÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[^[Ý]Âˆ[ÈXY\ÛÝ˜[YOHšXY\ˆO‘Y˜][XY[™ÏÚOÜÛÝÚXY\ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ^[Ý]ÛÝ˜[YOHšXY\ˆOÝ\ÝÛHXY[™ÏÚOÜÛÝÓ^[Ý]‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXY\OÝ\ÝÛHXY[™ÏÚOÚXY\ˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊ‘Y˜][XY[™ÈŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—Û˜[YYØÛÛ\Û™[ÜÛÝÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[^[Ý]Âˆ[ÈXZ[ÛÝ˜[YOH˜ÛÛ[ˆÏÛXZ[ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆ[Âˆ^[Ý]ÛÝ˜[YOH™›ÛÝ\ˆ‘›ÛÝ\ÜÜÛÝÓ^[Ý]‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[Ê˜ÛÛ\Û™[Ëžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙ\×Û˜[YYÝšY]×ÜÛÝ×Ø[™Ù˜[˜XÚÜÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[Âˆ[‚ˆ›ÙO‚ˆXY\ÛÝ˜[YOHšXY\ˆO‘Y˜][XY[™ÏÚOÜÛÝÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆ›ÛÝ\ÛÝ˜[YOH™›ÛÝ\ˆ‘Y˜][›ÛÝ\ÜÛÝÙ›ÛÝ\‚ˆØ›ÙO‚ˆÚ[‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆšY]ÎˆÚ[ˆ[ÂˆÛÝ˜[YOHšXY\ˆOÝ\ÝÛHXY[™ÏÚOÜÛÝ‚ˆ‘\Ú›Ø\™ÛÛ[Ü‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ][HÛÛ\ÜÙWÜYÙWÝšY]Ê	œ›ÙÜ˜[K	œ›ÙÜ˜[KœYÙ\ÖÌJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXY\OÝ\ÝÛHXY[™ÏÚOÚXY\ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊXZ[ˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊ‘\Ú›Ø\™ÛÛ[ÜˆŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊ›ÛÝ\‘Y˜][›ÛÝ\Ù›ÛÝ\ˆŠJNÂˆ\ÜÙ\JZ[˜ÛÛZ[œÊÛÝŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—Û˜[YYÝšY]×ÜÛÝÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[Âˆ›ÙO‚ˆXY\ÛÝ˜[YOHšXY\ˆˆÏÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆØ›ÙO‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆšY]ÎˆÚ[ˆ[ÂˆÛÝ˜[YOH™›ÛÝ\ˆ‘›ÛÝ\ÜÜÛÝ‚ˆ‘\Ú›Ø\™ÛÛ[Ü‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙ\×ØÜYÛ^[Ý]ÝÚ]ÙÙ[™\˜]YØÛÛ[ÛX\šÙ\Š
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[˜YÙHÂˆ›ÜÈÈX™[ˆÝš[™ÈBˆ[ÈÝ›Û™ÏžÛX™[OÜÝ›Û™ÏˆBˆBˆšY]ÈÚ[Âˆ[Âˆ[›ÙO‚ˆXY\ÛÝ˜[YOHšXY[™ÈOÝ\ÝÛY\œÏÚOÜÛÝÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆ\ÚYOÛÝ˜[YOHš[‘Y˜][[ÜÜÛÝØ\ÚYO‚ˆ›ÛÝ\ÛÝ˜[YOH™›ÛÝ\ˆ‘Y˜][›ÛÝ\ÜÜÛÝÙ›ÛÝ\‚ˆØ›ÙOÚ[‚ˆBˆBˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ^[Ý]ˆÚ[ˆÛÝÈÂˆXY[™ÈÈ[È˜YÙHX™[H“XXÚ[™H™YÚ\Ý\ˆˆÏˆHBˆ[È[ÈÚÛÜÙHHXXÚ[™HÈÙYH]È]Z[ËÜˆHBˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ]^[Ý]HÜYÛ^[Ý]Ú[
+	œ›ÙÜ˜[K	œ›ÙÜ˜[K˜ÜYÖÌJK[Ü˜\
+
+NÂˆ\ÜÙ\J^[Ý]˜ÛÛZ[œÊÝ›Û™Ï“XXÚ[™H™YÚ\Ý\ÜÝ›Û™ÏˆŠJNÂˆ\ÜÙ\J^[Ý]˜ÛÛZ[œÊÔ•QÓVSÕUÐÓÓ•S•ÓPT’ÑTŠJNÂˆ\ÜÙ\J^[Ý]˜ÛÛZ[œÊÚÛÜÙHHXXÚ[™HÈÙYH]È]Z[ËÜˆŠJNÂˆ\ÜÙ\J[^[Ý]˜ÛÛZ[œÊ‘Y˜][[ŠJNÂˆ\ÜÙ\J^[Ý]˜ÛÛZ[œÊ‘Y˜][›ÛÝ\ˆŠJNÂˆ\ÜÙ\J[^[Ý]˜ÛÛZ[œÊÛÝŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×ØÜYÛ^[Ý]ÜÛÝ×ÝÚ]Ý]ØWÛX]Ú[™×Û^[Ý]
+
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[ÈXY\ÛÝ˜[YOHšXY[™ÈˆÏÚXY\XZ[ÛÝÏÛXZ[ˆBˆBˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]ÈBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ^[Ý]ˆÚ[ˆÛÝÈÈZ\ÜÚ[™ÈÈ[ÈÝ\ÝÛHÛÛ[ÜˆHHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂ‚ˆ]ÛÝ\˜ÙWÝÚ]Ý]Û^[Ý]HˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]ÈBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆÛÝÈÈXY[™ÈÈ[ÈOÝ\ÝÛY\œÏÚOˆHHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙWÝÚ]Ý]Û^[Ý]
+K[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂ‚ˆ]\XØ]WÜÛÝÈHˆÈ‚ˆšY]ÈÚ[Âˆ[ÂˆXY\ÛÝ˜[YOHšXY[™ÈˆÏÚXY\XZ[ÛÝÏÛXZ[‚ˆBˆBˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]ÈBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ^[Ý]ˆÚ[ˆÛÝÈÂˆXY[™ÈÈ[ÈO‘š\œÝXY[™ÏÚOˆHBˆXY[™ÈÈ[ÈO”ÙXÛÛ™XY[™ÏÚOˆHBˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+\XØ]WÜÛÝÊK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÜYÛ^[Ý]ÜÛÝØÛÛ[ØØ[››ÝÜ™XYØÜYÜ™XÛÜ™Ý˜[Y\Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[ÈXY\ÛÝ˜[YOHšXY[™ÈˆÏÚXY\XZ[ÛÝÏÛXZ[ˆBˆBˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]È˜[YNˆÝš[™ÊL
+HBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ^[Ý]ˆÚ[ˆÛÝÈÈXY[™ÈÈ[ÈOžØÝ\ÝÛY\‹›˜[Y_OÚOˆHHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÜYÛ^[Ý]ØÛÛ\Û™[×Ø\™WØÚXÚÙYÙ]™[—ÝÚ]Ý]ØWÜYÙWÝ\Ú[™×ÝWÝšY]Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆÛÛ\Û™[œ˜[™X\šÈÂˆ›ÜÈÈX™[ˆÝš[™ÈBˆ[ÈÝ›Û™ÏžÛX™[OÜÝ›Û™ÏˆBˆBˆšY]ÈÚ[Âˆ[ÂˆXY\ÛÝ˜[YOHšXY[™ÈˆÏœ˜[™X\šÈÏÚXY\XZ[ÛÝÏÛXZ[‚ˆBˆBˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]ÈBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ^[Ý]ˆÚ[ˆÛÝÈÈXY[™ÈÈ[ÈOÝ\ÝÛY\œÏÚOˆHHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆ\ÜÙ\J]˜[Y]WØÛÛ\Û™[ÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—ØÜYÛ^[Ý]ÝšY]Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÈYˆYš[X\žH]]ÈBˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÈ^[Ý]ˆZ\ÜÚ[™ÔÚ[BˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ù\XØ]WÛ˜[YYÝšY]×ÜÛÝÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[ÂˆXY\ÛÝ˜[YOHšXY\ˆˆÏÚXY\‚ˆXZ[ÛÝÏÛXZ[‚ˆBˆBˆYÙH‹Ù\Ú›Ø\™ˆÂˆšY]ÎˆÚ[ˆ[ÂˆÛÝ˜[YOHšXY\ˆO‘š\œÝÚOÜÛÝ‚ˆÛÝ˜[YOHšXY\ˆO”ÙXÛÛ™ÚOÜÛÝ‚ˆ‘\Ú›Ø\™ÛÛ[Ü‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ú[˜[YÛ˜[YYÝšY]×ØÛÛ\ÜÚ][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆšY]ÈÚ[Âˆ[È›ÙO“›ÈÛÛ[ÛÝØ›ÙOˆBˆBˆYÙH‹ØÝ\ÝÛY\œÈˆÂˆšY]ÎˆZ\ÜÚ[™ÔÚ[ˆ[ÈOÝ\ÝÛY\œÏÚOˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WÝšY]ÜÊšY]ÜËžž[‹	œ›ÙÜ˜[JJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ø\WÙXÛ\˜][Ûœ×Ø\×ÛÜ[˜\J
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ\HÝ\ÝÛY\’YHYX›HÝ\ÝÛY\œÈÈYˆÝ\ÝÛY\’Yš[X\žH]]È˜[YNˆÝš[™ÊL
+H™\]Z\™YH\HÑU‹ØÝ\ÝÛY\œËÞÚYWˆÈ[œ]ÈYˆÝ\ÝÛY\’YHÝ]]Ý\ÝÛY\ˆ\œ›ÜœÈÈ›Ý›Ý[™HH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]ØÝ[Y[H›Ü›X]ÛÜ[˜\J	œ›ÙÜ˜[JNÂˆ\ÜÙ\JØÝ[Y[˜ÛÛZ[œÊ—›Ü[˜\WŽ—ŒËŒŒ×ˆŠJNÂˆ\ÜÙ\JØÝ[Y[˜ÛÛZ[œÊ—‹ØÝ\ÝÛY\œËÞÚYWˆŠJNÂˆ\ÜÙ\JØÝ[Y[˜ÛÛZ[œÊ—Žž×™\ØÜš\[Û—Ž—“›Ý›Ý[™ŸHŠJNÂˆ\ÜÙ\JØÝ[Y[˜ÛÛZ[œÊˆËØÛÛ\Û™[ËÜØÚ[X\ËÐÝ\ÝÛY\ˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ý\YÝ\\ØÜš\ØÛY[Ùœ›ÛWØ\WØ[™Ü™XÛÜ™Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝY™\ÜÈÈÚ]NˆÝš[™ÈH\HÑU‹ØÝ\ÝÛY\œËÞÚYWˆÈ[œ]ÈYˆY\›NˆÝš[™ÏÈHÝ]]Y™\ÜÈ\œ›ÜœÈÈ›Ý›Ý[™HH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]ÛY[H›Ü›X]Ý\\ØÜš\ØÛY[
+	œ›ÙÜ˜[JNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ™^Ü[\™˜XÙHY™\ÜÈŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ˜\Þ[˜ÈÙ]ØÝ\ÝÛY\œ×ÚYŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ™[˜ÛÙUT’PÛÛ\Û™[
+Ýš[™Ê\˜[\ËšY
+JHŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ”›ÛZ\ÙOY™\ÜÏˆŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ›™]ÈT“ÙX\˜Ú\˜[\Ê
+HŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ–™[\˜P\Q\œ›ÜˆŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ–™[\˜P\Q\œ›ÜÛÙHH“›Ý›Ý[™ˆ
+Ýš[™È	ˆßJHŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ™œ›ÛT™\ÜÛœÙJ™\ÜÛœÙJHŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊœ^[ØY™\œ›Ü‹›Y\ÜØYÙHŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ›Ü›X]×Ý\YØ\WÙ\œ›Ü—Ü^[ØY×Ù›Ü—ÛÜ[˜\WØ[™Ý\\ØÜš\
+
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝ›Ø›[HÈY\ÜØYÙNˆÝš[™ÈH\HÑU‹Ù˜Z[ˆÈÝ]]™\Ý[Ýš[™Ë›Ø›[Oˆ\œ›ÜœÈÈŒˆ˜[Y][ÛŽˆ›Ø›[HHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]Ü[˜\HH›Ü›X]ÛÜ[˜\J	œ›ÙÜ˜[JNÂˆ\ÜÙ\JÜ[˜\K˜ÛÛZ[œÊ—™]Z[×ˆŠJNÂˆ\ÜÙ\JÜ[˜\K˜ÛÛZ[œÊˆËØÛÛ\Û™[ËÜØÚ[X\ËÔ›Ø›[HŠJNÂˆ]ÛY[H›Ü›X]Ý\\ØÜš\ØÛY[
+	œ›ÙÜ˜[JNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ–™[\˜P\Q\œ›Ü”^[ØYÈŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ—•˜[Y][Û—Žˆ›Ø›[HŠJNÂˆ\ÜÙ\JÛY[˜ÛÛZ[œÊ™]Z[Îˆ]Z[È[™Yš[™YŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ\Ü]Ú\×ÚœÛÛ—Ø\WÚ[œ]Ý×ØWÝ\YÚ[™\Š
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[YNˆ[HÝ]][H›ˆXÚÊ˜[YNˆ[
+HOˆ[È™]\›ˆ˜[YHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÚXÚ×Ø\\Ê	œ›ÙÜ˜[JKš\×ÛÚÊ
+JNÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—’ÜÝˆØØ[ÜÝ—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜[YWŽŸH‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜ÛÛ[Ý\K˜\XØ][Û‹ÚœÛÛŽÈÚ\œÙ]]]‹NŠNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜›ÙKˆŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆ\Ü]Ú\×ÜÝš[™×ÚÙ^YYÛX\Ø\WÚ[œ]Ø[™ÛÝ]]
+
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÜÙ][™Ü×ˆÈ[™\ˆXÚÈ[œ]ÈÙ][™ÜÎˆX\Ýš[™Ë[ˆHÝ]]X\Ýš[™Ë[ˆH›ˆXÚÊÙ][™ÜÎˆX\Ýš[™Ë[ŠHOˆX\Ýš[™Ë[ˆÈ™]\›ˆÙ][™ÜÈH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÚXÚ×Ø\\Ê	œ›ÙÜ˜[JKš\×ÛÚÊ
+JNÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÜÙ][™ÜÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×œÙ][™Ü×Žž×œÝ[™\™ŽŒLœ™[Z][WŽŒŒ_H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ]›ÙNˆÙ\™WÚœÛÛŽŽ•˜[YHHÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	œ™\ÜÛœÙK˜›ÙJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJ›ÙKÙ\™WÚœÛÛŽŽšœÛÛˆJÈœ™[Z][HŽˆŒœÝ[™\™ŽˆLJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™]\›œ×ÜÝXÝ\™YÚœÛÛ—Ù›Ü—Ú[˜[YØ\WÚ[œ]
+
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[YNˆ[HÝ]][H›ˆXÚÊ˜[YNˆ[
+HOˆ[È™]\›ˆ˜[YHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————žßH‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\Ë
+NÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜ÛÛ[Ý\K˜\XØ][Û‹ÚœÛÛŽÈÚ\œÙ]]]‹NŠNÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ—˜ÛÙWŽ—˜Y™\]Y\ÝˆŠJNÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ›Z\ÜÚ[™ÈTH[œ]ŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[œÝ\ÜYØ\WÜ™\]Y\ÝÛYYXWÝ\\Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[YNˆÝš[™ÈHÝ]]Ýš[™ÈH›ˆXÚÊ˜[YNˆÝš[™ÊHOˆÝš[™ÈÈ™]\›ˆ˜[YHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ^ÜZ[————š[È‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËMJNÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ•[œÝ\ÜYYYXU\HŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆXÛÙ\×ÚœÛÛ—ÜÝš[™Ü×ÝÚ]ØÛÛ[X\×ØÛÛÛœ×Ø[™Ù\ØØ\\Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[YNˆÝš[™ÈHÝ]]Ýš[™ÈH›ˆXÚÊ˜[YNˆÝš[™ÊHOˆÝš[™ÈÈ™]\›ˆ˜[YHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜[YWŽ—˜KŽˆœ][ÝY—ŸH‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜›ÙK—˜KŽˆœ][ÝY—ˆŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆXÛÙ\×ÚœÛÛ—Ø›ÛÛX[œ×Ø[™Û[ÛÜ[ÛœÊ
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]ÈXÝ]™Nˆ›ÛÛÈHÝ]]›ÛÛÈH›ˆXÚÊXÝ]™Nˆ›ÛÛÊHOˆ›ÛÛÈÈ™]\›ˆXÝ]™HH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜XÝ]™WŽ›[H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜›ÙK›[ŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆXÛÙ\×Ø[™ÜÙ\šX[^™\×Ý\YÚœÛÛ—Ø\œ˜^\Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[Y\Îˆ[×HHÝ]][×HH›ˆXÚÊ˜[Y\Îˆ[×JHOˆ[×HÈ™]\›ˆ˜[Y\ÈH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÚXÚ×Ø\\Ê	œ›ÙÜ˜[JKš\×ÛÚÊ
+JNÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜[Y\×Ž–ÌK‹×_H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙK˜›ÙK–ÌK‹×HŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆXÛÙ\×Ø[™ÜÙ\šX[^™\×Û™\ÝYÜÝXÝ\™YØ\WÛØš™XÝÊ
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝY™\ÜÈÈÚ]NˆÝš[™ÈHÝXÝÝ\ÝÛY\’[œ]È˜[YNˆÝš[™ÈY™\ÜÎˆY™\ÜÈH\HÔÕ‹ØÝ\ÝÛY\œ×ˆÈ[™\ˆXÚÈ[œ]ÈÝ\ÝÛY\ŽˆÝ\ÝÛY\’[œ]HÝ]]Ý\ÝÛY\’[œ]H›ˆXÚÊÝ\ÝÛY\ŽˆÝ\ÝÛY\’[œ]
+HOˆÝ\ÝÛY\’[œ]È™]\›ˆÝ\ÝÛY\ˆH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÚXÚ×Ø\\Ê	œ›ÙÜ˜[JKš\×ÛÚÊ
+JNÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕØÝ\ÝÛY\œÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜Ý\ÝÛY\—Žž×›˜[YWŽ—[›˜W‹˜Y™\Ü×Žž×˜Ú]WŽ—™\›[—Ÿ__H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒ
+NÂˆ]›ÙNˆÙ\™WÚœÛÛŽŽ•˜[YHHÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	œ™\ÜÛœÙK˜›ÙJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJ›ÙVÈ›˜[YH—K[›˜HŠNÂˆ\ÜÙ\Ù\HJ›ÙVÈ˜Y™\ÜÈ—VÈ˜Ú]H—K™\›[ˆŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—Ø[™ÛZ\ÜÚ[™×Ü™XÛÜ™ÙšY[Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝÝ\ÝÛY\’[œ]È˜[YNˆÝš[™È[XZ[ˆ[XZ[ÈH\HÔÕ‹ØÝ\ÝÛY\œ×ˆÈ[™\ˆXÚÈ[œ]ÈÝ\ÝÛY\ŽˆÝ\ÝÛY\’[œ]HÝ]]Ý\ÝÛY\’[œ]H›ˆXÚÊÝ\ÝÛY\ŽˆÝ\ÝÛY\’[œ]
+HOˆÝ\ÝÛY\’[œ]È™]\›ˆÝ\ÝÛY\ˆH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ][šÛ›ÝÛˆH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕØÝ\ÝÛY\œÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜Ý\ÝÛY\—Žž×›˜[YWŽ—[›˜W‹[šÛ›ÝÛ—ŽY__H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	[šÛ›ÝÛ‹	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\Ë
+NÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ[šÛ›ÝÛˆšY[ŠJNÂ‚ˆ]Z\ÜÚ[™ÈH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕØÝ\ÝÛY\œÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜Ý\ÝÛY\—Žžß_H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	›Z\ÜÚ[™Ë	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\Ë
+NÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ›Z\ÜÚ[™ÈšY[ŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆX\×ÙXÛ\™YÜ™\Ý[Ù\œ›Üœ×Ý×ÚÜ™\ÜÛœÙ\Ê
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÑU‹ØÝ\ÝÛY\œ×ˆÈ[™\ˆš[™[œ]ÈHÝ]]™\Ý[Ýš[™ËÝš[™Ïˆ\œ›ÜœÈÈ›Ý›Ý[™HH›ˆš[™
+
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÈ™]\›ˆ\œŠ“›Ý›Ý[™ŠHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+‘ÑUØÝ\ÝÛY\œÈÌKŒW———ˆŠK[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™š[™‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\Ë
+NÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ—˜ÛÙWŽ—“›Ý›Ý[™ˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™]\›œ×Ú[\›˜[Ù\œ›Ü—Ù›Ü—Ý[™XÛ\™YÜ™\Ý[Ù\œ›ÜœÊ
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÑU‹ØÝ\ÝÛY\œ×ˆÈ[™\ˆš[™[œ]ÈHÝ]]™\Ý[Ýš[™ËÝš[™Ïˆ\œ›ÜœÈÈ›Ý›Ý[™HH›ˆš[™
+
+HOˆ™\Ý[Ýš[™ËÝš[™ÏˆÈ™]\›ˆ\œŠ“Ý\—ŠHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+‘ÑUØÝ\ÝÛY\œÈÌKŒW———ˆŠK[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™š[™‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËL
+NÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ’[\›˜[Ù\™\‘\œ›ÜˆŠJNÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊ[›X\YTH\œ›ÜˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™]\›œ×Ý\YÙ]Z[×Ù›Ü—ÙXÛ\™YØ\WÙ\œ›ÜœÊ
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝ›Ø›[HÈY\ÜØYÙNˆÝš[™ÈH\HÑU‹Ù˜Z[ˆÈ[™\ˆ˜Z[[œ]ÈHÝ]]™\Ý[Ýš[™Ë›Ø›[Oˆ\œ›ÜœÈÈŒˆ˜[Y][ÛŽˆ›Ø›[HHH›ˆ˜Z[
+
+HOˆ™\Ý[Ýš[™Ë›Ø›[OˆÈ™]\›ˆ\œŠ›Ø›[HÈY\ÜØYÙNˆš[˜[YÝ\ÝÛY\—ˆJHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÚXÚ×Ø\\Ê	œ›ÙÜ˜[JKš\×ÛÚÊ
+JNÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+‘ÑUÙ˜Z[ÌKŒW———ˆŠK[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™˜Z[‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\ËŒŠNÂˆ]›ÙNˆÙ\™WÚœÛÛŽŽ•˜[YHHÙ\™WÚœÛÛŽŽ™œ›ÛWÜÝŠ	œ™\ÜÛœÙK˜›ÙJK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJ›ÙVÈ™\œ›Üˆ—VÈ˜ÛÙH—K•˜[Y][ÛˆŠNÂˆ\ÜÙ\Ù\HJ›ÙVÈ™\œ›Üˆ—VÈ™]Z[È—VÈ›Y\ÜØYÙH—Kš[˜[YÝ\ÝÛY\ˆŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ø\WÙ\œ›Ü—Ü^[ØYÝ]ÙÙ\×Û›ÝÛX]ÚÜ™\Ý[Ù\œ›Ü—Ý\J
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆœÝXÝ›Ø›[HÈY\ÜØYÙNˆÝš[™ÈHÝXÝÝ\ˆÈÛÙNˆ[H\HÑU‹Ù˜Z[ˆÈ[™\ˆ˜Z[[œ]ÈHÝ]]™\Ý[Ýš[™Ë›Ø›[Oˆ\œ›ÜœÈÈŒˆ˜[Y][ÛŽˆÝ\ˆHH›ˆ˜Z[
+
+HOˆ™\Ý[Ýš[™Ë›Ø›[OˆÈ™]\›ˆ\œŠ›Ø›[HÈY\ÜØYÙNˆš[˜[YˆJHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\œ›ÜœÈHÚXÚ×Ø\\Ê	œ›ÙÜ˜[JK[Ü˜\Ù\œŠ
+NÂˆ\ÜÙ\J\œ›ÜœÂˆš]\Š
+Bˆ˜[žJ\œ›ÜŸ\œ›Ü‹›Y\ÜØYÙK˜ÛÛZ[œÊ™Ù\È›ÝX]Ú[™\ˆ\œ›Üˆ\HŠJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×ÛØš™XÝÚœÛÛ—Ù›Ü—ÜØØ[\—Ú[œ]
+
+HÂˆ]›ÙÜ˜[HH\œÙJˆ	›^
+ˆ˜\HÔÕ‹ÙXÚ×ˆÈ[™\ˆXÚÈ[œ]È˜[YNˆÝš[™ÈHÝ]]Ýš[™ÈH›ˆXÚÊ˜[YNˆÝš[™ÊHOˆÝš[™ÈÈ™]\›ˆ˜[YHH›ˆXZ[Š
+HÈH‹ˆ
+Bˆ[Ü˜\
+
+Kˆ
+Bˆ[Ü˜\
+
+NÂˆ]\HH	œ›ÙÜ˜[K˜\\ÖÌNÂˆ]™\]Y\ÝH™[\˜WÝÙXŽŽœ\œÙWÜ™\]Y\Ý
+ˆ”ÔÕÙXÚÈÌKŒW—ÛÛ[U\Nˆ\XØ][Û‹ÚœÛÛ————ž×˜[YWŽž×›™\ÝYŽY__H‹ˆ
+Bˆ[Ü˜\
+
+NÂˆ]™\ÜÛœÙHH\Ü]ÚØ\J	œ›ÙÜ˜[K\K™XÚÈ‹	œ™\]Y\Ý	’\ÚX\Ž›™]Ê
+K›Û™JNÂˆ\ÜÙ\Ù\HJ™\ÜÛœÙKœÝ]\Ë
+NÂˆ\ÜÙ\J™\ÜÛœÙK˜›ÙK˜ÛÛZ[œÊœØØ[\ˆ”ÓÓˆ˜[YHŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ý[šÛ›ÝÛ—ØÛÛ™šYÝ\™YØÜYØÛÛ[[œÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HXXÚ[™\ÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆB‚ˆÜYXXÚ[™HOˆXXÚ[™\ÈÂˆšY]ÈÈšY[ÈÈZ\ÜÚ[™ÈHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÜYÊ\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÚ\™YØÜYÝšY]×ÙšY[×Ùš]™WÛ\ÝØ[™Ù›Ü›WÙY˜][Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ[XZ[ˆ[XZ[ÂˆXÝ]™Nˆ›ÛÛY˜][YBˆB‚ˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆšY]ÈÈšY[ÈÈ˜[YH[XZ[XÝ]™HHBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØÜYÊ\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆ]ÜYH	œ›ÙÜ˜[K˜ÜYÖÌNÂˆ]X›HH›ÙÜ˜[BˆX›\Âˆš]\Š
+Bˆ™š[™
+X›_X›K›˜[YHOH˜Ý\ÝÛY\œÈŠBˆ[Ü˜\
+
+NÂˆ]›Ü›HHÙ[™\˜]YØÜYÙ›Ü›JˆÜYˆX›Kˆ	œØÚ[XKˆ˜[ÙKˆÜYÙ[™\˜][ÛÛÛ^Âˆ^[Ý]Ú[ˆ›Û™KˆÜÜ™ŽˆÜÜ™”›ÝXÝ[ÛŽŽ›™]Ê\ÝXÜÜ™ˆŠKˆ]Y]ÝX›Nˆ›Û™Kˆ]Y]ØÚZ[Žˆ˜[ÙKˆKˆ
+NÂˆ\ÜÙ\Ù\HJˆ›Ü›K™›Ü›Bˆ™šY[Âˆš]\Š
+Bˆ›X\
+šY[šY[›˜[YK˜\×ÜÝŠ
+JBˆ˜ÛÛXÝŽ™XÏÏŠ
+KˆÈ›˜[YH‹™[XZ[‹˜XÝ]™H—Bˆ
+NÂˆ]\ÝHÛÛ™šYÝ\™YØÜYØÛÛ[[œÊ	œ›ÙÜ˜[K	œØÚ[XKÜY	˜ÜYšY]Ë™šY[ËX›_ÂˆX›Bˆ˜ÛÛ[[œÂˆš]\Š
+Bˆ›X\
+ÛÛ[[ŸÛÛ[[‹›˜[YK˜ÛÛ™J
+JBˆ˜ÛÛXÝ
+
+BˆJNÂˆ\ÜÙ\Ù\HJ\ÝÈ›˜[YH‹™[XZ[‹˜XÝ]™H—JNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ú[˜[YÜÛÙÙ[]WØÛÛ[[œÊ
+HÂˆ]Z\ÜÚ[™×ÜÛÝ\˜ÙHHˆÈ‚ˆX›HXXÚ[™\ÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆB‚ˆÜYXXÚ[™HOˆXXÚ[™\ÈÂˆÛÙÙ[]HÈÛÛ[[Žˆ[]YØ]BˆBˆˆÎÂˆ]Z\ÜÚ[™×Ü›ÙÜ˜[HH\œÙJ	›^
+Z\ÜÚ[™×ÜÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]Z\ÜÚ[™×ÜØÚ[XHHZ[ÜØÚ[XJ	›Z\ÜÚ[™×Ü›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÜYÊˆ\Ýžž[‹ˆ	›Z\ÜÚ[™×Ü›ÙÜ˜[Kˆ	›Z\ÜÚ[™×ÜØÚ[XBˆ
+JNÂ‚ˆ]Ü›Û™×Ý\WÜÛÝ\˜ÙHHˆÈ‚ˆX›HXXÚ[™\ÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™Yˆ[]YØ]ˆÝš[™ÏÂˆB‚ˆÜYXXÚ[™HOˆXXÚ[™\ÈÂˆÛÙÙ[]HÈÛÛ[[Žˆ[]YØ]BˆBˆˆÎÂˆ]Ü›Û™×Ý\WÜ›ÙÜ˜[HH\œÙJ	›^
+Ü›Û™×Ý\WÜÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]Ü›Û™×Ý\WÜØÚ[XHHZ[ÜØÚ[XJ	Ü›Û™×Ý\WÜ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØÜYÊˆ\Ýžž[‹ˆ	Ü›Û™×Ý\WÜ›ÙÜ˜[Kˆ	Ü›Û™×Ý\WÜØÚ[XBˆ
+JNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ü›ÝXÝYÜ›Ý]\×ÝÚ]Ý]Ø]]ÙYš[š][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆYÙH‹ØYZ[ˆˆÂˆ™\]Z\™\È]]ˆ[ÂˆOYZ[ÚO‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×ÜØÛÜYØÜYÜ\›Z\ÜÚ[Ûœ×ÝÚ]Ý]Ø]]ÙYš[š][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆX›HÝ\ÝÛY\œÈÂˆYˆYš[X\žH]]Âˆ˜[YNˆÝš[™ÊL
+H™\]Z\™YˆB‚ˆÜYÝ\ÝÛY\ˆOˆÝ\ÝÛY\œÈÂˆ\›Z]ÈÜ™X]H˜Ý\ÝÛY\œË˜Ü™X]H‚ˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ü›ÝXÝYÙ›Ü›WØXÝ[Û—ÝÚ]Ý]Ø]]ÙYš[š][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆ›Ü›HÝ\ÝÛY\‘›Ü›HÂˆšY[˜[YNˆÝš[™ÈÂˆ™\]Z\™YˆBˆXÝ[ÛˆØ]™HÂˆ™\]Z\™\È]]ˆ\›Z]È˜Ý\ÝÛY\œËœØ]™H‚ˆBˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ü›ÝXÝYØ\WÝÚ]Ý]Ø]]ÙYš[š][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆ\HÑU‹ØYZ[ˆˆÂˆ™\]Z\™\È]]ˆÝ]]Ýš[™ÂˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆXØÙ\×Ü\œÚ\Ý[Ø]]ÝX›\Ê
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆ]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆÙ\ÜÚ[ÛœÎˆ]]ÜÙ\ÜÚ[ÛœÂˆ\›Z\ÜÚ[ÛœÎˆ\Ù\—Ü\›Z\ÜÚ[ÛœÂˆ›Û\Îˆ\Ù\—Ü›Û\Âˆ›ÛWÜ\›Z\ÜÚ[ÛœÎˆ›ÛWÜ\›Z\ÜÚ[ÛœÂˆB‚ˆX›H\Ù\œÈÂˆYˆYš[X\žH]]Âˆ[XZ[ˆ[XZ[™\]Z\™Yˆ\ÜÝÛÜ™Ú\ÚˆÝš[™ÊMJH™\]Z\™YˆB‚ˆX›H]]ÜÙ\ÜÚ[ÛœÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™YˆÚÙ[—Ú\ÚˆÝš[™Ê
+H™\]Z\™Yˆ^\™\×Ø]ˆ[Y\Ý[\™\]Z\™YˆB‚ˆX›H\Ù\—Ü\›Z\ÜÚ[ÛœÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™Yˆ\›Z\ÜÚ[ÛŽˆÝš[™ÊL
+H™\]Z\™YˆB‚ˆX›H\Ù\—Ü›Û\ÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™Yˆ›ÛNˆÝš[™ÊL
+H™\]Z\™YˆB‚ˆX›H›ÛWÜ\›Z\ÜÚ[ÛœÈÂˆYˆYš[X\žH]]Âˆ›ÛNˆÝš[™ÊL
+H™\]Z\™Yˆ\›Z\ÜÚ[ÛŽˆÝš[™ÊL
+H™\]Z\™YˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×Ü\X[Ø]]Ü›ÛWØÛÛ™šYÝ\˜][ÛŠ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆ]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆ›Û\Îˆ\Ù\—Ü›Û\ÂˆB‚ˆX›H\Ù\œÈÂˆYˆYš[X\žH]]Âˆ[XZ[ˆ[XZ[™\]Z\™Yˆ\ÜÝÛÜ™Ú\ÚˆÝš[™ÊMJH™\]Z\™YˆB‚ˆX›H\Ù\—Ü›Û\ÈÂˆYˆYš[X\žH]]Âˆ\Ù\Žˆ\Ù\ˆ™\]Z\™Yˆ›ÛNˆÝš[™ÊL
+H™\]Z\™YˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™Z™XÝ×ØÚZ[™YØ]Y]ÝÚ]Ý]Ú\ÚØÛÛ[[œÊ
+HÂˆ]ÛÝ\˜ÙHHˆÈ‚ˆ]]\Ù\œÈÂˆX›Nˆ\Ù\œÂˆ]Y]ˆ]Y]ÛÙÂˆ]Y]ØÚZ[ŽˆYBˆB‚ˆX›H\Ù\œÈÂˆYˆYš[X\žH]]Âˆ[XZ[ˆ[XZ[™\]Z\™Yˆ\ÜÝÛÜ™Ú\ÚˆÝš[™ÊMJH™\]Z\™YˆB‚ˆX›H]Y]ÛÙÈÂˆYˆYš[X\žH]]ÂˆXÝÜ—Ý\Ù\—ÚYˆ[Âˆ]™[ˆÝš[™ÊL
+H™\]Z\™Yˆ\™Ù]Ý\Ù\—ÚYˆ[Âˆ]Z[ÎˆÝš[™ÊL
+H™\]Z\™YˆÜ™X]YØ]ˆ[Y\Ý[\Y˜][›ÝÂˆBˆˆÎÂˆ]›ÙÜ˜[HH\œÙJ	›^
+ÛÝ\˜ÙJK[Ü˜\
+
+JK[Ü˜\
+
+NÂˆ]ØÚ[XHHZ[ÜØÚ[XJ	œ›ÙÜ˜[JK[Ü˜\
+
+NÂˆ\ÜÙ\J]˜[Y]WØ]]
+\Ýžž[‹	œ›ÙÜ˜[K	œØÚ[XJJNÂˆB‚ˆÖÝ\ÝBˆ›ˆ™XY×Ü›Ú™XÝØØ\Xš[]WÙÜ˜[Ê
+HÂˆ]Ü˜[ÈH›Ú™XÝØØ\Xš[]WÙÜ˜[Ê‹‹‹Ù^[\\ËØØ\Xš[]Y\Ëžž[ŠBˆ[Ü˜\
+
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÜ˜[Ë˜ÛÛZ[œÊ‘]X˜\ÙHŠJNÂˆ\ÜÙ\JÜ˜[Ë˜ÛÛZ[œÊ“™]ÛÜšÈŠJNÂˆ\ÜÙ\JÜ˜[Ë˜ÛÛZ[œÊÛÛœÛÛHŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆY˜][×Ü›Ú™XÝÙš[WÜÞ\Ý[WÜÛXÞWÝ×Ü›Ú™XÝÜ›ÛÝ
+
+HÂˆ]ÛXÞHH›Ú™XÝÙš[\Þ\Ý[WÜÛXÞJ‹‹‹Ù^[\\ËÙš[\Þ\Ý[WØ\Kžž[ŠBˆ[Ü˜\
+
+Bˆ[Ü˜\
+
+NÂˆ]›Ú™XÝÜ›ÛÝHœÎŽ˜Ø[›ÛšXØ[^™J‹‹ˆŠK[Ü˜\
+
+NÂˆ\ÜÙ\JÛXÞKœ™XYÜ›ÛÝËš]\Š
+K˜[žJ›ÛÝ›ÛÝOH	œ›Ú™XÝÜ›ÛÝ
+JNÂˆ\ÜÙ\JÛXÞKÜš]WÜ›ÛÝËš\×Ù[\J
+JNÂˆB‚ˆÖÝ\ÝBˆ›ˆY˜][×Ü›Ú™XÝÛ™]ÛÜš×ÜÛXÞWÝ×Û›×Ø[ÝÙYÚÜÝÊ
+HÂˆ]ÛXÞHH›Ú™XÝÛ™]ÛÜš×ÜÛXÞJ‹‹‹Ù^[\\ËÙš[\Þ\Ý[WØ\Kžž[ŠBˆ[Ü˜\
+
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÛXÞK˜[ÝÙYÚÜÝËš\×Ù[\J
+JNÂˆ\ÜÙ\Ù\HJÛXÞK[Y[Ý]Û\ËWÌ
+NÂˆ\ÜÙ\Ù\HJÛXÞK›X^Ü™\ÜÛœÙWØž]\ËWÌÍMÍŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆY˜][×Ü›Ú™XÝÜ›ØÙ\Ü×ÜÛXÞWÝ×Û›×Ø[ÝÙYØÛÛ[X[™Ê
+HÂˆ]ÛXÞHH›Ú™XÝÜ›ØÙ\Ü×ÜÛXÞJ‹‹‹Ù^[\\ËÙš[\Þ\Ý[WØ\Kžž[ŠBˆ[Ü˜\
+
+Bˆ[Ü˜\
+
+NÂˆ\ÜÙ\JÛXÞK˜[ÝÙYØÛÛ[X[™Ëš\×Ù[\J
+JNÂˆ\ÜÙ\Ù\HJÛXÞK[Y[Ý]Û\ËWÌ
+NÂˆ\ÜÙ\Ù\HJÛXÞK›X^ÛÝ]]Øž]\ËWÌÍMÍŠNÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ[™\˜]\×Ü›Ú™XÝÝÚ]Ý\™Ù]Ü™[X\ÙWÝ™\œÚ[ÛŠ
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK][\]K^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆ]Ý]\ÈHÜ™X]WÜ›Ú™XÝ
+ˆ]×ÜÝŠ
+K[Ü˜\
+
+Kˆ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆ˜[ÙKˆÚ]ÛX\šXYŽˆYKˆÜYÝ[\]Nˆ˜[ÙKˆ]]Ý[\]Nˆ˜[ÙKˆ\Ú[™\Ü×Ý[\]Nˆ˜[ÙKˆÙX—ÜÜˆQUSÕÑP—ÔÔ•ˆÜÝÜÜˆQUSÕÑP—ÔÔ•ˆ]X˜\ÙWÚÜÝÜÜˆQUSÑUPTÑWÒÔÕÔÔ•ˆÜÝÜÜÙÚ]™[Žˆ˜[ÙKˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[Žˆ˜[ÙKˆKˆ
+NÂˆ\ÜÙ\Ù\HJÝ]\Ë^]ÛÙNŽ”ÕPÐÑTÔÊNÂ‚ˆ]ØÚÙ\™š[HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‘ØÚÙ\™š[HŠJK[Ü˜\
+
+NÂˆ]›Ú™XÝØÛÛ™šYÈHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Šž™[\˜KÛ[ŠJK[Ü˜\
+
+NÂˆ]›Ú™XÝÝ[YHHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š“Ò‘PÕÕSQWÐÔÔ×Ñ’SJJK[Ü˜\
+
+NÂˆ\ÜÙ\JØÚÙ\™š[K˜ÛÛZ[œÊ	™›Ü›X]JT‘È‘STWÔ‘Q]žßH‹[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJJJNÂˆ\ÜÙ\J›Ú™XÝØÛÛ™šYË˜ÛÛZ[œÊ	™›Ü›X]J™\œÚ[ÛˆHžßWˆ‹[ˆJÐT‘Ó×ÔÑ×Õ‘T”ÒSÓˆŠJJJNÂˆ\ÜÙ\J›Ú™XÝØÛÛ™šYË˜ÛÛZ[œÊ˜ÛÛœÛÛHH˜[ÙHŠJNÂˆ\ÜÙ\JØÚÙ\™š[K˜ÛÛZ[œÊÓÔHXZ[‹žž[™[\˜KÛ[™[\˜K[YK˜ÜÜÈ‹ÈŠJNÂˆ\ÜÙ\JØÚÙ\™š[K˜ÛÛZ[œÊÓÔHØØ[\È‹ÛØØ[\ÈŠJNÂˆ\ÜÙ\J]š›Ú[Š›ØØ[\ËÙKšœÛÛˆŠKš\×Ùš[J
+JNÂˆ\ÜÙ\J]š›Ú[Š›ØØ[\ËÙ[‹šœÛÛˆŠKš\×Ùš[J
+JNÂˆ›ÜˆÚÙ[ˆ[ˆÂˆ‹K^™[\˜KXÛÛÜ‹XXØÙ[‹ˆ‹K^™[\˜KXÛÛÜ‹XXØÙ[\Ý›Û™È‹ˆ‹K^™[\˜KXÛÛÜ‹XXØÙ[]^‹ˆ‹K^™[\˜KXÛÛÜ‹XXØÙ[\ÛÙ‹ˆ‹K^™[\˜KXÛÛÜ‹Z[šÈ‹ˆ‹K^™[\˜KXÛÛÜ‹[]]Y‹ˆ‹K^™[\˜KXÛÛÜ‹X›Ü™\ˆ‹ˆ‹K^™[\˜KXÛÛÜ‹XØ[˜\È‹ˆ‹K^™[\˜KXÛÛÜ‹\Ý\™˜XÙH‹ˆ‹K^™[\˜KXÛÛÜ‹\Ý\™˜XÙK\ÝXH‹ˆ‹K^™[\˜KXÛÛÜ‹\ÚYX˜\‹\Ý\‹ˆ‹K^™[\˜KXÛÛÜ‹\ÚYX˜\‹[ZYH‹ˆ‹K^™[\˜KXÛÛÜ‹\ÚYX˜\‹Y[™‹ˆ‹K^™[\˜KXÛÛÜ‹\ÚYX˜\‹Y›Ü™YÜ›Ý[™‹ˆ‹K^™[\˜KXÛÛÜ‹\ÚYX˜\‹[]]Y‹ˆ‹K^™[\˜KXÛÛÜ‹Z\›Ë\Ý\‹ˆ‹K^™[\˜KXÛÛÜ‹Z\›Ë[ZYH‹ˆ‹K^™[\˜KXÛÛÜ‹Z\›ËY[™‹ˆ‹K^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËX˜XÚÙÜ›Ý[™‹ˆ‹K^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËX›Ü™\ˆ‹ˆ‹K^™[\˜KXÛÛÜ‹\ÝXØÙ\ÜËZ[šÈ‹ˆ‹K^™[\˜KXÛÛÜ‹Y[™Ù\‹X˜XÚÙÜ›Ý[™‹ˆ‹K^™[\˜KXÛÛÜ‹Y[™Ù\‹X›Ü™\ˆ‹ˆ‹K^™[\˜KXÛÛÜ‹Y[™Ù\‹Z[šÈ‹ˆ‹K^™[\˜KXÛÛÜ‹Y›ØÝ\È‹ˆ‹K^™[\˜KY›ÛX›ÙH‹ˆ‹K^™[\˜K\˜Y]\ËXØ\™‹ˆ‹K^™[\˜K\˜Y]\ËXÛÛ›Û‹ˆ‹K^™[\˜KXÛÛ[[X^]ÚY‹ˆHÂˆ\ÜÙ\Jˆ›Ú™XÝÝ[YK˜ÛÛZ[œÊÚÙ[ŠKˆ™Ù[™\˜]Y[YHZ\ÜÙ\ÈÝÚÙ[ŸH‚ˆ
+NÂˆB‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆX\šXY—ØÜYÜØØY™›ÛÚ[˜ÛY\×ÝWÙšXÝ[Û˜[Ù[[×Ùš^\™J
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛKXÜYY[[Ë^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆ]Ý]\ÈHÜ™X]WÜ›Ú™XÝ
+ˆ]×ÜÝŠ
+K[Ü˜\
+
+Kˆ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆ˜[ÙKˆÚ]ÛX\šXYŽˆYKˆÜYÝ[\]NˆYKˆ]]Ý[\]Nˆ˜[ÙKˆ\Ú[™\Ü×Ý[\]Nˆ˜[ÙKˆÙX—ÜÜˆQUSÕÑP—ÔÔ•ˆÜÝÜÜˆQUSÕÑP—ÔÔ•ˆ]X˜\ÙWÚÜÝÜÜˆQUSÑUPTÑWÒÔÕÔÔ•ˆÜÝÜÜÙÚ]™[Žˆ˜[ÙKˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[Žˆ˜[ÙKˆKˆ
+NÂˆ\ÜÙ\Ù\HJÝ]\Ë^]ÛÙNŽ”ÕPÐÑTÔÊNÂ‚ˆ]š^\™HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š›XXÚ[™K[X[˜YÙ[Y[Y[[ËœÜ[ŠJK[Ü˜\
+
+NÂˆ\ÜÙ\Jš^\™K˜ÛÛZ[œÊ–“KQSSËLÌŠJNÂˆ\ÜÙ\Jš^\™K˜ÛÛZ[œÊ’S”ÑT•QÓ“Ô‘HS•ÈXXÚ[™\ÈŠJNÂˆ]ÛÝ\˜ÙHHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š›XZ[‹žž[ŠJK[Ü˜\
+
+NÂˆ\ÜÙ\JÛÝ\˜ÙK˜ÛÛZ[œÊ›XXÚ[™\Ëœ™\ÛÝ\˜Ù\Ë]HŠJNÂˆ\ÜÙ\JÛÝ\˜ÙK˜ÛÛZ[œÊ›[ÙNˆØ\™ÈŠJNÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ[™\˜]YÛX\šXY—Ý[\]WÝ\Ù\×ÜÙ[XÝYÝÙX—ÜÜ
+
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK\Ü][\]K^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆ]]]Ù[XÝYÜÜÈH›Û™NÂˆ›ÜˆÈ[ˆ‹ŽÂˆ]]X˜\ÙWÚÜÝÜÜHš[™Ùœ™YWÜÜ
+ÍÌ	–×JK[Ü˜\
+
+NÂˆ]ÜÝÜÜHš[™Ùœ™YWÜÜ
+ÍWÌ	–Ù]X˜\ÙWÚÜÝÜÜJK[Ü˜\
+
+NÂˆ]Ý]\ÈHÜ™X]WÜ›Ú™XÝ
+ˆ]×ÜÝŠ
+K[Ü˜\
+
+Kˆ›Ú™XÝÜ[ÛœÈÂˆ[Ý×ØÝ\œ™[Ù\™XÝÜžNˆ˜[ÙKˆÚ]ÛX\šXYŽˆYKˆÜYÝ[\]Nˆ˜[ÙKˆ]]Ý[\]Nˆ˜[ÙKˆ\Ú[™\Ü×Ý[\]Nˆ˜[ÙKˆÙX—ÜÜˆˆÜÝÜÜˆ]X˜\ÙWÚÜÝÜÜˆÜÝÜÜÙÚ]™[ŽˆYKˆ]X˜\ÙWÚÜÝÜÜÙÚ]™[ŽˆYKˆKˆ
+NÂˆYˆÝ]\ÈOH^]ÛÙNŽ”ÕPÐÑTÔÈÂˆÙ[XÝYÜÜÈHÛÛYJ
+ÜÝÜÜ]X˜\ÙWÚÜÝÜÜ
+JNÂˆœ™XZÎÂˆBˆBˆ]
+ÜÝÜÜ]X˜\ÙWÚÜÝÜÜ
+HBˆÙ[XÝYÜÜË™^XÝ
+[\]H\ÝÚÝ[XÜ]Z\™HÛÈœ™YHÜÝÜÈŠNÂ‚ˆ][—Ù^[\HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™[‹™^[\HŠJK[Ü˜\
+
+NÂˆ]ÛÛ\ÜÙHHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š™ØÚÙ\‹XÛÛ\ÜÙK›X\šXY‹ž[[ŠJK[Ü˜\
+
+NÂˆ]ØÚÙ\™š[HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‘ØÚÙ\™š[HŠJK[Ü˜\
+
+NÂˆ]ØÚÙ\šYÛ›Ü™HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™ØÚÙ\šYÛ›Ü™HŠJK[Ü˜\
+
+NÂˆ]Ú]YÛ›Ü™HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™Ú]YÛ›Ü™HŠJK[Ü˜\
+
+NÂˆ\ÜÙ\J[—Ù^[\K˜ÛÛZ[œÊ–‘STWÕÑP—ÔÔ•NŠJNÂˆ\ÜÙ\J[—Ù^[\K˜ÛÛZ[œÊ	™›Ü›X]J–‘STWÒÔÕÔÔ•^ÚÜÝÜÜHŠJJNÂˆ\ÜÙ\J[—Ù^[\K˜ÛÛZ[œÊ	™›Ü›X]J–‘STWÑ—ÒÔÕÔÔ•^Ù]X˜\ÙWÚÜÝÜÜHŠJJNÂˆ\ÜÙ\JÛÛ\ÜÙK˜ÛÛZ[œÊŒŒŒŒ‰Ö‘STWÕÑP—ÔÔ•‹NHŠJNÂˆ\ÜÙ\JÛÛ\ÜÙK˜ÛÛZ[œÊ	™›Ü›X]JˆŒLËŒŒŒN‰ÞÖ‘STWÒÔÕÔÔ•‹^ÚÜÝÜÜ__N‰ÞÖ‘STWÕÑP—ÔÔ•‹N_H‚ˆ
+JJNÂˆ\ÜÙ\JÛÛ\ÜÙK˜ÛÛZ[œÊ	™›Ü›X]JˆŒLËŒŒŒN‰ÞÖ‘STWÑ—ÒÔÕÔÔ•‹^Ù]X˜\ÙWÚÜÝÜÜ__NŒÌÌˆ‚ˆ
+JJNÂˆ\ÜÙ\JÛÛ\ÜÙK˜ÛÛZ[œÊŒŒŒŒ‰Ö‘STWÕÑP—ÔÔ•‹NHŠJNÂˆ\ÜÙ\JØÚÙ\™š[K˜ÛÛZ[œÊ‘VÔÑHŠJNÂˆ\ÜÙ\JØÚÙ\™š[K˜ÛÛZ[œÊŒŒŒŒŽŠJNÂˆ\ÜÙ\JØÚÙ\šYÛ›Ü™K˜ÛÛZ[œÊ‹™[ˆŠJNÂˆ\ÜÙ\JÚ]YÛ›Ü™K˜ÛÛZ[œÊ‹™[ˆŠJNÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ]\ØXØÙ\×ÛX\šXY—Ü›Ú™XÝÝÚ]Ý]Ù[—Ù^[\J
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK\Ù]\XÛÛ™šYË[Û›K^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	œ]
+K[Ü˜\
+
+NÂˆœÎŽÜš]Jˆ]š›Ú[Šž™[\˜KÛ[ŠKˆ–Ù]X˜\ÙK›XZ[—W™[™Ú[™HH›X\šXY——ˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂ‚ˆ\ÜÙ\Ù\HJˆÙ]\Ü›Ú™XÝ
+]×ÜÝŠ
+K[Ü˜\
+
+K	”Ù]\Ü[ÛœÎŽ™Y˜][
+
+JKˆ^]ÛÙNŽ”ÕPÐÑTÔÂˆ
+NÂˆ][—Ùš[HHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™[ˆŠJK[Ü˜\
+
+NÂˆ\ÜÙ\J[—Ùš[K˜ÛÛZ[œÊ‘UPTÑWÕT“[X\šXYŽ‹ËÞ™[\˜NˆŠJNÂˆ\ÜÙ\J[—Ùš[K˜ÛÛZ[œÊ“PT’PQ—Ô“ÓÕÔTÔÕÓÔ‘HŠJNÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ]\ØXÝ[Û—Ü™\\™WÚ\×ÚY[\Ý[Ø[™ÙÙ\×Û›ÝÜ™\XÙWØÜ™Y[X[Ê
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK\Ù]\XXÝ[Û‹^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	œ]
+K[Ü˜\
+
+NÂˆœÎŽÜš]Jˆ]š›Ú[Šž™[\˜KÛ[ŠKˆ–Ù]X˜\ÙK›XZ[—W™[™Ú[™HH›X\šXY——ˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂ‚ˆ]š\œÝBˆÙ]\ØXÝ[ÛŠ]×ÜÝŠ
+K[Ü˜\
+
+Kœ™\\™H‹	”Ù]\Ü[ÛœÎŽ™Y˜][
+
+JK[Ü˜\
+
+NÂˆ]ÛÛ[ÈHœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™[ˆŠJK[Ü˜\
+
+NÂˆ]ÙXÛÛ™BˆÙ]\ØXÝ[ÛŠ]×ÜÝŠ
+K[Ü˜\
+
+Kœ™\\™H‹	”Ù]\Ü[ÛœÎŽ™Y˜][
+
+JK[Ü˜\
+
+NÂˆ\ÜÙ\Jš\œÝ˜ÛÛZ[œÊ˜Ü™X]Y›ÝXÝY™[ˆŠJNÂˆ\ÜÙ\JÙXÛÛ™˜ÛÛZ[œÊšÙ\^\Ý[™È™[ˆŠJNÂˆ\ÜÙ\Ù\HJÛÛ[ËœÎŽœ™XYÝ×ÜÝš[™Ê]š›Ú[Š‹™[ˆŠJK[Ü˜\
+
+JNÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ]\ÝÙX—Ý\›Ý\Ù\×ÝWÙY™™XÝ]™WÚÜÝÜÜ
+
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK\Ù]\]ÙX‹]\›^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	œ]
+K[Ü˜\
+
+NÂˆœÎŽÜš]Jˆ]š›Ú[Šž™[\˜KÛ[ŠKˆ–Ù]X˜\ÙK›XZ[—W™[™Ú[™HH›X\šXY——ˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂˆœÎŽÜš]Jˆ]š›Ú[Š‹™[‹™^[\HŠKˆˆÈ‘STWÒÔÕÔÔ•LN–‘STWÑ—ÒÔÕÔÔ•LÌÌˆ‹ˆ
+Bˆ[Ü˜\
+
+NÂˆœÎŽÜš]J]š›Ú[Š‹™[ˆŠK–‘STWÒÔÕÔÔ•LN×ˆŠK[Ü˜\
+
+NÂ‚ˆ][—Ü]H]š›Ú[Š‹™[ˆŠNÂˆ][—Ü]H[—Ü]×ÜÝš[™×ÛÜÜÞJ
+NÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝÙX—Ý\›ÝÚ]ÚÜÝÜÜ
+	œ]›Û™K	™[—Ü]
+K[Ü˜\
+
+Kˆš‹ËÌLËŒŒŒNŒNÈ‚ˆ
+NÂ‚ˆœÎŽÜš]J]š›Ú[Š‹™[ˆŠK–‘STWÑ—ÒÔÕÔÔ•LÌÌˆŠK[Ü˜\
+
+NÂˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝÙX—Ý\›ÝÚ]ÚÜÝÜÜ
+	œ]›Û™K	™[—Ü]
+K[Ü˜\
+
+Kˆš‹ËÌLËŒŒŒNŒN‚ˆ
+NÂ‚ˆ\ÜÙ\Ù\HJˆ›Ú™XÝÝÙX—Ý\›ÝÚ]ÚÜÝÜÜ
+	œ]ÛÛYJŒNŠK[\ÙY™[ˆŠK[Ü˜\
+
+Kˆš‹ËÌLËŒŒŒNŒN‚ˆ
+NÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙ]\ÝÙX—Ü™\]Z\™\×ÝWÝÚÙ[—Ø[™Ü™[™\œ×ÝWÛØØ[ØXÝ[ÛœÊ
+HÂˆ]]H[ŽŽ[\Ù\Š
+Kš›Ú[Š›Ü›X]Jˆž™[\˜KXÛK\Ù]\]ÙX‹^ßK^ßH‹ˆÝŽœ›ØÙ\ÜÎŽšY
+
+KˆÝŽ[YNŽ”Þ\Ý[U[YNŽ››ÝÊ
+Bˆ™\˜][Û—ÜÚ[˜ÙJÝŽ[YNŽ•S’VÑTÐÒ
+Bˆ[Ü˜\
+
+Bˆ˜\×Û˜[›ÜÊ
+Bˆ
+JNÂˆœÎŽ˜Ü™X]WÙ\—Ø[
+	œ]
+K[Ü˜\
+
+NÂˆ]Ý]HH\˜ÎŽ›™]Ê]]^Ž›™]ÊÙ]\ÙX”Ý]HÂˆ\™XÝÜžNˆ]˜ÛÛ™J
+KˆÚÙ[Žˆ\Ý]ÚÙ[ˆ‹š[Ê
+KˆY\ÜØYÙNˆÝš[™ÎŽ›™]Ê
+KˆJJNÂˆ]™\]Y\ÝH\™Ù]ˆ	œÝŸ™[\˜WÝÙXŽŽ”™\]Y\ÝÂˆY]Ùˆ‘ÑU‹š[Ê
+Kˆ\™Ù]ˆ\™Ù]š[Ê
+Kˆ]ˆ‹È‹š[Ê
+KˆXY\œÎˆ\ÚX\Ž›™]Ê
+Kˆ›ÙNˆÝš[™ÎŽ›™]Ê
+KˆNÂ‚ˆ]›Ü˜šY[ˆHÙ]\ÝÙX—Ü™\ÜÛœÙJ	œÝ]K	œ™\]Y\Ý
+‹ÏÝÚÙ[]Ü›Û™ÈŠJNÂˆ\ÜÙ\Ù\HJ›Ü˜šY[‹œÝ]\ËÊNÂˆ]YÙHHÙ]\ÝÙX—Ü™\ÜÛœÙJ	œÝ]K	œ™\]Y\Ý
+‹ÏÝÚÙ[]\Ý]ÚÙ[ˆŠJNÂˆ\ÜÙ\Ù\HJYÙKœÝ]\ËŒ
+NÂˆ\ÜÙ\JYÙK˜›ÙK˜ÛÛZ[œÊ’ÛÛ™šYÝ\˜][Ûˆ›Ü˜™\™Z][ˆŠJNÂˆ\ÜÙ\JYÙK˜›ÙK˜ÛÛZ[œÊ“X\šXQˆ[™[Ù[™[™ÈÝ\[ˆŠJNÂ‚ˆœÎŽœ™[[Ý™WÙ\—Ø[
+]
+K[Ü˜\
+
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆÙX—ÜÜÝ˜[Y][Û—Ü™Z™XÝ×Þ™\›×Ø[™Û›Û—Û[Y\šX×Ý˜[Y\Ê
+HÂˆ\ÜÙ\Ù\HJ\œÙWÝÙX—ÜÜ
+ŒHŠKÚÊJJNÂˆ\ÜÙ\Ù\HJ\œÙWÝÙX—ÜÜ
+MLÍHŠKÚÊMLÍJJNÂˆ\ÜÙ\J\œÙWÝÙX—ÜÜ
+ŒŠKš\×Ù\œŠ
+JNÂˆ\ÜÙ\J\œÙWÝÙX—ÜÜ
+MLÍˆŠKš\×Ù\œŠ
+JNÂˆ\ÜÙ\J\œÙWÝÙX—ÜÜ
+ÙXˆŠKš\×Ù\œŠ
+JNÂˆ\ÜÙ\Ù\HJ\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+ŒÌÌŠKÚÊÌÌ
+JNÂˆ\ÜÙ\J\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+ŒŠKš\×Ù\œŠ
+JNÂˆ\ÜÙ\J\œÙWÙ]X˜\ÙWÚÜÝÜÜ
+™]X˜\ÙHŠKš\×Ù\œŠ
+JNÂˆB‚ˆÖÝ\ÝBˆ›ˆØÚÙ\—ØÛÛ\ÜÙWÚ[Ú\×ØXÝ[Û˜X›WØ[™Ü]›Ü›WÜÜXÚYšXÊ
+HÂˆ][HØÚÙ\—ØÛÛ\ÜÙWÚ[œÝ[Ú[
+
+NÂˆ\ÜÙ\J[˜ÛÛZ[œÊ‘ØÚÙ\ˆÛÛ\ÜÙH\È[˜]˜Z[X›HŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊšÎ‹ËÙØÜË™ØÚÙ\‹˜ÛÛKÈŠJNÂˆ\ÜÙ\J[˜ÛÛZ[œÊ™ØÚÙ\ˆÛÛ\ÜÙH™\œÚ[ÛˆŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆÛÛ\ÜÙWÜÝ\Ù\œ›Üœ×Ø\™WØXÝ[Û˜X›WÝÚ]Ý]Ù^ÜÚ[™×ÛÝ]]
+
+HÂˆ]ÙXÜ™]H›X\šXYŽ‹ËÞ™[\˜NœÙXÜ™]]˜[YPLËŒŒŒNŒÌÌ‹Þ™[\˜WØ\ŽÂˆ]\›Z\ÜÚ[ÛˆHÛÛ\ÜÙWÜÝ\Ù˜Z[\™WÛY\ÜØYÙJˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž“YØXÞKˆ	™›Ü›X]Jœ\›Z\ÜÚ[Ûˆ[šYYÚ[HÛÛ›™XÝ[™ÈÈØÚÙ\‹œÛØÚÎˆÜÙXÜ™]HŠKˆ
+NÂˆ\ÜÙ\J\›Z\ÜÚ[Û‹˜ÛÛZ[œÊ\Ù\›[ÙXQÈØÚÙ\ˆŠJNÂˆ\ÜÙ\J\›Z\ÜÚ[Û‹˜ÛÛZ[œÊ—ˆ™]ÙÜœØÚÙ\—ˆY[‘×ˆØÚÙ\ˆ×ˆŠJNÂˆ\ÜÙ\J\›Z\ÜÚ[Û‹˜ÛÛZ[œÊ“Ü[š[™È[›Ý\ˆ\›Z[˜[Ú[™ÝÈ[Û™HŠJNÂˆ\ÜÙ\J\\›Z\ÜÚ[Û‹˜ÛÛZ[œÊÙXÜ™]
+JNÂ‚ˆ]ÛÛ™›XÝHÛÛ\ÜÙWÜÝ\Ù˜Z[\™WÛY\ÜØYÙJˆØÚÙ\ÛÛ\ÜÙPÛÛ[X[™Ž”YÚ[‹ˆ™˜Z[YÈš[™ÜÝÜˆY™\ÜÈ[™XYH[ˆ\ÙH‹ˆ
+NÂˆ\ÜÙ\JÛÛ™›XÝ˜ÛÛZ[œÊœÜ\È[™XYH[ˆ\ÙHŠJNÂˆ\ÜÙ\JXÛÛ™›XÝ˜ÛÛZ[œÊ™˜Z[YÈš[™ŠJNÂˆB‚ˆÖÝ\ÝBˆ›ˆœ™YWÜÜÜÙ[XÝ[Û—ÜÚÚ\×ØWØ›Ý[™ÜÜ
+
+HÂˆ]\Ý[™\ˆHÜ\Ý[™\ŽŽ˜š[™
+
+ŒLËŒŒŒH‹
+JK[Ü˜\
+
+NÂˆ]ØØÝ\YYH\Ý[™\‹›ØØ[ØYŠ
+K[Ü˜\
+
+KœÜ
+
+NÂˆ]Ù[XÝYHš[™Ùœ™YWÜÜ
+ØØÝ\YY	–×JK[Ü˜\
+
+NÂˆ\ÜÙ\Û™HJÙ[XÝYØØÝ\YY
+NÂˆB‚ˆÖÝ\ÝBˆ›ˆ^XÚ]ÜÜØÛÛ™›XÝ×Ø\™WÜ™Z™XÝY
+
+HÂˆ]\Ý[™\ˆHÜ\Ý[™\ŽŽ˜š[™
+
+ŒLËŒŒŒH‹
+JK[Ü˜\
+
+NÂˆ]ØØÝ\YYH\Ý[™\‹›ØØ[ØYŠ
+K[Ü˜\
+
+KœÜ
+
+NÂˆ]\œ›ÜˆH™\ÛÛ™WÚÜÝÜÜ
+ØØÝ\YYYKÙXˆÜÝ‹YK	–×JBˆ™^XÝÙ\œŠ˜[ˆ^XÚ]HØØÝ\YYÜ]\Ý™H™Z™XÝYŠNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ˜[™XYH[ˆ\ÙHŠJNÂˆ\ÜÙ\J\œ›Ü‹˜ÛÛZ[œÊ˜ÚÛÜÙHHY™™\™[ÜŠJNÂˆBŸB

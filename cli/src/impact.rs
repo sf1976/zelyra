@@ -272,6 +272,35 @@ fn semantic_references(
             );
         }
     }
+    for page in &program.pages {
+        for data in &page.data {
+            for table in referenced_tables(&data.query, table_names) {
+                add_reference(
+                    &mut references,
+                    format!("page:{}", page.path),
+                    format!("table:{table}"),
+                    "page_data_sql",
+                    span_value(data.span, sources),
+                );
+            }
+        }
+    }
+    for table in &program.tables {
+        for column in &table.columns {
+            let zelyra_ast::Type::Named(name) = &column.ty else {
+                continue;
+            };
+            if let Some(target) = relation_table(name, table_names) {
+                add_reference(
+                    &mut references,
+                    format!("table:{}", table.name),
+                    format!("table:{target}"),
+                    "relation",
+                    span_value(column.span, sources),
+                );
+            }
+        }
+    }
     for entry in sql {
         let Some(owner) = entry.get("owner").and_then(Value::as_str) else {
             continue;
@@ -917,6 +946,25 @@ fn referenced_tables(query: &str, table_names: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn relation_table(name: &str, table_names: &[String]) -> Option<String> {
+    let normalized = name.to_ascii_lowercase();
+    if let Some(table) = table_names
+        .iter()
+        .find(|table| table.eq_ignore_ascii_case(&normalized))
+    {
+        return Some(table.clone());
+    }
+    let plural = if normalized.ends_with('y') {
+        format!("{}ies", &normalized[..normalized.len() - 1])
+    } else {
+        format!("{normalized}s")
+    };
+    table_names
+        .iter()
+        .find(|table| table.eq_ignore_ascii_case(&plural))
+        .cloned()
+}
+
 fn contains_identifier(source: &str, needle: &str) -> bool {
     let needle = needle.to_ascii_lowercase();
     source
@@ -1014,8 +1062,10 @@ mod tests {
             view Shell { html { <Badge /><slot /> } }
             page "/customers" {
                 view: Shell
+                load customers = sql<Customer[]> { SELECT id FROM customers }
                 html { <Badge /> }
             }
+            table invoices { id: Id customer: Customer }
             form CustomerForm -> customers { fields { id } }
             crud Customer -> customers
             fn load() uses Database {
@@ -1049,6 +1099,16 @@ mod tests {
             reference["from"] == "page:/customers"
                 && reference["to"] == "view:Shell"
                 && reference["kind"] == "view"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "page:/customers"
+                && reference["to"] == "table:customers"
+                && reference["kind"] == "page_data_sql"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "table:invoices"
+                && reference["to"] == "table:customers"
+                && reference["kind"] == "relation"
         }));
         assert!(references.iter().any(|reference| {
             reference["from"] == "view:Shell"
