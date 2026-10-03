@@ -439,9 +439,10 @@ project-relative source path in `span.file`. The context inventory for web
 resources remains entry-file-only. `verify` checks linked functions, but
 verification results do not yet preserve per-module source provenance. Views,
 APIs, and other application resources remain unsupported in imported files.
-`fmt`, `impact`, `edit`, and database commands remain source-file-local. These
-limits make the implementation experimental rather than a complete multi-file
-project model. The full requirements are tracked in the
+`fmt`, `edit`, and database commands remain source-file-local. `impact` now
+analyzes the linked module graph and attributes its spans to their source
+files. These limits make the implementation experimental rather than a
+complete multi-file project model. The full requirements are tracked in the
 [0.4.0 release plan](release-plans/0.4.0.en.md).
 
 When a page collection declares search, filters, sorting, or pagination,

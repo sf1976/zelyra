@@ -1,17 +1,26 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::project::ProjectSource;
 use serde_json::{json, Value};
 use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt};
 
-pub fn build_impact(program: &Program, source: &str) -> Value {
+pub fn build_impact_with_sources(
+    program: &Program,
+    project_sources: &[ProjectSource],
+    fallback_source: &str,
+) -> Value {
+    let sources = ImpactSources {
+        project_sources,
+        fallback_source,
+    };
     let table_names = program
         .tables
         .iter()
         .map(|table| table.name.clone())
         .collect::<Vec<_>>();
-    let sql = sql_entries(program, &table_names, source);
+    let sql = sql_entries(program, &table_names, &sources);
     let table_consumers = table_consumers(program, &table_names, &sql);
-    let references = semantic_references(program, &table_names, &sql, source);
+    let references = semantic_references(program, &table_names, &sql, &sources);
     let permissions = permissions(program);
 
     json!({
@@ -19,7 +28,7 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "name": table.name,
             "columns": table.columns.iter().map(|column| column.name.clone()).collect::<Vec<_>>(),
             "consumers": table_consumers.get(&table.name).cloned().unwrap_or_default(),
-            "span": span_value(table.span, source),
+            "span": span_value(table.span, &sources),
         })).collect::<Vec<_>>(),
         "sql": sql,
         "references": references,
@@ -28,7 +37,7 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "table": form.table,
             "fields": form.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
             "actions": form.actions.iter().map(|action| action.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(form.span, source),
+            "span": span_value(form.span, &sources),
         })).collect::<Vec<_>>(),
         "crud": program.cruds.iter().map(|crud| json!({
             "name": crud.name,
@@ -36,40 +45,40 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "layout": crud.layout,
             "permissions": crud_permissions(crud),
             "actions": crud.actions.iter().map(|action| action.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(crud.span, source),
+            "span": span_value(crud.span, &sources),
         })).collect::<Vec<_>>(),
         "views": program.views.iter().map(|view| json!({
             "name": view.name,
             "kind": "named",
-            "span": span_value(view.span, source),
+            "span": span_value(view.span, &sources),
         })).chain(program.components.iter().map(|component| json!({
             "name": component.name,
             "kind": "component",
             "props": component.props.iter().map(|prop| prop.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(component.span, source),
+            "span": span_value(component.span, &sources),
         }))).chain(program.pages.iter().map(|page| json!({
             "name": page.path,
             "kind": "page",
             "view": page.view,
             "permissions": page.permissions,
-            "span": span_value(page.span, source),
+            "span": span_value(page.span, &sources),
         }))).collect::<Vec<_>>(),
         "apis": program.apis.iter().map(|api| json!({
             "method": api.method,
             "path": api.path,
             "handler": api.handler,
             "permissions": api.permissions,
-            "span": span_value(api.span, source),
+            "span": span_value(api.span, &sources),
         })).collect::<Vec<_>>(),
         "permissions": permissions,
         "contracts": program.functions.iter()
             .filter(|function| !function.requires.is_empty() || !function.ensures.is_empty())
             .map(|function| json!({
                 "function": function.name,
-                "requires": function.requires.iter().map(|expression| span_value(expression.span, source)).collect::<Vec<_>>(),
-                "ensures": function.ensures.iter().map(|expression| span_value(expression.span, source)).collect::<Vec<_>>(),
+                "requires": function.requires.iter().map(|expression| span_value(expression.span, &sources)).collect::<Vec<_>>(),
+                "ensures": function.ensures.iter().map(|expression| span_value(expression.span, &sources)).collect::<Vec<_>>(),
                 "capabilities": function.capabilities,
-                "span": span_value(function.span, source),
+                "span": span_value(function.span, &sources),
             })).collect::<Vec<_>>(),
         "emails": [],
         "jobs": [],
@@ -80,6 +89,25 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "items": []
         }
     })
+}
+
+struct ImpactSources<'a> {
+    project_sources: &'a [ProjectSource],
+    fallback_source: &'a str,
+}
+
+impl ImpactSources<'_> {
+    fn text(&self, span: Span) -> &str {
+        self.project_sources
+            .get(span.source_id as usize)
+            .map_or(self.fallback_source, |source| source.text.as_str())
+    }
+
+    fn path(&self, span: Span) -> Option<&str> {
+        self.project_sources
+            .get(span.source_id as usize)
+            .map(|source| source.path.as_str())
+    }
 }
 
 pub fn focus_impact(impact: &Value, query: &str) -> Result<Value, String> {
@@ -200,7 +228,7 @@ fn semantic_references(
     program: &Program,
     table_names: &[String],
     sql: &[Value],
-    source: &str,
+    sources: &ImpactSources<'_>,
 ) -> Vec<Value> {
     let mut references = Vec::new();
 
@@ -211,7 +239,7 @@ fn semantic_references(
                 format!("form:{}", form.name),
                 format!("table:{table}"),
                 "table",
-                span_value(form.span, source),
+                span_value(form.span, sources),
             );
         }
     }
@@ -221,7 +249,7 @@ fn semantic_references(
             format!("crud:{}", crud.name),
             format!("table:{}", crud.table),
             "table",
-            span_value(crud.span, source),
+            span_value(crud.span, sources),
         );
         if let Some(layout) = &crud.layout {
             add_reference(
@@ -229,7 +257,7 @@ fn semantic_references(
                 format!("crud:{}", crud.name),
                 format!("view:{layout}"),
                 "view",
-                span_value(crud.span, source),
+                span_value(crud.span, sources),
             );
         }
     }
@@ -240,7 +268,7 @@ fn semantic_references(
                 format!("tableview:{}", tableview.name),
                 format!("table:{table}"),
                 "table",
-                span_value(tableview.span, source),
+                span_value(tableview.span, sources),
             );
         }
     }
@@ -281,7 +309,7 @@ fn semantic_references(
                     format!("page:{}", page.path),
                     format!("view:{view}"),
                     "view",
-                    span_value(page.span, source),
+                    span_value(page.span, sources),
                 );
             }
         }
@@ -299,7 +327,7 @@ fn semantic_references(
                 format!("view:{}", view.name),
                 format!("component:{component}"),
                 "component",
-                span_value(view.span, source),
+                span_value(view.span, sources),
             );
         }
     }
@@ -310,7 +338,7 @@ fn semantic_references(
                 format!("component:{}", component.name),
                 format!("component:{nested}"),
                 "component",
-                span_value(component.span, source),
+                span_value(component.span, sources),
             );
         }
     }
@@ -321,7 +349,7 @@ fn semantic_references(
                 format!("page:{}", page.path),
                 format!("component:{component}"),
                 "component",
-                span_value(page.span, source),
+                span_value(page.span, sources),
             );
         }
     }
@@ -338,7 +366,7 @@ fn semantic_references(
                 format!("function:{}", function.name),
                 format!("function:{call}"),
                 "call",
-                span_value(function.span, source),
+                span_value(function.span, sources),
             );
         }
         for expression in function.requires.iter().chain(function.ensures.iter()) {
@@ -348,7 +376,7 @@ fn semantic_references(
                     format!("function:{}", function.name),
                     format!("function:{call}"),
                     "call",
-                    span_value(function.span, source),
+                    span_value(function.span, sources),
                 );
             }
         }
@@ -363,7 +391,7 @@ fn semantic_references(
                     format!("api:{} {}", api.method, api.path),
                     format!("function:{handler}"),
                     "handler",
-                    span_value(api.span, source),
+                    span_value(api.span, sources),
                 );
             }
         }
@@ -601,12 +629,16 @@ fn reference_sort_key(reference: &Value) -> (String, String, String, usize) {
     )
 }
 
-fn span_value(span: Span, source: &str) -> Value {
-    let (end_line, end_column) = source_position(source, span.end);
-    json!({
+fn span_value(span: Span, sources: &ImpactSources<'_>) -> Value {
+    let (end_line, end_column) = source_position(sources.text(span), span.end);
+    let mut value = json!({
         "start": { "offset": span.start, "line": span.line, "column": span.column },
         "end": { "offset": span.end, "line": end_line, "column": end_column }
-    })
+    });
+    if let Some(path) = sources.path(span) {
+        value["file"] = json!(path);
+    }
+    value
 }
 
 fn source_position(source: &str, offset: usize) -> (usize, usize) {
@@ -674,7 +706,11 @@ fn add_consumer(consumers: &mut HashMap<String, Vec<String>>, table: &str, consu
     }
 }
 
-fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<Value> {
+fn sql_entries(
+    program: &Program,
+    table_names: &[String],
+    sources: &ImpactSources<'_>,
+) -> Vec<Value> {
     let mut entries = Vec::new();
     for function in &program.functions {
         collect_statement_sql(
@@ -682,7 +718,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
             &function.name,
             "function",
             table_names,
-            source,
+            sources,
             &mut entries,
         );
     }
@@ -693,7 +729,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
                 &format!("form:{} action:{}", form.name, action.name),
                 "form_action",
                 table_names,
-                source,
+                sources,
                 &mut entries,
             );
         }
@@ -705,7 +741,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
                 &format!("crud:{} action:{}", crud.name, action.name),
                 "crud_action",
                 table_names,
-                source,
+                sources,
                 &mut entries,
             );
         }
@@ -715,7 +751,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
             "owner": format!("tableview:{}", tableview.name),
             "kind": "tableview",
             "tables": referenced_tables(&tableview.source, table_names),
-            "span": span_value(tableview.span, source),
+            "span": span_value(tableview.span, sources),
         }));
     }
     entries
@@ -726,11 +762,11 @@ fn collect_statement_sql(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     for statement in statements {
-        collect_statement_sql_inner(statement, owner, kind, table_names, source, entries);
+        collect_statement_sql_inner(statement, owner, kind, table_names, sources, entries);
     }
 }
 
@@ -739,16 +775,16 @@ fn collect_statement_sql_inner(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     match statement {
         Stmt::Let { value, .. } | Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
-            collect_expr_sql(value, owner, kind, table_names, source, entries)
+            collect_expr_sql(value, owner, kind, table_names, sources, entries)
         }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
-                collect_expr_sql(value, owner, kind, table_names, source, entries);
+                collect_expr_sql(value, owner, kind, table_names, sources, entries);
             }
         }
         Stmt::If {
@@ -757,13 +793,13 @@ fn collect_statement_sql_inner(
             else_block,
             ..
         } => {
-            collect_expr_sql(condition, owner, kind, table_names, source, entries);
+            collect_expr_sql(condition, owner, kind, table_names, sources, entries);
             collect_statement_sql(
                 &then_block.statements,
                 owner,
                 kind,
                 table_names,
-                source,
+                sources,
                 entries,
             );
             if let Some(else_block) = else_block {
@@ -772,7 +808,7 @@ fn collect_statement_sql_inner(
                     owner,
                     kind,
                     table_names,
-                    source,
+                    sources,
                     entries,
                 );
             }
@@ -783,39 +819,39 @@ fn collect_statement_sql_inner(
             body,
             ..
         } => {
-            collect_expr_sql(condition, owner, kind, table_names, source, entries);
+            collect_expr_sql(condition, owner, kind, table_names, sources, entries);
             for invariant in invariants {
-                collect_expr_sql(invariant, owner, kind, table_names, source, entries);
+                collect_expr_sql(invariant, owner, kind, table_names, sources, entries);
             }
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::For { iterable, body, .. } => {
-            collect_expr_sql(iterable, owner, kind, table_names, source, entries);
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_expr_sql(iterable, owner, kind, table_names, sources, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Loop {
             invariants, body, ..
         } => {
             for invariant in invariants {
-                collect_expr_sql(invariant, owner, kind, table_names, source, entries);
+                collect_expr_sql(invariant, owner, kind, table_names, sources, entries);
             }
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Match { value, arms, .. } => {
-            collect_expr_sql(value, owner, kind, table_names, source, entries);
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
             for arm in arms {
                 collect_statement_sql(
                     &arm.body.statements,
                     owner,
                     kind,
                     table_names,
-                    source,
+                    sources,
                     entries,
                 );
             }
         }
         Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Break { .. } | Stmt::Continue { .. } => {}
     }
@@ -826,7 +862,7 @@ fn collect_expr_sql(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     match &expression.kind {
@@ -834,34 +870,34 @@ fn collect_expr_sql(
             "owner": owner,
             "kind": kind,
             "tables": referenced_tables(query, table_names),
-            "span": span_value(expression.span, source),
+            "span": span_value(expression.span, sources),
         })),
         ExprKind::Array(values) => values
             .iter()
-            .for_each(|value| collect_expr_sql(value, owner, kind, table_names, source, entries)),
+            .for_each(|value| collect_expr_sql(value, owner, kind, table_names, sources, entries)),
         ExprKind::Map(map_entries) => map_entries.iter().for_each(|(key, value)| {
-            collect_expr_sql(key, owner, kind, table_names, source, entries);
-            collect_expr_sql(value, owner, kind, table_names, source, entries);
+            collect_expr_sql(key, owner, kind, table_names, sources, entries);
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
         }),
         ExprKind::Record { fields, .. } => fields.iter().for_each(|(_, value)| {
-            collect_expr_sql(value, owner, kind, table_names, source, entries)
+            collect_expr_sql(value, owner, kind, table_names, sources, entries)
         }),
         ExprKind::Index { target, index } => {
-            collect_expr_sql(target, owner, kind, table_names, source, entries);
-            collect_expr_sql(index, owner, kind, table_names, source, entries);
+            collect_expr_sql(target, owner, kind, table_names, sources, entries);
+            collect_expr_sql(index, owner, kind, table_names, sources, entries);
         }
         ExprKind::Field { target, .. } | ExprKind::Await(target) => {
-            collect_expr_sql(target, owner, kind, table_names, source, entries)
+            collect_expr_sql(target, owner, kind, table_names, sources, entries)
         }
         ExprKind::Call { args, .. } => args.iter().for_each(|argument| {
-            collect_expr_sql(argument, owner, kind, table_names, source, entries)
+            collect_expr_sql(argument, owner, kind, table_names, sources, entries)
         }),
         ExprKind::Unary { expr, .. } => {
-            collect_expr_sql(expr, owner, kind, table_names, source, entries)
+            collect_expr_sql(expr, owner, kind, table_names, sources, entries)
         }
         ExprKind::Binary { left, right, .. } => {
-            collect_expr_sql(left, owner, kind, table_names, source, entries);
-            collect_expr_sql(right, owner, kind, table_names, source, entries);
+            collect_expr_sql(left, owner, kind, table_names, sources, entries);
+            collect_expr_sql(right, owner, kind, table_names, sources, entries);
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
@@ -993,7 +1029,7 @@ mod tests {
             }
         "#;
         let program = parse(&lex(source).expect("source should lex")).expect("source should parse");
-        let impact = build_impact(&program, source);
+        let impact = build_impact_with_sources(&program, &[], source);
         assert_eq!(impact["tables"][0]["name"], "customers");
         assert_eq!(impact["sql"][0]["tables"][0], "customers");
         assert_eq!(impact["permissions"][0]["name"], "customers.read");
@@ -1029,7 +1065,7 @@ mod tests {
                 && reference["to"] == "function:load"
                 && reference["kind"] == "call"
         }));
-        assert_eq!(impact, build_impact(&program, source));
+        assert_eq!(impact, build_impact_with_sources(&program, &[], source));
     }
 
     #[test]
@@ -1040,7 +1076,7 @@ mod tests {
             crud Customer -> customers
         "#;
         let program = parse(&lex(source).expect("source should lex")).expect("source should parse");
-        let impact = build_impact(&program, source);
+        let impact = build_impact_with_sources(&program, &[], source);
         let focused = focus_impact(&impact, "table:customers").expect("table should be known");
         assert_eq!(focused["focus"], "table:customers");
         assert!(focused["references"]

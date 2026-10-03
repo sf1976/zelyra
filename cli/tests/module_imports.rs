@@ -276,6 +276,40 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
         "{}",
         String::from_utf8_lossy(&check.stderr)
     );
+    let impact = run(&directory, &["impact", "main.zyl", "--format=json"]);
+    let impact_again = run(&directory, &["impact", "main.zyl", "--format=json"]);
+    assert!(
+        impact.status.success(),
+        "{}",
+        String::from_utf8_lossy(&impact.stderr)
+    );
+    assert_eq!(impact.stdout, impact_again.stdout);
+    let document: Value = serde_json::from_slice(&impact.stdout).unwrap();
+    let tables = document["impact"]["tables"].as_array().unwrap();
+    let invoice_table = tables
+        .iter()
+        .find(|table| table["name"] == "invoices")
+        .unwrap();
+    assert_eq!(invoice_table["span"]["file"], "src/invoices.zyl");
+    let sql = document["impact"]["sql"].as_array().unwrap();
+    assert_eq!(sql.len(), 1);
+    assert_eq!(sql[0]["owner"], "src/invoices.zyl::count");
+    assert_eq!(sql[0]["span"]["file"], "src/invoices.zyl");
+    assert_eq!(sql[0]["span"]["start"]["line"], 2);
+    assert_eq!(sql[0]["tables"][0], "invoices");
+    let focused = run(
+        &directory,
+        &[
+            "impact",
+            "main.zyl",
+            "--symbol",
+            "table:invoices",
+            "--format=json",
+        ],
+    );
+    assert!(focused.status.success());
+    let focused: Value = serde_json::from_slice(&focused.stdout).unwrap();
+    assert_eq!(focused["impact"]["references"].as_array().unwrap().len(), 1);
     fs::remove_dir_all(directory).unwrap();
 }
 

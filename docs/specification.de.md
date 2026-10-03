@@ -378,10 +378,11 @@ Das Kontextinventar für Webressourcen bleibt auf die Einstiegsdatei begrenzt.
 `verify` prüft verknüpfte Funktionen, bewahrt in Verifikationsergebnissen aber
 noch keine Quellzuordnung pro Modul. Views, APIs und andere
 Anwendungsressourcen bleiben in importierten Dateien unzulässig. `fmt`,
-`impact`, `edit` und Datenbankbefehle arbeiten weiterhin nur mit der
-angegebenen Quelldatei. Diese Grenzen machen die Implementierung experimentell
-und noch nicht zu einem vollständigen Mehrdatei-Projektmodell. Die
-vollständigen Anforderungen stehen im
+`edit` und Datenbankbefehle arbeiten weiterhin nur mit der angegebenen
+Quelldatei. `impact` wertet den verknüpften Modulgraphen aus und weist seine
+Spannen der jeweiligen Quelldatei zu. Diese Grenzen machen die
+Implementierung experimentell und noch nicht zu einem vollständigen
+Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen im
 [Releaseplan 0.4.0](release-plans/0.4.0.de.md).
 
 Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination

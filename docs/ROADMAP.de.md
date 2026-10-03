@@ -188,7 +188,7 @@ Feature eines bestimmten Anbieters.
 ## 2. Sprache und Compiler
 
 - [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [~] Experimentelle Funktions-/Typ-/Record-Module und projektweite
+- [~] Experimentelle Funktions-/Typ-/Record-/Tabellen-Imports und projektweite
   Datenbankkonfiguration im aktuellen
   Entwicklungszweig unterstützen projektrelative Imports, `pub`-Deklarationen,
   qualifizierte Aufrufe und Typreferenzen, Zyklenerkennung,
@@ -201,10 +201,11 @@ Feature eines bestimmten Anbieters.
   projektrelativen Dateipfad. Webressourcen im Kontextinventar bleiben auf die
   Einstiegsdatei begrenzt; Verifikationsergebnisse haben noch keine
   Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
-  pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen fließen in
-  das gemeinsame Schema ein und behalten globale SQL-Namen; Views und APIs
-  bleiben noch unvollständig. Auch die Integration mit `fmt`, `impact`, `edit`
-  und Datenbankbefehlen fehlt noch; das Feature ist
+  pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
+  globale SQL-Namen; Views und APIs
+  bleiben noch unvollständig. `impact` analysiert den verknüpften Graphen mit
+  dateibezogenen Spannen; `fmt`, `edit` und Datenbankbefehle bleiben dateilokal.
+  Das Feature ist
   nicht im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
   für alle Fachdaten-Typen.

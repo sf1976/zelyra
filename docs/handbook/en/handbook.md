@@ -1925,10 +1925,11 @@ for the composed application. The runnable example is in
 graph. Context spans for imported tables and database definitions include
 their project-relative source path in `span.file`; the web-resource inventory
 remains entry-file-only. `verify` also checks the linked graph, but
-does not yet attribute results to individual module source files. `fmt`,
-`impact`, `edit`, and database commands still process only the explicitly
-named source file. This branch behavior is experimental and is not included
-in the published 0.3.0 binary.
+does not yet attribute results to individual module source files. `impact`
+analyzes the linked graph and marks spans with their source file. `fmt`,
+`edit`, and database commands still process only the explicitly named source
+file. This branch behavior is experimental and is not included in the
+published 0.3.0 binary.
 
 A module can export a domain record for another module to use in a function
 signature:

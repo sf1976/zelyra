@@ -47,7 +47,7 @@ mod project;
 mod updater;
 use formatter::format_source;
 use holes::collect_typed_holes;
-use impact::{build_impact, focus_impact};
+use impact::{build_impact_with_sources, focus_impact};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
 const MACHINE_MANAGEMENT_DEMO_DATA: &str =
@@ -941,7 +941,7 @@ fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
     }
 }
 
-fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
+fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
     PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
     PROJECT_MODULES.with(|modules| modules.borrow_mut().clear());
     let loaded = match project::load(path) {
@@ -954,6 +954,11 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     };
     PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = loaded.sources.clone());
     PROJECT_MODULES.with(|modules| *modules.borrow_mut() = loaded.modules.clone());
+    Ok(loaded)
+}
+
+fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
+    let loaded = load_project(path)?;
     let source = loaded
         .sources
         .first()
@@ -1902,10 +1907,15 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if format == OutputFormat::Json {
         let source = fs::read_to_string(&path).unwrap_or_default();
         begin_json_diagnostics(&path, &source);
-        let program = load(&path);
-        let mut success = program.is_ok();
-        let impact = if let Ok(program) = program.as_ref() {
-            let full_impact = build_impact(program, &source);
+        let project = load_project(&path);
+        let mut success = project.is_ok();
+        let impact = if let Ok(project) = project.as_ref() {
+            let fallback_source = project
+                .sources
+                .first()
+                .map_or(source.as_str(), |source| source.text.as_str());
+            let full_impact =
+                build_impact_with_sources(&project.program, &project.sources, fallback_source);
             match focus.as_deref() {
                 Some(query) => match focus_impact(&full_impact, query) {
                     Ok(focused) => focused,
@@ -1935,12 +1945,16 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::from(1)
         };
     }
-    let program = match load(&path) {
-        Ok(program) => program,
+    let project = match load_project(&path) {
+        Ok(project) => project,
         Err(()) => return ExitCode::from(1),
     };
     let source = fs::read_to_string(&path).unwrap_or_default();
-    let impact = build_impact(&program, &source);
+    let fallback_source = project
+        .sources
+        .first()
+        .map_or(source.as_str(), |source| source.text.as_str());
+    let impact = build_impact_with_sources(&project.program, &project.sources, fallback_source);
     let impact = match focus.as_deref() {
         Some(query) => match focus_impact(&impact, query) {
             Ok(focused) => focused,

@@ -1907,9 +1907,10 @@ Kontextspannen importierter Tabellen und Datenbankdefinitionen enthalten den
 projektrelativen Quellpfad unter `span.file`; das Inventar für Webressourcen
 bleibt auf die Einstiegsdatei beschränkt. `verify` prüft den verknüpften
 Graphen, weist Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu.
-`fmt`, `impact`, `edit` und Datenbankbefehle arbeiten weiterhin nur mit der
-ausdrücklich angegebenen Quelldatei. Dieses Branch-Verhalten ist experimentell
-und nicht im veröffentlichten 0.3.0-Binary enthalten.
+`impact` wertet den verknüpften Modulgraphen aus und kennzeichnet Spannen mit
+dem jeweiligen Quelldateipfad. `fmt`, `edit` und Datenbankbefehle bearbeiten
+weiterhin nur die ausdrücklich angegebene Quelldatei. Dieses Branch-Verhalten
+ist experimentell und nicht im veröffentlichten 0.3.0-Binary enthalten.
 
 Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
 einer Funktionssignatur verwendet:
