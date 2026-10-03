@@ -191,16 +191,17 @@ architecture requirement for every phase, not a provider-specific feature.
   definitions and tables join the shared schema; imported views/components
   compose into the application and are rendered through `serve`. Their context
   spans include project-relative file paths. Imported pages join the
-  application route set; forms and CRUD declarations also compose from imported
-  files, while APIs and authentication resources remain entry-file-only; some template
-  diagnostics and verification results still lack complete per-module source
+  application route set; forms, CRUD declarations, API routes, and authentication
+  configuration also compose from imported files. API handler references and
+  declared types resolve in their owning module; some template diagnostics and
+  verification results still lack complete per-module source
   provenance.
   Database configuration is not addressed through its alias and is
   limited to one connection per project. Imported tables retain global SQL
   names; imported tableview, view, and component names are global, with
   collisions rejected.
-  Forms and CRUD declarations are composed from imported files; API and
-  authentication resources remain unsupported in imported files.
+  Forms, CRUD declarations, API routes, and authentication configuration compose
+  from imported files; auth tables are checked against the shared schema.
   Imported pages join the route set, with overlapping patterns rejected;
   MariaDB-backed tableviews are composed and served. Database commands load
   the linked graph when building the shared schema. Their diagnostics still need

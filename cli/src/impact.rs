@@ -261,6 +261,29 @@ fn semantic_references(
             );
         }
     }
+    for auth in &program.auth {
+        let auth_node = format!("auth:{}", auth.name);
+        let auth_span = span_value(auth.span, sources);
+        for table in [
+            Some(auth.table.as_str()),
+            auth.session_table.as_deref(),
+            auth.permissions_table.as_deref(),
+            auth.roles_table.as_deref(),
+            auth.role_permissions_table.as_deref(),
+            auth.audit_table.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            add_reference(
+                &mut references,
+                auth_node.clone(),
+                format!("table:{table}"),
+                "auth_table",
+                auth_span.clone(),
+            );
+        }
+    }
     for tableview in &program.tableviews {
         for table in referenced_tables(&tableview.source, table_names) {
             add_reference(

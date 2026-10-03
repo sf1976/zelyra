@@ -444,6 +444,136 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
 }
 
 #[test]
+fn check_composes_imported_api_routes_and_authentication_configuration() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/security.zyl\" as security\nimport \"src/status_api.zyl\" as status_api\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/security.zyl",
+            "import \"src/models.zyl\" as models\nauth users { table: users }\n",
+        ),
+        (
+            "src/models.zyl",
+            "table users { id: Id primary auto email: Email required password_hash: String(255) required }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"app\" }\n",
+        ),
+        (
+            "src/status_api.zyl",
+            "fn status() -> String { return \"ok\" }\napi GET \"/api/status\" { handler status requires auth permits \"status.read\" output String }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    let context: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(
+        context["declarations"]["apis"][0]["span"]["file"],
+        "src/status_api.zyl"
+    );
+    assert_eq!(
+        context["declarations"]["auth"][0]["span"]["file"],
+        "src/security.zyl"
+    );
+    let plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/security.zyl"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        plan["plan"]["source_files"],
+        serde_json::json!(["src/database.zyl", "src/models.zyl", "src/security.zyl"])
+    );
+    assert!(plan["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|dependency| {
+            dependency["from"] == "auth:users"
+                && dependency["to"] == "table:users"
+                && dependency["kind"] == "auth_table"
+        }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn serve_dispatches_an_imported_api_to_its_module_handler() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/status_api.zyl\" as status_api\nfn main() {}\n",
+        ),
+        (
+            "src/status_api.zyl",
+            "fn status() -> String { return \"imported api works\" }\napi GET \"/api/status\" { handler status output String }\n",
+        ),
+    ]);
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&directory)
+        .args(["serve", "main.zyl", &address])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let response = {
+        let socket: std::net::SocketAddr = address.parse().unwrap();
+        let mut response = String::new();
+        for _ in 0..75 {
+            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /api/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut candidate = String::new();
+                stream.read_to_string(&mut candidate).unwrap();
+                if !candidate.is_empty() {
+                    response = candidate;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        response
+    };
+    let _ = server.kill();
+    let server_output = server.wait_with_output().unwrap();
+    assert!(
+        response.contains("200 OK"),
+        "{response}\nserver stderr: {}",
+        String::from_utf8_lossy(&server_output.stderr)
+    );
+    assert!(response.contains("imported api works"), "{response}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_rejects_modules_outside_the_reachable_project_graph() {
     let directory = project(&[
         (

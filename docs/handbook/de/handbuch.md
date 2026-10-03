@@ -1892,8 +1892,9 @@ fn main() {
 
 Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
 `tableview`-Definitionen, Seiten, benannte Views, typisierte Komponenten,
-Formulare und CRUD-Deklarationen enthalten. API- und Authentifizierungs-
-definitionen müssen weiterhin in der Einstiegsdatei stehen.
+Formulare, CRUD-Deklarationen, API-Routen und Authentifizierungsdefinitionen
+enthalten. API-Handler und Typen werden im jeweiligen Modulkontext aufgelöst;
+Authentifizierungstabellen werden gegen das gemeinsame Schema geprüft.
 Funktionen, Typen und Records brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
 Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
 verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
@@ -1903,8 +1904,8 @@ Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
 
 `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und die
 Datenbankbefehle laden den Projektgraphen. `serve` kann importierte
-`tableview`s, Seiten, Views, Komponenten, Formulare und CRUD-Ressourcen in die
-Anwendung integrieren.
+`tableview`s, Seiten, Views, Komponenten, Formulare, CRUD-Ressourcen,
+API-Routen und Authentifizierungskonfiguration in die Anwendung integrieren.
 Importierte Seiten werden projektweit als Routen zusammengesetzt;
 überschneidende Seitenpfade werden mit Verweis auf die importierte Quelldatei
 abgelehnt.
@@ -1914,8 +1915,8 @@ nicht ausgeführt.
 Importkanten und pro Datei die derzeit unterstützten öffentlichen Funktionen,
 Typen und Records unter `modules[].exports`. Die Modul-Einträge enthalten auch
 Importalias und projektrelativen Quellpfad. Importierte Tabellen,
-`tableview`-Definitionen, Seiten, Views, Komponenten, Formulare und CRUD-
-Definitionen erscheinen mit ihrem
+`tableview`-Definitionen, Seiten, Views, Komponenten, Formulare, CRUD-, API-
+und Authentifizierungsdefinitionen erscheinen mit ihrem
 `span.file`-Quellpfad in den Deklarationen. Diese Exportliste ist eine
 Introspektionshilfe; sie ist noch kein vollständiges Paket- oder
 Deploymentmanifest und macht UI-Ressourcen nicht öffentlich. Typ-,

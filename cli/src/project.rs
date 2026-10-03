@@ -388,16 +388,6 @@ fn link_modules(
     let mut type_sets = HashMap::new();
     for (path, module) in modules {
         let functions = function_visibility(&module.program);
-        if path != entry && has_unsupported_import_declarations(&module.program) {
-            let span = first_unsupported_import_span(&module.program).unwrap_or_default();
-            return Err(ProjectError {
-                code: "E-MOD-008",
-                message: "imported modules support functions, types, records, tables, tableviews, pages, views, components, forms, and CRUD; APIs and authentication resources must remain in the entry file".into(),
-                path: module.relative_path.clone(),
-                span,
-                sources: Box::default(),
-            });
-        }
         function_sets.insert(path.clone(), functions);
         type_sets.insert(path.clone(), type_visibility(&module.program));
     }
@@ -526,6 +516,46 @@ fn link_modules(
             }
             linked.cruds.push(crud);
         }
+        for mut api in module.program.apis.clone() {
+            for field in &mut api.input {
+                linker.rewrite_type(&mut field.ty, field.span)?;
+            }
+            linker.rewrite_type(&mut api.output, api.span)?;
+            for error in &mut api.errors {
+                if let Some(payload) = &mut error.payload {
+                    linker.rewrite_type(payload, error.span)?;
+                }
+            }
+            if let Some(handler) = &mut api.handler {
+                let mut expression = Expr {
+                    kind: ExprKind::Call {
+                        name: handler.clone(),
+                        type_args: Vec::new(),
+                        args: Vec::new(),
+                    },
+                    span: api.span,
+                };
+                rewrite_expr(
+                    &mut expression,
+                    path,
+                    module_name,
+                    &module.imports,
+                    function_sets
+                        .get(path)
+                        .expect("current module functions are indexed"),
+                    &function_sets,
+                    &module_names,
+                    &root_functions,
+                    &module.relative_path,
+                    false,
+                )?;
+                if let ExprKind::Call { name, .. } = expression.kind {
+                    *handler = name;
+                }
+            }
+            linked.apis.push(api);
+        }
+        linked.auth.extend(module.program.auth.clone());
         for mut tableview in module.program.tableviews.clone() {
             if linked
                 .tableviews
@@ -611,10 +641,6 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
         .collect()
 }
 
-fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.auth.is_empty() || !program.apis.is_empty()
-}
-
 fn page_routes_overlap(left: &str, right: &str) -> bool {
     let left_parts = left
         .trim_matches('/')
@@ -632,14 +658,6 @@ fn page_routes_overlap(left: &str, right: &str) -> bool {
                 || left.starts_with('{') && left.ends_with('}')
                 || right.starts_with('{') && right.ends_with('}')
         })
-}
-
-fn first_unsupported_import_span(program: &Program) -> Option<Span> {
-    program
-        .auth
-        .first()
-        .map(|item| item.span)
-        .or_else(|| program.apis.first().map(|item| item.span))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -753,13 +771,15 @@ impl TypeLinker<'_> {
             }
         }
         for api in &mut program.apis {
-            for field in &mut api.input {
-                self.rewrite_type(&mut field.ty, field.span)?;
-            }
-            self.rewrite_type(&mut api.output, api.span)?;
-            for error in &mut api.errors {
-                if let Some(payload) = &mut error.payload {
-                    self.rewrite_type(payload, error.span)?;
+            if api.span.source_id == source_id {
+                for field in &mut api.input {
+                    self.rewrite_type(&mut field.ty, field.span)?;
+                }
+                self.rewrite_type(&mut api.output, api.span)?;
+                for error in &mut api.errors {
+                    if let Some(payload) = &mut error.payload {
+                        self.rewrite_type(payload, error.span)?;
+                    }
                 }
             }
         }
@@ -1811,20 +1831,32 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_still_reject_api_and_auth_resources() {
+    fn imported_api_handlers_and_types_are_linked_in_their_module_context() {
         let directory = project(&[
             (
                 "main.zyl",
-                "import \"src/domain.zyl\" as domain\nfn main() {}\n",
+                "import \"src/models.zyl\" as models\nimport \"src/endpoints.zyl\" as endpoints\nfn main() {}\n",
             ),
             (
-                "src/domain.zyl",
-                "fn list_contacts() -> Int { return 0 }\napi GET \"/contacts\" { handler list_contacts output Int }\n",
+                "src/models.zyl",
+                "pub type CustomerId = Int\npub struct Customer { id: CustomerId }\npub fn get(id: CustomerId) -> Customer { return Customer { id: id } }\n",
+            ),
+            (
+                "src/endpoints.zyl",
+                "import \"src/models.zyl\" as models\nfn fetch_customer(id: models::CustomerId) -> models::Customer { return models::get(id) }\napi GET \"/customers/{id}\" { handler fetch_customer input { id: models::CustomerId } output models::Customer }\n",
             ),
         ]);
-        let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
-        assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("APIs and authentication"));
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        let api = &loaded.program.apis[0];
+        assert_eq!(
+            api.handler.as_deref(),
+            Some("src/endpoints.zyl::fetch_customer")
+        );
+        assert_eq!(
+            api.input[0].ty,
+            Type::Named("src/models.zyl::CustomerId".into())
+        );
+        assert!(check(&loaded.program).is_ok());
         cleanup(&directory);
     }
 

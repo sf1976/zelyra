@@ -1915,9 +1915,10 @@ names are rejected. Tableviews, views, and components are composed from
 imported files
 under their declared, unqualified names; they do not yet have `pub` visibility
 syntax. Imported pages join the application's route set; overlapping page
-patterns are rejected with their source location. Forms and CRUD declarations
-also compose from imported files. API and authentication resources remain
-entry-file-only.
+patterns are rejected with their source location. Forms, CRUD declarations,
+API routes, and authentication definitions also compose from imported files.
+API handler references and types resolve in their owning module, and auth
+tables are validated against the shared schema.
 Function, type, and
 record declarations are private by default; tables and the database
 definition are included by importing their file. Public records cannot expose
@@ -1930,14 +1931,16 @@ for the composed application. The runnable example is in
 commands load the project graph. Database commands build the schema from the
 composed declarations; some schema diagnostics still lack complete module
 source attribution. `serve` can compose imported pages, MariaDB-backed
-tableviews, views, components, forms, and CRUD resources into the application;
+tableviews, views, components, forms, CRUD resources, API routes, and
+authentication configuration into the application;
 the tableview query
 runtime does not yet execute against SQLite. `context --format=json` reports
 the deterministically sorted module graph, import edges, and the currently
 supported public functions, types, and records per file under
 `modules[].exports`. Module entries also include the import alias and
 project-relative source path. Imported tables, tableviews, pages, views,
-components, forms, and CRUD declarations appear with their source path in
+components, forms, CRUD declarations, API routes, and authentication
+definitions appear with their source path in
 `span.file`. This
 export list is an introspection aid, not a complete package or deployment
 manifest, and it does not make UI resources public.
