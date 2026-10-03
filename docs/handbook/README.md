@@ -13,10 +13,10 @@ A concise, step-by-step introduction building a machine-management application:
 - [Deutsch (Einstieg)](de/README.md)
 - [English (Intro)](en/README.md)
 
-Both editions document the experimental Zelyra 0.2.0 implementation as it
-exists today and clearly label roadmap features. The planned 0.3.0 scope is
-tracked separately in the [English release plan](../release-plans/0.3.0.en.md)
-and [German release plan](../release-plans/0.3.0.de.md).
+Both editions document the experimental Zelyra 0.3.0 implementation as it
+exists today and clearly label roadmap features. The next proposed milestone
+is tracked separately in the [English release plan](../release-plans/0.4.0.en.md)
+and [German release plan](../release-plans/0.4.0.de.md).
 
 The [digital sovereignty manifesto](../MANIFESTO.md) is the binding product
 compass; read it alongside the implementation status rather than as a claim of

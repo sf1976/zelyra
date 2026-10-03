@@ -356,7 +356,7 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.2.0`). The language compatibility line remains 0.1.
+`zelyra --version` outputs the full compiler and package version (for example, `zelyra 0.3.0`). The language compatibility line remains 0.1.
 
 **Step 3: Verify Docker Compose (for MariaDB projects)**
 ```bash
@@ -1917,7 +1917,7 @@ In `zelyra.toml`, you explicitly configure which system resources the project is
 
 ### 7. Exercises
 - **Level 1 (Easy):** Generate a new project skeleton using `zelyra new task_app` and explore the generated files.
-- **Level 2 (Medium):** Update `zelyra.toml` with a project description and increment the version number to `0.2.0`.
+- **Level 2 (Medium):** Update `zelyra.toml` with a project description and increment the version number to `0.3.0`.
 - **Level 3 (Challenging):** Write an application structured into three separate functions handling initialization, business processing, and output reporting.
 
 ### 8. Practical project task: Task Management – Project Structure
