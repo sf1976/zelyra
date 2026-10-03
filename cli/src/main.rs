@@ -4620,6 +4620,7 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
 
 struct DoctorCheck {
     name: &'static str,
+    category: &'static str,
     status: &'static str,
     message: String,
 }
@@ -4801,12 +4802,14 @@ fn docker_compose_check() -> DoctorCheck {
     if let Some(command) = detect_docker_compose() {
         return DoctorCheck {
             name: "docker_compose",
+            category: "tooling",
             status: "pass",
             message: format!("{} is available", command.label()),
         };
     }
     DoctorCheck {
         name: "docker_compose",
+        category: "tooling",
         status: "warn",
         message: format!(
             "{} The generated MariaDB stack cannot be started until Docker Compose is available.",
@@ -5226,6 +5229,7 @@ fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
         .map(|check| {
             serde_json::json!({
                 "name": check.name,
+                "category": check.category,
                 "status": check.status,
                 "message": check.message,
             })
@@ -5239,6 +5243,66 @@ fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
         "checks": checks,
     })
     .to_string()
+}
+
+fn doctor_database_category(message: &str) -> &'static str {
+    let message = message.to_ascii_lowercase();
+    if message.contains("access denied")
+        || message.contains("authentication failed")
+        || message.contains("rejected authentication")
+        || message.contains("password authentication failed")
+        || message.contains("no pg_hba.conf entry")
+    {
+        "authentication"
+    } else if message.contains("timed out")
+        || message.contains("timeout")
+        || message.contains("time out")
+        || message.contains("query execution was interrupted")
+        || message.contains("max_statement_time")
+    {
+        "timeout"
+    } else if message.contains("database_url is not set")
+        || message.contains("must use mariadb://")
+        || message.contains("must include a database name")
+        || message.contains("must include user and host")
+        || message.contains("contains an empty user")
+        || message.contains("unknown database")
+        || (message.contains("database ") && message.contains(" does not exist"))
+        || message.contains("configuration is invalid")
+    {
+        "configuration"
+    } else if message.contains("could not start mariadb")
+        || message.contains("could not start psql")
+        || message.contains("could not start sqlite")
+        || message.contains("no such file or directory")
+        || message.contains("client is unavailable")
+    {
+        "tooling"
+    } else if message.contains("could not connect")
+        || message.contains("can't connect")
+        || message.contains("cannot connect")
+        || message.contains("connection refused")
+        || message.contains("connection reset")
+        || message.contains("server has gone away")
+        || message.contains("certificate")
+        || message.contains("tls")
+        || message.contains("ssl")
+    {
+        "connectivity"
+    } else {
+        "schema"
+    }
+}
+
+fn doctor_database_failure_message(category: &str) -> &'static str {
+    match category {
+        "authentication" => "database rejected authentication; check the configured user and grants",
+        "timeout" => "database check timed out; check server responsiveness and configured timeouts",
+        "configuration" => "database configuration is invalid or the configured database is unavailable",
+        "tooling" => "database client is unavailable; install the client required by this backend",
+        "connectivity" => "could not connect securely to the database; check host, port, TLS, and server status",
+        _ => "could not inspect the database schema; check schema compatibility and metadata permissions",
+    }
 }
 
 fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -5283,6 +5347,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Ok(Some(url)) => {
                 checks.push(DoctorCheck {
                     name: "env_file",
+                    category: "configuration",
                     status: "pass",
                     message: format!(
                         "loaded DATABASE_URL from {env_file} without exposing credentials"
@@ -5293,6 +5358,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Ok(None) => {
                 checks.push(DoctorCheck {
                     name: "env_file",
+                    category: "configuration",
                     status: "warn",
                     message: format!("{env_file} does not define DATABASE_URL"),
                 });
@@ -5301,6 +5367,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Err(error) => {
                 checks.push(DoctorCheck {
                     name: "env_file",
+                    category: "configuration",
                     status: "fail",
                     message: error,
                 });
@@ -5313,6 +5380,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
             name: "project_file",
+            category: "configuration",
             status: "pass",
             message: format!("{path} exists"),
         });
@@ -5320,6 +5388,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Ok(program) => {
                 checks.push(DoctorCheck {
                     name: "static_checks",
+                    category: "project",
                     status: "pass",
                     message: "source, types, APIs, SQL, and forms are valid".into(),
                 });
@@ -5328,6 +5397,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Err(()) => {
                 checks.push(DoctorCheck {
                     name: "static_checks",
+                    category: "project",
                     status: "fail",
                     message: "see diagnostics above".into(),
                 });
@@ -5337,6 +5407,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         checks.push(DoctorCheck {
             name: "project_file",
+            category: "configuration",
             status: "fail",
             message: format!("`{path}` does not exist"),
         });
@@ -5346,11 +5417,13 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     match Command::new("cargo").arg("--version").output() {
         Ok(output) if output.status.success() => checks.push(DoctorCheck {
             name: "rust_toolchain",
+            category: "tooling",
             status: "pass",
             message: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
         }),
         _ => checks.push(DoctorCheck {
             name: "rust_toolchain",
+            category: "tooling",
             status: "warn",
             message: "cargo is unavailable".into(),
         }),
@@ -5364,6 +5437,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
+                            category: "schema",
                             status: "pass",
                             message: format!(
                                 "{}: {}",
@@ -5371,14 +5445,23 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                                 current.summary().replace('\n', ", ")
                             ),
                         }),
-                        Err(error) => checks.push(DoctorCheck {
-                            name: "database",
-                            status: "fail",
-                            message: format!("{}: {error}", backend.name()),
-                        }),
+                        Err(error) => {
+                            let category = doctor_database_category(&error.message);
+                            checks.push(DoctorCheck {
+                                name: "database",
+                                category,
+                                status: "fail",
+                                message: format!(
+                                    "{}: {}",
+                                    backend.name(),
+                                    doctor_database_failure_message(category)
+                                ),
+                            });
+                        }
                     },
                     None => checks.push(DoctorCheck {
                         name: "database",
+                        category: "configuration",
                         status: "warn",
                         message: format!("{}: DATABASE_URL is not set", backend.name()),
                     }),
@@ -5386,6 +5469,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }
             Err(errors) => checks.push(DoctorCheck {
                 name: "schema",
+                category: "schema",
                 status: "fail",
                 message: errors
                     .iter()
@@ -5403,12 +5487,14 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             let actual_port = listener.local_addr().map_or(port, |address| address.port());
             checks.push(DoctorCheck {
                 name: "web_port",
+                category: "connectivity",
                 status: "pass",
                 message: format!("127.0.0.1:{actual_port} is available"),
             });
         }
         Err(error) => checks.push(DoctorCheck {
             name: "web_port",
+            category: "connectivity",
             status: "fail",
             message: format!("127.0.0.1:{port} is unavailable ({error})"),
         }),
@@ -10673,11 +10759,19 @@ mod tests {
         let checks = vec![
             DoctorCheck {
                 name: "project_file",
+                category: "configuration",
                 status: "pass",
                 message: "app.zyl exists".into(),
             },
             DoctorCheck {
+                name: "static_checks",
+                category: "project",
+                status: "pass",
+                message: "source is valid".into(),
+            },
+            DoctorCheck {
                 name: "database",
+                category: "configuration",
                 status: "warn",
                 message: "mariadb: DATABASE_URL is not set".into(),
             },
@@ -10687,8 +10781,33 @@ mod tests {
         assert_eq!(document["version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(document["status"], "ready");
         assert_eq!(document["warnings"], 1);
-        assert_eq!(document["checks"][1]["status"], "warn");
+        assert_eq!(document["checks"][1]["category"], "project");
+        assert_eq!(document["checks"][2]["status"], "warn");
+        assert_eq!(document["checks"][2]["category"], "configuration");
         assert!(!format_doctor_json("app.zyl", &checks).contains("password"));
+    }
+
+    #[test]
+    fn doctor_classifies_database_failures_without_returning_backend_details() {
+        let cases = [
+            ("Access denied for user `app`", "authentication"),
+            ("connection timed out", "timeout"),
+            (
+                "query execution was interrupted (max_statement_time exceeded)",
+                "timeout",
+            ),
+            ("Unknown database 'private_name'", "configuration"),
+            ("could not start mariadb: executable missing", "tooling"),
+            ("Can't connect to server on 'db.example'", "connectivity"),
+            ("unexpected column metadata", "schema"),
+        ];
+        for (detail, expected) in cases {
+            let category = doctor_database_category(detail);
+            assert_eq!(category, expected, "wrong category for {detail}");
+            let safe_message = doctor_database_failure_message(category);
+            assert!(!safe_message.contains(detail));
+            assert!(!safe_message.contains("private_name"));
+        }
     }
 
     #[test]

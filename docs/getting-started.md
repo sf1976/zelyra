@@ -245,7 +245,10 @@ zelyra doctor examples/machine_management.zyl --json
 ~~~
 
 The JSON document contains `version`, `project`, `status`, `warnings`, and a
-`checks` array. Credentials from `DATABASE_URL` are never included.
+`checks` array. Every check includes a stable `category` such as
+`configuration`, `project`, `connectivity`, `authentication`, `timeout`,
+`schema`, or `tooling`. Database failures are mapped to short, actionable messages; raw
+client diagnostics and credentials are not included.
 
 The installation does not require an account password. Do not run the installer
 as root unless there is a separate system-wide packaging reason.

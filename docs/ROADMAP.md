@@ -186,8 +186,10 @@ architecture requirement for every phase, not a provider-specific feature.
   defaults and generated configuration previews.
 - [~] `zelyra doctor` checks project validity, database connectivity, Docker
   Compose availability, an optional `.env` without exposing credentials, and
-  host-port readiness; TLS, permissions, and broader external-tool guidance
-  remain open.
+  host-port readiness. JSON checks now carry stable configuration,
+  project, connectivity, authentication, timeout, schema, and tooling categories with
+  normalized secret-free database errors; TLS, permissions, and broader
+  external-tool guidance remain open.
 - [~] Project templates: minimal, MariaDB CRUD, MariaDB authentication, and
   MariaDB business starters are available; API and production-deployment
   templates remain.

@@ -207,8 +207,10 @@ Feature eines bestimmten Anbieters.
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
   Compose, eine optionale `.env` ohne Zugangsdaten auszugeben, und die
-  Host-Port-Bereitschaft; TLS, Dateirechte und umfassendere Werkzeug-Hinweise
-  bleiben offen.
+  Host-Port-Bereitschaft. JSON-Checks enthalten nun stabile Kategorien für
+  Konfiguration, Projekt, Verbindung, Authentifizierung, Timeout, Schema und Werkzeuge;
+  Datenbankfehler werden geheimnisfrei normalisiert. TLS, Dateirechte und
+  umfassendere Werkzeug-Hinweise bleiben offen.
 - [~] Projektvorlagen: minimales Skript sowie MariaDB-CRUD-,
   MariaDB-Authentifizierungs- und MariaDB-Business-Starter sind vorhanden;
   API- und Produktionsdeployment-Vorlagen folgen.

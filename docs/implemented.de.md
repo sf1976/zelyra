@@ -122,8 +122,10 @@ der [Setup-Anleitung](setup-web.de.md) und den
 - ✅ `zelyra setup` bietet Konsolenaktionen und einen nur an Loopback gebundenen
   Browser-Assistenten, startet erzeugte lokale MariaDB-/Web-Stacks, wendet das
   Anfangsschema an, unterstützt Portwahl und gibt die App-Adresse aus.
-- ✅ `zelyra doctor` prüft Projekt-, Datenbank- und Compose-Bereitschaft im
-  dokumentierten schreibgeschützten Umfang. `zelyra update` prüft
+- ✅ `zelyra doctor --json` liefert schreibgeschützte Bereitschaftsprüfungen
+  mit stabilen Kategorien für Konfiguration, Projekt, Verbindung, Authentifizierung,
+  Timeout, Schema und Werkzeuge; Datenbankdiagnosen werden ohne Zugangsdaten
+  normalisiert. `zelyra update` prüft
   Release-Prüfsummen vor dem Austausch unterstützter Linux-/Windows-x86_64-
   Binärdateien.
 - ✅ Benutzerlokale Installation aus dem Quellcode ist verfügbar.

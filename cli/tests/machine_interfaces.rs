@@ -1045,6 +1045,7 @@ fn doctor_reports_unreachable_database_without_exposing_credentials() {
         .find(|check| check["name"] == "database")
         .expect("doctor should report a database check");
     assert_eq!(database_check["status"], "fail");
+    assert_eq!(database_check["category"], "connectivity");
     assert!(database_check["message"]
         .as_str()
         .unwrap()
