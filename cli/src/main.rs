@@ -3326,7 +3326,9 @@ DATABASE_URL=
                     "compiler_repository": "https://github.com/sf1976/zelyra",
                     "compiler_commit": compiler_ref,
                     "files": docker_files,
-                    "database_connection": "external, configured per exported Compose project via DATABASE_URL"
+                    "database_connection": "external, configured per exported Compose project via DATABASE_URL",
+                    "database_connection_scope": "per_exported_compose_project",
+                    "supports_multiple_connections_per_process": false
                 })
             } else {
                 Value::Null

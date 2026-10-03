@@ -390,6 +390,100 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
 }
 
 #[test]
+fn independent_database_using_bundles_get_separate_connection_configuration() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\nimport \"src/inventory.zyl\" as inventory\nfn main() {}\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"business\" }\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "table invoices { id: Id primary auto number: String(30) required }\ncrud Invoice -> invoices\n",
+        ),
+        (
+            "src/inventory.zyl",
+            "table inventory { id: Id primary auto sku: String(30) required }\ncrud Inventory -> inventory\n",
+        ),
+    ]);
+
+    let compiler_ref = "a".repeat(40);
+    let deployments = [
+        (
+            "crud:Invoice",
+            "invoices",
+            "src/invoices.zyl",
+            "src/inventory.zyl",
+        ),
+        (
+            "crud:Inventory",
+            "inventory",
+            "src/inventory.zyl",
+            "src/invoices.zyl",
+        ),
+    ];
+    for (resource, name, included_module, excluded_module) in deployments {
+        let bundle = directory.with_extension(format!("{name}-docker-bundle"));
+        let bundle_arg = bundle.to_string_lossy().into_owned();
+        let result = run(
+            &directory,
+            &[
+                "module",
+                "bundle",
+                "main.zyl",
+                resource,
+                "--output",
+                &bundle_arg,
+                "--docker",
+                "--compiler-ref",
+                &compiler_ref,
+            ],
+        );
+        assert!(
+            result.status.success(),
+            "{resource}: {}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(bundle.join("src/database.zyl").is_file());
+        assert!(bundle.join(included_module).is_file());
+        assert!(!bundle.join(excluded_module).exists());
+        assert!(!bundle.join(".env").exists());
+
+        let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
+        assert!(env_example.contains("DATABASE_URL="));
+        assert!(env_example.lines().any(|line| line == "DATABASE_URL="));
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+        assert_eq!(manifest["database"]["required"], true);
+        assert_eq!(
+            manifest["database"]["connection_environment"],
+            "DATABASE_URL"
+        );
+        assert_eq!(
+            manifest["database"]["connection_model"],
+            "single-project-wide-connection"
+        );
+        assert_eq!(
+            manifest["docker"]["database_connection_scope"],
+            "per_exported_compose_project"
+        );
+        assert_eq!(
+            manifest["docker"]["supports_multiple_connections_per_process"],
+            false
+        );
+        assert_eq!(manifest["source_closure_complete"], false);
+        assert_eq!(manifest["complete_deployment"], false);
+
+        fs::remove_dir_all(bundle).unwrap();
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_and_run_support_public_records_and_qualified_types() {
     let directory = project(&[
         (

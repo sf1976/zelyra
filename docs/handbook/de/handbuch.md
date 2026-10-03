@@ -2048,6 +2048,12 @@ MariaDB wird ausdrücklich nicht mitgeliefert. `.env.example` enthält nur
 Platzhalter und eine leere `DATABASE_URL`. Kopiere sie nach `.env` und
 konfiguriere dort die Datenbankverbindung, falls die Anwendung sie benötigt.
 Die Zugangsdaten werden weder kopiert noch in das Image gebaut.
+Jedes exportierte Compose-Paket hat sein eigenes `.env.example` und damit nach
+dem lokalen Kopieren eine unabhängig konfigurierbare `DATABASE_URL`. Das ist
+eine Verbindung pro laufender Anwendungseinheit, kein Datenbankmodul mit
+mehreren benannten Verbindungen innerhalb desselben Prozesses. Das Manifest
+weist diesen begrenzten Umfang unter
+`docker.database_connection_scope: "per_exported_compose_project"` aus.
 
 Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
 `source_closure_complete` und `complete_deployment` bleiben `false`, weil der

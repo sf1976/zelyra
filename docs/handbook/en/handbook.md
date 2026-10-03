@@ -2060,6 +2060,11 @@ the extracted application; MariaDB is not included. `.env.example` contains
 only placeholders and an empty `DATABASE_URL`. Copy it to `.env` and configure
 the database connection there if the application needs one. Credentials are
 neither copied nor built into the image.
+Each exported Compose package has its own `.env.example` and, after the local
+copy, an independently configurable `DATABASE_URL`. This is one connection
+per running application unit, not a database module with multiple named
+connections inside one process. The manifest records this limited scope as
+`docker.database_connection_scope: "per_exported_compose_project"`.
 
 This Docker package is still not a complete module export:
 `source_closure_complete` and `complete_deployment` remain `false` because the
