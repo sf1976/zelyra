@@ -1895,10 +1895,13 @@ standardmäßig privat. Pfade beziehen sich auf das Verzeichnis der
 Einstiegsdatei. `check`, `build` und `run` laden die Imports, lehnen Zyklen und
 Pfade außerhalb des Projektstamms ab und behalten Typ-, Capability- und
 Contract-Prüfungen bei. Importierte Dateien dürfen derzeit nur Funktionen
-enthalten. Andere Befehle wie `fmt`, `context`, `impact`, `edit`, `verify` und
-Datenbankbefehle arbeiten weiterhin nur mit der angegebenen Quelldatei. Dieses
-Branch-Verhalten ist experimentell und nicht im veröffentlichten 0.3.0-Binary
-enthalten.
+enthalten. `context --format=json` zeigt den vollständigen, deterministisch
+sortierten Modulgraphen; sein Deklarationsinventar enthält jedoch weiterhin
+nur die Einstiegsdatei. Auch `verify` prüft den verknüpften Graphen, weist
+Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu. `fmt`, `impact`,
+`edit` und Datenbankbefehle arbeiten weiterhin nur mit der ausdrücklich
+angegebenen Quelldatei. Dieses Branch-Verhalten ist experimentell und nicht im
+veröffentlichten 0.3.0-Binary enthalten.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 

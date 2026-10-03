@@ -192,10 +192,13 @@ Feature eines bestimmten Anbieters.
   unterstützen projektrelative Imports, `pub fn`, qualifizierte Aufrufe,
   Zyklenerkennung, Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
   Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
-  `check`, `build` und `run` verwenden diesen Graphen. Nicht-Funktions-
-  Deklarationen und die Integration in `fmt`, `context`, `impact`, `edit`,
-  `verify` und Datenbankbefehle sind noch unvollständig; das Feature ist nicht
-  im veröffentlichten 0.3.0-Binary enthalten.
+  `check`, `build`, `run`, `context` und `verify` prüfen diesen Graphen; der
+  maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
+  Modul-/Import-Überblick. Sein Deklarationsinventar umfasst weiterhin nur die
+  Einstiegsdatei; Verifikationsergebnisse haben noch keine Quellzuordnung pro
+  Modul. Nicht-Funktions-Deklarationen sowie `fmt`, `impact`, `edit` und
+  Datenbankbefehle bleiben unvollständig; das Feature ist nicht im
+  veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
   für alle Fachdaten-Typen.
 - [ ] Bessere Typinferenz mit präzisen Quellpositionen und Fix-Vorschlägen.

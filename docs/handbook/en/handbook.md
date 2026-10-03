@@ -1906,10 +1906,13 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. `check`, `build`,
 and `run` load the imports, reject cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions only. Other commands such as `fmt`, `context`,
-`impact`, `edit`, `verify`, and database commands remain source-file-local.
-This branch behavior is experimental and is not included in the published
-0.3.0 binary.
+currently contain functions only. `context --format=json` reports the complete,
+deterministically sorted module graph, although its declaration inventory
+still covers only the entry file. `verify` also checks the linked graph, but
+does not yet attribute results to individual module source files. `fmt`,
+`impact`, `edit`, and database commands still process only the explicitly
+named source file. This branch behavior is experimental and is not included
+in the published 0.3.0 binary.
 
 ### 4. Small, progressive examples
 

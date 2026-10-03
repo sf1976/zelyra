@@ -17,6 +17,19 @@ pub struct ProjectSource {
 pub struct LoadedProject {
     pub program: Program,
     pub sources: Vec<ProjectSource>,
+    pub modules: Vec<ProjectModule>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectModule {
+    pub path: String,
+    pub imports: Vec<ProjectImport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectImport {
+    pub alias: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug)]
@@ -86,9 +99,41 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
             error.sources = loader.sources.clone().into_boxed_slice();
             error
         })?;
+    let module_paths = loader
+        .modules
+        .iter()
+        .map(|(path, module)| (path.clone(), module.relative_path.clone()))
+        .collect::<HashMap<_, _>>();
+    let mut modules = loader
+        .modules
+        .values()
+        .map(|module| {
+            let mut imports = module
+                .imports
+                .iter()
+                .filter_map(|(alias, path)| {
+                    module_paths.get(path).map(|path| ProjectImport {
+                        alias: alias.clone(),
+                        path: path.clone(),
+                    })
+                })
+                .collect::<Vec<_>>();
+            imports.sort_by(|left, right| {
+                left.alias
+                    .cmp(&right.alias)
+                    .then_with(|| left.path.cmp(&right.path))
+            });
+            ProjectModule {
+                path: module.relative_path.clone(),
+                imports,
+            }
+        })
+        .collect::<Vec<_>>();
+    modules.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(LoadedProject {
         program,
         sources: loader.sources,
+        modules,
     })
 }
 
@@ -984,6 +1029,55 @@ mod tests {
         assert_eq!(execute(&loaded.program).unwrap(), ["10"]);
         assert!(check(&loaded.program).is_ok());
         assert_eq!(loaded.sources.len(), 2);
+        assert_eq!(
+            loaded.modules,
+            [
+                ProjectModule {
+                    path: "main.zyl".into(),
+                    imports: vec![ProjectImport {
+                        alias: "math".into(),
+                        path: "src/math.zyl".into()
+                    }]
+                },
+                ProjectModule {
+                    path: "src/math.zyl".into(),
+                    imports: vec![]
+                }
+            ]
+        );
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn reports_transitive_module_graph_in_stable_path_order() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/invoice.zyl\" as invoice\nfn main() { print(invoice::total()) }\n",
+            ),
+            (
+                "src/invoice.zyl",
+                "import \"src/money.zyl\" as money\npub fn total() -> Int { return money::amount() }\n",
+            ),
+            (
+                "src/money.zyl",
+                "pub fn amount() -> Int { return 25 }\n",
+            ),
+        ]);
+        let entry = directory.join("main.zyl");
+        let loaded = load(entry.to_str().unwrap()).unwrap();
+        let repeated = load(entry.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.modules, repeated.modules);
+        assert_eq!(
+            loaded
+                .modules
+                .iter()
+                .map(|module| module.path.as_str())
+                .collect::<Vec<_>>(),
+            ["main.zyl", "src/invoice.zyl", "src/money.zyl"]
+        );
+        assert_eq!(loaded.modules[1].imports[0].alias, "money");
+        assert_eq!(loaded.modules[1].imports[0].path, "src/money.zyl");
         cleanup(&directory);
     }
 

@@ -339,13 +339,17 @@ fehlende Dateien, doppelte Aliasse, Importzyklen, Pfad-Traversal, Symlinks
 außerhalb des Projektstamms sowie Aufrufe privater oder unbekannter importierter
 Funktionen ab. Beim Laden der Module findet kein Netzwerkzugriff statt.
 
-`check`, `build` und `run` laden derzeit diesen Projektgraphen. Typen, Tabellen,
-Views, APIs und andere Nicht-Funktions-Deklarationen bleiben in der
-Einstiegsdatei; `fmt`, `context`, `impact`, `edit`, `verify` und
-Datenbankbefehle arbeiten weiterhin nur mit der angegebenen Quelldatei. Diese
-Grenzen machen die Implementierung experimentell und noch nicht zu einem
-vollständigen Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen
-im [Releaseplan 0.4.0](release-plans/0.4.0.de.md).
+`check`, `build`, `run`, `context` und `verify` prüfen derzeit diesen
+Projektgraphen. Das maschinenlesbare Kontextdokument enthält jedes erreichbare
+Modul und seine sortierten Importkanten. Das Deklarationsinventar beschreibt
+weiterhin nur die Einstiegsdatei; `verify` prüft verknüpfte Funktionen, bewahrt
+in Verifikationsergebnissen aber noch keine Quellzuordnung pro Modul.
+Typen, Tabellen, Views, APIs und andere Nicht-Funktions-Deklarationen bleiben
+in der Einstiegsdatei. `fmt`, `impact`, `edit` und Datenbankbefehle arbeiten
+weiterhin nur mit der angegebenen Quelldatei. Diese Grenzen machen die
+Implementierung experimentell und noch nicht zu einem vollständigen
+Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen im
+[Releaseplan 0.4.0](release-plans/0.4.0.de.md).
 
 Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination
 deklariert, erzeugt Zelyra automatisch vor dem Seiteninhalt ein semantisches

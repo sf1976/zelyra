@@ -118,6 +118,7 @@ struct JsonDiagnosticCollector {
 thread_local! {
     static JSON_DIAGNOSTICS: RefCell<Option<JsonDiagnosticCollector>> = const { RefCell::new(None) };
     static PROJECT_SOURCES: RefCell<Vec<project::ProjectSource>> = const { RefCell::new(Vec::new()) };
+    static PROJECT_MODULES: RefCell<Vec<project::ProjectModule>> = const { RefCell::new(Vec::new()) };
 }
 
 fn database_usage() {
@@ -942,6 +943,7 @@ fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
+    PROJECT_MODULES.with(|modules| modules.borrow_mut().clear());
     let loaded = match project::load(path) {
         Ok(loaded) => loaded,
         Err(error) => {
@@ -951,6 +953,7 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
         }
     };
     PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = loaded.sources.clone());
+    PROJECT_MODULES.with(|modules| *modules.borrow_mut() = loaded.modules.clone());
     let source = loaded
         .sources
         .first()
@@ -2408,6 +2411,22 @@ fn empty_context_declarations() -> Value {
     })
 }
 
+fn context_modules() -> Value {
+    PROJECT_MODULES.with(|modules| {
+        json!(modules
+            .borrow()
+            .iter()
+            .map(|module| json!({
+                "path": module.path,
+                "imports": module.imports.iter().map(|import| json!({
+                    "alias": import.alias,
+                    "path": import.path
+                })).collect::<Vec<_>>()
+            }))
+            .collect::<Vec<_>>())
+    })
+}
+
 fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let Some(path) = arguments.next() else {
         usage();
@@ -2461,6 +2480,7 @@ fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }),
         ),
         ("declarations".into(), declarations),
+        ("modules".into(), context_modules()),
     ];
     print_machine_document(&machine_document("context", success, diagnostics, fields));
     if success {

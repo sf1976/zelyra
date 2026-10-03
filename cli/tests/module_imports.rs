@@ -89,6 +89,39 @@ fn imported_type_diagnostic_names_the_imported_source() {
 }
 
 #[test]
+fn context_exposes_the_transitive_module_graph_deterministically() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoice.zyl\" as invoice\nfn main() { print(invoice::total()) }\n",
+        ),
+        (
+            "src/invoice.zyl",
+            "import \"src/money.zyl\" as money\npub fn total() -> Int { return money::amount() }\n",
+        ),
+        ("src/money.zyl", "pub fn amount() -> Int { return 25 }\n"),
+    ]);
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    let repeated = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    assert_eq!(context.stdout, repeated.stdout);
+    let document: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(
+        document["modules"],
+        serde_json::json!([
+            {"path":"main.zyl","imports":[{"alias":"invoice","path":"src/invoice.zyl"}]},
+            {"path":"src/invoice.zyl","imports":[{"alias":"money","path":"src/money.zyl"}]},
+            {"path":"src/money.zyl","imports":[]}
+        ])
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_rejects_import_cycles_and_private_symbols_before_execution() {
     let cycle = project(&[
         ("main.zyl", "import \"src/a.zyl\" as a\nfn main() {}\n"),

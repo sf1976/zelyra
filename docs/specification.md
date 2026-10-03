@@ -386,12 +386,16 @@ duplicate aliases, import cycles, path traversal, symlinks that resolve outside
 the project root, and calls to private or unknown imported functions. Module
 loading performs no network lookup.
 
-`check`, `build`, and `run` currently load this project graph. Types, tables,
-views, APIs, and other non-function declarations remain in the entry file;
-`fmt`, `context`, `impact`, `edit`, `verify`, and database commands are still
-source-file-local. These limits make the implementation experimental rather
-than a complete multi-file project model. The full requirements are tracked in
-the [0.4.0 release plan](release-plans/0.4.0.en.md).
+`check`, `build`, `run`, `context`, and `verify` currently validate this
+project graph. The machine-readable context document includes every reachable
+module and its sorted import edges. Its declaration inventory still describes
+the entry file; `verify` checks linked functions, but verification results do
+not yet preserve per-module source provenance. Types, tables, views, APIs, and
+other non-function declarations remain in the entry file. `fmt`, `impact`,
+`edit`, and database commands remain source-file-local. These limits make the
+implementation experimental rather than a complete multi-file project model.
+The full requirements are tracked in the
+[0.4.0 release plan](release-plans/0.4.0.en.md).
 
 When a page collection declares search, filters, sorting, or pagination,
 Zelyra automatically renders a semantic query-control form before the page
