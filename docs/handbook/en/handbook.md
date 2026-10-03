@@ -1906,8 +1906,17 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. `check`, `build`,
 and `run` load the imports, reject cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, and records. These declarations
-are private by default, and public records cannot expose private field types.
+currently contain functions, type aliases, records, and a project-wide
+database connection definition. Database configuration is composed into the
+application and is not accessed through the import alias; only one database
+definition is allowed in the complete project graph. Tables, views, components,
+pages, forms, CRUD declarations, APIs, and authentication resources remain
+entry-file-only. Function, type, and record declarations are private by
+default, and public records cannot expose private field types.
+The database module is ordinary project configuration, not a separately named
+database service: the current runtime supports only one configured database
+for the composed application. The runnable example is in
+`examples/modules/`.
 `context --format=json` reports the complete,
 deterministically sorted module graph, although its declaration inventory
 still covers only the entry file. `verify` also checks the linked graph, but
@@ -1958,7 +1967,9 @@ In `zelyra.toml`, you explicitly configure which system resources the project is
 
 ### 5. Typical errors and their causes
 - **Error:** Using module imports with the published Zelyra 0.3.0 binary.
-  *Cause:* `import` is not part of that release. The development branch has an experimental module implementation for functions, type aliases, and records; it is not a supported 0.3.0 feature.
+  *Cause:* `import` is not part of that release. The development branch has
+  experimental imports for functions, type aliases, records, and one
+  project-wide database definition; these are not supported 0.3.0 features.
 - **Error:** Deleting `zelyra.toml` or executing CLI commands from outside the project root directory.
   *Cause:* Commands like `zelyra run` look for `zelyra.toml` in the current working directory to configure capabilities and compilation paths.
 
@@ -1996,7 +2007,9 @@ fn main() {
 ### 9. Summary
 - Projects are configured and secured via `zelyra.toml`.
 - The published 0.3.0 CLI checks the source file explicitly named in the command.
-- The unreleased development branch imports functions, type aliases, and records experimentally; it does not yet provide a complete modular application model.
+- The unreleased development branch imports functions, type aliases, records,
+  and one project-wide database definition experimentally; it does not yet
+  provide a complete modular application model.
 - Organizing files into folders helps readers, but does not by itself connect modules.
 
 ### 10. Self-check review questions

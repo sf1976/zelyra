@@ -5575,7 +5575,8 @@ Release-Meilensteine:
   [Releaseplan](../../release-plans/0.4.0.de.md).
 - **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
   bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält nur das
-  in Kapitel 15 beschriebene Experiment für Funktions-, Typ- und Record-Imports; es ist nicht in
+  in Kapitel 15 beschriebene Experiment für Funktions-, Typ-, Record- und
+  Datenbankkonfigurations-Imports; es ist nicht in
   0.3.0 enthalten und bietet noch keine vollständigen Projektmodule.
 
 ### 4. Zelyras Versprechen an Entwickler
@@ -5588,7 +5589,7 @@ Release-Meilensteine:
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
 - **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
-  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen und Records; das umfassendere Modulmodell bleibt geplant.
+  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen, Records und einer projektweiten Datenbankkonfiguration. Tabellen, Views und andere Anwendungsressourcen bleiben ausgeschlossen; das umfassendere Modulmodell ist geplant.
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
@@ -5597,7 +5598,7 @@ Release-Meilensteine:
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
 3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
    zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es nur begrenzte
-   Funktions-, Typ- und Record-Imports.
+   Funktions-, Typ-, Record- und Datenbankkonfigurations-Imports.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
@@ -8613,8 +8614,9 @@ fn main() {
 **Frage: Warum gibt es in Zelyra 0.3.0 keine `import`-Anweisung?**
 *Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
 CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
-unveröffentlichten Entwicklungszweig gibt es einen experimentellen Import für
-Funktions-, Typ- und Record-Deklarationen, die `check`, `build`, `run`,
+unveröffentlichten Entwicklungszweig gibt es experimentelle Imports für
+Funktions-, Typ- und Record-Deklarationen sowie eine projektweite
+Datenbankkonfiguration, die `check`, `build`, `run`,
 `context` und `verify` im Modulgraphen prüfen. Vollständige
 Projektmodule sind weiterhin geplante Arbeit und dürfen nicht mit diesem
 begrenzten Stand verwechselt werden.

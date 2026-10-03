@@ -347,7 +347,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules currently support function, type, and record declarations only; keep tables, views, APIs, and other project declarations in the entry file".into(),
+                message: "imported modules support functions, type aliases, records, and a project-wide database definition; keep tables, views, APIs, and other application resources in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -364,6 +364,10 @@ fn link_modules(
         }
         let module = modules.get(path).expect("ordered module was loaded");
         let module_name = module_names.get(path).expect("module name exists");
+        // A database declaration is project-wide connection configuration.
+        // Keep it in the composed program while tables and web resources stay
+        // entry-file-only until their own linking semantics are defined.
+        linked.databases.extend(module.program.databases.clone());
         let linker = TypeLinker {
             current_path: path,
             current_name: module_name,
@@ -463,8 +467,7 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 }
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.databases.is_empty()
-        || !program.tables.is_empty()
+    !program.tables.is_empty()
         || !program.views.is_empty()
         || !program.components.is_empty()
         || !program.pages.is_empty()
@@ -477,10 +480,9 @@ fn has_unsupported_import_declarations(program: &Program) -> bool {
 
 fn first_unsupported_import_span(program: &Program) -> Option<Span> {
     program
-        .databases
+        .tables
         .first()
         .map(|item| item.span)
-        .or_else(|| program.tables.first().map(|item| item.span))
         .or_else(|| program.views.first().map(|item| item.span))
         .or_else(|| program.components.first().map(|item| item.span))
         .or_else(|| program.pages.first().map(|item| item.span))
@@ -1622,9 +1624,29 @@ mod tests {
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error
-            .message
-            .contains("function, type, and record declarations only"));
+        assert!(error.message.contains("project-wide database definition"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imported_database_definition_configures_the_composed_project() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/database.zyl\" as storage\nfn main() {}\n",
+            ),
+            (
+                "src/database.zyl",
+                "database main { engine: mariadb database: \"invoices\" }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        let schema = build_schema(&loaded.program).unwrap();
+        assert_eq!(schema.database.as_ref().unwrap().name, "main");
+        assert_eq!(
+            schema.database.as_ref().unwrap().database.as_deref(),
+            Some("invoices")
+        );
         cleanup(&directory);
     }
 

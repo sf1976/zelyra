@@ -309,7 +309,7 @@ gegen die Deklaration geprüft. Beispiele sind
 `/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und nicht
 deklarierte Felder erzeugen eine kontrollierte HTTP-400-Antwort.
 
-## Experimentelle Funktionsmodule in Projekten
+## Experimentelle Modul-Imports in Projekten
 
 Der aktuelle Entwicklungszweig enthält einen experimentellen ersten Schritt
 für Datei-Imports. Er ist nicht Teil des veröffentlichten 0.3.0-Releases und
@@ -331,10 +331,16 @@ fn main() {
 }
 ~~~
 
-Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase und Records
-deklarieren. Sie sind standardmäßig privat; Deklarationen überschreiten eine
-Modulgrenze nur mit `pub` und einem ausdrücklichen Importalias, zum Beispiel
-als `pub fn`, `pub type` oder `pub struct`. Ein qualifizierter Typ wie
+Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase, Records und
+eine projektweite Datenbankverbindungsdefinition enthalten. Die
+Datenbankkonfiguration wird in die Anwendung übernommen und nicht über den
+Importalias angesprochen; im gesamten Projektgraphen ist höchstens eine
+Datenbank zulässig. Importierte Tabellen, Views, Komponenten, Seiten, Formulare,
+CRUD-, API- und Authentifizierungsdefinitionen bleiben weiterhin unzulässig.
+Funktions-, Typ- und Record-Deklarationen sind standardmäßig privat;
+Deklarationen überschreiten eine Modulgrenze nur mit `pub` und einem
+ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type` oder
+`pub struct`. Ein qualifizierter Typ wie
 `money::Amount` wird über den Import `money` der aktuellen Datei aufgelöst.
 Private Hilfsfunktionen und Typen bleiben innerhalb ihrer Datei verfügbar.
 Öffentliche Signaturen dürfen keine privaten Typen offenlegen. Der Compiler

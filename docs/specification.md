@@ -357,7 +357,7 @@ operators are validated against the declaration. URL examples are
 `/customers?filter_quantity__gte=10`. Unsupported operators and undeclared
 fields produce a controlled HTTP 400 response.
 
-## Experimental project function modules
+## Experimental project module imports
 
 The current development branch has an experimental file-import slice. It is
 not included in the published 0.3.0 release and is not yet a stable language
@@ -378,8 +378,13 @@ fn main() {
 }
 ~~~
 
-An imported source currently may declare functions, type aliases, and records.
-They are private by default; declarations cross a module boundary only with a
+An imported source currently may declare functions, type aliases, records, and
+one project-wide database connection definition. Database configuration is
+composed into the application and is not accessed through the import alias;
+the composed project may define at most one database. Imported tables, views,
+components, pages, forms, CRUD declarations, APIs, and authentication resources
+remain unsupported. Function, type, and record declarations are private by
+default; declarations cross a module boundary only with a
 `pub` modifier and an explicit import alias. For example, use `pub fn`,
 `pub type`, or `pub struct`. A qualified type reference such as
 `money::Amount` resolves through the current file's `money` import. Private
@@ -388,6 +393,23 @@ may not expose private types. The compiler rejects missing files, duplicate
 aliases, import cycles, path traversal, symlinks that resolve outside the
 project root, and calls or type references to private or unknown declarations.
 Module loading performs no network lookup.
+
+The database declaration is project-wide configuration, not a module-qualified
+resource. The alias is still required to include the file, but application
+code does not refer to `storage::main`:
+
+~~~zelyra
+import "src/database.zyl" as storage
+
+fn main() {}
+~~~
+
+~~~zelyra
+database main {
+    engine: mariadb
+    database: "invoices"
+}
+~~~
 
 For example, `src/money.zyl` may export a record and `src/invoice.zyl` may use
 that public type in a function signature:

@@ -205,3 +205,62 @@ fn imported_capabilities_remain_subject_to_project_grants() {
     }));
     fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn check_composes_a_project_database_from_an_imported_configuration_module() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\ntable customers { id: Id primary auto }\nfn main() uses Database { invoices::count() }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"invoices\" }\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "pub fn count() -> Int uses Database { return 0 }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"module-test\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn check_rejects_more_than_one_database_across_the_project_graph() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/database.zyl\" as storage\ndatabase main { engine: mariadb database: \"invoices\" }\nfn main() {}\n",
+        ),
+        (
+            "src/database.zyl",
+            "database reports { engine: mariadb database: \"reports\" }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!check.status.success());
+    let document: Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(document["success"], false);
+    assert!(document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| {
+            item["code"] == "E-DB-001"
+                && item["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("only one database definition")
+        }));
+    fs::remove_dir_all(directory).unwrap();
+}

@@ -188,7 +188,8 @@ Feature eines bestimmten Anbieters.
 ## 2. Sprache und Compiler
 
 - [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [~] Experimentelle Funktions-/Typ-/Record-Module im aktuellen
+- [~] Experimentelle Funktions-/Typ-/Record-Module und projektweite
+  Datenbankkonfiguration im aktuellen
   Entwicklungszweig unterstützen projektrelative Imports, `pub`-Deklarationen,
   qualifizierte Aufrufe und Typreferenzen, Zyklenerkennung,
   Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
@@ -197,7 +198,9 @@ Feature eines bestimmten Anbieters.
   maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
   Modul-/Import-Überblick. Sein Deklarationsinventar umfasst weiterhin nur die
   Einstiegsdatei; Verifikationsergebnisse haben noch keine Quellzuordnung pro
-  Modul. Anwendungsressourcen wie Tabellen, Views und APIs sowie `fmt`,
+  Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
+  pro Projekt auf eine Verbindung begrenzt. Anwendungsressourcen wie Tabellen,
+  Views und APIs sowie `fmt`,
   `impact`, `edit` und Datenbankbefehle bleiben unvollständig; das Feature ist
   nicht im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching

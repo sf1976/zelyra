@@ -1,3 +1,4 @@
+import "src/database.zyl" as storage
 import "src/invoice.zyl" as invoice
 fn main() {
     print(invoice::total(20, 5).cents)
