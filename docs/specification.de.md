@@ -309,6 +309,44 @@ gegen die Deklaration geprüft. Beispiele sind
 `/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und nicht
 deklarierte Felder erzeugen eine kontrollierte HTTP-400-Antwort.
 
+## Experimentelle Funktionsmodule in Projekten
+
+Der aktuelle Entwicklungszweig enthält einen experimentellen ersten Schritt
+für Datei-Imports. Er ist nicht Teil des veröffentlichten 0.3.0-Releases und
+noch keine stabile Zusage zur Sprachkompatibilität.
+
+Importpfade sind relativ zum Verzeichnis der ausdrücklich gewählten
+Einstiegsquelldatei. Ein Alias ist Pflicht; Imports müssen vor allen
+Deklarationen stehen:
+
+~~~zelyra
+import "src/math.zyl" as math
+
+pub fn add(left: Int, right: Int) -> Int {
+    return left + right
+}
+
+fn main() {
+    print(math::add(2, 3))
+}
+~~~
+
+Eine importierte Quelldatei darf derzeit nur Funktionen deklarieren.
+Funktionen sind standardmäßig privat. Aus einer anderen Datei ist eine Funktion
+nur über den Alias erreichbar, wenn sie mit `pub fn` deklariert wurde. Private
+Hilfsfunktionen bleiben innerhalb ihrer Datei verfügbar. Der Compiler lehnt
+fehlende Dateien, doppelte Aliasse, Importzyklen, Pfad-Traversal, Symlinks
+außerhalb des Projektstamms sowie Aufrufe privater oder unbekannter importierter
+Funktionen ab. Beim Laden der Module findet kein Netzwerkzugriff statt.
+
+`check`, `build` und `run` laden derzeit diesen Projektgraphen. Typen, Tabellen,
+Views, APIs und andere Nicht-Funktions-Deklarationen bleiben in der
+Einstiegsdatei; `fmt`, `context`, `impact`, `edit`, `verify` und
+Datenbankbefehle arbeiten weiterhin nur mit der angegebenen Quelldatei. Diese
+Grenzen machen die Implementierung experimentell und noch nicht zu einem
+vollständigen Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen
+im [Releaseplan 0.4.0](release-plans/0.4.0.de.md).
+
 Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination
 deklariert, erzeugt Zelyra automatisch vor dem Seiteninhalt ein semantisches
 Query-Steuerungsformular und bewahrt den aktuellen URL-Zustand. Pagination

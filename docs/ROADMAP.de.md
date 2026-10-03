@@ -188,7 +188,14 @@ Feature eines bestimmten Anbieters.
 ## 2. Sprache und Compiler
 
 - [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [ ] Module, Imports, Sichtbarkeit, Namespaces und Multi-File-Projekte.
+- [~] Experimentelle Funktionsmodule im aktuellen Entwicklungszweig
+  unterstützen projektrelative Imports, `pub fn`, qualifizierte Aufrufe,
+  Zyklenerkennung, Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
+  Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
+  `check`, `build` und `run` verwenden diesen Graphen. Nicht-Funktions-
+  Deklarationen und die Integration in `fmt`, `context`, `impact`, `edit`,
+  `verify` und Datenbankbefehle sind noch unvollständig; das Feature ist nicht
+  im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
   für alle Fachdaten-Typen.
 - [ ] Bessere Typinferenz mit präzisen Quellpositionen und Fix-Vorschlägen.

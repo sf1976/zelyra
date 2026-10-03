@@ -1853,9 +1853,9 @@ Zu Beginn schreibt man gerne alles in eine einzige Datei. Doch wenn deine Aufgab
 Ein Projekt besitzt eine klare Ablagestruktur. `zelyra.toml` enthält
 Projektangaben und Capability-Freigaben; `main.zyl` ist die vom Starterprojekt
 angelegte Quelldatei. Weitere Dateien oder Unterordner kannst du zur eigenen
-Ordnung anlegen. Wichtig ist aber die derzeitige Compilergrenze: Die CLI
-verarbeitet nur die Quelldatei, die du beim Befehl angibst. Sie entdeckt keine
-weiteren `.zyl`-Dateien automatisch und verbindet sie nicht miteinander.
+Ordnung anlegen. Im veröffentlichten Release 0.3.0 verarbeitet jeder Befehl
+nur die ausdrücklich angegebene Quelldatei; weitere `.zyl`-Dateien werden
+weder automatisch gefunden noch zusammengeführt.
 
 ```toml
 [project]
@@ -1869,13 +1869,36 @@ network = false
 console = false
 ```
 
-**Aktueller Stand (0.3.0):** `import` und ein Modulsystem sind noch nicht
+**Stand des veröffentlichten Releases 0.3.0:** `import` und ein Modulsystem
+sind nicht
 implementiert. `zelyra check main.zyl` prüft `main.zyl`; eine zusätzliche Datei
 wie `src/schema.zyl` wird nur mit einem eigenen Aufruf wie
 `zelyra check src/schema.zyl` geprüft. Namen und Typen aus einer Datei stehen
-der anderen dadurch nicht automatisch zur Verfügung. Modulimporte,
-Sichtbarkeit und deterministische Mehrdateiprojekte sind für 0.4.0 geplant,
-aber noch nicht verfügbar.
+der anderen dadurch nicht automatisch zur Verfügung. Das veröffentlichte
+Release enthält keine Modulimporte. Ein experimenteller Funktions-Import ist
+im aktuellen Entwicklungszweig vorhanden; vollständige Module und
+deterministische Mehrdateiprojekte bleiben Arbeit für 0.4.0.
+
+**🧪 Aktueller, noch unveröffentlichter Entwicklungszweig:** Ein erster
+Funktions-Modulschnitt ist implementiert und getestet. Die Syntax lautet:
+
+~~~zelyra
+import "src/math.zyl" as math
+
+fn main() {
+    print(math::add(2, 3))
+}
+~~~
+
+Die importierte Datei muss `pub fn add(...)` deklarieren; Funktionen sind
+standardmäßig privat. Pfade beziehen sich auf das Verzeichnis der
+Einstiegsdatei. `check`, `build` und `run` laden die Imports, lehnen Zyklen und
+Pfade außerhalb des Projektstamms ab und behalten Typ-, Capability- und
+Contract-Prüfungen bei. Importierte Dateien dürfen derzeit nur Funktionen
+enthalten. Andere Befehle wie `fmt`, `context`, `impact`, `edit`, `verify` und
+Datenbankbefehle arbeiten weiterhin nur mit der angegebenen Quelldatei. Dieses
+Branch-Verhalten ist experimentell und nicht im veröffentlichten 0.3.0-Binary
+enthalten.
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -1901,8 +1924,8 @@ fn main() {
 In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anfordern darf. Greift dein Code auf die Datenbank zu, muss `database = true` aktiviert sein.
 
 ### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein nicht vorhandenes `import`-Schlüsselwort aus anderen Sprachen wie Python oder JS verwenden.
-  *Ursache:* Zelyra 0.1 verwendet Projekt-Kompilierung; externe Import-Syntax ist Gegenstand der Roadmap Phase 11.
+- **Fehler:** Modulimporte mit dem veröffentlichten Zelyra-0.3.0-Binary verwenden.
+  *Ursache:* `import` gehört nicht zu diesem Release. Der Entwicklungszweig enthält eine experimentelle Implementierung nur für Funktionen; sie ist kein unterstütztes 0.3.0-Feature.
 - **Fehler:** `zelyra.toml` löschen oder im falschen Verzeichnis ausführen.
   *Ursache:* `zelyra run` sucht im aktuellen Verzeichnis nach der Konfiguration.
 
@@ -1937,14 +1960,14 @@ fn main() {
 ```
 
 ### 9. Zusammenfassung
-- Projekte werden über `zelyra.toml` gesteuert und konfiguriert.
-- Zelyra prüft Projektdateien als ganzheitliche Einheit.
+- `zelyra.toml` steuert Metadaten und Capability-Sicherheitsfreigaben des Projekts.
+- Release 0.3.0 prüft die ausdrücklich angegebene Quelldatei; der Entwicklungszweig ergänzt experimentelle Funktionsmodule.
 - Eine modulare Denkweise erleichtert Erweiterungen und Teamarbeit.
 
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Welche Datei enthält die Metadaten eines Zelyra-Projekts?
 2. Warum ist die Trennung von Datenmodell und Ausführungslogik sinnvoll?
-3. Wie prüft die Zelyra-CLI das gesamte Projekt auf einmal?
+3. Welche Befehle folgen derzeit experimentellen Funktions-Imports im Entwicklungszweig?
 
 # TEIL IV – SICHERHEIT UND FEHLERBEHANDLUNG
 
@@ -5505,7 +5528,7 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Entwicklung von Zelyra: Was das experimentelle Release 0.3.0 liefert und was als Nächstes kommt.
-- Geplante nächste Meilensteine: Modul-Imports, Package-Management und WebAssembly.
+- Geplante nächste Meilensteine: vollständige Module, Package-Management und WebAssembly.
 - Wie Abwärtskompatibilität und Stabilitätsgarantien bis Version 1.0 gewährleistet werden.
 
 ### 2. Warum ist das Thema wichtig?
@@ -5528,8 +5551,10 @@ Release-Meilensteine:
 - **0.4.0 (vorgeschlagen):** Module, Datenbank-Lebenszyklus, sichere
   Konto-/API-Abläufe und unabhängige menschliche Einsteigerabnahme. Siehe den
   [Releaseplan](../../release-plans/0.4.0.de.md).
-- **Spätere Meilensteine:** Feingranulare Module/Imports, Paketmanager,
-  WebAssembly und jede LTS-Zusage bleiben zukünftige Arbeiten.
+- **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
+  bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält nur das
+  in Kapitel 15 beschriebene Experiment für Funktions-Imports; es ist nicht in
+  0.3.0 enthalten und bietet noch keine vollständigen Projektmodule.
 
 ### 4. Zelyras Versprechen an Entwickler
 - **Keine Breaking Changes ohne Deprecation:** Änderungen an der Syntax werden mit klaren Übergangsfristen und Compiler-Hinweisen eingeführt.
@@ -5540,15 +5565,17 @@ Release-Meilensteine:
   *Richtigstellung:* Zelyra 0.3.0 ist ein experimenteller, getesteter Umfang.
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
-- **Missverständnis:** Sprachsyntax aus anderen Sprachen blind voraussetzen.
-  *Richtigstellung:* Zelyra ist bewusst eigenständig entworfen. Nicht unterstützte Konstrukte (wie `enum` oder dynamisches `import`) sind in Phase 11/12 der Roadmap geplant.
+- **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
+  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt nur statische, projektlokale Imports von Funktionsdateien über `check`, `build` und `run`; das umfassendere Modulmodell bleibt geplant.
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
    Release 0.3.0 zu späteren Meilensteinen.
 2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
-3. Modul-Imports, Paketverteilung und WebAssembly bleiben zukünftige Arbeiten.
+3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
+   zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es nur begrenzte
+   Funktions-Imports.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
@@ -7675,8 +7702,8 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Einrückung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Blöcken | ✅ |
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
 | Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
-| Module | Noch nicht festgelegt | `mod name {}`, Dateien und Module | keine `mod`-Syntax im Zelyra-Parser | ❌ |
-| Imports | Noch nicht festgelegt | `use crate::module::Item;` | keine Importsyntax | ❌ |
+| Module | `pub fn` in importierter Datei (Entwicklungszweig) | `mod name {}`, Dateien und Module | derzeit nur importierte Funktionsdeklarationen; Release 0.3.0 hat keine Module | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektrelative Datei-Imports; bisher laden nur `check`, `build` und `run` den Graphen | 🧪 |
 | Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
 | Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ✅ |
@@ -8562,11 +8589,12 @@ fn main() {
 ## Anhang I: Häufige Fragen und Antworten (FAQ)
 
 **Frage: Warum gibt es in Zelyra 0.3.0 keine `import`-Anweisung?**
-*Antwort:* Das Modulsystem ist noch nicht implementiert. Ein CLI-Aufruf prüft
-die ausdrücklich angegebene `.zyl`-Datei; weitere Dateien werden weder
-automatisch gefunden noch als gemeinsames Programm eingebunden. Projektweite
-Importe und Modulgrenzen sind geplante Arbeit für 0.4.0 und dürfen derzeit
-nicht als verfügbare Funktion vorausgesetzt werden.
+*Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
+CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
+unveröffentlichten Entwicklungszweig gibt es einen experimentellen Import für
+Funktionsdateien, den `check`, `build` und `run` verwenden. Vollständige
+Projektmodule sind weiterhin geplante Arbeit und dürfen nicht mit diesem
+begrenzten Stand verwechselt werden.
 
 **Frage: Kann ich mit Zelyra auch reine Konsolenprogramme schreiben?**
 *Antwort:* Ja. `print()` gibt Werte aus. `read_console("Prompt: ")` liest eine Zeile und liefert `String?`; dafür braucht die Funktion `uses Console` und das Projekt gegebenenfalls `console = true`.

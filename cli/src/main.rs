@@ -43,6 +43,7 @@ mod edit;
 mod formatter;
 mod holes;
 mod impact;
+mod project;
 mod updater;
 use formatter::format_source;
 use holes::collect_typed_holes;
@@ -116,6 +117,7 @@ struct JsonDiagnosticCollector {
 
 thread_local! {
     static JSON_DIAGNOSTICS: RefCell<Option<JsonDiagnosticCollector>> = const { RefCell::new(None) };
+    static PROJECT_SOURCES: RefCell<Vec<project::ProjectSource>> = const { RefCell::new(Vec::new()) };
 }
 
 fn database_usage() {
@@ -826,29 +828,38 @@ fn span_value(source: &str, span: zelyra_ast::Span) -> Value {
 }
 
 fn diagnostic_with_span(path: &str, code: &str, message: &str, span: zelyra_ast::Span) {
+    let source =
+        PROJECT_SOURCES.with(|sources| sources.borrow().get(span.source_id as usize).cloned());
     let captured = JSON_DIAGNOSTICS.with(|collector| {
         let mut collector = collector.borrow_mut();
         let Some(collector) = collector.as_mut() else {
             return false;
         };
-        let file = if collector.path.is_empty() {
-            path.to_owned()
-        } else {
+        let file = if span.source_id == 0 && !collector.path.is_empty() {
             collector.path.clone()
+        } else {
+            source
+                .as_ref()
+                .map_or_else(|| path.to_owned(), |source| source.path.clone())
         };
+        let source_text = source
+            .as_ref()
+            .map_or(collector.source.as_str(), |source| source.text.as_str());
         collector.diagnostics.push(json!({
             "code": code,
             "severity": "error",
             "message": message,
             "file": file,
-            "span": span_value(&collector.source, span)
+            "span": span_value(source_text, span)
         }));
         true
     });
     if !captured {
         eprintln!(
-            "error[{code}]: {message}\n\n --> {path}:{}:{}",
-            span.line, span.column
+            "error[{code}]: {message}\n\n --> {}:{}:{}",
+            source.as_ref().map_or(path, |source| source.path.as_str()),
+            span.line,
+            span.column
         );
     }
 }
@@ -930,21 +941,21 @@ fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
 }
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
+    PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
+    let loaded = match project::load(path) {
+        Ok(loaded) => loaded,
         Err(error) => {
-            diagnostic(
-                path,
-                "E-IO-001",
-                &format!("cannot read `{path}`: {error}"),
-                1,
-                1,
-            );
+            PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = error.sources.to_vec());
+            diagnostic_with_span(&error.path, error.code, &error.message, error.span);
             return Err(());
         }
     };
-    let program = parse_source(path, &source)?;
-    validate_program(path, &source, program)
+    PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = loaded.sources.clone());
+    let source = loaded
+        .sources
+        .first()
+        .map_or_else(String::new, |source| source.text.clone());
+    validate_program(path, &source, loaded.program)
 }
 
 fn validate_program(
@@ -958,26 +969,14 @@ fn validate_program(
     validate_project_features(path, &program)?;
     if let Err(errors) = lower(&program) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-NAME-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-NAME-001", &error.message, error.span);
         }
         return Err(());
     }
     if !program.functions.is_empty() {
         if let Err(errors) = check(&program) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-TYPE-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-TYPE-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1003,13 +1002,7 @@ fn validate_program(
     }
     if let Err(errors) = check_apis(&program) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-API-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-API-001", &error.message, error.span);
         }
         return Err(());
     }
@@ -1029,13 +1022,7 @@ fn validate_program(
         Ok(schema) => schema,
         Err(errors) => {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-DB-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1052,25 +1039,13 @@ fn validate_program(
         }
         if let Err(errors) = check_sql_program(&program, &schema) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-SQL-004",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-SQL-004", &error.message, error.span);
             }
             return Err(());
         }
         if let Err(errors) = check_form_program(&program, &schema) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-FORM-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-FORM-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1105,7 +1080,11 @@ fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -
         } else {
             hole.contract_spans
                 .iter()
-                .filter_map(|span| source.get(span.start..span.end))
+                .filter_map(|span| {
+                    source_text_for_span(source, *span)
+                        .get(span.start..span.end)
+                        .map(str::to_owned)
+                })
                 .map(|contract| contract.replace(['\n', '\r'], " "))
                 .collect::<Vec<_>>()
                 .join("; ")
@@ -1116,6 +1095,15 @@ fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -
         diagnostic_with_span(path, "E-HOLE-001", &message, hole.span);
     }
     holes.is_empty()
+}
+
+fn source_text_for_span(fallback: &str, span: zelyra_ast::Span) -> String {
+    PROJECT_SOURCES.with(|sources| {
+        sources
+            .borrow()
+            .get(span.source_id as usize)
+            .map_or_else(|| fallback.to_owned(), |source| source.text.clone())
+    })
 }
 
 fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
@@ -5135,13 +5123,7 @@ fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<()
     };
     if let Err(errors) = check_capabilities_with_grants(program, grants.as_ref()) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-CAP-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-CAP-001", &error.message, error.span);
         }
         return Err(());
     }
@@ -10820,10 +10802,8 @@ mod tests {
         let policy = project_filesystem_policy("../examples/filesystem_api.zyl")
             .unwrap()
             .unwrap();
-        assert!(policy
-            .read_roots
-            .iter()
-            .any(|root| root.ends_with("zelyra")));
+        let project_root = fs::canonicalize("..").unwrap();
+        assert!(policy.read_roots.iter().any(|root| root == &project_root));
         assert!(policy.write_roots.is_empty());
     }
 

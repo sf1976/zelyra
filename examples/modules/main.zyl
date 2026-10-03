@@ -1,0 +1,5 @@
+import "src/invoice.zyl" as invoice
+
+fn main() {
+    print(invoice::total(20, 5))
+}

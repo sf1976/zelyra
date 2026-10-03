@@ -87,6 +87,7 @@ impl<'a> Parser<'a> {
         }
     }
     fn program(mut self) -> Result<Program, ParseError> {
+        let mut imports = Vec::new();
         let mut databases = Vec::new();
         let mut tables = Vec::new();
         let mut types = Vec::new();
@@ -101,37 +102,66 @@ impl<'a> Parser<'a> {
         let mut apis = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
+        let mut declarations_started = false;
         while !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Database) {
+            if self.at(&TokenKind::Import) {
+                if declarations_started {
+                    return self.error("module imports must appear before declarations");
+                }
+                imports.push(self.import_definition()?);
+            } else if self.at(&TokenKind::Database) {
+                declarations_started = true;
                 databases.push(self.database_definition()?);
             } else if self.at(&TokenKind::Table) {
+                declarations_started = true;
                 tables.push(self.table_definition()?);
             } else if self.at(&TokenKind::Type) {
+                declarations_started = true;
                 types.push(self.type_definition()?);
             } else if self.at(&TokenKind::Struct) {
+                declarations_started = true;
                 records.push(self.record_definition()?);
             } else if self.at(&TokenKind::View) {
+                declarations_started = true;
                 views.push(self.view_definition()?);
             } else if self.at(&TokenKind::Component) {
+                declarations_started = true;
                 components.push(self.component_definition()?);
             } else if self.at(&TokenKind::Page) {
+                declarations_started = true;
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::TableView) {
+                declarations_started = true;
                 tableviews.push(self.tableview_definition()?);
             } else if self.at(&TokenKind::Form) {
+                declarations_started = true;
                 forms.push(self.form_definition()?);
             } else if self.at(&TokenKind::Crud) {
+                declarations_started = true;
                 cruds.push(self.crud_definition()?);
             } else if self.at(&TokenKind::Auth) {
+                declarations_started = true;
                 auth.push(self.auth_definition()?);
             } else if self.at(&TokenKind::Api) {
+                declarations_started = true;
                 apis.push(self.api_definition()?);
             } else {
-                functions.push(self.function()?);
+                declarations_started = true;
+                let is_public = if self.at(&TokenKind::Pub) {
+                    self.advance();
+                    if !self.at(&TokenKind::Fn) {
+                        return self.error("`pub` currently applies only to functions");
+                    }
+                    true
+                } else {
+                    false
+                };
+                functions.push(self.function(is_public)?);
             }
             self.skip_newlines();
         }
         Ok(Program {
+            imports,
             databases,
             tables,
             types,
@@ -145,6 +175,21 @@ impl<'a> Parser<'a> {
             auth,
             apis,
             functions,
+        })
+    }
+
+    fn import_definition(&mut self) -> Result<ImportDef, ParseError> {
+        let start = self.expect(TokenKind::Import, "`import`")?;
+        let path = self.string_value("project-relative module path")?;
+        let (as_keyword, _) = self.ident("`as` after module path")?;
+        if as_keyword != "as" {
+            return self.error("expected `as` after module path");
+        }
+        let (alias, alias_span) = self.ident("module alias")?;
+        Ok(ImportDef {
+            path,
+            alias,
+            span: start.join(alias_span),
         })
     }
 
@@ -1595,7 +1640,7 @@ impl<'a> Parser<'a> {
             span: start.join(end),
         })
     }
-    fn function(&mut self) -> Result<Function, ParseError> {
+    fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         self.expect(TokenKind::LParen, "`(`")?;
@@ -1658,6 +1703,7 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         Ok(Function {
             name,
+            is_public,
             params,
             return_type,
             capabilities,
@@ -2145,6 +2191,13 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
+                let mut name = name;
+                while self.at(&TokenKind::DoubleColon) {
+                    self.advance();
+                    let (segment, _) = self.ident("name after `::`")?;
+                    name.push_str("::");
+                    name.push_str(&segment);
+                }
                 let type_args =
                     if matches!(name.as_str(), "json_decode" | "http_json" | "http_result")
                         && self.at(&TokenKind::Less)
@@ -3185,6 +3238,42 @@ mod tests {
         .unwrap();
         assert_eq!(program.functions[0].requires.len(), 1);
         assert_eq!(program.functions[0].ensures.len(), 1);
+    }
+
+    #[test]
+    fn parses_project_relative_import_and_public_function() {
+        let program = parse(
+            &lex("import \"src/math.zyl\" as math\npub fn add(a: Int, b: Int) -> Int { return a + b }\nfn main() { print(math::add(2, 3)) }").unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(program.imports.len(), 1);
+        assert_eq!(program.imports[0].path, "src/math.zyl");
+        assert_eq!(program.imports[0].alias, "math");
+        assert!(program.functions[0].is_public);
+        let Stmt::Expr(expression) = &program.functions[1].body.statements[0] else {
+            panic!("expected print expression");
+        };
+        let ExprKind::Call { args, .. } = &expression.kind else {
+            panic!("expected print call");
+        };
+        assert!(matches!(
+            &args[0].kind,
+            ExprKind::Call { name, .. } if name == "math::add"
+        ));
+    }
+
+    #[test]
+    fn rejects_imports_after_declarations_and_public_non_functions() {
+        let late_import =
+            parse(&lex("fn main() {}\nimport \"src/math.zyl\" as math").unwrap()).unwrap_err();
+        assert!(late_import
+            .message
+            .contains("must appear before declarations"));
+
+        let invalid_visibility =
+            parse(&lex("pub struct Customer { id: Int }").unwrap()).unwrap_err();
+        assert!(invalid_visibility.message.contains("only to functions"));
     }
 
     #[test]

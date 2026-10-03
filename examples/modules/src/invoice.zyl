@@ -1,0 +1,9 @@
+import "src/math.zyl" as math
+
+fn add_tax(net: Int, tax: Int) -> Int {
+    return math::sum(net, tax)
+}
+
+pub fn total(net: Int, tax: Int) -> Int {
+    return add_tax(net, tax)
+}

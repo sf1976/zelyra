@@ -6,6 +6,7 @@ pub struct Span {
     pub end: usize,
     pub line: usize,
     pub column: usize,
+    pub source_id: u32,
 }
 
 impl Span {
@@ -15,7 +16,13 @@ impl Span {
             end,
             line,
             column,
+            source_id: 0,
         }
+    }
+
+    pub const fn with_source_id(mut self, source_id: u32) -> Self {
+        self.source_id = source_id;
+        self
     }
 
     pub fn join(self, other: Span) -> Self {
@@ -24,6 +31,7 @@ impl Span {
             end: other.end,
             line: self.line,
             column: self.column,
+            source_id: self.source_id,
         }
     }
 }
@@ -82,6 +90,7 @@ impl fmt::Display for Type {
 
 #[derive(Clone, Debug)]
 pub struct Program {
+    pub imports: Vec<ImportDef>,
     pub databases: Vec<DatabaseDef>,
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
@@ -95,6 +104,15 @@ pub struct Program {
     pub auth: Vec<AuthDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportDef {
+    /// Project-root-relative path to another `.zyl` source file.
+    pub path: String,
+    /// The local namespace used to qualify public declarations.
+    pub alias: String,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -463,6 +481,7 @@ pub struct RecordField {
 #[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
+    pub is_public: bool,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,

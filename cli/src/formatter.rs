@@ -59,6 +59,7 @@ impl<'a> Formatter<'a> {
                 TokenKind::RBracket => self.right_bracket(),
                 TokenKind::Comma => self.comma(),
                 TokenKind::Colon => self.colon(),
+                TokenKind::DoubleColon => self.punctuation("::"),
                 TokenKind::Dot => self.punctuation("."),
                 TokenKind::Question => self.punctuation("?"),
                 TokenKind::Arrow
@@ -342,6 +343,7 @@ fn is_compact_token(kind: &TokenKind) -> bool {
             | TokenKind::LBracket
             | TokenKind::Comma
             | TokenKind::Colon
+            | TokenKind::DoubleColon
             | TokenKind::Dot
             | TokenKind::Question
             | TokenKind::Arrow
@@ -374,6 +376,8 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
             .get(token.span.start..token.span.end)
             .unwrap_or_default(),
         TokenKind::SqlBody(body) | TokenKind::HtmlBody(body) => body,
+        TokenKind::Import => "import",
+        TokenKind::Pub => "pub",
         TokenKind::Fn => "fn",
         TokenKind::Type => "type",
         TokenKind::Struct => "struct",
@@ -480,6 +484,7 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Dot => ".",
         TokenKind::DotDot => "..",
         TokenKind::Colon => ":",
+        TokenKind::DoubleColon => "::",
         TokenKind::Comma => ",",
         TokenKind::LParen => "(",
         TokenKind::RParen => ")",
@@ -513,6 +518,16 @@ mod tests {
             formatted,
             "fn main() {\n    mutable total = 1 + 2\n    print(total)\n}\n"
         );
+        assert_eq!(format(&formatted), formatted);
+    }
+
+    #[test]
+    fn formats_imports_and_qualified_function_calls() {
+        let formatted = format(
+            "import \"src/math.zyl\" as math\npub fn add(a: Int, b: Int) -> Int { return a+b }\nfn main() { print(math::add(2,3)) }",
+        );
+        assert!(formatted.contains("import \"src/math.zyl\" as math"));
+        assert!(formatted.contains("math::add("));
         assert_eq!(format(&formatted), formatted);
     }
 

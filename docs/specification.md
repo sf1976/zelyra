@@ -357,6 +357,42 @@ operators are validated against the declaration. URL examples are
 `/customers?filter_quantity__gte=10`. Unsupported operators and undeclared
 fields produce a controlled HTTP 400 response.
 
+## Experimental project function modules
+
+The current development branch has an experimental file-import slice. It is
+not included in the published 0.3.0 release and is not yet a stable language
+compatibility promise.
+
+Imports use a path relative to the directory of the explicitly selected entry
+source file. An alias is required, and imports must precede declarations:
+
+~~~zelyra
+import "src/math.zyl" as math
+
+pub fn add(left: Int, right: Int) -> Int {
+    return left + right
+}
+
+fn main() {
+    print(math::add(2, 3))
+}
+~~~
+
+An imported source currently may declare functions only. Functions are private
+by default; a caller in another module can access one only when it is declared
+with `pub fn` and called through that import's alias. Private helpers remain
+available to functions in their own file. The compiler rejects missing files,
+duplicate aliases, import cycles, path traversal, symlinks that resolve outside
+the project root, and calls to private or unknown imported functions. Module
+loading performs no network lookup.
+
+`check`, `build`, and `run` currently load this project graph. Types, tables,
+views, APIs, and other non-function declarations remain in the entry file;
+`fmt`, `context`, `impact`, `edit`, `verify`, and database commands are still
+source-file-local. These limits make the implementation experimental rather
+than a complete multi-file project model. The full requirements are tracked in
+the [0.4.0 release plan](release-plans/0.4.0.en.md).
+
 When a page collection declares search, filters, sorting, or pagination,
 Zelyra automatically renders a semantic query-control form before the page
 content and preserves the current URL state. Pagination also performs a safe
