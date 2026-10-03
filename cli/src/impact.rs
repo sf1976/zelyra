@@ -1034,10 +1034,12 @@ fn table_consumers(
         add_consumer(&mut consumers, &crud.table, format!("crud:{}", crud.name));
     }
     for tableview in &program.tableviews {
-        for table in referenced_tables(&tableview.source, table_names) {
+        let (_, accesses) =
+            zelyra_database::sql::analyze_table_access(&tableview.source, table_names);
+        for access in accesses {
             add_consumer(
                 &mut consumers,
-                &table,
+                &access.table,
                 format!("tableview:{}", tableview.name),
             );
         }
@@ -1279,14 +1281,6 @@ fn collect_expr_sql(
     }
 }
 
-fn referenced_tables(query: &str, table_names: &[String]) -> Vec<String> {
-    table_names
-        .iter()
-        .filter(|table| contains_identifier(query, table))
-        .cloned()
-        .collect()
-}
-
 fn analyzed_sql_accesses(
     query: &str,
     table_names: &[String],
@@ -1317,13 +1311,6 @@ fn relation_table(name: &str, table_names: &[String]) -> Option<String> {
         .iter()
         .find(|table| table.eq_ignore_ascii_case(&plural))
         .cloned()
-}
-
-fn contains_identifier(source: &str, needle: &str) -> bool {
-    let needle = needle.to_ascii_lowercase();
-    source
-        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
-        .any(|word| word.eq_ignore_ascii_case(&needle))
 }
 
 fn crud_permissions(crud: &zelyra_ast::CrudDef) -> Vec<String> {
