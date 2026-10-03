@@ -170,16 +170,17 @@ architecture requirement for every phase, not a provider-specific feature.
 ## 2. Language and compiler
 
 - [ ] Stable grammar specification and versioned compatibility rules.
-- [~] Experimental function modules in the current development branch support
-  project-root-relative imports, `pub fn`, qualified calls, dependency-cycle
-  rejection, project-root/symlink containment, per-file source IDs, and
+- [~] Experimental function/type/record modules in the current development
+  branch support project-root-relative imports, `pub` declarations, qualified
+  calls and type references, dependency-cycle rejection, project-root/symlink
+  containment, per-file source IDs, and
   type/capability/contract checks across imported calls. `check`, `build`,
   `run`, `context`, and `verify` validate this graph; machine context now emits
   a deterministic, sorted module/import inventory. Its declaration inventory
   is still entry-file-only, and verification results lack per-module source
-  provenance. Non-function declarations and integration with `fmt`, `impact`,
-  `edit`, and database commands remain incomplete; this is not part of the
-  published 0.3.0 binary.
+  provenance. Application resources such as tables, views, and APIs, and
+  integration with `fmt`, `impact`, `edit`, and database commands remain
+  incomplete; this is not part of the published 0.3.0 binary.
 - [ ] Generics, interfaces/traits, enums, tagged unions, and pattern matching
   across all domain types.
 - [ ] Better type inference with precise source spans and fix suggestions.

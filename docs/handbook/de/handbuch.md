@@ -1894,14 +1894,33 @@ Die importierte Datei muss `pub fn add(...)` deklarieren; Funktionen sind
 standardmäßig privat. Pfade beziehen sich auf das Verzeichnis der
 Einstiegsdatei. `check`, `build` und `run` laden die Imports, lehnen Zyklen und
 Pfade außerhalb des Projektstamms ab und behalten Typ-, Capability- und
-Contract-Prüfungen bei. Importierte Dateien dürfen derzeit nur Funktionen
-enthalten. `context --format=json` zeigt den vollständigen, deterministisch
+Contract-Prüfungen bei. Importierte Dateien dürfen derzeit Funktionen,
+Typ-Aliase und Records enthalten. Diese Deklarationen sind standardmäßig
+privat; öffentliche Records dürfen keine privaten Typen in ihren Feldern
+verbergen. `context --format=json` zeigt den vollständigen, deterministisch
 sortierten Modulgraphen; sein Deklarationsinventar enthält jedoch weiterhin
 nur die Einstiegsdatei. Auch `verify` prüft den verknüpften Graphen, weist
 Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu. `fmt`, `impact`,
 `edit` und Datenbankbefehle arbeiten weiterhin nur mit der ausdrücklich
 angegebenen Quelldatei. Dieses Branch-Verhalten ist experimentell und nicht im
 veröffentlichten 0.3.0-Binary enthalten.
+
+Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
+einer Funktionssignatur verwendet:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
 
 ### 4. Kleine, aufeinander aufbauende Beispiele
 
@@ -1970,7 +1989,7 @@ fn main() {
 ### 10. Kontrollfragen zur Selbstprüfung
 1. Welche Datei enthält die Metadaten eines Zelyra-Projekts?
 2. Warum ist die Trennung von Datenmodell und Ausführungslogik sinnvoll?
-3. Welche Befehle folgen derzeit experimentellen Funktions-Imports im Entwicklungszweig?
+3. Welche Befehle folgen derzeit den experimentellen Modul-Imports im Entwicklungszweig?
 
 # TEIL IV – SICHERHEIT UND FEHLERBEHANDLUNG
 
@@ -5556,7 +5575,7 @@ Release-Meilensteine:
   [Releaseplan](../../release-plans/0.4.0.de.md).
 - **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
   bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält nur das
-  in Kapitel 15 beschriebene Experiment für Funktions-Imports; es ist nicht in
+  in Kapitel 15 beschriebene Experiment für Funktions-, Typ- und Record-Imports; es ist nicht in
   0.3.0 enthalten und bietet noch keine vollständigen Projektmodule.
 
 ### 4. Zelyras Versprechen an Entwickler
@@ -5569,7 +5588,7 @@ Release-Meilensteine:
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
 - **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
-  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt nur statische, projektlokale Imports von Funktionsdateien über `check`, `build` und `run`; das umfassendere Modulmodell bleibt geplant.
+  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen und Records; das umfassendere Modulmodell bleibt geplant.
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
@@ -5578,7 +5597,7 @@ Release-Meilensteine:
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
 3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
    zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es nur begrenzte
-   Funktions-Imports.
+   Funktions-, Typ- und Record-Imports.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
@@ -8595,7 +8614,8 @@ fn main() {
 *Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
 CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
 unveröffentlichten Entwicklungszweig gibt es einen experimentellen Import für
-Funktionsdateien, den `check`, `build` und `run` verwenden. Vollständige
+Funktions-, Typ- und Record-Deklarationen, die `check`, `build`, `run`,
+`context` und `verify` im Modulgraphen prüfen. Vollständige
 Projektmodule sind weiterhin geplante Arbeit und dürfen nicht mit diesem
 begrenzten Stand verwechselt werden.
 

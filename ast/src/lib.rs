@@ -460,6 +460,7 @@ pub struct IndexDef {
 #[derive(Clone, Debug)]
 pub struct TypeDef {
     pub name: String,
+    pub is_public: bool,
     pub target: Type,
     pub span: Span,
 }
@@ -467,6 +468,7 @@ pub struct TypeDef {
 #[derive(Clone, Debug)]
 pub struct RecordDef {
     pub name: String,
+    pub is_public: bool,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }

@@ -1891,8 +1891,8 @@ module imports. An experimental function-import slice exists in the current
 development branch; complete modules and deterministic multi-file projects
 remain work for 0.4.0.
 
-**🧪 Current unreleased development branch:** a first function-only module
-slice is implemented and tested. Its syntax is:
+**🧪 Current unreleased development branch:** an experimental module slice for
+functions, type aliases, and records is implemented and tested. Its syntax is:
 
 ~~~zelyra
 import "src/math.zyl" as math
@@ -1906,13 +1906,32 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. `check`, `build`,
 and `run` load the imports, reject cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions only. `context --format=json` reports the complete,
+currently contain functions, type aliases, and records. These declarations
+are private by default, and public records cannot expose private field types.
+`context --format=json` reports the complete,
 deterministically sorted module graph, although its declaration inventory
 still covers only the entry file. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `fmt`,
 `impact`, `edit`, and database commands still process only the explicitly
 named source file. This branch behavior is experimental and is not included
 in the published 0.3.0 binary.
+
+A module can export a domain record for another module to use in a function
+signature:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
 
 ### 4. Small, progressive examples
 
@@ -1939,7 +1958,7 @@ In `zelyra.toml`, you explicitly configure which system resources the project is
 
 ### 5. Typical errors and their causes
 - **Error:** Using module imports with the published Zelyra 0.3.0 binary.
-  *Cause:* `import` is not part of that release. The development branch has an experimental, function-only module implementation; it is not a supported 0.3.0 feature.
+  *Cause:* `import` is not part of that release. The development branch has an experimental module implementation for functions, type aliases, and records; it is not a supported 0.3.0 feature.
 - **Error:** Deleting `zelyra.toml` or executing CLI commands from outside the project root directory.
   *Cause:* Commands like `zelyra run` look for `zelyra.toml` in the current working directory to configure capabilities and compilation paths.
 
@@ -1977,7 +1996,7 @@ fn main() {
 ### 9. Summary
 - Projects are configured and secured via `zelyra.toml`.
 - The published 0.3.0 CLI checks the source file explicitly named in the command.
-- The unreleased development branch has experimental function-only imports; it does not yet provide a complete modular application model.
+- The unreleased development branch imports functions, type aliases, and records experimentally; it does not yet provide a complete modular application model.
 - Organizing files into folders helps readers, but does not by itself connect modules.
 
 ### 10. Self-check review questions
@@ -8503,9 +8522,10 @@ fn main() {
 **Question: Why is there no `import` statement in Zelyra 0.3.0?**
 *Answer:* The published 0.3.0 binary has no module imports. A CLI invocation
 checks only the explicitly named `.zyl` source file. The current unreleased
-development branch has an experimental import for function files, used by
-`check`, `build`, and `run`. Complete project modules remain planned work and
-must not be confused with this limited implementation.
+development branch has experimental imports for functions, type aliases, and
+records, validated by `check`, `build`, `run`, `context`, and `verify`. Complete
+project modules remain planned work and must not be confused with this limited
+implementation.
 
 **Question: Can I build command-line applications with Zelyra?**
 *Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.

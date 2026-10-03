@@ -67,6 +67,38 @@ fn check_and_run_compile_imported_public_functions() {
 }
 
 #[test]
+fn check_and_run_support_public_records_and_qualified_types() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoice.zyl\" as invoice\nfn main() { print(invoice::total().cents) }\n",
+        ),
+        (
+            "src/invoice.zyl",
+            "import \"src/money.zyl\" as money\npub fn total() -> money::Money { return money::Money { cents: 25 } }\n",
+        ),
+        (
+            "src/money.zyl",
+            "pub struct Money { cents: Int }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let result = run(&directory, &["run", "main.zyl"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&result.stdout).trim(), "25");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn imported_type_diagnostic_names_the_imported_source() {
     let directory = project(&[
         (

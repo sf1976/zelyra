@@ -331,21 +331,42 @@ fn main() {
 }
 ~~~
 
-Eine importierte Quelldatei darf derzeit nur Funktionen deklarieren.
-Funktionen sind standardmäßig privat. Aus einer anderen Datei ist eine Funktion
-nur über den Alias erreichbar, wenn sie mit `pub fn` deklariert wurde. Private
-Hilfsfunktionen bleiben innerhalb ihrer Datei verfügbar. Der Compiler lehnt
-fehlende Dateien, doppelte Aliasse, Importzyklen, Pfad-Traversal, Symlinks
-außerhalb des Projektstamms sowie Aufrufe privater oder unbekannter importierter
-Funktionen ab. Beim Laden der Module findet kein Netzwerkzugriff statt.
+Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase und Records
+deklarieren. Sie sind standardmäßig privat; Deklarationen überschreiten eine
+Modulgrenze nur mit `pub` und einem ausdrücklichen Importalias, zum Beispiel
+als `pub fn`, `pub type` oder `pub struct`. Ein qualifizierter Typ wie
+`money::Amount` wird über den Import `money` der aktuellen Datei aufgelöst.
+Private Hilfsfunktionen und Typen bleiben innerhalb ihrer Datei verfügbar.
+Öffentliche Signaturen dürfen keine privaten Typen offenlegen. Der Compiler
+lehnt fehlende Dateien, doppelte Aliasse, Importzyklen, Pfad-Traversal,
+Symlinks außerhalb des Projektstamms sowie Aufrufe und Typreferenzen auf
+private oder unbekannte Deklarationen ab. Beim Laden der Module findet kein
+Netzwerkzugriff statt.
+
+Zum Beispiel kann `src/money.zyl` einen Record exportieren, den
+`src/invoice.zyl` in einer Funktionssignatur verwendet:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
 
 `check`, `build`, `run`, `context` und `verify` prüfen derzeit diesen
 Projektgraphen. Das maschinenlesbare Kontextdokument enthält jedes erreichbare
 Modul und seine sortierten Importkanten. Das Deklarationsinventar beschreibt
 weiterhin nur die Einstiegsdatei; `verify` prüft verknüpfte Funktionen, bewahrt
 in Verifikationsergebnissen aber noch keine Quellzuordnung pro Modul.
-Typen, Tabellen, Views, APIs und andere Nicht-Funktions-Deklarationen bleiben
-in der Einstiegsdatei. `fmt`, `impact`, `edit` und Datenbankbefehle arbeiten
+Tabellen, Views, APIs und andere Anwendungsressourcen bleiben in der
+Einstiegsdatei. `fmt`, `impact`, `edit` und Datenbankbefehle arbeiten
 weiterhin nur mit der angegebenen Quelldatei. Diese Grenzen machen die
 Implementierung experimentell und noch nicht zu einem vollständigen
 Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen im

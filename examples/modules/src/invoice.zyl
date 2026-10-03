@@ -1,9 +1,10 @@
 import "src/math.zyl" as math
-
+import "src/money.zyl" as money
 fn add_tax(net: Int, tax: Int) -> Int {
     return math::sum(net, tax)
 }
-
-pub fn total(net: Int, tax: Int) -> Int {
-    return add_tax(net, tax)
+pub fn total(net: Int, tax: Int) -> money::Money {
+    return money::Money {
+        cents: add_tax(net, tax)
+    }
 }

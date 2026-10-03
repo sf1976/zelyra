@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use zelyra_ast::{
-    BinaryOp, Block, Expr, ExprKind, Function, ImportDef, Program, Span, Stmt, UnaryOp,
+    BinaryOp, Block, Expr, ExprKind, FormAction, Function, ImportDef, Program, Span, Stmt, Type,
+    UnaryOp,
 };
 use zelyra_lexer::lex;
 use zelyra_parser::parse;
@@ -339,19 +340,21 @@ fn link_modules(
         .map(|(path, module)| (path.clone(), module.relative_path.clone()))
         .collect::<HashMap<_, _>>();
     let mut function_sets = HashMap::new();
+    let mut type_sets = HashMap::new();
     for (path, module) in modules {
         let functions = function_visibility(&module.program);
-        if path != entry && has_non_function_declarations(&module.program) {
-            let span = first_non_function_span(&module.program).unwrap_or_default();
+        if path != entry && has_unsupported_import_declarations(&module.program) {
+            let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules currently support function declarations only; keep tables, views, APIs, and other project declarations in the entry file".into(),
+                message: "imported modules currently support function, type, and record declarations only; keep tables, views, APIs, and other project declarations in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
             });
         }
         function_sets.insert(path.clone(), functions);
+        type_sets.insert(path.clone(), type_visibility(&module.program));
     }
 
     let mut linked = root.program.clone();
@@ -361,7 +364,35 @@ fn link_modules(
         }
         let module = modules.get(path).expect("ordered module was loaded");
         let module_name = module_names.get(path).expect("module name exists");
+        let linker = TypeLinker {
+            current_path: path,
+            current_name: module_name,
+            imports: &module.imports,
+            type_sets: &type_sets,
+            module_names: &module_names,
+            display_path: &module.relative_path,
+            is_root: false,
+        };
+        for mut definition in module.program.types.clone() {
+            if definition.is_public {
+                linker.ensure_exported_type_is_public(&definition.target, definition.span)?;
+            }
+            linker.rewrite_type(&mut definition.target, definition.span)?;
+            definition.name = internal_type_name(module_name, &definition.name);
+            linked.types.push(definition);
+        }
+        for mut record in module.program.records.clone() {
+            for field in &mut record.fields {
+                if record.is_public {
+                    linker.ensure_exported_type_is_public(&field.ty, field.span)?;
+                }
+                linker.rewrite_type(&mut field.ty, field.span)?;
+            }
+            record.name = internal_type_name(module_name, &record.name);
+            linked.records.push(record);
+        }
         for mut function in module.program.functions.clone() {
+            linker.rewrite_function_types(&mut function)?;
             rewrite_function(
                 &mut function,
                 path,
@@ -378,10 +409,21 @@ fn link_modules(
         }
     }
 
+    let root_linker = TypeLinker {
+        current_path: entry,
+        current_name: &root.relative_path,
+        imports: &root.imports,
+        type_sets: &type_sets,
+        module_names: &module_names,
+        display_path: &root.relative_path,
+        is_root: true,
+    };
+    root_linker.rewrite_root_declaration_types(&mut linked, root.source_id)?;
     for function in &mut linked.functions {
         if function.span.source_id != root.source_id {
             continue;
         }
+        root_linker.rewrite_function_types(function)?;
         rewrite_function(
             function,
             entry,
@@ -406,11 +448,23 @@ fn function_visibility(program: &Program) -> HashMap<String, bool> {
         .collect()
 }
 
-fn has_non_function_declarations(program: &Program) -> bool {
+fn type_visibility(program: &Program) -> HashMap<String, bool> {
+    program
+        .types
+        .iter()
+        .map(|definition| (definition.name.clone(), definition.is_public))
+        .chain(
+            program
+                .records
+                .iter()
+                .map(|record| (record.name.clone(), record.is_public)),
+        )
+        .collect()
+}
+
+fn has_unsupported_import_declarations(program: &Program) -> bool {
     !program.databases.is_empty()
         || !program.tables.is_empty()
-        || !program.types.is_empty()
-        || !program.records.is_empty()
         || !program.views.is_empty()
         || !program.components.is_empty()
         || !program.pages.is_empty()
@@ -421,14 +475,12 @@ fn has_non_function_declarations(program: &Program) -> bool {
         || !program.apis.is_empty()
 }
 
-fn first_non_function_span(program: &Program) -> Option<Span> {
+fn first_unsupported_import_span(program: &Program) -> Option<Span> {
     program
         .databases
         .first()
         .map(|item| item.span)
         .or_else(|| program.tables.first().map(|item| item.span))
-        .or_else(|| program.types.first().map(|item| item.span))
-        .or_else(|| program.records.first().map(|item| item.span))
         .or_else(|| program.views.first().map(|item| item.span))
         .or_else(|| program.components.first().map(|item| item.span))
         .or_else(|| program.pages.first().map(|item| item.span))
@@ -437,6 +489,367 @@ fn first_non_function_span(program: &Program) -> Option<Span> {
         .or_else(|| program.cruds.first().map(|item| item.span))
         .or_else(|| program.auth.first().map(|item| item.span))
         .or_else(|| program.apis.first().map(|item| item.span))
+}
+
+struct TypeLinker<'a> {
+    current_path: &'a Path,
+    current_name: &'a str,
+    imports: &'a HashMap<String, PathBuf>,
+    type_sets: &'a HashMap<PathBuf, HashMap<String, bool>>,
+    module_names: &'a HashMap<PathBuf, String>,
+    display_path: &'a str,
+    is_root: bool,
+}
+
+impl TypeLinker<'_> {
+    fn rewrite_root_declaration_types(
+        &self,
+        program: &mut Program,
+        source_id: u32,
+    ) -> Result<(), ProjectError> {
+        for definition in &mut program.types {
+            if definition.span.source_id == source_id {
+                self.rewrite_type(&mut definition.target, definition.span)?;
+            }
+        }
+        for record in &mut program.records {
+            if record.span.source_id == source_id {
+                for field in &mut record.fields {
+                    self.rewrite_type(&mut field.ty, field.span)?;
+                }
+            }
+        }
+        for table in &mut program.tables {
+            for column in &mut table.columns {
+                self.rewrite_type(&mut column.ty, column.span)?;
+            }
+        }
+        for page in &mut program.pages {
+            for input in &mut page.inputs {
+                self.rewrite_type(&mut input.ty, input.span)?;
+            }
+            for data in &mut page.data {
+                self.rewrite_type(&mut data.result_type, data.span)?;
+            }
+        }
+        for component in &mut program.components {
+            for prop in &mut component.props {
+                self.rewrite_type(&mut prop.ty, prop.span)?;
+            }
+        }
+        for view in &mut program.tableviews {
+            self.rewrite_type(&mut view.result_type, view.span)?;
+        }
+        for form in &mut program.forms {
+            for field in &mut form.fields {
+                if let Some(ty) = &mut field.ty {
+                    self.rewrite_type(ty, field.span)?;
+                }
+            }
+            for action in &mut form.actions {
+                self.rewrite_action_types(action)?;
+            }
+        }
+        for crud in &mut program.cruds {
+            for action in &mut crud.actions {
+                self.rewrite_action_types(action)?;
+            }
+        }
+        for api in &mut program.apis {
+            for field in &mut api.input {
+                self.rewrite_type(&mut field.ty, field.span)?;
+            }
+            self.rewrite_type(&mut api.output, api.span)?;
+            for error in &mut api.errors {
+                if let Some(payload) = &mut error.payload {
+                    self.rewrite_type(payload, error.span)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn rewrite_action_types(&self, action: &mut FormAction) -> Result<(), ProjectError> {
+        for field in &mut action.fields {
+            if let Some(ty) = &mut field.ty {
+                self.rewrite_type(ty, field.span)?;
+            }
+        }
+        self.rewrite_statements_types(&mut action.statements)
+    }
+
+    fn rewrite_statements_types(&self, statements: &mut [Stmt]) -> Result<(), ProjectError> {
+        for statement in statements {
+            match statement {
+                Stmt::Let {
+                    ty, value, span, ..
+                } => {
+                    if let Some(ty) = ty {
+                        self.rewrite_type(ty, *span)?;
+                    }
+                    self.rewrite_expression_types(value)?;
+                }
+                Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
+                    self.rewrite_expression_types(value)?;
+                }
+                Stmt::Return {
+                    value: Some(value), ..
+                } => self.rewrite_expression_types(value)?,
+                Stmt::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    self.rewrite_expression_types(condition)?;
+                    self.rewrite_block_types(then_block)?;
+                    if let Some(else_block) = else_block {
+                        self.rewrite_block_types(else_block)?;
+                    }
+                }
+                Stmt::While {
+                    condition,
+                    invariants,
+                    body,
+                    ..
+                } => {
+                    self.rewrite_expression_types(condition)?;
+                    for invariant in invariants {
+                        self.rewrite_expression_types(invariant)?;
+                    }
+                    self.rewrite_block_types(body)?;
+                }
+                Stmt::For { iterable, body, .. } => {
+                    self.rewrite_expression_types(iterable)?;
+                    self.rewrite_block_types(body)?;
+                }
+                Stmt::Loop {
+                    invariants, body, ..
+                } => {
+                    for invariant in invariants {
+                        self.rewrite_expression_types(invariant)?;
+                    }
+                    self.rewrite_block_types(body)?;
+                }
+                Stmt::Match { value, arms, .. } => {
+                    self.rewrite_expression_types(value)?;
+                    for arm in arms {
+                        self.rewrite_block_types(&mut arm.body)?;
+                    }
+                }
+                Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                    self.rewrite_block_types(body)?;
+                }
+                Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_exported_type_is_public(&self, ty: &Type, span: Span) -> Result<(), ProjectError> {
+        match ty {
+            Type::Named(name) if !name.contains("::") => {
+                if self
+                    .type_sets
+                    .get(self.current_path)
+                    .and_then(|types| types.get(name))
+                    == Some(&false)
+                {
+                    return Err(project_error(
+                        "E-MOD-007",
+                        format!(
+                            "public declaration exposes private type or record `{name}`; make the type public or keep it out of the public signature"
+                        ),
+                        self.display_path,
+                        span,
+                    ));
+                }
+            }
+            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+                self.ensure_exported_type_is_public(inner, span)?;
+            }
+            Type::Result(ok, error) | Type::Map(ok, error) => {
+                self.ensure_exported_type_is_public(ok, span)?;
+                self.ensure_exported_type_is_public(error, span)?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn rewrite_type(&self, ty: &mut Type, span: Span) -> Result<(), ProjectError> {
+        match ty {
+            Type::Named(name) => {
+                if let Some((alias, imported_name)) = name.split_once("::") {
+                    if imported_name.contains("::") {
+                        return Err(project_error(
+                            "E-MOD-009",
+                            "qualified type references currently support one imported namespace",
+                            self.display_path,
+                            span,
+                        ));
+                    }
+                    let target = self.imports.get(alias).ok_or_else(|| {
+                        project_error(
+                            "E-MOD-009",
+                            format!("unknown imported module alias `{alias}` in type reference"),
+                            self.display_path,
+                            span,
+                        )
+                    })?;
+                    let visibility = self
+                        .type_sets
+                        .get(target)
+                        .and_then(|types| types.get(imported_name))
+                        .copied();
+                    match visibility {
+                        None => {
+                            return Err(project_error(
+                                "E-MOD-009",
+                                format!("module `{alias}` has no type or record `{imported_name}`"),
+                                self.display_path,
+                                span,
+                            ));
+                        }
+                        Some(false) => {
+                            return Err(project_error(
+                                "E-MOD-007",
+                                format!("type or record `{imported_name}` in module `{alias}` is private; declare it with `pub` to use it from another module"),
+                                self.display_path,
+                                span,
+                            ));
+                        }
+                        Some(true) => {}
+                    }
+                    let module_name = self
+                        .module_names
+                        .get(target)
+                        .expect("resolved module has a canonical name");
+                    *name = internal_type_name(module_name, imported_name);
+                } else if !self.is_root
+                    && self
+                        .type_sets
+                        .get(self.current_path)
+                        .is_some_and(|types| types.contains_key(name))
+                {
+                    *name = internal_type_name(self.current_name, name);
+                }
+            }
+            Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+                self.rewrite_type(inner, span)?;
+            }
+            Type::Result(ok, error) | Type::Map(ok, error) => {
+                self.rewrite_type(ok, span)?;
+                self.rewrite_type(error, span)?;
+            }
+            Type::Int
+            | Type::UInt
+            | Type::Float
+            | Type::Decimal
+            | Type::Bool
+            | Type::String
+            | Type::Char
+            | Type::Bytes
+            | Type::Timestamp
+            | Type::Date
+            | Type::Time
+            | Type::Duration
+            | Type::Unit
+            | Type::Unknown => {}
+        }
+        Ok(())
+    }
+
+    fn rewrite_function_types(&self, function: &mut Function) -> Result<(), ProjectError> {
+        for parameter in &mut function.params {
+            if function.is_public {
+                self.ensure_exported_type_is_public(&parameter.ty, parameter.span)?;
+            }
+            self.rewrite_type(&mut parameter.ty, parameter.span)?;
+        }
+        if let Some(return_type) = &mut function.return_type {
+            if function.is_public {
+                self.ensure_exported_type_is_public(return_type, function.span)?;
+            }
+            self.rewrite_type(return_type, function.span)?;
+        }
+        for expression in function
+            .requires
+            .iter_mut()
+            .chain(function.ensures.iter_mut())
+        {
+            self.rewrite_expression_types(expression)?;
+        }
+        self.rewrite_block_types(&mut function.body)
+    }
+
+    fn rewrite_block_types(&self, block: &mut Block) -> Result<(), ProjectError> {
+        self.rewrite_statements_types(&mut block.statements)
+    }
+
+    fn rewrite_expression_types(&self, expression: &mut Expr) -> Result<(), ProjectError> {
+        match &mut expression.kind {
+            ExprKind::Array(values) => {
+                for value in values {
+                    self.rewrite_expression_types(value)?;
+                }
+            }
+            ExprKind::Map(entries) => {
+                for (key, value) in entries {
+                    self.rewrite_expression_types(key)?;
+                    self.rewrite_expression_types(value)?;
+                }
+            }
+            ExprKind::Record { type_name, fields } => {
+                let mut ty = Type::Named(type_name.clone());
+                self.rewrite_type(&mut ty, expression.span)?;
+                let Type::Named(canonical_name) = ty else {
+                    unreachable!("named record type remains a named type")
+                };
+                *type_name = canonical_name;
+                for (_, value) in fields {
+                    self.rewrite_expression_types(value)?;
+                }
+            }
+            ExprKind::Index { target, index } => {
+                self.rewrite_expression_types(target)?;
+                self.rewrite_expression_types(index)?;
+            }
+            ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+                self.rewrite_expression_types(target)?;
+            }
+            ExprKind::Call {
+                type_args, args, ..
+            } => {
+                for ty in type_args {
+                    self.rewrite_type(ty, expression.span)?;
+                }
+                for argument in args {
+                    self.rewrite_expression_types(argument)?;
+                }
+            }
+            ExprKind::Unary { expr, .. } => self.rewrite_expression_types(expr)?,
+            ExprKind::Binary { left, right, .. } => {
+                self.rewrite_expression_types(left)?;
+                self.rewrite_expression_types(right)?;
+            }
+            ExprKind::Sql { result_type, .. } => {
+                self.rewrite_type(result_type, expression.span)?;
+            }
+            ExprKind::Int(_)
+            | ExprKind::UInt(_)
+            | ExprKind::Float(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Char(_)
+            | ExprKind::Variable(_) => {}
+        }
+        Ok(())
+    }
+}
+
+fn internal_type_name(module_path: &str, name: &str) -> String {
+    format!("{module_path}::{name}")
 }
 
 fn internal_name(module_path: &str, function: &str) -> String {
@@ -992,6 +1405,7 @@ fn project_error(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use zelyra_database::build_schema;
     use zelyra_runtime::{check, execute};
 
     static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
@@ -1082,6 +1496,86 @@ mod tests {
     }
 
     #[test]
+    fn imports_public_records_and_aliases_across_transitive_modules() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/invoice.zyl\" as invoice\nimport \"src/money.zyl\" as money\ntable invoices { id: money::InvoiceId primary auto }\nfn main() { print(invoice::amount().value) }\n",
+            ),
+            (
+                "src/invoice.zyl",
+                "import \"src/money.zyl\" as money\npub fn amount() -> money::Amount { return money::Amount { value: 25 } }\n",
+            ),
+            (
+                "src/money.zyl",
+                "pub type InvoiceId = Id\npub struct Amount { value: Int }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        assert!(
+            check(&loaded.program).is_ok(),
+            "{:?}",
+            check(&loaded.program)
+        );
+        assert!(build_schema(&loaded.program).is_ok());
+        assert_eq!(execute(&loaded.program).unwrap(), ["25"]);
+        assert!(loaded
+            .program
+            .records
+            .iter()
+            .any(|record| record.name == "src/money.zyl::Amount"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn rejects_private_types_and_public_signatures_that_leak_them() {
+        let private_use = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nfn accept(value: models::Secret) {}\nfn main() {}\n",
+            ),
+            (
+                "src/models.zyl",
+                "struct Secret { value: Int }\npub struct Public { value: Int }\n",
+            ),
+        ]);
+        let error = load(private_use.join("main.zyl").to_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "E-MOD-007");
+        assert!(error.message.contains("private"));
+        cleanup(&private_use);
+
+        let leaked = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nfn main() { models::create() }\n",
+            ),
+            (
+                "src/models.zyl",
+                "struct Secret { value: Int }\npub fn create() -> Secret { return Secret { value: 1 } }\n",
+            ),
+        ]);
+        let error = load(leaked.join("main.zyl").to_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "E-MOD-007");
+        assert!(error.message.contains("exposes private type"));
+        cleanup(&leaked);
+
+        let leaked_field = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nfn main() { models::empty() }\n",
+            ),
+            (
+                "src/models.zyl",
+                "struct Secret { value: Int }\npub struct Public { secret: Secret }\npub fn empty() {}\n",
+            ),
+        ]);
+        let error = load(leaked_field.join("main.zyl").to_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "E-MOD-007");
+        assert!(error.message.contains("exposes private type"));
+        cleanup(&leaked_field);
+    }
+
+    #[test]
     fn imported_function_contracts_are_still_checked_at_runtime() {
         let directory = project(&[
             (
@@ -1115,7 +1609,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_reject_non_function_declarations_for_now() {
+    fn imported_files_reject_application_resource_declarations_for_now() {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1128,7 +1622,9 @@ mod tests {
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("function declarations only"));
+        assert!(error
+            .message
+            .contains("function, type, and record declarations only"));
         cleanup(&directory);
     }
 

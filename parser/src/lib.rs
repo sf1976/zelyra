@@ -109,6 +109,19 @@ impl<'a> Parser<'a> {
                     return self.error("module imports must appear before declarations");
                 }
                 imports.push(self.import_definition()?);
+            } else if self.at(&TokenKind::Pub) {
+                declarations_started = true;
+                self.advance();
+                if self.at(&TokenKind::Fn) {
+                    functions.push(self.function(true)?);
+                } else if self.at(&TokenKind::Type) {
+                    types.push(self.type_definition(true)?);
+                } else if self.at(&TokenKind::Struct) {
+                    records.push(self.record_definition(true)?);
+                } else {
+                    return self
+                        .error("`pub` currently applies only to functions, types, and records");
+                }
             } else if self.at(&TokenKind::Database) {
                 declarations_started = true;
                 databases.push(self.database_definition()?);
@@ -117,10 +130,10 @@ impl<'a> Parser<'a> {
                 tables.push(self.table_definition()?);
             } else if self.at(&TokenKind::Type) {
                 declarations_started = true;
-                types.push(self.type_definition()?);
+                types.push(self.type_definition(false)?);
             } else if self.at(&TokenKind::Struct) {
                 declarations_started = true;
-                records.push(self.record_definition()?);
+                records.push(self.record_definition(false)?);
             } else if self.at(&TokenKind::View) {
                 declarations_started = true;
                 views.push(self.view_definition()?);
@@ -147,16 +160,7 @@ impl<'a> Parser<'a> {
                 apis.push(self.api_definition()?);
             } else {
                 declarations_started = true;
-                let is_public = if self.at(&TokenKind::Pub) {
-                    self.advance();
-                    if !self.at(&TokenKind::Fn) {
-                        return self.error("`pub` currently applies only to functions");
-                    }
-                    true
-                } else {
-                    false
-                };
-                functions.push(self.function(is_public)?);
+                functions.push(self.function(false)?);
             }
             self.skip_newlines();
         }
@@ -1597,19 +1601,20 @@ impl<'a> Parser<'a> {
             span: start.join(end),
         })
     }
-    fn type_definition(&mut self) -> Result<TypeDef, ParseError> {
+    fn type_definition(&mut self, is_public: bool) -> Result<TypeDef, ParseError> {
         let start = self.expect(TokenKind::Type, "`type`")?;
         let (name, _) = self.ident("type name")?;
         self.expect(TokenKind::Equal, "`=` in type definition")?;
         let target = self.type_name()?;
         Ok(TypeDef {
             name,
+            is_public,
             target,
             span: start,
         })
     }
 
-    fn record_definition(&mut self) -> Result<RecordDef, ParseError> {
+    fn record_definition(&mut self, is_public: bool) -> Result<RecordDef, ParseError> {
         let start = self.expect(TokenKind::Struct, "`struct`")?;
         let (name, _) = self.ident("record name")?;
         self.expect(TokenKind::LBrace, "`{` after record name")?;
@@ -1636,6 +1641,7 @@ impl<'a> Parser<'a> {
         }
         Ok(RecordDef {
             name,
+            is_public,
             fields,
             span: start.join(end),
         })
@@ -1728,7 +1734,13 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
-        let (name, _) = self.ident("type name")?;
+        let (mut name, _) = self.ident("type name")?;
+        while self.at(&TokenKind::DoubleColon) {
+            self.advance();
+            let (segment, _) = self.ident("type name after `::`")?;
+            name.push_str("::");
+            name.push_str(&segment);
+        }
         let mut ty = match name.as_str() {
             "Int" => Type::Int,
             "UInt" => Type::UInt,
@@ -3264,7 +3276,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_imports_after_declarations_and_public_non_functions() {
+    fn rejects_imports_after_declarations_and_public_unsupported_declarations() {
         let late_import =
             parse(&lex("fn main() {}\nimport \"src/math.zyl\" as math").unwrap()).unwrap_err();
         assert!(late_import
@@ -3272,8 +3284,38 @@ mod tests {
             .contains("must appear before declarations"));
 
         let invalid_visibility =
-            parse(&lex("pub struct Customer { id: Int }").unwrap()).unwrap_err();
-        assert!(invalid_visibility.message.contains("only to functions"));
+            parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
+        assert!(invalid_visibility
+            .message
+            .contains("functions, types, and records"));
+    }
+
+    #[test]
+    fn parses_public_records_aliases_and_qualified_types() {
+        let program = parse(
+            &lex("pub type CustomerId = Int\npub struct Customer { id: CustomerId }\nfn load(id: crm::CustomerId) -> crm::Customer { return crm::Customer { id: id } }").unwrap(),
+        )
+        .unwrap();
+
+        assert!(program.types[0].is_public);
+        assert!(program.records[0].is_public);
+        assert_eq!(
+            program.functions[0].params[0].ty,
+            Type::Named("crm::CustomerId".into())
+        );
+        assert_eq!(
+            program.functions[0].return_type,
+            Some(Type::Named("crm::Customer".into()))
+        );
+        let Stmt::Return {
+            value: Some(value), ..
+        } = &program.functions[0].body.statements[0]
+        else {
+            panic!("expected returned record literal");
+        };
+        assert!(
+            matches!(&value.kind, ExprKind::Record { type_name, .. } if type_name == "crm::Customer")
+        );
     }
 
     #[test]

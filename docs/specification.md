@@ -378,20 +378,40 @@ fn main() {
 }
 ~~~
 
-An imported source currently may declare functions only. Functions are private
-by default; a caller in another module can access one only when it is declared
-with `pub fn` and called through that import's alias. Private helpers remain
-available to functions in their own file. The compiler rejects missing files,
-duplicate aliases, import cycles, path traversal, symlinks that resolve outside
-the project root, and calls to private or unknown imported functions. Module
-loading performs no network lookup.
+An imported source currently may declare functions, type aliases, and records.
+They are private by default; declarations cross a module boundary only with a
+`pub` modifier and an explicit import alias. For example, use `pub fn`,
+`pub type`, or `pub struct`. A qualified type reference such as
+`money::Amount` resolves through the current file's `money` import. Private
+helpers and types remain available within their own file. Public signatures
+may not expose private types. The compiler rejects missing files, duplicate
+aliases, import cycles, path traversal, symlinks that resolve outside the
+project root, and calls or type references to private or unknown declarations.
+Module loading performs no network lookup.
+
+For example, `src/money.zyl` may export a record and `src/invoice.zyl` may use
+that public type in a function signature:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
 
 `check`, `build`, `run`, `context`, and `verify` currently validate this
 project graph. The machine-readable context document includes every reachable
 module and its sorted import edges. Its declaration inventory still describes
 the entry file; `verify` checks linked functions, but verification results do
-not yet preserve per-module source provenance. Types, tables, views, APIs, and
-other non-function declarations remain in the entry file. `fmt`, `impact`,
+not yet preserve per-module source provenance. Tables, views, APIs, and other
+application-resource declarations remain in the entry file. `fmt`, `impact`,
 `edit`, and database commands remain source-file-local. These limits make the
 implementation experimental rather than a complete multi-file project model.
 The full requirements are tracked in the
