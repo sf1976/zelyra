@@ -97,7 +97,8 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
-    eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies (not a deployment export)");
+    eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
+    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir>` writes a checked source-only bundle (not Docker)");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
@@ -2589,10 +2590,17 @@ fn qualify_impact_declaration(
 }
 
 fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    if arguments.next().as_deref() != Some("plan") {
-        usage();
-        return ExitCode::from(2);
+    match arguments.next().as_deref() {
+        Some("plan") => module_plan_command(arguments),
+        Some("bundle") => module_bundle_command(arguments),
+        _ => {
+            usage();
+            ExitCode::from(2)
+        }
     }
+}
+
+fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
         usage();
         return ExitCode::from(2);
@@ -2931,6 +2939,349 @@ fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     } else {
         ExitCode::from(1)
     }
+}
+
+fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
+        usage();
+        return ExitCode::from(2);
+    };
+    let mut output = None;
+    while let Some(argument) = arguments.next() {
+        if argument == "--output" && output.is_none() {
+            output = arguments.next().map(PathBuf::from);
+        } else {
+            eprintln!("error[E-CLI-001]: expected one `--output <directory>` option");
+            return ExitCode::from(2);
+        }
+    }
+    let Some(output) = output else {
+        eprintln!("error[E-CLI-001]: `module bundle` requires `--output <directory>`");
+        return ExitCode::from(2);
+    };
+
+    let executable = match env::current_exe() {
+        Ok(executable) => executable,
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: cannot locate the Zelyra executable: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let plan_output = match Command::new(&executable)
+        .args(["module", "plan", &entry, &selected])
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: cannot run the module dependency planner: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    if !plan_output.status.success() {
+        eprint!("{}", String::from_utf8_lossy(&plan_output.stdout));
+        return ExitCode::from(1);
+    }
+    let plan_document: Value = match serde_json::from_slice(&plan_output.stdout) {
+        Ok(document) => document,
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: dependency planner returned invalid JSON: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let Some(plan) = plan_document.get("plan") else {
+        eprintln!("error[E-MOD-018]: dependency planner returned no plan");
+        return ExitCode::from(1);
+    };
+    let Some(source_files) = plan.get("source_files").and_then(Value::as_array) else {
+        eprintln!("error[E-MOD-018]: dependency plan has no source-file inventory");
+        return ExitCode::from(1);
+    };
+    let source_files = source_files
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    if source_files.is_empty() {
+        eprintln!("error[E-MOD-018]: dependency plan contains no source files");
+        return ExitCode::from(1);
+    }
+    if plan
+        .get("unresolved_references")
+        .and_then(Value::as_array)
+        .is_none_or(|references| !references.is_empty())
+    {
+        eprintln!("error[E-MOD-018]: refusing to bundle a plan with unresolved references");
+        return ExitCode::from(1);
+    }
+
+    let entry_path = match fs::canonicalize(&entry) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: cannot resolve entry `{entry}`: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let Some(project_root) = entry_path.parent() else {
+        eprintln!("error[E-MOD-018]: entry has no project directory");
+        return ExitCode::from(1);
+    };
+    let entry_relative = match entry_path.strip_prefix(project_root) {
+        Ok(path) => path.to_string_lossy().replace('\\', "/"),
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: cannot make entry project-relative: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let selected_module = plan
+        .get("selected_module")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let selected_resource = plan
+        .get("selected_resource")
+        .and_then(Value::as_str)
+        .is_some();
+    let full_project = selected_module == entry_relative && !selected_resource;
+    if selected_module == entry_relative && selected_resource {
+        eprintln!("error[E-MOD-018]: move the selected resource into its own source module before bundling; the project entry file cannot be isolated safely");
+        return ExitCode::from(1);
+    }
+    if !full_project && source_files.contains(&entry_relative) {
+        eprintln!("error[E-MOD-018]: selected module depends on the original project entry; split the entry from reusable application modules before bundling");
+        return ExitCode::from(1);
+    }
+
+    let output_name = output.file_name().filter(|name| !name.is_empty());
+    let Some(output_name) = output_name else {
+        eprintln!("error[E-MOD-018]: output must name a new directory");
+        return ExitCode::from(1);
+    };
+    let output_parent = output.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let output_parent = match fs::canonicalize(output_parent) {
+        Ok(path) if path.is_dir() => path,
+        Ok(_) => {
+            eprintln!("error[E-MOD-018]: output parent is not a directory");
+            return ExitCode::from(1);
+        }
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: output parent must already exist: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let output = output_parent.join(output_name);
+    match fs::symlink_metadata(&output) {
+        Ok(_) => {
+            eprintln!(
+                "error[E-MOD-018]: output `{}` already exists; no files were changed",
+                output.display()
+            );
+            return ExitCode::from(1);
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            eprintln!("error[E-MOD-018]: cannot inspect output directory: {error}");
+            return ExitCode::from(1);
+        }
+    }
+    if output.starts_with(project_root) {
+        eprintln!("error[E-MOD-018]: choose an output directory outside the source project");
+        return ExitCode::from(1);
+    }
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let mut staging = None;
+    for attempt in 0..8 {
+        let candidate = output_parent.join(format!(
+            ".{}.zelyra-bundle-{}-{timestamp}-{attempt}",
+            output_name.to_string_lossy(),
+            std::process::id()
+        ));
+        match fs::create_dir(&candidate) {
+            Ok(()) => {
+                staging = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                eprintln!("error[E-MOD-018]: cannot create staging directory: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    }
+    let Some(staging) = staging else {
+        eprintln!("error[E-MOD-018]: cannot allocate a unique staging directory");
+        return ExitCode::from(1);
+    };
+
+    let build_result = (|| -> Result<(Vec<String>, Vec<String>), String> {
+        let mut copied = Vec::new();
+        if full_project {
+            copy_bundle_source(project_root, &staging, &entry_relative, "main.zyl")?;
+            copied.push("main.zyl".to_owned());
+        }
+        for relative in &source_files {
+            if full_project && relative == &entry_relative {
+                continue;
+            }
+            copy_bundle_source(project_root, &staging, relative, relative)?;
+            copied.push(relative.clone());
+        }
+        if !full_project {
+            let imports = source_files
+                .iter()
+                .enumerate()
+                .map(|(index, path)| {
+                    let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+                    format!("import \"{escaped}\" as bundle_{index}")
+                })
+                .collect::<Vec<_>>();
+            fs::write(
+                staging.join("main.zyl"),
+                format!("{}\n", imports.join("\n")),
+            )
+            .map_err(|error| format!("cannot write generated entry: {error}"))?;
+            copied.push("main.zyl".to_owned());
+        }
+
+        let mut support_files = Vec::new();
+        for relative in ["zelyra.toml", PROJECT_THEME_CSS_FILE] {
+            if project_root.join(relative).exists() {
+                copy_bundle_source(project_root, &staging, relative, relative)?;
+                support_files.push(relative.to_owned());
+            }
+        }
+        let locales = project_root.join("locales");
+        match fs::symlink_metadata(&locales) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err("refusing to copy a symlinked locales directory".into());
+            }
+            Ok(metadata) if metadata.is_dir() => {
+                for item in fs::read_dir(&locales)
+                    .map_err(|error| format!("cannot read locales directory: {error}"))?
+                {
+                    let item =
+                        item.map_err(|error| format!("cannot read locale entry: {error}"))?;
+                    let name = item.file_name().to_string_lossy().into_owned();
+                    if !name.ends_with(".json") {
+                        continue;
+                    }
+                    copy_bundle_source(
+                        project_root,
+                        &staging,
+                        &format!("locales/{name}"),
+                        &format!("locales/{name}"),
+                    )?;
+                    support_files.push(format!("locales/{name}"));
+                }
+            }
+            Ok(_) => return Err("locales path is not a directory".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("cannot inspect locales directory: {error}")),
+        }
+
+        let database = plan.get("database").cloned().unwrap_or(Value::Null);
+        let manifest = json!({
+            "format_version": 1,
+            "kind": "experimental-source-bundle",
+            "selected": selected,
+            "selected_module": selected_module,
+            "selected_resource": plan.get("selected_resource"),
+            "source_files": copied,
+            "support_files": support_files,
+            "database": database,
+            "source_closure_complete": false,
+            "complete_deployment": false,
+            "limitations": [
+                "The static dependency graph is incomplete; this bundle is not a deployment manifest.",
+                "No Dockerfile, Compose stack, runtime binary, database service, or .env file is included.",
+                "Database credentials and other runtime secrets are intentionally not copied.",
+                "The selected source file is included in full; resource selection does not remove co-located declarations."
+            ]
+        });
+        let manifest_text = serde_json::to_string_pretty(&manifest)
+            .map_err(|error| format!("cannot serialize bundle manifest: {error}"))?;
+        fs::write(
+            staging.join("zelyra.bundle.json"),
+            format!("{manifest_text}\n"),
+        )
+        .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
+        fs::write(
+            staging.join("README.md"),
+            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n",
+        )
+        .map_err(|error| format!("cannot write bundle README: {error}"))?;
+
+        let check = Command::new(&executable)
+            .current_dir(&staging)
+            .args(["check", "main.zyl", "--format=json"])
+            .output()
+            .map_err(|error| format!("cannot validate generated bundle: {error}"))?;
+        if !check.status.success() {
+            return Err(format!(
+                "generated bundle failed `zelyra check`; staged files were discarded:\n{}",
+                String::from_utf8_lossy(&check.stdout)
+            ));
+        }
+        Ok((copied, support_files))
+    })();
+
+    match build_result {
+        Ok((source_files, support_files)) => {
+            if fs::symlink_metadata(&output).is_ok() {
+                let _ = fs::remove_dir_all(&staging);
+                eprintln!(
+                    "error[E-MOD-018]: output `{}` appeared during bundle creation; it was not changed",
+                    output.display()
+                );
+                return ExitCode::from(1);
+            }
+            if let Err(error) = fs::rename(&staging, &output) {
+                let _ = fs::remove_dir_all(&staging);
+                eprintln!("error[E-MOD-018]: cannot publish source bundle: {error}");
+                return ExitCode::from(1);
+            }
+            println!("created experimental source bundle: {}", output.display());
+            println!(
+                "{} Zelyra source files; {} support files",
+                source_files.len(),
+                support_files.len()
+            );
+            println!("the generated bundle passed `zelyra check`");
+            println!("this is not a complete deployment or Docker export; see zelyra.bundle.json");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&staging);
+            eprintln!("error[E-MOD-018]: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn copy_bundle_source(
+    source_root: &std::path::Path,
+    bundle_root: &std::path::Path,
+    source_relative: &str,
+    bundle_relative: &str,
+) -> Result<(), String> {
+    let source = source_root.join(source_relative);
+    let metadata = fs::symlink_metadata(&source)
+        .map_err(|error| format!("cannot inspect `{source_relative}`: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(format!(
+            "refusing to copy non-regular source `{source_relative}`"
+        ));
+    }
+    let destination = bundle_root.join(bundle_relative);
+    let parent = destination
+        .parent()
+        .ok_or_else(|| format!("bundle path `{bundle_relative}` has no parent"))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("cannot create bundle directory: {error}"))?;
+    fs::copy(&source, &destination)
+        .map_err(|error| format!("cannot copy `{source_relative}`: {error}"))?;
+    Ok(())
 }
 
 fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {

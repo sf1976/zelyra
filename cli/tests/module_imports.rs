@@ -115,6 +115,140 @@ fn check_and_run_compile_imported_public_functions() {
 }
 
 #[test]
+fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nimport \"src/ui.zyl\" as ui\nfn main() { print(\"original entry\") }\n",
+        ),
+        (
+            "src/pages.zyl",
+            "page \"/invoices\" { view: AppShell html { <h1>Bundled invoices</h1> } }\n",
+        ),
+        (
+            "src/ui.zyl",
+            "view AppShell { html { <html><body><slot /></body></html> } }\n",
+        ),
+        ("zelyra.toml", "[project]\nname = \"module-bundle-test\"\n"),
+        (".env", "DATABASE_URL=mariadb://must-not-be-copied\n"),
+        (".env.example", "DATABASE_URL=mariadb://replace-me\n"),
+    ]);
+    let bundle = directory.with_extension("invoice-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "page:/invoices",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(bundle.join("src/pages.zyl").is_file());
+    assert!(bundle.join("src/ui.zyl").is_file());
+    assert!(bundle.join("zelyra.toml").is_file());
+    assert!(!bundle.join(".env").exists());
+    assert!(!bundle.join(".env.example").exists());
+    assert!(!bundle.join("Dockerfile").exists());
+
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["kind"], "experimental-source-bundle");
+    assert_eq!(manifest["source_closure_complete"], false);
+    assert_eq!(manifest["complete_deployment"], false);
+    let check = run(&bundle, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stdout)
+    );
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&bundle)
+        .args(["serve", "main.zyl", &address])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let response = {
+        let socket: std::net::SocketAddr = address.parse().unwrap();
+        let mut response = String::new();
+        for _ in 0..75 {
+            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /invoices HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut candidate = String::new();
+                stream.read_to_string(&mut candidate).unwrap();
+                if !candidate.is_empty() {
+                    response = candidate;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        response
+    };
+    let _ = server.kill();
+    let server_output = server.wait_with_output().unwrap();
+    assert!(
+        response.contains("200 OK") && response.contains("Bundled invoices"),
+        "{response}\nserver stderr: {}",
+        String::from_utf8_lossy(&server_output.stderr)
+    );
+
+    let original_readme = fs::read(bundle.join("README.md")).unwrap();
+    let repeat = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "page:/invoices",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(!repeat.status.success());
+    assert_eq!(fs::read(bundle.join("README.md")).unwrap(), original_readme);
+    let nested_output = directory.join("nested-bundle");
+    let nested_output_arg = nested_output.to_string_lossy().into_owned();
+    let nested = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "page:/invoices",
+            "--output",
+            &nested_output_arg,
+        ],
+    );
+    assert!(!nested.status.success());
+    assert!(!nested_output.exists());
+    let _ = fs::remove_dir_all(bundle);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_and_run_support_public_records_and_qualified_types() {
     let directory = project(&[
         (

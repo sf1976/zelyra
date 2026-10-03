@@ -1982,6 +1982,28 @@ oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
 Dienste und Docker-Artefakte sind nicht enthalten. `complete_deployment` bleibt
 ausdrücklich `false`; der Befehl exportiert oder startet keine Anwendung.
 
+Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
+
+~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
+~~~
+
+Der Befehl materialisiert die im Plan bekannten Quelldateien in einem neuen
+Zielordner, erzeugt einen Einstieg, prüft das Ergebnis mit `zelyra check` und
+veröffentlicht den Ordner erst nach erfolgreicher Prüfung. Er kopiert außerdem
+`zelyra.toml`, `zelyra.theme.css` und JSON-Sprachkataloge, sofern vorhanden.
+Ein vorhandenes Ziel, ein nicht auflösbarer Verweis oder eine Abhängigkeit vom
+ursprünglichen Einstieg wird abgelehnt. Die ausgewählte Quelldatei bleibt
+vollständig enthalten.
+
+Das Ergebnis ist ausdrücklich nur ein experimentelles Quellpaket:
+`zelyra.bundle.json` setzt sowohl `source_closure_complete` als auch
+`complete_deployment` auf `false`. Es enthält weder Docker-/Compose-Dateien,
+Compiler-Binärdatei, Datenbankdienst noch `.env`; Zugangsdaten werden nicht
+kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
+eine externe Laufzeitkonfiguration und gegebenenfalls eine MariaDB nötig. Ein
+eigenständiger Dockerexport ist damit noch nicht erreicht.
+
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
 verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen
 werden in der HTML-Deklaration derzeit nicht mit `ui::` qualifiziert:

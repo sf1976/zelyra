@@ -2000,6 +2000,26 @@ runtime configuration, external services, and Docker artifacts are not
 included. `complete_deployment` remains explicitly `false`; the command does
 not export or run an application.
 
+The next experimental step is `zelyra module bundle`:
+
+~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
+~~~
+
+It materializes the source files known to the plan in a new output directory,
+generates an entry file, validates the result with `zelyra check`, and only
+publishes the directory after that check succeeds. It also copies
+`zelyra.toml`, `zelyra.theme.css`, and JSON locale catalogs when present. An
+existing destination, unresolved reference, or dependency on the original
+entry is rejected. The selected source file is included in full.
+
+The result is explicitly only an experimental source bundle:
+`zelyra.bundle.json` sets both `source_closure_complete` and
+`complete_deployment` to `false`. It contains no Docker/Compose files, compiler
+binary, database service, or `.env`; credentials are not copied. Running it
+still requires a compatible Zelyra build, external runtime configuration, and
+MariaDB when applicable. This is not yet an independent Docker export.
+
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:
 
