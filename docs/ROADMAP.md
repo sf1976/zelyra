@@ -301,9 +301,10 @@ architecture requirement for every phase, not a provider-specific feature.
   connections now support verified TLS: `auto` requires certificate- and
   hostname-verified TLS for non-local hosts, `required` forces it, and
   `disabled` is explicit. A custom CA path is supported. Positive handshake,
-  CLI inspection, and untrusted-CA rejection passed locally on MariaDB 11.4;
-  the new TLS integration is added to every MariaDB CI matrix entry. Standalone
-  Docker module exports default to `auto`; only the full local Compose template
+  CLI inspection, and untrusted-CA rejection passed locally on MariaDB 11.4
+  and in PR CI run 37161345832 across all four MariaDB matrix versions.
+  Standalone Docker module exports default to `auto`; only the full local
+  Compose template
   opts out for its isolated internal database network.
   Schema inspection/DDL still uses the CLI; response transfer is not globally
   bounded, and there are no automatic retries. Windows TLS has not been tested

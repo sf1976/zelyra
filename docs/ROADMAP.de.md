@@ -325,9 +325,10 @@ Feature eines bestimmten Anbieters.
   verlangt geprüfte Zertifikatskette und Hostnamen für externe Hosts,
   `required` erzwingt TLS und `disabled` schaltet es ausdrücklich ab. Eine
   eigene CA-Datei ist unterstützt. Erfolgreicher Handshake, CLI-Inspektion und
-  Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4;
-  der TLS-Integrationstest läuft in jedem MariaDB-CI-Matrixeintrag. Exportierte
-  Docker-Module verwenden standardmäßig `auto`; nur die vollständige lokale
+  Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4
+  und im PR-CI-Lauf 37161345832 gegen alle vier MariaDB-Matrixversionen.
+  Exportierte Docker-Module verwenden standardmäßig `auto`; nur die vollständige
+  lokale
   Compose-Vorlage schaltet TLS für ihr isoliertes internes Datenbanknetz ab.
   Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
   Ergebnisübertragung ist nicht global begrenzt und automatische Retries gibt
