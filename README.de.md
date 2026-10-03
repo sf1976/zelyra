@@ -15,7 +15,7 @@ und natives SQL bleiben jederzeit möglich.
 >
 > Zelyra 0.2.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
- > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
+> begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
 Der Workspace auf `main` hat die Version `0.3.0`. Das veröffentlichte [`v0.3.0-rc.2`-Vorab-Release](https://github.com/sf1976/zelyra/releases/tag/v0.3.0-rc.2) ist kein finales 0.3.0; stabil ist weiterhin 0.2.0 und die finalen 0.3.0-Abnahmekriterien sind noch offen.
 
