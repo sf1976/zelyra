@@ -572,10 +572,11 @@ OIDC, or a visual editor into automatic 0.4.0 promises.
 
 The verified upstream release state on 2026-10-03 is stable `v0.2.0` and
 prerelease `v0.3.0-rc.2`; the `main` workspace declares `0.3.0`, but final
-`v0.3.0` has not been published. The 0.4.0 plan must not be treated as started
-until that final release and its human onboarding evidence are recorded.
-Scope and status remain subject to the plan's risk register and acceptance
-gates.
+`v0.3.0` has not been published. The project owner explicitly deferred the
+0.3.0 human onboarding test to 0.4.0; this is a risk acceptance, not test
+evidence. The 0.4.0 plan requires that independent test before its final
+release. Scope and status remain subject to the plan's risk register and
+acceptance gates.
 
 ## Proposed release milestone 0.5.0
 

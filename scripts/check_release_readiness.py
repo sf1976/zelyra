@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the final 0.3.0 tag against unfinished mandatory release gates."""
+"""Guard the final 0.3.0 tag against unfinished gates and undocumented waivers."""
 
 from __future__ import annotations
 
@@ -10,18 +10,31 @@ from pathlib import Path
 
 REQUIRED_GATES = {
     "docs/release-plans/0.3.0.en.md": (
-        ("human onboarding", "Run at least one documented onboarding test with a person"),
+        ("human onboarding deferral", "Defer the independent human onboarding test from 0.3.0 to 0.4.0 by"),
         ("candidate artifacts", "Build release binaries and archives for the targets actually supported"),
         ("published install/update smoke", "Smoke-test installation and update paths for the published artifacts"),
         ("P0 decisions", "All included P0 issues are fixed or explicitly deferred with a visible"),
         ("artifact/update verification", "Installation artifacts, checksums, and update path are verified"),
     ),
     "docs/release-plans/0.3.0.de.md": (
-        ("menschlicher Einsteigertest", "Mindestens einen dokumentierten Einsteigertest mit einer Person"),
+        ("Vertagung des menschlichen Einsteigertests", "Den unabhängigen menschlichen Einsteigertest für 0.3.0 auf ausdrückliche"),
         ("Kandidatenartefakte", "Release-Binärdateien und Archive für die tatsächlich unterstützten"),
         ("veröffentlichter Installations-/Update-Smoke", "Installations- und Updatepfad der veröffentlichten Artefakte smoke-testen"),
         ("P0-Entscheidungen", "Alle aufgenommenen P0-Fehler behoben oder mit sichtbarer Begründung"),
         ("Artefakt-/Updateprüfung", "Installationsartefakte, Prüfsummen und Updatepfad geprüft"),
+    ),
+}
+
+REQUIRED_DECISION_RECORDS = {
+    "docs/release-readiness/0.3.0-human-gate-decision.en.md": (
+        "not conducted for 0.3.0",
+        "mandatory release gate for 0.4.0",
+        "not a test result",
+    ),
+    "docs/release-readiness/0.3.0-human-gate-decision.de.md": (
+        "nicht durchgeführt",
+        "0.4.0",
+        "kein testergebnis",
     ),
 }
 
@@ -44,6 +57,18 @@ def unfinished_gates(root: Path, version: str) -> list[str]:
         for name, marker in gates:
             if not _checkbox_is_checked(text, marker):
                 failures.append(f"{name} ({relative_path})")
+
+    for relative_path, markers in REQUIRED_DECISION_RECORDS.items():
+        path = root / relative_path
+        try:
+            text = " ".join(path.read_text(encoding="utf-8").casefold().split())
+        except FileNotFoundError:
+            failures.append(f"human onboarding decision record missing ({relative_path})")
+            continue
+        for marker in markers:
+            if " ".join(marker.casefold().split()) not in text:
+                failures.append(f"human onboarding decision record incomplete ({relative_path})")
+                break
     return failures
 
 

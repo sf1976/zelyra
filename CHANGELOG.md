@@ -6,6 +6,11 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Record the project-owner decision to defer the 0.3.0 human onboarding study
+  without claiming it passed; independent human acceptance remains mandatory
+  for 0.4.0. / Die Entscheidung des Projektverantwortlichen dokumentiert, die
+  menschliche Einsteigerstudie für 0.3.0 zu vertagen, ohne sie als bestanden
+  darzustellen; eine unabhängige menschliche Abnahme bleibt für 0.4.0 Pflicht.
 - The published-release smoke test now compares prerelease installs with the
   stable CLI version reported by the binary. / Der Published-Release-
   Smoke-Test vergleicht Prerelease-Installationen nun mit der stabilen,
@@ -22,11 +27,14 @@ releases follow Semantic Versioning independently of the language line.
 
 - Prerelease candidate tags such as `v0.3.0-rc.1` now use the same metadata,
   packaging, checksum, and artifact verification path as stable releases; the
-  final `v0.3.0` tag is blocked while mandatory bilingual release-plan gates
-  remain open. / Prerelease-Kandidatentags wie `v0.3.0-rc.1` verwenden nun
-  denselben Metadaten-, Packaging-, Prüfsummen- und Artefaktprüfpfad wie stabile
-  Releases; das endgültige `v0.3.0`-Tag wird blockiert, solange verpflichtende
-  zweisprachige Releaseplan-Gates offen sind.
+  final `v0.3.0` tag remains guarded by bilingual release-plan gates. The
+  human onboarding study may only be deferred through the documented owner
+  decision; it is not represented as passed. / Prerelease-Kandidatentags wie
+  `v0.3.0-rc.1` verwenden nun denselben Metadaten-, Packaging-, Prüfsummen- und
+  Artefaktprüfpfad wie stabile Releases. Das endgültige `v0.3.0`-Tag bleibt
+  durch zweisprachige Releaseplan-Gates geschützt. Die menschliche
+  Einsteigerstudie darf nur mit dokumentierter Projektentscheidung vertagt
+  werden und wird nicht als bestanden dargestellt.
 - Complete the generated project theme token template and document the CSS
   versus Zelyra view/component boundary. / Die generierte Theme-Vorlage
   enthält nun den vollständigen Token-Vertrag; die Grenze zwischen CSS sowie
