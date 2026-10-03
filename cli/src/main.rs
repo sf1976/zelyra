@@ -4437,8 +4437,8 @@ fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         usage();
         return ExitCode::from(2);
     }
-    let program = match validate(&path) {
-        Ok(program) => program,
+    let program = match load_project(&path) {
+        Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
     if format == "typescript" {
@@ -6876,8 +6876,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let program = match validate(&path) {
-        Ok(program) => program,
+    let program = match load_project(&path) {
+        Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
     if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
@@ -6927,6 +6927,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         && program.apis.is_empty()
     {
         eprintln!("error[E-WEB-001]: {path} does not define a page, form, CRUD resource, or API");
+        return ExitCode::from(1);
+    }
+    if !validate_views(&path, &program)
+        || !validate_page_inputs(&path, &program)
+        || !validate_page_data(&path, &program)
+        || !validate_components(&path, &program)
+    {
         return ExitCode::from(1);
     }
     let routes = program
