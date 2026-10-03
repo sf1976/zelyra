@@ -1963,7 +1963,14 @@ Quelldatei zusätzlich enthalten sind.
 aktuellen statischen Wirkungsgraphen erreichbaren Deklarationen. `edges` zeigt
 bekannte Sprach- und Typreferenzen, zum Beispiel API-Ein-/Ausgaben,
 Funktionssignaturen, Records und Type Aliases. `configuration_edges` weist die
-Datenbankkonfiguration separat aus;
+Datenbankkonfiguration separat aus. `database.configurations` nennt für jede
+im Abschluss liegende Datenbankdeklaration ihren Namen, ihr Backend, den
+logischen Datenbanknamen, die Quelldatei und `DATABASE_URL` als aktuelle
+Laufzeitvariable. Der Plan kennzeichnet außerdem `connection_model` als
+`single-project-wide-connection` und `supports_multiple_connections` als
+`false`. Die Deklaration beschreibt also Schema-/Backend-Konfiguration; sie ist
+noch keine separat adressierbare Datenbankschnittstelle. Zugangsdaten werden
+nicht in den Plan aufgenommen.
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt
@@ -1976,7 +1983,13 @@ Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
 Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records und
 Type Aliases, von geschützten Ressourcen zur Authentifizierung, von
 Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
-Datenbankkonfiguration.
+Datenbankkonfiguration. `database.configurations` macht die im Abschluss
+liegenden Deklarationen mit Backend, logischem Datenbanknamen, Quelldatei und
+der aktuellen Laufzeitvariable `DATABASE_URL` sichtbar. Der Plan weist
+`connection_model: "single-project-wide-connection"` und
+`supports_multiple_connections: false` aus: Mehrere unabhängig konfigurierbare
+Verbindungen oder eine benannte DB-Schnittstelle werden noch nicht unterstützt.
+Zugangsdaten erscheinen nicht im Plan.
 Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische
 oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
 Dienste und Docker-Artefakte sind nicht enthalten. `complete_deployment` bleibt

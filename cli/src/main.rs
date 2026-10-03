@@ -2863,6 +2863,26 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     .filter(|path| included.contains(*path))
                     .cloned()
                     .collect::<BTreeSet<_>>();
+                let database_configurations = program
+                    .databases
+                    .iter()
+                    .filter_map(|database| {
+                        let declaration = format!("database:{}", database.name);
+                        let module_path = owners.get(&declaration)?;
+                        included.contains(module_path).then(|| {
+                            (
+                                format!("{module_path}::{declaration}"),
+                                json!({
+                                    "declaration": declaration,
+                                    "module": module_path,
+                                    "engine": database.engine,
+                                    "database": database.database,
+                                    "connection_environment": "DATABASE_URL"
+                                }),
+                            )
+                        })
+                    })
+                    .collect::<BTreeMap<_, _>>();
                 plan = Some(json!({
                     "kind": "known-semantic-dependency-closure",
                     "closure_semantics": "explicit-imports-plus-statically-recognized-references",
@@ -2904,7 +2924,11 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     })).collect::<Vec<_>>(),
                     "database": {
                         "required": database_required,
-                        "configuration_sources": database_configuration_sources
+                        "configuration_sources": database_configuration_sources,
+                        "configurations": database_configurations.values().collect::<Vec<_>>(),
+                        "connection_model": "single-project-wide-connection",
+                        "connection_environment": "DATABASE_URL",
+                        "supports_multiple_connections": false
                     },
                     "complete_deployment": false,
                     "limitations": [

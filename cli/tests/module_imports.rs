@@ -532,6 +532,22 @@ fn module_plan_adds_cross_module_views_components_and_database_tables() {
         document["plan"]["database"]["configuration_sources"],
         serde_json::json!([])
     );
+    assert_eq!(
+        document["plan"]["database"]["configurations"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        document["plan"]["database"]["connection_model"],
+        "single-project-wide-connection"
+    );
+    assert_eq!(
+        document["plan"]["database"]["connection_environment"],
+        "DATABASE_URL"
+    );
+    assert_eq!(
+        document["plan"]["database"]["supports_multiple_connections"],
+        false
+    );
     let dependencies = document["plan"]["resource_dependencies"]
         .as_array()
         .unwrap();
@@ -584,6 +600,20 @@ fn module_plan_includes_separate_database_configuration_source() {
     assert_eq!(
         document["plan"]["database"]["configuration_sources"],
         serde_json::json!(["src/database.zyl"])
+    );
+    assert_eq!(
+        document["plan"]["database"]["configurations"],
+        serde_json::json!([{
+            "declaration": "database:main",
+            "module": "src/database.zyl",
+            "engine": "mariadb",
+            "database": "invoices",
+            "connection_environment": "DATABASE_URL"
+        }])
+    );
+    assert_eq!(
+        document["plan"]["database"]["supports_multiple_connections"],
+        false
     );
     assert!(document["plan"]["resource_dependencies"]
         .as_array()

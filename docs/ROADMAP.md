@@ -85,7 +85,10 @@ architecture requirement for every phase, not a provider-specific feature.
   for included source files and distinguishes the statically reachable
   declaration closure from additional declarations in those files. This
   analysis is incomplete; `configuration_edges` reports database configuration
-  separately. Known
+  separately, and `database.configurations` identifies the declared backend,
+  logical database name, source file, and current `DATABASE_URL` runtime
+  setting. The runtime still has one project-wide connection; this is not a
+  reusable named database interface. Known
   page-to-view/component, page-SQL and
   form/CRUD-action-SQL-to-table, API-handler-to-function, declaration type
   references for APIs, function signatures, records, and type aliases,

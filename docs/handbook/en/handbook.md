@@ -1982,7 +1982,13 @@ records, and application resources co-located in the selected source visible.
 reachable through the current static impact graph. Its `edges` show known
 language and type references, such as API input/output types, function
 signatures, records, and type aliases. `configuration_edges` reports database
-configuration separately;
+configuration separately. `database.configurations` lists each database
+declaration in the closure with its name, backend, logical database name,
+source file, and current runtime variable `DATABASE_URL`. The plan also marks
+`connection_model` as `single-project-wide-connection` and
+`supports_multiple_connections` as `false`. A declaration therefore describes
+schema/backend configuration; it is not yet a separately addressable database
+interface. Credentials are not included in the plan.
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
 the known graph: `complete` remains `false`, and unrecognized dependencies may
@@ -1994,11 +2000,17 @@ known page-to-view and page-to-component references, page and form/CRUD-action
 SQL-to-table edges, API-handler-to-function and type references from API fields,
 function signatures, records, and type aliases, protected-resource-to-
 authentication, authentication-to-table, recognized table relations, and
-database configuration. Unresolved references
-appear in `unresolved_references`. Dynamic or unmodeled dependencies, assets,
-runtime configuration, external services, and Docker artifacts are not
-included. `complete_deployment` remains explicitly `false`; the command does
-not export or run an application.
+database configuration. Unresolved references appear in
+`unresolved_references`. `database.configurations` identifies declarations in
+the closure with their backend, logical database name, source file, and current
+runtime variable `DATABASE_URL`. The plan reports
+`connection_model: "single-project-wide-connection"` and
+`supports_multiple_connections: false`: multiple independently configurable
+connections and a named database interface are not implemented. Credentials
+are not included. Dynamic or unmodeled dependencies, assets, runtime
+configuration, external services, and Docker artifacts are not included.
+`complete_deployment` remains explicitly `false`; the command does not export
+or run an application.
 
 The next experimental step is `zelyra module bundle`:
 

@@ -94,7 +94,11 @@ Feature eines bestimmten Anbieters.
   Quelldateien sichtbar. `declaration_closure` trennt davon den ausgewählten
   Startpunkt und statisch erreichbare Deklarationen von zusätzlichen
   Deklarationen in den einbezogenen Dateien; `configuration_edges` weist die
-  Datenbankkonfiguration separat aus. Die Analyse bleibt unvollständig.
+  Datenbankkonfiguration separat aus. `database.configurations` nennt Backend,
+  logischen Datenbanknamen, Quelldatei und die aktuelle Laufzeitvariable
+  `DATABASE_URL`. Die Laufzeit hat weiterhin genau eine projektweite
+  Verbindung; das ist noch keine benannte, wiederverwendbare
+  Datenbankschnittstelle. Die Analyse bleibt unvollständig.
   Enthalten sind bekannte Kanten
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
