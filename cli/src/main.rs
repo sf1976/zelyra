@@ -590,6 +590,9 @@ console = false
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
         ("main.zyl", main_source.to_owned()),
+        // Keep the conventional module source directory present so the
+        // generated Dockerfile can copy it even for a fresh single-file app.
+        ("src/.keep", String::new()),
         (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
@@ -691,6 +694,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 COPY main.zyl zelyra.toml zelyra.theme.css ./
+COPY src ./src
 COPY locales ./locales
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
@@ -702,7 +706,10 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
                 )
                 .replace("__WEB_PORT__", &options.web_port.to_string()),
             ),
-            (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
+            (
+                ".dockerignore",
+                ".git\ntarget\n.env\n.env.*\n*.sqlite3\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n".to_owned(),
+            ),
             (".gitignore", ".env\ntarget/\n".to_owned()),
         ]);
     }
@@ -11392,6 +11399,8 @@ mod tests {
         assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
         assert!(project_config.contains("console = false"));
         assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
+        assert!(dockerfile.contains("COPY src ./src"));
+        assert!(path.join("src/.keep").is_file());
         assert!(dockerfile.contains("COPY locales ./locales"));
         assert!(path.join("locales/de.json").is_file());
         assert!(path.join("locales/en.json").is_file());
@@ -11528,6 +11537,7 @@ mod tests {
         assert!(dockerfile.contains("EXPOSE 8080"));
         assert!(dockerfile.contains("0.0.0.0:8080"));
         assert!(dockerignore.contains(".env"));
+        assert!(dockerignore.contains(".env.*"));
         assert!(gitignore.contains(".env"));
 
         fs::remove_dir_all(path).unwrap();

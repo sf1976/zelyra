@@ -1929,6 +1929,13 @@ Quellzuordnung für Schemafehler aus importierten Dateien ist noch nicht in
 allen Fällen vollständig. Dieses Branch-Verhalten ist experimentell und nicht im
 veröffentlichten 0.3.0-Binary enthalten.
 
+Das MariaDB-Dockerprojekt kopiert zusätzlich den konventionellen Ordner
+`src/` in das Laufzeitimage. Mehrdateienprojekte mit importierten
+Zelyra-Dateien unter `src/` können dadurch im Container geladen werden.
+Das ist weder ein Export einzelner Module noch ein unabhängig konfigurierbares
+Datenbankmodul; Zugangsdaten gehören weiterhin ausschließlich in die lokale
+Laufzeitkonfiguration und nicht in Quelldateien.
+
 Ein weiterer experimenteller Vorläufer für spätere Modul-Exporte ist:
 
 ~~~sh

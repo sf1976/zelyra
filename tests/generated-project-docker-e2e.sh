@@ -45,6 +45,9 @@ echo "[1/4] generating a fresh MariaDB CRUD project"
     --web-port "${web_port}" \
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
+sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"
+printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
+    > "${project_dir}/src/docker-smoke.zyl"
 if [[ ! -f "${project_dir}/.env" ]]; then
     echo "error: zelyra new did not create the protected local .env file" >&2
     exit 1
@@ -174,6 +177,10 @@ assert_file_contains "${project_root}/machine-form.html" 'name="department"' "ma
 curl --silent --show-error --fail "http://${address}/departments" \
     -o "${project_root}/departments.html"
 assert_file_contains "${project_root}/departments.html" '<h1>Produktionsbereiche</h1>' "German department CRUD title"
+curl --silent --show-error --fail "http://${address}/docker-module" \
+    -o "${project_root}/docker-module.html"
+assert_file_contains "${project_root}/docker-module.html" '<h1>Imported Docker module</h1>' \
+    "page from imported Docker module"
 
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \

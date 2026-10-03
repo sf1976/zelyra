@@ -1908,7 +1908,12 @@ currently contain functions, type aliases, records, tables, tableviews, pages,
 named views, typed components, and one
 project-wide database connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
-only one database definition is allowed in the complete project graph.
+only one database definition is allowed in the complete project graph. The
+generated MariaDB Docker project also copies the conventional `src/` directory
+into the runtime image, so imported Zelyra files stored under `src/` can be
+loaded in the container. This is not an export of an individual module or an
+independently configurable database module; credentials still belong only in
+local runtime configuration, never in source files.
 Imported tables join the application's shared physical schema. Their names
 are global SQL identifiers, not module-qualified names, and duplicate table
 names are rejected. Tableviews, views, and components are composed from
