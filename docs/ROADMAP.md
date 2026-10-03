@@ -295,8 +295,9 @@ architecture requirement for every phase, not a provider-specific feature.
   bounded process-wide pool (default 8; allowed 1–64), checkout health checks,
   bounded pool waits (default 10 s; allowed 1–300), and discards connections
   after statement failures. Timeout and pool integration tests pass locally
-  against isolated MariaDB 11.4; full database-crate CI across all supported
-  MariaDB versions is pending. Schema inspection/DDL still uses the CLI; TLS
+  against isolated MariaDB 11.4 and in [PR CI run
+  37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
+  across MariaDB 10.11.19, 11.4.13, 11.8.9, and 12.3.3. Schema inspection/DDL still uses the CLI; TLS
   is not configurable in the native pool, response transfer is not globally
   bounded, and there are no automatic retries. Do not use this branch's native
   pool over untrusted networks. This is not in 0.3.0. Response deadlines,

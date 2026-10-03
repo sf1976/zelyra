@@ -318,9 +318,10 @@ Feature eines bestimmten Anbieters.
   jetzt einen prozessweiten Pool mit harter Obergrenze (Standard 8; zulässig
   1–64), Checkout-Healthchecks, begrenzter Wartezeit (Standard 10 s; zulässig
   1–300) und verwirft Verbindungen nach Statementfehlern. Timeout- und
-  Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 geprüft;
-  die vollständigen Datenbank-CI-Tests aller unterstützten MariaDB-Versionen
-  stehen noch aus. Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
+  Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 sowie im
+  [PR-CI-Lauf 37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
+  gegen MariaDB 10.11.19, 11.4.13, 11.8.9 und 12.3.3 geprüft.
+  Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
   TLS ist im nativen Pool nicht konfigurierbar, Ergebnisübertragung ist nicht
   global begrenzt und automatische Retries gibt es nicht. Den nativen Pool
   dieses Entwicklungszweigs nicht über nicht vertrauenswürdige Netze verwenden.
