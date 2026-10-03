@@ -566,11 +566,16 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
         &directory,
         &["module", "plan", "main.zyl", "api:GET /api/status"],
     );
+    let repeated_plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "api:GET /api/status"],
+    );
     assert!(
         plan.status.success(),
         "{}",
         String::from_utf8_lossy(&plan.stderr)
     );
+    assert_eq!(plan.stdout, repeated_plan.stdout);
     let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
     assert_eq!(plan["plan"]["selection_kind"], "resource");
     assert_eq!(plan["plan"]["selected_resource"], "api:GET /api/status");
@@ -591,6 +596,39 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
             "type:StatusCode"
         ])
     );
+    assert_eq!(
+        plan["plan"]["declaration_closure"]["declarations"],
+        serde_json::json!([
+            "src/database.zyl::database:main",
+            "src/models.zyl::table:users",
+            "src/security.zyl::auth:users",
+            "src/status_api.zyl::api:GET /api/status",
+            "src/status_api.zyl::function:status"
+        ])
+    );
+    assert_eq!(
+        plan["plan"]["declaration_closure"]["additional_declarations_in_included_source_files"],
+        serde_json::json!([
+            "src/status_api.zyl::function:unusedHelper",
+            "src/status_api.zyl::record:StatusPayload",
+            "src/status_api.zyl::type:StatusCode"
+        ])
+    );
+    assert_eq!(plan["plan"]["declaration_closure"]["complete"], false);
+    assert!(plan["plan"]["declaration_closure"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|edge| {
+            edge["from"] == "api:GET /api/status"
+                && edge["to"] == "auth:users"
+                && edge["kind"] == "authentication"
+        }));
+    assert!(plan["plan"]["declaration_closure"]["configuration_edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|edge| { edge["kind"] == "database_configuration" && edge["to"] == "database:main" }));
     fs::remove_dir_all(directory).unwrap();
 }
 

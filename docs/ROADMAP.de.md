@@ -91,7 +91,11 @@ Feature eines bestimmten Anbieters.
   erkannter Verweise aus dem Wirkungsgraphen – wahlweise ab einer Quelldatei
   oder einer unterstützten Seiten-/API-/CRUD-/Formular-/Tableview-Ressource.
   `modules[].declarations` macht alle erkannten Deklarationen der einbezogenen
-  Quelldateien sichtbar. Enthalten sind bekannte Kanten
+  Quelldateien sichtbar. `declaration_closure` trennt davon den ausgewählten
+  Startpunkt und statisch erreichbare Deklarationen von zusätzlichen
+  Deklarationen in den einbezogenen Dateien; `configuration_edges` weist die
+  Datenbankkonfiguration separat aus. Die Analyse bleibt unvollständig.
+  Enthalten sind bekannte Kanten
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
   Authentifizierung, Authentifizierung zu Tabellen, Tabellenrelationen und

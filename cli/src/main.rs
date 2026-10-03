@@ -2567,6 +2567,20 @@ fn is_application_resource_id(resource: &str) -> bool {
     )
 }
 
+fn qualify_impact_declaration(
+    declaration: &str,
+    owners: &HashMap<String, String>,
+) -> Option<String> {
+    let module_path = owners.get(declaration)?;
+    let (kind, name) = declaration.split_once(':')?;
+    let local_name = if matches!(kind, "function" | "record" | "type") {
+        name.rsplit_once("::").map_or(name, |(_, name)| name)
+    } else {
+        name
+    };
+    Some(format!("{module_path}::{kind}:{local_name}"))
+}
+
 fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if arguments.next().as_deref() != Some("plan") {
         usage();
@@ -2673,6 +2687,84 @@ fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     .iter()
                     .filter_map(|path| by_path.get(path.as_str()).copied())
                     .collect::<Vec<_>>();
+                let declaration_roots = selected_resource
+                    .as_ref()
+                    .map(|resource| vec![format!("{selected_module}::{resource}")])
+                    .unwrap_or_else(|| {
+                        by_path
+                            .get(selected_module.as_str())
+                            .map(|module| {
+                                module
+                                    .declarations
+                                    .iter()
+                                    .map(|declaration| format!("{}::{declaration}", module.path))
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    });
+                let mut declaration_pending = declaration_roots.clone();
+                let mut declaration_closure = BTreeSet::new();
+                while let Some(current) = declaration_pending.pop() {
+                    if !declaration_closure.insert(current.clone()) {
+                        continue;
+                    }
+                    for reference in &references {
+                        let Some(from) = reference.get("from").and_then(Value::as_str) else {
+                            continue;
+                        };
+                        if qualify_impact_declaration(from, &owners).as_deref()
+                            != Some(current.as_str())
+                        {
+                            continue;
+                        }
+                        let Some(to) = reference.get("to").and_then(Value::as_str) else {
+                            continue;
+                        };
+                        if let Some(to) = qualify_impact_declaration(to, &owners) {
+                            declaration_pending.push(to);
+                        }
+                    }
+                }
+                if database_required {
+                    for database in &program.databases {
+                        let database_id = format!("database:{}", database.name);
+                        if let Some(module_path) = owners.get(&database_id) {
+                            if included.contains(module_path) {
+                                declaration_closure.insert(format!("{module_path}::{database_id}"));
+                            }
+                        }
+                    }
+                }
+                let source_only_declarations = closure
+                    .iter()
+                    .flat_map(|module| {
+                        module
+                            .declarations
+                            .iter()
+                            .map(|declaration| format!("{}::{declaration}", module.path))
+                    })
+                    .filter(|declaration| !declaration_closure.contains(declaration))
+                    .collect::<BTreeSet<_>>();
+                let declaration_edges = references
+                    .iter()
+                    .filter(|reference| {
+                        let from = reference
+                            .get("from")
+                            .and_then(Value::as_str)
+                            .and_then(|from| qualify_impact_declaration(from, &owners));
+                        let to = reference
+                            .get("to")
+                            .and_then(Value::as_str)
+                            .and_then(|to| qualify_impact_declaration(to, &owners));
+                        from.as_ref().is_some_and(|from| {
+                            declaration_closure.contains(from)
+                                && to
+                                    .as_ref()
+                                    .is_some_and(|to| declaration_closure.contains(to))
+                        })
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
                 let mut resource_dependencies = BTreeMap::new();
                 for reference in &references {
                     let Some(from) = reference.get("from").and_then(Value::as_str) else {
@@ -2764,6 +2856,19 @@ fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                     "selection_kind": if selected_resource.is_some() { "resource" } else { "module" },
                     "entry": context_entry(&entry),
                     "source_files": included,
+                    "declaration_closure": {
+                        "semantics": "selected-root-plus-statically-recognized-impact-references-and-database-configuration",
+                        "complete": false,
+                        "roots": declaration_roots,
+                        "declarations": declaration_closure,
+                        "edges": declaration_edges,
+                        "configuration_edges": resource_dependencies
+                            .values()
+                            .filter(|dependency| dependency["kind"] == "database_configuration")
+                            .cloned()
+                            .collect::<Vec<_>>(),
+                        "additional_declarations_in_included_source_files": source_only_declarations
+                    },
                     "modules": closure.iter().map(|module| json!({
                         "path": module.path,
                         "imports": module.imports.iter().map(|import| json!({

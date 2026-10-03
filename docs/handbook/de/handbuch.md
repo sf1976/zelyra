@@ -1952,6 +1952,13 @@ Unter `modules[].declarations` listet der Plan alle erkannten Deklarationen
 der jeweils einbezogenen Quelldateien stabil sortiert auf. So ist sichtbar,
 welche Funktionen, Typen, Records und Anwendungsressourcen durch die gemeinsame
 Quelldatei zusätzlich enthalten sind.
+`declaration_closure` trennt davon die ausgewählte Ressource und die über den
+aktuellen statischen Wirkungsgraphen erreichbaren Deklarationen. `edges` zeigt
+bekannte Sprachreferenzen und `configuration_edges` die Datenbankkonfiguration;
+`additional_declarations_in_included_source_files`
+führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
+auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt
+`false`, und nicht erkannte Abhängigkeiten können fehlen.
 
 Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.

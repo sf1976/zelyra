@@ -82,7 +82,10 @@ architecture requirement for every phase, not a provider-specific feature.
   closure of explicit imports and statically recognized references from the
   impact graph, starting either from a source module or a supported
   page/API/CRUD/form/tableview resource root. It lists declaration inventories
-  for included source files and known
+  for included source files and distinguishes the statically reachable
+  declaration closure from additional declarations in those files. This
+  analysis is incomplete; `configuration_edges` reports database configuration
+  separately. Known
   page-to-view/component, page-SQL and
   form/CRUD-action-SQL-to-table, API-handler-to-function,
   protected-resource-to-authentication, authentication-to-table,
