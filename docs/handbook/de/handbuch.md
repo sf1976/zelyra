@@ -1,8570 +1,551 @@
-# Das Zelyra-Handbuch
-
-**Von den Grundlagen bis zur datenbankgest√ºtzten Webanwendung. Absicht beschreiben. Korrektheit beweisen.**
-
-[English edition](/handbook) ¬∑ Deutsch
-
-Willkommen beim vollst√§ndigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **¬ªZelyra lernen ‚Äì Verst√§ndlich programmieren von den Grundlagen bis zur eigenen Anwendung¬´** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 23) sowie ausf√ºhrliche **Anh√§nge** (A bis J).
-
-> **Projektstatus:** Compiler 0.2.0 implementiert einen gepr√ºften, experimentellen Teil der Sprachlinie 0.1. Zelyra ist noch nicht f√ºr den Produktionseinsatz freigegeben.
-
-## Statuszeichen
-
-- ‚úÖ **Implementiert und gepr√ºft:** im aktuellen Repository vorhanden und in diesem Arbeitslauf erfolgreich ausgef√ºhrt.
-- üß™ **Experimentell:** vorhanden, aber noch jung oder eingeschr√§nkt.
-- üó∫Ô∏è **Geplant:** Teil der Sprachvision, noch nicht zuverl√§ssig verf√ºgbar.
-- ‚ùå **Derzeit nicht verf√ºgbar:** im aktuellen CLI nicht vorhanden.
-
-## Inhaltsverzeichnis
-
-### Zelyra lernen ‚Äì Das Lehrbuch
-
-- **[TEIL I ‚Äì ZELYRA UND PROGRAMMIERUNG VERSTEHEN](#teil-i-zelyra-und-programmierung-verstehen)**
-  - [Kapitel 1: Willkommen bei Zelyra](#kapitel-1-willkommen-bei-zelyra)
-  - [Kapitel 2: Wie ein Programm funktioniert](#kapitel-2-wie-ein-programm-funktioniert)
-  - [Kapitel 3: Zelyra installieren und einrichten](#kapitel-3-zelyra-installieren-und-einrichten)
-  - [Kapitel 4: Das erste Zelyra-Projekt](#kapitel-4-das-erste-zelyra-projekt)
-- **[TEIL II ‚Äì DIE GRUNDLAGEN DER SPRACHE](#teil-ii-die-grundlagen-der-sprache)**
-  - [Kapitel 5: Werte und Datentypen](#kapitel-5-werte-und-datentypen)
-  - [Kapitel 6: Variablen und Unver√§nderlichkeit](#kapitel-6-variablen-und-unveranderlichkeit)
-  - [Kapitel 7: Operatoren und Ausdr√ºcke](#kapitel-7-operatoren-und-ausdrucke)
-  - [Kapitel 8: Ein- und Ausgaben](#kapitel-8-ein-und-ausgaben)
-  - [Kapitel 9: Entscheidungen mit Bedingungen](#kapitel-9-entscheidungen-mit-bedingungen)
-  - [Kapitel 10: Wiederholungen und Schleifen](#kapitel-10-wiederholungen-und-schleifen)
-- **[TEIL III ‚Äì PROGRAMME STRUKTURIEREN](#teil-iii-programme-strukturieren)**
-  - [Kapitel 11: Funktionen und Prozeduren](#kapitel-11-funktionen-und-prozeduren)
-  - [Kapitel 12: Vertr√§ge und Vorbedingungen (Design by Contract)](#kapitel-12-vertrage-und-vorbedingungen-design-by-contract)
-  - [Kapitel 13: Sammlungen, Listen und W√∂rterb√ºcher (Arrays & Maps)](#kapitel-13-sammlungen-listen-und-worterbucher-arrays-und-maps)
-  - [Kapitel 14: Eigene Datentypen erstellen (Records & Tables)](#kapitel-14-eigene-datentypen-erstellen-records-tables)
-  - [Kapitel 15: Module und Code-Organisation](#kapitel-15-module-und-code-organisation)
-- **[TEIL IV ‚Äì SICHERHEIT UND FEHLERBEHANDLUNG](#teil-iv-sicherheit-und-fehlerbehandlung)**
-  - [Kapitel 16: Fehlerarten und ihre Ursachen](#kapitel-16-fehlerarten-und-ihre-ursachen)
-  - [Kapitel 17: Fehler als Werte ‚Äì Das Result-Muster](#kapitel-17-fehler-als-werte-das-result-muster)
-  - [Kapitel 18: Das Nichts existiert nicht ‚Äì Der sichere Umgang mit Option](#kapitel-18-das-nichts-existiert-nicht-der-sichere-umgang-mit-option)
-  - [Kapitel 19: Tests und Qualit√§tssicherung](#kapitel-19-tests-und-qualitatssicherung)
-- **[TEIL V ‚Äì PRAKTISCHE DATENVERARBEITUNG](#teil-v-praktische-datenverarbeitung)**
-  - [Kapitel 20: Arbeiten mit Dateien](#kapitel-20-arbeiten-mit-dateien)
-  - [Kapitel 21: Datum, Uhrzeit, Zufall und strukturierte Daten](#kapitel-21-datum-uhrzeit-zufall-und-strukturierte-daten)
-  - [Kapitel 22: Nebenl√§ufigkeit und Hintergrundaufgaben](#kapitel-22-nebenlaufigkeit-und-hintergrundaufgaben)
-- **[TEIL VI ‚Äì DATENBANKEN MIT ZELYRA](#teil-vi-datenbanken-mit-zelyra)**
-  - [Kapitel 23: Warum Zelyra die Datenbank direkt versteht](#kapitel-23-warum-zelyra-die-datenbank-direkt-versteht)
-  - [Kapitel 24: Tabellen definieren und Daten modellieren](#kapitel-24-tabellen-definieren-und-daten-modellieren)
-  - [Kapitel 25: Daten abfragen und ver√§ndern](#kapitel-25-daten-abfragen-und-verandern)
-- **[TEIL VII ‚Äì WEBANWENDUNGEN UND FORMULARE](#teil-vii-webanwendungen-und-formulare)**
-  - [Kapitel 26: Webseiten ausgeben](#kapitel-26-webseiten-ausgeben)
-  - [Kapitel 27: Formulare und Benutzereingaben](#kapitel-27-formulare-und-benutzereingaben)
-  - [Kapitel 28: Das vollst√§ndige CRUD-Muster](#kapitel-28-das-vollstandige-crud-muster)
-  - [Kapitel 29: Benutzer, Passw√∂rter und Sitzungen](#kapitel-29-benutzer-passworter-und-sitzungen)
-  - [Kapitel 30: APIs und Datenaustausch](#kapitel-30-apis-und-datenaustausch)
-- **[TEIL VIII ‚Äì DIE BESONDERHEITEN VON ZELYRA](#teil-viii-die-besonderheiten-von-zelyra)**
-  - [Kapitel 31: Lesbarkeit als oberstes Gebot](#kapitel-31-lesbarkeit-als-oberstes-gebot)
-  - [Kapitel 32: KI-Nativit√§t ‚Äì Warum Zelyra perfekt f√ºr KI-Assistenten ist](#kapitel-32-ki-nativitat-warum-zelyra-perfekt-fur-ki-assistenten-ist)
-  - [Kapitel 33: Sicherheit durch F√§higkeiten (Capabilities)](#kapitel-33-sicherheit-durch-fahigkeiten-capabilities)
-  - [Kapitel 34: Zelyra im Vergleich](#kapitel-34-zelyra-im-vergleich)
-- **[TEIL IX ‚Äì VOM ENTWURF ZUR FERTIGEN ANWENDUNG](#teil-ix-vom-entwurf-zur-fertigen-anwendung)**
-  - [Kapitel 35: Software planen ‚Äì Von der Idee zum Entwurf](#kapitel-35-software-planen-von-der-idee-zum-entwurf)
-  - [Kapitel 36: Architektur und saubere Codestruktur](#kapitel-36-architektur-und-saubere-codestruktur)
-  - [Kapitel 37: Konfiguration und Umgebungsvariablen](#kapitel-37-konfiguration-und-umgebungsvariablen)
-  - [Kapitel 38: Fehlersuche und Optimierung](#kapitel-38-fehlersuche-und-optimierung)
-  - [Kapitel 39: Bereitstellung und Betrieb](#kapitel-39-bereitstellung-und-betrieb)
-- **[TEIL X ‚Äì ABSCHLUSSPROJEKT UND WEITERF√úHRUNG](#teil-x-abschlussprojekt-und-weiterfuhrung)**
-  - [Kapitel 40: Das gro√üe Abschlussprojekt: Vollst√§ndige Aufgabenverwaltung](#kapitel-40-das-grosse-abschlussprojekt-vollstandige-aufgabenverwaltung)
-  - [Kapitel 41: Die Zelyra-Roadmap (Von 0.2.0 bis 1.0)](#kapitel-41-die-zelyra-roadmap-von-020-bis-10)
-  - [Kapitel 42: Dein Weg als Zelyra-Entwickler](#kapitel-42-dein-weg-als-zelyra-entwickler)
-
-### Technisches Referenzhandbuch
-
-- [1. Was Zelyra anders macht](#1-was-zelyra-anders-macht)
-- [2. Installation](#2-installation)
-- [3. Das erste Programm](#3-das-erste-programm)
-- [4. Neues Projekt anlegen und CLI](#4-neues-projekt-anlegen-und-cli)
-- [5. Variablen, Typen und Funktionen](#5-variablen-typen-und-funktionen)
-- [6. Option, Result und Pattern Matching](#6-option-result-und-pattern-matching)
-- [7. MariaDB und Tabellen](#7-mariadb-und-tabellen)
-- [8. Schema pr√ºfen und anwenden](#8-schema-prufen-und-anwenden)
-- [9. Natives SQL](#9-natives-sql)
-- [10. Webseiten](#10-webseiten)
-- [11. Formulare](#11-formulare)
-- [12. CRUD](#12-crud)
-- [13. Authentifizierung und Berechtigungen](#13-authentifizierung-und-berechtigungen)
-- [14. Capabilities](#14-capabilities)
-- [15. Contracts und Verify](#15-contracts-und-verify)
-- [16. Konfiguration und Geheimnisse](#16-konfiguration-und-geheimnisse)
-- [17. Diagnosen und Fehlersuche](#17-diagnosen-und-fehlersuche)
-- [18. Testen und Mitentwickeln](#18-testen-und-mitentwickeln)
-- [19. Was als N√§chstes kommt](#19-was-als-nachstes-kommt)
-- [20. Zelyra im Vergleich zu Rust](#20-zelyra-im-vergleich-zu-rust)
-- [21. Positionierung und aktueller Entwicklungsstand](#21-positionierung-und-aktueller-entwicklungsstand)
-- [22. Roadmap aus dem aktuellen Repository](#22-roadmap-aus-dem-aktuellen-repository)
-- [23. KI-native Entwicklung](#23-ki-native-entwicklung)
-- [24. Verbindliche Quellen und Compiler-Pr√ºfung (Source Authority)](#24-verbindliche-quellen-und-compiler-prufung-source-authority)
-
-### Anh√§nge
-
-- [Anhang A: Schnelleinstieg / Spickzettel (Syntax-Cheat-Sheet)](#anhang-a-schnelleinstieg-spickzettel-syntax-cheat-sheet)
-- [Anhang B: Alle Fehlermeldungen von Zelyra auf einen Blick](#anhang-b-alle-fehlermeldungen-von-zelyra-auf-einen-blick)
-- [Anhang C: Zelyra-CLI-Referenz](#anhang-c-zelyra-cli-referenz)
-- [Anhang D: Die Standardbibliothek im √úberblick](#anhang-d-die-standardbibliothek-im-uberblick)
-- [Anhang E: SQL-Spickzettel f√ºr Zelyra-Entwickler](#anhang-e-sql-spickzettel-fur-zelyra-entwickler)
-- [Anhang F: HTML- und Web-Referenz in Zelyra](#anhang-f-html-und-web-referenz-in-zelyra)
-- [Anhang G: Glossar der Fachbegriffe](#anhang-g-glossar-der-fachbegriffe)
-- [Anhang H: L√∂sungen zu den √úbungsaufgaben der Kapitel](#anhang-h-losungen-zu-den-ubungsaufgaben-der-kapitel)
-- [Anhang I: H√§ufige Fragen und Antworten (FAQ)](#anhang-i-haufige-fragen-und-antworten-faq)
-- [Anhang J: Weiterf√ºhrende Ressourcen und Community](#anhang-j-weiterfuhrende-ressourcen-und-community)
-
-# TEIL I ‚Äì ZELYRA UND PROGRAMMIERUNG VERSTEHEN
-
----
-
-## Kapitel 1: Willkommen bei Zelyra
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Einf√ºhrungskapitel erf√§hrst du:
-- Was eine Programmiersprache im Kern ist und welche Aufgabe sie erf√ºllt.
-- Was Zelyra besonders macht und warum es als eigenst√§ndige Sprache entwickelt wurde.
-- Welche praktischen Ziele Zelyra verfolgt und f√ºr welche Aufgaben es sich besonders eignet.
-- Wie Zelyra Lesbarkeit, Zuverl√§ssigkeit und Sicherheit von vornherein garantiert.
-- Warum Zelyra sowohl f√ºr menschliche Entwickler als auch f√ºr KI-Systeme entworfen wurde.
-- Wie dieses Lehrbuch aufgebaut ist und wie du am besten damit arbeitest.
-
-### 2. Warum ist das Thema wichtig?
-Bevor du die erste Zeile Code schreibst, solltest du verstehen, welches Problem Zelyra l√∂st. In der modernen Softwareentwicklung ‚Äì besonders bei daten- und webgest√ºtzten Anwendungen ‚Äì herrscht oft ein riesiges Durcheinander: Man modelliert eine Tabelle in SQL, schreibt dieselben Regeln noch einmal in einem Backend-Framework (wie Laravel, Express oder Django), validiert dieselben Daten ein drittes Mal im Frontend (HTML/JavaScript) und generiert m√ºhsam API-Beschreibungen.
-Zelyra bricht mit dieser Fragmentierung: Du beschreibst dein Datenmodell, deine Regeln und deine Schnittstellen an einer einzigen Stelle ‚Äì und Zelyra leitet daraus gepr√ºfte, sichere Bausteine ab.
-
-### 3. Verst√§ndliche Erkl√§rung
-Eine **Programmiersprache** ist wie ein pr√§zises Regelwerk. Sie erlaubt es dir, einem Computer eindeutige Anweisungen zu geben. Computer sind extrem schnell, aber sie besitzen keinen gesunden Menschenverstand: Wenn eine Anweisung zweideutig ist oder ein unerwarteter Zustand eintritt, st√ºrzt das Programm ab oder produziert fatale Fehler.
-
-**Zelyra** ist eine moderne, statisch typisierte Sprache. ‚ÄûStatisch typisiert‚Äú bedeutet einfach: Bereits vor dem Start des Programms pr√ºft der Zelyra-Compiler gr√ºndlich, ob alle Bausteine zusammenpassen. Wenn eine Funktion Text erwartet, du ihr aber versehentlich eine Zahl √ºbergibst, weist Zelyra dich sofort darauf hin ‚Äì bevor der Code jemals einen Server oder Nutzer erreicht.
-
-Gleichzeitig ist Zelyra **datenbank- und webzentriert**:
-- Ein Tabellenschema (`table`) ist keine isolierte SQL-Datei, sondern integraler Bestandteil der Sprache.
-- Variablen sind standardm√§√üig **unver√§nderlich** (`immutable`). Dadurch kann sich ein Wert nicht pl√∂tzlich im Hintergrund √§ndern.
-- Keine √úberraschungen durch `null`: Fehlende Werte m√ºssen ausdr√ºcklich als `Option` deklariert werden.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-Schauen wir uns ein erstes winziges Zelyra-Programm an:
-
-```zelyra
-// Unser erstes Zelyra-Programm: Eine Begr√º√üung
-fn main() {
-    print("Willkommen bei Zelyra!")
-}
-```
-
-Wenn du diesem Programm mehr Struktur geben m√∂chtest, zerlegst du die Aufgabe in eine Funktion:
-
-```zelyra
-fn begruessen(name: String) -> String {
-    return "Hallo, " + name + "! Willkommen in der Zelyra-Welt."
-}
-
-fn main() {
-    nachricht = begruessen("Entwickler")
-    print(nachricht)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein Semikolon am Zeilenende setzen (wie in Java, C++ oder PHP).
-  *Ursache:* In Zelyra trennen Zeilenumbr√ºche Anweisungen sauber ab. √úberfl√ºssige Satzzeichen st√∂ren das Schriftbild.
-- **Fehler:** Annehmen, Zelyra sei nur ein Framework oder eine Skriptsprache.
-  *Ursache:* Zelyra ist eine eigenst√§ndige, kompilierte Sprache mit eigenem Typ- und Pr√ºfsystem.
-
-### 6. Merks√§tze
-1. Zelyra verbindet Datenmodell, Logik und Oberfl√§che in einer einzigen klaren Sprache.
-2. Was du meinst, steht im Code: Keine versteckte Magie, keine impliziten Null-Werte.
-3. Der Compiler ist dein Partner: Er findet Fehler fr√ºh, bevor sie Schaden anrichten k√∂nnen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** √Ñndere das Begr√º√üungsprogramm so, dass es deinen eigenen Vornamen und Wohnort ausgibt.
-- **Stufe 2 (Mittel):** Schreibe eine zweite Funktion `verabschieden(name: String) -> String`, die einen Abschiedsgru√ü formuliert, und rufe beide Funktionen in `main()` auf.
-- **Stufe 3 (Anspruchsvoll):** √úberlege dir drei typische Probleme, die in anderen Sprachen durch Tippfehler entstehen (z. B. eine Zahl statt Text √ºbergeben), und begr√ºnde, wie ein Compiler davor sch√ºtzt.
-
-### 8. Praxisaufgabe: Der Grundstein der Aufgabenverwaltung
-In diesem Buch bauen wir Schritt f√ºr Schritt eine echte, praxistaugliche **Aufgabenverwaltung** (Task Management). Wir beginnen mit dem einfachsten Schritt:
-Erstelle eine Datei `aufgaben_start.zyl`, die den Namen unseres Systems und die Versionsnummer sauber auf dem Bildschirm ausgibt:
-
-```zelyra
-fn main() {
-    system_name = "Zelyra TaskManager"
-    version = "0.1.50"
-    print(system_name + " (Version " + version + ") gestartet.")
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra ist eine statisch typisierte, sichere und lesbare Sprache f√ºr Gesch√§ftslogik, Datenbanken und das Web.
-- Zelyra eliminiert Redundanzen zwischen Datenbank-Definitionen, Validierung und API.
-- Variablen sind standardm√§√üig unver√§nderlich; der Compiler garantiert Stabilit√§t und Klarheit.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Was unterscheidet eine statisch typisierte Sprache von einer dynamischen Sprache?
-2. Warum ist es ein Vorteil, wenn Tabellenschemata direkt in der Programmiersprache definiert werden?
-3. Warum sind unver√§nderliche Werte standardm√§√üig sicherer als ver√§nderliche Variablen?
-
----
-
-## Kapitel 2: Wie ein Programm funktioniert
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie dein geschriebener Quelltext Schritt f√ºr Schritt in ein ausgef√ºhrtes Programm verwandelt wird.
-- Welche Rollen Lexer, Parser, Type Checker, Verifier und Interpreter in Zelyra spielen.
-- Was genau beim Start eines Zelyra-Programms geschieht.
-- Was der Unterschied zwischen Syntax (Form) und Semantik (Bedeutung) ist.
-- Was ein Algorithmus ist und wie das EVA-Prinzip (Eingabe, Verarbeitung, Ausgabe) funktioniert.
-
-### 2. Warum ist das Thema wichtig?
-Programmierfehler zu beheben ist kinderleicht, wenn man versteht, an welcher Station des Compilers der Fehler gemeldet wird. Ein Syntaxfehler bedeutet, dass der Text unlesbar ist; ein Typfehler bedeutet, dass die Logik widerspr√ºchlich ist; ein Laufzeitfehler bedeutet, dass w√§hrend der Ausf√ºhrung eine unvorhergesehene Bedingung eintrat. Wenn du diese Kette verstehst, verlierst du jegliche Scheu vor Fehlermeldungen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Ein Computerprozessor versteht nur Nullen und Einsen (Maschinencode). Wenn wir Menschen eine Textdatei mit Zelyra-Code schreiben (z. B. `programm.zyl`), durchl√§uft dieser Text mehrere Stationen:
-
-```text
-Quelltext (.zyl)
-   ‚îÇ
-   ‚ñº
-[1. Lexer]: Zerlegt den Text in W√∂rter/Symbole (Tokens)
-   ‚îÇ
-   ‚ñº
-[2. Parser]: Baut einen logischen Strukturbaum (AST = Abstract Syntax Tree)
-   ‚îÇ
-   ‚ñº
-[3. Type Checker]: Pr√ºft alle Typen, Namen und Berechtigungen
-   ‚îÇ
-   ‚ñº
-[4. Verifier]: Beweist mathematisch Schleifen und Vertr√§ge (Contracts)
-   ‚îÇ
-   ‚ñº
-[5. Runtime / Interpreter]: F√ºhrt die gepr√ºften Anweisungen aus
-```
-
-- **Syntax** ist die Grammatik: Setzt du Klammern richtig? Schreibst du Schl√ºsselw√∂rter korrekt?
-- **Semantik** ist der Sinn: Wenn du schreibst `alter = "f√ºnfundzwanzig"`, ist das syntaktisch Text, aber wenn du damit rechnen willst, ergibt es semantisch keinen Sinn.
-- **Algorithmus**: Eine pr√§zise, endliche Schritt-f√ºr-Schritt-Anleitung zur L√∂sung eines Problems.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-Ein einfacher Algorithmus zur Berechnung der verbleibenden Tage bis zu einer Frist:
-
-```zelyra
-fn tage_bis_ziel(ziel_tag: Int, aktueller_tag: Int) -> Int {
-    verbleibend = ziel_tag - aktueller_tag
-    return verbleibend
-}
-
-fn main() {
-    heute = 10
-    abgabe = 24
-    tage = tage_bis_ziel(abgabe, heute)
-    print(tage)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein geschweifte Klammer `{` √∂ffnen, aber nicht schlie√üen `}`.
-  *Ursache:* Dies ist ein reiner **Syntaxfehler**. Der Parser bricht sofort ab (`E-PARSE-001`), weil der Baum unvollst√§ndig ist.
-- **Fehler:** Einer Zahl eine Zeichenkette zuweisen: `alter: Int = "20"`.
-  *Ursache:* Das ist ein **Typfehler** (`E-TYPE-001`). Der Parser versteht die Form, aber der Type Checker stoppt die Ausf√ºhrung.
-
-### 6. Merks√§tze
-1. Der Lexer liest Zeichen, der Parser versteht Strukturen, der Type Checker pr√ºft den Sinn.
-2. Je fr√ºher ein Fehler abgefangen wird (beim Pr√ºfen statt beim Kunden), desto g√ºnstiger und sicherer ist die Software.
-3. Jedes Programm folgt dem Grundmuster: Eingabe empfangen, nach klaren Regeln verarbeiten, Ergebnis ausgeben.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Zeichne auf einem Blatt Papier den Ablauf von `main()` im obigen Fristen-Beispiel als Pfeildiagramm auf.
-- **Stufe 2 (Mittel):** Erweitere die Funktion `tage_bis_ziel` um eine Pr√ºfung mit `if`: Wenn `aktueller_tag > ziel_tag` ist, soll `0` zur√ºckgegeben werden.
-- **Stufe 3 (Anspruchsvoll):** Erkl√§re in eigenen Worten, warum Zelyra vor der Ausf√ºhrung pr√ºft (`zelyra check`), anstatt den Code Zeile f√ºr Zeile blind auszuf√ºhren.
-
-### 8. Praxisaufgabe: Aufgaben-Priorit√§t berechnen
-In unserer Aufgabenverwaltung m√ºssen wir die Dringlichkeit einer Aufgabe einstufen. Wenn weniger als 3 Tage verbleiben, ist die Aufgabe dringend:
-
-```zelyra
-fn ist_dringend(verbleibende_tage: Int) -> Bool {
-    return verbleibende_tage <= 3
-}
-
-fn main() {
-    frist_in_tagen = 2
-    dringend = ist_dringend(frist_in_tagen)
-    if dringend {
-        print("Achtung: Aufgabe hat hohe Prioritaet!")
-    } else {
-        print("Aufgabe liegt im normalen Zeitplan.")
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Programme durchlaufen eine feste Kette: Lexing, Parsing, Typpr√ºfung, Verifikation und Ausf√ºhrung.
-- Zelyra stellt sicher, dass Syntax und Typen stimmen, bevor ein Programm gestartet wird.
-- Ein Algorithmus verwandelt Eingaben durch logische Einzelschritte in verl√§ssliche Ausgaben.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. An welcher Stelle der Toolchain wird bemerkt, dass ein Anf√ºhrungszeichen fehlt?
-2. Was bedeutet das EVA-Prinzip?
-3. Warum bricht ein statisch typisiertes Programm ab, wenn man Text und Zahl fehlerhaft verbindet?
-
----
-
-## Kapitel 3: Zelyra installieren und einrichten
-
-### 1. Was lerne ich in diesem Kapitel?
-- Die Systemvoraussetzungen f√ºr die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
-- Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra √ºber den Quellcode (`./install.sh` / `install.ps1`) oder vorkompilierte Release-Archive (`--release v0.2.0`) installierst.
-- Vollst√§ndige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
-- Den integrierten, token-gesch√ºtzten Web-Setup-Assistenten (`zelyra setup --web`).
-- Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
-
-### 2. Warum ist das Thema wichtig?
-Eine reibungslos funktionierende Werkzeugkette ist die Grundlage jeder erfolgreichen Entwicklungsarbeit. Wenn Befehle nicht gefunden werden oder Umgebungsvariablen fehlen, verliert man wertvolle Zeit. Zelyra bringt einen schlanken, benutzerlokalen Installer mit, der ohne fremde Paketmanager oder Root-Rechte auskommt. Zudem f√ºhrt der neue Web-Setup-Assistent Einsteiger visuell durch die Initialisierung von Datenbank und Containern.
-
-### 3. Verst√§ndliche Erkl√§rung
-Zelyra ben√∂tigt f√ºr einfache Programme weder Apache noch fremde Laufzeiten. Das Zelyra-CLI (`zelyra`) ist ein einzelnes, hochoptimiertes Bin√§rprogramm.
-
-Je nach Betriebssystem w√§hlst du den passenden Weg:
-1. **Linux / macOS:** Hier l√§dst du das offizielle Repository herunter und f√ºhrst `./install.sh` aus (oder l√§dst ein Release-Archiv). Zelyra wird benutzerlokal in `~/.local/bin` installiert. F√ºr Docker nutzt man unter Linux die [offizielle Docker-Engine-Anleitung](https://docs.docker.com/engine/install/) und unter macOS [Docker Desktop f√ºr Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
-2. **Windows:** Unter Windows stehen `install.ps1` f√ºr PowerShell sowie `install.cmd` zur Verf√ºgung. F√ºr vollst√§ndige MariaDB-Projekte wird [Docker Desktop f√ºr Windows](https://docs.docker.com/desktop/setup/install/windows-install/) mit aktivierter Compose-Unterst√ºtzung empfohlen.
-3. **Plattform-Docker-Pr√ºfung:** Zelyra installiert Docker bewusst nicht eigenm√§chtig und fordert keine Root-Rechte an. Vor dem Start von Compose-Diensten pr√ºfst du deine Umgebung einfach mit `docker compose version`. Fehlt Compose oder fehlen Berechtigungen auf den Docker-Socket, gibt Zelyra gezielte Plattform-Hilfestellungen aus.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Schritt 1: Zelyra installieren**
-Aus dem Quelltext (Linux / macOS):
-```bash
-git clone https://github.com/sf1976/zelyra.git
-cd zelyra
-./install.sh
-```
-Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
-```bash
-./install.sh --release v0.2.0
-```
-Unter Windows (PowerShell):
-```powershell
-git clone https://github.com/sf1976/zelyra.git
-Set-Location zelyra
-.\install.ps1 -Release v0.2.0
-```
-
-**Schritt 2: Vollst√§ndige Version und Hilfe pr√ºfen**
-```bash
-zelyra --version
-zelyra --help
-```
-`zelyra --version` gibt den vollst√§ndigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.2.0`). Die Sprachkompatibilit√§tslinie bleibt 0.1.
-
-**Schritt 3: Docker Compose pr√ºfen (f√ºr MariaDB-Projekte)**
-```bash
-docker compose version
-```
-
-**Schritt 4: Systemdiagnose ausf√ºhren**
-```bash
-zelyra doctor
-```
-Dieser Befehl analysiert Umgebung, Pfade, Ports und Werkzeuge. Mit `zelyra doctor --json` erh√§ltst du strukturierte Maschinendaten f√ºr IDEs.
-
-**Schritt 5: Gef√ºhrter Web-Setup-Assistent (Optional)**
-In jedem MariaDB-Projektverzeichnis kannst du den grafischen Assistenten starten:
-```bash
-zelyra setup --web
-```
-Zelyra √∂ffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zuf√§lligen, einmaligen Sicherheitstoken. Dort kannst du mit einem Klick die `.env`-Konfiguration erzeugen, den MariaDB-Container starten und das Datenbankschema anwenden.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** `zelyra: command not found`
-  *Ursache:* Der Ordner `~/.local/bin` ist noch nicht in deiner `$PATH`-Variable. F√ºhre `export PATH="$HOME/.local/bin:$PATH"` aus oder starte dein Terminal neu.
-- **Fehler:** `permission denied while trying to connect to the Docker daemon socket`
-  *Ursache:* Auf Linux-Systemen hat dein Benutzer noch keine Rechte auf den Docker-Socket. F√ºhre `sudo usermod -aG docker $USER` aus und melde dich neu an. Zelyra f√§ngt diesen Fehler ab und gibt einen klaren Hinweis.
-- **Fehler:** Standard-Port 3000 oder 3306 ist belegt.
-  *Ursache:* Ein anderer lokaler Dienst belegt den Port. Zelyra w√§hlt bei `zelyra setup` und `zelyra new` automatisch den n√§chsten freien Host-Port, sodass kein Konflikt entsteht.
-
-### 6. Merks√§tze
-1. Das Zelyra-CLI b√ºndelt Compiler, Runner, Formularpr√ºfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
-2. Mit `docker compose version` und `zelyra doctor` √ºberpr√ºfst du jederzeit den Zustand deiner Toolchain.
-3. Releases k√∂nnen mit `--release v0.2.0` direkt ohne Rust-Compiler installiert werden.
-4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** F√ºhre `zelyra doctor` in deinem Terminal aus und notiere dir die Versionsnummer.
-- **Stufe 2 (Mittel):** Erkunde die Hilfeseite mit `zelyra check --help` und schau dir die Option `--format json` an.
-- **Stufe 3 (Anspruchsvoll):** Richte in deinem bevorzugten Editor (z. B. VS Code) eine Dateizuordnung ein, sodass `.zyl`-Dateien automatisch als Zelyra-Dateien erkannt werden.
-
-### 8. Praxisaufgabe: Die Arbeitsumgebung f√ºr den TaskManager vorbereiten
-Lege auf deinem Rechner einen neuen Ordner f√ºr unser Projekt an und teste, ob die Zelyra-Toolchain dort ordnungsgem√§√ü funktioniert:
-
-```bash
-mkdir mein-taskmanager
-cd mein-taskmanager
-echo 'fn main() { print("TaskManager-Umgebung bereit.") }' > test.zyl
-zelyra check test.zyl
-zelyra run test.zyl
-```
-Wenn die Ausgabe `TaskManager-Umgebung bereit.` erscheint, ist dein System perfekt vorbereitet!
-
-### 9. Zusammenfassung
-- Zelyra wird √ºber ein einfaches Skript (`./install.sh`) oder Docker eingerichtet.
-- Das Kommandozeilenwerkzeug `zelyra` enth√§lt alle notwendigen Funktionen.
-- `zelyra doctor` stellt sicher, dass alles einwandfrei konfiguriert ist.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welcher Befehl zeigt alle verf√ºgbaren CLI-Optionen an?
-2. Warum ben√∂tigt Zelyra f√ºr Konsolen- und Web-Programme keinen externen Webserver wie Apache?
-3. Was pr√ºft der Befehl `zelyra doctor`?
-
----
-
-## Kapitel 4: Das erste Zelyra-Projekt
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie man ein Zelyra-Projekt mit `zelyra new` oder `zelyra init` anlegt (inkl. `--mariadb`).
-- Wie ein Standard-Projektordner strukturiert ist (`main.zyl`, `zelyra.toml`, `.env`).
-- Automatische Portvergabe (`ZELYRA_HOST_PORT` und `ZELYRA_DB_HOST_PORT`) bei belegten Ports.
-- Wie `zelyra setup --all` und `zelyra setup --web` den Erststart automatisieren.
-- Optionale Feature-Schalter (`[features]` in `zelyra.toml` oder `.env`) und Pr√ºfung mit `zelyra config`.
-- Wann ein Programm eine `main()`-Funktion ben√∂tigt und wie man Programme pr√ºft, ausf√ºhrt und formatiert.
-
-### 2. Warum ist das Thema wichtig?
-Sobald Programme mehr als zehn Zeilen umfassen, geh√∂ren sie in eine saubere Projektstruktur. Eine gut organisierte Ordnerstruktur stellt sicher, dass Konfigurationen, Datenbankmodelle, Web-Routen und Gesch√§ftslogik ihren festen Platz haben. Wer von Beginn an Projekte standardisiert anlegt, spart sich sp√§ter aufw√§ndige Aufr√§umarbeiten.
-
-### 3. Verst√§ndliche Erkl√§rung
-Mit dem Befehl `zelyra new <projektname>` erzeugst du ein schl√ºsselfertiges Projekt:
-
-- **`main.zyl`**: Die Hauptdatei deines Programms. Hier definierst du entweder den Einstiegspunkt `fn main()` oder deklarierst deine Tabellen, Webseiten und APIs.
-- **`zelyra.toml`**: Die dauerhafte Projektkonfiguration (Name, Version, Capabilities und optionale Feature-Schalter wie `web`, `api`, `crud`, `auth`, `audit`).
-- **`.env`**: Lokale, nicht in Git eingecheckte Geheimnisse und Ports (`DATABASE_URL`, `ZELYRA_HOST_PORT`, `ZELYRA_DB_HOST_PORT`).
-- **Docker & MariaDB**: Mit `--mariadb` legt Zelyra zus√§tzlich `Dockerfile`, `docker-compose.mariadb.yml` und `.env.example` an.
-
-**Automatische Portvergabe:** Sind die Standardports 3000 (Web) oder 3306 (MariaDB) auf deinem Entwicklungsrechner bereits belegt, scannt Zelyra automatisch und vergibt freie Ports in der neu erzeugten `.env`.
-
-**Optionale Feature-Schalter:** Du kannst in `zelyra.toml` oder `.env` Teilbereiche aktivieren oder deaktivieren:
-```toml
-[features]
-web = true
-api = true
-crud = true
-auth = true
-audit = true
-```
-Wird ein deaktivierter Bereich im Code genutzt, meldet der Compiler verl√§sslich `E-FEATURE-001`. Die wirksame Konfiguration kannst du jederzeit mit `zelyra config main.zyl` (oder `--format=json`) geheimnisfrei inspizieren.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Projekt erstellen (Minimal oder MariaDB):**
-```bash
-# Minimales Skriptprojekt:
-zelyra new taskmanager --template minimal
-cd taskmanager
-
-# Oder vollst√§ndiges MariaDB-Webprojekt:
-zelyra new taskmanager-web --mariadb
-cd taskmanager-web
-```
-
-**Ersteinrichtung mit einem einzigen Befehl:**
-```bash
-zelyra setup --all
-```
-Dieser Befehl legt eine gesch√ºtzte `.env` an, startet die MariaDB-Container-Umgebung und wendet das Schema an.
-
-**Projektkonfiguration pr√ºfen:**
-```bash
-zelyra config main.zyl
-```
-
-**Projekt pr√ºfen und starten:**
-```bash
-zelyra check main.zyl
-zelyra run main.zyl
-```
-
-**Projekt automatisch formatieren:**
-```bash
-zelyra fmt main.zyl
-```
-`zelyra fmt` sorgt daf√ºr, dass aller Zelyra-Code im gesamten Team exakt denselben, sauberen Gestaltungsregeln folgt.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Dateien ohne die Dateiendung `.zyl` anlegen.
-  *Ursache:* Der Compiler erwartet ausdr√ºcklich Zelyra-Quelldateien mit der Endung `.zyl`.
-- **Fehler:** Ein CLI-Programm ohne `fn main()` starten.
-  *Ursache:* Wenn Zelyra per `zelyra run` gestartet wird, sucht es nach `fn main()`. Fehlt diese Funktion, bricht die Ausf√ºhrung ab.
-
-### 6. Merks√§tze
-1. `zelyra new` erstellt eine saubere, standardisierte Projektstruktur.
-2. In `zelyra.toml` werden Name, Version und ben√∂tigte Berechtigungen (Capabilities) verwaltet.
-3. `zelyra fmt` garantiert einen einheitlichen, gut lesbaren Programmierstil.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle ein neues Projekt `mein_erstes_projekt` mit `zelyra new` und f√ºhre es aus.
-- **Stufe 2 (Mittel):** √Ñndere in `zelyra.toml` die Version auf `0.2.0` und gib in `main()` die neue Versionsnummer aus.
-- **Stufe 3 (Anspruchsvoll):** Ver√§ndere die Einr√ºckungen in `main.zyl` absichtlich unordentlich und beobachte, wie `zelyra fmt main.zyl` den Quelltext wieder perfekt ausrichtet.
-
-### 8. Praxisaufgabe: Die Aufgabenverwaltung als echtes Projekt initialisieren
-Erstelle das Projekt, das uns durch das gesamte Buch begleiten wird:
-
-```bash
-zelyra new zelyra-tasks --template minimal
-cd zelyra-tasks
-```
-
-Schreibe in `main.zyl` ein erstes Men√º:
-```zelyra
-fn zeige_menue() {
-    print("=================================")
-    print("   ZELYRA AUFGABENVERWALTUNG     ")
-    print("=================================")
-    print("1: Alle Aufgaben anzeigen")
-    print("2: Neue Aufgabe anlegen")
-    print("3: Programm beenden")
-}
-
-fn main() {
-    zeige_menue()
-}
-```
-Pr√ºfe das Projekt mit `zelyra check main.zyl` und f√ºhre es mit `zelyra run main.zyl` aus.
-
-### 9. Zusammenfassung
-- Zelyra-Projekte besitzen eine klare Struktur aus Quelltext (`.zyl`) und Konfiguration (`zelyra.toml`).
-- `zelyra check` pr√ºft die G√ºltigkeit, `zelyra run` f√ºhrt das Programm aus.
-- `zelyra fmt` formatiert den Code automatisch nach einheitlichen Standards.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wozu dient die Datei `zelyra.toml`?
-2. Warum ist `zelyra fmt` in Teams so wertvoll?
-3. Wann ben√∂tigt ein Zelyra-Programm eine `main()`-Funktion?
-
-# TEIL II ‚Äì DIE GRUNDLAGEN DER SPRACHE
-
----
-
-## Kapitel 5: Werte und Datentypen
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was Werte und Datentypen sind und warum sie das R√ºckgrat sicherer Programme bilden.
-- Die grundlegenden Zahlentypen: `Int`, `UInt`, `Float` und `Decimal`.
-- Text- und Zeichentypen: `String` und `Char`.
-- Wahrheitswerte (`Bool`) und der leere Typ (`Unit`).
-- Zeit- und Datumstypen: `Timestamp`, `Date`, `Time`, `Duration`.
-- Der Unterschied zwischen automatischer Typableitung und ausdr√ºcklicher Typangabe.
-
-### 2. Warum ist das Thema wichtig?
-Im echten Leben kann man √Ñpfel nicht mit Birnen addieren. Ein Computer w√ºrde ohne Typen jedoch genau das tun: Er w√ºrde versuchen, eine Postleitzahl mit einem Preis zu multiplizieren oder einen Buchstabensalat als Datum zu interpretieren. In Zelyra verhindert das Typsystem solche Absurdit√§ten von vornherein. Ein Datentyp legt exakt fest, welche Werte erlaubt sind und welche Operationen darauf ausgef√ºhrt werden d√ºrfen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Jeder Wert in Zelyra besitzt einen Typ. Du kannst den Typ entweder explizit hinschreiben oder Zelyra ihn automatisch aus dem zugewiesenen Wert ableiten lassen:
-
-```zelyra
-fn main() {
-    // Explizite Typangabe: Name gefolgt von Doppelpunkt und Typ
-    anzahl: Int = 10
-
-    // Automatische Typableitung: Zelyra erkennt sofort, dass dies ein String ist
-    titel = "Wichtige Besprechung"
-
-    print(titel)
-}
-```
-
-Die wichtigsten Datentypen in Zelyra:
-- **`Int`**: Ganze Zahlen mit Vorzeichen (64-Bit), z. B. `-5`, `0`, `42`.
-- **`UInt`**: Ganze Zahlen ohne Vorzeichen (nur `>= 0`), z. B. IDs oder Z√§hler.
-- **`Float`**: Flie√ükommazahlen f√ºr wissenschaftliche Berechnungen, z. B. `3.1415`.
-- **`Decimal`**: Festkommazahlen mit garantierter Exaktheit ‚Äì unverzichtbar f√ºr Geldbetr√§ge, um Rundungsfehler von Flie√ükommazahlen zu vermeiden!
-- **`Bool`**: Wahrheitswerte. Es gibt exakt zwei Zust√§nde: `true` (wahr) oder `false` (falsch).
-- **`String`**: Zeichenketten (Text) in doppelten Anf√ºhrungszeichen: `"Hallo Welt"`.
-- **`Char`**: Einzelne Zeichen in einfachen Anf√ºhrungszeichen: `'A'`, `'z'`, `'‚úì'`.
-- **`Unit`**: Steht f√ºr ‚Äûkein Wert‚Äú, √§hnlich wie `void` in anderen Sprachen. Wenn eine Funktion nur etwas ausgibt und nichts zur√ºckliefert, ist ihr Typ `Unit`.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-```zelyra
-fn main() {
-    aufgabe_id: Int = 101
-    aufgabe_name: String = "Server aktualisieren"
-    ist_erledigt: Bool = false
-    geschaetzte_stunden: Float = 2.5
-    stundensatz: Float = 85.50
-
-    print(aufgabe_name)
-    print(ist_erledigt)
-}
-```
-
-Zelyra sch√ºtzt vor unpassenden Typen:
-Wenn du versuchst, `aufgabe_id = "einhundert"` zu schreiben, verweigert der Compiler sofort den Dienst mit `E-TYPE-001`.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Geldbetr√§ge mit `Float` berechnen.
-  *Ursache:* Flie√ükommazahlen nach IEEE-754 k√∂nnen krumme Rundungen wie `0.1 + 0.2 = 0.30000000000000004` erzeugen. In Zelyra nutzt du f√ºr Finanzen immer `Decimal`.
-- **Fehler:** Ein einzelnes Zeichen in doppelte Anf√ºhrungszeichen setzen, wenn ein `Char` erwartet wird.
-  *Ursache:* `"A"` ist ein `String`, w√§hrend `'A'` ein `Char` ist.
-
-### 6. Merks√§tze
-1. Datentypen sch√ºtzen davor, unpassende Informationen miteinander zu verkn√ºpfen.
-2. F√ºr Geldbetr√§ge gilt: Immer `Decimal`, niemals `Float`.
-3. Zelyra kann Typen intelligent ableiten, aber explizite Typen dokumentieren deine Absicht.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Deklariere drei Variablen f√ºr deinen Lieblingsfilm: Titel (`String`), Erscheinungsjahr (`Int`) und ob du ihn im Kino gesehen hast (`Bool`).
-- **Stufe 2 (Mittel):** Berechne die Gesamtkosten einer Aufgabe aus `geschaetzte_stunden` und `stundensatz` und gib das Ergebnis aus.
-- **Stufe 3 (Anspruchsvoll):** Erkl√§re, warum ein ID-Feld oft besser als `Int` oder als nominaler Typ `type TaskId = Id` deklariert wird, anstatt als beliebiger Text.
-
-### 8. Praxisaufgabe: Aufgaben-Attribute definieren
-Erweitere unser Aufgabenprojekt in `main.zyl`. Definiere die typisierten Grunddaten einer Aufgabe:
-
-```zelyra
-fn main() {
-    task_id: Int = 1
-    task_name: String = "Datenbankschema pruefen"
-    is_done: Bool = false
-    priority: Int = 1 // 1 = hoch, 2 = mittel, 3 = niedrig
-
-    print("Aufgabe #" + "1" + ": " + task_name)
-    if is_done {
-        print("Status: Erledigt")
-    } else {
-        print("Status: Offen (Prioritaet: hohe Dringlichkeit)")
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra stellt eine reichhaltige Palette primitiver Datentypen f√ºr Zahlen, Text und Logik bereit.
-- Typen werden entweder explizit angegeben oder vom Compiler automatisch abgeleitet.
-- Strenge Typpr√ºfung verhindert logische Fehler zur Entwurfszeit.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Warum sollte man f√ºr Geldwerte `Decimal` statt `Float` verwenden?
-2. Was ist der Unterschied zwischen `"Z"` und `'Z'`?
-3. Welche beiden Werte kann ein `Bool` annehmen?
-
----
-
-## Kapitel 6: Variablen und Unver√§nderlichkeit
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was eine Variable im Speicher eines Computers bedeutet.
-- Warum Variablen in Zelyra standardm√§√üig unver√§nderlich (`immutable`) sind.
-- Wie man ver√§nderbare Variablen ausdr√ºcklich mit `mutable` kennzeichnet.
-- G√ºltigkeitsbereiche (`Scopes`) und Lebensdauer von Variablen.
-- Warum Unver√§nderlichkeit Software dramatisch stabiler und fehlerfreier macht.
-
-### 2. Warum ist das Thema wichtig?
-Einer der h√§ufigsten Gr√ºnde f√ºr schwer auffindbare Softwarefehler in Sprachen wie JavaScript, Python oder C++ ist unkontrollierte Ver√§nderbarkeit: Eine Funktion ver√§ndert heimlich eine globale Variable, und an ganz anderer Stelle st√ºrzt das Programm ab.
-Zelyra folgt einem radikal klaren Prinzip: **Feste Werte sind der Normalfall.** Wenn sich ein Wert w√§hrend der Programmlaufzeit √§ndern darf, musst du das ganz bewusst mit dem Schl√ºsselwort `mutable` ank√ºndigen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir eine Variable wie eine beschriftete Schachtel im Arbeitsspeicher vor:
-
-- **Unver√§nderliche Bindung (Standard):**
-  ```zelyra
-  fn main() {
-      titel = "Steuererklaerung"
-      print(titel)
-  }
-  ```
-  Du legst den Text `"Steuererkl√§rung"` in die Schachtel mit der Aufschrift `titel` und versiegelst sie. Niemand darf den Inhalt der Schachtel austauschen. Jeder, der die Schachtel liest, kann sich darauf verlassen, dass immer dasselbe darin liegt.
-
-- **Ver√§nderbare Variable (`mutable`):**
-  ```zelyra
-  fn main() {
-      mutable zaehler = 0
-      zaehler = zaehler + 1
-      print(zaehler)
-  }
-  ```
-  Hier bleibt die Schachtel offen. Du darfst den alten Wert herausnehmen und durch einen neuen ersetzen.
-
-**G√ºltigkeitsbereich (Scope):**
-Variablen leben immer nur innerhalb des Blocks `{ ... }`, in dem sie deklariert wurden. Wird der Block verlassen, vergisst Zelyra die Variable automatisch. Das schont den Speicher und verhindert Namenskonflikte.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Unver√§nderlichkeit sch√ºtzt vor versehentlichem √úberschreiben**
-```zelyra
-fn main() {
-    projekt = "Zelyra Kern"
-    // projekt = "Neues Projekt" // FEHLER: Compiler blockiert Zuweisung an unver√§nderliche Variable!
-    print(projekt)
-}
-```
-
-**Beispiel 2: Wann `mutable` sinnvoll ist (z. B. Z√§hler und Schleifen)**
-```zelyra
-fn main() {
-    mutable offene_aufgaben = 5
-    print(offene_aufgaben)
-
-    // Eine Aufgabe wurde erledigt:
-    offene_aufgaben = offene_aufgaben - 1
-    print(offene_aufgaben)
-}
-```
-
-**Beispiel 3: G√ºltigkeitsbereiche (Scopes)**
-```zelyra
-fn main() {
-    bereich = "Global im main"
-    if true {
-        lokal = "Nur im if sichtbar"
-        print(lokal)
-        print(bereich)
-    }
-    // print(lokal) // FEHLER: `lokal` existiert au√üerhalb des Blocks nicht mehr!
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Versuchen, einer Variablen ohne `mutable` einen neuen Wert zuzuweisen.
-  *Ursache:* Zelyra meldet `cannot assign to immutable variable`. Wenn sich ein Wert √§ndern k√∂nnen muss, schreibe `mutable name = ...`.
-- **Fehler:** Jede Variable aus Bequemlichkeit als `mutable` deklarieren.
-  *Ursache:* Schlechter Stil. Verwende `mutable` nur dort, wo ein Wert sich tats√§chlich im Ablauf √§ndern muss (z. B. in Schleifen oder Zwischenakkumulatoren).
-
-### 6. Merks√§tze
-1. In Zelyra sind Werte standardm√§√üig unver√§nderlich.
-2. Wenn sich ein Wert √§ndern darf, steht `mutable` sichtbar davor.
-3. Variablen existieren nur innerhalb ihres deklarierten Blocks `{ ... }`.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle eine unver√§nderliche Variable f√ºr deinen Benutzernamen und gib sie aus.
-- **Stufe 2 (Mittel):** Erstelle einen `mutable punktestand = 100`, ziehe 15 Punkte ab, f√ºge 30 Punkte hinzu und gib die Zwischenst√§nde aus.
-- **Stufe 3 (Anspruchsvoll):** Begr√ºnde, warum unver√§nderliche Variablen besonders bei Programmen helfen, die mehrere Aufgaben gleichzeitig (nebenl√§ufig) ausf√ºhren.
-
-### 8. Praxisaufgabe: Z√§hler f√ºr unsere Aufgabenverwaltung
-In unserer Aufgabenverwaltung wollen wir z√§hlen, wie viele Aufgaben noch zu erledigen sind:
-
-```zelyra
-fn main() {
-    mutable anzahl_offen = 3
-    print("Start: Aufgaben zu erledigen: ")
-    print(anzahl_offen)
-
-    // Erste Aufgabe erledigt:
-    anzahl_offen = anzahl_offen - 1
-    print("Zwischenstand: Noch offen:")
-    print(anzahl_offen)
-
-    // Zweite Aufgabe erledigt:
-    anzahl_offen = anzahl_offen - 1
-    print("Endstand: Noch offen:")
-    print(anzahl_offen)
-}
-```
-
-### 9. Zusammenfassung
-- Unver√§nderlichkeit ist Zelyras Standard und verhindert unerw√ºnschte Nebeneffekte.
-- Ver√§nderliche Variablen werden explizit mit `mutable` deklariert.
-- Geschweifte Klammern begrenzen die Sichtbarkeit und Lebensdauer von Variablen.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Was passiert, wenn du einer Variablen ohne `mutable` einen neuen Wert zuweist?
-2. Warum ist Unver√§nderlichkeit ein Sicherheitsmerkmal?
-3. Kann eine Variable aus einem inneren Block au√üerhalb dieses Blocks gelesen werden?
-
----
-
-## Kapitel 7: Operatoren und Ausdr√ºcke
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was ein Operator und was ein Ausdruck (`Expression`) ist.
-- Rechenoperatoren f√ºr Zahlen: `+`, `-`, `*`, `/`, `%`.
-- Vergleichsoperatoren: `==`, `!=`, `<`, `<=`, `>`, `>=`.
-- Logische Operatoren: `&&` (UND), `||` (ODER), `!` (NICHT).
-- Operatorrangfolge und verst√§ndliche Klammersetzung.
-
-### 2. Warum ist das Thema wichtig?
-Programme bestehen nicht nur aus festen Werten, sondern berechnen Ergebnisse, treffen Vergleiche und kombinieren logische Aussagen. Ein Operator ist das Bindeglied, das aus einzelnen Werten neue Erkenntnisse formt. Wer Operatoren beherrscht, kann komplexe Gesch√§ftsregeln pr√§zise in einfache Ausdr√ºcke √ºbersetzen.
-
-### 3. Verst√§ndliche Erkl√§rung
-- Ein **Ausdruck** ist jedes St√ºck Quelltext, das zu einem Wert ausgewertet werden kann. Zum Beispiel ist `5 + 3` ein Ausdruck, der zum Wert `8` wird.
-- Ein **Operator** ist das Symbol, das die Operation beschreibt (z. B. `+` oder `==`).
-
-**Rechenoperatoren:**
-- `+`: Addition (auch f√ºr String- und Array-Verkettung)
-- `-`: Subtraktion (oder Negation: `-x`)
-- `*`: Multiplikation
-- `/`: Division
-- `%`: Modulo (Rest einer ganzzahligen Division, z. B. `7 % 3 == 1`)
-
-**Vergleichsoperatoren (liefern immer `Bool`):**
-- `==`: Ist gleich?
-- `!=`: Ist ungleich?
-- `<` / `<=`: Kleiner / Kleiner oder gleich?
-- `>` / `>=`: Gr√∂√üer / Gr√∂√üer oder gleich?
-
-**Logische Operatoren:**
-- `&&` (UND): Nur wahr, wenn **beide** Seiten wahr sind (`true && true == true`).
-- `||` (ODER): Wahr, wenn **mindestens eine** Seite wahr ist.
-- `!` (NICHT): Kehrt einen Wahrheitswert um (`!true == false`).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-```zelyra
-fn main() {
-    // Rechnen
-    grundzeit = 60
-    puffer = 15
-    gesamtzeit = grundzeit + puffer
-    print(gesamtzeit)
-
-    // Vergleichen
-    ist_lang = gesamtzeit > 60
-    print(ist_lang)
-
-    // Logische Verkn√ºpfung
-    hat_puffer = puffer > 0
-    ist_kritisch = gesamtzeit > 120 && !hat_puffer
-    print(ist_kritisch)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein einfaches Gleichheitszeichen `=` im Vergleich verwenden: `if x = 5`.
-  *Ursache:* `=` ist die Zuweisung! F√ºr Vergleiche verlangt Zelyra strikt das doppelte `==`.
-- **Fehler:** Division durch Null (`x / 0`).
-  *Ursache:* F√ºhrt zur Laufzeit zu einem Abbruch. Vor einer Division muss der Teiler gepr√ºft werden.
-
-### 6. Merks√§tze
-1. Zuweisen mit `=`, Vergleichen mit `==`.
-2. Rechnungen werten Punkt vor Strich aus; setze im Zweifel Klammern f√ºr maximale Klarheit.
-3. `&&` verlangt beidseitige Wahrheit, `||` gibt sich mit einer zufriedenen Bedingung zufrieden.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Pr√ºfe mit `==`, ob `10 % 2` gleich `0` ist (Gerade-Zahl-Pr√ºfung).
-- **Stufe 2 (Mittel):** Schreibe einen Ausdruck, der pr√ºft, ob eine Zahl `alter` zwischen `18` und `65` (inklusive) liegt.
-- **Stufe 3 (Anspruchsvoll):** Schreibe einen Ausdruck f√ºr eine Rabattregel: Ein Kunde erh√§lt Rabatt, wenn er VIP ist (`is_vip == true`) ODER wenn sein Bestellwert √ºber 100 liegt UND er kein Neukunde ist.
-
-### 8. Praxisaufgabe: Fristen- und Status-Pr√ºfung im TaskManager
-In unserem TaskManager m√ºssen wir pr√ºfen, ob eine Aufgabe √ºberf√§llig ist und sofortige Aufmerksamkeit verlangt:
-
-```zelyra
-fn main() {
-    tage_verbleibend = -2
-    ist_erledigt = false
-    ist_blockiert = false
-
-    // Eine Aufgabe ist ueberfaellig, wenn Tage < 0 und sie noch nicht erledigt ist
-    ist_ueberfaellig = tage_verbleibend < 0 && !ist_erledigt
-
-    // Hohe Dringlichkeit: Ueberfaellig und nicht durch andere blockiert
-    braucht_eingriff = ist_ueberfaellig && !ist_blockiert
-
-    print("Aufgabe ueberfaellig?")
-    print(ist_ueberfaellig)
-    print("Braucht sofortigen Eingriff?")
-    print(braucht_eingriff)
-}
-```
-
-### 9. Zusammenfassung
-- Operatoren verkn√ºpfen Werte zu aussagekr√§ftigen Ausdr√ºcken.
-- Vergleichsoperatoren erzeugen `Bool`-Werte.
-- Logische Operatoren (`&&`, `||`, `!`) erlauben komplexe Entscheidungsregeln.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Was ist der Unterschied zwischen `=` und `==`?
-2. Welches Ergebnis liefert der Ausdruck `5 > 3 && 2 > 10`?
-3. Wof√ºr steht der Operator `%`?
-
----
-
-## Kapitel 8: Ein- und Ausgaben
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie man Informationen mit `print()` zuverl√§ssig auf der Konsole ausgibt.
-- Wie `read_console()` eine Zeile interaktiv vom Terminal einliest.
-- Wie Text und Variablen durch Verkettung formatiert werden.
-- Wie Zelyra Eingaben √ºber Parameter, Dateien, Umgebungsvariablen, Terminal und Web-Routen empf√§ngt.
-- Warum Zelyra f√ºr sensible Au√üeninteraktionen ausdr√ºckliche Berechtigungen (`Capabilities`) verlangt.
-
-### 2. Warum ist das Thema wichtig?
-Ein Programm, das weder Daten empfangen noch Ergebnisse mitteilen kann, ist f√ºr den Anwender nutzlos. Ein- und Ausgaben (I/O) verbinden die Logik deines Codes mit der Au√üenwelt. Weil Zugriffe auf Tastatur, Festplatte oder Netzwerk aber auch Sicherheitsrisiken darstellen, regelt Zelyra diese Zugriffe viel kontrollierter als √§ltere Sprachen.
-
-### 3. Verst√§ndliche Erkl√§rung
-- **Ausgabe:** Der eingebaute Befehl `print(wert)` nimmt Zahlen, Wahrheitswerte, Zeichenketten oder zusammengesetzte Objekte entgegen und gibt sie auf dem Standard-Ausgabekanal (`stdout`) aus.
-- **Formatierung:** Mehrere Texte und Werte verbindest du mit dem Plus-Operator `+`.
-- **Eingabe in Zelyra:**
-  Programme empfangen Eingaben √ºber Parameter, Umgebungsvariablen, Dateien, Web-Anfragen oder interaktiv im Terminal:
-  1. **Funktionsparameter:** Daten werden beim Aufruf √ºbergeben.
-  2. **Umgebungsvariablen:** `env("MEIN_KEY")` liest Konfigurationswerte aus dem System.
-  3. **Dateien:** `read_text("eingabe.txt")` liest gespeicherte Daten ein.
-  4. **Web-Anfragen:** Formulare (`form`) und URLs (`page "/user/{id}"`) empfangen Benutzereingaben im Browser.
-  5. **Terminal:** `read_console("Prompt: ")` zeigt eine Eingabeaufforderung und liest eine Zeile. Das Ergebnis ist `String?`: `None` bedeutet Dateiende, eine leere Zeile ist `Some("")`.
-
-Terminalzugriff ist eine Capability. Die aufrufende Funktion muss `uses
-Console` deklarieren. In Projekten mit einer `[capabilities]`-Sektion muss
-zus√§tzlich `console = true` gesetzt werden; neue Projektvorlagen lassen die
-Freigabe standardm√§√üig aus. Konsoleneingabe ist f√ºr `zelyra run` gedacht.
-Webanwendungen verwenden stattdessen typisierte Requests und Formulare.
-Die Eingabe wird nicht verborgen; nutze `read_console()` daher nicht f√ºr
-Passw√∂rter oder andere Geheimnisse.
-
-```zelyra
-fn main() uses Console {
-    datum = read_console("Datum: ")
-    match datum {
-        Some(wert) => {
-            print("Eingegeben: " + wert)
-        }
-        None => {
-            print("Keine Eingabe.")
-        }
-    }
-}
-```
-
-```toml
-[capabilities]
-console = true
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Ausgabe formatieren:**
-```zelyra
-fn main() {
-    titel = "Release 1.0"
-    prozent = 80
-    print("Fortschritt fuer " + titel + ":")
-    print(prozent)
-}
-```
-
-**Eingabe √ºber Funktionsparameter und Umgebungsvariablen:**
-```zelyra
-fn verarbeite_aufgabe(titel: String, prioritaet: Int) {
-    print("Bearbeite: " + titel)
-    print("Prioritaetsstufe:")
-    print(prioritaet)
-}
-
-fn main() uses Environment {
-    modus = env("APP_MODUS")
-    print("Aktueller Modus:")
-    print(modus)
-    verarbeite_aufgabe("Backup erstellen", 1)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Versuchen, eine Zahl direkt mit `+` an einen Text zu h√§ngen: `"Zahl: " + 5`.
-  *Ursache:* Zelyra verlangt Typkompatibilit√§t. `5` ist ein `Int`, kein `String`. Gib die Zahl entweder separat mit `print(5)` aus oder nutze Hilfsfunktionen.
-- **Fehler:** `env()` ohne `uses Environment` aufrufen.
-  *Ursache:* Zelyras Sicherheitsmodell (Capabilities) verlangt, dass Funktionen, die auf das Betriebssystem zugreifen, dies ausdr√ºcklich deklarieren.
-
-### 6. Merks√§tze
-1. `print()` gibt Werte verl√§sslich auf der Konsole aus.
-2. Eingaben flie√üen √ºber Parameter, Umgebungsvariablen, Dateien, Terminal oder Web-Routen.
-3. Systemzugriffe ben√∂tigen die passende Capability (z. B. `uses Environment`).
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Gib eine formatierte Visitenkarte (Name, Beruf, E-Mail) mit mehreren `print()`-Befehlen aus.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion `drucke_aufgabe(id: Int, name: String, erledigt: Bool)`, die alle Details sauber untereinander darstellt.
-- **Stufe 3 (Anspruchsvoll):** Schreibe ein CLI-Programm mit `read_console()` und erkl√§re, wann Terminaleingabe sinnvoll ist und wann strukturierte Web-Requests besser passen.
-
-### 8. Praxisaufgabe: Ausgabeformatierung f√ºr den TaskManager
-Erstelle eine Ausgabefunktion f√ºr unsere Aufgabenverwaltung:
-
-```zelyra
-fn drucke_kopfzeile(bereich: String) {
-    print("----------------------------------------")
-    print("BEREICH: " + bereich)
-    print("----------------------------------------")
-}
-
-fn drucke_aufgabe_eintrag(nr: Int, titel: String, erledigt: Bool) {
-    print("Aufgabe Nr: ")
-    print(nr)
-    print("Titel: " + titel)
-    if erledigt {
-        print("Status: [X] ERLEDIGT")
-    } else {
-        print("Status: [ ] OFFEN")
-    }
-    print("----------------------------------------")
-}
-
-fn main() {
-    drucke_kopfzeile("HEUTIGE AUFGABEN")
-    drucke_aufgabe_eintrag(1, "Handbuch durcharbeiten", true)
-    drucke_aufgabe_eintrag(2, "Zelyra-Beispiele ueben", false)
-}
-```
-
-### 9. Zusammenfassung
-- Ausgaben erfolgen klar und unmissverst√§ndlich √ºber `print()`.
-- Externe Zugriffe sind durch Capabilities gesch√ºtzt.
-- Eingaben werden √ºber Parameter, Dateien, Umgebungsvariablen, `read_console()` oder Web-Anfragen entgegengenommen.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Funktion nutzt man in Zelyra f√ºr Textausgaben?
-2. Warum verlangt der Zugriff auf `env()` die Angabe `uses Environment`?
-3. Welche Eingabewege sind in serverbasierten Zelyra-Anwendungen typisch?
-
----
-
-## Kapitel 9: Entscheidungen mit Bedingungen
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie Programme mit `if` und `else` eigenst√§ndige Entscheidungen treffen.
-- Wie man alternative Pfade mit `else if` formuliert.
-- Wie man mehrere Bedingungen logisch kombiniert.
-- Wie man mit `match` elegante und l√ºckenlose Fallunterscheidungen schreibt.
-- Typische Denkfehler bei Verschachtelungen und wie man sie vermeidet.
-
-### 2. Warum ist das Thema wichtig?
-Ohne Bedingungen w√§re jedes Programm starr wie eine Musikwalze: Es w√ºrde immer exakt dieselben Schritte abspielen. Wirklich n√ºtzlich wird Software erst, wenn sie auf unterschiedliche Situationen reagiert: Ist der Nutzer eingeloggt? Ist die Frist abgelaufen? Reicht das Guthaben? Mit `if` und `match` verleihst du deinem Code Urteilsverm√∂gen.
-
-### 3. Verst√§ndliche Erkl√§rung
-- **`if` / `else`:** Pr√ºft eine Bedingung. Wenn sie `true` ergibt, wird der erste Block ausgef√ºhrt; andernfalls der `else`-Block:
-  ```zelyra
-  fn pruefe_ergebnis(punkte: Int) {
-      if punkte >= 50 {
-          print("Bestanden!")
-      } else {
-          print("Leider nicht bestanden.")
-      }
-  }
-
-  fn main() {
-      pruefe_ergebnis(75)
-  }
-  ```
-- **`match`:** Wenn du einen Wert gegen viele feste M√∂glichkeiten pr√ºfen willst, ist `match` viel lesbarer als endlose `if / else if`-Ketten. In Zelyra stellt der Compiler sicher, dass alle m√∂glichen F√§lle abgedeckt sind (Exhaustiveness):
-  ```zelyra
-  fn zeige_status(status_code: Int) {
-      match status_code {
-          1 => { print("Neu") }
-          2 => { print("In Bearbeitung") }
-          3 => { print("Erledigt") }
-          _ => { print("Unbekannter Status") }
-      }
-  }
-
-  fn main() {
-      zeige_status(2)
-  }
-  ```
-  Der Unterstrich `_` ist das sogenannte **Wildcard-Muster**: Er greift f√ºr alle anderen, nicht ausdr√ºcklich genannten Werte.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Einfache Verzweigung:**
-```zelyra
-fn main() {
-    offen = 0
-    if offen == 0 {
-        print("Super! Alle Aufgaben sind erledigt.")
-    } else {
-        print("Es gibt noch offene Aufgaben.")
-    }
-}
-```
-
-**Mehrstufige Entscheidung (`else if`):**
-```zelyra
-fn bewerte_prioritaet(stufe: Int) -> String {
-    match stufe {
-        1 => { return "SEHR DRINGEND" }
-        2 => { return "NORMAL" }
-        3 => { return "NIEDRIG" }
-        _ => { return "UNBEKANNT" }
-    }
-}
-
-fn main() {
-    print(bewerte_prioritaet(1))
-    print(bewerte_prioritaet(2))
-}
-```
-
-**Mustervergleich mit `match`:**
-```zelyra
-fn status_text(code: Int) -> String {
-    match code {
-        0 => { return "Entwurf" }
-        1 => { return "Aktiv" }
-        2 => { return "Archiviert" }
-        _ => { return "Ungueltig" }
-    }
-}
-
-fn main() {
-    print(status_text(1))
-    print(status_text(99))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Den `_`-Fall in einem `match` auf Zahlen weglassen.
-  *Ursache:* Eine Zahl kann unendlich viele Werte annehmen. Wenn du nur `1` und `2` abdeckst, meldet der Compiler `non-exhaustive match`.
-- **Fehler:** Zu tiefe Verschachtelung (Pfeil-Anti-Pattern: `if { if { if { ... } } }`).
-  *Ursache:* Schwer lesbar. L√∂se tiefe Verschachtelungen durch fr√ºhes Zur√ºckkehren (`early return`) oder `match` auf.
-
-### 6. Merks√§tze
-1. `if` entscheidet anhand eines Wahrheitswertes (`Bool`).
-2. `match` pr√ºft Werte gegen Muster und garantiert L√ºckenlosigkeit.
-3. Der Wildcard `_` f√§ngt alle √ºbrigen F√§lle sicher ab.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine Funktion `ist_volljaehrig(alter: Int) -> Bool`, die pr√ºft, ob `alter >= 18` ist.
-- **Stufe 2 (Mittel):** Schreibe mit `match` eine Funktion `monats_tage(monat: Int) -> Int`, die f√ºr die Monate 1 bis 12 die Tage zur√ºckgibt (Februar pauschal 28).
-- **Stufe 3 (Anspruchsvoll):** Baue eine Validierungsfunktion, die pr√ºft, ob ein Passwort mindestens 8 Zeichen lang ist (√ºber einen String-Vergleich) und nicht `"12345678"` lautet.
-
-### 8. Praxisaufgabe: Status-Logik f√ºr den TaskManager
-Erstelle f√ºr unsere Aufgabenverwaltung die automatische Ampel-Einstufung:
-
-```zelyra
-fn berechne_ampel(verbleibende_tage: Int, ist_fertig: Bool) -> String {
-    if ist_fertig {
-        return "GRUEN: Aufgabe ist abgeschlossen"
-    } else {
-        if verbleibende_tage < 0 {
-            return "ROT: Frist ist abgelaufen!"
-        } else {
-            if verbleibende_tage <= 2 {
-                return "GELB: Bald faellig, bitte bearbeiten"
-            } else {
-                return "BLAU: Im Zeitplan"
-            }
-        }
-    }
-}
-
-fn main() {
-    print(berechne_ampel(5, false))
-    print(berechne_ampel(1, false))
-    print(berechne_ampel(-1, false))
-    print(berechne_ampel(-1, true))
-}
-```
-
-### 9. Zusammenfassung
-- `if` und `else` steuern den Programmfluss anhand logischer Bedingungen.
-- `match` erm√∂glicht saubere, compilergepr√ºfte Fallunterscheidungen.
-- Klar gegliederte Verzweigungen machen Gesch√§ftslogik verst√§ndlich und wartbar.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wann ist ein `match` einem `if / else if` vorzuziehen?
-2. Welche Aufgabe erf√ºllt das `_`-Muster im `match`?
-3. Warum verlangt Zelyra, dass bei `match` alle m√∂glichen F√§lle abgedeckt sind?
-
----
-
-## Kapitel 10: Wiederholungen und Schleifen
-
-### 1. Was lerne ich in diesem Kapitel?
-- Warum Wiederholungen (`Loops`) in der Datenverarbeitung unentbehrlich sind.
-- Schleifen mit Z√§hlern: `while bedingung { ... }`.
-- Iteration √ºber Listen und Arrays: `for element in array { ... }`.
-- Endlosschleifen: `loop { ... }`.
-- Schleifen vorzeitig steuern mit `break` (Abbrechen) und `continue` (√úberspringen).
-- Schleifeninvarianten (`invariant`), mit denen Zelyra Korrektheit formal beweisen kann.
-
-### 2. Warum ist das Thema wichtig?
-Computer wurden erfunden, um monotone, wiederkehrende Aufgaben fehlerfrei und in Sekundenschnelle zu erledigen. Wenn du 1.000 Aufgaben aus einer Datenbank laden, pr√ºfen und anzeigen willst, schreibst du den Code nicht tausendmal, sondern einmal innerhalb einer Schleife. Zelyra bietet daf√ºr sichere Konstrukte und erlaubt es sogar, mathematische Garantien √ºber Schleifendurchl√§ufe abzugeben.
-
-### 3. Verst√§ndliche Erkl√§rung
-Zelyra kennt drei Arten von Schleifen:
-
-1. **`for ... in`:** Der einfachste und sicherste Weg, um eine Liste von Elementen abzuarbeiten. Die Schleife l√§uft automatisch √ºber jedes Element und stoppt von selbst:
-   ```zelyra
-   fn main() {
-       for zahl in [1, 2, 3] {
-           print(zahl)
-       }
-   }
-   ```
-2. **`while bedingung`:** Wiederholt den Block so lange, wie die Bedingung wahr (`true`) bleibt. Ideal, wenn du vorher nicht wei√üt, wie viele Durchl√§ufe n√∂tig sind.
-3. **`loop`:** Eine Dauerschleife. Sie l√§uft endlos weiter, bis sie im Inneren durch den Befehl `break` gestoppt wird.
-
-**Steuerbefehle:**
-- **`break`**: Beendet die Schleife sofort. Das Programm springt hinter die Schleife.
-- **`continue`**: Bricht den aktuellen Durchlauf ab und springt sofort zum n√§chsten Element.
-
-**Schleifeninvariante (`invariant`):**
-Eine Invariante ist eine Bedingung, die **vor**, **w√§hrend** und **nach** jedem Schleifendurchlauf wahr sein muss (z. B. `invariant { zaehler >= 0 }`). Der Zelyra-Verifier (`zelyra verify`) nutzt Invarianten, um mathematisch zu beweisen, dass die Schleife niemals in unzul√§ssige Zust√§nde ger√§t!
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: `for ... in` √ºber ein Array**
-```zelyra
-fn main() {
-    aufgaben = ["Planen", "Programmieren", "Testen", "Ausliefern"]
-    for a in aufgaben {
-        print("Schritt: " + a)
-    }
-}
-```
-
-**Beispiel 2: `while` mit Z√§hler und `invariant`**
-```zelyra
-fn main() {
-    mutable zaehler = 1
-    while zaehler <= 3
-        invariant { zaehler >= 1 }
-    {
-        print(zaehler)
-        zaehler = zaehler + 1
-    }
-}
-```
-
-**Beispiel 3: `break` und `continue` gezielt einsetzen**
-```zelyra
-fn main() {
-    for zahl in [1, 2, 3, 4, 5] {
-        if zahl == 2 {
-            // Die 2 wollen wir auslassen:
-            continue
-        }
-        if zahl == 4 {
-            // Bei 4 brechen wir komplett ab:
-            break
-        }
-        print(zahl)
-    }
-}
-```
-*Ausgabe:* Gibt `1` und `3` aus!
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** In einer `while`-Schleife vergessen, den Z√§hler zu erh√∂hen (`zaehler = zaehler + 1`).
-  *Ursache:* Die Bedingung bleibt ewig wahr ‚Äì eine **Endlosschleife** entsteht und das Programm friert ein.
-- **Fehler:** Falsche Indexgrenzen bei manuellen Z√§hlern.
-  *Ursache:* Nutze wann immer m√∂glich `for item in array`, um Grenzfehler (Off-by-one) komplett auszuschlie√üen.
-
-### 6. Merks√§tze
-1. Nutze `for ... in` f√ºr Sammlungen und Arrays.
-2. `break` beendet die Schleife sofort; `continue` springt zur n√§chsten Runde.
-3. Invarianten dokumentieren und beweisen die Sicherheit deiner Schleife.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Gib mit einer `while`-Schleife die Zahlen von 10 r√ºckw√§rts bis 1 aus.
-- **Stufe 2 (Mittel):** Berechne mit einer `for`-Schleife die Summe aller Zahlen im Array `[10, 20, 30, 40]`.
-- **Stufe 3 (Anspruchsvoll):** Durchsuche ein Array von Zahlen nach der Zahl `42`. Sobald sie gefunden wird, gib `"Gefunden!"` aus und beende die Schleife mit `break`. Wenn sie nicht vorkommt, gib am Ende `"Nicht gefunden"` aus.
-
-### 8. Praxisaufgabe: Aufgaben filtern und z√§hlen
-Wir wenden Schleifen auf unsere Aufgabenverwaltung an. Wir z√§hlen die erledigten Aufgaben und geben offene Aufgaben aus:
-
-```zelyra
-fn main() {
-    aufgaben = ["Konzept schreiben", "Datenbank aufsetzen", "Tests schreiben"]
-    mutable erledigt_zaehler = 0
-
-    print("Aufgabenliste durchgehen:")
-    for a in aufgaben {
-        if a == "Konzept schreiben" {
-            print("[X] " + a)
-            erledigt_zaehler = erledigt_zaehler + 1
-        } else {
-            print("[ ] " + a)
-        }
-    }
-
-    print("Erledigte Aufgaben insgesamt:")
-    print(erledigt_zaehler)
-}
-```
-
-### 9. Zusammenfassung
-- Schleifen automatisieren monotone Wiederholungen.
-- `for ... in` iteriert sicher √ºber Arrays, `while` wiederholt nach Bedingungen.
-- `break` und `continue` erm√∂glichen pr√§zise Flusssteuerung.
-- `invariant` erm√∂glicht formale Korrektheitsbeweise mit `zelyra verify`.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Was ist der Unterschied zwischen `break` und `continue`?
-2. Warum ist `for ... in` bei Arrays sicherer als eine manuelle `while`-Schleife?
-3. Welche Rolle spielt eine `invariant` bei der Programmpr√ºfung?
-
-# TEIL III ‚Äì PROGRAMME STRUKTURIEREN
-
----
-
-## Kapitel 11: Funktionen und Prozeduren
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Was Funktionen sind und wie sie Programme √ºbersichtlich und wiederverwendbar machen.
-- Wie man Parameter √ºbergibt und R√ºckgabetypen mit `-> Typ` deklariert.
-- Was reine Funktionen (*pure functions*) ohne Seiteneffekte sind und warum sie Gold wert sind.
-- Was Prozeduren sind (Funktionen ohne R√ºckgabewert bzw. Typ `Unit`), die Aktionen ausf√ºhren.
-- Wie Zelyra Namenskonventionen und sauberen Stil f√∂rdert.
-
-### 2. Warum ist das Thema wichtig?
-Wenn du jede Berechnung und jeden Bildschirmausdruck zehnmal an verschiedenen Stellen deines Codes wiederholst, entsteht das gef√ºrchtete ‚ÄûSpaghetti-Ph√§nomen‚Äú. √Ñndert sich eine Gesch√§ftsregel (z. B. wie die Frist einer Aufgabe berechnet wird), m√ºsstest du alle zehn Stellen suchen und anpassen ‚Äì Fehler sind dabei unausweichlich. Funktionen fassen eine logische Aufgabe unter einem klaren Namen zusammen: Du schreibst sie einmal, testest sie gr√ºndlich und verwendest sie beliebig oft.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir eine Funktion wie ein K√ºchenger√§t vor:
-- Du gibst Zutaten hinein (**Parameter**).
-- Das Ger√§t verarbeitet die Zutaten nach einem festen Rezept (**Funktionsk√∂rper**).
-- Am Ende kommt ein fertiges Gericht heraus (**R√ºckgabewert**).
-
-In Zelyra definierst du Funktionen mit dem Schl√ºsselwort `fn`:
-```zelyra
-fn addiere(a: Int, b: Int) -> Int {
-    return a + b
-}
-
-fn main() {
-    print(addiere(2, 3))
-}
-```
-Besitzt eine Funktion keinen R√ºckgabewert, weil sie z. B. nur eine Zeile Text ausgibt, ist ihr R√ºckgabetyp `Unit` (oder kann weggelassen werden):
-```zelyra
-fn drucke_trennlinie() {
-    print("----------------------------------------")
-}
-
-fn main() {
-    drucke_trennlinie()
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Berechnung mit R√ºckgabewert**
-```zelyra
-fn berechne_tage_bis_frist(heute_tag: Int, frist_tag: Int) -> Int {
-    return frist_tag - heute_tag
-}
-
-fn main() {
-    tage = berechne_tage_bis_frist(10, 18)
-    print(tage)
-}
-```
-
-**Beispiel 2: Textformatierung in einer Hilfsfunktion**
-```zelyra
-fn format_aufgabe(id_text: String, text: String, fertig: Bool) -> String {
-    mutable status_zeichen = "[ ]"
-    if fertig {
-        status_zeichen = "[X]"
-    }
-    return status_zeichen + " #" + id_text + ": " + text
-}
-
-fn main() {
-    ausgabe = format_aufgabe("1", "Dokumentation lesen", true)
-    print(ausgabe)
-}
-```
-
-**Beispiel 3: Prozedur zur Men√ºausgabe**
-```zelyra
-fn zeige_kopfzeile(benutzer: String) {
-    print("Angemeldet als: " + benutzer)
-    print("========================================")
-}
-
-fn main() {
-    zeige_kopfzeile("Sabine")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein `return` vergessen, obwohl ein R√ºckgabetyp angegeben wurde.
-  *Ursache:* Zelyra verlangt bei deklariertem R√ºckgabetyp zwingend ein passendes Ergebnis auf allen Ausf√ºhrungspfaden.
-- **Fehler:** Falsche Argumentreihenfolge beim Aufruf.
-  *Ursache:* Zelyra pr√ºft die Parametertypen strikt. Wenn der erste Parameter ein `Int` ist, darf kein `String` √ºbergeben werden.
-- **Fehler:** Versuchen, `String` und `Int` direkt mit `+` zu verketten.
-  *Ursache:* Der Operator `+` verkn√ºpft in Zelyra entweder zwei Strings oder zwei Zahlen gleichen Typs. Verwende Strings oder gebe Werte separat √ºber `print()` aus.
-
-### 6. Merks√§tze
-1. Eine Funktion sollte genau eine einzige, klar benannte Aufgabe erf√ºllen.
-2. Reine Funktionen erzeugen bei gleichen Eingaben immer die gleichen Ausgaben und haben keine Seiteneffekte.
-3. Namen von Funktionen sollten aussagekr√§ftige Verben sein (z. B. `berechne_differenz`, `format_aufgabe`).
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine Funktion `verdopple(zahl: Int) -> Int`, die das Doppelte einer Zahl zur√ºckgibt.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion `ist_dringend(tage: Int) -> Bool`, die `true` liefert, wenn weniger als 3 Tage verbleiben.
-- **Stufe 3 (Anspruchsvoll):** Schreibe eine Funktion `status_symbol(erledigt: Bool) -> String`, die `"[OK]"` oder `"[OFFEN]"` liefert.
-
-### 8. Praxisaufgabe: Aufgabenanzeige modularisieren
-Schreibe ein Zelyra-Programm, das drei Aufgaben mit ID-Text, Name und Erledigungsstatus √ºber eine wiederverwendbare Formatierungsfunktion aufbereitet und ausgibt:
-
-```zelyra
-fn format_eintrag(id_text: String, name: String, erledigt: Bool) -> String {
-    mutable symbol = "[OFFEN]"
-    if erledigt {
-        symbol = "[OK]"
-    }
-    return symbol + " Aufgabe " + id_text + ": " + name
-}
-
-fn main() {
-    print(format_eintrag("1", "Post abholen", true))
-    print(format_eintrag("2", "Rechnung bezahlen", false))
-    print(format_eintrag("3", "Backup erstellen", false))
-}
-```
-
-### 9. Zusammenfassung
-- Funktionen gliedern Programme in logische, handhabbare Bausteine.
-- Parameter und R√ºckgabetypen sind in Zelyra exakt typisiert.
-- Reine Funktionen machen den Code wartungsfreundlich und fehlerresistent.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welchen Typ besitzt eine Funktion, die keinen Wert zur√ºckgibt?
-2. Warum sind reine Funktionen einfacher zu testen als Funktionen mit globalen Seiteneffekten?
-3. Was pr√ºft der Zelyra-Compiler bei jedem Funktionsaufruf?
-
----
-
-## Kapitel 12: Vertr√§ge und Vorbedingungen (Design by Contract)
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was das Konzept *Design by Contract* (Entwurf durch Vertrag) bedeutet.
-- Wie du Vorbedingungen mit `requires` definierst.
-- Wie du Nachbedingungen mit `ensures` und dem Schl√ºsselwort `result` formulierst.
-- Wie Schleifeninvarianten mit `invariant` sichergestellt werden.
-- Warum Vertr√§ge defensiven `if`-Kaskaden √ºberlegen sind.
-
-### 2. Warum ist das Thema wichtig?
-H√§ufig entstehen Fehler, weil Entwickler Annahmen treffen, die nirgendwo festgeschrieben sind: ‚ÄûDiese Funktion darf niemals mit einer negativen Zahl aufgerufen werden!‚Äú Wenn jemand die Funktion ein halbes Jahr sp√§ter doch mit `-1` aufruft, kracht es unerwartet. In herk√∂mmlichen Sprachen schreibt man seitenlange `if`-Pr√ºfungen oder hofft auf gute Kommentare. Zelyra hebt Vertr√§ge auf Sprachebene: Vor- und Nachbedingungen sind Teil der Funktionssignatur und werden garantiert gepr√ºft.
-
-### 3. Verst√§ndliche Erkl√§rung
-Ein Vertrag in Zelyra funktioniert wie ein notarieller Vertrag zwischen dem Aufrufer und der Funktion:
-- **`requires` (Vorbedingung):** Der Aufrufer verpflichtet sich, der Funktion nur Daten zu √ºbergeben, die die Bedingung erf√ºllen (z. B. `wert > 0`).
-- **`ensures` (Nachbedingung):** Im Gegenzug garantiert die Funktion, dass ihr Ergebnis (`result`) bestimmte Eigenschaften aufweist (z. B. `result >= 0`).
-
-Wird ein Vertrag verletzt, stoppt Zelyra sofort mit einem pr√§zisen Fehler (`E-CONTRACT-*`) und zeigt genau, wer den Vertrag gebrochen hat.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Vorbedingung mit requires**
-```zelyra
-fn dividiere(zaehler: Int, nenner: Int) -> Int
-    requires { nenner != 0 }
-{
-    return zaehler / nenner
-}
-
-fn main() {
-    ergebnis = dividiere(100, 4)
-    print(ergebnis)
-}
-```
-
-**Beispiel 2: Vor- und Nachbedingung kombiniert**
-```zelyra
-fn prioritaet_anpassen(aktuelle_stufe: Int, delta: Int) -> Int
-    requires { aktuelle_stufe >= 1 && delta >= 0 }
-    ensures { result >= 1 }
-{
-    neue_stufe = aktuelle_stufe + delta
-    return neue_stufe
-}
-
-fn main() {
-    p = prioritaet_anpassen(2, 1)
-    print(p)
-}
-```
-
-**Beispiel 3: Schleifeninvariante**
-```zelyra
-fn zaehle_bis(grenze: Int) -> Int
-    requires { grenze >= 0 }
-    ensures { result == grenze }
-{
-    mutable i = 0
-    while i < grenze
-        invariant { i >= 0 }
-    {
-        i = i + 1
-    }
-    return i
-}
-
-fn main() {
-    print(zaehle_bis(5))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Benutzereingaben √ºber `requires` abfangen wollen.
-  *Ursache:* Vertr√§ge sind Schutzschilde gegen Programmierfehler im Code, nicht zur Validierung von unsicheren Benutzereingaben gedacht. F√ºr Benutzereingaben nutzt man Validierungsregeln (`form` oder `Result`).
-- **Fehler:** Ein `ensures` formulieren, das die Funktion logisch nicht einhalten kann.
-  *Ursache:* Wenn die Funktion z. B. `-5` zur√ºckgibt, das `ensures` aber `{ result >= 0 }` verlangt, schl√§gt die Nachbedingung fehl.
-
-### 6. Merks√§tze
-1. `requires` sch√ºtzt die Funktion vor unzul√§ssigen Eingaben des Aufrufers.
-2. `ensures` garantiert dem Aufrufer ein korrektes Ergebnis √ºber `result`.
-3. Vertr√§ge machen implizite Annahmen zu √ºberpr√ºfbaren, lebendigen Spezifikationen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine Funktion `quadratwurzel_naiv(x: Int) -> Int` mit der Vorbedingung `requires { x >= 0 }`.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion `begrenze(wert: Int, min_wert: Int, max_wert: Int) -> Int` mit Vorbedingungen und passender Nachbedingung.
-- **Stufe 3 (Anspruchsvoll):** Sichere eine Funktion `prozentsatz(teil: Int, gesamt: Int) -> Int` so ab, dass niemals durch 0 geteilt wird und das Ergebnis stets zwischen 0 und 100 liegt.
-
-### 8. Praxisaufgabe: Fortschrittsrechner f√ºr Aufgaben
-Schreibe eine abgesicherte Funktion f√ºr die Aufgabenverwaltung:
-```zelyra
-fn berechne_fortschritt(erledigt: Int, gesamt: Int) -> Int
-    requires { gesamt > 0 && erledigt >= 0 && erledigt <= gesamt }
-    ensures { result >= 0 && result <= 100 }
-{
-    return (erledigt * 100) / gesamt
-}
-
-fn main() {
-    quote = berechne_fortschritt(3, 4)
-    print(quote)
-}
-```
-
-### 9. Zusammenfassung
-- Vertr√§ge (`requires`, `ensures`) dokumentieren und erzwingen Programmierannahmen zur Laufzeit.
-- `result` verweist in `ensures` auf das Berechnungsergebnis der Funktion.
-- Schleifeninvarianten sichern den inneren Zustand von Schleifendurchl√§ufen ab.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wann wird eine `requires`-Bedingung gepr√ºft: vor oder nach der Ausf√ºhrung?
-2. Worauf bezieht sich das Wort `result` in einem Vertrag?
-3. Warum ersetzt ein Vertrag kein HTML-Formularvalidierungs-Muster?
-
----
-
-## Kapitel 13: Sammlungen, Listen und W√∂rterb√ºcher (Arrays & Maps)
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du mehrere gleichartige Werte in einem Array (`Typ[]`) speicherst.
-- Die wichtigsten Listen-Funktionen: `len`, `append`, `contains`, `first`, `last`.
-- Wie du Listen mit `for .. in` durchl√§ufst.
-- Wie assoziative Schl√ºssel-Wert-Sammlungen mit `Map<Schl√ºssel, Wert>` deklariert und genutzt werden.
-- Die wichtigsten W√∂rterbuch-Funktionen: `get`, `put`, `contains`, `keys`, `values`.
-- Warum Zelyras `get()` immer eine sichere `Option` liefert und Abst√ºrze verhindert.
-
-### 2. Warum ist das Thema wichtig?
-Eine Anwendung, die nur einzelne Werte speichern kann, w√§re nutzlos. In der Praxis arbeiten wir fast immer mit Sammlungen: Listen von Aufgaben, E-Mail-Adressen oder Tabellenzeilen aus einer Datenbank. 
-Manchmal suchen wir Elemente nach ihrer Reihenfolge (Listen bzw. Arrays). Sehr oft wollen wir Daten jedoch direkt √ºber einen eindeutigen Schl√ºssel nachschlagen ‚Äì zum Beispiel die Benutzereinstellungen zu einer User-ID, ein W√∂rterbuch von √úbersetzungstexten oder L√§ndervorwahlen. Daf√ºr bietet Zelyra typisierte W√∂rterb√ºcher (`Map`).
-
-### 3. Verst√§ndliche Erkl√§rung
-
-#### Teil A: Arrays ‚Äì Die geordnete Liste
-Ein Array ist wie ein Setzkasten: Jedes Fach hat eine feste Nummer (Index) und enth√§lt genau ein Element. In Zelyra m√ºssen alle Elemente im selben Kasten denselben Typ haben (`Int[]`, `String[]` etc.):
-
-```zelyra
-fn main() {
-    zahlen: Int[] = [10, 20, 30, 40]
-    print(len(zahlen))
-}
-```
-
-Zelyra stellt m√§chtige Hilfswerkzeuge f√ºr Arrays bereit:
-- `len(liste)`: Gibt die Anzahl der Elemente zur√ºck.
-- `append(liste, wert)`: Liefert ein neues Array mit dem angeh√§ngten Element.
-- `first(liste)`: Liefert das erste Element als `Option`.
-- `last(liste)`: Liefert das letzte Element als `Option`.
-- `contains(liste, wert)`: Pr√ºft, ob ein Element vorhanden ist (`Bool`).
-
-#### Teil B: Maps ‚Äì Assoziative Schl√ºssel-Wert-W√∂rterb√ºcher
-Eine `Map` ordnet jedem eindeutigen Schl√ºssel (*Key*) genau einen Wert (*Value*) zu.
-- **Typnotation:** `Map<KeyTyp, WertTyp>`, zum Beispiel `Map<String, Int>` oder `Map<String, String>`.
-- **Literalschreibweise:** `Map { "schluessel": wert }`
-- **Schl√ºsseltypen:** Alle Skalartypen (`String`, `Int`, `Id` etc.) sind zul√§ssig.
-
-```zelyra
-fn main() {
-    vorwahlen: Map<String, Int> = Map {
-        "de": 49
-        "at": 43
-        "ch": 41
-    }
-}
-```
-
-Die wichtigsten Operationen auf Maps:
-- **`get(map, key)`**: Schl√§gt einen Schl√ºssel nach. Weil ein Schl√ºssel fehlen k√∂nnte, liefert `get()` **immer** eine sichere `Option<Wert>` zur√ºck (`Some(wert)` oder `None`) ‚Äì niemals einen Null-Pointer-Absturz!
-- **`put(map, key, wert)`**: F√ºgt ein Paar hinzu oder √ºberschreibt den bestehenden Wert. Da Zelyra Unver√§nderlichkeit sch√§tzt, liefert `put()` eine neue, aktualisierte Map zur√ºck.
-- **`contains(map, key)`**: Gibt `true` zur√ºck, wenn der Schl√ºssel existiert.
-- **`keys(map)`**: Gibt alle vorhandenen Schl√ºssel als typisiertes Array zur√ºck (`KeyTyp[]`).
-- **`values(map)`**: Gibt alle Werte als typisiertes Array zur√ºck (`WertTyp[]`).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Array anlegen und mit for-Schleife durchlaufen**
-```zelyra
-fn main() {
-    aufgabe_ids: Int[] = [101, 102, 103, 104]
-    for id in aufgabe_ids {
-        print(id)
-    }
-}
-```
-
-**Beispiel 2: Elemente an ein Array anf√ºgen**
-```zelyra
-fn main() {
-    mutable liste: Int[] = [1, 2, 3]
-    liste = append(liste, 4)
-    print(len(liste))
-}
-```
-
-**Beispiel 3: W√∂rterbuch (Map) anlegen, aktualisieren und abfragen**
-```zelyra
-fn main() {
-    preise: Map<String, Int> = Map {
-        "Kaffee": 3
-        "Tee": 2
-    }
-    
-    // Neues Element hinzuf√ºgen
-    mutable aktion = put(preise, "Kuchen", 4)
-    // Vorhandenen Preis anpassen
-    aktion = put(aktion, "Kaffee", 4)
-    
-    // Nullsicher mit match abfragen
-    match get(aktion, "Kaffee") {
-        Some(preis) => {
-            print("Kaffeepreis: " + str(preis) + " Euro")
-        }
-        None => {
-            print("Artikel nicht gefunden.")
-        }
-    }
-    
-    // Alle Schl√ºssel und Werte ausgeben
-    print(keys(aktion))
-}
-```
-
-**Beispiel 4: Pr√ºfen der Existenz in einer Map**
-```zelyra
-fn main() {
-    einstellungen: Map<String, Bool> = Map {
-        "dunkelmodus": true
-        "benachrichtigungen": false
-    }
-    
-    if contains(einstellungen, "dunkelmodus") {
-        print("Dunkelmodus-Einstellung ist konfiguriert.")
-    }
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Versuchen, verschiedene Typen in einem Array oder einer Map zu mischen (z. B. `[1, "Hallo"]`).
-  *Ursache:* Zelyra ist strikt typrein. Alle Elemente eines Arrays m√ºssen denselben Typ haben, und alle Schl√ºssel bzw. Werte einer Map m√ºssen ihren deklarierten Typen entsprechen.
-- **Fehler:** `map.get("key")` direkt als Wert behandeln wollen, ohne die `Option` auszupacken.
-  *Ursache:* Zelyra garantiert Compile-Time-Sicherheit. Da ein Schl√ºssel in der Map fehlen k√∂nnte, zwingt der Compiler dich, mit `match` oder Standardwerten auf `Some` und `None` zu reagieren.
-- **Fehler:** Nicht-skalare Typen (wie Arrays) als Map-Schl√ºssel verwenden.
-  *Ursache:* Map-Schl√ºssel m√ºssen skalare Typen sein (`String`, `Int`, `Id`), damit sie deterministisch vergleichbar und JSON-serialisierbar sind.
-
-### 6. Merks√§tze
-1. Arrays in Zelyra sind typrein: `Int[]`, `String[]`, `Bool[]`.
-2. Das Durchlaufen von Arrays erfolgt elegant und sicher mit `for element in sammlung { ... }`.
-3. `Map<Key, Value>` speichert eindeutige Schl√ºssel-Wert-Paare.
-4. `get(map, key)` liefert immer eine `Option` (`Some` oder `None`) und sch√ºtzt vor Laufzeitabst√ºrzen.
-5. `put(map, key, value)` liefert funktional ein neues, aktualisiertes W√∂rterbuch.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle ein Array mit drei Zeichenketten und gib jedes Element mit einer `for`-Schleife aus.
-- **Stufe 2 (Mittel):** Erstelle eine `Map<String, Int>` mit drei Produktnamen und ihren Preisen. Frage einen vorhandenen und einen nicht vorhandenen Artikel mit `get()` und `match` ab.
-- **Stufe 3 (Anspruchsvoll):** Schreibe eine Funktion `zaehle_woerter(liste: String[]) -> Map<String, Int>`, die z√§hlt, wie oft jedes Wort in einer Liste vorkommt, und das Ergebnis als Map zur√ºckgibt.
-
-### 8. Praxisaufgabe: Aufgaben-Priorit√§ten nachschlagen
-Erstelle eine Verwaltung von Priorit√§tsstufen f√ºr Aufgaben mit einer Map:
-```zelyra
-fn prioritaet_anzeigen(prioritaeten: Map<String, Int>, aufgabe: String) {
-    match get(prioritaeten, aufgabe) {
-        Some(stufe) => {
-            print("Prioritaet fuer " + aufgabe + ": Stufe " + str(stufe))
-        }
-        None => {
-            print("Keine Prioritaet hinterlegt fuer: " + aufgabe)
-        }
-    }
-}
-
-fn main() {
-    prio_map: Map<String, Int> = Map {
-        "Datenbankmigration": 1
-        "CSS anpassen": 3
-        "Dokumentation": 2
-    }
-    
-    prioritaet_anzeigen(prio_map, "Datenbankmigration")
-    prioritaet_anzeigen(prio_map, "Kaffeepause")
-}
-```
-
-### 9. Zusammenfassung
-- Arrays (`Typ[]`) speichern geordnete Folgen von Werten desselben Typs.
-- Maps (`Map<Key, Value>`) speichern Schl√ºssel-Wert-Zuordnungen mit sicherem `get()`, `put()`, `contains()`, `keys()` und `values()`.
-- Beide Sammlungen sind vollst√§ndig typsicher und arbeiten nahtlos mit Zelyras `Option`-System zusammen.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welchen Typ hat der Ausdruck `["A", "B", "C"]`?
-2. Warum schl√§gt `append([1, 2], "Drei")` beim Kompilieren fehl?
-3. Wie pr√ºfst du effizient, ob ein Wert in einer Liste existiert?
-
----
-
-## Kapitel 14: Eigene Datentypen erstellen (Records & Tables)
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du eigene dom√§nenspezifische Datentypen erstellst.
-- Was nominale Typen (`type TaskId = Id`) sind und wie sie Verwechslungen verhindern.
-- Wie Datens√§tze in Zelyra als `table` mit Attributen definiert werden (`id: Id primary auto`).
-- Warum starke Typisierung die Softwarequalit√§t revolutioniert.
-
-### 2. Warum ist das Thema wichtig?
-In schlechter Software wird fast alles als einfache Zahl oder Zeichenkette behandelt (‚ÄûPrimitive Obsession‚Äú). Wenn eine Funktion `pruefe(benutzer_id: Int, aufgabe_id: Int)` erwartet, du aber versehentlich die IDs vertauschst, merkt der Computer bei einfachen `Int`-Typen gar nichts ‚Äì die Software bucht wom√∂glich fatale Daten falsch zu. Mit eigenen Typen unterscheidet Zelyra schon beim Kompilieren zwischen einer `UserId` und einer `TaskId`.
-
-### 3. Verst√§ndliche Erkl√§rung
-Eigene Datentypen erlauben es dir, der realen Welt einen Namen zu geben:
-1. **Nominale Aliase:**
-   ```zelyra
-   type TaskId = Id
-
-   fn main() {
-       print("Typalias TaskId aktiv")
-   }
-   ```
-   Hierdurch wird `TaskId` ein eigener, eindeutiger Typ.
-2. **Tabellen als strukturierte Datentypen:**
-   ```zelyra
-   table aufgaben {
-       id: Id primary auto
-       beschreibung: String required
-       fertig: Bool
-   }
-
-   fn main() {
-       print("Tabellenschema definiert")
-   }
-   ```
-   Dieses Schema definiert nicht nur eine Datenbanktabelle, sondern stellt in Zelyra automatisch den Datentyp f√ºr eine Aufgabe bereit!
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Eigene Typnamen f√ºr IDs**
-```zelyra
-type TaskId = Id
-
-fn main() {
-    print("Typalias erfolgreich definiert")
-}
-```
-
-**Beispiel 2: Ein Datenmodell als Tabelle definieren**
-```zelyra
-table aufgaben {
-    id: Id primary auto
-    beschreibung: String required
-    erledigt: Bool
-}
-
-fn main() {
-    print("Tabellenschema fuer Aufgaben definiert")
-}
-```
-
-**Beispiel 3: Typisierte Attribute in Funktionen ansprechen**
-```zelyra
-table projekte {
-    id: Id primary auto
-    name: String required
-    aktiv: Bool
-}
-
-fn zeige_projekt_status(p_name: String, p_aktiv: Bool) {
-    mutable status = "Pausiert"
-    if p_aktiv {
-        status = "Aktiv"
-    }
-    print("Projekt: " + p_name + " [" + status + "]")
-}
-
-fn main() {
-    zeige_projekt_status("Web-Portal", true)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein Tabellenfeld mit einem reservierten Schl√ºsselwort wie `title` oder `list` benennen.
-  *Ursache:* In Zelyra sind diese W√∂rter f√ºr Abfragen und Ansichten reserviert. Nutze stattdessen aussagekr√§ftige Namen wie `name`, `text` oder `beschreibung`.
-- **Fehler:** Den Prim√§rschl√ºssel mit `primary key` statt `primary` angeben.
-  *Ursache:* In Zelyra lautet die Spaltenspezifikation `id: Id primary auto`.
-
-### 6. Merks√§tze
-1. Eigene Datentypen spiegeln die Gesch√§ftswelt wider und verhindern fatale Parameterverwechslungen.
-2. `table`-Definitionen sind in Zelyra gleichzeitig Datenbankschema und Sprach-Datentyp.
-3. Reservierte W√∂rter (`title`, `list`, etc.) d√ºrfen nicht als Spalten- oder Variablennamen genutzt werden.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle einen Typalias `type UserId = Id`.
-- **Stufe 2 (Mittel):** Modelliere eine Tabelle `kategorien` mit `id: Id primary auto` und `kategorie_name: String required`.
-- **Stufe 3 (Anspruchsvoll):** Modelliere eine Tabelle `notizen`, die √ºber ein Feld `aufgabe_id: Id` mit einer Aufgabe verkn√ºpft werden kann.
-
-### 8. Praxisaufgabe: Das Kernschema der Aufgabenverwaltung
-Definiere das vollst√§ndige Zelyra-Schema f√ºr unsere Aufgabenverwaltung:
-
-```zelyra
-table aufgaben {
-    id: Id primary auto
-    name: String required
-    beschreibung: String
-    prioritaet: Int
-    ist_erledigt: Bool
-}
-
-fn main() {
-    print("Kernschema der Aufgabenverwaltung aktiv.")
-}
-```
-
-### 9. Zusammenfassung
-- Eigene Typen geben Daten eine klare, unmissverst√§ndliche Bedeutung.
-- `table` vereint Schema-Deklaration und statische Typdefinition nahtlos in der Sprache.
-- Statische Typen fangen Logikfehler bereits beim Schreiben des Codes ab.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welchen Vorteil bietet `type TaskId = Id` gegen√ºber einem einfachen `Int`?
-2. Warum m√ºssen Tabellenfelder in Zelyra stets einen festen Typ besitzen?
-3. Welche Namen sollten als Feldbezeichnungen vermieden werden?
-
----
-
-## Kapitel 15: Module und Code-Organisation
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie ein typisches Zelyra-Projekt strukturiert ist.
-- Die Rolle der Projektkonfigurationsdatei `zelyra.toml`.
-- Wie Code in logische Bestandteile (Schema, Logik, Ansichten) gegliedert wird.
-- Wie Zelyras CLI zusammenh√§ngende Projektdateien pr√ºft und baut.
-- Den aktuellen Entwicklungsstand und die Roadmap von Modulen und Imports.
-
-### 2. Warum ist das Thema wichtig?
-Zu Beginn schreibt man gerne alles in eine einzige Datei. Doch wenn deine Aufgabenverwaltung w√§chst ‚Äì mit Datenbanktabellen, 20 Funktionen, Webformularen und Validierungen ‚Äì, verliert man in einer 2000-Zeilen-Datei schnell den √úberblick. Gute Softwareentwicklung bedeutet, Code so zu organisieren, dass man Neuerungen sofort an der richtigen Stelle findet.
-
-### 3. Verst√§ndliche Erkl√§rung
-Ein professionelles Zelyra-Projekt folgt einer klaren Ablagestruktur:
-- `zelyra.toml`: Die Geburtsurkunde des Projekts. Hier stehen Name, Version und erforderliche Berechtigungen.
-- `src/schema.zyl`: Enth√§lt alle Tabellendefinitionen (`table`) und Dom√§nentypen.
-- `src/main.zyl`: Enth√§lt die Hauptlogik und den Einstiegspunkt (`fn main()`).
-
-```toml
-[package]
-name = "aufgaben_planer"
-version = "0.1.0"
-authors = ["Entwickler <dev@example.com>"]
-
-[capabilities]
-filesystem = false
-database = true
-```
-
-*Hinweis zur Sprachversion 0.1:* Das Schl√ºsselwort `import` zur feingliedrigen Modularisierung externer Pakete befindet sich laut Zelyra-Roadmap aktuell in Entwicklung (Phase 11/12). In der aktuellen Version 0.1 werden die Quelldateien eines Projekts vom Zelyra-Compiler gemeinsam im Projektkontext √ºbersetzt.
-`// [Platzhalter: Modul-Importe - in Zelyra 0.1 noch nicht spezifiziert; siehe Roadmap Phase 11/12]`
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Eine saubere Hauptdatei**
-```zelyra
-fn main() {
-    print("Zelyra Aufgaben-System bereit.")
-}
-```
-
-**Beispiel 2: Trennung von Logikfunktionen**
-```zelyra
-fn format_system_status(status: String) -> String {
-    return "[STATUS] " + status
-}
-
-fn main() {
-    print(format_system_status("Datenbank verbunden"))
-}
-```
-
-**Beispiel 3: Deklaration von Capabilities in der Projektdatei**
-In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt √ºberhaupt anfordern darf. Greift dein Code auf die Datenbank zu, muss `database = true` aktiviert sein.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein nicht vorhandenes `import`-Schl√ºsselwort aus anderen Sprachen wie Python oder JS verwenden.
-  *Ursache:* Zelyra 0.1 verwendet Projekt-Kompilierung; externe Import-Syntax ist Gegenstand der Roadmap Phase 11.
-- **Fehler:** `zelyra.toml` l√∂schen oder im falschen Verzeichnis ausf√ºhren.
-  *Ursache:* `zelyra run` sucht im aktuellen Verzeichnis nach der Konfiguration.
-
-### 6. Merks√§tze
-1. `zelyra.toml` steuert Metadaten und Sicherheitsrichtlinien des Projekts.
-2. Trenne Datenmodell (`table`), Gesch√§ftslogik (`fn`) und Darstellung sauber voneinander.
-3. Ordnung im Projektverzeichnis sch√ºtzt vor Fl√ºchtigkeitsfehlern im Team.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle mit `zelyra new aufgaben_app` eine neue Projektstruktur und untersuche die erzeugten Dateien.
-- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und die Versionsnummer `0.2.0`.
-- **Stufe 3 (Anspruchsvoll):** Schreibe ein Programm mit drei separaten Funktionen f√ºr Initialisierung, Verarbeitung und Ausgabe.
-
-### 8. Praxisaufgabe: Projektstruktur f√ºr die Aufgabenverwaltung
-Lege die Struktur fest mit folgendem Inhalt in `main.zyl`:
-```zelyra
-table aufgaben {
-    id: Id primary auto
-    name: String required
-    erledigt: Bool
-}
-
-fn starte_system() {
-    print("========================================")
-    print("   AUFGABEN-MANAGER ERFOLGREICH GESTARTET")
-    print("========================================")
-}
-
-fn main() {
-    starte_system()
-}
-```
-
-### 9. Zusammenfassung
-- Projekte werden √ºber `zelyra.toml` gesteuert und konfiguriert.
-- Zelyra pr√ºft Projektdateien als ganzheitliche Einheit.
-- Eine modulare Denkweise erleichtert Erweiterungen und Teamarbeit.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Datei enth√§lt die Metadaten eines Zelyra-Projekts?
-2. Warum ist die Trennung von Datenmodell und Ausf√ºhrungslogik sinnvoll?
-3. Wie pr√ºft die Zelyra-CLI das gesamte Projekt auf einmal?
-
-# TEIL IV ‚Äì SICHERHEIT UND FEHLERBEHANDLUNG
-
----
-
-## Kapitel 16: Fehlerarten und ihre Ursachen
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Welche vier Hauptarten von Fehlern es beim Programmieren gibt.
-- Wie sich Syntaxfehler, Typfehler, Logikfehler und Laufzeitfehler unterscheiden.
-- Wie Zelyras Compiler dich durch pr√§zise Fehlermeldungen mit Code-Ort und Hinweisen leitet.
-- Warum fr√ºhe Fehlererkennung beim Kompilieren bares Geld spart.
-
-### 2. Warum ist das Thema wichtig?
-Fehler sind beim Programmieren v√∂llig normal. Selbst erfahrene Programmierer machen dutzende Fehler pro Tag. Der Unterschied zwischen frustrierenden und erfolgreichen Entwicklern liegt nicht darin, keine Fehler zu machen, sondern darin, Fehlermeldungen lesen und verstehen zu k√∂nnen. Zelyra wurde so entworfen, dass m√∂glichst viele Fehler bereits beim Kompilieren (`zelyra check`) abgefangen werden, bevor die Anwendung den ersten Nutzer erreicht.
-
-### 3. Verst√§ndliche Erkl√§rung
-Wir unterscheiden vier Kategorien:
-1. **Syntaxfehler (`E-LEX-*`, `E-PARSE-*`):** Du hast die Grammatik der Sprache verletzt ‚Äì wie ein Rechtschreibfehler in einem Diktat (z. B. eine geschlossene Klammer vergessen).
-2. **Typfehler (`E-TYPE-*`):** Die Grammatik stimmt, aber die Bedeutung passt nicht zusammen (z. B. Text zu einer Zahl addieren).
-3. **Vertrags- und Berechtigungsfehler (`E-CONTRACT-*`, `E-CAP-*`):** Eine vereinbarte Vorbedingung wurde verletzt oder eine Funktion versucht, ohne Erlaubnis auf das Dateisystem zuzugreifen.
-4. **Logikfehler:** Das Programm l√§uft fehlerfrei durch, tut aber nicht das, was du beabsichtigt hast (z. B. Rabatt addiert statt abgezogen).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Typischer Syntaxfehler (und wie man ihn liest)**
-Wenn du in Zelyra eine Klammer vergisst:
-```zelyra
-// Syntaktisch korrekt:
-fn korrekte_klammern() {
-    print("Alle Klammern sind geschlossen.")
-}
-
-fn main() {
-    korrekte_klammern()
-}
-```
-
-**Beispiel 2: Berechtigungsfehler (Capability-Pr√ºfung)**
-Versucht eine Funktion ohne deklarierte Rechte auf Systemressourcen zuzugreifen, stoppt Zelyra sofort:
-```zelyra
-fn lese_datei(pfad: String) -> String
-    uses FileSystem
-{
-    return read_text(pfad)
-}
-
-fn main() {
-    print("Dateizugriff sauber deklariert.")
-}
-```
-
-**Beispiel 3: Logikfehler durch Vertr√§ge entlarven**
-```zelyra
-fn berechne_rabattpreis(original: Int, rabatt: Int) -> Int
-    requires { original >= 0 && rabatt >= 0 && rabatt <= original }
-    ensures { result <= original }
-{
-    return original - rabatt
-}
-
-fn main() {
-    preis = berechne_rabattpreis(100, 20)
-    print(preis)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Fehlermeldungen wegklicken, ohne die Zeilennummer zu beachten.
-  *Ursache:* Zelyra gibt immer die exakte Zeile und Spalte des Fehlers an.
-- **Fehler:** Ein `+` zwischen Text und Zahl verwenden.
-  *Ursache:* Zelyra erzwingt Typsicherheit. Formatiere Werte als String oder gib sie separat aus.
-
-### 6. Merks√§tze
-1. Ein Compilerfehler ist kein Scheitern, sondern ein wertvoller Hinweis.
-2. Je fr√ºher ein Fehler gefunden wird (Compile-Zeit statt Laufzeit), desto sicherer ist die Software.
-3. Vertr√§ge (`requires`, `ensures`) verwandeln t√ºckische Logikfehler in sofort sichtbare Vertragsbr√ºche.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Provoziere absichtlich einen Syntaxfehler (z. B. Semikolon oder Klammer weglassen) und beobachte die Meldung von `zelyra check`.
-- **Stufe 2 (Mittel):** Erstelle eine Funktion mit einem Typfehler und korrigiere sie nach dem Compiler-Hinweis.
-- **Stufe 3 (Anspruchsvoll):** Schreibe eine Funktion zur Altersfreigabe mit Vertr√§gen, die ung√ºltige Alterseingaben (z. B. negative Werte) sofort abfangen.
-
-### 8. Praxisaufgabe: Fehlertolerante Aufgabendauer-Berechnung
-Schreibe eine Funktion f√ºr die Aufgabenverwaltung, die verhindert, dass negative Stunden erfasst werden:
-```zelyra
-fn erfasse_stunden(bisherige_stunden: Int, neue_stunden: Int) -> Int
-    requires { bisherige_stunden >= 0 && neue_stunden >= 0 }
-    ensures { result >= bisherige_stunden }
-{
-    return bisherige_stunden + neue_stunden
-}
-
-fn main() {
-    gesamt = erfasse_stunden(5, 3)
-    print(gesamt)
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra unterscheidet strikt zwischen Syntax-, Typ-, Berechtigungs- und Logikfehlern.
-- Durch statische Pr√ºfung und Vertr√§ge werden die meisten Fehler vor dem Einsatz aufgedeckt.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Fehlermeldung (`E-...`) erzeugt ein vergessenes Schl√ºsselwort?
-2. Warum kann ein Programm trotz fehlerfreier Kompilierung falsch rechnen?
-3. Wie helfen Vertr√§ge beim Aufsp√ºren logischer Denkfehler?
-
----
-
-## Kapitel 17: Fehler als Werte ‚Äì Das Result-Muster
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was das `Result`-Muster ist und warum Zelyra keine unkontrollierten Exceptions (Ausnahmen) nutzt.
-- Die beiden Zust√§nde: `Ok(wert)` f√ºr Erfolg und `Err(meldung)` f√ºr Fehler.
-- Wie du Ergebnisse mit `match` sicher zerlegst.
-- Warum Fehler als Werte deinen Code transparent und absturzsicher machen.
-
-### 2. Warum ist das Thema wichtig?
-In vielen √§lteren Sprachen (wie Java oder Python) wirft eine Funktion im Fehlerfall eine ‚ÄûException‚Äú. Wenn irgendwo im Code eine solche Ausnahme vergessen wird, st√ºrzt die gesamte Webanwendung mit einem Serverfehler ab. In Zelyra gibt es keine unkontrollierten Abst√ºrze: Wenn eine Operation fehlschlagen kann (z. B. Datei nicht gefunden oder ung√ºltige ID), gibt sie zwingend ein `Result<T, E>` zur√ºck. Der Compiler zwingt dich, beide F√§lle zu behandeln.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stelle dir ein Postpaket vor:
-- Wenn der Zusteller das Paket erfolgreich abgibt, √∂ffnest du es und findest den gew√ºnschten Inhalt: `Ok(inhalt)`.
-- Wenn die Adresse nicht existiert, kommt ein R√ºcksendebeleg mit Begr√ºndung: `Err("Adresse unbekannt")`.
-
-Ein Paket kann niemals ‚Äûexplodieren‚Äú ‚Äì du musst es einfach nur annehmen und nachsehen:
-```zelyra
-fn dividiere_sicher(a: Int, b: Int) -> Result<Int, String> {
-    if b == 0 {
-        return Err("Division durch 0 nicht erlaubt")
-    }
-    return Ok(a / b)
-}
-
-fn main() {
-    print("Sichere Division definiert.")
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Eine Funktion mit Result definieren**
-```zelyra
-fn pruefe_prioritaet(stufe: Int) -> Result<Int, String> {
-    if stufe < 1 {
-        return Err("Prioritaet zu niedrig (mindestens 1)")
-    }
-    if stufe > 3 {
-        return Err("Prioritaet zu hoch (maximal 3)")
-    }
-    return Ok(stufe)
-}
-
-fn main() {
-    res = pruefe_prioritaet(2)
-    match res {
-        Ok(stufe) => {
-            print("Gueltige Prioritaet:")
-            print(stufe)
-        }
-        Err(fehler) => {
-            print(fehler)
-        }
-    }
-}
-```
-
-**Beispiel 2: Fehlerfall behandeln**
-```zelyra
-fn hole_kontostand(pin: Int) -> Result<Int, String> {
-    if pin != 1234 {
-        return Err("Falsche PIN!")
-    }
-    return Ok(500)
-}
-
-fn main() {
-    versuch = hole_kontostand(9999)
-    match versuch {
-        Ok(betrag) => {
-            print(betrag)
-        }
-        Err(meldung) => {
-            print("Abgewiesen: " + meldung)
-        }
-    }
-}
-```
-
-**Beispiel 3: Sichere Werteumwandlung**
-```zelyra
-fn pruefe_titel_laenge(titel: String) -> Result<String, String> {
-    if titel == "" {
-        return Err("Aufgabentitel darf nicht leer sein.")
-    }
-    return Ok(titel)
-}
-
-fn main() {
-    ergebnis = pruefe_titel_laenge("Projektbericht")
-    match ergebnis {
-        Ok(t) => {
-            print("Gueltiger Titel: " + t)
-        }
-        Err(e) => {
-            print("Fehler: " + e)
-        }
-    }
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Versuchen, direkt auf den inneren Wert zuzugreifen, ohne `match` zu verwenden.
-  *Ursache:* Ein `Result<T, E>` ist eine H√ºlle. Du musst sie mit `match` √∂ffnen.
-- **Fehler:** Einen der beiden Zweige (`Ok` oder `Err`) im `match` vergessen.
-  *Ursache:* Zelyra verlangt vollst√§ndige Musterabdeckung.
-
-### 6. Merks√§tze
-1. `Result<T, E>` macht Fehler zu regul√§ren R√ºckgabewerten.
-2. `Ok(v)` repr√§sentiert Erfolg, `Err(e)` den begr√ºndeten Fehlschlag.
-3. Mit `match` m√ºssen immer beide Ausg√§nge behandelt werden ‚Äì das sch√ºtzt vor Abst√ºrzen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine Funktion `pruefe_gerade(zahl: Int) -> Result<Int, String>`, die `Ok(zahl)` liefert, wenn sie durch 2 teilbar ist, sonst `Err("Ungerade")`.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion `validiere_benutzername(name: String) -> Result<String, String>`, die leere Namen oder `"admin"` ablehnt.
-- **Stufe 3 (Anspruchsvoll):** Implementiere eine Rechenfunktion mit Fehlerpr√ºfung, die zwei Zahlen dividiert und das Ergebnis bei Erfolg verdoppelt zur√ºckgibt.
-
-### 8. Praxisaufgabe: Validierung beim Anlegen einer neuen Aufgabe
-Erstelle eine sichere Validierungsfunktion f√ºr neue Aufgaben:
-```zelyra
-fn erstelle_aufgabe_geprueft(name: String, prioritaet: Int) -> Result<String, String> {
-    if name == "" {
-        return Err("Name darf nicht leer sein!")
-    }
-    if prioritaet < 1 {
-        return Err("Prioritaet muss mindestens 1 sein!")
-    }
-    return Ok("Aufgabe [" + name + "] erfolgreich angelegt.")
-}
-
-fn main() {
-    treffer1 = erstelle_aufgabe_geprueft("Dokumentation fertigstellen", 1)
-    match treffer1 {
-        Ok(msg) => {
-            print(msg)
-        }
-        Err(err) => {
-            print("Fehler: " + err)
-        }
-    }
-
-    treffer2 = erstelle_aufgabe_geprueft("", 0)
-    match treffer2 {
-        Ok(msg) => {
-            print(msg)
-        }
-        Err(err) => {
-            print("Fehler: " + err)
-        }
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Das `Result`-Muster ersetzt unkontrollierte Ausnahmen durch typisierte Werte.
-- Zelyra garantiert, dass kein Fehler unbehandelt im Programm √ºbersehen wird.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wof√ºr steht `T` und wof√ºr steht `E` im Typ `Result<T, E>`?
-2. Warum f√ºhrt ein unbehandelter Fehler in Zelyra nicht zum pl√∂tzlichen Programmabsturz?
-3. Wie verarbeitet man den Inhalt eines `Result` sicher?
-
----
-
-## Kapitel 18: Das Nichts existiert nicht ‚Äì Der sichere Umgang mit Option
-
-### 1. Was lerne ich in diesem Kapitel?
-- Warum der Wert `null` in der Informatik als ‚ÄûMilliarden-Dollar-Fehler‚Äú bezeichnet wird.
-- Wie Zelyra `null` vollst√§ndig eliminiert und durch den sicheren Typ `Option<T>` (Kurzform `T?`) ersetzt.
-- Wie man Werte mit `Some(wert)` verpackt und das Nichtvorhandensein mit `None` signalisiert.
-- Wie Standard-Listenoperationen wie `first` und `last` den Typ `Option` nutzen.
-
-### 2. Warum ist das Thema wichtig?
-In Sprachen wie JavaScript, Java, PHP oder C existiert `null`. Wenn ein Programm versucht, eine Methode auf einem `null`-Wert aufzurufen, st√ºrzt es augenblicklich mit einer gef√ºrchteten `NullPointerException` oder `Cannot read properties of null` ab. Zelyra besitzt schlicht kein `null`. Jeder Wert ist garantiert vorhanden. Wenn etwas fehlen kann, muss es ausdr√ºcklich als `Option` deklariert werden.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir eine Schachtel vor:
-- Die Schachtel ist entweder mit einem Geschenk gef√ºllt: `Some("Smartphone")`.
-- Oder die Schachtel ist leer: `None`.
-
-Du kannst nicht versehentlich in ein ‚ÄûNichts‚Äú greifen, weil du die Schachtel erst mit `match` √∂ffnen musst:
-```zelyra
-fn finde_aufgabe_nach_id(id: Int) -> Option<String> {
-    if id == 42 {
-        return Some("Server aufsetzen")
-    }
-    return None
-}
-
-fn main() {
-    print("Aufgabensuche definiert.")
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Option erzeugen und auswerten**
-```zelyra
-fn main() {
-    treffer: Option<String> = Some("Zelyra 0.1 Handbuch")
-    match treffer {
-        Some(titel) => {
-            print("Gefunden: " + titel)
-        }
-        None => {
-            print("Kein Treffer vorhanden")
-        }
-    }
-}
-```
-
-**Beispiel 2: first() und last() auf Listen**
-Greifst du auf eine leere Liste zu, st√ºrzt Zelyra nicht ab ‚Äì es liefert `None`:
-```zelyra
-fn main() {
-    meine_liste: Int[] = [100, 200, 300]
-    erstes_element = first(meine_liste)
-    match erstes_element {
-        Some(wert) => {
-            print("Erster Wert:")
-            print(wert)
-        }
-        None => {
-            print("Die Liste ist leer!")
-        }
-    }
-}
-```
-
-**Beispiel 3: Standardwert bereitstellen mit Option**
-```zelyra
-fn aufgabe_titel_oder_standard(opt_titel: Option<String>) -> String {
-    match opt_titel {
-        Some(t) => {
-            return t
-        }
-        None => {
-            return "Ohne Titel"
-        }
-    }
-}
-
-fn main() {
-    print(aufgabe_titel_oder_standard(Some("Wichtiges Meeting")))
-    print(aufgabe_titel_oder_standard(None))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Denken, ein `Option<String>` sei direkt ein `String`.
-  *Ursache:* Eine Schachtel ist nicht das Geschenk. Erst mit `match` entpackst du den Inhalt.
-- **Fehler:** Versuchen, `None` einer normalen `String`-Variable zuzuweisen.
-  *Ursache:* Regul√§re Variablen sind garantiert niemals leer.
-
-### 6. Merks√§tze
-1. In Zelyra gibt es kein `null` und keinen `NullPointerException`-Absturz.
-2. Wenn ein Wert fehlen kann, hei√üt der Typ `Option<T>` oder `T?`.
-3. `Some(x)` verpackt den Wert, `None` signalisiert das Fehlen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine Funktion `finde_partner(name: String) -> Option<String>`, die bei `"Romeo"` `Some("Julia")` liefert, sonst `None`.
-- **Stufe 2 (Mittel):** Untersuche das letzte Element eines Zahlen-Arrays mit `last()` und gib seinen Wert oder eine Warnung aus.
-- **Stufe 3 (Anspruchsvoll):** Schreibe eine Suchfunktion, die eine Liste von Aufgaben-IDs durchsucht und die Position (Index) als `Option<Int>` zur√ºckgibt.
-
-### 8. Praxisaufgabe: Aufgabendetails sicher abfragen
-Implementiere die Nachschlagefunktion f√ºr unsere Aufgabenverwaltung:
-```zelyra
-fn suche_aufgabe_beschreibung(id: Int) -> Option<String> {
-    if id == 1 {
-        return Some("Datenbankschema fuer Zelyra anlegen")
-    }
-    if id == 2 {
-        return Some("Weboberflaeche gestalten")
-    }
-    return None
-}
-
-fn main() {
-    suche1 = suche_aufgabe_beschreibung(1)
-    match suche1 {
-        Some(text) => {
-            print("Aufgabe 1: " + text)
-        }
-        None => {
-            print("Aufgabe 1 nicht gefunden!")
-        }
-    }
-
-    suche99 = suche_aufgabe_beschreibung(99)
-    match suche99 {
-        Some(text) => {
-            print("Aufgabe 99: " + text)
-        }
-        None => {
-            print("Aufgabe 99 nicht gefunden!")
-        }
-    }
-}
-```
-
-### 9. Zusammenfassung
-- `Option<T>` sch√ºtzt deine Anwendung vor den verheerenden Folgen unvorhergesehener Leerwerte.
-- Zelyra garantiert zur Compile-Zeit, dass jeder m√∂gliche `None`-Fall behandelt wird.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Warum gibt es in Zelyra kein `null`?
-2. Was ist der Unterschied zwischen `String` und `Option<String>`?
-3. Welche zwei Muster werden in einem `match` √ºber eine `Option` immer abgefragt?
-
----
-
-## Kapitel 19: Tests und Qualit√§tssicherung
-
-### 1. Was lerne ich in diesem Kapitel?
-- Warum automatisierte Pr√ºfungen das R√ºckgrat moderner, langlebiger Software sind.
-- Wie Zelyras Verifikations-Befehl `zelyra verify` Vertr√§ge formal analysiert.
-- Wie man eigene Test- und Pr√ºffunktionen strukturiert.
-- Was die Philosophie von *Test-Driven Development* (TDD) bedeutet.
-- Der Ausblick auf das zuk√ºnftige integrierte Testmodul.
-
-### 2. Warum ist das Thema wichtig?
-Manuelle Tests (Klicken im Browser oder wiederholtes manuelles Aufrufen) sind m√ºhsam, fehleranf√§llig und unvollst√§ndig. Sobald eine Software komplexer wird, f√ºhrt jede kleine √Ñnderung an einer Stelle unweigerlich zu neuen Fehlern an einer anderen Stelle (‚ÄûRegressionen‚Äú). Automatisierte Tests stellen sicher, dass alle bereits gebauten Funktionen auch nach Wochen und Monaten noch exakt wie vereinbart arbeiten.
-
-### 3. Verst√§ndliche Erkl√§rung
-Testen in Zelyra st√ºtzt sich auf zwei kraftvolle S√§ulen:
-1. **Formale Vertragsverifikation mit `zelyra verify`:**
-   Der Compiler pr√ºft, ob die Vor- und Nachbedingungen (`requires`, `ensures`) deiner Funktionen mathematisch und logisch haltbar sind.
-2. **Pr√ºffunktionen mit Erwartungsabgleich:**
-   Du schreibst kleine Pr√ºffunktionen, die bestimmte Eingaben in deine Funktionen schicken und das tats√§chliche Ergebnis mit dem erwarteten Ergebnis vergleichen.
-
-*Hinweis zur Roadmap:* Das integrierte CLI-Testframework `zelyra test` befindet sich laut Roadmap in Phase 11/12. In Zelyra 0.1 erfolgt die Qualit√§tssicherung √ºber `zelyra check`, `zelyra verify` sowie gezielte Test-Hauptroutinen.
-`// [Platzhalter: Zelyra Test Framework - in 0.1 ueber verify und Test-Runner realisiert; siehe Roadmap Phase 11]`
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Eine einfache Assert-Pr√ºffunktion**
-```zelyra
-fn pruefe(test_name: String, bedingung: Bool) {
-    if bedingung {
-        print("[PASS] " + test_name)
-    } else {
-        print("[FAIL] " + test_name)
-    }
-}
-
-fn verdopple(x: Int) -> Int {
-    return x * 2
-}
-
-fn main() {
-    pruefe("Verdopple 5 ergibt 10", verdopple(5) == 10)
-    pruefe("Verdopple 0 ergibt 0", verdopple(0) == 0)
-}
-```
-
-**Beispiel 2: Testen von Option-R√ºckgaben**
-```zelyra
-fn ist_volljaehrig(alter: Int) -> Option<Bool> {
-    if alter < 0 {
-        return None
-    }
-    return Some(alter >= 18)
-}
-
-fn main() {
-    test1 = ist_volljaehrig(20)
-    match test1 {
-        Some(ok) => {
-            if ok {
-                print("[PASS] 20 Jahre ist volljaehrig")
-            } else {
-                print("[FAIL] Unerwarteter Zustand")
-            }
-        }
-        None => {
-            print("[FAIL] Alter ungueltig")
-        }
-    }
-}
-```
-
-**Beispiel 3: Verifikation mit Vertr√§gen absichern**
-```zelyra
-fn berechne_ueberstunden(stunden: Int, regelarbeitszeit: Int) -> Int
-    requires { stunden >= 0 && regelarbeitszeit >= 0 }
-    ensures { result >= 0 }
-{
-    if stunden > regelarbeitszeit {
-        return stunden - regelarbeitszeit
-    }
-    return 0
-}
-
-fn main() {
-    print(berechne_ueberstunden(45, 40))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Nur den ‚ÄûGut-Fall‚Äú testen und Randf√§lle (Grenzwerte, 0, leere Listen) ignorieren.
-  *Ursache:* Die meisten Fehler treten an den Grenzen des Definitionsbereichs auf.
-- **Fehler:** Tests nach einer Code-√Ñnderung nicht erneut ausf√ºhren.
-  *Ursache:* Gew√∂hne dir an, `zelyra check` und deinen Test-Runner nach jeder Anpassung zu starten.
-
-### 6. Merks√§tze
-1. Ungesteter Code ist kaputter Code, von dem du es nur noch nicht wei√üt.
-2. `zelyra verify` pr√ºft Funktionsvertr√§ge direkt auf Sprachebene.
-3. Schreibe Tests, die Randbedingungen und Fehlerpfade gezielt herausfordern.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe drei Testf√§lle f√ºr eine Funktion `addiere(a: Int, b: Int) -> Int`.
-- **Stufe 2 (Mittel):** Schreibe Testf√§lle f√ºr die Option-Suchfunktion aus Kapitel 18.
-- **Stufe 3 (Anspruchsvoll):** Implementiere eine vollst√§ndige Test-Suite f√ºr eine Funktion, die pr√ºft, ob ein Aufgabentitel den Qualit√§tsregeln entspricht (nicht leer, keine Sonderzeichen).
-
-### 8. Praxisaufgabe: Test-Runner f√ºr die Aufgaben-Gesch√§ftslogik
-Baue eine kleine Test-Suite f√ºr die Kernlogik der Aufgabenverwaltung:
-```zelyra
-fn test_fall(beschreibung: String, ok: Bool) {
-    if ok {
-        print("OK: " + beschreibung)
-    } else {
-        print("FEHLER: " + beschreibung)
-    }
-}
-
-fn filter_prioritaet(p: Int) -> Bool {
-    return p == 1
-}
-
-fn main() {
-    print("Starte Test-Suite: Aufgabenlogik")
-    test_fall("Prioritaet 1 wird gefiltert", filter_prioritaet(1) == true)
-    test_fall("Prioritaet 2 wird ignoriert", filter_prioritaet(2) == false)
-    print("Test-Suite abgeschlossen.")
-}
-```
-
-### 9. Zusammenfassung
-- Automatisierte Pr√ºfungen sichern langfristige Softwarequalit√§t.
-- `zelyra verify` und assertionsbasierte Pr√ºffunktionen sichern Gesch√§ftsregeln zuverl√§ssig ab.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Was versteht man unter einer ‚ÄûRegression‚Äú in der Softwareentwicklung?
-2. Welche Aufgabe √ºbernimmt der CLI-Befehl `zelyra verify`?
-3. Warum sind Grenzwerte (z. B. 0 oder maximale Kapazit√§t) besonders testrelevant?
-
-# TEIL V ‚Äì PRAKTISCHE DATENVERARBEITUNG
-
----
-
-## Kapitel 20: Arbeiten mit Dateien
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Wie du mit Zelyra Textdateien erstellst, liest, auflistest und l√∂schst.
-- Warum Dateizugriffe in Zelyra zwingend die F√§higkeit (*Capability*) `uses FileSystem` verlangen.
-- Die wichtigsten Bibliotheksfunktionen: `read_text`, `write_text`, `delete_file`, `list_dir`.
-- Wie du Aufgabenlisten persistent als Datei auf der Festplatte speicherst.
-
-### 2. Warum ist das Thema wichtig?
-Variablen im Arbeitsspeicher gehen verloren, sobald ein Programm beendet wird oder der Rechner neu startet. Um Daten dauerhaft zu sichern ‚Äì z. B. Exporte, Konfigurationsdateien oder Protokolle ‚Äì, m√ºssen sie auf die Festplatte geschrieben werden. Gleichzeitig stellen Dateizugriffe ein Sicherheitsrisiko dar. Zelyra sch√ºtzt das System, indem Funktionen ihre Zugriffsrechte explizit deklarieren m√ºssen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir das Dateisystem wie ein Archiv vor:
-- Wenn du eine Akte ablegen willst, schreibst du Text hinein (`write_text`).
-- Wenn du nachsehen willst, liest du die Akte (`read_text`).
-- Du darfst das Archiv aber nur betreten, wenn du den Archivschl√ºssel besitzt: `uses FileSystem`.
-
-```zelyra
-fn speichere_notiz(pfad: String, inhalt: String)
-    uses FileSystem
-{
-    write_text(pfad, inhalt)
-}
-
-fn main() uses FileSystem {
-    speichere_notiz("notiz.txt", "Einkaufsliste: Milch, Brot")
-    print("Notiz gespeichert.")
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Text schreiben und lesen**
-```zelyra
-fn datei_workflow() uses FileSystem {
-    pfad = "aufgaben_export.txt"
-    write_text(pfad, "Aufgabe 1: Zelyra lernen")
-    text = read_text(pfad)
-    print("Gelesener Inhalt: " + text)
-}
-
-fn main() uses FileSystem {
-    datei_workflow()
-}
-```
-
-**Beispiel 2: Datei aufr√§umen mit delete_file**
-```zelyra
-fn aufraeumen(pfad: String) uses FileSystem {
-    delete_file(pfad)
-    print("Datei geloescht.")
-}
-
-fn main() uses FileSystem {
-    write_text("temp.txt", "Kurzlebig")
-    aufraeumen("temp.txt")
-}
-```
-
-**Beispiel 3: Verzeichnisinhalte auflisten**
-```zelyra
-fn zeige_dateien(ordner: String) uses FileSystem {
-    dateien = list_dir(ordner)
-    for datei in dateien {
-        print("Gefundene Datei: " + datei)
-    }
-}
-
-fn main() uses FileSystem {
-    zeige_dateien(".")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Aufruf von `read_text` oder `write_text` ohne Deklaration von `uses FileSystem`.
-  *Ursache:* Zelyras Sicherheitssystem (`E-CAP-001`) verhindert jeden unberechtigten Zugriff auf die Festplatte.
-- **Fehler:** Vergessen, dass auch `main()` die Berechtigung deklarieren muss, wenn sie aufrufende Funktionen ausf√ºhrt.
-  *Ursache:* Berechtigungen vererben sich entlang der Aufruf-Kette nach oben.
-
-### 6. Merks√§tze
-1. Jede Funktion, die Dateien ber√ºhrt, muss `uses FileSystem` deklarieren.
-2. `write_text` legt Dateien an oder √ºberschreibt sie vollst√§ndig.
-3. `read_text` liefert den gesamten Dateiinhalt als `String`.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe ein Programm, das eine Begr√º√üungsnachricht in `hallo.txt` schreibt.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion, die pr√ºft, ob eine exportierte Datei existiert und deren Inhalt ausgibt.
-- **Stufe 3 (Anspruchsvoll):** Implementiere eine einfache Log-Funktion, die Statusmeldungen zeilenweise aneinanderh√§ngt und sichert.
-
-### 8. Praxisaufgabe: Aufgabenliste in eine Textdatei exportieren
-Speichere die offenen Aufgaben unserer Anwendung als Datei:
-```zelyra
-fn exportiere_aufgaben(pfad: String) uses FileSystem {
-    inhalt = "[ ] Dokumentation fertigstellen\n[OK] Zelyra-Compiler installieren\n[ ] Backup konfigurieren"
-    write_text(pfad, inhalt)
-    print("Aufgaben erfolgreich nach " + pfad + " exportiert.")
-}
-
-fn main() uses FileSystem {
-    exportiere_aufgaben("aufgaben_heute.txt")
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra bietet schlanke, sichere Funktionen f√ºr Datei-Ein-/Ausgabe.
-- Das Capability-System verhindert verdeckte Spionage oder Datenmanipulation.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche F√§higkeit muss eine Funktion anfordern, um `write_text` aufzurufen?
-2. Warum verlangt Zelyra `uses FileSystem` auch f√ºr `main()`?
-3. Welche Funktion liefert eine Liste aller Dateinamen in einem Ordner?
-
----
-
-## Kapitel 21: Datum, Uhrzeit, Zufall und strukturierte Daten
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du mit `now()` den aktuellen Zeitstempel abfragst (`uses Clock`).
-- Wie Zufallswerte mit `random_int(min, max)` erzeugt werden (`uses Random`).
-- Wie Datenstrukturen mit `json_encode` in universelles JSON umgewandelt werden.
-- Wie JSON-Text mit `json_decode<T>` wieder typisiert zur√ºckgewandelt wird.
-
-### 2. Warum ist das Thema wichtig?
-Praktisch jede reale Software ben√∂tigt Zeitangaben: Wann wurde eine Aufgabe erstellt? Wann ist die Frist abgelaufen? Auch strukturierte Datenformate wie JSON sind im Internet Standard ‚Äì von REST-APIs bis hin zu Speicherst√§nden. Zelyra integriert Zeit, Zufall und JSON nahtlos und typgepr√ºft.
-
-### 3. Verst√§ndliche Erkl√§rung
-- **Zeitstempel:** `now()` liefert die exakte aktuelle Systemzeit als `Timestamp`. Daf√ºr ben√∂tigt deine Funktion die Erlaubnis `uses Clock`.
-- **Zufallszahlen:** `random_int(1, 10)` liefert eine unvorhersehbare Zahl zwischen 1 und 10 (`uses Random`).
-- **JSON:** JSON ist ein einfaches Textformat, das Menschen und Computer gleicherma√üen lesen k√∂nnen. Mit `json_encode` machst du aus einem Zelyra-Array einen Textstring, den du √ºbers Netzwerk verschicken kannst.
-
-```zelyra
-fn zeige_zeit() uses Clock {
-    jetzt = now()
-    print("Aktuelle Systemzeit erfasst")
-}
-
-fn main() uses Clock {
-    zeige_zeit()
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Fristen und Zeitmessung mit Clock**
-```zelyra
-fn protokolliere_erstellung(aufgabe: String) uses Clock {
-    erstellt_um = now()
-    print("Aufgabe angelegt: " + aufgabe)
-}
-
-fn main() uses Clock {
-    protokolliere_erstellung("Server patchen")
-}
-```
-
-**Beispiel 2: Zuf√§llige Ticket-Nummern erzeugen**
-```zelyra
-fn generiere_ticket_nummer() -> Int uses Random {
-    return random_int(1000, 9999)
-}
-
-fn main() uses Random {
-    ticket = generiere_ticket_nummer()
-    print("Dein Ticket-Code:")
-    print(ticket)
-}
-```
-
-**Beispiel 3: Daten als JSON exportieren**
-```zelyra
-fn exportiere_ids_als_json(ids: Int[]) -> String {
-    return json_encode(ids)
-}
-
-fn main() {
-    ids: Int[] = [101, 102, 103]
-    json_text = exportiere_ids_als_json(ids)
-    print("JSON-Ausgabe: " + json_text)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** `now()` aufrufen, ohne `uses Clock` im Funktionskopf zu deklarieren.
-  *Ursache:* Zeitabfragen sind nicht-deterministisch und erfordern in Zelyra eine Berechtigung.
-- **Fehler:** Ung√ºltigen JSON-Text in `json_decode` √ºbergeben.
-  *Ursache:* Zelyra pr√ºft JSON strikt; fehlerhaftes JSON f√ºhrt zu einem `Result`-Fehler oder Laufzeitfehler.
-
-### 6. Merks√§tze
-1. `now()` liefert die aktuelle Zeit und erfordert `uses Clock`.
-2. `random_int` erzeugt Zufallszahlen und verlangt `uses Random`.
-3. `json_encode` wandelt Zelyra-Datenstrukturen in standardisierten JSON-Text um.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erzeuge eine Zufallszahl zwischen 1 und 6 (W√ºrfel) und gib sie aus.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion, die ein Array von Status-Codes in JSON umwandelt.
-- **Stufe 3 (Anspruchsvoll):** Kombiniere `uses Clock` und `uses FileSystem`, um einen Zeitstempel in eine Datei `log.txt` zu schreiben.
-
-### 8. Praxisaufgabe: Aufgaben-Snapshot als JSON sichern
-Erstelle einen JSON-Snapshot der Aufgaben-IDs und sichere ihn als Datei:
-```zelyra
-fn sichere_snapshot(dateiname: String, ids: Int[])
-    uses Clock, FileSystem
-{
-    json_daten = json_encode(ids)
-    write_text(dateiname, json_daten)
-    print("Snapshot erfolgreich gesichert.")
-}
-
-fn main() uses Clock, FileSystem {
-    aktuelle_ids: Int[] = [1, 2, 5, 8]
-    sichere_snapshot("aufgaben_snapshot.json", aktuelle_ids)
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra bietet integrierte, typsichere Unterst√ºtzung f√ºr Zeitstempel, Zufall und JSON.
-- Berechtigungen (`Clock`, `Random`) sorgen f√ºr vollst√§ndige Nachvollziehbarkeit.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Capability ben√∂tigt eine Funktion, die `now()` aufruft?
-2. Warum verlangt Zelyra f√ºr Zufallszahlen die Berechtigung `uses Random`?
-3. In welches Format wandelt `json_encode` Zelyra-Objekte um?
-
----
-
-## Kapitel 22: Nebenl√§ufigkeit und Hintergrundaufgaben
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was Nebenl√§ufigkeit bedeutet und wann Aufgaben parallel ausgef√ºhrt werden sollten.
-- Wie Zelyras `parallel`-Block funktioniert: `parallel { a = await ...; b = await ... }`.
-- Warum Zelyra unkontrollierte Threads oder ‚ÄûCallback-H√∂lle‚Äú vermeidet.
-- Wie deterministische Nebenl√§ufigkeit deine Anwendung schnell und sicher h√§lt.
-
-### 2. Warum ist das Thema wichtig?
-Moderne Computer und Server besitzen viele Rechenkerne. Wenn ein Programm drei unabh√§ngige Berichte erstellen oder zwei APIs im Netzwerk abfragen muss, w√§re es reine Zeitverschwendung, brav nacheinander zu warten. F√ºhrt man die Abfragen gleichzeitig aus, ist das Programm doppelt oder dreifach so schnell. In vielen Sprachen f√ºhrt Nebenl√§ufigkeit jedoch zu gef√ºrchteten Fehlern (‚ÄûRace Conditions‚Äú). Zelyra verhindert diese Risiken durch einen strukturierten, sicheren Ansatz.
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir ein Restaurant vor:
-- Wenn der Koch erst das Steak br√§t, danach die Pommes frittiert und danach den Salat w√§scht, wird das Essen kalt.
-- Ein guter K√ºchenchef startet alle drei Schritte parallel und wartet, bis alle drei Sch√ºsseln bereitstehen.
-
-In Zelyra nutzt du daf√ºr den `parallel`-Block mit `await`:
-```zelyra
-fn berechne_teil_1() -> Int {
-    return 40
-}
-
-fn berechne_teil_2() -> Int {
-    return 60
-}
-
-fn main() {
-    parallel {
-        ergebnis_1 = await berechne_teil_1()
-        ergebnis_2 = await berechne_teil_2()
-    }
-    print("Beide Teilaufgaben parallel abgeschlossen.")
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Parallele Teilberechnungen**
-```zelyra
-fn berechne_statistiken() -> String {
-    return "Statistiken berechnet"
-}
-
-fn lade_archiv() -> String {
-    return "Archiv geladen"
-}
-
-fn main() {
-    parallel {
-        stats = await berechne_statistiken()
-        archiv = await lade_archiv()
-    }
-    print("Paralleles Laden erfolgreich.")
-}
-```
-
-**Beispiel 2: Unabh√§ngige Datenbeschaffung**
-```zelyra
-fn summe_a() -> Int {
-    return 100
-}
-
-fn summe_b() -> Int {
-    return 250
-}
-
-fn main() {
-    parallel {
-        wert_a = await summe_a()
-        wert_b = await summe_b()
-    }
-    print("Summen ermittelt.")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Versuchen, `await` au√üerhalb eines `parallel`-Blocks zu nutzen.
-  *Ursache:* Zelyra erlaubt `await` ausschlie√ülich innerhalb von `parallel { ... }`.
-- **Fehler:** Beliebige Anweisungen im `parallel`-Block platzieren.
-  *Ursache:* Ein `parallel`-Block darf ausschlie√ülich Zuweisungen der Form `name = await ausdruck` enthalten.
-
-### 6. Merks√§tze
-1. `parallel { ... }` f√ºhrt unabh√§ngige Operationen gleichzeitig aus.
-2. Jede Zeile im `parallel`-Block folgt dem Muster `variable = await aufruf()`.
-3. Strukturierte Nebenl√§ufigkeit verhindert Deadlocks und unkontrollierte Hintergrundprozesse.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Definiere zwei einfache Berechnungsfunktionen und f√ºhre sie parallel aus.
-- **Stufe 2 (Mittel):** Erstelle zwei Funktionen, die jeweils eine Zeichenkette erzeugen, und f√ºhre beide im `parallel`-Block aus.
-- **Stufe 3 (Anspruchsvoll):** Simuliere das parallele Pr√ºfen von zwei Bedingungen vor dem Start eines Projekts.
-
-### 8. Praxisaufgabe: Paralleles Laden von Aufgaben und Benutzerdaten
-Beschleunige den Systemstart unserer Aufgabenverwaltung:
-```zelyra
-fn lade_benutzerprofil() -> String {
-    return "Profil: Entwickler"
-}
-
-fn lade_aufgabenliste() -> String {
-    return "5 Aufgaben geladen"
-}
-
-fn main() {
-    print("Starte parallelen Abruf...")
-    parallel {
-        profil = await lade_benutzerprofil()
-        aufgaben = await lade_aufgabenliste()
-    }
-    print("Dashboard bereit.")
-}
-```
-
-### 9. Zusammenfassung
-- Nebenl√§ufigkeit in Zelyra ist strukturiert, deterministisch und sicher vor Race Conditions.
-- Der `parallel`-Block b√ºndelt asynchrone Berechnungen sauber an einer Stelle.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wo darf das Schl√ºsselwort `await` in Zelyra verwendet werden?
-2. Welchem Format m√ºssen die Anweisungen innerhalb eines `parallel`-Blocks folgen?
-3. Welcher Vorteil ergibt sich aus parallelen Abrufen gegen√ºber sequenzieller Abarbeitung?
-
-# TEIL VI ‚Äì DATENBANKEN MIT ZELYRA
-
----
-
-## Kapitel 23: Warum Zelyra die Datenbank direkt versteht
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Warum die Verbindung zwischen Programmiersprache und relationaler Datenbank traditionell oft fehleranf√§llig ist.
-- Was das Problem der ‚ÄûORM-Kluft‚Äú (*Object-Relational Impedance Mismatch*) ist.
-- Wie Zelyra Datenbanken als B√ºrger erster Klasse (*First-Class Citizen*) in die Sprache integriert.
-- Wie Zelyra SQL-Befehle bereits zur Compile-Zeit auf syntaktische und typbezogene Korrektheit pr√ºft.
-
-### 2. Warum ist das Thema wichtig?
-In fast allen g√§ngigen Web-Frameworks (PHP/Laravel, Python/Django, Node/TypeORM) existiert eine unsaubere Trennung: Entwickler schreiben SQL-Strings oder nutzen komplexe Abstraktionsschichten (ORMs). Tippfehler in Spaltennamen wie `user.emaiil` werden oft erst bemerkt, wenn ein Nutzer im laufenden Betrieb einen Fehler 500 erh√§lt. Zelyra beendet dieses Risiko: Wenn eine SQL-Abfrage nicht zum definierten Tabellenschema passt, verweigert der Compiler den Build sofort.
-
-### 3. Verst√§ndliche Erkl√§rung
-In Zelyra definierst du deine Datenbank-Konfiguration direkt im Quelltext mit dem Schl√ºsselwort `database`:
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "aufgaben_db"
-}
-
-fn main() {
-    print("Datenbank-Konfiguration initialisiert.")
-}
-```
-
-Wenn du Daten aus der Datenbank abfragst, schreibst du echtes SQL ‚Äì aber der Compiler wei√ü genau, welche Spalten existieren:
-- Schreibt man `SELECT id, beschreibung FROM tasks`, ist das g√ºltig.
-- Schreibt man `SELECT gibts_nicht FROM tasks`, meldet Zelyra schon beim Pr√ºfen: `unknown column gibts_nicht`.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Datenbank und Tabelle deklarieren**
-```zelyra
-database main {
-    engine: mariadb
-    database: "test_db"
-}
-
-table tasks {
-    id: Id primary auto
-    beschreibung: String(255) required
-}
-
-fn main() {
-    print("Datenbank und Tabelle geprueft.")
-}
-```
-
-**Beispiel 2: SQL-Pr√ºfung zur Compile-Zeit**
-```zelyra
-database main {
-    engine: mariadb
-    database: "test_db"
-}
-
-table tasks {
-    id: Id primary auto
-    beschreibung: String(255) required
-}
-
-fn zeige_aufgaben() uses Database {
-    daten = sql<Task[]> {
-        SELECT id, beschreibung
-        FROM tasks
-    }
-    print("SQL typgeprueft.")
-}
-
-fn main() uses Database {
-    zeige_aufgaben()
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** SQL-Abfragen ohne Deklaration von `uses Database` in der Funktion ausf√ºhren.
-  *Ursache:* Zelyras Capability-System sch√ºtzt vor unerlaubten Datenbankzugriffen.
-- **Fehler:** Den Datenbankblock `database main` vergessen.
-  *Ursache:* Ohne Ziel-Engine kann Zelyra das SQL-Schema nicht verifizieren.
-
-### 6. Merks√§tze
-1. Zelyra schlie√üt die Kluft zwischen Code und Datenbank.
-2. SQL-Abfragen werden zur Compile-Zeit typgepr√ºft.
-3. Datenbankzugriffe erfordern zwingend `uses Database`.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle einen `database`-Block f√ºr SQLite oder MariaDB.
-- **Stufe 2 (Mittel):** Modelliere eine Tabelle `benutzer` und schreibe eine SQL-Abfrage, die alle Benutzer selektiert.
-- **Stufe 3 (Anspruchsvoll):** Provoziere absichtlich einen Tippfehler in einem SQL-Spaltennamen und beobachte, wie Zelyra den Fehler exakt meldet.
-
-### 8. Praxisaufgabe: Die Datenbank der Aufgabenverwaltung anbinden
-Erstelle das Fundament unserer Aufgabenverwaltung:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    erledigt: Bool
-}
-
-fn status_bericht() uses Database {
-    liste = sql<Task[]> {
-        SELECT id, name, erledigt
-        FROM tasks
-    }
-    print("Datenbank fuer Aufgabenverwaltung einsatzbereit.")
-}
-
-fn main() uses Database {
-    status_bericht()
-}
-```
-
-### 9. Zusammenfassung
-- Datenbanken und Schemas sind in Zelyra integraler Bestandteil der Sprache.
-- Tippfehler in SQL werden bereits zur Entwicklungszeit verhindert.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welches Problem l√∂sen Zelyras typgepr√ºfte SQL-Bl√∂cke gegen√ºber gew√∂hnlichen SQL-Strings?
-2. Welche F√§higkeit muss eine Funktion deklarieren, die `sql` ausf√ºhrt?
-3. Wie leitet Zelyra den Typ `Aufgabe` aus der Tabelle `aufgaben` ab?
-
----
-
-## Kapitel 24: Tabellen definieren und Daten modellieren
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie relationale Tabellen mit `table` deklariert werden.
-- Die Syntax f√ºr Prim√§rschl√ºssel: `id: Id primary auto`.
-- Wie Spalteneigenschaften definiert werden: `required`, L√§ngenbegrenzung `String(100)`, Standardwerte.
-- Wie Beziehungen zwischen Tabellen modelliert werden.
-
-### 2. Warum ist das Thema wichtig?
-Das Datenmodell ist das Fundament jeder Anwendung. Wenn das Schema unsauber entworfen ist, schleppt man Datenm√ºll und Performanceprobleme √ºber Jahre mit sich herum. Zelyra erzwingt von Anfang an klare Pflichtfelder, Typen und Integrit√§t.
-
-### 3. Verst√§ndliche Erkl√§rung
-Eine Tabelle (`table`) ist wie ein Aktenordner f√ºr gleichartige Datenbl√§tter:
-- Jedes Datenblatt hat eine eindeutige laufende Nummer: `id: Id primary auto`.
-- Bestimmte Angaben d√ºrfen niemals fehlen: `required`.
-- F√ºr Texte kannst du L√§ngenbegrenzungen angeben: `String(100)`.
-
-```zelyra
-table kategorien {
-    id: Id primary auto
-    bezeichnung: String(50) required
-}
-```
-
-Aus der Tabellendefinition `table kategorien` generiert Zelyra automatisch den Datentyp `Kategorie` mit den exakten Feldern.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Einfache Tabelle mit Pflichtfeldern**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table projekte {
-    id: Id primary auto
-    name: String(80) required
-    aktiv: Bool
-}
-
-fn main() {
-    print("Tabelle projekte deklariert.")
-}
-```
-
-**Beispiel 2: Tabelle mit Datums- und Zahlenfeldern**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table zeiterfassungen {
-    id: Id primary auto
-    stunden: Float
-    erfasst_am: Timestamp
-}
-
-fn main() {
-    print("Tabelle zeiterfassungen deklariert.")
-}
-```
-
-**Beispiel 3: Verkn√ºpfung zweier Tabellen √ºber IDs**
-```zelyra
-database main {
-    engine: mariadb
-    database: "app_db"
-}
-
-table tasks {
-    id: Id primary auto
-    beschreibung: String(200) required
-    projekt_id: Id
-}
-
-fn main() {
-    print("Beziehung aufgaben -> projekt_id angelegt.")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein Pflichtfeld beim Anlegen weglassen.
-  *Ursache:* Felder mit `required` m√ºssen in jedem Datensatz g√ºltige Werte besitzen.
-- **Fehler:** Reservierte W√∂rter wie `action`, `field`, `title` als Spaltennamen w√§hlen.
-  *Ursache:* Diese Bezeichner sind f√ºr Zelyra-Sprachkonstrukte reserviert.
-
-### 6. Merks√§tze
-1. Jede Tabelle ben√∂tigt einen Prim√§rschl√ºssel `id: Id primary auto`.
-2. Das Attribut `required` verbietet leere Eintr√§ge auf Datenbank- und Sprachebene.
-3. Der Singularname der Tabelle (z. B. `Aufgabe` f√ºr `aufgaben`) wird zum automatischen Datentyp.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Definiere eine Tabelle `etiketten` mit einem Pflichtfeld `name: String(30) required`.
-- **Stufe 2 (Mittel):** Erg√§nze eine Tabelle `kunden` um `email: Email` und `telefon: String(30)`.
-- **Stufe 3 (Anspruchsvoll):** Modelliere eine Tabelle `kommentare`, die per `aufgabe_id: Id` mit einer Aufgabe verkn√ºpft ist und einen `erstellt_am: Timestamp` besitzt.
-
-### 8. Praxisaufgabe: Vollst√§ndiges Schema f√ºr die Aufgabenverwaltung
-Erstelle das produktive Datenmodell unserer Aufgabenverwaltung:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    beschreibung: String(500)
-    prioritaet: Int
-    ist_erledigt: Bool
-}
-
-fn main() {
-    print("Vollstaendiges Aufgaben-Schema aktiv.")
-}
-```
-
-### 9. Zusammenfassung
-- `table` definiert Struktur, Typen und Beschr√§nkungen der Daten.
-- Zelyra sorgt daf√ºr, dass Datenbank-Struktur und Code-Typen immer synchron bleiben.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wozu dient die Kennzeichnung `auto` beim Prim√§rschl√ºssel?
-2. Was bewirkt das Schl√ºsselwort `required` an einer Tabellenspalte?
-3. Welcher Typname entsteht automatisch aus der Tabelle `projekte`?
-
----
-
-## Kapitel 25: Daten abfragen und ver√§ndern
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du mit `sql<T[]>` Datens√§tze sicher aus der Datenbank liest.
-- Wie SQL-Injection durch parametrisierte Abfragen (`:param`) unm√∂glich gemacht wird.
-- Wie man Datens√§tze mit `INSERT`, `UPDATE` und `DELETE` ver√§ndert.
-- Warum √Ñnderungen in `transaction { ... }`-Bl√∂cken zusammengefasst werden.
-- Die CLI-Migrationswerkzeuge (`zelyra db setup`, `zelyra db apply`).
-
-### 2. Warum ist das Thema wichtig?
-SQL-Injection geh√∂rt seit √ºber 20 Jahren zu den gef√§hrlichsten Sicherheitsl√ºcken im Web: Ein Angreifer gibt in ein Suchfeld manipulierten Text ein und liest fremde Passw√∂rter aus oder l√∂scht Tabellen. Zelyra sch√ºtzt deine Software konstruktiv: Parameter in SQL-Bl√∂cken werden mit Doppelpunkt (`:name`) gebunden und von der Engine immer sicher escaped. Gleichzeitig sichern Transaktionen ab, dass bei Fehlern keine halben Buchungen stehenbleiben.
-
-### 3. Verst√§ndliche Erkl√§rung
-- **Lesen mit sql<T[]>:**
-  ```zelyra
-  database main {
-      engine: mariadb
-      database: "tasks_db"
-  }
-  table tasks {
-      id: Id primary auto
-      name: String required
-      ist_erledigt: Bool
-  }
-  fn lade(filter_wert: Bool) uses Database {
-      meine_tasks = sql<Task[]> {
-          SELECT id, name, ist_erledigt
-          FROM tasks
-          WHERE ist_erledigt = :filter_wert
-      }
-      print("Tasks geladen")
-  }
-  fn main() uses Database { lade(false) }
-  ```
-- **Schreiben in einer Transaktion:**
-  ```zelyra
-  database main {
-      engine: mariadb
-      database: "tasks_db"
-  }
-  table tasks {
-      id: Id primary auto
-      name: String required
-      ist_erledigt: Bool
-  }
-  fn anlegen(neuer_name: String) uses Database {
-      fertig_flag = false
-      transaction {
-          sql {
-              INSERT INTO tasks (name, ist_erledigt)
-              VALUES (:neuer_name, :fertig_flag)
-          }
-      }
-  }
-  fn main() uses Database { anlegen("Test") }
-  ```
-  Sollte w√§hrend der Transaktion etwas schiefgehen, macht die Datenbank alle √Ñnderungen ungeschehen (*Rollback*).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Einen neuen Datensatz einf√ºgen**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    fertig: Bool
-}
-
-fn fuege_aufgabe_ein(text: String) uses Database {
-    fertig_status = false
-    transaction {
-        sql {
-            INSERT INTO tasks (name, fertig)
-            VALUES (:text, :fertig_status)
-        }
-    }
-    print("Aufgabe gespeichert.")
-}
-
-fn main() uses Database {
-    fuege_aufgabe_ein("E-Mail beantworten")
-}
-```
-
-**Beispiel 2: Datens√§tze typisiert abfragen**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    fertig: Bool
-}
-
-fn lade_alle() uses Database {
-    liste = sql<Task[]> {
-        SELECT id, name, fertig
-        FROM tasks
-    }
-    print("Aufgabenliste geladen.")
-}
-
-fn main() uses Database {
-    lade_alle()
-}
-```
-
-**Beispiel 3: Datensatz aktualisieren**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    fertig: Bool
-}
-
-fn markiere_als_fertig(aufgabe_id: Int) uses Database {
-    transaction {
-        sql {
-            UPDATE tasks
-            SET fertig = true
-            WHERE id = :aufgabe_id
-        }
-    }
-    print("Status aktualisiert.")
-}
-
-fn main() uses Database {
-    markiere_als_fertig(1)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Werte mit String-Verkettung in SQL einf√ºgen wollen (`"WHERE id = " + id`).
-  *Ursache:* In Zelyra gibt es keine String-Zusammenst√ºckelung in SQL. Nutze immer Parameter mit Doppelpunkt (`:id`).
-- **Fehler:** Vergessen, dass √Ñnderungen in `transaction { ... }` gekapselt sein m√ºssen.
-  *Ursache:* Zelyra verlangt f√ºr Schreiboperationen klare Transaktionsgrenzen.
-
-### 6. Merks√§tze
-1. Binde Eingabewerte in SQL stets mit `:parameter` ‚Äì das sch√ºtzt vor SQL-Injection.
-2. Schreibende Operationen geh√∂ren in `transaction { ... }`.
-3. Mit `zelyra db apply` wird das definierte Schema auf die Datenbank √ºbertragen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Schreibe eine SQL-Abfrage, die alle unfertigen Aufgaben (`fertig = false`) selektiert.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion zum L√∂schen einer Aufgabe anhand ihrer ID (`DELETE FROM tasks WHERE id = :id`).
-- **Stufe 3 (Anspruchsvoll):** Implementiere eine Funktion, die innerhalb einer einzigen Transaktion eine alte Aufgabe archiviert und eine neue Nachfolge-Aufgabe anlegt.
-
-### 8. Praxisaufgabe: Vollst√§ndige Datenbank-Operationen der Aufgabenverwaltung
-Schreibe den Datenzugriff f√ºr unsere Aufgabenverwaltung:
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    ist_erledigt: Bool
-}
-
-fn aufgabe_anlegen(aufgabe_name: String) uses Database {
-    status_initial = false
-    transaction {
-        sql {
-            INSERT INTO tasks (name, ist_erledigt)
-            VALUES (:aufgabe_name, :status_initial)
-        }
-    }
-    print("Aufgabe angelegt.")
-}
-
-fn aufgabe_abschliessen(ziel_id: Int) uses Database {
-    transaction {
-        sql {
-            UPDATE tasks
-            SET ist_erledigt = true
-            WHERE id = :ziel_id
-        }
-    }
-    print("Aufgabe abgeschlossen.")
-}
-
-fn main() uses Database {
-    aufgabe_anlegen("Erstes Zelyra Projekt starten")
-    aufgabe_abschliessen(1)
-}
-```
-
-### 9. Zusammenfassung
-- SQL in Zelyra ist nativ, typsicher und automatisch vor Angriffen gesch√ºtzt.
-- `transaction` sch√ºtzt die Datenbankkonsistenz bei allen √Ñnderungen.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wie sch√ºtzt Zelyra vor b√∂sartigen SQL-Injection-Angriffen?
-2. Warum m√ºssen schreibende SQL-Befehle in einem `transaction`-Block stehen?
-3. Welcher CLI-Befehl richtet die Datenbanktabellen anhand des Codes ein?
-
-# TEIL VII ‚Äì WEBANWENDUNGEN UND FORMULARE
-
----
-
-## Kapitel 26: Webseiten ausgeben
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Wie du mit `page` blitzschnell Webseiten und Routen erstellst.
-- Wie URL-Parameter (z. B. `/tasks/{id}`) dynamisch √ºbergeben werden.
-- Wie HTML-Vorlagen direkt im Zelyra-Code definiert werden (`html { ... }`).
-- Wie Zelyra Cross-Site Scripting (XSS) durch automatisches HTML-Escaping verhindert.
-
-### 2. Warum ist das Thema wichtig?
-Im klassischen Web-Development muss man oft drei verschiedene Welten verbinden: Einen Webserver (wie Nginx oder Apache), einen Router, eine Template-Engine (Blade, Jinja, Twig) und den Anwendungscode. Wenn man an einer Stelle vergisst, HTML-Sonderzeichen zu maskieren, k√∂nnen Angreifer b√∂sartiges JavaScript einschleusen (XSS). In Zelyra ist der Webserver direkt integriert (`zelyra serve`), und das HTML-Escaping geschieht automatisch und unumg√§nglich.
-
-### 3. Verst√§ndliche Erkl√§rung
-Mit dem Schl√ºsselwort `page` definierst du eine Webroute und das dazugeh√∂rige HTML:
-
-```zelyra
-page "/willkommen" {
-    html {
-        <h1>Willkommen bei Zelyra</h1>
-        <p>Deine moderne Webanwendung laeuft!</p>
-    }
-}
-```
-
-Wenn du dynamische Werte anzeigen m√∂chtest, setzt du sie einfach in geschweifte Klammern: `{name}`. Zelyra ersetzt den Platzhalter sicher durch den echten Text.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Einfache statische Begr√º√üungsseite**
-```zelyra
-page "/hallo" {
-    html {
-        <html>
-            <body>
-                <h1>Hallo Zelyra-Welt!</h1>
-            </body>
-        </html>
-    }
-}
-```
-
-**Beispiel 2: Dynamische Route mit URL-Parameter**
-```zelyra
-page "/benutzer/{name}" {
-    html {
-        <html>
-            <body>
-                <h1>Profil von {name}</h1>
-                <p>Willkommen zurueck im Dashboard.</p>
-            </body>
-        </html>
-    }
-}
-```
-
-**Beispiel 3: Sicheres Escaping gegen XSS-Angriffe**
-√úbergibt ein Nutzer als Namen `<script>alert('hack')</script>`, gibt Zelyra dies im Browser als harmlosen Text aus ‚Äì das Skript wird niemals ausgef√ºhrt:
-```zelyra
-page "/sicher/{eingabe}" {
-    html {
-        <div>Eingabe: {eingabe}</div>
-    }
-}
-```
-
-**Beispiel 4: Wiederverwendbare View-Layouts und Slots (ab Zelyra 0.1.41)**
-Statt auf jeder Seite `<html>`, `<head>`, Header und Footer neu zu schreiben, definierst du mit `view` ein Layout. Ein View besitzt genau einen Hauptslot `<slot />` sowie optionale benannte Slots mit sicherem Standardinhalt:
-```zelyra
-view AppShell {
-    html {
-        <html lang="de">
-            <head><title>Zelyra Anwendung</title></head>
-            <body>
-                <header>
-                    <slot name="header"><h1>Zelyra Portal</h1></slot>
-                </header>
-                <main>
-                    <slot />
-                </main>
-                <footer>
-                    <slot name="footer"><p>Erstellt mit Zelyra</p></slot>
-                </footer>
-            </body>
-        </html>
-    }
-}
-
-page "/dashboard" {
-    view: AppShell
-    html {
-        <slot name="header"><h1>Mein Dashboard</h1></slot>
-        <p>Der eigentliche Inhalt wird im Haupt-Slot der AppShell platziert.</p>
-    }
-}
-```
-
-**Beispiel 5: Deklarative Suche, Filterung und Pagination (ab Zelyra 0.1.40)**
-F√ºr datengetriebene Seiten erzeugt Zelyra semantische Steuerungen f√ºr Suche, Sortierung und Seitenaufteilung automatisch, inklusive URL-Zustandserhalt:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    title: String(100) required
-    done: Bool default false
-}
-
-page "/tasks" {
-    search { title }
-    filter { done }
-    sort { title }
-    paginated 25
-
-    load tasks = sql<Task[]> {
-        SELECT id, title, done
-        FROM tasks
-        ORDER BY title
-    }
-
-    html {
-        <h1>Aufgaben ({total} gesamt, Seite {page} von {pages})</h1>
-        <ul>
-            for task in tasks {
-                <li>{task.title}</li>
-            }
-        </ul>
-    }
-}
-```
-Zelyra f√ºhrt im Hintergrund automatisch die optimierte Z√§hlabfrage (`COUNT(*)`) aus, bindet `total` und `pages` als sichere `UInt`-Variablen und rendert semantische Filter-Fieldsets.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** HTML-Tags nicht ordnungsgem√§√ü schlie√üen (z. B. `<h1>` ohne `</h1>`).
-  *Ursache:* Zelyra pr√ºft den HTML-Baum syntaktisch auf Wohlgeformtheit.
-- **Fehler:** URL-Parameter in geschweiften Klammern falsch benennen.
-  *Ursache:* Der Parameter in der Route (z. B. `{id}`) muss mit der Variablen im HTML √ºbereinstimmen.
-- **Fehler `E-VIEW-010` bis `E-VIEW-015`:** Unbekannte Variablen oder falsche Typen in der View-Interpolation.
-  *Ursache:* Der Zelyra-Compiler pr√ºft View-Bindungen und Component-Properties bereits zur Compile-Zeit strikt gegen deklarierte Routen, Typen und SQL-Loads.
-- **Fehler:** Unbekannte oder doppelte Slots in `page` angeben.
-  *Ursache:* Eine Seite darf nur benannte Slots bef√ºllen, die der ausgew√§hlte `view` auch tats√§chlich deklariert.
-
-### 6. Merks√§tze
-1. `page "/pfad"` definiert eine Route und liefert gepr√ºften HTML-Code aus.
-2. Variablen im HTML werden mit `{variable}` sicher interpoliert und automatisch escaped.
-3. `view Name { ... }` definiert wiederverwendbare Master-Layouts mit `<slot />` und benannten Slots (`<slot name="...">`).
-4. `search`, `filter` und `paginated` erzeugen vollautomatische, semantische Query-Steuerungen mit Zustandsbewahrung in der URL.
-5. Mit `zelyra serve` startest du den integrierten HTTP-Server ohne externe Webserver-Konfiguration.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle eine `page "/ueber-uns"`, die eine Firmenbeschreibung anzeigt.
-- **Stufe 2 (Mittel):** Erstelle eine dynamische Route `/produkt/{nummer}`, die eine Produkt-Detailansicht darstellt.
-- **Stufe 3 (Anspruchsvoll):** Gestalte eine √úbersichtsseite mit √úberschrift, Navigation und Aufz√§hlungsliste im HTML-Block.
-
-### 8. Praxisaufgabe: Startseite f√ºr die Aufgabenverwaltung
-Erstelle die Web-Startseite unserer Aufgabenverwaltung:
-```zelyra
-page "/tasks" {
-    html {
-        <html>
-            <head>
-                <title>Zelyra Aufgabenverwaltung</title>
-            </head>
-            <body>
-                <h1>Meine Aufgaben</h1>
-                <p>Willkommen in deiner persoenlichen Aufgabenverwaltung.</p>
-                <a href="/tasks/neu">Neue Aufgabe erstellen</a>
-            </body>
-        </html>
-    }
-}
-```
-
-Starte den Server mit `zelyra serve main.zyl` und √∂ffne `http://localhost:8080/tasks` im Browser!
-
-### 9. Zusammenfassung
-- Webseiten werden mit `page` und `html` direkt deklariert.
-- Automatisches Escaping sch√ºtzt deine Nutzer vor Sicherheitsrisiken.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welches Schl√ºsselwort leitet eine Webseiten-Definition ein?
-2. Wie bindet man dynamische Werte in den HTML-Quelltext ein?
-3. Warum ist XSS bei der HTML-Ausgabe in Zelyra standardm√§√üig ausgeschlossen?
-
----
-
-## Kapitel 27: Formulare und Benutzereingaben
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du mit `form` sichere Eingabemasken f√ºr deine Datenbanktabellen definierst.
-- Wie automatische CSRF-Schutzmechanismen funktionieren.
-- Wie Zelyra Eingabedaten typisiert validiert (z. B. `Email`, Mindestl√§ngen).
-- Wie du Formulare mit dem CLI-Befehl `zelyra form validate` vorab testen kannst.
-
-### 2. Warum ist das Thema wichtig?
-Eingaben von Nutzern sind die Hauptursache f√ºr Sicherheitsl√ºcken im Web: Angreifer √ºbermitteln leere Pflichtfelder, manipulierte IDs oder nutzen fremde Browser-Sitzungen aus (CSRF-Attacken). In anderen Frameworks muss man Formulare m√ºhsam von Hand mit Validierungsregeln, Fehleranzeigen und CSRF-Tokens zusammenbauen. Zelyras `form`-Konstrukt leitet die Eingabemaske direkt aus der Datenbanktabelle ab und sichert alles automatisch ab.
-
-### 3. Verst√§ndliche Erkl√§rung
-Ein Formular verkn√ºpft eine Eingabemaske mit einer Zieltabelle:
-
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    beschreibung: String(500)
-}
-
-form TaskCreate -> tasks {
-    fields {
-        name
-        beschreibung
-    }
-}
-```
-
-Zelyra generiert daraus:
-- Die HTML-Eingabefelder mit passenden Typen (`<input type="text">`, etc.).
-- Ein unsichtbares, kryptografisches CSRF-Token, das Angriffe verhindert.
-- Server-seitige Validierungspr√ºfungen (z. B. `name` darf maximal 100 Zeichen haben und nicht fehlen).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Basis-Formular f√ºr Kundendaten**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table customers {
-    id: Id primary auto
-    name: String(80) required
-    email: Email?
-}
-
-form CustomerForm -> customers {
-    fields {
-        name
-        email
-    }
-}
-```
-
-**Beispiel 2: Formular mit benutzerdefinierten Aktionen**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-}
-
-form NewTaskForm -> tasks {
-    fields {
-        name
-    }
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Ein Feld im Formular auff√ºhren, das in der Zieltabelle gar nicht existiert.
-  *Ursache:* Zelyra pr√ºft `fields` strikt gegen die Spalten der Tabelle.
-- **Fehler:** CSRF-Schutz manuell deaktivieren wollen.
-  *Ursache:* In Zelyra ist der CSRF-Schutz unverzichtbarer Sicherheitsstandard.
-
-### 6. Merks√§tze
-1. `form Name -> zieltabelle` generiert eine sichere Eingabemaske.
-2. Alle Validierungsregeln der Tabelle (L√§nge, Pflichtfeld, Typ) gelten automatisch.
-3. CSRF- und XSS-Schutz sind integral eingebaut.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Definiere ein Formular `KategorieErstellen` f√ºr eine Tabelle `kategorien`.
-- **Stufe 2 (Mittel):** Teste das Formular auf der Kommandozeile mit `zelyra form validate`.
-- **Stufe 3 (Anspruchsvoll):** Erg√§nze das Aufgaben-Formular um ein Priorit√§tsfeld und validiere fehlerhafte Eingaben.
-
-### 8. Praxisaufgabe: Das Erstellungsformular f√ºr Aufgaben
-Definiere das Eingabeformular f√ºr neue Aufgaben:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    prioritaet: Int
-}
-
-form TaskCreate -> tasks {
-    fields {
-        name
-        prioritaet
-    }
-}
-
-fn main() {
-    print("Aufgaben-Formular bereit.")
-}
-```
-
-### 9. Zusammenfassung
-- Formulare verkn√ºpfen Tabellen mit sicheren Web-Eingabemasken.
-- Zelyra erledigt Validierung, CSRF-Schutz und Fehlerbehandlung automatisch.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wof√ºr steht der Pfeil `->` in `form TaskCreate -> tasks`?
-2. Warum m√ºssen Entwickler in Zelyra keine manuellen CSRF-Tokens im HTML einf√ºgen?
-3. Welche Spaltenpr√ºfungen werden automatisch auf das Formular angewendet?
-
----
-
-## Kapitel 28: Das vollst√§ndige CRUD-Muster
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was CRUD (Create, Read, Update, Delete) bedeutet und warum es das Herzst√ºck von Business-Web-Apps ist.
-- Wie Zelyra ein vollst√§ndiges Verwaltungsinterface mit nur einem `crud`-Block erzeugt.
-- Wie du Listen-, Detail-, Formular- und L√∂schansichten konfigurierst.
-- Wie benutzerdefinierte Aktionen mit `action` hinzugef√ºgt werden.
-
-### 2. Warum ist das Thema wichtig?
-√úber 80 % der Arbeit an Webanwendungen besteht aus dem immer gleichen Muster: Eine Tabelle anzeigen, Datens√§tze anlegen, bearbeiten und l√∂schen. Entwickler verbringen Wochen damit, Controller, Routen, Formulare und Best√§tigungsdialoge zu schreiben. In Zelyra erledigst du das in wenigen Zeilen deklarativem Code ‚Äì absolut fehlerfrei, sicher und konsistent.
-
-### 3. Verst√§ndliche Erkl√§rung
-Das Schl√ºsselwort `crud` fasst alle Operationen f√ºr eine Entit√§t zusammen:
-- **C**reate: Neue Datens√§tze anlegen.
-- **R**ead: Liste durchsuchen und Details ansehen.
-- **U**pdate: Vorhandene Daten √§ndern.
-- **D**elete: Datens√§tze mit Sicherheitsabfrage entfernen.
-
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    erledigt: Bool default false
-}
-
-crud Task -> tasks {
-    title: "Aufgabenverwaltung"
-    view {
-        fields {
-            name
-            erledigt
-        }
-        list {
-            mode: cards
-            empty: "Keine Aufgaben vorhanden."
-        }
-    }
-}
-```
-
-> **Automatische Detail-Verlinkung bei ausgeblendeter ID (ab Version 0.1.50):**
-> Wenn die technische `id`-Spalte im Block `fields` nicht aufgef√ºhrt ist (wie hier, wo nur `name` und `erledigt` sichtbar sind), verlinkt Zelyra automatisch das erste angezeigte Feld (`name`) mit der Detailseite des Datensatzes. Dies gilt sowohl f√ºr Tabellen- (`table`) als auch f√ºr Kachel-Layouts (`cards`).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Ein vollst√§ndiges CRUD-Modul**
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    aktiv: Bool default true
-}
-
-crud Task -> tasks {
-    title: "Aufgaben"
-
-    view {
-        fields {
-            name
-            aktiv
-        }
-
-        list {
-            mode: cards
-            empty: "Keine Aufgaben vorhanden."
-        }
-
-        detail {
-            mode: cards
-            title: "Aufgabendetails"
-        }
-
-        form {
-            mode: cards
-            title: "Aufgabe bearbeiten"
-            submit: "Speichern"
-        }
-
-        delete {
-            title: "Aufgabe loeschen"
-            message: "Diese Aktion kann nicht rueckgaengig gemacht werden."
-            submit: "Jetzt loeschen"
-        }
-    }
-}
-```
-
-**Beispiel 2: Benutzerdefinierte Aktionen im CRUD-Interface**
-Du kannst individuelle Schaltfl√§chen hinzuf√ºgen, z. B. um eine Aufgabe sofort als erledigt zu markieren:
-```zelyra
-database main {
-    engine: mariadb
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    erledigt: Bool default false
-}
-
-crud Task -> tasks {
-    title: "Aufgaben"
-    view {
-        fields {
-            name
-            erledigt
-        }
-    }
-
-    action erledigen {
-        label: "Als erledigt markieren"
-        confirm: "Moechtest du diese Aufgabe abschliessen?"
-
-        sql {
-            UPDATE tasks
-            SET erledigt = true
-            WHERE id = :id
-        }
-
-        success "Aufgabe erfolgreich abgeschlossen."
-        redirect "/tasks"
-    }
-}
-```
-
-**Beispiel 3: CRUD-Ressource mit wiederverwendbarem View-Layout (ab Zelyra 0.1.43)**
-Mit `layout: ViewName` bettest du alle generierten CRUD-Ansichten (Listen-, Detail-, Formular- und L√∂schdialoge) automatisch in ein zuvor deklariertes Seitenlayout ein:
-```zelyra
-view AppShell {
-    html {
-        <html lang="de">
-            <body>
-                <nav><a href="/">Start</a> | <a href="/tasks">Aufgaben</a></nav>
-                <main>
-                    <slot />
-                </main>
-            </body>
-        </html>
-    }
-}
-
-crud Task -> tasks {
-    title: "Aufgabenverwaltung"
-    layout: AppShell
-
-    view {
-        fields {
-            name
-            erledigt
-        }
-    }
-}
-```
-Die generierte CRUD-Ressource √ºbernimmt das Navigationsger√ºst von `AppShell`, w√§hrend alle Sicherheitspr√ºfungen, Rollen und CSRF-Tokens voll aktiv bleiben.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Den `view`-Block oder die `fields`-Deklaration im CRUD weglassen.
-  *Ursache:* Zelyra muss wissen, welche Spalten in den generierten Ansichten angezeigt werden sollen.
-- **Fehler:** Ein `UPDATE` in einer `action` ohne `WHERE id = :id` ausf√ºhren.
-  *Ursache:* Aktionen beziehen sich immer auf den aktuell ausgew√§hlten Datensatz mit `:id`.
-
-### 6. Merks√§tze
-1. `crud Name -> tabelle` generiert eine vollst√§ndige, sichere Verwaltungsoberfl√§che.
-2. Ansichten (`list`, `detail`, `form`, `delete`) lassen sich flexibel anpassen.
-3. Benutzerdefinierte Aktionen (`action`) erweitern den Standard um individuelle Gesch√§ftsregeln.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erstelle ein CRUD-Interface f√ºr eine Tabelle `kategorien`.
-- **Stufe 2 (Mittel):** Passe die Hinweistexte und Titel der Ansichten an.
-- **Stufe 3 (Anspruchsvoll):** Implementiere eine benutzerdefinierte Aktion `duplizieren`, die eine Kopie der ausgew√§hlten Aufgabe anlegt.
-
-### 8. Praxisaufgabe: Das produktive CRUD-Interface unserer Aufgabenverwaltung
-Kombiniere Datenbank, Tabelle und CRUD zu einem vollst√§ndigen System:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_app"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    erledigt: Bool default false
-}
-
-crud Task -> tasks {
-    title: "Meine Aufgabenverwaltung"
-
-    view {
-        fields {
-            name
-            erledigt
-        }
-
-        list {
-            mode: cards
-            empty: "Grossartig! Alle Aufgaben sind erledigt."
-        }
-
-        detail {
-            mode: cards
-            title: "Aufgabe ansehen"
-        }
-
-        form {
-            mode: cards
-            title: "Aufgabe erfassen oder bearbeiten"
-            submit: "Aufgabe sichern"
-        }
-
-        delete {
-            title: "Aufgabe loeschen"
-            message: "Soll diese Aufgabe unwiderruflich entfernt werden?"
-            submit: "Loeschen"
-        }
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Das CRUD-Muster beschleunigt die Entwicklung von Datenbank-Web-Apps dramatisch.
-- Zelyra generiert fehlerfreie Routen, HTML-Masken und Datenbankaufrufe vollautomatisch.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche vier Grundfunktionen umfasst die Abk√ºrzung CRUD?
-2. Wie reagiert Zelyra, wenn in `fields` ein ung√ºltiger Spaltenname steht?
-3. Welche Aufgabe erf√ºllt das Schl√ºsselwort `action` in einem CRUD-Block?
-
----
-
-## Kapitel 29: Benutzer, Passw√∂rter und Sitzungen
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie Zelyra Benutzerauthentifizierung mit dem `auth`-Block nativ bereitstellt.
-- Wie Passw√∂rter mit dem modernen Argon2-Algorithmus gehasht werden.
-- Wie Sitzungen (*Sessions*) und Rollenrechte abgesichert werden.
-- Wie Seiten und Aktionen mit `requires auth` und `permits` gesch√ºtzt werden.
-
-### 2. Warum ist das Thema wichtig?
-Sicherheit ist kein nachtr√§gliches Add-on. Wer Passw√∂rter im Klartext oder mit veralteten Algorithmen (wie MD5 oder SHA1) speichert, riskiert Datenschutz-Katastrophen. In Zelyra ist Authentifizierung fest in der Spracharchitektur verankert: Passw√∂rter werden standardm√§√üig mit Argon2 gehasht, Sitzungs-Tokens werden kryptografisch gesch√ºtzt und Routenrechte werden deklarativ gepr√ºft.
-
-### 3. Verst√§ndliche Erkl√§rung
-Ein Authentifizierungsblock verbindet Benutzer, Sitzungen und Berechtigungen:
-
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-```
-
-Um eine Webroute nur f√ºr angemeldete Nutzer freizugeben, schreibst du einfach:
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/geheim" {
-    requires auth
-    html {
-        <h1>Nur fuer angemeldete Nutzer sichtbar!</h1>
-    }
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Die Standardtabellen f√ºr Authentifizierung**
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-```
-
-**Beispiel 2: Gesch√ºtzte Seite mit Rechtepr√ºfung**
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/dashboard" {
-    requires auth
-    permits "tasks.view"
-
-    html {
-        <h1>Aufgaben-Dashboard</h1>
-        <p>Du bist autorisiert.</p>
-    }
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Passw√∂rter im Klartext in der Tabelle ablegen.
-  *Ursache:* Zelyra verlangt ein Spaltenfeld `password_hash` und stellt mit `zelyra auth hash-password` ein Hashing-Tool bereit.
-- **Fehler:** Die Sitzungstabelle `auth_sessions` vergessen.
-  *Ursache:* Zelyra ben√∂tigt eine dedizierte Tabelle zur sicheren Token-Verwaltung.
-
-### 6. Merks√§tze
-1. `auth` deklariert Benutzer, Sitzungen und Berechtigungen an einer zentralen Stelle.
-2. Gesch√ºtzte Seiten erfordern `requires auth` und optional `permits "recht"`.
-3. Passw√∂rter werden ausschlie√ülich als sichere Argon2-Hashes gespeichert.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Erzeuge ein Passwort-Hash √ºber den CLI-Befehl `zelyra auth hash-password`.
-- **Stufe 2 (Mittel):** Sch√ºtze eine Seite `/einstellungen` mit `requires auth`.
-- **Stufe 3 (Anspruchsvoll):** Vergib einer Rolle ein Berechtigungsrecht √ºber `zelyra auth role-permission`.
-
-### 8. Praxisaufgabe: Gesch√ºtzte Aufgabenverwaltung
-Sch√ºtze die Aufgabenverwaltung vor unbefugtem Zugriff:
-```zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-page "/meine-aufgaben" {
-    requires auth
-
-    html {
-        <h1>Geschuetzter Aufgabenbereich</h1>
-        <p>Nur fuer authentifizierte Benutzer zugaenglich.</p>
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Authentifizierung und Autorisierung sind vollwertige Bestandteile von Zelyra.
-- Moderne Sicherheitsstandards (Argon2, Session-Tokens, RBAC) sind ohne Drittanbieter-Bibliotheken einsatzbereit.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welcher moderne Hash-Algorithmus wird von Zelyra f√ºr Passw√∂rter verwendet?
-2. Mit welchem Befehl wird eine Webroute f√ºr unbefugte Besucher gesperrt?
-3. Wozu dient die Tabelle `auth_sessions`?
-
----
-
-## Kapitel 30: APIs und Datenaustausch
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du typisierte REST-Schnittstellen mit dem Schl√ºsselwort `api` definierst.
-- Wie HTTP-Methoden (`GET`, `POST`, `PUT`, `DELETE`) und Eingabe/Ausgabe typisiert werden.
-- Wie automatische Fehler-Codes (`404 NotFound`, `400 ValidationError`) deklariert werden.
-- Wie Zelyra vollst√§ndige OpenAPI/Swagger-Dokumentationen auf Knopfdruck generiert (`zelyra doc --openapi`).
-
-### 2. Warum ist das Thema wichtig?
-Moderne Software lebt nicht isoliert: Mobile Apps (iOS/Android), Frontend-Frameworks (Vue, React) oder Partnersysteme m√ºssen mit deinem Backend kommunizieren. Bei herk√∂mmlichen APIs veraltet die Dokumentation oft schon am Tag nach dem Release. In Zelyra ist die API-Definition der Code selbst: Jede Route, jedes Eingabefeld und jeder Fehlercode ist exakt typisiert ‚Äì und die OpenAPI-Spezifikation wird daraus vollautomatisch abgeleitet.
-
-### 3. Verst√§ndliche Erkl√§rung
-Mit dem Schl√ºsselwort `api` deklarierst du einen Web-Endpunkt:
-- **Methode und Pfad:** z. B. `GET "/tasks/{id}"`
-- **Input:** Welche Parameter erwartet die API?
-- **Output:** Welcher Typ wird als JSON zur√ºckgegeben?
-- **Errors:** Welche HTTP-Statuscodes k√∂nnen im Fehlerfall auftreten?
-
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String required
-}
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-fn main() {
-    print("API-Endpunkt definiert.")
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Ein GET-Endpunkt mit R√ºckgabetyp**
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String required
-}
-
-api GET "/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-fn main() {
-    print("GET API geprueft.")
-}
-```
-
-**Beispiel 2: Ein POST-Endpunkt zum Anlegen von Daten**
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(100) required
-}
-
-api POST "/tasks" {
-    input {
-        name: String
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-fn main() {
-    print("POST API geprueft.")
-}
-```
-
-**Beispiel 3: OpenAPI-Dokumentation erzeugen**
-Mit dem Befehl:
-```bash
-zelyra doc main.zyl --openapi
-```
-generiert Zelyra eine normgerechte `openapi.json`, die du direkt in Swagger-UI oder Postman importieren kannst.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Den Ausgabetyp `output` mit einem unbekannten Typen belegen.
-  *Ursache:* Zelyra pr√ºft, ob der Datentyp (z. B. `Task`) als Tabelle oder Record existiert.
-- **Fehler:** Nicht deklarierte HTTP-Fehlercodes zur√ºcksenden wollen.
-  *Ursache:* Deklarierte Schnittstellen fordern vollst√§ndige Spezifikation aller Statuscodes.
-
-### 6. Merks√§tze
-1. `api METHOD "/pfad"` deklariert eine typsichere REST-Schnittstelle.
-2. `input`, `output` und `errors` beschreiben den Datenvertrag der Schnittstelle l√ºckenlos.
-3. `zelyra doc --openapi` erzeugt OpenAPI-Spezifikationen direkt aus dem Quelltext.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Definiere einen Endpunkt `GET "/api/version"`, der einen Versions-String liefert.
-- **Stufe 2 (Mittel):** Erstelle einen Endpunkt `DELETE "/api/tasks/{id}"` mit Fehlercode `404 NotFound`.
-- **Stufe 3 (Anspruchsvoll):** Generiere mit `zelyra doc --openapi` eine API-Dokumentation und untersuche die JSON-Ausgabe.
-
-### 8. Praxisaufgabe: Die REST-API f√ºr unsere Aufgabenverwaltung
-Definiere die √∂ffentliche Programmierschnittstelle unserer Aufgabenverwaltung:
-```zelyra
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(120) required
-    erledigt: Bool
-}
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-api POST "/api/tasks" {
-    input {
-        name: String
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-fn main() {
-    print("Aufgaben REST-API einsatzbereit.")
-}
-```
-
-### 9. Zusammenfassung
-- APIs in Zelyra sind typsicher, selbstdokumentierend und standardkonform.
-- Mit minimalem Aufwand entstehen robuste Endpunkte f√ºr Web- und Mobilanwendungen.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche vier Abschnitte umfasst eine vollst√§ndige `api`-Deklaration?
-2. Warum ist die automatische OpenAPI-Generierung gegen√ºber manuellen Dokumentationen √ºberlegen?
-3. Was geschieht, wenn ein Client ung√ºltige Daten an einen `input`-Block sendet?
-
-# TEIL VIII ‚Äì DIE BESONDERHEITEN VON ZELYRA
-
----
-
-## Kapitel 31: Lesbarkeit als oberstes Gebot
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Warum Code in der Realit√§t bis zu zehnmal √∂fter gelesen als geschrieben wird.
-- Welche Designentscheidungen Zelyra bewusst getroffen hat, um maximale Klarheit zu schaffen.
-- Warum Zelyra auf unlesbare Syntaxakrobatik und kryptische Symbole verzichtet.
-- Wie der integrierte Code-Formatierer `zelyra fmt` f√ºr einen einheitlichen Standard sorgt.
-
-### 2. Warum ist das Thema wichtig?
-Viele Programmiersprachen erlauben es, denselben Sachverhalt auf zehn verschiedene Arten auszudr√ºcken ‚Äì oft in ultrakompakten Einzeilern mit Sonderzeichen, die nach drei Monaten niemand mehr versteht. In gro√üen Teams und langfristigen Projekten f√ºhrt das zu enormen Wartungskosten. Zelyra folgt dem Grundsatz: Es gibt genau einen offensichtlichen, klaren Weg, eine Aufgabe zu l√∂sen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Lesbarkeit in Zelyra bedeutet:
-- **Ausdr√ºckliche Namen statt Abk√ºrzungen:** Funktionen und Variablen sprechen Klartext (`prioritaet` statt `prio_lvl_fn()`).
-- **Klare Bl√∂cke:** Jede Bedingung, Schleife und Funktion besitzt eindeutige geschweifte Klammern.
-- **Automatische Formatierung:** Niemand im Team muss √ºber Einr√ºckungen oder Leerzeichen diskutieren. Der Befehl `zelyra fmt` r√ºckt jede Zeile exakt nach dem einheitlichen Zelyra-Standard ein.
-
-```zelyra
-fn berechne_gesamtzeit(aufgaben_dauern: Int[]) -> Int {
-    mutable summe = 0
-    for dauer in aufgaben_dauern {
-        summe = summe + dauer
-    }
-    return summe
-}
-
-fn main() {
-    zeiten: Int[] = [15, 30, 45]
-    print(berechne_gesamtzeit(zeiten))
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Selbsterkl√§rende Funktionssignaturen**
-```zelyra
-fn ist_aufgabe_ueberfaellig(frist_tage: Int) -> Bool {
-    return frist_tage < 0
-}
-
-fn main() {
-    print(ist_aufgabe_ueberfaellig(-2))
-}
-```
-
-**Beispiel 2: Verst√§ndliche Kontrollstrukturen**
-```zelyra
-fn status_anzeige(status_code: Int) -> String {
-    match status_code {
-        1 => {
-            return "Neu"
-        }
-        2 => {
-            return "In Bearbeitung"
-        }
-        3 => {
-            return "Erledigt"
-        }
-        _ => {
-            return "Unbekannt"
-        }
-    }
-}
-
-fn main() {
-    print(status_anzeige(2))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Variablen mit einzelnen Buchstaben (`a`, `x`, `tmp`) benennen, deren Bedeutung unklar ist.
-  *Ursache:* Zelyra-Code soll wie verst√§ndliche Prosa gelesen werden k√∂nnen.
-- **Fehler:** Uneinheitliche Einr√ºckungen manuell korrigieren.
-  *Ursache:* F√ºhre einfach `zelyra fmt main.zyl` aus ‚Äì der Compiler formatiert alles automatisch.
-
-### 6. Merks√§tze
-1. Schreibe Code f√ºr den Menschen, der ihn in sechs Monaten warten muss.
-2. `zelyra fmt` garantiert einen einheitlichen, lesbaren Programmierstil im gesamten Projekt.
-3. Klare, sprechende Bezeichner sind die beste Dokumentation.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Formatiere eine unordentliche Quellcodedatei mit `zelyra fmt`.
-- **Stufe 2 (Mittel):** Refaktoriere eine Funktion mit unklaren Variablennamen zu sprechendem Zelyra-Code.
-- **Stufe 3 (Anspruchsvoll):** Schreibe eine komplexe Berechnungsfunktion so sauber gegliedert, dass keine einzige Zeile mehr als 80 Zeichen ben√∂tigt.
-
-### 8. Praxisaufgabe: Lesbare Status- und Filterlogik
-Gestalte die Filterlogik unserer Aufgabenverwaltung maximal verst√§ndlich:
-```zelyra
-fn ist_dringend_und_offen(prioritaet: Int, erledigt: Bool) -> Bool {
-    ist_prioritaet_eins = prioritaet == 1
-    ist_noch_nicht_erledigt = !erledigt
-    return ist_prioritaet_eins && ist_noch_nicht_erledigt
-}
-
-fn main() {
-    print(ist_dringend_und_offen(1, false))
-    print(ist_dringend_und_offen(2, false))
-}
-```
-
-### 9. Zusammenfassung
-- Lesbarkeit ist der wichtigste Schutzfaktor gegen schleichende Software-F√§ulnis.
-- Zelyra erzwingt Klarheit durch Sprachdesign und Werkzeuge.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Warum spart gut lesbarer Code auf lange Sicht Zeit und Geld?
-2. Welcher Zelyra-CLI-Befehl formatiert Quelldateien automatisch?
-3. Warum verzichtet Zelyra auf √ºberm√§√üig viele alternative Schreibweisen f√ºr dieselbe Logik?
-
----
-
-## Kapitel 32: KI-Nativit√§t ‚Äì Warum Zelyra perfekt f√ºr KI-Assistenten ist
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was eine ‚ÄûKI-native Programmiersprache‚Äú bedeutet.
-- Warum moderne LLMs (wie Claude, GPT, Gemini) bei Zelyra weniger halluzinieren.
-- Wie typisierte L√∂cher (*Typed Holes* `_`) Entwicklern und KIs bei der Codegenerierung helfen.
-- Wie CLI-Befehle mit `--format json` strukturierte Schnittstellen f√ºr Werkzeuge bieten.
-- Wie `zelyra impact` und `zelyra edit` automatisierte Code-√Ñnderungen absichern.
-
-### 2. Warum ist das Thema wichtig?
-Die meisten Programmiersprachen wurden vor Jahrzehnten entwickelt ‚Äì ausschlie√ülich f√ºr menschliche Tastatureingaben. Wenn moderne KI-Assistenten Code in Python oder JavaScript schreiben, erfinden sie oft Methoden, verwechseln Typen oder √ºbersehen Seiteneffekte. Zelyra wurde von Grund auf so entworfen, dass menschliche Entwickler und KI-Assistenten optimal zusammenarbeiten k√∂nnen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Zelyra unterst√ºtzt KI-Entwicklung durch vier Schl√ºsselmerkmale:
-1. **Eindeutige, kontextfreie Grammatik:** Die Sprache hat keine Mehrdeutigkeiten.
-2. **Maschinenlesbare JSON-Ausgabe:** Fast alle Befehle bieten `--format json` (z. B. `zelyra check --format json`), sodass KIs Fehlermeldungen direkt als strukturierte Daten erfassen.
-3. **Typed Holes (`_`):** Wenn du oder die KI nicht genau wissen, wie ein Wert berechnet wird, setzt man einen Unterstrich `_` ein. Der Compiler meldet sofort exakt: Welcher Typ wird erwartet? Welche Variablen sind verf√ºgbar? Welche Vertr√§ge gelten?
-4. **Auswirkungsanalyse (`zelyra impact`):** Zelyra berechnet vorab genau, welche Programmteile von einer √Ñnderung betroffen sind.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Typisierte Vertr√§ge leiten die KI fehlerfrei**
-Durch Vertr√§ge wei√ü die KI ohne Raten, welche Randbedingungen gelten:
-```zelyra
-fn normalisiere_skala(wert: Int) -> Int
-    requires { wert >= 0 && wert <= 100 }
-    ensures { result >= 0 && result <= 10 }
-{
-    return wert / 10
-}
-
-fn main() {
-    print(normalisiere_skala(85))
-}
-```
-
-**Beispiel 2: Maschinenlesbare Fehleranalyse**
-F√ºhrt ein KI-Tool den Befehl:
-```bash
-zelyra check main.zyl --format json
-```
-aus, erh√§lt es pr√§zise JSON-Objekte mit exaktem Fehlercode, Zeile, Spalte und L√∂sungshinweis.
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Typed Holes (`_`) in Produktionscode belassen.
-  *Ursache:* Typed Holes sind Entwicklungshilfen. Vor dem finalen Kompilieren m√ºssen alle `_` durch g√ºltigen Code ersetzt werden.
-- **Fehler:** KI-Code ohne `zelyra check` ungepr√ºft √ºbernehmen.
-  *Ursache:* Nutze immer den Zelyra-Compiler als unbestechlichen Richter.
-
-### 6. Merks√§tze
-1. Zelyra ist die erste KI-native Sprache: Eindeutig, strukturiert und werkzeugfreundlich.
-2. Typed Holes `_` dienen als pr√§zise Arbeitsauftr√§ge an den Compiler und KI-Assistenten.
-3. `--format json` erm√∂glicht nahtlose Integration in moderne KI-Agenten und IDEs.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** F√ºhre `zelyra check` mit der Option `--format json` aus und studiere die Ausgabe.
-- **Stufe 2 (Mittel):** Analysiere eine Datei mit `zelyra impact`.
-- **Stufe 3 (Anspruchsvoll):** Setze in einer Funktion ein Typed Hole `_` ein und beobachte die detaillierten Kontextinformationen des Compilers.
-
-### 8. Praxisaufgabe: KI-unterst√ºtzte Erweiterung der Aufgabenverwaltung
-Schreibe eine wohlstrukturierte Funktionssignatur mit Vertrag, die sich perfekt von einer KI vervollst√§ndigen l√§sst:
-```zelyra
-fn berechne_restzeit(ziel_stunde: Int, aktuelle_stunde: Int) -> Int
-    requires { ziel_stunde >= aktuelle_stunde }
-    ensures { result >= 0 }
-{
-    return ziel_stunde - aktuelle_stunde
-}
-
-fn main() {
-    rest = berechne_restzeit(18, 14)
-    print(rest)
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra beseitigt Sprach-Mehrdeutigkeiten, die KI-Systeme traditionell verwirren.
-- Typed Holes und strukturierte JSON-Ausgaben machen Pair-Programming mit KIs extrem zuverl√§ssig.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Wof√ºr steht das Konzept der ‚ÄûTyped Holes‚Äú in Zelyra?
-2. Warum profitieren KI-Systeme von der `--format json`-Option des Compilers?
-3. Wie helfen Vertr√§ge (`requires`, `ensures`) einer KI beim Erzeugen von korrektem Code?
-
----
-
-## Kapitel 33: Sicherheit durch F√§higkeiten (Capabilities)
-
-### 1. Was lerne ich in diesem Kapitel?
-- Was das Capability-Sicherheitsmodell ist und warum es herk√∂mmlichen Berechtigungskonzepten √ºberlegen ist.
-- System-Capabilities wie `Console`, `Database`, `Network`, `FileSystem`, `Process`, `Environment`, `Clock` und `Random`.
-- Wie Capabilities deklariert, vererbt und in `zelyra.toml` beschr√§nkt werden.
-- Warum Zelyra gegen Supply-Chain-Angriffe (b√∂sartige Pakete) immun ist.
-
-### 2. Warum ist das Thema wichtig?
-In heutigen √ñkosystemen wie npm (JavaScript) oder PyPI (Python) bindet man oft hunderte Bibliotheken von Drittanbietern ein. Wenn ein Paket manipuliert wird, kann es unbemerkt Passw√∂rter auslesen, Dateien verschl√ºsseln oder Daten ins Internet funken. In Zelyra ist das unm√∂glich: Eine Funktion kann ohne ausdr√ºckliche Deklaration von `uses Network` kein einziges Byte √ºbers Netz senden ‚Äì der Compiler verweigert den Dienst!
-
-### 3. Verst√§ndliche Erkl√§rung
-Stell dir Zelyras Capability-System wie ein Sicherheitsschloss vor:
-- Wenn eine Funktion auf die Festplatte schreiben will, muss sie den Schl√ºssel `uses FileSystem` am Revers tragen.
-- Hat sie diesen Schl√ºssel nicht, kann sie keine Dateien anr√ºhren ‚Äì selbst wenn sie es versucht.
-- Und das Beste: Wenn Funktion A die Funktion B aufruft, muss auch A die Berechtigung deklarieren. So siehst du auf den ersten Blick in `main()`, was das gesamte Programm √ºberhaupt darf!
-
-```zelyra
-fn sichere_operation() {
-    // Diese Funktion hat KEINE Capabilities.
-    // Sie kann unmoeglich Schaden auf der Festplatte oder im Netzwerk anrichten!
-    print("Garantiert seiteneffektfrei.")
-}
-
-fn main() {
-    sichere_operation()
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Saubere Deklaration von Umgebungsvariablen**
-```zelyra
-fn lese_konfiguration(schluessel: String) -> Option<String>
-    uses Environment
-{
-    return env(schluessel)
-}
-
-fn main() uses Environment {
-    print("Konfigurationszugriff erlaubt.")
-}
-```
-
-**Beispiel 2: Datenbankzugriff mit Capability**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_db"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String required
-}
-
-fn lade_daten() uses Database {
-    daten = sql<Task[]> {
-        SELECT id, name
-        FROM tasks
-    }
-    print("Datenbankzugriff gewaehrt.")
-}
-
-fn main() uses Database {
-    lade_daten()
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Vergessen, Capabilities an den Aufrufer weiterzureichen.
-  *Ursache:* Wenn Funktion `a()` die Funktion `b() uses FileSystem` aufruft, muss auch `a()` mit `uses FileSystem` versehen sein.
-- **Fehler:** Fehlende Freigabe in `zelyra.toml`.
-  *Ursache:* Das Projekt manifestiert seine maximalen Rechte in der Konfiguration.
-
-### 6. Merks√§tze
-1. Keine Funktion kann heimlich auf Dateien, Datenbanken oder das Netzwerk zugreifen.
-2. Alle Seiteneffekte sind transparent in der Funktionssignatur dokumentiert.
-3. Reine Funktionen ohne Capabilities sind garantiert manipulationssicher.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Identifiziere in einem bestehenden Code alle Funktionen mit Capabilities.
-- **Stufe 2 (Mittel):** Schreibe eine Funktion, die `uses Clock` und `uses Environment` kombiniert.
-- **Stufe 3 (Anspruchsvoll):** Entwirf ein Programm so, dass alle Gesch√§ftsrechenlogik in Funktionen v√∂llig ohne Capabilities ausgelagert wird.
-
-### 8. Praxisaufgabe: Berechtigungs-Architektur der Aufgabenverwaltung
-Isoliere die Berechtigungen in unserer Aufgabenverwaltung:
-```zelyra
-// 1. Reine Logik: KEINE Berechtigungen noetig
-fn ist_bereit_fuer_export(anzahl_aufgaben: Int) -> Bool {
-    return anzahl_aufgaben > 0
-}
-
-// 2. I/O-Logik: Explizite Dateisystem-Berechtigung
-fn fuehre_export_durch(datei: String, inhalt: String) uses FileSystem {
-    write_text(datei, inhalt)
-    print("Export vollzogen.")
-}
-
-fn main() uses FileSystem {
-    if ist_bereit_fuer_export(5) {
-        fuehre_export_durch("aufgaben.txt", "Aufgabe 1")
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Das Capability-Modell von Zelyra sch√ºtzt vor b√∂sartigen Bibliotheken und unkontrollierten Seiteneffekten.
-- Software wird durch explizite Rechtevergabe von Grund auf sicher (*Secure by Design*).
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Nenne drei System-Capabilities von Zelyra.
-2. Warum m√ºssen auch √ºbergeordnete Aufrufer-Funktionen Capabilities deklarieren?
-3. Wie sch√ºtzt Zelyra vor schadhaftem Fremdcode aus Paketmanagern?
-
----
-
-## Kapitel 34: Zelyra im Vergleich
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie sich Zelyra im direkten Vergleich zu Python, PHP/Laravel, Rust und TypeScript schl√§gt.
-- Welche St√§rken die jeweiligen Sprachen haben und warum Zelyra f√ºr moderne Web- & KI-Systeme ma√ügeschneidert wurde.
-- Warum Zelyra die Typsicherheit von Rust mit der Entwicklungsgeschwindigkeit von Python verbindet.
-
-### 2. Warum ist das Thema wichtig?
-Keine Programmiersprache ist f√ºr jeden Zweck perfekt: C und Rust sind unschlagbar f√ºr Betriebssystemkerne, Python dominiert die Datenwissenschaft, JavaScript das Frontend. Wer aber moderne, datenbankgest√ºtzte Gesch√§ftsanwendungen und Web-Backends bauen will, k√§mpft in diesen Sprachen oft mit historischem Ballast. Zelyra vereint das Beste aus diesen Welten.
-
-### 3. Verst√§ndliche Erkl√§rung: Der Sprachvergleich
-
-| Merkmal | Python | PHP / Laravel | TypeScript / Node | Rust | Zelyra |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Typisierung** | Dynamisch | Dynamisch/Optional | Statisch (wird zu JS) | Statisch (sehr streng) | **Statisch & Eindeutig** |
-| **Null-Sicherheit** | `None`-Crashes m√∂glich | `null`-Crashes m√∂glich | `undefined`-Crashes | Absolut (`Option`) | **Absolut (`Option`)** |
-| **SQL-Integration** | ORM (Strings) | ORM (Eloquent) | ORM (Prisma/TypeORM) | Diesel/SQLx | **Nativ & Typgepr√ºft** |
-| **Vertr√§ge (Contracts)**| Nein (nur `assert`) | Nein | Nein | Dritt-Bibliotheken | **Eingebaut (`requires`)** |
-| **Sicherheits-Capabilities**| Nein (Vollzugriff) | Nein (Vollzugriff) | Nein (Vollzugriff) | Nein | **Eingebaut (`uses ...`)** |
-| **KI-Werkzeugunterst√ºtzung**| Mittel (Mehrdeutig) | Mittel | Mittel | Schwer f√ºr KIs | **Nativ (JSON, Typed Holes)** |
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Vergleich: Wie Zelyra Fehler verhindert, die in anderen Sprachen passieren**
-
-*In Python/JS (potenzieller Laufzeitabsturz bei `null`):*
-Ein unbemerkter fehlender Wert f√ºhrt zum Servercrash: `AttributeError: 'NoneType' object has no attribute 'title'`.
-
-*In Zelyra (garantiert abgefangen zur Compilezeit):*
-```zelyra
-fn zeige_titel(opt_titel: Option<String>) {
-    match opt_titel {
-        Some(t) => {
-            print("Titel: " + t)
-        }
-        None => {
-            print("Kein Titel vorhanden.")
-        }
-    }
-}
-
-fn main() {
-    zeige_titel(Some("Projekt X"))
-    zeige_titel(None)
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Zelyra wie Python schreiben wollen (Einr√ºckung statt Klammern, dynamische Typ√§nderung).
-  *Ursache:* Zelyra nutzt geschweifte Klammern und verlangt statische Typstabilit√§t.
-- **Fehler:** Zelyra mit Low-Level-Rust verwechseln (komplexe Lifetime-Annotationen suchen).
-  *Ursache:* Zelyra nimmt Entwicklern die Speicherverwaltung vollautomatisch ab.
-
-### 6. Merks√§tze
-1. Zelyra vereint die Einfachheit von Skriptsprachen mit der Unbestechlichkeit statischer Typsysteme.
-2. Datenbanken, Webformulare und Schnittstellen sind native Sprachbausteine statt externer Bibliotheken.
-3. Sicherheit und Korrektheit werden nicht nachtr√§glich hineingetestet, sondern von Anfang an erzwungen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** √úbersetze eine einfache Python-Berechnungsfunktion in sauberen Zelyra-Code.
-- **Stufe 2 (Mittel):** Vergleiche eine Datenbankabfrage in PHP/Laravel Eloquent mit Zelyras `sql<T[]>`.
-- **Stufe 3 (Anspruchsvoll):** Diskutiere anhand eines Praxisbeispiels, warum Zelyras Capabilities Supply-Chain-Angriffe verhindern.
-
-### 8. Praxisaufgabe: Die Aufgabenverwaltung als Zelyra-Vorzeigeprojekt
-F√ºhre alle Kernst√§rken in einem pr√§gnanten Ausschnitt zusammen:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_demo"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    erledigt: Bool default false
-}
-
-fn zaehle_offene() -> Int uses Database {
-    offene = sql<Task[]> {
-        SELECT id, name, erledigt
-        FROM tasks
-        WHERE erledigt = false
-    }
-    return len(offene)
-}
-
-fn main() uses Database {
-    anzahl = zaehle_offene()
-    print("Offene Aufgaben ermittelt.")
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra schlie√üt die L√ºcke zwischen zu komplexen System-Sprachen und zu fehleranf√§lligen Skriptsprachen.
-- F√ºr moderne Web-, Daten- und KI-Anwendungen bietet Zelyra eine un√ºbertroffen robuste Plattform.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welchen Vorteil bietet Zelyras `Option`-Typ gegen√ºber Pythons `None` oder JavaScripts `null`?
-2. Warum ist die native Datenbankintegration in Zelyra sicherer als traditionelle ORM-Bibliotheken?
-3. Welche Rolle spielen Capabilities beim Schutz vor b√∂sartigen Fremdpaketen?
-
-# TEIL IX ‚Äì VOM ENTWURF ZUR FERTIGEN ANWENDUNG
-
----
-
-## Kapitel 35: Software planen ‚Äì Von der Idee zum Entwurf
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem Kapitel lernst du:
-- Wie du von einer vagen Idee zu einem pr√§zisen, umsetzbaren Software-Entwurf gelangst.
-- Wie man Entit√§ten und deren Beziehungen auf Papier oder im Editor skizziert.
-- Warum die fr√ºhe Definition des Schemas in Zelyra den gesamten weiteren Entwicklungsverlauf vereinfacht.
-- Wie man Anforderungen in kleine, testbare Meilensteine zerlegt.
-
-### 2. Warum ist das Thema wichtig?
-Der gr√∂√üte Fehler von Anf√§ngern (und unvorsichtigen Profis) ist es, sofort loszutippen, ohne den Datenfluss zu planen. Wer w√§hrend des Programmierens merkt, dass ein zentrales Tabellenfeld oder eine Beziehung fehlt, muss oft Tage damit verbringen, bestehenden Code m√ºhsam umzuschreiben. Zelyra belohnt gr√ºndliche Planung: Sobald dein `table`-Schema steht, leiten sich Formulare, Validierungen und APIs fast wie von selbst ab.
-
-### 3. Verst√§ndliche Erkl√§rung
-Jedes gute Softwareprojekt durchl√§uft vier Planungsphasen:
-1. **Zweck und Zielgruppe kl√§ren:** Wer nutzt das System? Welche Kernaufgabe muss gel√∂st werden? (z. B. ‚ÄûEin Teamleiter m√∂chte Aufgaben anlegen, zuweisen und als erledigt markieren‚Äú).
-2. **Datenmodell entwerfen:** Welche Objekte gibt es? Welche Felder sind Pflicht? (z. B. `tasks` mit `name`, `prioritaet`, `ist_erledigt`).
-3. **Sicherheits- und Zugriffsregeln:** Wer darf was tun? Ben√∂tigen wir Authentifizierung?
-4. **Schrittweise Implementierung:** Erst das Schema (`table`), dann die Logik (`fn`), dann die Webansichten (`crud`/`page`).
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Der erste Meilenstein ‚Äì Das Datenmodell**
-```zelyra
-database main {
-    engine: mariadb
-    database: "aufgaben_planer"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    prioritaet: Int default 2
-    erledigt: Bool default false
-}
-
-fn main() {
-    print("Planungsschritt 1: Schema steht.")
-}
-```
-
-**Beispiel 2: Planung der Gesch√§ftslogik als reine Funktionen**
-```zelyra
-fn validiere_frist(tage: Int) -> Bool {
-    return tage >= 0
-}
-
-fn main() {
-    print(validiere_frist(3))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Alles auf einmal programmieren wollen, bevor die Grundlagen getestet sind.
-  *Ursache:* Baue Software schrittweise: Teste jede Funktion sofort mit `zelyra check`.
-- **Fehler:** Unklare Pflichtfelder im Datenmodell.
-  *Ursache:* Lege von Anfang an fest, welche Felder `required` sind und welche leer sein d√ºrfen (`Option`).
-
-### 6. Merks√§tze
-1. Wer die Planung vernachl√§ssigt, plant das Scheitern.
-2. Ein klares Datenmodell ist das R√ºckgrat jeder erfolgreichen Anwendung.
-3. Zerlege gro√üe Probleme in kleine, unabh√§ngig √ºberpr√ºfbare Funktionen.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Skizziere den Funktionsumfang einer einfachen Notiz-App in Stichpunkten.
-- **Stufe 2 (Mittel):** Entwirf ein Tabellenschema f√ºr Benutzer, Aufgaben und Kategorien mit passenden Datentypen.
-- **Stufe 3 (Anspruchsvoll):** Formuliere f√ºr alle Kernfunktionen deiner geplanten App Vor- und Nachbedingungen (`requires`, `ensures`).
-
-### 8. Praxisaufgabe: Der vollst√§ndige Architekturplan unserer Aufgabenverwaltung
-F√ºhre alle Planungselemente der Aufgabenverwaltung zusammen:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_pro"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    prioritaet: Int default 1
-    erledigt: Bool default false
-}
-
-fn berechne_dringlichkeit(prioritaet: Int, verbleibende_tage: Int) -> String {
-    if prioritaet == 1 {
-        return "HOECHSTE PRIORITAET"
-    }
-    if verbleibende_tage <= 1 {
-        return "DRINGEND WEGEN FRIST"
-    }
-    return "NORMAL"
-}
-
-fn main() {
-    status = berechne_dringlichkeit(1, 5)
-    print("Architektur-Plan verifiziert: " + status)
-}
-```
-
-### 9. Zusammenfassung
-- Strukturierte Planung spart Entwicklungszeit und verhindert Architekturfehler.
-- Zelyras deklarative Sprachstruktur passt sich nahtlos an agile Planungsphasen an.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche vier Phasen durchl√§uft ein professioneller Software-Entwurf?
-2. Warum sollte das Datenmodell vor der Benutzeroberfl√§che entworfen werden?
-3. Wie helfen Vorbedingungen bei der pr√§zisen Anforderungsdefinition?
-
----
-
-## Kapitel 36: Architektur und saubere Codestruktur
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du deinen Zelyra-Code nach dem bew√§hrten Schichtenmodell strukturierst.
-- Die klare Trennung von Persistenz (`table`), Gesch√§ftslogik (`fn`) und Darstellung (`page`, `crud`).
-- Wie du Kopplungen vermeidest und Module wartungsfreundlich h√§ltst.
-- Warum saubere Architektur vor b√∂sen √úberraschungen bei sp√§teren Erweiterungen sch√ºtzt.
-
-### 2. Warum ist das Thema wichtig?
-Wenn Datenzugriff, Gesch√§ftsregeln und HTML-Ausgabe wild durcheinandergew√ºrfelt werden, entsteht unwartbarer Code. Wenn sich sp√§ter das Datenbanklayout √§ndert, zerbricht pl√∂tzlich die Weboberfl√§che. Eine saubere Architektur zieht klare Trennlinien: Jede Schicht hat eine einzige Verantwortlichkeit.
-
-### 3. Verst√§ndliche Erkl√§rung
-Eine saubere Zelyra-Anwendung gliedert sich in drei klare Schichten:
-1. **Daten- und Persistenzschicht:** Tabellendefinitionen (`table`) und typisierte SQL-Abfragen.
-2. **Gesch√§ftslogikschicht:** Reine Rechen- und Validierungsfunktionen mit Vertr√§gen (`requires`, `ensures`).
-3. **Pr√§sentations- und Schnittstellenschicht:** Weboberfl√§chen (`crud`, `page`) und REST-Endpunkte (`api`).
-
-```zelyra
-// 1. Datenmodell
-table tasks {
-    id: Id primary auto
-    name: String required
-}
-
-// 2. Gesch√§ftslogik
-fn formatiere_name(rohtext: String) -> String {
-    return "[AUFGABE] " + rohtext
-}
-
-// 3. Einstieg / Ablauf
-fn main() {
-    print(formatiere_name("Server pruefen"))
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Trennung von Logik und I/O**
-```zelyra
-// Reine Rechenfunktion: Keine Capabilities noetig
-fn berechne_prozent(wert: Int, max_wert: Int) -> Int
-    requires { max_wert > 0 && wert >= 0 }
-{
-    return (wert * 100) / max_wert
-}
-
-// I/O-Funktion: Nutzt die Logik und gibt sie aus
-fn main() {
-    prozent = berechne_prozent(45, 50)
-    print(prozent)
-}
-```
-
-**Beispiel 2: Strukturierung durch aussagekr√§ftige Namen**
-```zelyra
-table settings {
-    id: Id primary auto
-    app_name: String(60) required
-}
-
-fn zeige_systeminfo(name: String) {
-    print("System laeuft: " + name)
-}
-
-fn main() {
-    zeige_systeminfo("Zelyra Task Suite")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Gesch√§ftslogik direkt in SQL-Strings oder HTML-Bl√∂cke stopfen.
-  *Ursache:* Trenne Berechnungen in eigene Hilfsfunktionen aus, damit sie unabh√§ngig testbar bleiben.
-- **Fehler:** Zirkul√§re Abh√§ngigkeiten erzeugen.
-  *Ursache:* Der Datenfluss sollte immer von oben nach unten verlaufen (Pr√§sentation -> Logik -> Daten).
-
-### 6. Merks√§tze
-1. Trenne Datenmodell, Gesch√§ftsregeln und Darstellung strikt voneinander.
-2. Gesch√§ftslogik sollte m√∂glichst frei von Seiteneffekten und Capabilities sein.
-3. Saubere Schichten machen Anwendungen zukunftssicher und einfach erweiterbar.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Identifiziere in einem bestehenden Codebeispiel die drei Schichten.
-- **Stufe 2 (Mittel):** Lagere alle Berechnungen aus einer Web-Route in separate reine Funktionen aus.
-- **Stufe 3 (Anspruchsvoll):** Entwirf ein Schichtenmodell f√ºr ein Zeiterfassungssystem.
-
-### 8. Praxisaufgabe: Schichtenarchitektur f√ºr die Aufgabenverwaltung
-Implementiere das Schichtenmodell f√ºr unsere Aufgabenverwaltung:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_architecture"
-}
-
-// Schicht 1: Persistenz
-table tasks {
-    id: Id primary auto
-    name: String required
-    erledigt: Bool default false
-}
-
-// Schicht 2: Geschaeftslogik
-fn ist_aufgabe_wichtig(name: String, dringend: Bool) -> Bool {
-    return dringend
-}
-
-// Schicht 3: Anwendung / Ausfuehrung
-fn main() uses Database {
-    wichtig = ist_aufgabe_wichtig("Steuern einreichen", true)
-    print("Aufgaben-Architektur geprueft.")
-}
-```
-
-### 9. Zusammenfassung
-- Das Drei-Schichten-Modell garantiert √úbersichtlichkeit und langfristige Wartbarkeit.
-- Zelyra unterst√ºtzt diese Struktur auf nat√ºrliche Weise durch sein klares Typsystem.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche drei Schichten bilden das Fundament einer sauberen Zelyra-Anwendung?
-2. Warum sollte Kern-Gesch√§ftslogik m√∂glichst ohne Capabilities auskommen?
-3. Welche Vorteile bietet die Trennung von Pr√§sentation und Datenzugriff bei Re-Designs?
-
----
-
-## Kapitel 37: Konfiguration und Umgebungsvariablen
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie Konfigurationswerte sicher √ºber Umgebungsvariablen (`.env`) verwaltet werden.
-- Die Bibliotheksfunktion `env(schluessel)` und die ben√∂tigte F√§higkeit `uses Environment`.
-- Wie du mit dem `Option<String>`-R√ºckgabewert von `env()` sicher umgehst.
-- Warum Passw√∂rter und API-Schl√ºssel niemals im Quelltext stehen d√ºrfen.
-
-### 2. Warum ist das Thema wichtig?
-Einer der schwersten Sicherheitsverst√∂√üe ist das Versehentliche Einchecken von Datenbank-Passw√∂rtern oder geheimen API-Keys in √∂ffentliche Git-Repositories. Zudem muss sich eine Anwendung in Entwicklung, Test und Produktion unterschiedlich verhalten (z. B. andere Datenbank-Hosts). Umgebungsvariablen trennen Code und geheime Konfiguration sauber voneinander.
-
-### 3. Verst√§ndliche Erkl√§rung
-In Zelyra greifst du √ºber die Funktion `env()` auf Umgebungsvariablen zu.
-Weil eine Variable in der Umgebung existieren kann oder fehlen kann, liefert `env()` immer ein `Option<String>` zur√ºck:
-
-```zelyra
-fn lese_port() -> String uses Environment {
-    opt_port = env("APP_PORT")
-    match opt_port {
-        Some(p) => {
-            return p
-        }
-        None => {
-            return "8080"
-        }
-    }
-}
-
-fn main() uses Environment {
-    port = lese_port()
-    print("Server lauscht auf Port: " + port)
-}
-```
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Datenbank-Host konfigurieren**
-```zelyra
-fn hole_db_host() -> String uses Environment {
-    match env("DB_HOST") {
-        Some(host) => {
-            return host
-        }
-        None => {
-            return "127.0.0.1"
-        }
-    }
-}
-
-fn main() uses Environment {
-    print("Verbinde mit: " + hole_db_host())
-}
-```
-
-**Beispiel 2: Debug-Modus dynamisch abfragen**
-```zelyra
-fn ist_debug_aktiv() -> Bool uses Environment {
-    match env("APP_DEBUG") {
-        Some(wert) => {
-            return wert == "true"
-        }
-        None => {
-            return false
-        }
-    }
-}
-
-fn main() uses Environment {
-    if ist_debug_aktiv() {
-        print("Debug-Modus ist AN")
-    } else {
-        print("Debug-Modus ist AUS")
-    }
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Geheime Passw√∂rter fest in `.zyl`-Dateien hineinschreiben.
-  *Ursache:* Nutze immer eine `.env`-Datei und lese sensible Werte mit `env()`.
-- **Fehler:** `env()` ohne `uses Environment` aufrufen.
-  *Ursache:* Zelyras Sicherheitssystem sch√ºtzt Systemumgebungen vor unbefugtem Zugriff.
-
-### 6. Merks√§tze
-1. Sensible Zugangsdaten geh√∂ren niemals in den Versionskontroll-Quelltext.
-2. `env(name)` liefert ein `Option<String>` und erfordert `uses Environment`.
-3. Stelle f√ºr fehlende Umgebungsvariablen immer sichere Standardwerte bereit.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Lese eine Umgebungsvariable `USER_NAME` aus und gib eine pers√∂nliche Begr√º√üung aus.
-- **Stufe 2 (Mittel):** Schreibe eine Hilfsfunktion `hole_env_oder_standard(schluessel: String, standard: String) -> String`.
-- **Stufe 3 (Anspruchsvoll):** Konfiguriere ein Programm so, dass es zwischen Entwicklungs- und Produktions-Modus umschaltet.
-
-### 8. Praxisaufgabe: Konfigurationszentrale f√ºr die Aufgabenverwaltung
-Schreibe den Konfigurations-Loader f√ºr unsere Aufgabenverwaltung:
-```zelyra
-fn lade_app_titel() -> String uses Environment {
-    match env("APP_TITLE") {
-        Some(titel) => {
-            return titel
-        }
-        None => {
-            return "Zelyra Aufgabenverwaltung 0.1"
-        }
-    }
-}
-
-fn main() uses Environment {
-    print("System gestartet: " + lade_app_titel())
-}
-```
-
-### 9. Zusammenfassung
-- Umgebungsvariablen erm√∂glichen flexible, sichere Konfiguration f√ºr verschiedene Serverumgebungen.
-- Zelyras `Option`-Typ zwingt dich, das Fehlen von Einstellungen elegant zu behandeln.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Warum d√ºrfen geheime API-Schl√ºssel niemals im Quelltext fest hinterlegt sein?
-2. Welchen Datentyp liefert die Funktion `env()` zur√ºck?
-3. Welche Capability wird f√ºr den Zugriff auf Umgebungsvariablen ben√∂tigt?
-
----
-
-## Kapitel 38: Fehlersuche und Optimierung
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du mit dem CLI-Befehl `zelyra doctor` dein Projekt auf Herz und Nieren pr√ºfst.
-- Wie man Compilerhinweise und Diagnosen effektiv nutzt.
-- Strategien zum systematischen Aufsp√ºren von Fehlern (*Debugging*).
-- Wie du Performance-Engp√§sse erkennst und eliminierst.
-
-### 2. Warum ist das Thema wichtig?
-Selbst bei sorgf√§ltigster Programmierung l√§uft nicht immer alles auf Anhieb glatt. Vielleicht ist der Datenbankport blockiert, eine Konfiguration unvollst√§ndig oder eine Schleife berechnet unn√∂tige Schritte. Wer planlos herumprobiert, verliert Stunden. Systematisches Debugging mit den passenden Zelyra-Werkzeugen f√ºhrt dagegen in wenigen Minuten zur L√∂sung.
-
-### 3. Verst√§ndliche Erkl√§rung
-Zelyra gibt dir ein Schweizer Taschenmesser f√ºr die Fehlerdiagnose an die Hand:
-- `zelyra check`: Pr√ºft Syntax, Typen, Berechtigungen und Vertr√§ge.
-- `zelyra doctor`: Pr√ºft die Systemumgebung, Datenbankverbindungen, Ports und Richtlinien.
-- `zelyra impact`: Zeigt an, welche Funktionen durch eine geplante √Ñnderung beeinflusst werden.
-
-```bash
-zelyra doctor main.zyl
-```
-Wenn die MariaDB-Verbindung nicht erreichbar ist, meldet `doctor` sofort die Ursache, anstatt dich im Unklaren zu lassen.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Systematische Kontrollausgaben**
-```zelyra
-fn berechne_summe(zahlen: Int[]) -> Int {
-    mutable summe = 0
-    for z in zahlen {
-        summe = summe + z
-    }
-    return summe
-}
-
-fn main() {
-    werte: Int[] = [10, 20, 30]
-    ergebnis = berechne_summe(werte)
-    print("Berechnetes Ergebnis:")
-    print(ergebnis)
-}
-```
-
-**Beispiel 2: Absicherung vor Endlosschleifen durch Invarianten**
-```zelyra
-fn sichere_zaehlung(grenze: Int) -> Int
-    requires { grenze > 0 }
-{
-    mutable i = 0
-    while i < grenze
-        invariant { i >= 0 }
-    {
-        i = i + 1
-    }
-    return i
-}
-
-fn main() {
-    print(sichere_zaehlung(10))
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Bei unerwartetem Verhalten wahllos Zeilen im Code √§ndern.
-  *Ursache:* Lokalisiere das Problem erst exakt mit `zelyra check` und Ausgaben.
-- **Fehler:** Datenbankfehler vermuten, wenn lediglich Berechtigungen in `zelyra.toml` fehlen.
-  *Ursache:* F√ºhre `zelyra doctor` aus, um Umgebungsfehler sofort zu erkennen.
-
-### 6. Merks√§tze
-1. `zelyra doctor` ist der erste Schritt bei Verbindungsproblemen und Umgebungsfehlern.
-2. Invarianten und Vertr√§ge verhindern logische Fehlberechnungen.
-3. Systematische Fehlersuche ist schneller und sicherer als blindes Ausprobieren.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** F√ºhre `zelyra doctor` f√ºr dein Aufgaben-Projekt aus.
-- **Stufe 2 (Mittel):** Isoliere eine bewusst fehlerhafte Berechnung in einer Testfunktion.
-- **Stufe 3 (Anspruchsvoll):** Schreibe ein Programm mit detaillierten Statusmeldungen f√ºr jeden Einzelschritt.
-
-### 8. Praxisaufgabe: Selbstdiagnose-Routine der Aufgabenverwaltung
-Baue einen internen Gesundheits-Check f√ºr die Aufgabenverwaltung:
-```zelyra
-fn fuehre_selbsttest_durch() -> Bool {
-    test_ok = 1 + 1 == 2
-    return test_ok
-}
-
-fn main() {
-    print("Starte System-Selbsttest...")
-    if fuehre_selbsttest_durch() {
-        print("[OK] System arbeitet einwandfrei.")
-    } else {
-        print("[FEHLER] Interner Systemfehler.")
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Zelyras Werkzeugkette (`doctor`, `check`, `impact`) liefert schnelle Klarheit bei Fehlern.
-- Vertr√§ge und Invarianten fangen Probleme ab, bevor sie zu schwer auffindbaren Bugs werden.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Aspekte √ºberpr√ºft der CLI-Befehl `zelyra doctor`?
-2. Wie grenzt man einen Fehler in einer l√§ngeren Berechnung am besten ein?
-3. Welche Rolle spielen Schleifeninvarianten bei der Fehlersuche?
-
----
-
-## Kapitel 39: Bereitstellung und Betrieb
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie Zelyra-Anwendungen f√ºr den Produktivbetrieb bereitgestellt (*deployed*) werden.
-- Wie du deine Webanwendung im Docker-Container betreibst.
-- Wie Zelyra mit einer Produktions-MariaDB verbunden wird.
-- Wie du den Server-Prozess mit `zelyra serve` zuverl√§ssig am Laufen h√§ltst.
-
-### 2. Warum ist das Thema wichtig?
-Eine Software n√ºtzt niemandem, wenn sie nur auf dem Entwickler-Laptop l√§uft. Sie muss auf einem Server oder in der Cloud rund um die Uhr stabil erreichbar sein. In anderen Umgebungen erfordert das Deployment oft komplizierte Anleitungen mit PHP-FPM, Webserver-Vhosts und Prozessmanagern. Zelyra vereinfacht den Betrieb radikal: Eine einzelne Konfiguration und ein schlanker Container gen√ºgen.
-
-### 3. Verst√§ndliche Erkl√§rung
-Zelyra bringt seinen eigenen Hochleistungs-Webserver direkt mit:
-```bash
-zelyra serve src/main.zyl 0.0.0.0:8080
-```
-F√ºr den professionellen Betrieb verpackst du dein Projekt in einen Docker-Container:
-- Der Container enth√§lt das Zelyra-Binary, deine Quelldateien und `zelyra.toml`.
-- Beim Start f√ºhrt der Container automatisch `zelyra db apply` aus und startet den Webserver.
-
-### 4. Kleine, aufeinander aufbauende Beispiele
-
-**Beispiel 1: Produktionsreife Projektstruktur**
-```toml
-# zelyra.toml
-[package]
-name = "aufgaben_produktion"
-version = "1.0.0"
-
-[capabilities]
-database = true
-filesystem = false
-network = true
-```
-
-**Beispiel 2: Saubere Hauptdatei f√ºr den Webbetrieb**
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_prod"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(120) required
-    fertig: Bool default false
-}
-
-page "/" {
-    html {
-        <h1>Zelyra Aufgabenverwaltung live</h1>
-        <p>Produktivsystem aktiv und sicher.</p>
-    }
-}
-```
-
-**Beispiel 3: Startbefehl f√ºr den Server**
-Auf dem Produktionsserver gen√ºgt:
-```bash
-zelyra db apply src/main.zyl
-zelyra serve src/main.zyl 0.0.0.0:80
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Vergessen, die Datenbankmigrationen (`zelyra db apply`) vor dem Serverstart auszuf√ºhren.
-  *Ursache:* Neue Tabellen und Spalten m√ºssen in der Datenbank existieren, bevor Anfragen eingehen.
-- **Fehler:** In Docker den Port `8080` nicht nach au√üen freigeben.
-  *Ursache:* Nutze im `docker run`-Befehl das Port-Mapping `-p 8080:8080`.
-
-### 6. Merks√§tze
-1. `zelyra serve` startet den integrierten HTTP-Server ohne externe Webserver-Abh√§ngigkeiten.
-2. `zelyra db apply` bringt das Produktivschema sicher auf den neuesten Stand.
-3. Klare Capability-Beschr√§nkungen in `zelyra.toml` sichern den Server vor Angriffen ab.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Starte deine Webanwendung lokal auf Port 3000 mit `zelyra serve main.zyl 127.0.0.1:3000`.
-- **Stufe 2 (Mittel):** Erstelle eine `docker-compose.yml`, die MariaDB und deine Zelyra-App verbindet.
-- **Stufe 3 (Anspruchsvoll):** Simuliere ein Update mit einer Schema-√Ñnderung und f√ºhre `zelyra db plan` und `zelyra db apply` aus.
-
-### 8. Praxisaufgabe: Das produktionsfertige Aufgaben-Paket
-F√ºhre alle Einstellungen f√ºr das finale Deployment zusammen:
-```zelyra
-database main {
-    engine: mariadb
-    database: "tasks_production"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String(100) required
-    erledigt: Bool default false
-}
-
-page "/" {
-    html {
-        <html>
-            <body>
-                <h1>Aufgabenverwaltung - Produktivsystem</h1>
-                <p>System bereit fuer Benutzeranfragen.</p>
-            </body>
-        </html>
-    }
-}
-```
-
-### 9. Zusammenfassung
-- Zelyra-Anwendungen lassen sich ohne komplizierte Server-Stacks direkt und performant betreiben.
-- Datenbank-Migrationen und Webbetrieb greifen nahtlos ineinander.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welcher Befehl startet die Webanwendung auf einem Server?
-2. Warum sollte `zelyra db apply` vor dem Starten des Webservers ausgef√ºhrt werden?
-3. Welche Vorteile bietet der integrierte HTTP-Server gegen√ºber externen Server-Setups?
-
-# TEIL X ‚Äì ABSCHLUSSPROJEKT UND WEITERF√úHRUNG
-
----
-
-## Kapitel 40: Das gro√üe Abschlussprojekt: Vollst√§ndige Aufgabenverwaltung
-
-### 1. Was lerne ich in diesem Kapitel?
-In diesem gro√üen Finale lernst du:
-- Wie alle gelernten Bausteine zu einer vollst√§ndigen, produktionsreifen Anwendung verschmelzen.
-- Wie Datenbank, Authentifizierung, Rollen, CRUD-Interface, REST-API und Gesch√§ftslogik ineinandergreifen.
-- Wie du den kompletten Code liest, verstehst und auf deinem Server in Betrieb nimmst.
-
-### 2. Warum ist das Thema wichtig?
-Einzelne Code-Snippets zu verstehen ist eine Sache ‚Äì eine echte, zusammenh√§ngende Anwendung aus einem Guss zu bauen, ist die eigentliche Kunst der Softwareentwicklung. Dieses Abschlussprojekt beweist die Eleganz von Zelyra: In einer einzigen, √ºbersichtlichen Datei entsteht eine datenbankgest√ºtzte, authentifizierte Webanwendung mit UI und REST-API, f√ºr die man in herk√∂mmlichen Frameworks dutzende Dateien anlegen m√ºsste.
-
-### 3. Verst√§ndliche Erkl√§rung des Gesamtprojekts
-Unsere Aufgabenverwaltung umfasst:
-1. **Datenbank & Schemas:** Ziel-Engine MariaDB mit Tabellen f√ºr Aufgaben (`tasks`), Benutzer (`users`), Sitzungen (`auth_sessions`) und Berechtigungen (`user_permissions`).
-2. **Authentifizierung:** `auth users` mit gesch√ºtzten Routen und Argon2-Passwortschutz.
-3. **Gesch√§ftslogik:** Reine Funktionen mit Vertr√§gen (`requires`, `ensures`) zur Priorit√§tspr√ºfung und Fortschrittsberechnung.
-4. **CRUD-Interface:** Das administrative Web-Dashboard mit Listen, Formularen und L√∂schdialogen.
-5. **REST-API:** JSON-Endpunkte f√ºr den programmatischen Zugriff.
-
-### 4. Das vollst√§ndige Projekt: Der finale Quelltext
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "zelyra_tasks_app"
-}
-
-// ==========================================
-// 1. AUTHENTIFIZIERUNG & BENUTZERVERWALTUNG
-// ==========================================
-
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-}
-
-table users {
-    id: Id primary auto
-    email: Email required unique
-    password_hash: String(255) required
-    active: Bool default true
-}
-
-table auth_sessions {
-    id: Id primary auto
-    user: User required
-    token_hash: String(64) required unique
-    expires_at: Timestamp required
-}
-
-table user_permissions {
-    id: Id primary auto
-    user: User required
-    permission: String(100) required
-}
-
-// ==========================================
-// 2. AUFGABEN-DATENMODELL
-// ==========================================
-
-type TaskId = Id
-
-table tasks {
-    id: TaskId primary auto
-    name: String(120) required
-    beschreibung: String(500)
-    prioritaet: Int default 2
-    erledigt: Bool default false
-}
-
-// ==========================================
-// 3. GESCH√ÑFTSLOGIK MIT VERTR√ÑGEN
-// ==========================================
-
-fn berechne_erfolgsquote(erledigte: Int, gesamt: Int) -> Int
-    requires { gesamt > 0 && erledigte >= 0 && erledigte <= gesamt }
-    ensures { result >= 0 && result <= 100 }
-{
-    return (erledigte * 100) / gesamt
-}
-
-fn prioritaet_label(stufe: Int) -> String {
-    match stufe {
-        1 => {
-            return "HOCH"
-        }
-        2 => {
-            return "MITTEL"
-        }
-        3 => {
-            return "NIEDRIG"
-        }
-        _ => {
-            return "NORMAL"
-        }
-    }
-}
-
-// ==========================================
-// 4. WEBOBERFL√ÑCHE & CRUD-SCHNITTSTELLE
-// ==========================================
-
-crud Task -> tasks {
-    title: "Zelyra Aufgabenverwaltung"
-
-    view {
-        fields {
-            name
-            prioritaet
-            erledigt
-        }
-
-        list {
-            mode: cards
-            empty: "Keine Aufgaben vorhanden. Erstelle deine erste Aufgabe!"
-        }
-
-        detail {
-            mode: cards
-            title: "Aufgabendetails"
-        }
-
-        form {
-            mode: cards
-            title: "Aufgabe bearbeiten"
-            submit: "Aufgabe sichern"
-        }
-
-        delete {
-            title: "Aufgabe entfernen"
-            message: "Moechtest du diese Aufgabe wirklich loeschen?"
-            submit: "Jetzt loeschen"
-        }
-    }
-
-    action abschliessen {
-        label: "Als erledigt markieren"
-        confirm: "Aufgabe abschliessen?"
-
-        sql {
-            UPDATE tasks
-            SET erledigt = true
-            WHERE id = :id
-        }
-
-        success "Aufgabe erfolgreich abgeschlossen."
-        redirect "/tasks"
-    }
-}
-
-// ==========================================
-// 5. REST-API ENDPUNKTE
-// ==========================================
-
-api GET "/api/tasks/{id}" {
-    input {
-        id: TaskId
-    }
-    output Task
-    errors {
-        404 NotFound
-    }
-}
-
-api POST "/api/tasks" {
-    input {
-        name: String
-        prioritaet: Int
-    }
-    output Task
-    errors {
-        400 ValidationError
-    }
-}
-
-// ==========================================
-// 6. STARTSEITE
-// ==========================================
-
-page "/" {
-    html {
-        <html>
-            <head>
-                <title>Zelyra Aufgaben-System</title>
-            </head>
-            <body>
-                <h1>Zelyra Aufgabenverwaltung</h1>
-                <p>Das vollstaendige Abschlussprojekt ist einsatzbereit.</p>
-                <a href="/tasks">Zur Aufgabenuebersicht</a>
-            </body>
-        </html>
-    }
-}
-
-// ==========================================
-// 7. EINSTIEGSPUNKT
-// ==========================================
-
-fn main() {
-    print("Zelyra Aufgabenverwaltung vollstaendig initialisiert.")
-}
-```
-
-### 5. Typische Fehler und deren Ursachen
-- **Fehler:** Den Code starten, ohne vorher `zelyra db apply` ausgef√ºhrt zu haben.
-  *Ursache:* Die Tabellen in MariaDB m√ºssen angelegt sein, bevor der Webserver Anfragen verarbeitet.
-- **Fehler:** Fehlende MariaDB-Zugangsdaten in `.env`.
-  *Ursache:* Hinterlege `DB_HOST`, `DB_USER` und `DB_PASSWORD` in deiner Umgebungsdatei.
-
-### 6. Merks√§tze
-1. In Zelyra entsteht eine vollst√§ndige, sichere Web-App in einer einzigen, harmonischen Datei.
-2. Typsicherheit, Vertr√§ge, Authentifizierung und APIs greifen l√ºckenlos ineinander.
-3. Dieser Code ist sofort mit `zelyra check` pr√ºfbar und mit `zelyra serve` startbar.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Kompiliere das Gesamtprojekt mit `zelyra check` und √ºberpr√ºfe, dass 0 Fehler auftreten.
-- **Stufe 2 (Mittel):** Erg√§nze die Tabelle `tasks` um ein Feld `faellig_am: Date` und passe Formular und Ansichten an.
-- **Stufe 3 (Anspruchsvoll):** Richte MariaDB lokal ein, spiele das Schema mit `zelyra db apply` ein und lege die ersten echten Aufgaben √ºber den Webbrowser an.
-
-### 8. Praxisaufgabe: Dein eigener produktiver Server-Start
-Initialisiere das Projekt und starte es:
-```bash
-zelyra new task_manager --template minimal
-cd task_manager
-# Quellcode in src/main.zyl einfuegen
-zelyra check src/main.zyl
-zelyra serve src/main.zyl 0.0.0.0:8080
-```
-√ñffne `http://localhost:8080` ‚Äì deine eigene Zelyra-Anwendung ist live!
-
-### 9. Zusammenfassung
-- Das Abschlussprojekt vereint alle 9 vorangegangenen Teile dieses Lehrbuchs.
-- Du hast gelernt, wie man eine moderne, fehlertolerante Webanwendung von Grund auf baut.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Komponenten wurden im Abschlussprojekt kombiniert?
-2. Warum gen√ºgen in Zelyra so wenige Zeilen f√ºr ein vollwertiges CRUD-System?
-3. Welche Schritte sind erforderlich, um das Projekt auf einem neuen Server zu deployen?
-
----
-
-## Kapitel 41: Die Zelyra-Roadmap (Von 0.2.0 bis 1.0)
-
-### 1. Was lerne ich in diesem Kapitel?
-- Die Entwicklung von Zelyra: Was das experimentelle Release 0.2.0 liefert und was als N√§chstes kommt.
-- Geplante n√§chste Meilensteine: Modul-Imports, Package-Management und WebAssembly.
-- Wie Abw√§rtskompatibilit√§t und Stabilit√§tsgarantien bis Version 1.0 gew√§hrleistet werden.
-
-### 2. Warum ist das Thema wichtig?
-Eine Programmiersprache ist ein lebendiges √ñkosystem. Wer heute Zeit investiert, um Zelyra zu lernen, m√∂chte sicher sein, dass die Sprache eine klare Zukunft hat, professionell weiterentwickelt wird und bestehender Code auch in kommenden Versionen lauff√§hig bleibt.
-
-### 3. Verst√§ndliche Erkl√§rung: Die Roadmap im √úberblick
-Die Entwicklung von Zelyra gliedert sich in Implementierungsphasen und
-Release-Meilensteine:
-- **Phase 1 bis 3 (Fundament):** Lexer, Parser, AST, Typsystem, Kontrollstrukturen, Funktionen und Vertr√§ge (`requires`, `ensures`). *(Abgeschlossen)*
-- **Phase 4 bis 6 (Datenbank & Daten):** MariaDB/SQLite-Engine, typisiertes `sql<T>`, Migrationen, Transaktionen, Dateisystem- und Zeit-Capabilities. *(Abgeschlossen)*
-- **Phase 7 bis 9 (Web & Sicherheit):** `page`, `html`, `form` mit CSRF/XSS-Schutz, `crud`-Views, `auth` mit Argon2, `api` mit OpenAPI-Generierung, Typed Holes, JSON-Compilerdiagnostik. *(Abgeschlossen)*
-- **0.2.0 (aktuelles experimentelles Release):** Typisierte Maps, deklarative
-  Suche, Filterung und Pagination, wiederverwendbare Views und Slots,
-  erzeugtes CRUD, Authentifizierung und Berechtigungen, Audit-Unterst√ºtzung,
-  Setup-/Doctor-Werkzeuge, maschinenlesbare Compiler-Schnittstellen sowie
-  getestete Distributionspfade f√ºr Linux/Windows x86_64.
-- **0.3.0 (vorgeschlagen):** Einfacherer Einstieg, Release-Nachweise,
-  Schema-Sicherheit und eine reproduzierbare Abnahme mit einer realen
-  Anwendung. Siehe den [Releaseplan](../../release-plans/0.3.0.de.md); er ist
-  kein Releaseversprechen.
-- **Sp√§tere Meilensteine:** Feingranulare Module/Imports, Paketmanager,
-  WebAssembly und jede LTS-Zusage bleiben zuk√ºnftige Arbeiten.
-
-### 4. Zelyras Versprechen an Entwickler
-- **Keine Breaking Changes ohne Deprecation:** √Ñnderungen an der Syntax werden mit klaren √úbergangsfristen und Compiler-Hinweisen eingef√ºhrt.
-- **Verl√§ssliche Spezifikation:** Jedes Sprachmerkmal ist in der formalen Grammatik festgeschrieben.
-
-### 5. Typische Missverst√§ndnisse
-- **Missverst√§ndnis:** ‚ÄûZelyra 0.2.0 ist produktionsreif, weil die Kernpfade funktionieren.‚Äú
-  *Richtigstellung:* Zelyra 0.2.0 ist ein experimenteller, getesteter Umfang.
-  Unterst√ºtzte Pfade und Restrisiken sind dokumentiert; eine Freigabe f√ºr
-  Produktion wird nicht behauptet.
-- **Missverst√§ndnis:** Sprachsyntax aus anderen Sprachen blind voraussetzen.
-  *Richtigstellung:* Zelyra ist bewusst eigenst√§ndig entworfen. Nicht unterst√ºtzte Konstrukte (wie `enum` oder dynamisches `import`) sind in Phase 11/12 der Roadmap geplant.
-
-### 6. Merks√§tze
-1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
-   Release 0.2.0 zu sp√§teren Meilensteinen.
-2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
-   experimentelle Pfade, sind aber heute nicht f√ºr Produktion freigegeben.
-3. Modul-Imports, Paketverteilung und WebAssembly bleiben zuk√ºnftige Arbeiten.
-
-### 7. √úbungsaufgaben
-- **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
-- **Stufe 2 (Mittel):** Vergleiche die Features von Phase 9 mit den Planungen f√ºr Phase 11.
-- **Stufe 3 (Anspruchsvoll):** Schreibe ein kurzes Konzept f√ºr ein zuk√ºnftiges Zelyra-Paket, das du in Phase 12 ver√∂ffentlichen m√∂chtest.
-
-### 8. Praxisaufgabe: Zelyra-Version und Umgebung auditieren
-√úberpr√ºfe die installierte Version und den Zustand deines Systems:
-```bash
-zelyra --version
-zelyra doctor
-```
-
-### 9. Zusammenfassung
-- Zelyra schreitet zielstrebig auf Version 1.0 zu.
-- Das modulare Phasenkonzept garantiert kontinuierliche, stabile Weiterentwicklung.
-
-### 10. Kontrollfragen zur Selbstpr√ºfung
-1. Welche Kernbausteine sind im getesteten Umfang von 0.2.0 implementiert?
-2. F√ºr welchen zuk√ºnftigen Meilenstein sind feingliedrige `import`-Anweisungen geplant?
-3. Warum ist der experimentelle Status vor einem Produktiveinsatz wichtig?
-
----
-
-## Kapitel 42: Dein Weg als Zelyra-Entwickler
-
-### 1. Was lerne ich in diesem Kapitel?
-- Wie du dein erworbenes Wissen vertiefst und in eigenen Projekten anwendest.
-- Die wichtigsten Prinzipien f√ºr professionelle, langlebige Softwarearchitektur.
-- Wie du Teil der Zelyra-Community wirst und zum Open-Source-√ñkosystem beitr√§gst.
-
-### 2. Warum ist das Thema wichtig?
-Programmieren lernt man nicht durch blo√ües Lesen, sondern durch Machen. Dieses Buch hat dir das Fundament vermittelt ‚Äì jetzt beginnt deine pers√∂nliche Reise als Entwickler. Mit Zelyra besitzt du eine moderne, sichere und zukunftsf√§hige Sprache, die dich bei jedem Schritt unterst√ºtzt.
-
-### 3. Die f√ºnf goldenen Regeln f√ºr Zelyra-Entwickler
-1. **Model First:** Beginne jedes Projekt mit dem `table`-Schema. Ein klares Datenmodell l√∂st die H√§lfte aller sp√§teren Probleme.
-2. **Definiere Vertr√§ge:** Sichere wichtige Funktionen mit `requires` und `ensures` ab. Sie sind Dokumentation und Test in einem.
-3. **Rechte bewusst vergeben:** Halte den Gro√üteil deines Codes rein (ohne Capabilities) und deklariere Seiteneffekte gezielt.
-4. **Fehler als Werte behandeln:** Nutze `Result` und `Option`. Verbanne Ausreden f√ºr unkontrollierte Abst√ºrze.
-5. **Gemeinsam mit KI arbeiten:** Nutze Zelyras `--format json` und Typed Holes `_`, um KI-Assistenten als produktive Co-Piloten einzusetzen.
-
-### 4. Dein n√§chstes Projekt: Ideen zum Weiterprogrammieren
-- **Pers√∂nliches Haushaltsbuch:** Einnahmen, Ausgaben, Kategorien und Monatsberichte mit Zelyra CRUD.
-- **Support-Ticket-System:** Kundenanfragen, Priorit√§ten, Zuweisungen und E-Mail-Benachrichtigungen.
-- **Kunden- und Projektzeiterfassung:** Stundenerfassung mit `uses Clock` und Rechnungs-Export als JSON.
-
-### 5. Zusammenfassung des Lehrbuchs
-Herzlichen Gl√ºckwunsch! Du hast alle 10 Teile und 42 Kapitel von *Zelyra lernen* erfolgreich gemeistert. Du beherrschst die Grundlagen, das Typsystem, Fehlerbehandlung, Datenbanken, Webanwendungen, APIs und sichere Softwarearchitektur. Du bist jetzt bereit, eigene, robuste Anwendungen mit Zelyra zu erschaffen!
-
-### 6. Kontrollfragen zum Abschluss
-1. Welche Zelyra-Besonderheit sch√§tzt du nach diesem Lehrgang am meisten?
-2. Warum ist das Zusammenspiel von Sprache und Datenbank in Zelyra so revolution√§r?
-3. Welches Projekt wirst du als N√§chstes mit Zelyra umsetzen?
-
-# TECHNISCHES REFERENZHANDBUCH
-
-## 1. Was Zelyra anders macht
-
-In einer typischen Businessanwendung wird dieselbe Information mehrfach
-beschrieben: einmal in der Datenbank, noch einmal im Backend, erneut im
-Formular und schlie√ülich in der API. Zelyra versucht, daraus eine einzige
-nachvollziehbare Kette zu machen:
-
-~~~text
-Tabelle ‚Üí Typen ‚Üí SQL ‚Üí Formulare ‚Üí CRUD ‚Üí Webseite ‚Üí API/OpenAPI
-~~~
-
-Eine Spalte wie diese:
-
-~~~zelyra
-email: Email? 
-~~~
-
-sagt bereits:
-
-- Der Wert ist eine E-Mail-Adresse.
-- Der Wert darf fehlen.
-- SQL-Ergebnisse m√ºssen diese Nullf√§higkeit beachten.
-- Formulare k√∂nnen das passende Eingabefeld erzeugen.
-- Views m√ºssen mit dem optionalen Wert vern√ºnftig umgehen.
-
-SQL bleibt dabei echtes SQL. Zelyra zwingt niemanden, einen anspruchsvollen
-`JOIN` in eine 38 Glieder lange Methodenkette zu verwandeln. SQL hat schon
-genug erlebt.
-
-## 2. Installation
-
-### Voraussetzungen
-
-F√ºr Sprachbeispiele gen√ºgen:
-
-- Linux, macOS oder Windows (PowerShell/WSL);
-- `curl`;
-- eine funktionierende Shell.
-
-MariaDB wird erst f√ºr Datenbank-, Formularaktions-, Auth- und CRUD-Beispiele
-ben√∂tigt.
-
-### Aus dem Repository installieren
-
-~~~bash
-git clone https://github.com/sf1976/zelyra.git
-cd zelyra
-./install.sh
-~~~
-
-Der Installer ist wiederholbar und benutzerlokal. Optionen zur Kontrolle:
-
-~~~bash
-./install.sh --help
-./install.sh --dry-run --root "$HOME/.local"
-./install.sh --check
-./install.sh --uninstall
-~~~
-
-Mit `--no-rustup` wird die automatische Rust-Installation deaktiviert,
-`--no-path` unterdr√ºckt PATH-Hinweise. Mit `--root PATH` oder
-`ZELYRA_INSTALL_ROOT` l√§sst sich ein anderes benutzerbezogenes Ziel w√§hlen.
-Veraltete `cargo`-PATH-Eintr√§ge werden erkannt und nicht blind ausgef√ºhrt.
-
-Ver√∂ffentlichte Releases f√ºr Linux x86_64 und Windows x86_64 k√∂nnen ohne Rust
-oder Cargo installiert werden. Das gew√§hlte Archiv wird √ºber HTTPS geladen und
-per SHA-256 gepr√ºft:
-
-~~~bash
-./install.sh --release v0.2.0
-~~~
-
-Unter Windows steht `install.ps1` f√ºr PowerShell und `install.cmd` f√ºr die
-Eingabeaufforderung bereit:
-
-~~~powershell
-git clone https://github.com/sf1976/zelyra.git
-Set-Location zelyra
-.\install.ps1
-zelyra --version
-~~~
-
-Das Release-Archiv unter Windows:
-
-~~~powershell
-.\install.ps1 -Release v0.2.0
-~~~
-
-Danach:
-
-~~~bash
-zelyra --version
-zelyra --help
-~~~
-
-Wenn die Shell `zelyra` nicht findet:
-
-~~~bash
-export PATH="$HOME/.local/bin:$PATH"
-~~~
-
-### Docker und Container-Umgebung
-
-Zelyra installiert Docker selbst nicht, ver√§ndert keine Betriebssystempakete und fordert keine Root-Rechte an. F√ºr Container- und MariaDB-Workflows wird Docker mit Compose-Unterst√ºtzung ben√∂tigt:
-
-- **Linux:** Verwende die [offizielle Linux-Anleitung](https://docs.docker.com/engine/install/).
-- **Windows:** Verwende [Docker Desktop f√ºr Windows](https://docs.docker.com/desktop/setup/install/windows-install/) mit aktivierter Compose-Unterst√ºtzung.
-- **macOS:** Verwende [Docker Desktop f√ºr Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
-
-√úberpr√ºfe die Docker-Umgebung vor dem ersten Start:
-
-~~~bash
-docker compose version
-~~~
-
-Ist Docker installiert, aber der Zugriff auf seinen Socket verweigert, meldet Zelyra einen sicheren Hinweis zur Linux-Gruppenmitgliedschaft (`sudo usermod -aG docker $USER`) statt der rohen Docker-Ausgabe. Auch Portkonflikte werden ohne Preisgabe von Zugangsdaten gemeldet.
-
-### Zelyra aktualisieren
-
-Ein Update besteht aus zwei getrennten Teilen: Du aktualisierst den Zelyra-
-Compiler im Compiler-Repository und pr√ºfst danach dein eigenes
-Anwendungsprojekt. Deine `.zyl`-Dateien, `zelyra.toml` und `.env` liegen in
-deinem Anwendungsprojekt und werden durch `install.sh` nicht √ºberschrieben.
-
-#### Installation aus dem Git-Repository
-
-Arbeite zuerst im Compiler-Repository. Pr√ºfe lokale √Ñnderungen, bevor du sie
-aktualisierst:
-
-~~~bash
-cd /pfad/zu/zelyra
-git status --short
-git pull --ff-only origin main
-cargo check --workspace
-./install.sh
-zelyra doctor /pfad/zu/deinem-projekt/main.zyl --json
-~~~
-
-`git pull --ff-only` bricht ab, wenn du lokale √Ñnderungen oder eine eigene
-Historie hast. Sichere oder committe diese √Ñnderungen zuerst und f√ºhre das
-Update danach erneut aus. `./install.sh` baut die aktuelle CLI-Version und
-installiert sie mit `cargo install --path cli --force` erneut in deinem
-Benutzerverzeichnis.
-
-Die installierte Versionsnummer kannst du √ºber `zelyra --version` oder den JSON-Bericht von `doctor` ablesen:
-
-~~~bash
-zelyra --version
-zelyra doctor /pfad/zu/deinem-projekt/main.zyl --json
-~~~
-
-## 3. Das erste Programm
-
-Datei `hello.zyl`:
-
-~~~zelyra
-fn main() {
-    print("Hallo von Zelyra")
-}
-~~~
-
-Ausf√ºhren:
-
-~~~bash
-zelyra run hello.zyl
-~~~
-
-Ausgabe:
-
-~~~text
-Hallo von Zelyra
-~~~
-
-Ein etwas ehrgeizigeres Beispiel:
-
-~~~zelyra
-fn fibonacci(n: Int) -> Int {
-    if n <= 1 {
-        return n
-    }
-
-    return fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    print(fibonacci(10))
-}
-~~~
-
-Ergebnis: `55`. Der Rechner hat es geschafft. Wir d√ºrfen fortfahren.
-
-## 4. Neues Projekt anlegen und CLI
-
-### Compiler-Repository und Anwendungsprojekt
-
-Das GitHub-Repository `sf1976/zelyra` ist das Compiler-Repository. Es enth√§lt
-Lexer, Parser, Runtime, Datenbank- und Webmodule sowie das CLI. Eine eigene
-Anwendung ist ein davon getrenntes Verzeichnis. Du musst also nicht in der
-Zelyra-Quelle arbeiten und solltest dort auch keine Zugangsdaten ablegen.
-
-Der Projektstamm ist das Verzeichnis, in dem die Zelyra-Quelldatei und ‚Äì wenn
-vorhanden ‚Äì `zelyra.toml` liegen. Der Speicherort ist frei w√§hlbar, zum Beispiel
-`~/projekte/adressverwaltung` oder `C:\\Users\\Du\\Projekte\\adressverwaltung`.
-
-### ‚úÖ Projekt mit dem vorhandenen CLI anlegen
-
-Voraussetzungen f√ºr die CLI-Installation sind Rust/Cargo oder ein Release-Archiv; f√ºr relationale Datenbankbefehle der externe `mariadb`-Client oder Docker. Das CLI bietet aktuell diese Projektbefehle:
-
-~~~bash
-zelyra new adressverwaltung
-cd adressverwaltung
-zelyra run main.zyl
-~~~
-
-Ein vorhandenes Verzeichnis initialisieren:
-
-~~~bash
-mkdir adressverwaltung
-cd adressverwaltung
-zelyra init
-~~~
-
-F√ºr eine lokale MariaDB- und Webserver-Vorlage `zelyra new maschinenverwaltung --mariadb` verwenden:
-
-~~~bash
-zelyra new maschinenverwaltung --mariadb
-cd maschinenverwaltung
-~~~
-
-Dadurch entstehen `main.zyl`, `.env.example`, `Dockerfile` und `docker-compose.mariadb.yml` sowie direkt eine gesch√ºtzte `.env` mit sicheren Zufallspassw√∂rtern.
-
-**Automatische Portvergabe bei Konflikten:**
-Sind die Standardports `3000` (Web) oder `3306` (MariaDB) auf dem Rechner belegt, ermitteln `zelyra new`, `zelyra init` und `zelyra setup` automatisch den n√§chsten freien Host-Port und tragen ihn in die neue `.env` ein. Mit den optionalen Flags `--web-port <p>`, `--host-port <p>` und `--db-host-port <p>` k√∂nnen Ports verbindlich vorgegeben werden.
-
-### ‚úÖ Zelyra-Setup-Assistent (Konsole und Browser)
-
-`zelyra setup` bietet konsistente Einrichtungsaktionen sowohl √ºber die Befehlszeile als auch √ºber eine benutzerfreundliche Weboberfl√§che:
-
-#### Setup auf der Konsole
-
-Aus einem MariaDB-Projektverzeichnis:
-
-~~~bash
-zelyra setup
-zelyra setup --database
-zelyra setup --schema
-zelyra setup --all
-zelyra setup --host-port 18080 --db-host-port 3308
-~~~
-
-- `zelyra setup`: Legt eine gesch√ºtzte `.env` an, wenn sie fehlt. Vorhandene `.env`-Dateien werden niemals √ºberschrieben.
-- `zelyra setup --database`: Startet die Docker-Compose-Dienste (MariaDB und Zelyra-App). Erkennt automatisch `docker compose` oder den Legacy-Befehl `docker-compose`.
-- `zelyra setup --schema`: Startet die Umgebung und wendet das Schema aus `main.zyl` sicher an.
-- `zelyra setup --all`: F√ºhrt alle Schritte vollautomatisch in einem Zug aus.
-
-#### Setup im lokalen Browser (`zelyra setup --web`)
-
-~~~bash
-zelyra setup --web
-~~~
-
-Der Assistent bindet standardm√§√üig ausschlie√ülich an `127.0.0.1:3030` und erzeugt eine sichere, einmalige URL mit einem Zufallstoken:
-
-~~~text
-Zelyra setup web is running on http://127.0.0.1:3030/
-open: http://127.0.0.1:3030/?token=<local-token>
-~~~
-
-- Der Browser bietet dieselben Aktionen wie die Konsole: Konfiguration vorbereiten, MariaDB und Anwendung starten, Schema anwenden oder alles auf Knopfdruck ausf√ºhren.
-- Der Server ist aus Sicherheitsgr√ºnden **nur lokal** erreichbar und darf nicht √∂ffentlich exponiert werden.
-- Ist Port `3030` belegt, w√§hlt der Assistent automatisch den n√§chsten freien Port (oder wird mit `--port <port>` fest vorgegeben).
-- Nach Abschluss beendet `Ctrl+C` den Assistenten.
-
-Nach dem Start pr√ºft `zelyra doctor` den Status ohne destruktive Datenbank√§nderungen:
-
-~~~bash
-zelyra doctor main.zyl --env-file .env
-~~~
-
-F√ºr ein vollst√§ndiges CRUD-Starterprojekt mit Gesch√§ftslogik:
-
-~~~bash
-zelyra new maschinenverwaltung --template mariadb-crud
-cd maschinenverwaltung
-zelyra setup --all
-~~~
-
-## 5. Variablen, Typen und Funktionen
-
-Werte sind standardm√§√üig unver√§nderlich:
-
-~~~zelyra
-machine_name = "Presse 7"
-capacity: Int = 120
-active = true
-~~~
-
-Ver√§nderung muss sichtbar sein:
-
-~~~zelyra
-mutable completed = 0
-completed = completed + 1
-~~~
-
-Das verhindert versehentliche √Ñnderungen. Der Compiler ist dabei nicht
-misstrauisch; er hat nur schon Dinge gesehen.
-
-Wichtige Typen:
-
-~~~text
-Int UInt Float Decimal Bool String Char Bytes
-Timestamp Date Time Duration Email Url Uuid Money
-~~~
-
-Funktionen:
-
-~~~zelyra
-fn available_capacity(total: Int, reserved: Int) -> Int {
-    return total - reserved
-}
-~~~
-
-Nominale IDs verhindern Verwechslungen:
-
-~~~zelyra
-type MachineId = Id
-type OrderId = Id
-~~~
-
-Eine `OrderId` ist dadurch nicht automatisch eine `MachineId`, auch wenn beide
-intern √§hnlich aussehen. Fachlich falsch bleibt fachlich falsch.
-
-## 6. Option, Result und Pattern Matching
-
-Normale Typen sind nicht `null`. Ein m√∂glicher fehlender Wert wird markiert:
-
-~~~zelyra
-email: Email?
-~~~
-
-Behandlung:
-
-~~~zelyra
-match email {
-    Some(value) => print(value)
-    None => print("Keine E-Mail hinterlegt")
-}
-~~~
-
-Pattern Matching muss vollst√§ndig sein. Sonst erinnert dich der Compiler an
-den Fall, den der Freitagabend-Deploy vermutlich gefunden h√§tte.
-
-Fehler werden als Teil der Funktionssignatur sichtbar. Der aktuelle Sprachkern
-verwendet daf√ºr `Result<T, E>` mit `Ok` oder `Err`:
-
-~~~zelyra
-fn load_number(found: Bool) -> Result<Int, String> {
-    if found {
-        return Ok(42)
-    }
-    return Err("nicht gefunden")
-}
-~~~
-
-## 7. MariaDB und Tabellen
-
-‚úÖ MariaDB ist das Standardbackend und die prim√§re Runtime-Referenz. Die
-generierte Compose-Vorlage verwendet `mariadb:11`; der Compiler erzwingt aber
-keine konkrete MariaDB-Serverversion. Die Datenbankbefehle rufen den externen
-`mariadb`-Client auf.
-
-~~~zelyra
-database main {
-    engine: mariadb
-}
-
-table departments {
-    id: Id primary auto
-    name: String(100) required unique
-}
-
-table machines {
-    id: Id primary auto
-    number: String(30) required unique
-    name: String(100) required
-    department: Department required
-    active: Bool default true
-}
-~~~
-
-Zelyra erkennt die Beziehung zwischen Maschine und Abteilung. Daraus k√∂nnen
-Foreign Keys, Formulare und Auswahlfelder entstehen.
-
-Typische Abbildung:
-
-| Zelyra | MariaDB |
-|---|---|
-| `Id primary auto` | automatisch vergebene Prim√§r-ID |
-| `String(100)` | `VARCHAR(100)` |
-| `String` | `TEXT` |
-| `Email` | E-Mail-kompatible Textspalte |
-| `Bool` | boolescher Datenbankwert |
-| `Timestamp` | Zeitstempelwert |
-
-### MariaDB sicher vorbereiten
-
-Lege f√ºr die Anwendung eine eigene Datenbank und einen eigenen Benutzer an.
-Verwende nicht den MariaDB-Account `root` f√ºr den laufenden Zelyra-Webserver.
-Die folgenden Befehle werden als administrativer MariaDB-Benutzer ausgef√ºhrt;
-das Passwort wird interaktiv abgefragt:
-
-~~~bash
-mariadb --host=127.0.0.1 --port=3307 --user=root --password
-~~~
-
-~~~sql
-CREATE DATABASE `adressverwaltung`
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_unicode_ci;
-
-CREATE USER 'zelyra'@'127.0.0.1'
-    IDENTIFIED BY 'HIER_LOKALES_PASSWORT_EINTRAGEN';
-
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
-    ON `adressverwaltung`.* TO 'zelyra'@'127.0.0.1';
-
-SHOW GRANTS FOR 'zelyra'@'127.0.0.1';
-~~~
-
-`CREATE DATABASE` kann bei einer bereits vorhandenen Datenbank mit
-`IF NOT EXISTS` wiederholbar gemacht werden. Die Rechte sind bewusst auf diese
-Datenbank begrenzt; `GRANT ALL ON *.*` geh√∂rt nicht in einen Anwendungs-
-Schnellstart. `InnoDB` ist die f√ºr Transaktionen und Fremdschl√ºssel erwartete
-Storage-Engine. Die aktuelle Zelyra-SQL-Ausgabe setzt `ENGINE=InnoDB` jedoch
-nicht selbst; kontrolliere und erg√§nze das SQL vor dem Anwenden, wenn deine
-Servervorgaben es verlangen.
-
-F√ºr reine Lese- und normale CRUD-Operationen reichen die aufgef√ºhrten Rechte.
-`db apply --allow-destructive` kann zus√§tzlich `DROP`-Rechte ben√∂tigen; erteile
-sie nur bewusst und m√∂glichst zeitlich begrenzt. `db setup` ist ein
-Administratorvorgang, weil dabei die Datenbank selbst angelegt wird.
-
-Lokal kann MariaDB bereits auf Port `3306` laufen. Die generierte Compose-Datei
-ver√∂ffentlicht standardm√§√üig `127.0.0.1:3306`. Wenn dieser Port belegt ist,
-√§ndere die Zuordnung auf `127.0.0.1:3307:3306`: au√üen ist dann `3307`, im
-Container bleibt MariaDB auf `3306`. Von einem anderen Compose-Service ist der
-Host der Servicename `mariadb` und der Port weiterhin `3306`; vom Host ist es
-`127.0.0.1` plus der ver√∂ffentlichte Port.
-
-### Das Adressschema kontrollieren
-
-F√ºr das Beispiel erzeugt `zelyra db create src/main.zyl` derzeit sinngem√§√ü:
-
-~~~sql
-CREATE TABLE IF NOT EXISTS `addresses` (
-    `id` BIGINT PRIMARY KEY NOT NULL AUTO_INCREMENT,
-    `first_name` VARCHAR(100) NOT NULL,
-    `last_name` VARCHAR(100) NOT NULL,
-    `street` VARCHAR(150) NOT NULL,
-    `postal_code` VARCHAR(10) NOT NULL,
-    `city` VARCHAR(100) NOT NULL,
-    `email` VARCHAR(255)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-~~~
-
-F√ºr MariaDB enthalten die erzeugten Tabellenaussagen
-`ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
-Damit sind sie f√ºr die dokumentierte MariaDB-Basis vollst√§ndig; sie bleiben
-dennoch ein zu pr√ºfender Schema-Vorschlag. Vor √Ñnderungen an einer bestehenden
-Datenbank weiterhin `db plan` lesen und das Risiko ausdr√ºcklich bewerten.
-
-### Weitere Datenbank-Backends
-
-Neben MariaDB kann das Schema-CLI derzeit auch SQLite und PostgreSQL
-verarbeiten. Das Backend wird in der `.zyl`-Datei angegeben:
-
-~~~zelyra
-database main { engine: sqlite database: "adressverwaltung.sqlite3" }
-database main { engine: postgres database: "adressverwaltung" }
-~~~
-
-F√ºr SQLite verwendet `DATABASE_URL` das Schema `sqlite://` oder `sqlite:`; f√ºr
-MariaDB sind `mariadb://` und der kompatible Name `mysql://` g√ºltig. Die
-Schemaoperationen `create`, `inspect`, `plan` und `apply` ber√ºcksichtigen
-Tabellen, Spalten, Foreign Keys und Indizes. `db setup` und `db bootstrap`
-unterst√ºtzen f√ºr das automatische Anlegen derzeit MariaDB und SQLite; f√ºr
-PostgreSQL verwendest du das gew√ºnschte Schema mit `db create`, `db inspect`,
-`db plan` und anschlie√üend `db apply`.
-
-~~~bash
-export DATABASE_URL='sqlite:///tmp/adressverwaltung.sqlite3'
-zelyra db bootstrap src/main.zyl
-zelyra db inspect src/main.zyl
-~~~
-
-Die native SQL-Runtime wird weiterhin haupts√§chlich mit MariaDB eingesetzt.
-Ein vorhandenes Schema-Backend ist daher nicht automatisch ein Beleg daf√ºr,
-dass jede Runtime-Abfrage mit jedem Backend gleich funktioniert.
-
-## 8. Schema pr√ºfen und anwenden
-
-Zelyra verwendet keine Migrationsklassen. Die Quelldatei ist das gew√ºnschte
-Schema; das CLI vergleicht dieses mit dem Ist-Zustand. Der aktuelle Ablauf ist:
-
-1. Quelldatei pr√ºfen: `zelyra check src/main.zyl`.
-2. SQL nur anzeigen: `zelyra db create src/main.zyl`.
-3. Ist-Schema lesen: `zelyra db inspect src/main.zyl`.
-4. Unterschied planen: `zelyra db plan src/main.zyl`.
-5. Plan lesen und Risiko bewerten.
-6. Nach der Kontrolle anwenden: `zelyra db apply src/main.zyl`.
-
-Die Verbindung kommt ausschlie√ülich aus der Prozessumgebung:
-
-~~~bash
-export DATABASE_URL='mariadb://zelyra:HIER_LOKALES_PASSWORT_EINTRAGEN@127.0.0.1:3307/adressverwaltung'
-~~~
-
-‚ö†Ô∏è Zelyra l√§dt `.env` derzeit **nicht automatisch**. Eine `.env` ist eine
-sichere lokale Ablage, aber die Variablen m√ºssen vor dem CLI-Aufruf in die
-Prozessumgebung gelangen. Siehe Abschnitt 16.
-
-Schema-SQL anzeigen:
-
-~~~bash
-zelyra db create src/main.zyl > sql/addresses.generated.sql
-~~~
-
-Wenn du diese Datei nach der Kontrolle manuell um `ENGINE=InnoDB` und die
-Zeichensatzklauseln erg√§nzt hast, wendest du genau diese Datei mit dem
-MariaDB-Client an:
-
-~~~bash
-mariadb --host=127.0.0.1 --port=3307 --user=zelyra --password \
-    adressverwaltung < sql/addresses.generated.sql
-~~~
-
-`zelyra db apply` liest keine von dir bearbeitete SQL-Datei ein; es erzeugt
-seinen Plan erneut aus der `.zyl`-Quelle. Verwende deshalb entweder den
-unver√§nderten Zelyra-Plan oder den manuellen Clientweg ‚Äì nicht beides blind
-hintereinander.
-
-Bedingt durch die aktuelle Implementierung kann `db plan` auch ohne
-`DATABASE_URL` gegen ein leeres Schema planen. F√ºr eine echte Bestandsaufnahme
-und f√ºr `db apply` ist die Variable Pflicht:
-
-~~~bash
-zelyra db inspect src/main.zyl
-zelyra db plan src/main.zyl
-zelyra db apply src/main.zyl
-~~~
-
-Destruktive √Ñnderungen werden abgelehnt, bis sie ausdr√ºcklich freigegeben
-werden:
-
-~~~bash
-zelyra db apply src/main.zyl --allow-destructive
-~~~
-
-Dieses Flag bedeutet nicht ‚Äûwird schon gutgehen‚Äú. Es bedeutet ‚Äûich habe den
-Plan gelesen, ein Backup und einen vern√ºnftigen Puls‚Äú.
-
-`db setup` und sein Alias `db bootstrap` versuchen bei MariaDB zuerst die
-Datenbank anzulegen und wenden anschlie√üend das generierte Schema an. Daf√ºr
-braucht `DATABASE_URL` administrative Rechte. Ein gew√∂hnlicher
-Anwendungsbenutzer mit begrenzten Rechten sollte stattdessen `db create`
-verwenden und die SQL-Schritte durch einen Administrator ausf√ºhren lassen.
-
-‚ùå Nicht vorhanden sind `zelyra db check` sowie `zelyra schema inspect`,
-`zelyra schema plan` und `zelyra schema apply`. Der tats√§chlich vorhandene
-Bereitschaftstest ist `zelyra doctor src/main.zyl`; er pr√ºft statische Regeln,
-Cargo, `DATABASE_URL` (wenn gesetzt) und den lokalen Webport.
-
-### In 10 Minuten zur ersten Zelyra-Anwendung
-
-Die folgenden Schritte verwenden √ºberall dieselben Werte: das Verzeichnis
-`adressverwaltung`, die Datei `src/main.zyl`, die Datenbank
-`adressverwaltung`, den Benutzer `zelyra` und den Host-Port `3307`.
-
-1. Projektverzeichnis und Vorlage anlegen:
-
-   ~~~bash
-   zelyra new adressverwaltung --mariadb
-   cd adressverwaltung
-   cp .env.example .env
-   ~~~
-
-2. In `.env` die Platzhalter setzen. Wichtig: Compose liest die
-   `MARIADB_*`-Werte beim Containerstart; Zelyra selbst liest nur
-   `DATABASE_URL`. √Ñndere f√ºr den Host-Port in der Compose-Datei die Bindung
-   auf `127.0.0.1:3307:3306` und verwende lokal `3307`.
-
-3. MariaDB starten:
-
-   ~~~bash
-   docker compose -f docker-compose.mariadb.yml up -d mariadb
-   docker compose -f docker-compose.mariadb.yml ps
-   ~~~
-
-4. Als MariaDB-Administrator Datenbank und Benutzer vorbereiten; verwende das
-   SQL aus Abschnitt 7 und nur ein lokales Platzhalterpasswort.
-
-5. Die g√ºltige Adressverwaltung als `src/main.zyl` speichern und pr√ºfen:
-
-   ~~~bash
-   zelyra check src/main.zyl
-   ~~~
-
-6. Die URL in die Prozessumgebung laden und die Verbindung testen. `.env` wird
-   von Zelyra nicht automatisch geladen:
-
-   ~~~bash
-   set -a
-   . ./.env
-   set +a
-   zelyra doctor src/main.zyl --json
-   ~~~
-
-7. Das gew√ºnschte SQL erzeugen und vor dem Einsatz lesen:
-
-   ~~~bash
-   zelyra db create src/main.zyl > sql/addresses.generated.sql
-   sed -n '1,160p' sql/addresses.generated.sql
-   ~~~
-
-8. Ist-Schema und Plan ansehen:
-
-   ~~~bash
-   zelyra db inspect src/main.zyl
-   zelyra db plan src/main.zyl
-   ~~~
-
-9. Nach manueller Pr√ºfung anwenden:
-
-   ~~~bash
-   zelyra db apply src/main.zyl
-   ~~~
-
-10. Eine Webanwendung starten. F√ºr eine CRUD-Route braucht die Quelldatei
-    zus√§tzlich eine vom Server akzeptierte Webdefinition; `crud` allein ist
-    noch kein statischer Export:
-
-    ~~~bash
-    zelyra serve src/main.zyl 127.0.0.1:3000
-    ~~~
-
-Unter Windows ersetze `cp` durch `Copy-Item` und lade Variablen beispielsweise
-so in PowerShell:
-
-~~~powershell
-Copy-Item .env.example .env
-$env:DATABASE_URL = 'mariadb://zelyra:HIER_LOKALES_PASSWORT_EINTRAGEN@127.0.0.1:3307/adressverwaltung'
-zelyra doctor src/main.zyl --json
-~~~
-
-Der Generator bindet in der ausgelieferten Compose-Vorlage standardm√§√üig Port
-`3306`; `3307` ist dieses Handbuchs ein bewusst gew√§hlter, kollisionsarmer
-Host-Port. Passe die Compose-Portzeile an, bevor du den Schnellstart kopierst.
-
-## 9. Natives SQL
-
-‚úÖ SQL ist ein Sprachelement:
-
-~~~zelyra
-fn load_active_machines() -> Machine[]
-    uses Database
-{
-    return sql<Machine[]> {
-        SELECT id, number, name, department_id, active
-        FROM machines
-        WHERE active = true
-        ORDER BY number
-    }
-}
-~~~
-
-Parameter werden benannt und sicher gebunden:
-
-~~~zelyra
-fn load_machine(id: MachineId) -> Machine?
-    uses Database
-{
-    return sql<Machine?> {
-        SELECT id, number, name, department_id, active
-        FROM machines
-        WHERE id = :id
-    }
-}
-~~~
-
-Zelyra pr√ºft, soweit das Schema bekannt ist:
-
-- Tabellen und Spalten;
-- Aliase;
-- Parameter;
-- Nullf√§higkeit;
-- Ergebniszuordnung;
-- erforderliche `Database`-Capability.
-
-Schreibzugriff in einer Transaktion:
-
-~~~zelyra
-transaction {
-    sql {
-        UPDATE machines
-        SET active = false
-        WHERE id = :id
-    }
-}
-~~~
-
-## 10. Webseiten
-
-‚úÖ Eine vollst√§ndige, sichere Webschicht mit typisierten Datenbindungen, Query-Steuerungen und Komponenten ist implementiert.
-
-~~~zelyra
-page "/machines/{name}" {
-    html {
-        <html>
-            <body>
-                <h1>Maschine {name}</h1>
-                <p>Sie l√§uft. Hoffentlich nicht weg.</p>
-            </body>
-        </html>
-    }
-}
-~~~
-
-Start:
-
-~~~bash
-zelyra serve app.zyl
-~~~
-
-Dann beispielsweise:
-
-~~~text
-http://127.0.0.1:3000/machines/Presse-7
-~~~
-
-Pfadwerte werden standardm√§√üig HTML-escaped. Der derzeitige Web Core umfasst GET-Routen, Pfadparameter, Query-String-Behandlung, HTTP-Parsing und HTML-Antworten.
-
-### Typisierte Datenbindung und Collections in Views
-
-View-Interpolationen werden vor dem Serverstart statisch validiert. Eine Seite kann Routenparameter nutzen, geladene Datens√§tze √ºber typisiertes SQL abrufen und auf deren Felder gepr√ºft zugreifen:
-
-~~~zelyra
-page "/customers/{name}" {
-    load customer = sql<Customer> {
-        SELECT id, name FROM customers WHERE name = :name
-    }
-    html { <h1>{customer.name}</h1> }
-}
-~~~
-
-SQL wird gegen das Schema gepr√ºft, Parameter werden sicher gebunden und Capabilities sowie Berechtigungen vorab erzwungen. Collections k√∂nnen mit einer typisierten serverseitigen Schleife gerendert werden:
-
-~~~zelyra
-page "/customers" {
-    load customers = sql<Customer[]> { SELECT id, name FROM customers }
-    html { <ul>for customer in customers { <li>{customer.name}</li> }</ul> }
-}
-~~~
-
-### Deklarative Query-Steuerungen: Suche, Sortierung, Pagination und Filter
-
-Seiten k√∂nnen typisierte Query-Eingaben f√ºr ausdr√ºckliches SQL deklarieren:
-
-~~~zelyra
-page "/customers" {
-    input { search: String? }
-
-    load customers = sql<Customer[]> {
-        SELECT id, name FROM customers
-        WHERE (:search IS NULL OR name LIKE CONCAT('%', :search, '%'))
-        ORDER BY name
-    }
-
-    html { <p>Suche: {search}</p> }
-}
-~~~
-
-F√ºr Page-Collections, die Suche, Filterung, Sortierung oder Pagination deklarieren, erzeugt Zelyra automatisch semantische Formulare und bewahrt den URL-Zustand:
-
-~~~zelyra
-page "/customers" {
-    search { name email }
-    sort { name }
-    paginated 25
-    filter { name quantity }
-    load customers = sql<Customer[]> { SELECT id, name, quantity FROM customers }
-    html {
-        <p>Seite: {page} von {pages} (Gesamt: {total})</p>
-        <p>Sortierung: {sort} ({order})</p>
-    }
-}
-~~~
-
-- `search { name email }`: Der Compiler pr√ºft die Whitelist der durchsuchbaren Felder. Suchbegriffe werden sicher parametrisiert als `LIKE`-Bedingungen gebunden.
-- `sort { name }`: Akzeptiert nur deklarierte Ergebnisfelder, `order` nur `asc` oder `desc` (z. B. `/customers?sort=name&order=desc`).
-- `paginated 25`: Validiert `page` als positive Ganzzahl, nutzt parametrisiertes `LIMIT`/`OFFSET` und stellt `page`, `pages` und `total` als `UInt`-Werte bereit.
-- `filter { ... }`: Unterst√ºtzt typisierte Operatoren: Textfelder unterst√ºtzen `eq`, `contains`, `starts_with`, `ends_with` und Null-Checks; numerische Felder zus√§tzlich `gt`, `gte`, `lt`, `lte`. Beispiele: `/customers?filter_name__contains=Acme` oder `/customers?filter_quantity__gte=10`. Unbekannte Felder und ung√ºltige Werte werden mit kontrolliertem HTTP 400 beantwortet.
-
-### Benannte Views und Komponenten
-
-Ein benannter View bietet ein wiederverwendbares Seiten-Layout. Er deklariert Slots, in die Seiteninhalte eingef√ºgt werden:
-
-~~~zelyra
-view SiteShell {
-    html {
-        <html><body><main><slot /></main></body></html>
-    }
-}
-
-page "/customers" {
-    view: SiteShell
-    html { <h1>Customers</h1> }
-}
-~~~
-
-Typisierte Komponenten deklarieren Eigenschaften mit `props`:
-
-~~~zelyra
-component Badge {
-    props { text: String }
-    html { <span class="badge">{text}</span> }
-}
-
-page "/status" {
-    html { <Badge text="Ready" /> }
-}
-~~~
-
-Komponenten unterst√ºtzen Default-Slots und benannte Slots mit Fallback-Inhalten:
-
-~~~zelyra
-component Panel {
-    html {
-        <section class="panel">
-            <header><slot name="header">Standard-Kopfzeile</slot></header>
-            <div class="body"><slot /></div>
-        </section>
-    }
-}
-
-page "/dashboard" {
-    html {
-        <Panel>
-            <slot name="header"><h1>Mein Dashboard</h1></slot>
-            <p>Hauptinhalt des Panels.</p>
-        </Panel>
-    }
-}
-~~~
-
-*Hinweis:* Verschachtelte Komponenten-Slots innerhalb einer Komponentenverwendung ben√∂tigen nicht f√§lschlich ein √ºbergeordnetes Seiten-`view:`-Layout.
-
-## 11. Formulare
-
-‚úÖ Formulare k√∂nnen Regeln aus Tabellen √ºbernehmen:
-
-~~~zelyra
-form MachineCreate -> machines {
-    fields {
-        number
-        name
-        department
-        active
-    }
-}
-~~~
-
-Explizite Definition:
-
-~~~zelyra
-form ContactForm {
-    field email: Email {
-        label: "E-Mail"
-        required
-        max: 255
-        widget: email
-    }
-}
-~~~
-
-Werte ohne Server pr√ºfen:
-
-~~~bash
-zelyra form validate examples/customer_form.zyl CustomerCreate \
-    name="Muster GmbH" email=info@example.test
-~~~
-
-Mit `zelyra serve` stellt Zelyra das Formular unter `/forms/FormName` bereit.
-GET rendert das Formular samt CSRF-Token; POST pr√ºft Token und Werte.
-
-Eine Aktion:
-
-~~~zelyra
-form CustomerCreate -> customers {
-    fields { name email }
-
-    action save {
-        requires auth
-        permits "customers.save"
-        sql {
-            INSERT INTO customers (name, email)
-            VALUES (:name, :email)
-        }
-
-        redirect "/customers"
-    }
-}
-~~~
-
-Formularaktionen k√∂nnen eine eigene Autorisierung deklarieren. Die
-Berechtigung wird beim Anzeigen des Formulars und erneut vor dem Absenden
-gepr√ºft.
-
-## 12. CRUD
-
-‚úÖ Der kurze Fall ist erfreulich kurz:
-
-~~~zelyra
-crud Machine -> machines
-~~~
-
-Konfiguriert:
-
-~~~zelyra
-crud Machine -> machines {
-    title: "Maschinen"
-    list { number name department active }
-    search { number name }
-    filter { department active }
-}
-~~~
-
-Zelyra stellt Listen, Details, Create/Edit-Formulare, Suche, Filter, Sortierung,
-Pagination und eine CSRF-gesch√ºtzte L√∂schaktion bereit. Spalten werden gegen
-das Schema gepr√ºft.
-
-Beispiele f√ºr URLs:
-
-~~~text
-/machines
-/machines?search=Presse
-/machines?filter_active=true
-/machines?sort=number&order=asc
-/machines/new
-/machines/42/edit
-~~~
-
-### CRUD-Ressourcen mit wiederverwendbaren View-Layouts (`layout: ViewName`)
-
-CRUD-Definitionen k√∂nnen √ºber das Attribut `layout: ViewName` in das globale Seitenlayout eingebunden werden:
-
-~~~zelyra
-view AppLayout {
-    html {
-        <html>
-            <head><title><slot name="title">Verwaltung</slot></title></head>
-            <body>
-                <nav><slot name="nav">Standard-Navigation</slot></nav>
-                <main><slot name="content" /></main>
-                <aside><slot name="actions" /></aside>
-            </body>
-        </html>
-    }
-}
-
-crud Machine {
-    table machines
-    layout: AppLayout
-}
-~~~
-
-Das System bef√ºllt die benannten Slots `title`, `nav`, `content` und `actions` automatisch mit den generierten CRUD-Ansichten.
-
-Erzeugte CRUD- und Tableview-Steuerungen verwenden semantische Fieldsets und getrennte Beschriftungen f√ºr Operator und Wert jedes Filters. Filterverarbeitung und bewahrte Pagination-URLs verwenden eine deterministische Reihenfolge.
-
-üó∫Ô∏è Vollst√§ndig eigene typisierte Komponenten und feingranulare View-Overrides
-sind Teil der weiteren View-Roadmap.
-
-### CRUD-Ansichten, Aktionen und Soft Delete
-
-üß™ Die aktuelle CRUD-Schicht l√§sst sich innerhalb der sicheren Standardpfade
-gezielt anpassen. Eine Listenansicht kann beispielsweise als Kartenansicht
-erscheinen, ohne Suche, Filter, Sortierung, Pagination, Escaping oder
-Berechtigungspr√ºfung zu verlieren:
-
-~~~zelyra
-crud Customer -> customers {
-    view {
-        list {
-            mode: cards
-            empty: "Keine Kunden gefunden."
-        }
-        detail {
-            mode: cards
-            title: "Kundendetails"
-        }
-        form {
-            mode: cards
-            title: "Kundenformular"
-            submit: "Kunden speichern"
-        }
-        delete {
-            title: "Kunden l√∂schen"
-            message: "Dieser Vorgang kann nicht r√ºckg√§ngig gemacht werden."
-            submit: "Jetzt l√∂schen"
-        }
-        loading { message: "Kunden werden geladen ..." }
-        error {
-            title: "Kunden nicht verf√ºgbar"
-            message: "Bitte sp√§ter erneut versuchen."
-        }
-    }
-}
-~~~
-
-F√ºr den h√§ufigen Fall kann ein gemeinsames Feldprofil die erzeugte Liste,
-Detailansicht sowie Create-/Edit-Formulare einheitlich steuern:
-
-~~~zelyra
-crud Customer -> customers {
-    view {
-        fields { name email active }
-    }
-}
-~~~
-
-Ein explizites `list { ... }` bleibt eine √úberschreibung f√ºr Liste/Detail.
-Prim√§rschl√ºssel und automatisch erzeugte Felder bleiben in Formularen
-automatisch ausgeschlossen; unbekannte Profilfelder weist der Compiler zur√ºck.
-Wenn die technische `id`-Spalte in `fields` ausgeblendet ist (wie im obigen
-Beispiel mit `name email active`), verlinkt Zelyra in generierten CRUD-Listen
-automatisch das erste angezeigte Feld (`name`) mit der Detailseite des
-Datensatzes. Das gilt sowohl f√ºr Tabellen- als auch f√ºr Kachel-Layouts.
-
-Eigene fachliche Aktionen bleiben POST-only, parametrisiert und gesch√ºtzt:
-
-~~~zelyra
-crud Customer -> customers {
-    action deactivate {
-        label: "Kunden deaktivieren"
-        confirm: "Diesen Kunden wirklich deaktivieren?"
-        permits "customers.edit"
-        sql {
-            UPDATE customers
-            SET active = false
-            WHERE id = :id
-        }
-        success "Kunde deaktiviert."
-        redirect "/customers"
-    }
-}
-~~~
-
-Die Laufzeit erzwingt f√ºr solche Aktionen Datenbank-Capability,
-CSRF-Schutz, Authentifizierung und die deklarierte Berechtigung. Aktionen
-k√∂nnen zus√§tzlich typisierte Felder, eine Best√§tigungsseite sowie eigene
-Erfolgs- und Fehlerseiten erhalten. Das ist eine Erweiterung der vorhandenen
-CRUD-Runtime, kein frei programmierbarer Frontend-Generator.
-
-F√ºr reversible L√∂schungen gibt es eine Soft-Delete-Konfiguration:
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    deleted_at: Timestamp?
-}
-
-crud Customer -> customers {
-    soft_delete { column: deleted_at }
-}
-~~~
-
-Normale Listen und Details zeigen nur Zeilen mit `NULL`; archivierte Datens√§tze
-sind √ºber `?archived=true` erreichbar und k√∂nnen √ºber eine CSRF-gesch√ºtzte
-Restore-Aktion wiederhergestellt werden. Endg√ºltiges L√∂schen,
-Aufbewahrungsregeln und Massenarchivierung sind weiterhin geplant.
-
-Wenn eine Auth-Definition eine Audit-Tabelle angibt, schreiben CRUD-Erstellen,
-√Ñndern, L√∂schen, Archivieren, Wiederherstellen und eigene Aktionen ihre
-Ereignisse in derselben MariaDB-Transaktion. Passw√∂rter, Tokens, Geheimnisse
-und Hashes werden aus √Ñnderungsdetails entfernt.
-
-## 13. Authentifizierung und Berechtigungen
-
-üß™ Zelyra unterst√ºtzt Argon2-Login, persistente MariaDB-Sessions, Logout,
-Routenschutz und datenbankgest√ºtzte Berechtigungspr√ºfungen. F√ºnf
-Fehlversuche f√ºr dieselbe normalisierte E-Mail-Adresse innerhalb von 15
-Minuten l√∂sen eine 60-sek√ºndige HTTP-429-Sperre aus. Ein erfolgreicher Login
-rotiert das vorherige Session-Token dieses Browsers und entwertet es.
-
-Jedes schreibende Browserformular ben√∂tigt sein CSRF-Token sowie einen
-gleichurspr√ºnglichen `Origin`- oder `Referer`-Header, der zu `Host` und dem
-effektiven Schema der Anfrage passt. Fehlende, fehlerhafte oder fremde Angaben
-werden abgelehnt. Ein aus einem anderen Browser kopiertes Token reicht somit
-nicht f√ºr eine Website-√ºbergreifende Formularanfrage. Schreibende API-Anfragen
-mit Browser-Origin-Angaben durchlaufen dieselbe Pr√ºfung; Website-√ºbergreifender
-API-Zugriff ist nur f√ºr einen exakt in der CORS-Richtlinie freigegebenen Origin
-m√∂glich. API-Anfragen mit Browser-Origin-Angaben oder Browser-Session-Cookie
-durchlaufen diese Pr√ºfung ebenfalls. Das gilt auch f√ºr `GET`, weil Handler
-noch nicht statisch auf schreibgesch√ºtztes Verhalten beschr√§nkt sind.
-Website-√ºbergreifende API-Aufrufe sind nur f√ºr einen exakt in der CORS-Richtlinie
-freigegebenen Origin m√∂glich; mit Session-Cookie muss CORS zus√§tzlich
-Credentials erlauben. Das aktuelle CSRF-Token gilt pro Prozess und wird noch
-nicht einzeln pro Session gespeichert; deshalb sind diese Origin-Pr√ºfungen ein
-notwendiger Bestandteil des Schutzes.
-
-Der Zelyra-Server spricht derzeit ausschlie√ülich unverschl√ºsseltes HTTP.
-Schalte ihm einen vertrauensw√ºrdigen TLS-terminierenden Proxy vor, bevor die
-Anwendung au√üerhalb eines lokalen Entwicklungsrechners erreichbar ist. Der
-Proxy muss den √∂ffentlichen `Host` erhalten, `X-Forwarded-Proto` mit dem
-tats√§chlichen externen Schema √ºberschreiben und direkten √∂ffentlichen Zugriff
-auf den Anwendungsport verhindern. Zelyra verwendet den Header f√ºr die Pr√ºfung
-des effektiven Origins und setzt bei HTTPS das Cookie-Attribut `Secure`.
-Vertraue an einer √∂ffentlich erreichbaren Proxy-Grenze niemals ungepr√ºften,
-vom Client gelieferten Forwarded-Headern.
-
-Zus√§tzlich pr√ºft der Server jeden vorhandenen `Host`-Header gegen
-`ZELYRA_ALLOWED_HOSTS`. Der Standard erlaubt nur `localhost`, `127.0.0.1` und
-`[::1]`; das verhindert unter anderem DNS-Rebinding √ºber frei gew√§hlte Hosts.
-Mehrfach vorhandene sicherheitsrelevante Request-Header wie `Host`, `Origin`,
-`Referer`, `Cookie` und `Authorization` werden abgelehnt, damit keine
-mehrdeutige Auswertung entsteht. Die Antwort-Policy `Referrer-Policy:
-same-origin` erm√∂glicht gleichurspr√ºnglichen API-GETs diesen Nachweis, sendet
-aber keine Referrer-Informationen an andere Origins.
-F√ºr eine eigene Domain oder einen LAN-Host muss der tats√§chliche Hostname
-explizit in der kommagetrennten `.env`-Einstellung erg√§nzt werden. Es werden
-keine Schemes, Ports oder Wildcards akzeptiert. Prozessumgebung hat Vorrang
-vor Projekt-`.env` und Standardwert. Die Allowlist ersetzt weder TLS noch die
-Origin-/CSRF-Pr√ºfung.
-
-Einen Wert f√ºr die erforderliche Spalte `password_hash` mit der CLI erzeugen.
-Der interaktive Befehl schaltet die Passwortanzeige aus und verlangt eine
-Best√§tigung:
-
-~~~bash
-zelyra auth hash-password
-~~~
-
-F√ºr bewusste Automatisierung eine Passwortzeile mit `--stdin` √ºbergeben. Echte
-Passw√∂rter nicht als Kommandoargument verwenden und erzeugte Hashes nicht in
-die Versionsverwaltung √ºbernehmen:
-
-~~~bash
-printf '%s\n' 'dieses-passwort-aendern' | zelyra auth hash-password --stdin
-~~~
-
-~~~zelyra
-auth users {
-    table: users
-    permissions: user_permissions
-    roles: user_roles
-    role_permissions: role_permissions
-}
-
-page "/admin" {
-    requires auth
-    permits "machines.manage"
-
-    html {
-        <h1>Maschinenverwaltung</h1>
-    }
-}
-~~~
-
-Die optionale Tabelle `permissions` enth√§lt `user_id` und `permission` f√ºr
-direkte Vergaben. Rollengruppen werden mit `roles` und `role_permissions`
-aktiviert: Die erste Tabelle enth√§lt `user_id` und `role`, die zweite `role`
-und `permission`. Effektive Berechtigungen sind die Vereinigung direkter
-Vergaben und aller Berechtigungen aus den Rollen des Benutzers. In der
-integrierten Administrationsansicht √ºbermittelt auch das Formular zum Entziehen
-von Berechtigungen das korrekte CSRF-Token und entfernt Berechtigungen
-zuverl√§ssig.
-
-Dieselben Schutzregeln sichern typisierte API-Handler:
-
-~~~zelyra
-api GET "/api/machines/{id}" {
-    handler get_machine
-    requires auth
-    permits "machines.view"
-    input { id: MachineId }
-    output Machine
-    errors { 404 NotFound }
-}
-~~~
-
-Fehler bei gesch√ºtzten APIs verwenden JSON mit `code` und `message`. Ein
-Handler kann `Err("NotFound")` zur√ºckgeben, um den passenden Status aus dem
-deklarierten `errors`-Block zu w√§hlen; nicht deklarierte Fehler f√ºhren zu 500.
-JSON-Arrays k√∂nnen an typisierte Felder wie `Int[]` oder `MachineId[]` gebunden
-werden. Verschachteltes JSON wird √ºber deklarierte Records modelliert:
-
-~~~zelyra
-struct Address { city: String }
-struct CustomerInput { name: String address: Address }
-
-api POST "/customers" {
-    handler echo_customer
-    input { customer: CustomerInput }
-    output CustomerInput
-}
-~~~
-
-Unbekannte Record-Felder und fehlende Pflichtfelder werden abgelehnt. Im
-Sprachkern unterst√ºtzen Arrays Literale, Indexzugriff, `len`, `append`,
-`contains`, `first`, `last` und Verkettung mit `+`. Record-Literale und
-gepr√ºfter Feldzugriff stehen f√ºr verschachtelte Werte zur Verf√ºgung:
-
-~~~zelyra
-customer = CustomerInput {
-    name: "Anna"
-    address: Address { city: "Berlin" }
-}
-
-print(customer.address.city)
-~~~
-
-Die Array-Iteration verwendet `for ... in`; die Schleifenvariable ist
-unver√§nderlich und nur im Schleifenk√∂rper sichtbar. `break` und `continue`
-werden unterst√ºtzt.
-
-Einen mit Browsern und Node kompatiblen TypeScript-Client aus denselben
-API-Deklarationen erzeugen:
-
-~~~bash
-zelyra doc examples/api_records.zyl --typescript > customer-client.ts
-~~~
-
-Der erzeugte Client verwendet die standardm√§√üige `fetch`-API, enth√§lt
-deklarierte Records und Tabellen als TypeScript-Typen und behandelt
-Pfad-/Query-Parameter, JSON-Bodies, Bearer-Tokens, Response-Typen und
-HTTP-Fehler. Deklarierte API-Fehlernamen sind √ºber `ZelyraApiErrorCode`
-verf√ºgbar; `ZelyraApiError.fromResponse` liest Status, Code und Servermeldung
-aus und bewahrt den unver√§nderten Response-Body auf.
-
-API-Fehler k√∂nnen zus√§tzlich einen gepr√ºften Payload enthalten. Der Payload-
-Typ wird nach einem Doppelpunkt angegeben und muss dem Fehlertyp im `Result`
-des Handlers entsprechen:
-
-~~~zelyra
-struct ValidationProblem {
-    field: String
-    message: String
-}
-
-api POST "/customers/validate" {
-    handler validate_customer
-    output Result<String, ValidationProblem>
-    errors { 422 ValidationError: ValidationProblem }
-}
-~~~
-
-Die Antwort beh√§lt `error.code` und `error.message` und erg√§nzt den
-serialisierten Payload als `error.details`. OpenAPI enth√§lt das Details-Schema;
-der erzeugte Client stellt es √ºber `ZelyraApiErrorPayloads` und das generische
-Feld `ZelyraApiError.details` bereit. Bestehende ungetypte API-Fehler bleiben
-kompatibel.
-
-Browserzugriff ist standardm√§√üig deaktiviert. Wenn ein separates Frontend
-eine API aufrufen soll, werden exakte Origins in der Projektkonfiguration
-freigegeben:
-
-~~~toml
-[web]
-allowed_origins = ["http://localhost:5173"]
-allow_credentials = false
-~~~
-
-Zelyra beantwortet API-`OPTIONS`-Preflight-Anfragen automatisch und f√ºgt
-CORS-Header nur bei deklarierten API-Routen hinzu. Wildcard-Origins werden
-abgelehnt; CORS umgeht weder Authentifizierung noch Berechtigungen. Aktiviere
-Credentials nur f√ºr ben√∂tigte Browser-Session-Cookies; der Client muss dann
-zus√§tzlich `credentials: "include"` verwenden.
-
-Eine Origin muss mit `http://` oder `https://` beginnen. Pfade, Query-Strings,
-Fragmente, Wildcards und ein abschlie√üender Slash sind nicht erlaubt. Erlaubte
-Antworten erhalten `Access-Control-Allow-Origin` und `Vary: Origin`; bei
-aktivierten Zugangsdaten kommt `Access-Control-Allow-Credentials: true` hinzu.
-Eine Preflight-Antwort liefert HTTP 204 mit den erlaubten Methoden und
-angeforderten Headern. Verbotene Origins oder Methoden werden als strukturierte
-JSON-Fehler beantwortet; bei einem Methodenfehler enth√§lt die Antwort den
-`Allow`-Header.
-
-Ein ausgeblendeter Button ist keine Sicherheitsgrenze. Berechtigungen m√ºssen
-serverseitig an der Aktion gepr√ºft werden. Der Browser ist kreativ, besonders
-wenn man ihm vertraut.
-
-### API-Eingaben und sichere Antwort-Defaults
-
-API-Bodies f√ºr Methoden au√üer `GET` und `DELETE` d√ºrfen aktuell
-`application/json` oder `application/x-www-form-urlencoded` verwenden.
-Nicht unterst√ºtzte Medientypen liefern HTTP 415 als strukturierten JSON-Fehler.
-JSON-Bodies m√ºssen ein Objekt sein; anschlie√üend wird jedes deklarierte Feld
-in den Zelyra-Typ umgewandelt und gepr√ºft.
-
-Der HTTP-Parser pr√ºft `Content-Length`, liest vollst√§ndige Bodies auch √ºber
-mehrere Netzwerk-Reads ein und begrenzt Request-Bodies auf 1 MiB. Header sind
-auf 64 KiB begrenzt. Ein zu gro√üer Body wird vor dem Handler mit HTTP 413
-abgelehnt.
-
-Alle HTML-, JSON-, Redirect-, Fehler- und Preflight-Antworten erhalten diese
-sicheren Standard-Header:
-
-~~~http
-X-Content-Type-Options: nosniff
-X-Frame-Options: DENY
-Referrer-Policy: same-origin
-~~~
-
-Diese Defaults ersetzen weder TLS noch Authentifizierung, Autorisierung,
-CSRF-Schutz oder eine geeignete Content-Security-Policy.
-
-### Rollenverwaltung und manipulationssichtbares Audit
-
-üß™ Rollen und Rollenberechtigungen k√∂nnen mit den vorhandenen CLI-Befehlen
-gepflegt werden, wenn die `auth`-Definition die Tabellen daf√ºr konfiguriert:
-
-~~~zelyra
-auth users {
-    table: users
-    sessions: auth_sessions
-    permissions: user_permissions
-    roles: user_roles
-    role_permissions: role_permissions
-    audit: auth_audit_log
-    admin_path: "/admin/access"
-    admin_permission: "auth.manage"
-    admin_role: admin
-}
-~~~
-
-~~~bash
-DATABASE_URL='mariadb://user:passwort@127.0.0.1:3306/app' \
-  zelyra auth role grant app.zyl 42 manager
-DATABASE_URL='mariadb://user:passwort@127.0.0.1:3306/app' \
-  zelyra auth role-permission grant app.zyl manager customers.edit
-~~~
-
-`revoke` entfernt die jeweilige Zuordnung wieder. Die Befehle binden Werte als
-SQL-Parameter und pr√ºfen zun√§chst das Projektschema. Verwende f√ºr echte
-Passw√∂rter niemals den Platzhalter direkt aus diesem Beispiel.
-
-Mit `audit: auth_audit_log` lassen sich Authentifizierungs-, Rollen- und
-CRUD-Ereignisse untersuchen oder exportieren:
-
-~~~bash
-DATABASE_URL='mariadb://user:passwort@127.0.0.1:3306/app' \
-  zelyra audit inspect app.zyl --limit 100
-DATABASE_URL='mariadb://user:passwort@127.0.0.1:3306/app' \
-  zelyra audit export app.zyl --format json > audit.json
-zelyra audit verify app.zyl
-~~~
-
-F√ºr eine sichtbare Manipulationserkennung kann die Verkettung aktiviert werden:
-
-~~~zelyra
-auth users {
-    table: users
-    audit: auth_audit_log
-    audit_chain: true
-}
-~~~
-
-Die Audit-Tabelle ben√∂tigt dann `id`, `previous_hash` und `entry_hash`,
-√ºblicherweise `String(64)`. Zelyra verwendet kleingeschriebene SHA-256-
-Hexwerte. Der Hash bezieht sich auf die kanonische, mit `|` getrennte Folge
-`previous_hash|actor_user_id|event|target_user_id|details|created_at`.
-`zelyra audit verify` pr√ºft Verkn√ºpfungen und Hashes. Das Bereinigen ist f√ºr
-verkettete Protokolle absichtlich deaktiviert, weil das L√∂schen eines Eintrags
-die Kette brechen w√ºrde. Nicht verkettete alte Eintr√§ge k√∂nnen dagegen mit
-`zelyra audit prune ... --before ... --confirm` kontrolliert entfernt werden.
-
-Eine optionale Browser-Administrationsseite wird durch `admin_path`,
-`admin_permission` und `admin_role` aktiviert. Sie kann Benutzer, Passw√∂rter,
-Aktivierung, Rollen und Rollenberechtigungen verwalten; die Formulare sind
-CSRF-gesch√ºtzt. Der Schutz des letzten aktiven Administrators bleibt aktiv.
-
-## 14. Capabilities
-
-‚úÖ Externe F√§higkeiten werden sichtbar deklariert:
-
-~~~zelyra
-fn load_machines() -> Machine[]
-    uses Database
-{
-    return sql<Machine[]> {
-        SELECT id, number, name FROM machines
-    }
-}
-~~~
-
-Bekannte Capabilities:
-
-~~~text
-Database Network FileSystem Environment Process Clock Random Console
-~~~
-
-Aufrufende Funktionen m√ºssen ben√∂tigte Capabilities weiterf√ºhren. Projekte
-k√∂nnen sie in `zelyra.toml` freigeben:
-
-~~~toml
-[capabilities]
-database = true
-network = false
-~~~
-
-Statische Pr√ºfung und Runtime-Durchsetzung an Funktions-, nativen SQL-,
-Formular-, CRUD- und Authentifizierungs-Datenbankgrenzen sind bei vorhandenen
-Projektfreigaben implementiert. Eine vollst√§ndige Betriebssystem-Sandbox f√ºr
-alle Capabilities ist noch nicht vorhanden.
-
-Zwei sichere Host-APIs sind implementiert:
-
-~~~zelyra
-fn runtime_timestamp() -> Timestamp uses Clock {
-    return now()
-}
-
-fn configured_mode() -> String? uses Environment {
-    return env("ZELYRA_MODE")
-}
-~~~
-
-now() ben√∂tigt Clock und liefert Unix-Epoch-Millisekunden. env(name) ben√∂tigt
-Environment und liefert String?; eine fehlende Variable wird zu None. Werte
-werden nicht automatisch protokolliert oder ver√∂ffentlicht. Die Netzwerk-,
-Datei-, Prozess- und Zufalls-APIs sind implementiert, ben√∂tigen aber jeweils
-eigene Ressourcenfreigaben und bleiben in ihrer ersten Fassung bewusst
-eingeschr√§nkt.
-
-Die Random-Capability erzeugt sichere Ganzzahlen:
-
-~~~zelyra
-fn dice_roll() -> Int uses Random {
-    return random_int(1, 6)
-}
-~~~
-
-Der Bereich ist auf beiden Seiten inklusiv. Ung√ºltige Bereiche f√ºhren zu
-einem Runtime-Fehler; Zufallswerte werden nicht implizit ausgegeben.
-Prozessausf√ºhrung ist nur √ºber die folgende, ausdr√ºcklich begrenzte API
-verf√ºgbar.
-
-Die erste Network-Host-API ist `http_get`:
-
-~~~zelyra
-fn load_status(url: String) -> String uses Network {
-    return http_get(url)
-}
-~~~
-
-Projekte verwenden eine exakte Host-Allowlist und begrenzte Ressourcen:
-
-~~~toml
-[network]
-allowed_hosts = ["127.0.0.1:8080", "api.example.com"]
-timeout_ms = 5000
-max_response_bytes = 1048576
-~~~
-
-Ohne `[network]` sind in einem Projekt keine Hosts erlaubt. Der Transport
-unterst√ºtzt `http://` und `https://`; die Zertifikatspr√ºfung √ºber Rustls ist
-standardm√§√üig aktiviert. Es werden keine Redirects verfolgt und nur
-erfolgreiche UTF-8-GET-Response-Bodies innerhalb der konfigurierten Grenzen
-geliefert. Der Helper `http_get` bleibt die einfache GET-Komfort-API; f√ºr
-Request-Header, Request-Bodies oder den Response-Status wird `http_request`
-verwendet.
-
-Typisierte Anfragen verwenden `http_request`:
-
-~~~zelyra
-fn create_customer(url: String) -> HttpResponse uses Network {
-    return http_request(
-        "POST",
-        url,
-        ["Content-Type: application/json"],
-        Some("{\"name\":\"Anna\"}")
-    )
-}
-~~~
-
-Die Methode akzeptiert `GET`, `POST`, `PUT`, `PATCH`, `DELETE` und `HEAD`.
-Header sind Strings im Format `Name: value`, der Body ist `String?`. Das
-typisierte Ergebnis enth√§lt `status: Int`, `headers: String[]` und
-`body: String`. GET- und HEAD-Anfragen d√ºrfen keinen Body enthalten.
-
-JSON-Werte k√∂nnen in gepr√ºfte Zelyra-Werte umgewandelt werden und umgekehrt.
-Records und verschachtelte Felder werden gegen das deklarierte Schema gepr√ºft:
-
-~~~zelyra
-struct Customer { name: String tags: String[] nickname: String? }
-
-fn decode_customer(body: String) -> Customer {
-    return json_decode<Customer>(body)
-}
-
-fn encode_customer(customer: Customer) -> String {
-    return json_encode(customer)
-}
-~~~
-
-`json_decode<Typ>(text)` ben√∂tigt genau ein Zieltypargument und unterst√ºtzt
-Records, verschachtelte Records, Arrays, Optionen und Skalarwerte.
-`json_encode` serialisiert dieselben Werte. Ung√ºltiges JSON, Typfehler,
-unbekannte Record-Felder und fehlende Pflichtfelder werden als ausdr√ºckliche
-Laufzeitfehler gemeldet.
-
-F√ºr einen vollst√§ndigen typisierten JSON-Request-/Response-Ablauf gibt es
-`http_json` mit getrennten Request- und Response-Typargumenten:
-
-~~~zelyra
-struct CustomerCreate { name: String }
-struct Customer { id: Int name: String }
-
-fn create_customer(url: String, payload: CustomerCreate) -> Customer uses Network {
-    return http_json<CustomerCreate, Customer>("POST", url, [], Some(payload))
-}
-~~~
-
-Der Request-Record wird automatisch serialisiert und der Response-Body in den
-Response-Record dekodiert. Wenn kein `Content-Type` angegeben ist, wird
-`application/json` erg√§nzt. Nicht-2xx-Antworten sind ausdr√ºckliche
-Laufzeitfehler; der Helper liefert den dekodierten Wert und nicht die
-Response-Header zur√ºck.
-
-Wenn die Response-Metadaten erhalten bleiben m√ºssen, wird `http_result`
-verwendet:
-
-~~~zelyra
-fn submit(url: String, payload: CustomerCreate) -> HttpResult<Customer> uses Network {
-    return http_result<CustomerCreate, Customer>("POST", url, [], Some(payload))
-}
-~~~
-
-`HttpResult<Response>` enth√§lt `status: Int`, `headers: String[]`,
-`body: String`, `data: Response?` und `error: HttpError?`. Erfolgreiche
-2xx-Antworten setzen `data`; Nicht-2xx-Antworten setzen `error` mit Status,
-Headern, Body und Meldung. Transportfehler und ung√ºltiges Erfolgs-JSON bleiben
-Laufzeitfehler.
-
-Die Process-Capability stellt eine Befehls-API ohne Shell bereit:
-
-~~~zelyra
-fn render_report(input: String) -> String uses Process {
-    return run_process("/usr/bin/printf", ["%s", input])
-}
-~~~
-
-F√ºr Projekte ist eine exakte Befehls-Allowlist erforderlich:
-
-~~~toml
-[process]
-allowed_commands = ["/usr/bin/printf"]
-timeout_ms = 5000
-max_output_bytes = 1048576
-~~~
-
-Ohne `[process]` darf kein Befehl laufen. Die Umgebung des Kindprozesses wird
-geleert, stdin geschlossen, Prozesse werden nach dem Timeout beendet und
-stdout/stderr begrenzt. Shell-Ausf√ºhrung, Umgebungsweitergabe,
-Arbeitsverzeichnisse und Pipelines folgen sp√§ter.
-
-Die FileSystem-Host-APIs sind:
-
-~~~zelyra
-fn read_source(path: String) -> String uses FileSystem {
-    return read_text(path)
-}
-
-fn write_note(path: String, content: String) uses FileSystem {
-    write_text(path, content)
-}
-
-fn entries(path: String) -> String[] uses FileSystem {
-    return list_dir(path)
-}
-
-fn remove_note(path: String) uses FileSystem {
-    delete_file(path)
-}
-~~~
-
-Alle vier APIs ben√∂tigen FileSystem. Lesen und Verzeichnislisten verwenden
-read_roots; Schreiben und L√∂schen verwenden write_roots. Relative Pfade werden
-ausgehend vom Projektverzeichnis aufgel√∂st, vorhandene Symlink-Ziele vor dem
-Zugriff kanonisiert. Ohne filesystem-Abschnitt sind Projektlesezugriffe auf
-das Projektverzeichnis begrenzt; Schreiben und L√∂schen sind gesperrt:
-
-~~~toml
-[filesystem]
-read_roots = ["."]
-write_roots = ["data"]
-~~~
-
-Die konfigurierten Verzeichnisse m√ºssen bereits existieren. Ein neues
-Schreibziel ben√∂tigt ein bereits existierendes Elternverzeichnis.
-
-### Strukturierte Nebenl√§ufigkeit
-
-F√ºr einen ersten eingeschr√§nkten Nebenl√§ufigkeitsablauf gibt es `parallel` und
-`await`:
-
-~~~zelyra
-parallel {
-    customer = await load_customer()
-    orders = await load_orders()
-}
-~~~
-
-Jeder Zweig bindet sein Ergebnis mit `await`. Die Zweige erhalten eine
-unver√§nderliche Momentaufnahme der umgebenden Werte und werden vor der
-Fortsetzung in Quelltextreihenfolge zusammengef√ºhrt. Ein Fehler in einem Zweig
-l√§sst den gesamten Block fehlschlagen, nachdem die gestarteten Zweige beendet
-wurden. `await` au√üerhalb eines `parallel`-Blocks weist der Type Checker ab.
-Die aktuelle Runtime verwendet einen Worker-Thread pro Zweig; Abbruch und die
-Verwendung eines Datenbank-Connection-Pools sind noch nicht umgesetzt.
-
-## 15. Contracts und Verify
-
-üß™ Vor- und Nachbedingungen:
-
-~~~zelyra
-fn reserve(stock: Int, amount: Int) -> Int
-    requires {
-        amount > 0
-        stock >= amount
-    }
-    ensures {
-        result >= 0
-        result == stock - amount
-    }
-{
-    return stock - amount
-}
-~~~
-
-`requires` wird vor dem Funktionsk√∂rper, `ensures` danach gepr√ºft. In
-`ensures` bezeichnet `result` den R√ºckgabewert.
-
-~~~bash
-zelyra verify examples/contracts.zyl
-~~~
-
-M√∂gliche Statuswerte:
-
-~~~text
-PROVEN
-RUNTIME_CHECK
-UNPROVEN
-FAILED
-~~~
-
-Nur `PROVEN` bedeutet bewiesen. `RUNTIME_CHECK` tr√§gt keinen falschen Schnurrbart
-und behauptet nicht, Mathematik zu sein.
-
-Der Verifier fasst au√üerdem Funktionsaufrufe mit begrenzter Tiefe zusammen.
-Eine Callee mit mehreren R√ºckgabepfaden, etwa eine Absolutwertfunktion, liefert
-ihre Pfadbedingungen an den aufrufenden Contract. `requires`-Bedingungen der
-Callee werden nach Argumentsubstitution gepr√ºft; `requires` des Aufrufers sind
-Annahmen beim Beweis seiner `ensures`. Komplexe, rekursive oder nicht
-aufl√∂sbare F√§lle bleiben `RUNTIME_CHECK`.
-
-Lokaler Zustandsfluss wird in diesen Zusammenfassungen ber√ºcksichtigt. Sowohl
-`next: Int = value + 1` als auch die Kurzform `next = value + 1` mit
-anschlie√üendem `return next` werden wie eine direkte R√ºckgabe analysiert.
-Einfache lineare Mutable-Zuweisungen wie `next = next + 1` werden ebenfalls
-verfolgt. Statisch begrenzte Schleifen mit linearem Z√§hler werden entfaltet;
-`break` beendet die aktuelle Schleife und `continue` startet ihren n√§chsten
-Durchlauf als eigene symbolische Pfade. Nichtlineare Zuweisungen und
-unbeschr√§nkte Schleifen ohne bewiesene Invariante bleiben konservativ.
-
-### Schleifeninvarianten
-
-Eine `while`- oder unbedingte `loop`-Schleife kann eine oder mehrere explizite
-Invarianten deklarieren:
-
-~~~zelyra
-while current > 0
-    invariant { current >= 0 }
-{
-    current = current - 1
-}
-~~~
-
-Der Verifier pr√ºft die Invariante beim Eintritt und nach unterst√ºtzten
-K√∂rperpfaden. Eine bewiesene Invariante kann eine ansonsten unbeschr√§nkte
-lineare `while`-Schleife zusammenfassen; eine unbedingte `loop`-Schleife kann
-sie mit einem modellierten `break`-Austritt verwenden. Die Runtime pr√ºft sie
-vor und nach jedem Durchlauf. Nicht unterst√ºtzte oder nicht beweisbare
-Invarianten bleiben konservativ und erzeugen kein `PROVEN`-Ergebnis.
-
-`zelyra verify` meldet jede deklarierte Invariante separat, nach den
-`ensures`-Ergebnissen einer Funktion. Die Indizes der Invarianten beginnen bei
-null:
-
-~~~text
-PROVEN [V-001]: reduce.ensures[0] (src/reduce.zyl:3:5-3:21)
-PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:7:21-7:33)
-FAILED [V-004]: reduce.invariant[1] (src/reduce.zyl:8:21-8:34)
-~~~
-
-Jedes Ergebnis enth√§lt einen stabilen Code und einen Quellbereich als
-`(datei.zyl:startzeile:startspalte-endzeile:endspalte)`. Die Codes sind
-`V-001` (`PROVEN`), `V-002` (`RUNTIME_CHECK`), `V-003` (`UNPROVEN`) und
-`V-004` (`FAILED`). F√ºr IDEs und CI kann `zelyra verify app.zyl --json`
-verwendet werden; die JSON-Ausgabe enth√§lt dieselben Ergebnisdaten, eine
-verst√§ndliche `message`, ein optionales `counterexample`-Objekt und ein
-strukturiertes `location`-Objekt. Ein Gegenbeispiel wird nur ausgegeben, wenn
-eine begrenzte Suche einen kleinen linearen Integerzeugen sicher best√§tigt.
-Die aktuelle Suche umfasst bis zu drei lineare Variablen im Bereich
-`-32..=32`, auch bei fehlgeschlagenen Schleifeninvarianten; sonst ist der Wert
-`null`. Die Textausgabe zeigt au√üerdem f√ºr jedes Ergebnis eine Erkl√§rung und
-einen Quellzeilenausschnitt mit Caret-Marker.
-
-`FAILED` bedeutet, dass die Invariante auf einem m√∂glichen analysierten Pfad
-falsch ist oder vom Schleifenk√∂rper nicht erhalten bleibt. `RUNTIME_CHECK`
-bedeutet, dass eine Laufzeitpr√ºfung erforderlich ist, weil der symbolische
-Verifier den Beweis nicht vollst√§ndig f√ºhren kann. Nur `PROVEN` ist ein
-mathematischer Beweis.
-
-## 16. Konfiguration und Geheimnisse
-
-Projektkonfiguration geh√∂rt in `zelyra.toml`, Geheimnisse nicht:
-
-~~~toml
-[project]
-name = "maschinenverwaltung"
-version = "0.1.50"
-zelyra = "0.1"
-
-[capabilities]
-database = true
-network = false
-~~~
-
-Verbindungen und Passw√∂rter werden √ºber gesch√ºtzte Umgebungsvariablen bereitgestellt:
-
-~~~bash
-export DATABASE_URL='mariadb://user:password@127.0.0.1:3306/zelyra_demo'
-~~~
-
-Regeln:
-- `.env` niemals in Versionskontrolle committen;
-- Produktionszug√§nge nie in Codebeispiele schreiben;
-- Geheimnisse nicht loggen;
-- getrennte Datenbanken f√ºr Entwicklung, Tests und Produktion verwenden;
-- destruktive Tests niemals gegen Produktion ausf√ºhren.
-
-### Einfacher Einstieg, optionale Feature-Schalter
-
-F√ºr den einfachen Einstieg ist keine zus√§tzliche Feature-Konfiguration erforderlich. Erweiterte Projektbereiche k√∂nnen in `zelyra.toml` ausgew√§hlt werden; umgebungsabh√§ngige, nicht geheime √úberschreibungen geh√∂ren in `.env` oder die Prozessumgebung:
-
-~~~toml
-[features]
-web = true
-api = true
-crud = true
-auth = true
-audit = true
-~~~
-
-| Schalter | `.env` / Prozessvariable | Standard | Bedeutung |
-|---|---|---:|---|
-| `web` | `ZELYRA_FEATURE_WEB` | `true` | Seiten, Formulare und Web-Ressourcen |
-| `api` | `ZELYRA_FEATURE_API` | `true` | `api`-Deklarationen und API-Oberfl√§che |
-| `crud` | `ZELYRA_FEATURE_CRUD` | `true` | `crud`-Deklarationen und generierte CRUD-Oberfl√§che |
-| `auth` | `ZELYRA_FEATURE_AUTH` | `true` | `auth`-Deklarationen und Authentifizierungsoberfl√§che |
-| `audit` | `ZELYRA_FEATURE_AUDIT` | `true` | Audit-Konfiguration innerhalb der Authentifizierung |
-
-Auswertungsreihenfolge f√ºr Konfigurationswerte:
-```text
-Prozessumgebung ‚Üí .env ‚Üí zelyra.toml ‚Üí sichere Standardwerte
-```
-
-Wenn der Quellcode einen deaktivierten Bereich verwendet, meldet der Compiler `E-FEATURE-001`. Feature-Schalter k√∂nnen niemals Typpr√ºfung, SQL-Pr√ºfung, Capabilities, Contracts, CSRF-Schutz oder Sicherheitsregeln abschalten.
-
-Die wirksame Konfiguration kann jederzeit geheimnisfrei gepr√ºft werden:
-
-~~~bash
-zelyra config main.zyl
-zelyra config main.zyl --format=json
-~~~
-
-### Vollst√§ndige `.env`-Referenz des aktuellen Codes
-
-| Variable | Standard im generierten Projekt | Verwendung | Geheim |
-|---|---:|---|---|
-| `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container | nein |
-| `ZELYRA_HOST_PORT` | `3000` (oder autom. freier Port) | lokal ver√∂ffentlichter Webport | nein |
-| `ZELYRA_DB_HOST_PORT` | `3306` (oder autom. freier Port) | lokal ver√∂ffentlichter MariaDB-Port | nein |
-| `DATABASE_URL` | projektabh√§ngig | MariaDB-Verbindungs-URI (`mariadb://user:pass@host:port/db`) | ja |
-| `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname | nein |
-| `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer | nein |
-| `MARIADB_PASSWORD` | zuf√§llig erzeugt | Compose: Passwort des Anwendungsbenutzers | ja |
-| `MARIADB_ROOT_PASSWORD` | zuf√§llig erzeugt | Compose: MariaDB-Root-Passwort | ja |
-| `ZELYRA_AUTH_TOKEN` | keiner | optionaler lokaler Bearer-Token f√ºr gesch√ºtzte Anfragen | ja |
-| `ZELYRA_AUTH_PERMISSIONS` | leere Liste | kommagetrennte lokale Berechtigungs-Allowlist | nein |
-
-### Test- und Entwicklungsvariablen
-
-Die Testvariablen mit `ZELYRA_INSTALL_ROOT`, `ZELYRA_BIN`, `*_E2E_*` und `GENERATED_*` dienen internen CI- und lokalen Integrationstests (z. B. `tests/generated-project-docker-e2e.sh`, `tests/sqlite-e2e.sh`). Sie sind keine Anwendungskonfiguration und d√ºrfen nie Produktionszug√§nge enthalten.
-
-### Umgebungszugriff innerhalb der Sprache
-
-√úber die Built-in-Funktion `env(name)` kann Zelyra-Code Werte aus der Umgebung lesen, sofern `uses Environment` und `[capabilities] environment = true` deklariert sind:
-
-~~~zelyra
-fn configured_mode() -> String? uses Environment {
-    return env("ZELYRA_MODE")
-}
-~~~
-
-`DATABASE_URL` und sensible Schl√ºssel d√ºrfen niemals per `env(...)` in ungesichertem Code ausgelesen werden.
-
-## 17. Diagnosen und Fehlersuche
-
-Zelyra m√∂chte Fehler so erkl√§ren, dass man nicht erst eine arch√§ologische
-Ausgrabung im Stacktrace beginnen muss.
-
-### Verbindung unabh√§ngig testen
-
-Teste zuerst MariaDB ohne Zelyra. Das Passwort wird interaktiv abgefragt und
-landet nicht in der Shell-History:
-
-~~~bash
-mariadb \
-    --host=127.0.0.1 \
-    --port=3307 \
-    --user=zelyra \
-    --password \
-    adressverwaltung
-~~~
-
-Danach ist `zelyra doctor src/main.zyl --json` (optional mit `--env-file .env`
-und `--port 18080`) der vorhandene Zelyra-Test. Es gibt aktuell keinen
-`zelyra db check`-Befehl. `doctor` pr√ºft Quellcode, Schema, DB-Verbindung,
-Docker Compose und Host-Ports. Ohne `DATABASE_URL` meldet er nur eine Warnung,
-bei einer gesetzten, aber nicht erreichbaren Verbindung einen Fehler. Ein
-laufender DB-Container allein beweist noch nicht, dass Host, Port, Benutzer und
-Datenbank zusammenpassen.
-
-### Diagnosebefehle ohne Geheimnisse
-
-~~~bash
-pwd
-ls -la
-docker compose ps
-docker compose logs mariadb
-ss -ltn
-mariadb --version
-~~~
-
-Unter Windows in PowerShell sind `Get-Location`, `Get-ChildItem`,
-`docker compose ps` und `mariadb --version` die entsprechenden ersten Schritte.
-Gib niemals `DATABASE_URL` oder ein Passwort in eine Diagnoseausgabe aus.
-
-### Typische Fehler
-
-| Fehlermeldung | Wahrscheinliche Ursache | L√∂sung |
-|---|---|---|
-| `Permission denied` | fehlende Dateirechte, falscher Besitzer oder kein Zugriff auf den Client | `ls -la`, `chmod 600 .env` und Installationspfad pr√ºfen |
-| `Access denied for user` | Passwort stimmt nicht oder Benutzer ist f√ºr einen anderen Host angelegt | `SHOW GRANTS FOR 'zelyra'@'127.0.0.1';` pr√ºfen; Passwort rotieren |
-| `Connection refused` | auf Host/Port lauscht kein Dienst | `docker compose ps`, `ss -ltn` und den ver√∂ffentlichten Port pr√ºfen |
-| `Can't connect to server` | falscher Host, falscher Port oder Container noch nicht bereit | `docker compose logs mariadb`; vom Host `127.0.0.1:3307`, im Compose-Netz `mariadb:3306` verwenden |
-| `Unknown database` | Datenbankname in URL und MariaDB unterscheiden sich | `SHOW DATABASES;` ausf√ºhren und `DATABASE_URL` korrigieren |
-| falscher Port | au√üen `3307` mit innen `3306` verwechselt | Host nutzt `3307`, ein Compose-Service nutzt `3306` |
-| MariaDB-Container nicht gestartet | Compose-Fehler, belegter Port oder ungesundes Volume | `docker compose ps` und `docker compose logs mariadb` pr√ºfen |
-| Benutzer nur f√ºr anderen Host freigegeben | `'zelyra'@'localhost'` ist nicht immer `'zelyra'@'127.0.0.1'` | Benutzer exakt f√ºr den verwendeten Host anlegen und Grants kontrollieren |
-| fehlende Umgebungsvariable | `DATABASE_URL` wurde nicht exportiert | `.env` laden oder Variable f√ºr den Prozess setzen; Zelyra l√§dt sie nicht selbst |
-| `.env` wird nicht gefunden | falsches Arbeitsverzeichnis oder Annahme eines automatischen Loaders | `pwd`, `ls -la`; im Projektstamm arbeiten und Variable explizit exportieren |
-| ung√ºltiger Zahlenwert beim Port | Portteil der URI ist kein g√ºltiger MariaDB-Port | Ziffern verwenden, zum Beispiel `3307`; die URL wird ansonsten abgelehnt |
-| falscher Zeichensatz | Datenbank mit anderem Charset/Kollation angelegt | Datenbankdefinition pr√ºfen; `db setup` nutzt `utf8mb4`/`utf8mb4_unicode_ci` |
-| TLS-Fehler | TLS-Parameter wurden an die URL angeh√§ngt, werden aber nicht unterst√ºtzt | aktuelle CLI-URL ohne TLS-Query-Option nutzen; TLS-Konfiguration ist geplant |
-| Testdatenbank wird aus Sicherheitsgr√ºnden abgelehnt | Schutzmechanismus wird erwartet, ist aber nicht implementiert | Zelyra verhindert Produktionszugriff in Tests nicht automatisch; Variablen manuell pr√ºfen |
-| PostgreSQL-SQL gegen MariaDB | falsches Backend oder nicht passende DDL | Backend in `.zyl` pr√ºfen und `zelyra db create`-Ausgabe vor Anwendung lesen |
-
-Wenn `mariadb` gar nicht gestartet werden kann, nennt Zelyra den Startfehler
-des externen Programms. Der CLI-Prozess enth√§lt keinen eigenen MariaDB-Treiber.
-
-Quellcode pr√ºfen:
-
-~~~bash
-zelyra check app.zyl
-~~~
-
-Typische Fehlerklassen:
-
-- unbekannter Name oder Typ;
-- Zuweisung an unver√§nderlichen Wert;
-- unvollst√§ndiges Pattern Matching;
-- unbekannte Tabelle oder Spalte;
-- fehlender SQL-Parameter;
-- falsche Ergebnisstruktur;
-- fehlende Capability;
-- ung√ºltiges Formularfeld;
-- nicht erf√ºllter Contract;
-- unvollst√§ndige typisierte L√ºcke (`_`).
-
-Beim Entwickeln kannst du `_` als Platzhalter f√ºr einen unfertigen Ausdruck
-einsetzen (Typed Hole). `zelyra check` lehnt unfertigen Code f√ºr den Bau zwar
-ab, liefert aber kontextbezogene Diagnosen: erwarteter Typ, sichtbare Variablen
-und Funktionen, aktive Capabilities, Contract-Pflichten und Quelltextposition.
-
-Wenn `DATABASE_URL` fehlt, funktionieren reine Sprachpr√ºfungen weiterhin.
-Datenbankoperationen melden den fehlenden Zugriff kontrolliert. Das `run`-
-Kommando verwendet ohne Variable die reine Runtime; `serve` startet zwar die
-Routen, datenbankabh√§ngige Seiten antworten aber mit einem kontrollierten
-Fehler.
-
-## 18. Testen und Mitentwickeln
-
-Vor jedem Commit:
-
-~~~bash
-cargo fmt --all
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-~~~
-
-Ein Sprachfeature ist erst fertig, wenn es besitzt:
-
-- dokumentierte Syntax;
-- AST/HIR-Unterst√ºtzung;
-- statische Pr√ºfung;
-- verst√§ndliche Diagnosen;
-- positive Tests;
-- negative Tests;
-- ein ausf√ºhrbares Beispiel;
-- aktualisierte deutsche und englische Dokumentation.
-
-Tests, die nur deshalb gr√ºn sind, weil sie nie liefen, sind Dekoration.
-
-## 19. Was als N√§chstes kommt
-
-Die wichtigsten geplanten Bereiche:
-
-- typisierte, vollst√§ndig anpassbare View-Komponenten;
-- E-Mail-Vorlagen und SMTP;
-- Benachrichtigungszentrum;
-- Hintergrundaufgaben und transaktionale Outbox;
-- Activity-, Audit- und technische Logs;
-- typisierte Connections und Secret Provider;
-- ODBC und externe Read-only-Datenbanken;
-- umfangreichere fachliche Fehlerwerte √ºber typisierte API-Payloads hinaus und
-  weitergehende Request-/Response-Verarbeitung zur Laufzeit;
-- Abbruch und Datenbank-Pool-Integration f√ºr strukturierte Nebenl√§ufigkeit;
-- weitergehende formale Verifikation;
-- Optimierungsmodelle f√ºr reale Planungsprobleme.
-
-Zelyra soll den Standardfall kurz halten und beim Sonderfall nicht pl√∂tzlich
-die T√ºr abschlie√üen:
-
-> **Automatisch, wenn m√∂glich. Anpassbar, wenn n√∂tig. √úberall gepr√ºft.**
-
-Und jetzt: eine Tabelle bauen, SQL lesen, Backup pr√ºfen. In dieser Reihenfolge.
-
-## 20. Zelyra im Vergleich zu Rust
-
-### Die wichtigste Aussage zuerst
-
-Zelyra wird mit Rust entwickelt. Der Zelyra-Compiler, die Sprachmodule und
-Teile der Laufzeit liegen als Rust-Crates im Compiler-Repository. Das bedeutet
-nicht, dass Zelyra Rust ver√§ndert oder dass Zelyra-Anwendungsprogramme Rust-
-Programme sind.
-
-> **Zelyra ist nicht ver√§ndertes Rust. Zelyra ist eine eigenst√§ndige Sprache,
-> deren Compiler und Laufzeit in Rust entwickelt werden.**
-
-Der Rust-Compiler wird f√ºr Zelyra nicht geforkt und nicht um Zelyra-Schl√ºssel-
-w√∂rter erweitert. Zelyra ist auch keine Rust-Bibliothek und kein Pr√§prozessor,
-der gew√∂hnlichen Rust-Code in etwas anderes umschreibt. Eine `.zyl`-Datei wird
-vom eigenen Zelyra-Lexer und -Parser gelesen, in eigene AST-/HIR-Strukturen
-√ºberf√ºhrt, typgepr√ºft und anschlie√üend von der Zelyra-Runtime verarbeitet.
-
-Die √Ñhnlichkeit bei `fn`, geschweiften Klammern, `if`, `match` oder statischer
-Typisierung ist eine Designentscheidung, aber kein Abstammungsnachweis. Entschei-
-dend sind Grammatik, Semantik und Programmiermodell. Zelyra ist derzeit noch
-ein experimenteller Prototyp; die Eigenst√§ndigkeit w√§chst mit der Umsetzung des
-eigenen Typsystems, der SQL-Pr√ºfung, der Runtime und der Zelyra-spezifischen
-Konstrukte.
-
-Die Aussagen in diesem Kapitel wurden gegen den aktuellen Quellcode gepr√ºft:
-Lexer und `TokenKind` definieren die Zelyra-Tokens, der Parser erzeugt eigene
-AST-Strukturen, und die nachfolgenden Module √ºbernehmen Aufl√∂sung,
-Typpr√ºfung, Contract-Pr√ºfung, SQL-Analyse, Webverarbeitung und Runtime. Die
-CLI- und Datenbankmodule wurden ebenfalls ber√ºcksichtigt. Wo ein Merkmal nur
-als Token, AST-Knoten oder Zielbild vorhanden ist, wird es nicht als vollst√§ndig
-ausf√ºhrbare Spracheigenschaft ausgegeben.
-
-### Allgemeiner Vergleich
-
-| Bereich | Rust | Zelyra | Wesentlicher Unterschied | Zelyra-Status |
-|---|---|---|---|---|
-| Sprachkategorie | universelle System- und Anwendungssprache | eigenst√§ndige deklarative Sprache f√ºr Business- und Webanwendungen | andere Grammatik und Semantik | üß™ |
-| Haupteinsatzgebiet | Systeme, Services, CLI, Embedded, WebAssembly | datenbankgest√ºtzte Business- und Webanwendungen | Zelyra b√ºndelt Fachanwendungsebenen | üß™ |
-| Compiler | `rustc`, Cargo-√ñkosystem | eigenes Rust-Programm im Zelyra-Repository | Rust kompiliert den Compiler; `rustc` kompiliert nicht `.zyl` | ‚úÖ |
-| Laufzeit | Rust-Code l√§uft nativ oder √ºber gew√§hlte Runtime | eigene Zelyra-Runtime, in Rust implementiert | Zelyra f√ºhrt eigene Werte und Regeln aus | üß™ |
-| Speicherverwaltung | Ownership, Borrowing, Lifetimes | f√ºr Zelyra-Code weitgehend automatisch verborgen | kein Rust-Borrow-Checker im `.zyl`-Programm | üß™ |
-| Ownership | zentrale Rust-Semantik | kein entsprechendes `.zyl`-Konstrukt | Speicherregeln sind nicht dieselben | üó∫Ô∏è |
-| Borrowing | Referenzen und Borrow-Checker | kein entsprechendes `.zyl`-Konstrukt | keine Rust-Referenzsyntax | üó∫Ô∏è |
-| Lifetimes | explizite oder inferierte Lebensdauern | keine Lifetime-Syntax | Zelyra legt diese Ebene derzeit nicht offen | üó∫Ô∏è |
-| statische Typisierung | sehr ausgereift, generisch und trait-basiert | eigener statischer Typechecker mit `Int`, `String`, `Option`, Records usw. | Zelyra-Typen sind nicht Rust-Typen | ‚úÖ |
-| Nullf√§higkeit | `Option<T>` | `T?`, etwa `Email?` | Zelyra kann daraus Schema-/Formregeln ableiten | ‚úÖ |
-| Fehlerbehandlung | `Result<T, E>`, `Option<T>`, `?`-Operator | `Result<T, E>`, `Some`/`None`, Laufzeitdiagnosen | kein Rust-`?`-Operator als Zelyra-Syntax | ‚úÖ |
-| Datenbankintegration | externe Crates wie SQLx, Diesel oder SeaORM | vorgesehener Bestandteil von Sprache, CLI und Runtime | anderes Integrationsmodell; aktuell externer Client | üß™ |
-| SQL | Bibliotheken, Makros oder Strings | natives `sql<T> { ... }` mit Schema-/Parameterpr√ºfung | Zelyra kennt SQL als AST-Ausdruck | ‚úÖ |
-| MariaDB-Schema | nicht Aufgabe der Rust-Sprache | Tabellen werden in Zelyra beschrieben | Generator erzeugt sichtbares SQL | üß™ |
-| Formulare | Framework, Templates und Validierung selbst verbinden | `form`-Konstrukt und Tabellenregeln | Standardpfad ist Teil des Sprachmodells | üß™ |
-| CRUD | muss programmiert oder √ºber Frameworks erzeugt werden | deklaratives `crud Name -> table` mit gemeinsamem View-Feldprofil | aktuelle Runtime stellt CRUD-Routen bereit | üß™ |
-| Views | externe Bibliotheken oder Frameworks | `page`/`html`, benannte `view`-Layouts, typisierte `component`-Bausteine und benannte Slots mit Fallbacks sind vorhanden | kein Rust-√Ñquivalent; freie Styling-Komponenten fehlen noch | üß™ |
-| Quellformatierung | `cargo fmt`, `rustfmt` | `zelyra fmt <file.zyl> [--check]` | deterministischer Zelyra-Formatter, sch√ºtzt SQL und HTML | ‚úÖ |
-| Refactoring/Wirkungsanalyse | `rust-analyzer`, Compiler-APIs | `zelyra impact`, `zelyra edit` | versionierte, atomare JSON-Maschinenschnittstellen | üß™ |
-| Authentifizierung | externe Web-/Auth-Crates | Auth-Definition, Sessions und Berechtigungspr√ºfungen im Webmodul | Zelyra b√ºndelt den Standardfall | üß™ |
-| Berechtigungen | selbst entworfene Typen und Middleware | `requires auth`, `permits` und CRUD-Aktionsrechte | deklarative Regeln werden serverseitig gepr√ºft | üß™ |
-| Contracts | manuell oder √ºber Bibliotheken | native `requires {}` und `ensures {}` plus `verify` | Contract-Syntax geh√∂rt zu Zelyra | ‚úÖ |
-| Capabilities | APIs und Bibliotheken regeln Effekte | `uses Database`, `uses Network` usw. | sichtbare Effektdeklaration ist Sprachbestandteil | ‚úÖ |
-| E-Mails | externe SMTP-/Mail-Crates | kein integriertes E-Mail-Konstrukt | nicht mit `uses Email` vort√§uschen | ‚ùå |
-| Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ‚ùå |
-| Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | üß™ |
-| Deployment | Cargo, Container, CI und Infrastruktur frei w√§hlbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | üß™ |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra Compiler 0.2.0 ist experimentell | Reife und √ñkosystem sind nicht vergleichbar | üß™ |
-| √ñkosystem | sehr gro√ü: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | üß™ |
-
-Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
-Zelyra. Eine Rust-Struktur `Customer` und eine Zelyra-Tabelle `customers` k√∂nnen
-√§hnliche Daten beschreiben, erzeugen aber nicht dasselbe Verhalten.
-
-### Ausf√ºhrlicher Syntaxvergleich
-
-Die Statusangabe `‚úÖ` bedeutet in diesem Kapitel: im aktuellen Quellcode
-vorhanden und mit der installierten Rust-Toolchain beziehungsweise dem Zelyra-
-CLI gepr√ºft. `üß™`, `üó∫Ô∏è` und `‚ùå` kennzeichnen weiterhin eingeschr√§nkte,
-geplante oder derzeit nicht verf√ºgbare Sprachmerkmale.
-
-| Sprachmerkmal | Zelyra-Syntax | Rust-Syntax | Semantischer Unterschied | Zelyra-Status |
-|---|---|---|---|---|
-| Dateiendung | `app.zyl` | `main.rs` | eigener Lexer und eigener Dateityp | ‚úÖ |
-| Programmeinstieg | `fn main() { ... }` | `fn main() { ... }` | gleiche Schreibweise, andere Sprache | ‚úÖ |
-| Funktionsdefinition | `fn add(a: Int) -> Int { ... }` | `fn add(a: i64) -> i64 { ... }` | Zelyra-Typen sind eigene AST-Typen | ‚úÖ |
-| Parameter | `name: String` | `name: String` | √§hnliche Position, andere Typsemantik | ‚úÖ |
-| R√ºckgabetyp | `-> Int` | `-> i64` | Zelyra abstrahiert den Gesch√§ftstyp | ‚úÖ |
-| R√ºckgabewert | `return value` | `value` oder `return value;` | letzter Rust-Ausdruck ist R√ºckgabewert | ‚úÖ |
-| unver√§nderliche Variable | `value = 1` | `let value = 1;` | Zelyra bindet ohne `mutable` unver√§nderlich | ‚úÖ |
-| ver√§nderliche Variable | `mutable value = 1` | `let mut value = 1;` | Ver√§nderbarkeit wird anders markiert | ‚úÖ |
-| Ganzzahl | `Int` oder `UInt` | `i32`, `i64`, `u32`, `u64` | Rust verlangt konkrete Breite; Zelyra abstrahiert derzeit | ‚úÖ |
-| Dezimalzahl | `Float` oder `Decimal` | `f64` oder `f32` | Gr√∂√üe und genaue √úberlaufregeln von Zelyra sind noch nicht vollst√§ndig spezifiziert | üß™ |
-| Boolean | `true`, `false`, `Bool` | `true`, `false`, `bool` | eigenes Zelyra-Basistypmodell | ‚úÖ |
-| Zeichenkette | `String` und Zeichenliterale | `String`, `&str`, Zeichenliterale | Rust unterscheidet Besitz und Borrowing | ‚úÖ |
-| optionale Werte | `Email?` oder `Option<String>` | `Option<String>` | `?` ist Zelyras Kurzform f√ºr Option | ‚úÖ |
-| fehlender Wert | `None` | `None` | gleiche Bezeichnung in verschiedenem Enum-Modell | ‚úÖ |
-| Listen/Arrays | `Int[]`, `[1, 2, 3]` | `Vec<i64>`, `vec![1, 2, 3]` | Zelyra bietet keine Rust-Makrosyntax | ‚úÖ |
-| benannte Datentypen | `type CustomerId = Id`, `struct Customer { ... }` | `type CustomerId = u64`, `struct Customer { ... }` | Zelyra-Records und Rust-Structs sind nicht austauschbar | ‚úÖ |
-| Bedingungen | `if ok { ... }` | `if ok { ... }` | Blocksemantik und Ausdrucksregeln unterscheiden sich | ‚úÖ |
-| `else` | `else { ... }` | `else { ... }` | √§hnliche Kontrollflussform | ‚úÖ |
-| `match` | `match value { Some(x) => ... None => ... }` | `match value { Some(x) => ..., None => ... }` | Zelyra verlangt ebenfalls vollst√§ndige F√§lle | ‚úÖ |
-| Schleifen | `for item in items`, `while`, `loop` | `for item in items`, `while`, `loop` | Zelyra unterst√ºtzt keine Rust-Iteratortraits | ‚úÖ |
-| Funktionsaufrufe | `add(1, 2)` | `add(1, 2)` | gleiche Oberfl√§che, andere Aufl√∂sung | ‚úÖ |
-| Ausgabe | `print(value)` | `println!("{}", value);` | Rust verwendet ein Makro mit `!` | ‚úÖ |
-| Kommentare | `// Kommentar` | `// Kommentar`, `/* ... */` | aktueller Zelyra-Lexer hat Zeilenkommentare | ‚úÖ |
-| Zeilenumbr√ºche | meist Trennzeichen; nach Operatoren fortsetzbar | meist Whitespace | Parserregeln sind eigenst√§ndig | ‚úÖ |
-| Semikolons | werden als Statementtrenner akzeptiert, aber nicht ben√∂tigt | h√§ufig Statementtrenner | Zelyra ist nicht semikolonpflichtig | ‚úÖ |
-| Blockstruktur | `{ ... }` | `{ ... }` | Klammern bestimmen in beiden die Bl√∂cke | ‚úÖ |
-| Einr√ºckung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Bl√∂cken | ‚úÖ |
-| Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ‚úÖ |
-| Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | üß™ |
-| Module | Noch nicht festgelegt | `mod name {}`, Dateien und Module | keine `mod`-Syntax im Zelyra-Parser | ‚ùå |
-| Imports | Noch nicht festgelegt | `use crate::module::Item;` | keine Importsyntax | ‚ùå |
-| Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | üß™ |
-| asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschr√§nkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | üß™ |
-| Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ‚úÖ |
-| Datenbanktypen | `Id`, `String(100)`, `Email`, `Bool` | Rust-Typen und externe Mapping-Crates | Zelyra erzeugt SQL-Typen aus der Tabelle | ‚úÖ |
-| Beziehungen | `department: Department required` | Feld plus eigene Query-/Mappinglogik | Zelyra leitet Fremdschl√ºssel ab | ‚úÖ |
-| SQL-Abfragen | `sql<Customer[]> { SELECT ... }` | String/Makro einer DB-Crate | Zelyra pr√ºft Schema, Parameter und Ergebnis | ‚úÖ |
-| Formulare | `form CustomerCreate -> customers { ... }` | kein natives Formular | Webframework und Validierung n√∂tig | ‚úÖ |
-| CRUD | `crud Customer -> customers` | kein natives CRUD | Zelyra-Runtime stellt Standardrouten bereit | üß™ |
-| Views | `page`, `view SiteShell` und `component Badge` | kein natives View-Konstrukt | benannte Views/Komponenten sind vorhanden; `input`/`render`/`??` bleiben Zielsyntax | üß™ |
-| Vorbedingungen | `requires { amount > 0 }` | kein eingebautes √Ñquivalent | Contract ist Teil der Zelyra-Funktion | ‚úÖ |
-| Nachbedingungen | `ensures { result >= 0 }` | kein eingebautes √Ñquivalent | Verifier und Runtime kennen Zelyra-Contracts | ‚úÖ |
-| Zugriff auf alte Werte | Noch nicht festgelegt; `old(...)` nicht geparst | ebenfalls kein allgemeiner eingebauter Contractstandard | keine `old`-Syntax vort√§uschen | ‚ùå |
-| Capabilities | `uses Database` | kein identisches Sprachkonstrukt | Effekte werden in Zelyra sichtbar deklariert | ‚úÖ |
-| E-Mails | Noch nicht festgelegt | externe Crate/API | kein `Email`-Capability-Schl√ºssel | ‚ùå |
-| Hintergrundjobs | Noch nicht festgelegt | externe Queue-/Runtime-Crate | keine Job-Syntax | ‚ùå |
-| Audit | `auth users { audit: auth_audit_log }` | externe Logging-/Audit-Crate | Zelyra bindet Audit an Auth- und CRUD-Ereignisse | üß™ |
-| API-Definitionen | `api GET "/customers" { ... }` | Router, Handler und Typen separat | Zelyra b√ºndelt Vertrag und Route | ‚úÖ |
-
-### Funktionen: derselbe Gedanke, andere Sprache
-
-Beide folgenden Beispiele sind in ihrer jeweiligen Sprache typische kleine
-Funktionen. Das Zelyra-Beispiel entspricht der vom Parser verarbeiteten
-Funktionssyntax und wurde mit dem aktuellen CLI gepr√ºft.
-
-~~~zelyra
-fn add(a: Int, b: Int) -> Int {
-    return a + b
-}
-~~~
-
-~~~rust
-fn add(a: i64, b: i64) -> i64 {
-    a + b
-}
-~~~
-
-Rust verwendet konkrete Ganzzahltypen wie `i32`, `i64`, `u32` oder `u64`.
-Zelyra bietet f√ºr typische Businesslogik den verst√§ndlichen Typ `Int`; die
-verbindliche Gr√∂√üe, √úberlaufbehandlung und jede Datenbankabbildung m√ºssen noch
-vollst√§ndig spezifiziert werden.
-
-### Fibonacci
-
-~~~zelyra
-fn fibonacci(n: Int) -> Int {
-    if n <= 1 {
-        return n
-    }
-
-    return fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    print(fibonacci(10))
-}
-~~~
-
-~~~rust
-fn fibonacci(n: u64) -> u64 {
-    if n <= 1 {
-        return n;
-    }
-
-    fibonacci(n - 1) + fibonacci(n - 2)
-}
-
-fn main() {
-    println!("{}", fibonacci(10));
-}
-~~~
-
-‚úÖ Die Zelyra-Fassung nutzt `Int`, `print` und explizites `return`; Rust nutzt
-`u64`, das `println!`-Makro und den letzten Ausdruck als R√ºckgabewert. Rust-
-Makros tragen das `!`. In Zelyra sind Semikolons nicht erforderlich. Klammern
-bestimmen in beiden Beispielen die Blockstruktur, Einr√ºckung dient nur der
-Lesbarkeit. Ein Zeilenumbruch nach `+` setzt den Ausdruck fort; der Parser
-√ºberspringt an dieser Stelle Zeilenumbr√ºche. Rekursion funktioniert in Zelyra
-nur, weil Funktionsaufl√∂sung und Runtime sie tats√§chlich unterst√ºtzen. Der
-Code wurde in diesem Arbeitslauf nicht ausgef√ºhrt.
-
-### Optionale Werte
-
-~~~zelyra
-email: Email?
-~~~
-
-~~~rust
-email: Option<String>
-~~~
-
-`Email?` ist fachlich k√ºrzer und dr√ºckt neben der Optionalit√§t den E-Mail-
-Datentyp aus. Rust verwendet den allgemeinen generischen Typ `Option<T>`.
-Zelyra kann `Email?` in der Tabellen-, Formular- und SQL-Pr√ºfung ber√ºcksichtigen;
-eine allgemeine automatische View- oder Validierungsableitung ist jedoch nicht
-f√ºr jede Oberfl√§che vorhanden.
-
-### Tabellen
-
-~~~zelyra
-table customers {
-    id: Id primary auto
-    name: String(100) required
-    email: Email?
-    active: Bool default true
-}
-~~~
-
-~~~rust
-struct Customer {
-    id: u64,
-    name: String,
-    email: Option<String>,
-    active: bool,
-}
-~~~
-
-Die Rust-Struktur erzeugt keine Tabelle, keine SQL-Spalten, keine Validierung,
-kein Formular und keine CRUD-Oberfl√§che. Daf√ºr braucht Rust zus√§tzliche Crates,
-Makros, Queries, Handler und Templates. Die Zelyra-Tabelle wird dagegen in die
-Schemaableitung und ‚Äì wo die Webfunktion vorhanden ist ‚Äì in Formulare und CRUD
-einbezogen.
-
-### CRUD
-
-~~~zelyra
-crud Customer -> customers
-~~~
-
-Rust besitzt daf√ºr kein natives √Ñquivalent. Typischerweise kommen in Rust ein
-Webframework, Routing, eine Datenbank-Crate, ein Datenmodell, Abfragen,
-Request-Typen, Validierung, Handler, Templates oder ein Frontend,
-Fehlerbehandlung und Berechtigungspr√ºfung zusammen. Zelyra parst diese
-deklarative Definition und die aktuelle Runtime stellt daraus CRUD-Routen,
-Formulare, Suche, Filter und CSRF-gesch√ºtzte Aktionen bereit. Das ist
-experimentell; es ist kein statischer Frontend-Generator.
-
-### SQL
-
-Die Zielsyntax aus dem Auftrag enthielt `with { ... }`. Das ist im aktuellen
-Parser nicht vorhanden. Parameter kommen derzeit als Funktionsparameter in die
-SQL-Pr√ºfung:
-
-~~~zelyra
-struct Customer { id: Int name: String email: Email? active: Bool }
-
-fn active_customers(active: Bool) -> Customer[]
-    uses Database
-{
-    return sql<Customer[]> {
-        SELECT id, name, email, active
-        FROM customers
-        WHERE active = :active
-        ORDER BY name
-    }
-}
-~~~
-
-~~~rust
-let customers = sqlx::query_as!(
-    Customer,
-    r#"
-        SELECT id, name, email, active
-        FROM customers
-        WHERE active = ?
-        ORDER BY name
-    "#,
-    true
-)
-.fetch_all(&pool)
-.await?;
-~~~
-
-Rust hat SQL nicht als Spracheigenschaft; SQLx oder andere Crates k√∂nnen
-zus√§tzliche Compile-Time-Pr√ºfungen anbieten. Zelyras aktueller SQL-Checker
-pr√ºft ‚Äì wenn Schema und Typen bekannt sind ‚Äì Tabellen, Spalten, Aliase,
-Parameter, Nullf√§higkeit, Ergebniszuordnung und `Database`-Capability. Das
-macht Zelyra nicht automatisch besser als SQLx. Der aktuelle MariaDB-Generator
-und seine fehlenden Tabellenoptionen sind in Abschnitt 7 offen dokumentiert.
-
-### Views: aktuelle Syntax statt Zielbild
-
-Die gezeigte Zielsyntax mit `view`, `input`, `render`, Komponenten und `??` ist
-heute nicht Parser-Syntax. Der aktuelle Webkern verwendet stattdessen:
-
-~~~zelyra
-page "/customers/{name}" {
-    html {
-        <h1>Kunde {name}</h1>
-    }
-}
-~~~
-
-Rust besitzt keine eingebaute HTML- oder Komponenten-Syntax; dort kommen
-Templates und Webframeworks hinzu. Zelyras `page`/`html`-Form sowie benannte
-Views und typisierte Komponenten sind vorhanden. Mehrere Slots, verschachtelte
-Komponenten und die Zielsyntax mit `input`/`render` sind noch nicht stabil;
-`??` ist keine implementierte Zelyra-Operation.
-
-### Vertr√§ge
-
-Die Zielsyntax `require amount > 0` und `old(...)` ist nicht der aktuelle Stand.
-Der Parser akzeptiert `requires {}` und `ensures {}`:
-
-~~~zelyra
-fn reserve(stock: Int, amount: Int) -> Int
-    requires {
-        amount > 0
-        stock >= amount
-    }
-    ensures {
-        result >= 0
-        result == stock - amount
-    }
-{
-    return stock - amount
-}
-~~~
-
-Rust besitzt hierf√ºr kein direkt eingebautes √Ñquivalent. `requires` beschreibt
-Vorbedingungen, `ensures` Nachbedingungen. Runtime-Pr√ºfung und formale
-Verifikation sind verschieden: `zelyra verify` kann `PROVEN`, `RUNTIME_CHECK`,
-`UNPROVEN` oder `FAILED` melden. Ein Zugriff auf den alten Wert √ºber `old(...)`
-ist nicht implementiert.
-
-### Capabilities
-
-~~~zelyra
-fn load_customers() -> Customer[] uses Database {
-    return sql<Customer[]> {
-        SELECT id, name, email, active FROM customers
-    }
-}
-~~~
-
-`uses` macht erlaubte Seiteneffekte in der Signatur sichtbar. `Database`,
-`Network`, `FileSystem`, `Environment`, `Process`, `Clock`, `Random` und
-`Console` sind im
-aktuellen Runtime-Code bekannte Capabilities. Rust besitzt kein identisches
-eingebautes Capability-System; dort werden Zugriffe typischerweise √ºber Typen,
-Werte und Bibliotheks-APIs organisiert. `Email` ist keine Zelyra-Capability.
-
-### Was Rust-Kenner in Zelyra nicht suchen sollten
-
-Zelyra soll f√ºr typische Businessanwendungen nicht verlangen, im gew√∂hnlichen
-Anwendungscode explizite Lifetimes zu schreiben, Borrowing f√ºr einfache
-Formulare zu debuggen, zwischen vielen Ganzzahlbreiten zu w√§hlen oder ein
-Webframework aus zahlreichen Crates zusammenzustellen. Das ist eine
-Abstraktion, keine Behauptung, dass Speicher- und Laufzeitfragen verschwinden.
-
-Von Rust inspiriert sind statische Typisierung, verst√§ndliche Diagnosen,
-sichere Standardeinstellungen, explizite Ver√§nderbarkeit, Pattern Matching,
-Records/Enums, klare Grenzen, reproduzierbares Tooling und formale Pr√ºfungen.
-
-### Was Zelyra eigenst√§ndig macht
-
-| Zelyra-Merkmal | Nutzen | Status |
-|---|---|---|
-| Eine fachliche Definition | weniger widerspr√ºchliche Mehrfachdefinitionen | üß™ |
-| natives gepr√ºftes SQL | Datenbankfehler m√∂glichst vor Ausf√ºhrung erkennen | ‚úÖ |
-| deklaratives CRUD | Standardverwaltungen mit wenig Code | üß™ |
-| `page`/`html`-Webkern | einfache typisierte Pfadwerte und HTML-Antworten | üß™ |
-| sichtbares MariaDB-SQL | nachvollziehbare Schema√§nderungen | üß™ |
-| `requires` und `ensures` | Gesch√§ftsregeln ausdr√ºcklich festlegen | ‚úÖ |
-| Capabilities | erlaubte Seiteneffekte sichtbar machen | ‚úÖ |
-| integriertes Audit | √Ñnderungen nachvollziehen | üß™ |
-
-### Ehrliches Fazit
-
-> Zelyra sieht an einigen Stellen √§hnlich aus wie Rust, weil beide moderne,
-> statisch typisierte Sprachen mit geschweiften Klammern und klaren
-> Funktionssignaturen sind. Zelyra verfolgt jedoch ein anderes
-> Programmiermodell: Datenbank, SQL, Formulare, CRUD, Views und Gesch√§ftsregeln
-> sollen Bestandteile eines gemeinsamen Sprachsystems sein. Rust ist das
-> technische Fundament des Compilers ‚Äì nicht die Sprache, die
-> Zelyra-Anwendungsentwickler schreiben.
-
-> **Status:** Zelyra ist derzeit ein experimenteller Sprachprototyp. Einige
-> gezeigte Sprachmerkmale beschreiben das verbindliche Zielbild und sind noch
-> nicht vollst√§ndig implementiert. Der Status an jedem Beispiel zeigt, was
-> heute im Code tats√§chlich vorhanden und gepr√ºft ist.
-
-Weiterf√ºhrend: [Einf√ºhrung](#1-was-zelyra-anders-macht),
-[Sprachgrundlagen](#5-variablen-typen-und-funktionen),
-[MariaDB](#7-mariadb-und-tabellen), [SQL](#9-natives-sql),
-[Formulare](#11-formulare), [Views/Webseiten](#10-webseiten), [CRUD](#12-crud),
-[Contracts](#15-contracts-und-verify),
-[Capabilities](#14-capabilities), [Implementierungsstatus](#17-diagnosen-und-fehlersuche)
-und [Roadmap](#22-roadmap-aus-dem-aktuellen-repository). Der laufende Repository-Stand steht
-zus√§tzlich auf der [Statusseite](https://siedelmann.com/status).
-
-## 21. Positionierung und aktueller Entwicklungsstand
-
-Die aktuelle Positionierung in `docs/positioning.de.md` beschreibt Zelyra als
-eigenst√§ndige Sprache f√ºr datenbankgest√ºtzte Businessanwendungen. Sie ersetzt
-nicht die technische Pr√ºfung im Compiler; sie erkl√§rt, wof√ºr die Bausteine
-zusammen gedacht sind.
-
-### Was Zelyra unterscheidet
-
-1. **Eine Quelle der Wahrheit:** Schema, Typen, SQL, Formulare, CRUD, Views und
-   APIs sollen aus miteinander pr√ºfbaren Definitionen entstehen.
-2. **SQL bleibt First-Class:** SQL wird nicht hinter einer ORM-Abstraktion
-   versteckt, sondern als Bestandteil des Programms mit Tabellen, Parametern und
-   Ergebnisformen gepr√ºft.
-3. **Businessfunktionen sind Sprachbausteine:** Tabellen, Formulare, CRUD,
-   Seiten, Authentifizierung, Berechtigungen und Contracts geh√∂ren zum selben
-   Modell.
-4. **Sichere Defaults sind sichtbar:** HTML-Escaping, parametrisierte SQL-
-   Werte, CSRF-Schutz, Null-Sicherheit und serverseitige Berechtigungen sind
-   keine blo√üen Empfehlungen.
-5. **Beweise werden ehrlich bezeichnet:** `PROVEN`, `RUNTIME_CHECK`,
-   `UNPROVEN` und `FAILED` unterscheiden echte statische Beweise von
-   Laufzeitpr√ºfungen und offenen F√§llen.
-6. **Kurzer Einstieg, vollst√§ndige Sprache:** Der deklarative Standardfall ist
-   kurz; eigene Funktionen und native SQL bleiben f√ºr komplexe Fachlogik
-   verf√ºgbar.
-7. **Wenig Infrastruktur f√ºr den Start:** Der eingebaute Server und die CLI
-   sollen den Lern- und Entwicklungsweg ohne Apache, PHP oder ein verpflichtendes
-   Framework-B√ºndel erm√∂glichen.
-
-Der aktuelle Stand ist trotzdem ein experimenteller Prototyp. Die Roadmap und
-die einzelnen Statuszeichen sind deshalb wichtiger als eine allgemeine
-Produktbehauptung.
-
-## 22. Roadmap aus dem aktuellen Repository
-
-Die folgende Zusammenfassung stammt aus `docs/ROADMAP.de.md` im aktuellen
-Zelyra-Repository. Sie ist eine Entwicklungsplanung, keine Zusage f√ºr ein
-Release-Datum.
-
-| Bereich | Aktueller Schwerpunkt | Noch offene Ausbaustufen |
-|---|---|---|
-| Einstieg und Distribution | Quellcode- und Release-Installer (Linux/Windows x86_64 per SHA-256), `zelyra new/init` mit Starter-Templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker-/DB-Ports, `zelyra setup`, `zelyra doctor`, E2E-Tests | signierte Binaries, interaktiver Verbindungsassistent, Reverse-Proxy-Automatisierung |
-| Sprache und Compiler | Lexer, Parser, AST/HIR, Typpr√ºfung, `Option`, `Result`, Pattern Matching, Ausdrucks-Typed-Holes (`_`), kanonisches `zelyra fmt` | Module, Imports, Generics, L√ºcken in Deklarationen und vollst√§ndige formale Verifikation |
-| Datenbankplattform | MariaDB, SQLite und PostgreSQL im Schema-CLI; typisiertes SQL | weitere Schemaabdeckung, robustere Produktionsabl√§ufe |
-| Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, sicherer Output | Themes, View-Vererbung, freie Styling-Komponenten |
-| Formulare und CRUD | Validierung, CSRF, Suche, Filter, Pagination, Aktionen, Soft Delete, gemeinsames CRUD-View-Feldprofil (`view.fields`) | permanente L√∂schung, Aufbewahrung, Archivierung und breitere View-Anpassung |
-| Authentifizierung und Audit | Login, Sessions, Rollen, Berechtigungen, Browser-Admin, Audit und Hash-Kette | Self-Service, noch umfassendere Policy-Verwaltung und Archivstrategien |
-| APIs und Integration | typisierte APIs, OpenAPI, TypeScript-Client und CORS | Versionierung, Rate Limits und OAuth-/Integrationsbausteine |
-| Verifikation und Betrieb | Contracts, Capability-Pr√ºfung und erste Nebenl√§ufigkeitsbausteine | Abbruch, Timeouts, Datenbank-Pool-Integration und belastbare Performancepfade |
-| KI-native Schnittstellen | `zelyra fmt` (Stufe B ‚úÖ), Ausdrucks-L√ºcken `_` (Stufe C üß™), `zelyra impact` mit `--symbol` (Stufe D üß™), `zelyra edit` Umbenennung (Stufe E üß™) | L√ºcken in Deklarationen, Schema-/Laufzeit-Impact, komplexere Edit-Operationen, KI-Benchmark |
-| Qualit√§t und Governance | Tests, Dokumentation und reproduzierbare Pr√ºfungen | breitere Akzeptanzanwendungen und Produktionsh√§rtung |
-
-Nicht als verf√ºgbar dokumentieren: E-Mail- und Hintergrundjob-Systeme,
-vollst√§ndige Module/Imports, frei definierbare `view`-Komponenten mit mehreren
-Slots oder eine automatische Produktionsmigration. F√ºr jeden dieser Bereiche
-gilt üó∫Ô∏è, solange der aktuelle CLI-Code die Funktion nicht vollst√§ndig tr√§gt.
-
-Die sinnvollste Reihenfolge f√ºr ein eigenes Lernprojekt bleibt daher:
-
-1. `check` und `run` f√ºr die Sprachgrundlagen;
-2. `db create`, `db inspect`, `db plan` und kontrolliertes `db apply`;
-3. eine kleine `page`-, `form`- oder `crud`-Anwendung;
-4. erst danach Authentifizierung, Rollen, Audit und API-Integration.
-
-## 23. KI-native Entwicklung
-
-Die aktuellen Architektur- und Spezifikationsdokumente erg√§nzen ein wichtiges
-Prinzip:
-
-> **Die KI schreibt. Zelyra pr√ºft.**
-
-Zelyra soll f√ºr Menschen und KI-Systeme gleicherma√üen nutzbar sein, bleibt aber
-vollst√§ndig KI-unabh√§ngig. Der Compiler und die Tests sind die Vertrauensgrenze;
-eine plausible Erkl√§rung eines Modells ist kein Korrektheitsnachweis. F√ºr
-menschlichen und generierten Code gelten dieselben Pr√ºfungen f√ºr Lexer, Parser,
-Namen, Typen, SQL, Capabilities, Contracts, Tests und Laufzeit.
-
-### Heute verf√ºgbare Maschinenschnittstellen
-
-üß™ Die JSON-Ausgaben f√ºr Werkzeuge verwenden das gemeinsame Format mit
-`schema_version: "1"`. Menschliche Ausgabe bleibt Standard; JSON wird nur mit
-`--format=json` angefordert:
-
-~~~json
-{
-    "schema_version": "1",
-    "command": "check",
-    "success": false,
-    "diagnostics": []
-}
-~~~
-
-Die Ausgabe ist deterministisch. `schema_version` ist verpflichtend; neue
-optionale Felder d√ºrfen innerhalb einer Version erg√§nzt werden, inkompatible
-√Ñnderungen ben√∂tigen eine neue Version. JSON geh√∂rt ausschlie√ülich auf
-`stdout`, technische Meldungen auf `stderr`. Source-Spans verwenden
-nullbasierte UTF-8-Byte-Offsets, einsbasierte Zeilen-/Byte-Spalten und ein
-halb-offenes Intervall. Secrets, Zeitstempel, Zufalls-IDs, absolute
-maschinenabh√§ngige Pfade und Live-Datenbankinhalte geh√∂ren nicht in diese
-Ausgaben.
-
-#### Kanonische Quellformatierung
-
-‚úÖ `zelyra fmt <file.zyl>` erzeugt nach erfolgreichem Lexen und Parsen eine
-deterministische Quellformatierung. `zelyra fmt <file.zyl> --check` schreibt
-keine Dateien und liefert einen Fehlercode, wenn eine √Ñnderung n√∂tig w√§re;
-damit kann CI kanonischen Quellcode erzwingen.
-
-~~~bash
-zelyra fmt examples/fibonacci.zyl
-zelyra fmt examples/fibonacci.zyl --check
-~~~
-
-Der Formatter bewahrt Zeilenkommentare und behandelt SQL- und HTML-Bl√∂cke als
-opaken Quelltext. Er ist idempotent: Ein bereits formatiertes Dokument erzeugt
-byte-identisch dieselbe Ausgabe.
-
-#### Typisierte L√ºcken (Typed Holes)
-
-‚úÖ Ausdrucks-Typed-Holes mit `_` sind als erste sichere Stufe verf√ºgbar. Der
-Compiler meldet Kontexttyp, sichtbare Werte und Funktionen, aktive
-Capabilities, Contract-Pflichten und Source-Span:
-
-~~~zelyra
-fn double(x: Int) -> Int {
-    return _
-}
-~~~
-
-`zelyra check` meldet die Diagnose `E-HOLE-001` mit dem erwarteten Typ `Int`
-und den sichtbaren Bezeichnern. Baubare Befehle (`build`, `run`, `serve`) lehnen
-unvollst√§ndigen Code vor Lowering und Ausf√ºhrung ab. L√ºcken in
-Deklarationskontexten bleiben geplant.
-
-#### Strukturierte Projekt√ºbersicht
-
-‚úÖ `context` ist schreibgesch√ºtzt und verbindet sich nicht mit MariaDB, nutzt kein
-Netzwerk, f√ºhrt keine E-Mail oder Jobs aus und gibt keine Geheimnisse aus:
-
-~~~bash
-zelyra context examples/auth_crud_api.zyl --format=json
-~~~
-
-Sie meldet deklarierte Funktionen, Tabellen, SQL-Abfragen, CRUD-Ressourcen,
-Formulare, APIs und Source-Spans.
-
-#### Deterministische Wirkungsanalyse
-
-üß™ Quelltextabh√§ngigkeiten eines Programms lassen sich deterministisch pr√ºfen:
-
-~~~bash
-zelyra impact examples/auth_crud_api.zyl --format=json
-zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
-~~~
-
-Die Wirkungsantwort meldet quelltextbasierte Tabellen, SQL, Formulare, CRUD-
-Ressourcen, Views, APIs, Berechtigungen, Contracts und eine deterministische
-`references`-Kantenliste f√ºr bekannte Beziehungen. Jede bekannte Kante enth√§lt
-Quelle, Ziel, Art und Quelltextspanne. E-Mail-, Job-, Test- und
-Live-Schemaauswirkungen bleiben ausdr√ºcklich leer oder nicht verf√ºgbar; der
-Befehl verbindet sich nie mit MariaDB.
-
-Mit `--symbol <kind:name>` kann die Ausgabe auf einen bekannten Knoten wie
-`table:customers` fokussiert werden. Die fokussierte Antwort enth√§lt nur direkt
-verbundene Referenzen und zugeh√∂rige Knoten-IDs. Unbekannte Knoten liefern
-`E-IMPACT-001` und einen Exit-Code ungleich null.
-
-#### Atomare semantische √Ñnderungen
-
-üß™ Eine validierte Symbol-Umbenennung kann ohne √Ñnderung des Quelltexts
-als Vorschau berechnet werden:
-
-~~~json
-{
-  "schema_version": "1",
-  "entry": "examples/fibonacci.zyl",
-  "expected_source_fingerprint": "fnv1a64:18f35ecb3e2f99c4",
-  "operations": [
-    {"kind": "rename", "symbol": "function", "from": "fibonacci", "to": "fib"}
-  ]
-}
-~~~
-
-Als `change.json` speichern und ausf√ºhren:
-
-~~~bash
-zelyra edit --format=json change.json
-~~~
-
-Die Anfrage ist versioniert und darf nur auf eine existierende `.zyl`-Datei
-innerhalb der aufgel√∂sten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
-der √Ñnderung muss die Compilerpr√ºfungen bestehen. Das Ergebnis meldet die
-genauen Token-Spans und einen deterministischen Quelltext-Fingerprint.
-
-F√ºr `--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so
-wird eine zwischenzeitlich ge√§nderte Datei nicht √ºberschrieben (Stale-Source-
-Schutz). Ohne den ausdr√ºcklichen `--apply`-Schalter bleibt es eine reine
-Vorschau:
-
-~~~bash
-zelyra edit --format=json --apply change.json
-~~~
-
-Vor dem atomaren Ersetzen wird der Quelltext erneut geparst und vollst√§ndig
-gepr√ºft; ein ung√ºltiger oder semantisch unsicherer Vorschlag kann daher nicht
-geschrieben werden.
-
-Umbenennungen von Funktionen, Typen und Records sind AST-basiert:
-Deklarationen und bekannte Referenzen werden umbenannt, w√§hrend lokale
-Bindungen mit demselben Namen unver√§ndert bleiben. Tabellen-, View-, Form- und
-CRUD-Deklarationen sowie ihre strukturierten Referenzen werden ebenfalls
-unterst√ºtzt. Tabellenumbenennungen aktualisieren gepr√ºfte SQL-Tabellenpositionen
-(`FROM`, `JOIN`, `INTO`, `UPDATE`), lassen aber Literale, Kommentare,
-Parameter und HTML unver√§ndert. Komponenten-Umbenennungen aktualisieren die
-Deklaration sowie bekannte √∂ffnende und schlie√üende Komponententags in
-HTML-Bodies.
-
-### Sicherheitsgrenze und Benchmark
-
-KI-Werkzeuge d√ºrfen nicht unbemerkt Capabilities hinzuf√ºgen, Berechtigungen
-erweitern, destruktives SQL ausf√ºhren, Diagnosen abschw√§chen, Tests deaktivieren
-oder Geheimnisse ausgeben. Destruktive Schema√§nderungen und sicherheitsrelevante
-√Ñnderungen brauchen eine sichtbare menschliche Freigabe. Zelyra sendet keinen
-Quelltext automatisch an externe KI-Dienste; geplante Integrationen sollen
-offen, lokal nutzbar, herstellerneutral und versioniert sein.
-
-Der neue KI-Autorenschaftsbenchmark ist eine Spezifikation in
-`docs/benchmarks/ai-authoring.de.md`. Er soll mit versionierten Fixtures und
-identischen Aufgaben unter anderem Erstversuchskompilierung, Korrekturschleifen,
-Zeit bis zu bestandenen Tests, Tokens, Sicherheitsfehler, √ºbersehene
-Abh√§ngigkeiten, unsichere Schema√§nderungen und menschlichen Pr√ºfaufwand messen.
-Es gibt noch keine ver√∂ffentlichten Vergleichsergebnisse. Ein Secret-Leak oder
-eine nicht freigegebene destruktive √Ñnderung bleibt ein Sicherheitsfehler und
-wird nicht durch vermeintliche Produktivit√§t aufgewogen.
-
-# ANH√ÑNGE
-
----
-
-## 24. Verbindliche Quellen und Compiler-Pr√ºfung (Source Authority)
-
-> **Grundsatz:** Zelyra ist eine eigenst√§ndige Sprache. Parser und gepr√ºfte Tests entscheiden, was existiert.
-
-Bei Widerspr√ºchen gilt immer folgende verbindliche Reihenfolge:
-
-1. **[Formale Sprachspezifikation](docs/specification.de.md) und Phasendokumente**
-2. **Compiler-Code:** Lexer-, AST-, Parser-, Namensaufl√∂sungs-, Typpr√ºfungs- und semantischer Code in den Crates `lexer`, `parser`, `ast`, `hir`, `cli`, `runtime`, `database`, `web` und `forms`
-3. **Offizielle automatisierte Sprach- und Integrationstests:** Workspace-Tests (`cargo test --workspace`), Machine-Interface-Tests und E2E-Shellskripte in `tests/`
-4. **Die offizielle Standardbibliothek:** (sobald eigenst√§ndig strukturiert)
-5. **Offizielle Zelyra-Beispiele:** `.zyl`-Dateien in `examples/`, die mit dem aktuellen Compiler erfolgreich verifiziert wurden
-6. **Dokumentation und Handbuch**
-
-### Wichtige Invarianten f√ºr Entwickler und KI-Assistenten
-
-- **Roadmap ist Planung, keine Syntax:** Zuk√ºnftige Phasenvorschl√§ge d√ºrfen erst nach Implementierung in Lexer/Parser als verf√ºgbare Syntax dargestellt werden.
-- **Compiler-Implementierungssprache Rust ist kein Zelyra:** Zelyra wird in Rust entwickelt, aber Rust-Syntax in einer `.zyl`-Datei ist ung√ºltig, es sei denn, die Zelyra-Grammatik definiert sie ausdr√ºcklich.
-- **Keine erfundenen Befehle:** Alle CLI-Befehle m√ºssen in `cli/src/main.rs` existieren.
-- **Pr√ºfzyklus:** Jede Erweiterung durchl√§uft Formatierung (`cargo fmt`), Typ- und Crate-Pr√ºfung (`cargo check`), Linter (`cargo clippy`) und Tests (`cargo test`).
-
----
-
-## Anhang A: Schnelleinstieg / Spickzettel (Syntax-Cheat-Sheet)
-
-### Grundlegende Syntax
-```zelyra
-// Funktionen mit Vertraegen
-fn summe(a: Int, b: Int) -> Int
-    requires { a >= 0 && b >= 0 }
-    ensures { result >= 0 }
-{
-    return a + b
-}
-
-// Einstiegspunkt und Variablen
-fn main() {
-    x = 10                  // Typableitung (unveraenderlich)
-    mutable zaehler = 0     // Veraenderlich
-    name: String = "Zelyra" // Expliziter Typ
-
-    print(summe(3, 7))
-}
-```
-
-### Typen
-- Zahlen: `Int` (64-Bit vorzeichenbehaftet), `UInt` (vorzeichenlos), `Float`, `Decimal` (Festkomma)
-- Text & Zeichen: `String`, `Char`
-- Wahrheitswerte: `Bool` (`true`, `false`)
-- Sammlungen: `Int[]`, `String[]`
-- Abwesenheit: `Option<T>` (`Some(x)`, `None`), Kurzform `T?`
-- Fehler: `Result<T, E>` (`Ok(x)`, `Err(e)`)
-- System & Zeit: `Timestamp`, `Date`, `Time`, `Duration`
-
-### Kontrollstrukturen
-```zelyra
-fn kontrolle(x: Int) {
-    if x > 10 {
-        print("Gross")
-    } else {
-        print("Klein")
-    }
-
-    match x {
-        1 => { print("Eins") }
-        2 => { print("Zwei") }
-        _ => { print("Andere") }
-    }
-
-    mutable i = 0
-    while i < 3 invariant { i >= 0 } {
-        i = i + 1
-    }
-
-    for n in [1, 2, 3] {
-        print(n)
-    }
-}
-
-fn main() {
-    kontrolle(1)
-}
-```
-
-### Datenbank & Web
-```zelyra
-database main {
-    engine: mariadb
-    database: "app"
-}
-
-table items {
-    id: Id primary auto
-    bezeichnung: String required
-}
-
-page "/items" {
-    html {
-        <h1>Artikelliste</h1>
-    }
-}
-```
-
----
-
-## Anhang B: Alle Fehlermeldungen von Zelyra auf einen Blick
-
-| Fehlercode | Kategorie | Beschreibung | Typische Behebung |
-| :--- | :--- | :--- | :--- |
-| `E-LEX-001` | Lexer | Unerwartetes Zeichen / Lexikalischer Fehler | Tippfehler oder unzul√§ssiges Sonderzeichen entfernen |
-| `E-PARSE-001` | Parser | Syntaxfehler (z. B. fehlende Klammer, falsches Token) | Syntax gem√§√ü Zelyra-Grammatik korrigieren |
-| `E-NAME-001` | Aufl√∂sung | Unbekannter Name / Variable nicht gefunden | Deklaration pr√ºfen oder Tippfehler korrigieren |
-| `E-TYPE-001` | Typpr√ºfung | Typkonflikt (z. B. String zugewiesen an Int) | Typen anpassen oder Konvertierung vornehmen |
-| `E-FEATURE-001` | Feature-Schalter | Zugriff auf eine deaktivierte Sprachoberfl√§che (`web`, `api`, `crud`, `auth`, `audit`) | Feature in `zelyra.toml` oder `.env` aktivieren |
-| `E-CAP-001` / `E-CAP-002` | Capabilities | Fehlende Capability-Berechtigung (z. B. `database`, `network`) | In `zelyra.toml` unter `[capabilities]` freigeben |
-| `E-POLICY-001` / `002` | Richtlinien | Versto√ü gegen Sicherheits- oder Audit-Richtlinien | Sicherheitsdeklaration pr√ºfen |
-| `E-DB-001` - `E-DB-005` | Datenbank | Datenbankverbindungs- oder Treiberfehler | `DATABASE_URL` pr√ºfen, MariaDB-Dienst starten |
-| `E-SQL-001` - `E-SQL-004` | SQL | Ung√ºltiges SQL / Schema-Misfit / Spalte nicht existent | SQL-Anweisung gegen Tabellendefinition pr√ºfen |
-| `E-VIEW-001` - `E-VIEW-009` | Views & Pages | Fehler in View-Interpolation, Slots oder Datenbindung | Slot-Namen und Datentypen der Page-Bindung pr√ºfen |
-| `E-VIEW-010` - `E-VIEW-015` | Query-Controls | Ung√ºltige Such-, Sortier-, Paginierungs- oder Filterfelder | Deklarierte Whitelist (`search`, `sort`, `filter`) pr√ºfen |
-| `E-FORM-001` - `E-FORM-004` | Formulare | Validierungsfehler oder ung√ºltige Feldtypen | Formular-Deklaration und Eingabedaten anpassen |
-| `E-CRUD-001` - `E-CRUD-006` | CRUD | Ung√ºltige CRUD-Ressource, Schema-Konflikt oder Layout-Fehler | Tabellenverkn√ºpfung und Layout-Slots pr√ºfen |
-| `E-AUTH-001` - `E-AUTH-028` | Authentifizierung | Session-, Passwort- oder Berechtigungskonflikt | Rollen (`permits`), `requires auth` und Hashes pr√ºfen |
-| `E-AUDIT-001` - `E-AUDIT-010` | Audit-Trail | Fehler in der kryptografischen Hash-Kette des Audit-Logs | Pr√ºfsummen und Audit-Tabelle validieren |
-| `E-SETUP-001` - `E-SETUP-006` | Setup-Flow | Portkonflikt, Socket-Fehler oder Compose-Problem | Freie Ports w√§hlen, Docker-Berechtigungen pr√ºfen |
-| `E-SETUP-WEB-001` | Web-Setup | Ung√ºltiges oder abgelaufenes Setup-Token | Setup-Assistenten neu starten und Token-URL nutzen |
-| `E-IMPACT-001` | Impact-Analyse | Zyklische oder ung√ºltige Abh√§ngigkeiten | Quellcode-Abh√§ngigkeiten entflechten |
-| `E-RUNTIME-001` | Laufzeit | Unbehandelter Laufzeitfehler | Vertr√§ge (`requires`, `ensures`) oder Fehlerwerte pr√ºfen |
-
----
-
-## Anhang C: Zelyra-CLI-Referenz
-
-| Befehl | Option / Flag | Beschreibung |
-| :--- | :--- | :--- |
-| `zelyra --version` | | Gibt den vollst√§ndigen Compiler- und Paketversionsstand aus |
-| `zelyra new <dir>` | `--template minimal\|mariadb-crud\|...` | Erstellt ein neues Zelyra-Projekt mit Vorlage |
-| | `--mariadb` | Erzeugt MariaDB-Projekt mit Compose, Dockerfile und `.env` |
-| | `--web-port <p> --host-port <p> --db-host-port <p>` | Konfiguriert Container- und Host-Ports |
-| `zelyra init` | `[--mariadb]` | Initialisiert das aktuelle Verzeichnis als Zelyra-Projekt |
-| `zelyra check <file.zyl>` | `[--format json]` | Pr√ºft Syntax, Typen, Vertr√§ge und Capabilities statisch |
-| `zelyra run <file.zyl>` | | Kompiliert und f√ºhrt ein Zelyra-Programm aus |
-| `zelyra serve <file.zyl>` | `[host:port]` | Startet den integrierten HTTP-Webserver |
-| `zelyra setup` | `[--database]` | Startet Docker Compose / MariaDB |
-| | `[--schema]` | Startet Umgebung und wendet Datenbankschema an |
-| | `[--all]` | F√ºhrt Konfiguration, Start und Migration in einem Schritt aus |
-| | `[--host-port <p>] [--db-host-port <p>]` | Setzt verbindliche Host-Ports f√ºr die neue `.env` |
-| `zelyra setup --web` | `[--port <p>]` | Startet den lokalen, token-gesch√ºtzten Browser-Setup-Assistenten |
-| `zelyra config <file.zyl>` | `[--format json]` | Zeigt die wirksame Konfiguration und Feature-Schalter geheimnisfrei an |
-| `zelyra doctor <file.zyl>` | `[--port <p>] [--json]` | Pr√ºft Toolchain, MariaDB, Docker und Ports ohne DB-√Ñnderung |
-| | `[--env-file <file>]` | Liest gezielt `DATABASE_URL` aus der angegebenen Datei |
-| `zelyra fmt <file.zyl>` | `[--check]` | Formatiert Quellcode nach dem offiziellen Standard |
-| `zelyra verify <file.zyl>` | | F√ºhrt formale Vertragsverifikation durch |
-| `zelyra doc <file.zyl>` | `--openapi` | Generiert OpenAPI-3.0-Spezifikationen |
-| | `--typescript` | Generiert typisierten, abh√§ngigkeitsfreien TypeScript-Client |
-| `zelyra db init <file.zyl>` | | Initialisiert Datenbank und Basistabellen |
-| `zelyra db setup <file.zyl>` | | Richtet die MariaDB-Datenbank initial ein |
-| `zelyra db apply <file.zyl>` | | Wendet Schema-Migrationen sicher an |
-| `zelyra auth hash-password` | `[--stdin]` | Erzeugt sichere Argon2-Passworthashes |
-| `zelyra form validate <file> <Form>` | | Pr√ºft Formulare mit Testwerten auf der Konsole |
-| `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext f√ºr Tools aus |
-
----
-
-## Anhang D: Die Standardbibliothek im √úberblick
-
-### Grundfunktionen (ohne Capabilities)
-- `print(wert)`: Gibt einen beliebigen Wert auf der Standardausgabe aus.
-- `len(array)`: Liefert die Anzahl der Elemente in einem Array als `Int`.
-- `append(array, element)`: Erzeugt ein neues Array mit angeh√§ngtem Wert.
-- `contains(array, element)` -> `Bool`: Pr√ºft, ob ein Wert im Array enthalten ist.
-- `first(array)` -> `Option<T>`: Liefert das erste Element oder `None`.
-- `last(array)` -> `Option<T>`: Liefert das letzte Element oder `None`.
-- `get(map, key)` -> `Option<V>`: Schl√§gt einen Schl√ºssel in einer `Map<K, V>` nach.
-- `put(map, key, value)` -> `Map<K, V>`: F√ºgt ein Schl√ºssel-Wert-Paar hinzu oder aktualisiert es funktional.
-- `keys(map)` -> `K[]`: Liefert alle Schl√ºssel einer Map als Array.
-- `values(map)` -> `V[]`: Liefert alle Werte einer Map als Array.
-- `Some(wert)` / `None`: Konstruktoren f√ºr den Typ `Option<T>`.
-- `Ok(wert)` / `Err(fehler)`: Konstruktoren f√ºr den Typ `Result<T, E>`.
-- `json_encode(wert)` -> `String`: Wandelt Daten in JSON um.
-- `json_decode<T>(text)` -> `T`: Parst typisiertes JSON; ung√ºltige Daten werden als Laufzeitfehler gemeldet.
-
-### Funktionen mit Capabilities
-- `uses Console`:
-  - `read_console(prompt: String)` -> `String?`: Zeigt den Prompt an und liest eine Zeile; `None` bedeutet EOF.
-- `uses Clock`:
-  - `now()` -> `Timestamp`: Aktueller Systemzeitstempel.
-- `uses Random`:
-  - `random_int(min: Int, max: Int)` -> `Int`: Zufallszahl im Intervall.
-- `uses Environment`:
-  - `env(name: String)` -> `Option<String>`: Liest eine Umgebungsvariable.
-- `uses FileSystem`:
-  - `read_text(pfad: String)` -> `String`: Liest Dateiinhalt als Text.
-  - `write_text(pfad: String, inhalt: String)`: Schreibt Inhalt in Datei.
-  - `delete_file(pfad: String)`: L√∂scht eine Datei.
-  - `list_dir(ordner: String)` -> `String[]`: Listet Dateinamen auf.
-- `uses Database`:
-  - `sql<T[]> { SELECT ... }`: F√ºhrt typisierte SQL-Abfragen aus.
-  - `transaction { ... }`: Fasst Abfragen transaktional zusammen.
-
----
-
-## Anhang E: SQL-Spickzettel f√ºr Zelyra-Entwickler
-
-In Zelyra eingebettetes SQL wird mit `sql<T[]>` oder `sql` ausgef√ºhrt:
-
-```zelyra
-database main {
-    engine: mariadb
-    database: "app"
-}
-
-table tasks {
-    id: Id primary auto
-    name: String required
-    erledigt: Bool default false
-}
-
-fn sql_beispiele() uses Database {
-    // 1. SELECT mit typisiertem Rueckgabetyp und sicherem Parameter
-    status = false
-    gefiltert = sql<Task[]> {
-        SELECT id, name, erledigt
-        FROM tasks
-        WHERE erledigt = :status
-    }
-
-    // 2. INSERT in einer Transaktion
-    text = "Neue Aufgabe"
-    transaction {
-        sql {
-            INSERT INTO tasks (name, erledigt)
-            VALUES (:text, false)
-        }
-    }
-
-    // 3. UPDATE
-    ziel_id = 1
-    transaction {
-        sql {
-            UPDATE tasks
-            SET erledigt = true
-            WHERE id = :ziel_id
-        }
-    }
-}
-
-fn main() uses Database {
-    print("SQL Spickzettel validiert.")
-}
-```
-
----
-
-## Anhang F: HTML- und Web-Referenz in Zelyra
-
-### Web-Strukturen und Deklarationen
-
-| Element | Deklaration | Zweck |
-| :--- | :--- | :--- |
-| **Page** | `page "/pfad/{param}" { ... }` | Definiert eine HTTP-GET-Route mit Pfadparametern und HTML-Antwort |
-| **View-Layout** | `view LayoutName { html { ... <slot /> ... } }` | Wiederverwendbares Layout mit Standard- und benannten Slots |
-| **Component** | `component Name { props { ... } html { ... } }` | Wiederverwendbare HTML-Komponente mit typisierten Eigenschaften |
-| **Named Slot** | `<slot name="header">Fallback</slot>` | Platzhalter im Layout/Komponente mit optionalem Standardinhalt |
-| **Slot Injection** | `<slot name="header">Inhalt</slot>` | √úbergabe von Kindinhalten an den passenden Slot |
-| **Data Loading** | `load item = sql<Item> { SELECT ... }` | Typisiertes Laden eines Einzeldatensatzes mit Feldzugriff `{item.field}` |
-| **Collection Loop**| `for item in items { <li>{item.name}</li> }` | Typisierte serverseitige Iteration √ºber geladene Datens√§tze |
-| **Search Control** | `search { col1 col2 }` | Whitelist-gepr√ºfte URL-Suche mit parametrisierter `LIKE`-Abfrage |
-| **Sort Control** | `sort { col1 col2 }` | Typisierte Sortierung √ºber `?sort=col&order=asc\|desc` |
-| **Pagination** | `paginated 25` | Paginierung mit `LIMIT`/`OFFSET`, `page`, `pages` und `total` |
-| **Filter Control** | `filter { col1 col2 }` | Typisierte Filteroperatoren (`eq`, `contains`, `starts_with`, `gt`, `lte` etc.) |
-| **CRUD Layout** | `crud Res { table tbl layout: LayoutName }` | Bindet generierte CRUD-Ansichten in Slots `title`, `nav`, `content`, `actions` ein |
-
----
-
-## Anhang G: Glossar der Fachbegriffe
-
-- **AST (Abstract Syntax Tree):** Die hierarchische Baumstruktur, in die der Compiler deinen Quellcode √ºbersetzt.
-- **Capability (F√§higkeit):** Ausdr√ºckliche Berechtigung (`uses FileSystem`, etc.), ohne die eine Funktion keine gesch√ºtzten Ressourcen ber√ºhren darf.
-- **Design by Contract:** Entwurfsmethode, bei der Funktionen √ºber Vorbedingungen (`requires`) und Nachbedingungen (`ensures`) vertraglich abgesichert werden.
-- **Immutable (Unver√§nderlich):** Variablen k√∂nnen nach der ersten Zuweisung nicht mehr ver√§ndert werden. In Zelyra Standard, es sei denn, sie werden mit `mutable` deklariert.
-- **Invariant:** Eine Bedingung (z. B. in einer Schleife), die vor und nach jedem Durchlauf garantiert wahr sein muss.
-- **Option:** Typ (`Some(v)` oder `None`), der das m√∂gliche Fehlen eines Wertes darstellt ‚Äì Zelyras Antwort auf gef√ºrchtete `null`-Pointer-Crashes.
-- **Result:** Typ (`Ok(v)` oder `Err(e)`), der das Scheitern einer Operation als sicheren Wert zur√ºckgibt, statt unkontrollierte Abst√ºrze auszul√∂sen.
-- **Typed Hole (`_`):** Platzhalter im Code, der dem Compiler und KI-Werkzeugen signalisiert, an dieser Stelle eine passende Implementierung zu erwarten.
-
----
-
-## Anhang H: L√∂sungen zu den √úbungsaufgaben der Kapitel
-
-### Kapitel 1: Begr√º√üung
-```zelyra
-fn main() {
-    print("Hallo Welt aus Zelyra!")
-}
-```
-
-### Kapitel 5: Rabattpreis berechnen
-```zelyra
-fn berechne_rabatt(original: Float, prozent: Float) -> Float {
-    return original * (1.0 - (prozent / 100.0))
-}
-
-fn main() {
-    print(berechne_rabatt(100.0, 20.0))
-}
-```
-
-### Kapitel 11: Zahlen verdoppeln
-```zelyra
-fn verdopple(zahl: Int) -> Int {
-    return zahl * 2
-}
-
-fn main() {
-    print(verdopple(21))
-}
-```
-
-### Kapitel 12: Vor- und Nachbedingungen
-```zelyra
-fn begrenze(wert: Int, min_w: Int, max_w: Int) -> Int
-    requires { min_w <= max_w }
-    ensures { result >= min_w && result <= max_w }
-{
-    if wert < min_w { return min_w }
-    if wert > max_w { return max_w }
-    return wert
-}
-
-fn main() {
-    print(begrenze(120, 0, 100))
-}
-```
-
-### Kapitel 13: Array summieren
-```zelyra
-fn summe_array(zahlen: Int[]) -> Int {
-    mutable gesamt = 0
-    for z in zahlen {
-        gesamt = gesamt + z
-    }
-    return gesamt
-}
-
-fn main() {
-    liste: Int[] = [1, 2, 3, 4, 5]
-    print(summe_array(liste))
-}
-```
-
----
-
-## Anhang I: H√§ufige Fragen und Antworten (FAQ)
-
-**Frage: Warum gibt es in Zelyra 0.2.0 keine `import`-Anweisung?**
-*Antwort:* In Version 0.2.0 √ºbersetzt der Zelyra-Compiler alle `.zyl`-
-Quelldateien im Projektkontext als ein einheitliches System. Ein feingranulares
-Modul- und Import-System bleibt eine zuk√ºnftige Arbeit der Roadmap.
-
-**Frage: Kann ich mit Zelyra auch reine Konsolenprogramme schreiben?**
-*Antwort:* Ja. `print()` gibt Werte aus. `read_console("Prompt: ")` liest eine Zeile und liefert `String?`; daf√ºr braucht die Funktion `uses Console` und das Projekt gegebenenfalls `console = true`.
-
-**Frage: Warum unterst√ºtzt Zelyra MariaDB als bevorzugte Engine?**
-*Antwort:* MariaDB bietet herausragende Performance, Open-Source-Freiheit, Stabilit√§t und breite Cloud-Unterst√ºtzung f√ºr professionelle Webanwendungen.
-
----
-
-## Anhang J: Weiterf√ºhrende Ressourcen und Community
-
-- **Offizielles GitHub-Repository:** [https://github.com/sf1976/zelyra](https://github.com/sf1976/zelyra)
-- **Dokumentation & Online-Handbuch:** [https://siedelmann.com/handbuch](https://siedelmann.com/handbuch) / [https://siedelmann.com/handbook](https://siedelmann.com/handbook)
-- **Beispiele & Vorlagen:** Im Verzeichnis `examples/` des Repositories findest du lauff√§hige Vorlagen f√ºr Authentifizierung, CRUD-Ansichten, APIs und Datenbanken.
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊];„§Ëµ©h∫⁄n∂XßzÕH»\»ô[\òKR[ôùX⁄Çääïõ€à[à‹ù[ôYŸ[àö\»ù\à][òò[öŸŸ\›0Ôù[àŸXò[ùŸ[ô[ôÀàXú⁄X⁄ô\ÿ⁄ôZXô[ãà€‹úôZ›Z]ô]ŸZ\Ÿ[ãääÇÇñ—[ô€\⁄Y][€óJ⁄[ôõ€⁄ H0≠»]]ÿ⁄Çï⁄[€€[Y[àôZ[Hõ€›0ÈôYŸ[àô[\òKR[ôùX⁄à\»[Yò\‹›€›€⁄\»YZ›\ÿ⁄HZòùX⁄
+ä∞Æ÷ô[\òH\õô[à8†$»ô\ú›0ÈôX⁄õŸ‹ò[[ZY\ô[àõ€à[à‹ù[ôYŸ[àö\»ù\àZYŸ[ô[à[ùŸ[ô[ô™ äà
+Z[Hö\»ÿ\][Hö\»äH[»]X⁄\»
+äùX⁄ö\ÿ⁄HôYô\ô[ûö[ôùX⁄
+äà
+ÿ\][Hö\»å H€›⁄YH]\Ÿ∞ÔõX⁄H
+äê[ö0ÈôŸJäà
+Hö\»äKÇÇèà
+äîõ⁄ôZ››]\Œääà€€\[\àåÀå[\[Y[ùY\ùZ[ô[àŸ\∞Ôù[ã^\ö[Y[ù[[àZ[\à‹òX⁄[öYHåKàô[\òH\›õÿ⁄öX⁄∞Ôà[àõŸZ›[€úŸZ[úÿ]àúôZYŸYŸXô[ãÇÇà»»›]\ﬁôZX⁄[ÇÇãH8ß!H
+äí[\[Y[ùY\ù[ôŸ\∞Ôùääà[HZ›Y[[àô\‹⁄]‹ûHõ‹ö[ô[à[ô[àY\Ÿ[H\òôZ]€]Yà\ôõ€‹ôZX⁄]\ŸŸY∞ÔùÇãH<'ÈÍà
+äë^\ö[Y[ù[ääàõ‹ö[ô[ãXô\àõÿ⁄ù[ô»Ÿ\àZ[ôŸ\ÿ⁄∞Èö›ÇãH<'ÂÓªÓ#»
+äëŸ\[ùääàZ[\à‹òX⁄ö\⁄[€ãõÿ⁄öX⁄ù]ô\õ0È‹⁄Y»ô\ô∞Ôÿò\ãÇãH8ßc
+äë\ûôZ]öX⁄ô\ô∞Ôÿò\éääà[HZ›Y[[à”HöX⁄õ‹ö[ô[ãÇÇà»»[ö[›ô\ûôZX⁄ö\¬Çà»»»ô[\òH\õô[à8†$»\»ZòùX⁄ÇãH
+äñ’RSH8†$»ëSTêHSëì—‘êSSRQTïSë»ëTî’RSóJ›Z[ZK^ô[\òK][ô\õŸ‹ò[[ZY\ù[ôÀ]ô\ú›Z[äJäÇàH“ÿ\][Nà⁄[€€[Y[àôZHô[\òWJ⁄ÿ\][LK]⁄[€€[Y[ãXôZK^ô[\òJBàH“ÿ\][éà⁄YHZ[àõŸ‹ò[[Hù[ö›[€öY\ùJ⁄ÿ\][Lã]⁄YKYZ[ã\õŸ‹ò[[KYù[ö›[€öY\ù
+BàH“ÿ\][Œàô[\òH[ú›[Y\ô[à[ôZ[úöX⁄[óJ⁄ÿ\][LÀ^ô[\òKZ[ú›[Y\ô[ã][ôYZ[úöX⁄[äBàH“ÿ\][à\»\ú›Hô[\òKTõ⁄ôZ›J⁄ÿ\][MY\ÀY\ú›K^ô[\òK\õ⁄ôZ›
+BãH
+äñ’RSRH8†$»QH‘ïSëQ—SàTà‘êP“WJ›Z[ZZKYYKY‹ù[ôYŸ[ãY\ã\‹òX⁄JJäÇàH“ÿ\][NàŸ\ùH[ô][ù\[óJ⁄ÿ\][MK]Ÿ\ùK][ôY][ù\[äBàH“ÿ\][éàò\öXXõ[à[ô[ùô\∞Èô\õX⁄ŸZ]J⁄ÿ\][Mã]ò\öXXõ[ã][ô][ùô\ò[ô\õX⁄ŸZ]
+BàH“ÿ\][Œà‹\ò]‹ô[à[ô]\Ÿ∞Ô⁄ŸWJ⁄ÿ\][MÀ[‹\ò]‹ô[ã][ôX]\ŸùX⁄ŸJBàH“ÿ\][àZ[ãH[ô]\ŸÿXô[óJ⁄ÿ\][NYZ[ã][ôX]\ŸÿXô[äBàH“ÿ\][Nà[ùÿ⁄ZY[ôŸ[àZ]ôY[ô›[ôŸ[óJ⁄ÿ\][NKY[ùÿ⁄ZY[ôŸ[ã[Z]XôY[ô›[ôŸ[äBàH“ÿ\][Là⁄YY\ö€[ôŸ[à[ôÿ⁄ZYô[óJ⁄ÿ\][LL]⁄YY\ö€[ôŸ[ã][ô\ÿ⁄ZYô[äBãH
+äñ’RSRRH8†$»ì—‘êSSQH’ïR’TíQTëSóJ›Z[ZZZK\õŸ‹ò[[YK\›ùZ›\öY\ô[äJäÇàH“ÿ\][LNàù[ö›[€ô[à[ôõﬁôY\ô[óJ⁄ÿ\][LLKYù[ö›[€ô[ã][ô\õﬁôY\ô[äBàH“ÿ\][Léàô\ù∞ÈŸH[ôõ‹òôY[ô›[ôŸ[à
+\⁄Y€àûH€€ùòX›
+WJ⁄ÿ\][LLã]ô\ùòYŸK][ô]õ‹òôY[ô›[ôŸ[ãY\⁄Y€ãXûKX€€ùòX›
+BàH“ÿ\][LŒàÿ[[[[ôŸ[ã\›[à[ôÌúù\ò∞Ô⁄\à
+\úò^\»	àX\ WJ⁄ÿ\][LLÀ\ÿ[[[[ôŸ[ã[\›[ã][ô]€‹ù\òùX⁄\ãX\úò^\À][ô[X\ BàH“ÿ\][MàZYŸ[ôH][ù\[à\ú›[[à
+ôX€‹ô»	àXõ\ WJ⁄ÿ\][LMYZYŸ[ôKY][ù\[ãY\ú›[[ã\ôX€‹ôÀ]Xõ\ BàH“ÿ\][MNà[Ÿ[H[ô€ŸKS‹ôÿ[ö\ÿ][€óJ⁄ÿ\][LMK[[Ÿ[K][ôX€ŸK[‹ôÿ[ö\ÿ][€äBãH
+äñ’RSUà8†$»“P“TíRUSëëRTêëRSëSë◊J›Z[Z]ã\⁄X⁄\öZ]][ôYôZ\òôZ[ô[ô JäÇàH“ÿ\][MéàôZ\ò\ù[à[ôZôH\úÿX⁄[óJ⁄ÿ\][LMãYôZ\ò\ù[ã][ôZZôK]\úÿX⁄[äBàH“ÿ\][MŒàôZ\à[»Ÿ\ùH8†$»\»ô\›[S]\›\óJ⁄ÿ\][LMÀYôZ\ãX[À]Ÿ\ùKY\À\ô\›[[]\›\äBàH“ÿ\][Nà\»öX⁄»^\›Y\ùöX⁄8†$»\à⁄X⁄\ôH[Yÿ[ô»Z]‹[€óJ⁄ÿ\][LNY\À[öX⁄ÀY^\›Y\ù[öX⁄Y\ã\⁄X⁄\ôK][Yÿ[ôÀ[Z][‹[€äBàH“ÿ\][NNà\›»[ô]X[]0È‹⁄X⁄\ù[ô◊J⁄ÿ\][LNK]\›À][ô\]X[]]‹⁄X⁄\ù[ô BãH
+äñ’RSà8†$»êR’T–“HUSïëTêTêëRUSë◊J›Z[]ã\òZ›\ÿ⁄KY][ùô\ò\òôZ][ô JäÇàH“ÿ\][åà\òôZ][àZ]]ZY[óJ⁄ÿ\][LåX\òôZ][ã[Z]Y]ZY[äBàH“ÿ\][åNà][KZûôZ]ùYò[[ô›ùZ›\öY\ùH][óJ⁄ÿ\][LåKY][K]ZûôZ]^ùYò[][ô\›ùZ›\öY\ùKY][äBàH“ÿ\][åéàôXô[õ0ÈYöY⁄ŸZ][ô[ù\ô‹ù[ô]YôÿXô[óJ⁄ÿ\][Låã[ôXô[õ]YöY⁄ŸZ]][ôZ[ù\ô‹ù[ô]YôÿXô[äBãH
+äñ’RSíH8†$»USêêSí—SàRUëSTêWJ›Z[]öKY][òò[öŸ[ã[Z]^ô[\òJJäÇàH“ÿ\][åŒàÿ\ù[Hô[\òHYH][òò[ö»\ôZ›ô\ú›ZJ⁄ÿ\][LåÀ]ÿ\ù[K^ô[\òKYYKY][òò[öÀY\ôZ›]ô\ú›Z
+BàH“ÿ\][çàXô[[àYö[öY\ô[à[ô][à[Ÿ[Y\ô[óJ⁄ÿ\][Lç]Xô[[ãYYö[öY\ô[ã][ôY][ã[[Ÿ[Y\ô[äBàH“ÿ\][çNà][àXôúòYŸ[à[ôô\∞Èô\õóJ⁄ÿ\][LçKY][ãXXôúòYŸ[ã][ô]ô\ò[ô\õäBãH
+äñ’RSíRH8†$»—PêSï—SëSë—SàSëì‘ìUSTëWJ›Z[]öZK]ŸXò[ùŸ[ô[ôŸ[ã][ôYõ‹õ][\ôJJäÇàH“ÿ\][çéàŸXúŸZ][à]\ŸŸXô[óJ⁄ÿ\][Lçã]ŸXúŸZ][ãX]\ŸŸXô[äBàH“ÿ\][çŒàõ‹õ][\ôH[ôô[ù]ô\ôZ[ôÿXô[óJ⁄ÿ\][LçÀYõ‹õ][\ôK][ôXô[ù]ô\ôZ[ôÿXô[äBàH“ÿ\][éà\»õ€›0ÈôYŸH‘ïQS]\›\óJ⁄ÿ\][LéY\À]õ€›[ôYŸKX‹ùY[]\›\äBàH“ÿ\][éNàô[ù]ô\ã\‹›Ìúù\à[ô⁄]ù[ôŸ[óJ⁄ÿ\][LéKXô[ù]ô\ã\\‹›€‹ù\ã][ô\⁄]ù[ôŸ[äBàH“ÿ\][ÃàT\»[ô][ò]\›]\ÿ⁄J⁄ÿ\][LÃX\\À][ôY][ò]\›]\ÿ⁄
+BãH
+äñ’RSíRRH8†$»QHëT””ëTíRUSàì”àëSTêWJ›Z[]öZZKYYKXô\€€ô\öZ][ã]õ€ã^ô[\òJJäÇàH“ÿ\][ÃNà\ÿò\öŸZ][»ÿô\ú›\»ŸXõ›J⁄ÿ\][LÃK[\ÿò\öŸZ]X[À[ÿô\ú›\ÀYŸXõ›
+BàH“ÿ\][Ãéà“KSò]]ö]0È8†$»ÿ\ù[Hô[\òH\ôôZ›∞Ôà“KP\‹⁄\›[ù[à\›J⁄ÿ\][LÃãZ⁄K[ò]]ö]]]ÿ\ù[K^ô[\òK\\ôôZ›Yù\ãZ⁄KX\‹⁄\›[ù[ãZ\›
+BàH“ÿ\][ÃŒà⁄X⁄\öZ]\ò⁄∞ÈY⁄ŸZ][à
+ÿ\Xö[]Y\ WJ⁄ÿ\][LÃÀ\⁄X⁄\öZ]Y\ò⁄YòZY⁄ŸZ][ãXÿ\Xö[]Y\ BàH“ÿ\][Õàô[\òH[Hô\ô€ZX⁄J⁄ÿ\][LÕ^ô[\òKZ[K]ô\ô€ZX⁄
+BãH
+äñ’RSV8†$»ì”HSï’TëàïTàëTïQ—SàSï—SëSë◊J›Z[Z^]õ€KY[ù›\ôã^ù\ãYô\ùYŸ[ãX[ùŸ[ô[ô JäÇàH“ÿ\][ÕNà€Ÿùÿ\ôH[ô[à8†$»õ€à\àYYHù[H[ù›\ôóJ⁄ÿ\][LÕK\€Ÿùÿ\ôK\[ô[ã]õ€ãY\ãZYYK^ù[KY[ù›\ôäBàH“ÿ\][Õéà\ò⁄]Z›\à[ôÿ]Xô\ôH€Ÿ\›ùZ›\óJ⁄ÿ\][LÕãX\ò⁄]Z›\ã][ô\ÿ]Xô\ôKX€Ÿ\›ùZ›\äBàH“ÿ\][ÕŒà€€ôöY›\ò][€à[ô[YŸXù[ô‹›ò\öXXõ[óJ⁄ÿ\][LÕÀZ€€ôöY›\ò][€ã][ô][YŸXù[ô‹›ò\öXXõ[äBàH“ÿ\][ŒàôZ\ú›X⁄H[ô‹[ZY\ù[ô◊J⁄ÿ\][LŒYôZ\ú›X⁄K][ô[‹[ZY\ù[ô BàH“ÿ\][ŒNàô\ôZ]›[[ô»[ôô]öYXóJ⁄ÿ\][LŒKXô\ôZ]›[[ôÀ][ôXô]öYXäBãH
+äñ’RS8†$»Pî–“T‘‘ì“ëR’Së—RUTë∞ÁïSë◊J›Z[^XXúÿ⁄\‹‹õ⁄ôZ›][ô]ŸZ]\ôùZù[ô JäÇàH“ÿ\][à\»‹õÁŸHXúÿ⁄\‹‹õ⁄ôZ›àõ€›0ÈôYŸH]YôÿXô[ùô\ùÿ[[ô◊J⁄ÿ\][MY\ÀY‹õ‹‹ŸKXXúÿ⁄\‹‹õ⁄ôZ›]õ€›[ôYŸKX]YôÿXô[ùô\ùÿ[[ô BàH“ÿ\][NàYHô[\òKTõÿYX\
+õ€àåÀåö\»Kå
+WJ⁄ÿ\][MKYYK^ô[\òK\õÿYX\]õ€ãLÃXö\ÀLL
+BàH“ÿ\][éàZ[àŸY»[»ô[\òKQ[ù⁄X⁄€\óJ⁄ÿ\][MãYZ[ã]ŸYÀX[À^ô[\òKY[ù⁄X⁄€\äBÇà»»»X⁄ö\ÿ⁄\»ôYô\ô[ûö[ôùX⁄ÇãHÃKàÿ\»ô[\òH[ô\ú»XX⁄JÃK]ÿ\À^ô[\òKX[ô\úÀ[XX⁄
+BãHÃãà[ú›[][€óJÃãZ[ú›[][€äBãHÃÀà\»\ú›HõŸ‹ò[[WJÃÀY\ÀY\ú›K\õŸ‹ò[[JBãHÕàô]Y\»õ⁄ôZ›[õYŸ[à[ô”WJÕ[ô]Y\À\õ⁄ôZ›X[õYŸ[ã][ôX€JBãHÕKàò\öXXõ[ã\[à[ôù[ö›[€ô[óJÕK]ò\öXXõ[ã]\[ã][ôYù[ö›[€ô[äBãHÕãà‹[€ãô\›[[ô]\õàX]⁄[ô◊JÕã[‹[€ã\ô\›[][ô\]\õã[X]⁄[ô BãHÕÀàX\öXQà[ôXô[[óJÕÀ[X\öXYã][ô]Xô[[äBãHŒàÿ⁄[XH∞Ôô[à[ô[ùŸ[ô[óJŒ\ÿ⁄[XK\ùYô[ã][ôX[ùŸ[ô[äBãHŒKàò]]ô\»‘SJŒK[ò]]ô\À\‹[
+BãHÃLàŸXúŸZ][óJÃL]ŸXúŸZ][äBãHÃLKàõ‹õ][\ôWJÃLKYõ‹õ][\ôJBãHÃLãà‘ïQJÃLãX‹ùY
+BãHÃLÀà]][ùYö^öY\ù[ô»[ôô\ôX⁄Y›[ôŸ[óJÃLÀX]][ùYö^öY\ù[ôÀ][ôXô\ôX⁄Y›[ôŸ[äBãHÃMàÿ\Xö[]Y\◊JÃMXÿ\Xö[]Y\ BãHÃMKà€€ùòX›»[ôô\öYûWJÃMKX€€ùòX›À][ô]ô\öYûJBãHÃMãà€€ôöY›\ò][€à[ôŸZZ[[ö\‹ŸWJÃMãZ€€ôöY›\ò][€ã][ôYŸZZ[[ö\‹ŸJBãHÃMÀàXY€õ‹Ÿ[à[ôôZ\ú›X⁄WJÃMÀYXY€õ‹Ÿ[ã][ôYôZ\ú›X⁄JBãHÃNà\›[à[ôZ][ù⁄X⁄Ÿ[óJÃN]\›[ã][ô[Z][ù⁄X⁄Ÿ[äBãHÃNKàÿ\»[»∞È⁄›\»€€[]JÃNK]ÿ\ÀX[À[òX⁄›\ÀZ€€[]
+BãHÃåàô[\òH[Hô\ô€ZX⁄ùHù\›JÃå^ô[\òKZ[K]ô\ô€ZX⁄^ùK\ù\›
+BãHÃåKà‹⁄][€öY\ù[ô»[ôZ›Y[\à[ù⁄X⁄€[ô‹‹›[ôJÃåK\‹⁄][€öY\ù[ôÀ][ôXZ›Y[\ãY[ù⁄X⁄€[ô‹‹›[ô
+BãHÃåãàõÿYX\]\»[HZ›Y[[àô\‹⁄]‹ûWJÃåã\õÿYX\X]\ÀY[KXZ›Y[[ã\ô\‹⁄]‹ûJBãHÃåÀà“K[ò]]ôH[ù⁄X⁄€[ô◊JÃåÀZ⁄K[ò]]ôKY[ù⁄X⁄€[ô BãHÃçàô\òö[ôX⁄H]Y[[à[ô€€\[\ãT∞Ôù[ô»
+€›\òŸH]]‹ö]JWJÃç]ô\òö[ôX⁄K\]Y[[ã][ôX€€\[\ã\ùYù[ôÀ\€›\òŸKX]]‹ö]JBÇà»»»[ö0ÈôŸBÇãH–[ö[ô»Nàÿ⁄ô[Z[ú›YY»»‹X⁄ﬁô][
+ﬁ[ù^P⁄X]T⁄Y]
+WJÿ[ö[ôÀXK\ÿ⁄ô[Z[ú›YYÀ\‹X⁄ﬁô][\ﬁ[ù^X⁄X]\⁄Y]
+BãH–[ö[ô»éà[HôZ\õY[[ôŸ[àõ€àô[\òH]YàZ[ô[àõX⁄◊Jÿ[ö[ôÀXãX[KYôZ\õY[[ôŸ[ã]õ€ã^ô[\òKX]YãYZ[ô[ãXõX⁄ BãH–[ö[ô»Œàô[\òKP”KTôYô\ô[ûóJÿ[ö[ôÀXÀ^ô[\òKX€K\ôYô\ô[ûäBãH–[ö[ô»àYH›[ô\ôöXõ[›Z»[H0Áô\òõX⁄◊Jÿ[ö[ôÀYYYK\›[ô\ôöXõ[›ZÀZ[K]Xô\òõX⁄ BãH–[ö[ô»Nà‘ST‹X⁄ﬁô][∞Ôàô[\òKQ[ù⁄X⁄€\óJÿ[ö[ôÀYK\‹[\‹X⁄ﬁô][Yù\ã^ô[\òKY[ù⁄X⁄€\äBãH–[ö[ô»éàSH[ôŸXãTôYô\ô[ûà[àô[\òWJÿ[ö[ôÀYãZ[][ô]ŸXã\ôYô\ô[ûãZ[ã^ô[\òJBãH–[ö[ô»Œà€‹‹ÿ\à\àòX⁄ôY‹öYôôWJÿ[ö[ôÀYÀY€‹‹ÿ\ãY\ãYòX⁄ôY‹öYôôJBãH–[ö[ô»à0Ìú›[ôŸ[àùH[à0Áù[ô‹ÿ]YôÿXô[à\àÿ\][Jÿ[ö[ôÀZ[‹›[ôŸ[ã^ùKY[ã]Xù[ô‹ÿ]YôÿXô[ãY\ãZÿ\][
+BãH–[ö[ô»Nà0ÈYöYŸHúòYŸ[à[ô[ù€‹ù[à
+êTJWJÿ[ö[ôÀZKZ]YöYŸKYúòYŸ[ã][ôX[ù€‹ù[ãYò\JBãH–[ö[ô»éàŸZ]\ô∞Ôô[ôHô\‹€›\òŸ[à[ô€€[][ö]WJÿ[ö[ôÀZã]ŸZ]\ôùZô[ôK\ô\‹€›\òŸ[ã][ôX€€[][ö]JBÇà»RSH8†$»ëSTêHSëì—‘êSSRQTïSë»ëTî’RSÇÇãKKBÇà»»ÿ\][Nà⁄[€€[Y[àôZHô[\òBÇà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬í[àY\Ÿ[HZ[ô∞Ôù[ô‹⁄ÿ\][\ô∞Èú›NÇãHÿ\»Z[ôHõŸ‹ò[[ZY\ú‹òX⁄H[HŸ\õà\›[ôŸ[⁄H]YôÿXôH⁄YH\ô∞ÔÇãHÿ\»ô[\òHô\€€ô\ú»XX⁄[ôÿ\ù[H\»[»ZYŸ[ú›0ÈôYŸH‹òX⁄H[ù⁄X⁄Ÿ[›\ôKÇãHŸ[⁄HòZ›\ÿ⁄[àöY[Hô[\òHô\ôõ€›[ô∞ÔàŸ[⁄H]YôÿXô[à\»⁄X⁄ô\€€ô\ú»ZY€ô]ÇãH⁄YHô[\òH\ÿò\öŸZ]ù]ô\õ0È‹⁄Y⁄ŸZ][ô⁄X⁄\öZ]õ€àõ‹õö\ôZ[àÿ\ò[ùY\ùÇãHÿ\ù[Hô[\òH€›€⁄∞ÔàY[úÿ⁄X⁄H[ù⁄X⁄€\à[»]X⁄∞Ôà“KTﬁ\›[YH[ù€‹ôô[à›\ôKÇãH⁄YHY\Ÿ\»ZòùX⁄]YôŸXò]]\›[ô⁄YHH[Hô\›[à[Z]\òôZ]\›ÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬êô]õ‹àHYH\ú›HôZ[H€ŸHÿ⁄ôZXú›€€\›Hô\ú›Z[ãŸ[⁄\»õÿõ[Hô[\òH0Ìú›à[à\à[Ÿ\õô[à€Ÿùÿ\ôY[ù⁄X⁄€[ô»8†$»ô\€€ô\ú»ôZH][ãH[ôŸXôŸ\›0Ôù[à[ùŸ[ô[ôŸ[à8†$»\úúÿ⁄ŸùZ[àöY\⁄YŸ\»\ò⁄Z[ò[ô\éàX[à[Ÿ[Y\ùZ[ôHXô[H[à‘Sÿ⁄ôZXùY\Ÿ[ô[àôYŸ[àõÿ⁄Z[õX[[àZ[ô[HòX⁄Ÿ[ôQúò[Y]€‹ö»
+⁄YH\ò]ô[^ô\‹»Ÿ\àò[ô€ Kò[YY\ùY\Ÿ[ô[à][àZ[àö]\»X[[Húõ€ù[ô
+S“ò]òTÿ‹ö\
+H[ôŸ[ô\öY\ùpÔÿ[HTKPô\ÿ⁄ôZXù[ôŸ[ãÇñô[\òHúöX⁄Z]Y\Ÿ\àúòY€Y[ùY\ù[ôŒàHô\ÿ⁄ôZXú›Z[à][õ[Ÿ[Z[ôHôYŸ[à[ôZ[ôHÿ⁄ö]›[[à[àZ[ô\àZ[ûöYŸ[à›[H8†$»[ôô[\òHZ]]\ò]\»Ÿ\∞ÔùK⁄X⁄\ôHò]\›Z[ôHXãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬ëZ[ôH
+äîõŸ‹ò[[ZY\ú‹òX⁄Jäà\›⁄YHZ[à∞Èö\Ÿ\»ôYŸ[Ÿ\öÀà⁄YH\õ]Xù\»\ãZ[ô[H€€\]\àZ[ô]]YŸH[ùŸZ\›[ôŸ[àùHŸXô[ãà€€\]\à⁄[ô^ô[Hÿ⁄ô[Xô\à⁄YHô\⁄]ô[àŸZ[ô[àŸ\›[ô[àY[úÿ⁄[ùô\ú›[ôàŸ[õàZ[ôH[ùŸZ\›[ô»ùŸZY]]Y»\›Ÿ\àZ[à[ô\ùÿ\ù]\àù\›[ôZ[ùö]›0Ôûù\»õŸ‹ò[[HXàŸ\àõŸ^öY\ùò][HôZ\ãÇÇääñô[\òJäà\›Z[ôH[Ÿ\õôK›]\ÿ⁄\\⁄Y\ùH‹òX⁄Kà8†'î›]\ÿ⁄\\⁄Y\ù8†'ôY]]]Z[ôòX⁄àô\ôZ]»õ‹à[H›\ù\»õŸ‹ò[[\»∞Ôù\àô[\òKP€€\[\à‹∞ÔôX⁄ÿà[Hò]\›Z[ôHù\ÿ[[Y[ú\‹Ÿ[ãàŸ[õàZ[ôHù[ö›[€à^\ùÿ\ù]HZàXô\àô\úŸZ[ùX⁄Z[ôHòZ0Ôô\ô⁄Xú›ŸZ\›ô[\òHX⁄€Ÿõ‹ù\ò]Yà[à8†$»ô]õ‹à\à€ŸHô[X[»Z[ô[àŸ\ùô\àŸ\àù]ô\à\úôZX⁄ÇÇë€ZX⁄ôZ]Y»\›ô[\òH
+äô][òò[öÀH[ôŸXûô[ùöY\ù
+äéÇãHZ[àXô[[úÿ⁄[XH
+XõX
+H\›ŸZ[ôH\€€Y\ùH‘SQ]ZK€€ô\õà[ùY‹ò[\àô\›[ôZ[\à‹òX⁄KÇãHò\öXXõ[à⁄[ô›[ô\ôpÈ0Á⁄Y»
+äù[ùô\∞Èô\õX⁄
+äà
+[[]]XõX
+KàY\ò⁄ÿ[õà⁄X⁄Z[àŸ\ùöX⁄0ÌùõX⁄[H[ù\ô‹ù[ô0Èô\õãÇãHŸZ[ôH0Áô\úò\ÿ⁄[ôŸ[à\ò⁄ù[àôZ[ôHŸ\ùHpÔ‹Ÿ[à]\Ÿ∞Ô⁄€X⁄[»‹[€òZ€\öY\ùŸ\ô[ãÇÇà»»»à€Z[ôK]YôZ[ò[ô\à]Yòò]Y[ôHôZ\‹Y[BÇîÿ⁄]Y[à⁄\à[ú»Z[à\ú›\»⁄[ûöYŸ\»ô[\òKTõŸ‹ò[[H[éÇÇòô[\òBãÀ»[úŸ\à\ú›\»ô[\òKTõŸ‹ò[[NàZ[ôHôY‹∞Ô0Á›[ô¬ôõàXZ[ä
+H¬àö[ù
+ï⁄[€€[Y[àôZHô[\òHHäBüBòÇïŸ[õàHY\Ÿ[HõŸ‹ò[[HYZà›ùZ›\àŸXô[àpÌò⁄\›ô\õY‹›HYH]YôÿXôH[àZ[ôHù[ö›[€éÇÇòô[\òBôõàôY‹ùY\‹Ÿ[äò[YNà›ö[ô HOà›ö[ô»¬àô]\õàí[Àà
+»ò[YH
+»àH⁄[€€[Y[à[à\àô[\òKUŸ[àÇüBÇôõàXZ[ä
+H¬àòX⁄öX⁄HôY‹ùY\‹Ÿ[äë[ù⁄X⁄€\àäBàö[ù
+òX⁄öX⁄
+BüBòÇà»»»Kà\\ÿ⁄HôZ\à[ô\ô[à\úÿX⁄[ÇãH
+äëôZ\éääàZ[àŸ[ZZ€€€à[HôZ[[ô[ôHŸ]ô[à
+⁄YH[àò]òK  »Ÿ\à
+KÇà
+ï\úÿX⁄Näà[àô[\òHô[õô[àôZ[[ù[Xú∞Ô⁄H[ùŸZ\›[ôŸ[àÿ]Xô\àXãà0Áô\ôõ0Ô‹⁄YŸHÿ]ûôZX⁄[à›0Ìúô[à\»ÿ⁄öYùö[ÇãH
+äëôZ\éääà[õôZY[ãô[\òHŸZHù\àZ[àúò[Y]€‹ö»Ÿ\àZ[ôH⁄‹ö\‹òX⁄KÇà
+ï\úÿX⁄Näàô[\òH\›Z[ôHZYŸ[ú›0ÈôYŸK€€\[Y\ùH‹òX⁄HZ]ZYŸ[ô[H\H[ô∞Ôúﬁ\›[KÇÇà»»»ãàY\ö‹ÈôBåKàô[\òHô\òö[ô]][õ[Ÿ[Ÿ⁄Z»[ôÿô\ôõ0È⁄H[àZ[ô\àZ[ûöYŸ[à€\ô[à‹òX⁄KÇåãàÿ\»HYZ[ú››Z[H€ŸNàŸZ[ôHô\ú›X⁄›HXY⁄YKŸZ[ôH[\^ö][àù[UŸ\ùKÇåÀà\à€€\[\à\›Z[à\ùô\éà\àö[ô]ôZ\àú∞Ôô]õ‹à⁄YHÿ⁄Y[à[úöX⁄[àÌõõô[ãÇÇà»»»Àà0Áù[ô‹ÿ]YôÿXô[ÇãH
+äî›YôHH
+ZX⁄
+Nääà0·ô\ôH\»ôY‹∞Ô0Á›[ô‹‹õŸ‹ò[[H€À\‹»\»Z[ô[àZYŸ[ô[àõ‹õò[Y[à[ô€⁄õ‹ù]\Ÿ⁄XùÇãH
+äî›YôHà
+Z][
+Nääàÿ⁄ôZXôHZ[ôHùŸZ]Hù[ö›[€àô\òXúÿ⁄YY[äò[YNà›ö[ô HOà›ö[ôÿYHZ[ô[àXúÿ⁄YYŸ‹ùpÁ»õ‹õ][Y\ù[ôùYôHôZYHù[ö›[€ô[à[àXZ[ä
+X]YãÇãH
+äî›YôH»
+[ú‹ùX⁄›õ€
+Nääà0Áô\õYŸH\àôZH\\ÿ⁄Hõÿõ[YKYH[à[ô\ô[à‹òX⁄[à\ò⁄\ôZ\à[ù›Z[à
+ãàãàZ[ôHòZ›]^0Ôô\ôŸXô[äK[ôôY‹∞ÔôK⁄YHZ[à€€\[\à]õ‹àÿ⁄0ÔùÇÇà»»»àò^\ÿ]YôÿXôNà\à‹ù[ô›Z[à\à]YôÿXô[ùô\ùÿ[[ô¬í[àY\Ÿ[HùX⁄ò]Y[à⁄\àÿ⁄ö]∞Ôàÿ⁄ö]Z[ôHX⁄Kò^\›]Y€X⁄H
+äê]YôÿXô[ùô\ùÿ[[ô äà
+\⁄»X[òYŸ[Y[ù
+Kà⁄\àôY⁄[õô[àZ][HZ[ôòX⁄›[àÿ⁄ö]Çë\ú›[HZ[ôH]ZH]YôÿXô[ó‹›\ùûû[YH[àò[Y[à[úŸ\ô\»ﬁ\›[\»[ôYHô\ú⁄[€ú€ù[[Y\àÿ]Xô\à]Yà[Hö[ÿ⁄\õH]\Ÿ⁄XùÇÇòô[\òBôõàXZ[ä
+H¬àﬁ\›[W€ò[YHHñô[\òH\⁄”X[òYŸ\àÇàô\ú⁄[€àHååKçLÇàö[ù
+ﬁ\›[W€ò[YH
+»à
+ô\ú⁄[€àà
+»ô\ú⁄[€à
+»äHŸ\›\ù]àäBüBòÇà»»»Kàù\ÿ[[Y[ôò\‹›[ô¬ãHô[\òH\›Z[ôH›]\ÿ⁄\\⁄Y\ùK⁄X⁄\ôH[ô\ÿò\ôH‹òX⁄H∞ÔàŸ\ÿ⁄0Èù€Ÿ⁄ZÀ][òò[öŸ[à[ô\»ŸXãÇãHô[\òH[[Z[öY\ùôY[ô[ûô[àù⁄\ÿ⁄[à][òò[öÀQYö[ö][€ô[ãò[YY\ù[ô»[ôTKÇãHò\öXXõ[à⁄[ô›[ô\ôpÈ0Á⁄Y»[ùô\∞Èô\õX⁄»\à€€\[\àÿ\ò[ùY\ù›Xö[]0È[ô€\öZ]ÇÇà»»»Là€€ùõ€úòYŸ[àù\àŸ[ú›∞Ôù[ô¬åKàÿ\»[ù\úÿ⁄ZY]Z[ôH›]\ÿ⁄\\⁄Y\ùH‹òX⁄Hõ€àZ[ô\à[ò[Z\ÿ⁄[à‹òX⁄O¬åãàÿ\ù[H\›\»Z[àõ‹ùZ[Ÿ[õàXô[[úÿ⁄[X]H\ôZ›[à\àõŸ‹ò[[ZY\ú‹òX⁄HYö[öY\ùŸ\ô[è¬åÀàÿ\ù[H⁄[ô[ùô\∞Èô\õX⁄HŸ\ùH›[ô\ôpÈ0Á⁄Y»⁄X⁄\ô\à[»ô\∞Èô\õX⁄Hò\öXXõ[è¬ÇãKKBÇà»»ÿ\][éà⁄YHZ[àõŸ‹ò[[Hù[ö›[€öY\ùÇà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬ãH⁄YHZ[àŸ\ÿ⁄öYXô[ô\à]Y[^ÿ⁄ö]∞Ôàÿ⁄ö][àZ[à]\ŸŸY∞Ôù\»õŸ‹ò[[Hô\ùÿ[ô[⁄\ôÇãHŸ[⁄Hõ€[à^\ã\úŸ\ã\H⁄X⁄Ÿ\ãô\öYöY\à[ô[ù\úô]\à[àô[\òH‹Y[[ãÇãHÿ\»Ÿ[ò]HôZ[H›\ùZ[ô\»ô[\òKTõŸ‹ò[[\»Ÿ\ÿ⁄YZÇãHÿ\»\à[ù\úÿ⁄YYù⁄\ÿ⁄[àﬁ[ù^
+õ‹õJH[ôŸ[X[ùZ»
+ôY]][ô H\›ÇãHÿ\»Z[à[€‹ö]]\»\›[ô⁄YH\»UêKTö[ûö\
+Z[ôÿXôKô\ò\òôZ][ôÀ]\ŸÿXôJHù[ö›[€öY\ùÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬îõŸ‹ò[[ZY\ôôZ\àùHôZXô[à\›⁄[ô\õZX⁄Ÿ[õàX[àô\ú›Z[àŸ[⁄\à›][€à\»€€\[\ú»\àôZ\àŸ[Y[]⁄\ôàZ[àﬁ[ù^ôZ\àôY]]]\‹»\à^[õ\ÿò\à\›»Z[à\ôZ\àôY]]]\‹»YHŸ⁄Z»⁄Y\ú‹∞Ô⁄X⁄\›»Z[à]YûôZ]ôZ\àôY]]]\‹»Èô[ô\à]\Ÿ∞Ôù[ô»Z[ôH[ùõ‹ö\ôŸ\ŸZ[ôHôY[ô›[ô»Z[ùò]àŸ[õàHY\ŸHŸ]Hô\ú›Z›ô\õY\ú›HôY€X⁄Hÿ⁄]Hõ‹àôZ\õY[[ôŸ[ãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬ëZ[à€€\]\úõﬁô\‹€‹àô\ú›Zù\àù[[à[ôZ[úŸ[à
+X\ÿ⁄[ô[ò€ŸJKàŸ[õà⁄\àY[úÿ⁄[àZ[ôH^]ZHZ]ô[\òKP€ŸHÿ⁄ôZXô[à
+ãàãàõŸ‹ò[[Kûû[
+K\ò⁄0ÈYùY\Ÿ\à^YZô\ôH›][€ô[éÇÇò^î]Y[^
+ûû[
+Bà8• Çà8•ØñÃKà^\óNàô\õY›[à^[àÌúù\ã‘ﬁ[Xõ€H
+⁄Ÿ[ú Bà8• Çà8•ØñÃãà\úŸ\óNàò]]Z[ô[àŸ⁄\ÿ⁄[à›ùZ›\òò][H
+T’HXú›òX›ﬁ[ù^ôYJBà8• Çà8•ØñÃÀà\H⁄X⁄Ÿ\óNà∞Ôù[H\[ãò[Y[à[ôô\ôX⁄Y›[ôŸ[Çà8• Çà8•ØñÕàô\öYöY\óNàô]ŸZ\›X][X]\ÿ⁄ÿ⁄ZYô[à[ôô\ù∞ÈŸH
+€€ùòX› Bà8• Çà8•ØñÕKàù[ù[YH»[ù\úô]\óNà∞ÔùYHŸ\∞Ôù[à[ùŸZ\›[ôŸ[à]\¬òÇãH
+äîﬁ[ù^
+äà\›YH‹ò[[X]ZŒàŸ]ùH€[[Y\õàöX⁄Yœ»ÿ⁄ôZXú›Hÿ⁄0Ô‹Ÿ[Ìúù\à€‹úôZ›¬ãH
+äîŸ[X[ùZ äà\›\à⁄[õéàŸ[õàHÿ⁄ôZXú›[\àHô∞Ôôù[ôùÿ[ûöY»ò\›\»ﬁ[ùZ›\ÿ⁄^Xô\àŸ[õàH[Z]ôX⁄ô[à⁄[›\ô⁄Xù\»Ÿ[X[ù\ÿ⁄ŸZ[ô[à⁄[õãÇãH
+äê[€‹ö]]\ äéàZ[ôH∞Èö\ŸK[ôX⁄Hÿ⁄ö]Y∞ÔãTÿ⁄ö]P[õZ][ô»ù\à0Ìú›[ô»Z[ô\»õÿõ[\ÀÇÇà»»»à€Z[ôK]YôZ[ò[ô\à]Yòò]Y[ôHôZ\‹Y[BÇëZ[àZ[ôòX⁄\à[€‹ö]]\»ù\àô\ôX⁄ù[ô»\àô\òõZXô[ô[àYŸHö\»ùHZ[ô\àúö\›ÇÇòô[\òBôõàYŸWÿö\◊ﬁöY[
+öY[›YŒà[ùZ›Y[\ó›YŒà[ù
+HOà[ù¬àô\òõZXô[ôHöY[›Y»HZ›Y[\ó›Y¬àô]\õàô\òõZXô[ôüBÇôõàXZ[ä
+H¬à]]HHLàXôÿXôHHçàYŸHHYŸWÿö\◊ﬁöY[
+XôÿXôK]]JBàö[ù
+YŸJBüBòÇà»»»Kà\\ÿ⁄HôZ\à[ô\ô[à\úÿX⁄[ÇãH
+äëôZ\éääàZ[àŸ\ÿ⁄ŸZYùH€[[Y\àÿ0Ìôôõô[ãXô\àöX⁄ÿ⁄YpÁŸ[àXÇà
+ï\úÿX⁄NäàY\»\›Z[àôZ[ô\à
+äîﬁ[ù^ôZ\ääãà\à\úŸ\àúöX⁄€Ÿõ‹ùXà
+KTTî—KLX
+KŸZ[\àò][H[ùõ€›0ÈôY»\›ÇãH
+äëôZ\éääàZ[ô\àòZZ[ôHôZX⁄[öŸ]Hù]ŸZ\Ÿ[éà[\éà[ùHååòÇà
+ï\úÿX⁄Näà\»\›Z[à
+äï\ôZ\ääà
+KUTKLX
+Kà\à\úŸ\àô\ú›ZYHõ‹õKXô\à\à\H⁄X⁄Ÿ\à›‹YH]\Ÿ∞Ôù[ôÀÇÇà»»»ãàY\ö‹ÈôBåKà\à^\àY\›ôZX⁄[ã\à\úŸ\àô\ú›Z›ùZ›\ô[ã\à\H⁄X⁄Ÿ\à∞Ôù[à⁄[õãÇåãàôHú∞Ô\àZ[àôZ\àXôŸYò[ôŸ[à⁄\ô
+ôZ[H∞Ôô[à›]ôZ[H›[ô[äK\›»Ôú›YŸ\à[ô⁄X⁄\ô\à\›YH€Ÿùÿ\ôKÇåÀàôY\»õŸ‹ò[[Hõ€›[H‹ù[ô]\›\éàZ[ôÿXôH[\ò[ôŸ[ãòX⁄€\ô[àôYŸ[àô\ò\òôZ][ã\ôŸXõö\»]\ŸŸXô[ãÇÇà»»»Àà0Áù[ô‹ÿ]YôÿXô[ÇãH
+äî›YôHH
+ZX⁄
+NääàôZX⁄ôH]YàZ[ô[Hõ]\Y\à[àXõ]Yàõ€àXZ[ä
+X[HÿöYŸ[àúö\›[ãPôZ\‹Y[[»ôZ[XY‹ò[[H]YãÇãH
+äî›YôHà
+Z][
+Nääà\ùŸZ]\ôHYHù[ö›[€àYŸWÿö\◊ﬁöY[[HZ[ôH∞Ôù[ô»Z]YòàŸ[õàZ›Y[\ó›Y»àöY[›Yÿ\›€€ù\∞Ô⁄ŸŸYŸXô[àŸ\ô[ãÇãH
+äî›YôH»
+[ú‹ùX⁄›õ€
+Nääà\ö€0ÈôH[àZYŸ[ô[à€‹ù[ãÿ\ù[Hô[\òHõ‹à\à]\Ÿ∞Ôù[ô»∞Ôù
+ô[\òH⁄X⁄ÿ
+K[ú›][à€ŸHôZ[H∞ÔàôZ[Hõ[ô]\ﬁùY∞Ôô[ãÇÇà»»»àò^\ÿ]YôÿXôNà]YôÿXô[ãTö[‹ö]0Èô\ôX⁄ô[Çí[à[úŸ\ô\à]YôÿXô[ùô\ùÿ[[ô»pÔ‹Ÿ[à⁄\àYHö[ô€X⁄ŸZ]Z[ô\à]YôÿXôHZ[ú›Yô[ãàŸ[õàŸ[öYŸ\à[»»YŸHô\òõZXô[ã\›YH]YôÿXôHö[ôŸ[ôÇÇòô[\òBôõà\›Ÿö[ôŸ[ô
+ô\òõZXô[ôW›YŸNà[ù
+HOàõ€€¬àô]\õàô\òõZXô[ôW›YŸHH¬üBÇôõàXZ[ä
+H¬àúö\›⁄[ó›YŸ[àHÇàö[ôŸ[ôH\›Ÿö[ôŸ[ô
+úö\›⁄[ó›YŸ[äBàYàö[ôŸ[ô¬àö[ù
+êX⁄[ôŒà]YôÿXôH]⁄Hö[‹ö]Y]HäBàH[ŸH¬àö[ù
+ê]YôÿXôHYY›[Hõ‹õX[[àôZ][ãàäBàBüBòÇà»»»Kàù\ÿ[[Y[ôò\‹›[ô¬ãHõŸ‹ò[[YH\ò⁄]Yô[àZ[ôHô\›HŸ]Nà^[ôÀ\ú⁄[ôÀ\∞Ôù[ôÀô\öYöZÿ][€à[ô]\Ÿ∞Ôù[ôÀÇãHô[\òH›[⁄X⁄\ã\‹»ﬁ[ù^[ô\[à›[[Y[ãô]õ‹àZ[àõŸ‹ò[[HŸ\›\ù]⁄\ôÇãHZ[à[€‹ö]]\»ô\ùÿ[ô[Z[ôÿXô[à\ò⁄Ÿ⁄\ÿ⁄HZ[ûô[ÿ⁄ö]H[àô\õ0È‹€X⁄H]\ŸÿXô[ãÇÇà»»»Là€€ùõ€úòYŸ[àù\àŸ[ú›∞Ôù[ô¬åKà[àŸ[⁄\à›[H\à€€⁄Z[à⁄\ôô[Y\ö›\‹»Z[à[ô∞Ôù[ô‹ﬁôZX⁄[àôZ¬åãàÿ\»ôY]]]\»UêKTö[ûö\¬åÀàÿ\ù[HúöX⁄Z[à›]\ÿ⁄\\⁄Y\ù\»õŸ‹ò[[HXãŸ[õàX[à^[ôòZôZ\öYùô\òö[ô]¬ÇãKKBÇà»»ÿ\][Œàô[\òH[ú›[Y\ô[à[ôZ[úöX⁄[ÇÇà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬ãHYHﬁ\›[]õ‹ò]\‹Ÿ]ù[ôŸ[à∞ÔàYHô[\òKQ[ù⁄X⁄€[ô‹›[YŸXù[ô»]Yà[ù^XX”‘»[ô⁄[ô›‹ÀÇãH]õ‹õ\‹^öYö\ÿ⁄Hÿ⁄Ÿ\ãR[ú›[][€à[ôô\öYöZÿ][€àZ]ÿ⁄Ÿ\à€€\‹ŸHô\ú⁄[€òÇãH⁄YHHô[\òH0Ôô\à[à]Y[€ŸH
+ã⁄[ú›[ú⁄»[ú›[úÃX
+HŸ\à\»›Xö[Hô[X\ŸKP\ò⁄]à
+K\ô[X\ŸHååÀå
+H[ú›[Y\ú›ÇãHõ€›0ÈôYŸHô\ú⁄[€úÿXôúòYŸHZ]ô[\òHK]ô\ú⁄[€ò[ôﬁ\›[YXY€õ‹ŸHZ]ô[\òHÿ›‹òÇãH[à[ùY‹öY\ù[ã⁄Ÿ[ãYŸ\ÿ⁄0Ôù[àŸXãTŸ]\P\‹⁄\›[ù[à
+ô[\òHŸ]\K]ŸXò
+KÇãH\\ÿ⁄Hô\ôX⁄Y›[ô‹ÀH[ô‹ùR€€ôõZ›H
+ãàãàÿ⁄Ÿ\ãT€ÿ⁄Ÿ]TôX⁄K]]€X]\ÿ⁄H‹ùUÿZ
+KÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬ëZ[ôHôZXù[ô‹€‹»ù[ö›[€öY\ô[ôHŸ\öﬁô]Y⁄Ÿ]H\›YH‹ù[ôYŸHôY\à\ôõ€‹ôZX⁄[à[ù⁄X⁄€[ô‹ÿ\òôZ]àŸ[õàôYôZHöX⁄ŸYù[ô[àŸ\ô[àŸ\à[YŸXù[ô‹›ò\öXXõ[àôZ[ãô\õY\ùX[àŸ\ùõ€HôZ]àô[\òHúö[ô›Z[ô[àÿ⁄[öŸ[ãô[ù]ô\õ⁄ÿ[[à[ú›[\àZ]\à⁄ôHúô[YHZŸ]X[òYŸ\àŸ\àõ€›TôX⁄H]\⁄€€[]àùY[H∞Ôù\àô]YHŸXãTŸ]\P\‹⁄\›[ùZ[ú›ZYŸ\àö\›Y[\ò⁄YH[ö]X[\⁄Y\ù[ô»õ€à][òò[ö»[ô€€ùZ[ô\õãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬ñô[\òHô[∞ÌùY›∞ÔàZ[ôòX⁄HõŸ‹ò[[YHŸY\à\X⁄Hõÿ⁄úô[YH]YûôZ][ãà\»ô[\òKP”H
+ô[\òX
+H\›Z[àZ[ûô[ô\Àÿ⁄‹[ZY\ù\»ö[∞ÈúõŸ‹ò[[KÇÇíôHòX⁄ô]öYXú‹ﬁ\›[HÈ›H[à\‹Ÿ[ô[àŸYŒÇåKà
+äì[ù^»XX”‘ŒääàY\à0È›H\»Ÿôö^öY[Hô\‹⁄]‹ûH\ù[ù\à[ô∞Ôú›ã⁄[ú›[ú⁄]\»
+Ÿ\à0È›Z[àô[X\ŸKP\ò⁄]äKàô[\òH⁄\ôô[ù]ô\õ⁄ÿ[[àãÀõÿÿ[ÿö[ò[ú›[Y\ùà∞Ôàÿ⁄Ÿ\àù]ùX[à[ù\à[ù^YH€Ÿôö^öY[Hÿ⁄Ÿ\ãQ[ô⁄[ôKP[õZ][ô◊JŒãÀŸÿ‹Àôÿ⁄Ÿ\ãò€€KŸ[ô⁄[ôK⁄[ú›[ H[ô[ù\àXX”‘»—ÿ⁄Ÿ\à\⁄›‹∞ÔàXX◊JŒãÀŸÿ‹Àôÿ⁄Ÿ\ãò€€KŸ\⁄›‹‹Ÿ]\⁄[ú›[€XXÀZ[ú›[ KÇåãà
+äï⁄[ô›‹Œääà[ù\à⁄[ô›‹»›Z[à[ú›[úÃX∞Ôà›Ÿ\î⁄[€›⁄YH[ú›[ò€Yù\àô\ô∞Ô›[ôÀà∞Ôàõ€›0ÈôYŸHX\öXQãTõ⁄ôZ›H⁄\ô—ÿ⁄Ÿ\à\⁄›‹∞Ôà⁄[ô›‹◊JŒãÀŸÿ‹Àôÿ⁄Ÿ\ãò€€KŸ\⁄›‹‹Ÿ]\⁄[ú›[›⁄[ô›‹ÀZ[ú›[ HZ]Z›]öY\ù\à€€\‹ŸKU[ù\ú›0Ôù[ô»[\õ⁄[ãÇåÀà
+äî]õ‹õKQÿ⁄Ÿ\ãT∞Ôù[ôŒääàô[\òH[ú›[Y\ùÿ⁄Ÿ\àô]›\‹›öX⁄ZYŸ[õpÈ⁄Y»[ôõ‹ô\ùŸZ[ôHõ€›TôX⁄H[ãàõ‹à[H›\ùõ€à€€\‹ŸKQY[ú›[à∞Ôú›HZ[ôH[YŸXù[ô»Z[ôòX⁄Z]ÿ⁄Ÿ\à€€\‹ŸHô\ú⁄[€òàôZ€€\‹ŸHŸ\àôZ[àô\ôX⁄Y›[ôŸ[à]Yà[àÿ⁄Ÿ\ãT€ÿ⁄Ÿ]⁄Xùô[\òHŸ^öY[H]õ‹õKR[ô\›[[ôŸ[à]\ÀÇÇà»»»à€Z[ôK]YôZ[ò[ô\à]Yòò]Y[ôHôZ\‹Y[BÇääîÿ⁄ö]Nàô[\òH[ú›[Y\ô[ääÇê]\»[H]Y[^
+[ù^»XX”‘ NÇòò\⁄ô⁄]€€ôHŒãÀŸ⁄]Xãò€€K‹ŸåNMÕãﬁô[\òKô⁄]òŸô[\òBãã⁄[ú›[ú⁄òìŸ\à\ôZ›[»õ‹ö€€\[Y\ù\»ô[X\ŸH⁄ôHù\›U€€⁄Z[éÇòò\⁄ãã⁄[ú›[ú⁄K\ô[X\ŸHååÀåòï[ù\à⁄[ô›‹»
+›Ÿ\î⁄[
+NÇò›Ÿ\ú⁄[ô⁄]€€ôHŒãÀŸ⁄]Xãò€€K‹ŸåNMÕãﬁô[\òKô⁄]îŸ]Sÿÿ][€àô[\òBãó[ú›[úÃHTô[X\ŸHååÀåòÇääîÿ⁄ö]éàõ€›0ÈôYŸHô\ú⁄[€à[ô[ôH∞Ôô[ääÇòò\⁄ûô[\òHK]ô\ú⁄[€Çûô[\òHKZ[òòô[\òHK]ô\ú⁄[€ò⁄Xù[àõ€›0ÈôYŸ[à€€\[\ãH[ôZŸ]ô\ú⁄[€ú‹›[ô]\»
+ãàãàô[\òHåãå
+KàYH‹òX⁄€€\]Xö[]0È€[öYHõZXùåKÇÇääîÿ⁄ö]Œàÿ⁄Ÿ\à€€\‹ŸH∞Ôô[à
+∞ÔàX\öXQãTõ⁄ôZ›JJäÇòò\⁄ôÿ⁄Ÿ\à€€\‹ŸHô\ú⁄[€ÇòÇääîÿ⁄ö]àﬁ\›[YXY€õ‹ŸH]\Ÿ∞Ôô[ääÇòò\⁄ûô[\òHÿ›‹ÇòëY\Ÿ\àôYôZ[ò[\⁄Y\ù[YŸXù[ôÀòYK‹ù»[ôŸ\öﬁô]YŸKàZ]ô[\òHÿ›‹àKZú€€ò\ö0È›H›ùZ›\öY\ùHX\ÿ⁄[ô[ô][à∞ÔàQ\ÀÇÇääîÿ⁄ö]NàŸY∞Ôù\àŸXãTŸ]\P\‹⁄\›[ù
+‹[€ò[
+JäÇí[àôY[HX\öXQãTõ⁄ôZ›ô\ûôZX⁄ö\»ÿ[õú›H[à‹òYö\ÿ⁄[à\‹⁄\›[ù[à›\ù[éÇòò\⁄ûô[\òHŸ]\K]ŸXÇòñô[\òH0Ìôôõô]Z[ô[à⁄ÿ[[àTŸ\ùô\à]YàLçÀåååNåÃÃZ]Z[ô[HùY∞ÈYŸ[ãZ[õX[YŸ[à⁄X⁄\öZ]›⁄Ÿ[ãà‹ùÿ[õú›HZ]Z[ô[H€X⁄»YHô[ùòR€€ôöY›\ò][€à\ûô]YŸ[ã[àX\öXQãP€€ùZ[ô\à›\ù[à[ô\»][òò[ö‹ÿ⁄[XH[ùŸ[ô[ãÇÇà»»»Kà\\ÿ⁄HôZ\à[ô\ô[à\úÿX⁄[ÇãH
+äëôZ\éääàô[\òNà€€[X[ôõ›õ›[ôà
+ï\úÿX⁄Näà\à‹ôô\àãÀõÿÿ[ÿö[ò\›õÿ⁄öX⁄[àZ[ô\à	UUò\öXXõKà∞ÔôH^‹ùUHâ”QKÀõÿÿ[ÿö[éâUò]\»Ÿ\à›\ùHZ[à\õZ[ò[ô]KÇãH
+äëôZ\éääà\õZ\‹⁄[€à[öYY⁄[HûZ[ô»»€€õôX›»Hÿ⁄Ÿ\àY[[€à€ÿ⁄Ÿ]à
+ï\úÿX⁄Näà]Yà[ù^Tﬁ\›[Y[à]Z[àô[ù]ô\àõÿ⁄ŸZ[ôHôX⁄H]Yà[àÿ⁄Ÿ\ãT€ÿ⁄Ÿ]à∞ÔôH›Y»\Ÿ\õ[ŸXQ»ÿ⁄Ÿ\à	T—Tò]\»[ôY[HX⁄ô]H[ãàô[\òH∞Èô›Y\Ÿ[àôZ\àXà[ô⁄XùZ[ô[à€\ô[à[ùŸZ\ÀÇãH
+äëôZ\éääà›[ô\ôT‹ùÃŸ\àÃÃà\›ô[Y›Çà
+ï\úÿX⁄NäàZ[à[ô\ô\à⁄ÿ[\àY[ú›ô[Y›[à‹ùàô[\òHÈôZHô[\òHŸ]\[ôô[\òHô]ÿ]]€X]\ÿ⁄[à∞È⁄›[àúôZY[à‹›T‹ù€Ÿ\‹»ŸZ[à€€ôõZ›[ù›ZÇÇà»»»ãàY\ö‹ÈôBåKà\»ô[\òKP”H∞Ôô[€€\[\ãù[õô\ãõ‹õ][\ú∞Ôô\ãZY‹ò]‹ãŸXúŸ\ùô\à[ôŸ]\P\‹⁄\›[ù[à[àZ[ô[HZ[ûöYŸ[àŸ\öﬁô]YÀÇåãàZ]ÿ⁄Ÿ\à€€\‹ŸHô\ú⁄[€ò[ôô[\òHÿ›‹ò0Ôô\ú∞Ôú›HôY\ûôZ][àù\›[ôZ[ô\à€€⁄Z[ãÇåÀà\»›Xö[Hô[X\ŸHÿ[õàZ]K\ô[X\ŸHååÀå\ôZ›⁄ôHù\›P€€\[\à[ú›[Y\ùŸ\ô[ãÇçàô[\òHŸ]\K]ŸXòöY]]Z[ôH[ùZ]]ôKúõ›‹Ÿ\òò\⁄Y\ùH\ú›Z[úöX⁄[ô»Z]⁄X⁄\ô[HZ[õX[U⁄Ÿ[ãÇÇà»»»Àà0Áù[ô‹ÿ]YôÿXô[ÇãH
+äî›YôHH
+ZX⁄
+Nääà∞ÔôHô[\òHÿ›‹ò[àZ[ô[H\õZ[ò[]\»[ôõ›Y\ôH\àYHô\ú⁄[€ú€ù[[Y\ãÇãH
+äî›YôHà
+Z][
+Nääà\ö›[ôHYH[ô\ŸZ]HZ]ô[\òH⁄X⁄»KZ[[ôÿ⁄]H\àYH‹[€àKYõ‹õX]ú€€ò[ãÇãH
+äî›YôH»
+[ú‹ùX⁄›õ€
+NääàöX⁄H[àZ[ô[Hô]õ‹ûùY›[àY]‹à
+ãàãàî»€ŸJHZ[ôH]Z^ù[‹ôù[ô»Z[ã€Ÿ\‹»ûû[Q]ZY[à]]€X]\ÿ⁄[»ô[\òKQ]ZY[à\öÿ[õùŸ\ô[ãÇÇà»»»àò^\ÿ]YôÿXôNàYH\òôZ]›[YŸXù[ô»∞Ôà[à\⁄”X[òYŸ\àõ‹òô\ôZ][ÇìYŸH]YàZ[ô[HôX⁄ô\àZ[ô[àô]Y[à‹ôô\à∞Ôà[úŸ\àõ⁄ôZ›[à[ô\›KÿàYHô[\òKU€€⁄Z[à‹ù‹ôù[ô‹ŸŸ[pÈ0Á»ù[ö›[€öY\ùÇÇòò\⁄õZŸ\àYZ[ã]\⁄€X[òYŸ\ÇòŸYZ[ã]\⁄€X[òYŸ\ÇôX⁄»	ŸõàXZ[ä
+H»ö[ù
+ï\⁄”X[òYŸ\ãU[YŸXù[ô»ô\ôZ]àäHI»à\›ûû[ûô[\òH⁄X⁄»\›ûû[ûô[\òHù[à\›ûû[òïŸ[õàYH]\ŸÿXôH\⁄”X[òYŸ\ãU[YŸXù[ô»ô\ôZ]ò\úÿ⁄Z[ù\›Z[àﬁ\›[H\ôôZ›õ‹òô\ôZ]]BÇà»»»Kàù\ÿ[[Y[ôò\‹›[ô¬ãHô[\òH⁄\ô0Ôô\àZ[àZ[ôòX⁄\»⁄‹ö\
+ã⁄[ú›[ú⁄
+HŸ\àÿ⁄Ÿ\àZ[ôŸ\öX⁄]ÇãH\»€€[X[ôﬁôZ[[ùŸ\öﬁô]Y»ô[\òX[ù0È[Hõ›Ÿ[ôYŸ[àù[ö›[€ô[ãÇãHô[\òHÿ›‹ò›[⁄X⁄\ã\‹»[\»Z[ùÿ[ôúôZH€€ôöY›\öY\ù\›ÇÇà»»»Là€€ùõ€úòYŸ[àù\àŸ[ú›∞Ôù[ô¬åKàŸ[⁄\àôYôZôZY›[Hô\ô∞Ôÿò\ô[à”KS‹[€ô[à[è¬åãàÿ\ù[Hô[∞ÌùY›ô[\òH∞Ôà€€ú€€[ãH[ôŸXãTõŸ‹ò[[YHŸZ[ô[à^\õô[àŸXúŸ\ùô\à⁄YH\X⁄O¬åÀàÿ\»∞Ôù\àôYôZô[\òHÿ›‹ò¬ÇãKKBÇà»»ÿ\][à\»\ú›Hô[\òKTõ⁄ôZ›Çà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬ãH⁄YHX[àZ[àô[\òKTõ⁄ôZ›Z]ô[\òHô]ÿŸ\àô[\òH[ö][õY›
+[ö€àK[X\öXYò
+KÇãH⁄YHZ[à›[ô\ôTõ⁄ôZ›‹ôô\à›ùZ›\öY\ù\›
+XZ[ãûû[ô[\òKù€[ô[ùò
+KÇãH]]€X]\ÿ⁄H‹ùô\ôÿXôH
+ëSTêW“‘’‘‘ï[ôëSTêW—ó“‘’‘‘ï
+HôZHô[Y›[à‹ùÀÇãH⁄YHô[\òHŸ]\KX[[ôô[\òHŸ]\K]ŸXò[à\ú››\ù]]€X]\⁄Y\ô[ãÇãH‹[€ò[HôX]\ôKTÿ⁄[\à
+ŸôX]\ô\◊X[àô[\òKù€[Ÿ\àô[ùò
+H[ô∞Ôù[ô»Z]ô[\òH€€ôöYÿÇãHÿ[õàZ[àõŸ‹ò[[HZ[ôHXZ[ä
+XQù[ö›[€àô[∞ÌùY›[ô⁄YHX[àõŸ‹ò[[YH∞Ôù]\Ÿ∞Ôù[ôõ‹õX]Y\ùÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬î€ÿò[õŸ‹ò[[YHYZà[»ôZàôZ[[à[Yò\‹Ÿ[ãŸZ0Ìúô[à⁄YH[àZ[ôHÿ]Xô\ôHõ⁄ôZ››ùZ›\ãàZ[ôH›]‹ôÿ[ö\⁄Y\ùH‹ôô\ú›ùZ›\à›[⁄X⁄\ã\‹»€€ôöY›\ò][€ô[ã][òò[ö€[Ÿ[KŸXãTõ›][à[ôŸ\ÿ⁄0Èù€Ÿ⁄Z»Zô[àô\›[à]àXô[ãàŸ\àõ€àôY⁄[õà[àõ⁄ôZ›H›[ô\ô\⁄Y\ù[õY›‹\ù⁄X⁄‹0È\à]YùÈôYŸH]Yú∞È[X\òôZ][ãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬ìZ][HôYôZô[\òHô]»õ⁄ôZ›ò[YOò\ûô]Y‹›HZ[àÿ⁄0Ô‹Ÿ[ô\ùYŸ\»õ⁄ôZ›ÇÇãH
+äòXZ[ãûû[
+äéàYH]\]ZHZ[ô\»õŸ‹ò[[\ÀàY\àYö[öY\ú›H[ùŸY\à[àZ[ú›YY‹‹[ö›õàXZ[ä
+XŸ\àZ€\öY\ú›Z[ôHXô[[ãŸXúŸZ][à[ôT\ÀÇãH
+äòô[\òKù€[
+äéàYH]Y\öYùHõ⁄ôZ›€€ôöY›\ò][€à
+ò[YKô\ú⁄[€ãÿ\Xö[]Y\»[ô‹[€ò[HôX]\ôKTÿ⁄[\à⁄YHŸXò\X‹ùY]]]Y]
+KÇãH
+äòô[ùò
+äéà⁄ÿ[KöX⁄[à⁄]Z[ôŸX⁄X⁄›HŸZZ[[ö\‹ŸH[ô‹ù»
+UPêT—W’TìëSTêW“‘’‘‘ïëSTêW—ó“‘’‘‘ï
+KÇãH
+äëÿ⁄Ÿ\à	àX\öXQääéàZ]K[X\öXYòY›ô[\òHù\ÈõX⁄ÿ⁄Ÿ\ôö[Xÿ⁄Ÿ\ãX€€\‹ŸKõX\öXYãû[[[ôô[ùãô^[\X[ãÇÇääê]]€X]\ÿ⁄H‹ùô\ôÿXôNääà⁄[ôYH›[ô\ô‹ù»Ã
+ŸXäHŸ\àÃÃà
+X\öXQäH]YàZ[ô[H[ù⁄X⁄€[ô‹‹ôX⁄ô\àô\ôZ]»ô[Y›ÿÿ[õùô[\òH]]€X]\ÿ⁄[ôô\ô⁄XùúôZYH‹ù»[à\àô]H\ûô]Y›[àô[ùòÇÇääì‹[€ò[HôX]\ôKTÿ⁄[\éääàHÿ[õú›[àô[\òKù€[Ÿ\àô[ùòZ[ô\ôZX⁄HZ›]öY\ô[àŸ\àXZ›]öY\ô[éÇò€[ñŸôX]\ô\◊BùŸXàHùYBò\HHùYBò‹ùYHùYBò]]HùYBò]Y]HùYBòï⁄\ôZ[àXZ›]öY\ù\àô\ôZX⁄[H€ŸHŸ[ù]ùY[]\à€€\[\àô\õ0È‹€X⁄KQëPUTëKLXàYH⁄\ö‹ÿ[YH€€ôöY›\ò][€àÿ[õú›HôY\ûôZ]Z]ô[\òH€€ôöY»XZ[ãûû[
+Ÿ\àKYõ‹õX]Zú€€ò
+HŸZZ[[ö\ŸúôZH[ú‹^öY\ô[ãÇÇà»»»à€Z[ôK]YôZ[ò[ô\à]Yòò]Y[ôHôZ\‹Y[BÇääîõ⁄ôZ›\ú›[[à
+Z[ö[X[Ÿ\àX\öXQäNääÇòò\⁄à»Z[ö[X[\»⁄‹ö\õ⁄ôZ›Çûô[\òHô]»\⁄€X[òYŸ\àK][\]HZ[ö[X[òŸ\⁄€X[òYŸ\ÇÇà»Ÿ\àõ€›0ÈôYŸ\»X\öXQãUŸXúõ⁄ôZ›Çûô[\òHô]»\⁄€X[òYŸ\ã]ŸXàK[X\öXYÇòŸ\⁄€X[òYŸ\ã]ŸXÇòÇääë\ú›Z[úöX⁄[ô»Z]Z[ô[HZ[ûöYŸ[àôYôZääÇòò\⁄ûô[\òHŸ]\KX[òëY\Ÿ\àôYôZY›Z[ôHŸ\ÿ⁄0ÔùHô[ùò[ã›\ù]YHX\öXQãP€€ùZ[ô\ãU[YŸXù[ô»[ôŸ[ô]\»ÿ⁄[XH[ãÇÇääîõ⁄ôZ›€€ôöY›\ò][€à∞Ôô[éääÇòò\⁄ûô[\òH€€ôöY»XZ[ãûû[òÇääîõ⁄ôZ›∞Ôô[à[ô›\ù[éääÇòò\⁄ûô[\òH⁄X⁄»XZ[ãûû[ûô[\òHù[àXZ[ãûû[òÇääîõ⁄ôZ›]]€X]\ÿ⁄õ‹õX]Y\ô[éääÇòò\⁄ûô[\òHõ]XZ[ãûû[òòô[\òHõ]€‹ô›Y∞Ôã\‹»[\àô[\òKP€ŸH[HŸ\ÿ[][àX[H^Z›[úŸ[ô[ãÿ]Xô\ô[àŸ\›[[ô‹‹ôYŸ[àõ€›ÇÇà»»»Kà\\ÿ⁄HôZ\à[ô\ô[à\úÿX⁄[ÇãH
+äëôZ\éääà]ZY[à⁄ôHYH]ZY[ô[ô»ûû[[õYŸ[ãÇà
+ï\úÿX⁄Näà\à€€\[\à\ùÿ\ù]]\Ÿ∞Ô⁄€X⁄ô[\òKT]Y[]ZY[àZ]\à[ô[ô»ûû[ÇãH
+äëôZ\éääàZ[à”KTõŸ‹ò[[H⁄ôHõàXZ[ä
+X›\ù[ãÇà
+ï\úÿX⁄NäàŸ[õàô[\òH\àô[\òHù[òŸ\›\ù]⁄\ô›X⁄\»òX⁄õàXZ[ä
+XàôZY\ŸHù[ö›[€ãúöX⁄YH]\Ÿ∞Ôù[ô»XãÇÇà»»»ãàY\ö‹ÈôBåKàô[\òHô]ÿ\ú›[Z[ôHÿ]Xô\ôK›[ô\ô\⁄Y\ùHõ⁄ôZ››ùZ›\ãÇåãà[àô[\òKù€[Ÿ\ô[àò[YKô\ú⁄[€à[ôô[∞ÌùY›Hô\ôX⁄Y›[ôŸ[à
+ÿ\Xö[]Y\ Hô\ùÿ[]ÇåÀàô[\òHõ]ÿ\ò[ùY\ùZ[ô[àZ[öZ]X⁄[ã›]\ÿò\ô[àõŸ‹ò[[ZY\ú›[ÇÇà»»»Àà0Áù[ô‹ÿ]YôÿXô[ÇãH
+äî›YôHH
+ZX⁄
+Nääà\ú›[HZ[àô]Y\»õ⁄ôZ›YZ[óŸ\ú›\◊‹õ⁄ôZ›Z]ô[\òHô]ÿ[ô∞ÔôH\»]\ÀÇãH
+äî›YôHà
+Z][
+Nääà0·ô\ôH[àô[\òKù€[YHô\ú⁄[€à]Yàåãå[ô⁄Xà[àXZ[ä
+XYHô]YHô\ú⁄[€ú€ù[[Y\à]\ÀÇãH
+äî›YôH»
+[ú‹ùX⁄›õ€
+Nääàô\∞Èô\ôHYHZ[ú∞Ô⁄›[ôŸ[à[àXZ[ãûû[Xú⁄X⁄X⁄[õ‹ô[ùX⁄[ôô[ÿòX⁄K⁄YHô[\òHõ]XZ[ãûû[[à]Y[^⁄YY\à\ôôZ›]\‹öX⁄]ÇÇà»»»àò^\ÿ]YôÿXôNàYH]YôÿXô[ùô\ùÿ[[ô»[»X⁄\»õ⁄ôZ›[ö]X[\⁄Y\ô[Çë\ú›[H\»õ⁄ôZ›\»[ú»\ò⁄\»Ÿ\ÿ[]HùX⁄ôY€Z][à⁄\ôÇÇòò\⁄ûô[\òHô]»ô[\òK]\⁄‹»K][\]HZ[ö[X[òŸô[\òK]\⁄‹¬òÇîÿ⁄ôZXôH[àXZ[ãûû[Z[à\ú›\»Y[∞ÔÇòô[\òBôõàôZYŸW€Y[ùYJ
+H¬àö[ù
+èOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHäBàö[ù
+àëSTêHUQë–PëSïëTï–SSë»äBàö[ù
+èOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOHäBàö[ù
+åNà[H]YôÿXô[à[ûôZYŸ[àäBàö[ù
+åéàô]YH]YôÿXôH[õYŸ[àäBàö[ù
+åŒàõŸ‹ò[[HôY[ô[àäBüBÇôõàXZ[ä
+H¬àôZYŸW€Y[ùYJ
+BüBòî∞ÔôH\»õ⁄ôZ›Z]ô[\òH⁄X⁄»XZ[ãûû[[ô∞ÔôH\»Z]ô[\òHù[àXZ[ãûû[]\ÀÇÇà»»»Kàù\ÿ[[Y[ôò\‹›[ô¬ãHô[\òKTõ⁄ôZ›Hô\⁄]ô[àZ[ôH€\ôH›ùZ›\à]\»]Y[^
+ûû[
+H[ô€€ôöY›\ò][€à
+ô[\òKù€[
+KÇãHô[\òH⁄X⁄ÿ∞ÔùYHÔY⁄ŸZ]ô[\òHù[ò∞Ôù\»õŸ‹ò[[H]\ÀÇãHô[\òHõ]õ‹õX]Y\ù[à€ŸH]]€X]\ÿ⁄òX⁄Z[öZ]X⁄[à›[ô\ôÀÇÇà»»»Là€€ùõ€úòYŸ[àù\àŸ[ú›∞Ôù[ô¬åKà€ﬁùHY[ùYH]ZHô[\òKù€[¬åãàÿ\ù[H\›ô[\òHõ][àX[\»€»Ÿ\ùõ€¬åÀàÿ[õàô[∞ÌùY›Z[àô[\òKTõŸ‹ò[[HZ[ôHXZ[ä
+XQù[ö›[€è¬Çà»RSRH8†$»QH‘ïSëQ—SàTà‘êP“BÇãKKBÇà»»ÿ\][NàŸ\ùH[ô][ù\[ÇÇà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬ãHÿ\»Ÿ\ùH[ô][ù\[à⁄[ô[ôÿ\ù[H⁄YH\»∞Ô⁄Ÿ‹ò]⁄X⁄\ô\àõŸ‹ò[[YHö[[ãÇãHYH‹ù[ôYŸ[ô[àòZ[ù\[éà[ùR[ùõÿ][ôX⁄[X[ÇãH^H[ôôZX⁄[ù\[éà›ö[ôÿ[ô⁄\òÇãHÿZöZ]›Ÿ\ùH
+õ€€
+H[ô\àY\ôH\
+[ö]
+KÇãHôZ]H[ô][\›\[éà[Y\›[\]X[YX\ò][€òÇãH\à[ù\úÿ⁄YYù⁄\ÿ⁄[à]]€X]\ÿ⁄\à\XõZ][ô»[ô]\Ÿ∞Ô⁄€X⁄\à\[ôÿXôKÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬í[HX⁄[àXô[àÿ[õàX[à0·ô[öX⁄Z]ö\õô[àYY\ô[ãàZ[à€€\]\àÔôH⁄ôH\[àôYÿ⁄Ÿ[ò]H\»[éà\àÔôHô\ú›X⁄[ãZ[ôH‹›Z]òZZ]Z[ô[HôZ\»ùH][\^öY\ô[àŸ\àZ[ô[àùX⁄›Xô[úÿ[][»][HùH[ù\úô]Y\ô[ãà[àô[\òHô\ö[ô\ù\»\ﬁ\›[H€€⁄HXú›\ô]0È[àõ€àõ‹õö\ôZ[ãàZ[à][ù\Y›^Z›ô\›Ÿ[⁄HŸ\ùH\õ]Xù⁄[ô[ôŸ[⁄H‹\ò][€ô[à\ò]Yà]\ŸŸY∞ÔùŸ\ô[à0Ôôô[ãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬íôY\àŸ\ù[àô[\òHô\⁄]ùZ[ô[à\àHÿ[õú›[à\[ùŸY\à^^ö][úÿ⁄ôZXô[àŸ\àô[\òHZà]]€X]\ÿ⁄]\»[HùYŸ]⁄Y\Ÿ[ô[àŸ\ùXõZ][à\‹Ÿ[éÇÇòô[\òBôõàXZ[ä
+H¬àÀ»^^ö]H\[ôÿXôNàò[YHŸYõ€›õ€à‹[[ö›[ô\à[ûòZà[ùHLÇàÀ»]]€X]\ÿ⁄H\XõZ][ôŒàô[\òH\öŸ[õù€Ÿõ‹ù\‹»Y\»Z[à›ö[ô»\›à][Hï⁄X⁄YŸHô\‹ôX⁄[ô»ÇÇàö[ù
+][
+BüBòÇëYH⁄X⁄Y‹›[à][ù\[à[àô[\òNÇãH
+äò[ù
+äéàÿ[ûôHòZ[àZ]õ‹ûôZX⁄[à
+çPö]
+KãàãàMXòÇãH
+äòR[ù
+äéàÿ[ûôHòZ[à⁄ôHõ‹ûôZX⁄[à
+ù\àèH
+KãàãàQ»Ÿ\à∞È\ãÇãH
+äòõÿ]
+äéàõYpÁ⁄€€[X^òZ[à∞Ôà⁄\‹Ÿ[úÿ⁄YùX⁄Hô\ôX⁄ù[ôŸ[ããàãàÀåMMXÇãH
+äòX⁄[X[
+äéàô\›€€[X^òZ[àZ]ÿ\ò[ùY\ù\à^Z›Z]8†$»[ùô\ûöX⁄ò\à∞ÔàŸ[ô]∞ÈŸK[Hù[ô[ô‹ŸôZ\àõ€àõYpÁ⁄€€[X^òZ[àùHô\õYZY[àBãH
+äòõ€€
+äéàÿZöZ]›Ÿ\ùKà\»⁄Xù^Z›ùŸZHù\›0ÈôNàùYX
+ÿZäHŸ\àò[ŸX
+ò[ÿ⁄
+KÇãH
+äò›ö[ôÿ
+äéàôZX⁄[öŸ][à
+^
+H[à‹[[à[ô∞Ôù[ô‹ﬁôZX⁄[éàí[»Ÿ[òÇãH
+äò⁄\ò
+äéàZ[ûô[ôHôZX⁄[à[àZ[ôòX⁄[à[ô∞Ôù[ô‹ﬁôZX⁄[éà	–Iÿ	ﬁâÿ	¯ß$…ÿÇãH
+äò[ö]
+äéà›Z∞Ôà8†'öŸZ[àŸ\ù8†'0ÈõX⁄⁄YHõ⁄Y[à[ô\ô[à‹òX⁄[ãàŸ[õàZ[ôHù[ö›[€àù\à]ÿ\»]\Ÿ⁄Xù[ôöX⁄»ù\∞Ô⁄€YYô\ù\›Zà\[ö]ÇÇà»»»à€Z[ôK]YôZ[ò[ô\à]Yòò]Y[ôHôZ\‹Y[BÇòô[\òBôõàXZ[ä
+H¬à]YôÿXôW⁄Yà[ùHLBà]YôÿXôW€ò[YNà›ö[ô»HîŸ\ùô\àZ›X[\⁄Y\ô[àÇà\›Ÿ\õYY›àõ€€Hò[ŸBàŸ\ÿ⁄Y]ùW‹›[ô[éàõÿ]HãçBà›[ô[úÿ]éàõÿ]HKçLÇàö[ù
+]YôÿXôW€ò[YJBàö[ù
+\›Ÿ\õYY›
+BüBòÇñô[\òHÿ⁄0Ôùõ‹à[ú\‹Ÿ[ô[à\[éÇïŸ[õàHô\ú›X⁄›]YôÿXôW⁄YHôZ[ö[ô\ùòùHÿ⁄ôZXô[ãô\ùŸZYŸ\ù\à€€\[\à€Ÿõ‹ù[àY[ú›Z]KUTKLXÇÇà»»»Kà\\ÿ⁄HôZ\à[ô\ô[à\úÿX⁄[ÇãH
+äëôZ\éääàŸ[ô]∞ÈŸHZ]õÿ]ô\ôX⁄ô[ãÇà
+ï\úÿX⁄NäàõYpÁ⁄€€[X^òZ[àòX⁄QQQKMÕMÌõõô[à‹ù[[YHù[ô[ôŸ[à⁄YHåH
+»åàHåÃ\ûô]YŸ[ãà[àô[\òHù]ùH∞Ôàö[ò[ûô[à[[Y\àX⁄[X[ÇãH
+äëôZ\éääàZ[àZ[ûô[ô\»ôZX⁄[à[à‹[H[ô∞Ôù[ô‹ﬁôZX⁄[àŸ]ô[ãŸ[õàZ[à⁄\ò\ùÿ\ù]⁄\ôÇà
+ï\úÿX⁄NäàêHò\›Z[à›ö[ôÿÈô[ô	–IÿZ[à⁄\ò\›ÇÇà»»»ãàY\ö‹ÈôBåKà][ù\[àÿ⁄0Ôô[à]õ‹ã[ú\‹Ÿ[ôH[ôõ‹õX][€ô[àZ]Z[ò[ô\àùHô\ö€∞Ôô[ãÇåãà∞ÔàŸ[ô]∞ÈŸH⁄[à[[Y\àX⁄[X[öY[X[»õÿ]ÇåÀàô[\òHÿ[õà\[à[ù[YŸ[ùXõZ][ãXô\à^^ö]H\[à⁄›[Y[ùY\ô[àZ[ôHXú⁄X⁄ÇÇà»»»Àà0Áù[ô‹ÿ]YôÿXô[ÇãH
+äî›YôHH
+ZX⁄
+NääàZ€\öY\ôHôZHò\öXXõ[à∞ÔàZ[ô[àYXõ[ô‹Ÿö[Nà][
+›ö[ôÿ
+K\úÿ⁄Z[ù[ô‹⁄òZà
+[ù
+H[ôÿàHZà[H⁄[õ»Ÿ\ŸZ[à\›
+õ€€
+KÇãH
+äî›YôHà
+Z][
+Nääàô\ôX⁄ôHYHŸ\ÿ[]€‹›[àZ[ô\à]YôÿXôH]\»Ÿ\ÿ⁄Y]ùW‹›[ô[ò[ô›[ô[úÿ]ò[ô⁄Xà\»\ôŸXõö\»]\ÀÇãH
+äî›YôH»
+[ú‹ùX⁄›õ€
+Nääà\ö€0ÈôKÿ\ù[HZ[àQQô[Ÿùô\‹Ÿ\à[»[ùŸ\à[»õ€Z[ò[\à\\H\⁄“YHYZ€\öY\ù⁄\ô[ú›][»ô[YXöYŸ\à^ÇÇà»»»àò^\ÿ]YôÿXôNà]YôÿXô[ãP]öXù]HYö[öY\ô[Çë\ùŸZ]\ôH[úŸ\à]YôÿXô[úõ⁄ôZ›[àXZ[ãûû[àYö[öY\ôHYH\\⁄Y\ù[à‹ù[ô][àZ[ô\à]YôÿXôNÇÇòô[\òBôõàXZ[ä
+H¬à\⁄◊⁄Yà[ùHBà\⁄◊€ò[YNà›ö[ô»Hë][òò[ö‹ÿ⁄[XHùYYô[àÇà\◊Ÿ€ôNàõ€€Hò[ŸBàö[‹ö]Nà[ùHHÀ»HHÿ⁄àHZ][»HöYYöY¬Çàö[ù
+ê]YôÿXôH»à
+»åHà
+»éàà
+»\⁄◊€ò[YJBàYà\◊Ÿ€ôH¬àö[ù
+î›]\Œà\õYY›äBàH[ŸH¬àö[ù
+î›]\ŒàŸôô[à
+ö[‹ö]Y]à⁄Hö[ô€X⁄ŸZ]
+HäBàBüBòÇà»»»Kàù\ÿ[[Y[ôò\‹›[ô¬ãHô[\òH›[Z[ôHôZX⁄[YŸH[]Hö[Z]]ô\à][ù\[à∞ÔàòZ[ã^[ôŸ⁄Z»ô\ôZ]ÇãH\[àŸ\ô[à[ùŸY\à^^ö][ôŸYŸXô[àŸ\àõ€H€€\[\à]]€X]\ÿ⁄XôŸ[Z]]ÇãH›ô[ôŸH\∞Ôù[ô»ô\ö[ô\ùŸ⁄\ÿ⁄HôZ\àù\à[ù›\ôúﬁôZ]ÇÇà»»»Là€€ùõ€úòYŸ[àù\àŸ[ú›∞Ôù[ô¬åKàÿ\ù[H€€HX[à∞ÔàŸ[Ÿ\ùHX⁄[X[›]õÿ]ô\ùŸ[ô[è¬åãàÿ\»\›\à[ù\úÿ⁄YYù⁄\ÿ⁄[àñàò[ô	÷âÿ¬åÀàŸ[⁄HôZY[àŸ\ùHÿ[õàZ[àõ€€[õôZY[è¬ÇãKKBÇà»»ÿ\][éàò\öXXõ[à[ô[ùô\∞Èô\õX⁄ŸZ]Çà»»»Kàÿ\»\õôHX⁄[àY\Ÿ[Hÿ\][¬ãHÿ\»Z[ôHò\öXXõH[H‹ZX⁄\àZ[ô\»€€\]\ú»ôY]]]ÇãHÿ\ù[Hò\öXXõ[à[àô[\òH›[ô\ôpÈ0Á⁄Y»[ùô\∞Èô\õX⁄
+[[]]XõX
+H⁄[ôÇãH⁄YHX[àô\∞Èô\òò\ôHò\öXXõ[à]\Ÿ∞Ô⁄€X⁄Z]]]XõXŸ[õûôZX⁄ô]ÇãHÔY⁄ŸZ]ÿô\ôZX⁄H
+ÿ€‹\ÿ
+H[ôXô[úŸ]Y\àõ€àò\öXXõ[ãÇãHÿ\ù[H[ùô\∞Èô\õX⁄ŸZ]€Ÿùÿ\ôHò[X]\ÿ⁄›Xö[\à[ôôZ\ôúôZY\àXX⁄ÇÇà»»»ãàÿ\ù[H\›\»[XH⁄X⁄Yœ¬ëZ[ô\à\à0ÈYöY‹›[à‹∞ÔôH∞Ôàÿ⁄Ÿ\à]Yôö[ôò\ôH€Ÿùÿ\ôYôZ\à[à‹òX⁄[à⁄YHò]òTÿ‹ö\]€àŸ\à  »\›[ö€€ùõ€Y\ùHô\∞Èô\òò\öŸZ]àZ[ôHù[ö›[€àô\∞Èô\ùZ[[X⁄Z[ôH€ÿò[Hò\öXXõK[ô[àÿ[ûà[ô\ô\à›[H›0Ôûù\»õŸ‹ò[[HXãÇñô[\òHõ€›Z[ô[HòYZÿ[€\ô[àö[ûö\à
+äëô\›HŸ\ùH⁄[ô\àõ‹õX[ò[ääàŸ[õà⁄X⁄Z[àŸ\ùÈô[ô\àõŸ‹ò[[[]YûôZ]0Èô\õà\ôã]\‹›H\»ÿ[ûàô]›\‹›Z][Hÿ⁄0Ô‹Ÿ[€‹ù]]XõX[öÔôYŸ[ãÇÇà»»»Ààô\ú›0ÈôX⁄H\ö€0Èù[ô¬î›[\àZ[ôHò\öXXõH⁄YHZ[ôHô\ÿ⁄öYù]Hÿ⁄X⁄[[H\òôZ]‹‹ZX⁄\àõ‹éÇÇãH
+äï[ùô\∞Èô\õX⁄Hö[ô[ô»
+›[ô\ô
+NääÇàô[\òBàõàXZ[ä
+H¬à][Hî›]Y\ô\ö€Y\ù[ô»Çàö[ù
+][
+BàBààHY‹›[à^î›]Y\ô\ö€0Èù[ô»ò[àYHÿ⁄X⁄[Z]\à]Yúÿ⁄öYù][[ôô\ú⁄YYŸ[›⁄YKàöY[X[ô\ôà[à[ö[\àÿ⁄X⁄[]\›]\ÿ⁄[ãàôY\ã\àYHÿ⁄X⁄[Y\›ÿ[õà⁄X⁄\ò]Yàô\õ\‹Ÿ[ã\‹»[[Y\à\‹Ÿ[ôH\ö[àYY›ÇÇãH
+äïô\∞Èô\òò\ôHò\öXXõH
+]]XõX
+NääÇàô[\òBàõàXZ[ä
+H¬à]]XõHòYZ\àHàòYZ\àHòYZ\à
+»Bàö[ù
+òYZ\ä|Áæ:∂âûÀk∫wµÁ[›]\ã[ô\à[ô\[àŸ\\ò]ô[\òH∞Ôô[ô\ùòY»[ôõ›]H8ß!HÇà»»»ù[ö›[€ô[éà\úŸ[ôHŸY[öŸK[ô\ôH‹òX⁄BÇêôZYHõ€Ÿ[ô[àôZ\‹Y[H⁄[ô[àZô\àô]ŸZ[YŸ[à‹òX⁄H\\ÿ⁄H€Z[ôBëù[ö›[€ô[ãà\»ô[\òKPôZ\‹Y[[ù‹öX⁄\àõ€H\úŸ\àô\ò\òôZ]][Çëù[ö›[€ú‹ﬁ[ù^[ô›\ôHZ][HZ›Y[[à”HŸ\∞ÔùÇÇüüüûô[\òBôõàY
+Nà[ùéà[ù
+HOà[ù¬àô]\õàH
+»ÇüBüüüÇÇüüüúù\›ôõàY
+NàMçéàMç
+HOàMç¬àH
+»ÇüBüüüÇÇîù\›ô\ùŸ[ô]€€ö‹ô]Hÿ[ûûòZ\[à⁄YHLÃòMçLÃòŸ\àMçÇñô[\òHöY]]∞Ôà\\ÿ⁄Hù\⁄[ô\‹€Ÿ⁄Z»[àô\ú›0ÈôX⁄[à\[ù»YBùô\òö[ôX⁄H‹∞Ì∞ÁŸK0Áô\õ]YòôZ[ô[ô»[ôôYH][òò[öÿXòö[[ô»pÔ‹Ÿ[àõÿ⁄ùõ€›0ÈôY»‹^öYö^öY\ùŸ\ô[ãÇÇà»»»öXõ€òXÿ⁄BÇüüüûô[\òBôõàöXõ€òXÿ⁄Jéà[ù
+HOà[ù¬àYààHH¬àô]\õàÇàBÇàô]\õàöXõ€òXÿ⁄JàHJH
+»öXõ€òXÿ⁄JàHäBüBÇôõàXZ[ä
+H¬àö[ù
+öXõ€òXÿ⁄JL
+JBüBüüüÇÇüüüúù\›ôõàöXõ€òXÿ⁄JéàMç
+HOàMç¬àYààHH¬àô]\õàé¬àBÇàöXõ€òXÿ⁄JàHJH
+»öXõ€òXÿ⁄JàHäBüBÇôõàXZ[ä
+H¬àö[ùàJûﬂHãöXõ€òXÿ⁄JL
+JN¬üBüüüÇÇ∏ß!HYHô[\òKQò\‹›[ô»ù]ù[ùö[ù[ô^^ö]\»ô]\õò»ù\›ù]ùòMç\»ö[ùàXSXZ‹õ»[ô[à]ù[à]\ŸùX⁄»[»∞Ô⁄ŸÿXô]Ÿ\ùàù\›BìXZ‹õ‹»òYŸ[à\»Xà[àô[\òH⁄[ôŸ[ZZ€€€ú»öX⁄\ôõ‹ô\õX⁄à€[[Y\õÇòô\›[[Y[à[àôZY[àôZ\‹Y[[àYHõÿ⁄‹›ùZ›\ãZ[ú∞Ô⁄›[ô»Y[ùù\à\Çì\ÿò\öŸZ]àZ[àôZ[[ù[XúùX⁄òX⁄
+ÿŸ]ù[à]\ŸùX⁄»õ‹ù»\à\úŸ\Ç∞Ôô\ú‹ö[ô›[àY\Ÿ\à›[HôZ[[ù[Xú∞Ô⁄KàôZ›\ú⁄[€àù[ö›[€öY\ù[àô[\òBõù\ãŸZ[ù[ö›[€úÿ]Yõ0Ìú›[ô»[ôù[ù[YH⁄YH]È⁄X⁄[ù\ú›0Ôô[ãà\Çê€ŸH›\ôH[àY\Ÿ[H\òôZ]€]YàöX⁄]\ŸŸY∞ÔùÇÇà»»»‹[€ò[HŸ\ùBÇüüüûô[\òBô[XZ[à[XZ[¬üüüÇÇüüüúù\›ô[XZ[à‹[€è›ö[ôœÇüüüÇÇò[XZ[ÿ\›òX⁄X⁄Ôûô\à[ô∞Ô⁄›ôXô[à\à‹[€ò[]0È[àKSXZ[Bë][ù\]\Ààù\›ô\ùŸ[ô][à[Ÿ[YZ[ô[àŸ[ô\ö\ÿ⁄[à\‹[€èòÇñô[\òHÿ[õà[XZ[ÿ[à\àXô[[ãKõ‹õ][\ãH[ô‘ST∞Ôù[ô»ô\∞Ô⁄‹⁄X⁄YŸ[é¬ôZ[ôH[Ÿ[YZ[ôH]]€X]\ÿ⁄HöY]ÀHŸ\àò[YY\ù[ô‹ÿXõZ][ô»\›ôYÿ⁄öX⁄ô∞ÔàôYHÿô\ôõ0È⁄Hõ‹ö[ô[ãÇÇà»»»Xô[[ÇÇüüüûô[\òBùXõH›\›€Y\ú»¬àYàYö[X\ûH]]¬àò[YNà›ö[ô L
+Hô\]Z\ôYà[XZ[à[XZ[¬àX›]ôNàõ€€Yò][ùYBüBüüüÇÇüüüúù\›ú›ùX››\›€Y\à¬àYàMçàò[YNà›ö[ôÀà[XZ[à‹[€è›ö[ôœãàX›]ôNàõ€€üBüüüÇÇëYHù\›T›ùZ›\à\ûô]Y›ŸZ[ôHXô[KŸZ[ôH‘ST‹[[ãŸZ[ôHò[YY\ù[ôÀöŸZ[àõ‹õ][\à[ôŸZ[ôH‘ïQSÿô\ôõ0È⁄KàY∞Ôàúò]X⁄ù\›ù\ÈõX⁄H‹ò]\ÀìXZ‹õ‹À]Y\öY\À[ô\à[ô[\]\ÀàYHô[\òKUXô[H⁄\ôYŸYŸ[à[àYBîÿ⁄[XXXõZ][ô»[ô8†$»€»YHŸXôù[ö›[€àõ‹ö[ô[à\›8†$»[àõ‹õ][\ôH[ô‘ïQôZ[òô^õŸŸ[ãÇÇà»»»‘ïQÇüüüûô[\òBò‹ùY›\›€Y\àOà›\›€Y\ú¬üüüÇÇîù\›ô\⁄]ùY∞ÔàŸZ[àò]]ô\»0·]Z]ò[[ùà\\ÿ⁄\ùŸZ\ŸH€€[Y[à[àù\›Z[ÇïŸXôúò[Y]€‹öÀõ›][ôÀZ[ôH][òò[öÀP‹ò]KZ[à][õ[Ÿ[XôúòYŸ[ãîô\]Y\›U\[ãò[YY\ù[ôÀ[ô\ã[\]\»Ÿ\àZ[àúõ€ù[ôëôZ\òôZ[ô[ô»[ôô\ôX⁄Y›[ô‹‹∞Ôù[ô»ù\ÿ[[Y[ãàô[\òH\ú›Y\ŸBôZ€\ò]]ôHYö[ö][€à[ôYHZ›Y[Hù[ù[YH›[\ò]\»‘ïQTõ›][ãëõ‹õ][\ôK›X⁄Kö[\à[ô‘‘ëãYŸ\ÿ⁄0ÔùHZ›[€ô[àô\ôZ]à\»\›ô^\ö[Y[ù[»\»\›ŸZ[à›]\ÿ⁄\àúõ€ù[ôQŸ[ô\ò]‹ãÇÇà»»»‘SÇëYHöY[ﬁ[ù^]\»[H]YùòY»[ùY[⁄]»ããàXà\»\›[HZ›Y[[Çî\úŸ\àöX⁄õ‹ö[ô[ãà\ò[Y]\à€€[Y[à\ûôZ][»ù[ö›[€ú‹\ò[Y]\à[àYBî‘ST∞Ôù[ôŒÇÇüüüûô[\òBú›ùX››\›€Y\à»Yà[ùò[YNà›ö[ô»[XZ[à[XZ[»X›]ôNàõ€€BÇôõàX›]ôWÿ›\›€Y\ú X›]ôNàõ€€
+HOà›\›€Y\ñ◊Bà\Ÿ\»]Xò\ŸBû¬àô]\õà‹[›\›€Y\ñ◊Oà¬à—SP’Yò[YK[XZ[X›]ôBàîì”H›\›€Y\ú¬à“TëHX›]ôHHòX›]ôBà‘ëTàñHò[YBàBüBüüüÇÇüüüúù\›õ]›\›€Y\ú»H‹[éú]Y\ûWÿ\»Jà›\›€Y\ãàà»Çà—SP’Yò[YK[XZ[X›]ôBàîì”H›\›€Y\ú¬à“TëHX›]ôHH¬à‘ëTàñHò[YBààÀàùYBäBãôô]⁄ÿ[
+	ú€€
+Bãò]ÿZ]Œ¬üüüÇÇîù\›]‘SöX⁄[»‹òX⁄ZYŸ[úÿ⁄Yù»‘SŸ\à[ô\ôH‹ò]\»Ìõõô[Çûù\ÈõX⁄H€€\[KU[YKT∞Ôù[ôŸ[à[òöY][ãàô[\ò\»Z›Y[\à‘SP⁄X⁄Ÿ\Çú∞Ôù8†$»Ÿ[õàÿ⁄[XH[ô\[àôZÿ[õù⁄[ô8†$»Xô[[ã‹[[ã[X\ŸKî\ò[Y]\ãù[∞ÈY⁄ŸZ]\ôŸXõö\ﬁù[‹ôù[ô»[ô]Xò\ŸXPÿ\Xö[]Kà\¬õXX⁄ô[\òHöX⁄]]€X]\ÿ⁄ô\‹Ÿ\à[»‘Sà\àZ›Y[HX\öXQãQŸ[ô\ò]‹Çù[ôŸZ[ôHôZ[ô[àXô[[õ‹[€ô[à⁄[ô[àXúÿ⁄ö]»Ÿôô[à⁄›[Y[ùY\ùÇÇà»»»öY]‹ŒàZ›Y[Hﬁ[ù^›]öY[ö[ÇëYHŸ^ôZY›HöY[ﬁ[ù^Z]öY]ÿ[ú]ô[ô\ò€€\€ô[ù[à[ôœÿ\›ö]]HöX⁄\úŸ\ãTﬁ[ù^à\àZ›Y[HŸXöŸ\õàô\ùŸ[ô]›]\‹Ÿ[éÇÇüüüûô[\òBúYŸHãÿ›\›€Y\úÀﬁ€ò[Y_Hà¬à[¬àOí›[ôH€ò[Y_O⁄OÇàBüBüüüÇÇîù\›ô\⁄]ùŸZ[ôHZ[ôŸXò]]HSHŸ\à€€\€ô[ù[ãTﬁ[ù^»‹ù€€[Y[Çï[\]\»[ôŸXôúò[Y]€‹ö‹»[ûùKàô[\ò\»YŸXÿ[Qõ‹õH€›⁄YHô[ò[õùBïöY]‹»[ô\\⁄Y\ùH€€\€ô[ù[à⁄[ôõ‹ö[ô[ãàYZô\ôH€›Àô\úÿ⁄X⁄[Bí€€\€ô[ù[à[ôYHöY[ﬁ[ù^Z][ú]ÿô[ô\ò⁄[ôõÿ⁄öX⁄›Xö[¬òœÿ\›ŸZ[ôH[\[Y[ùY\ùHô[\òKS‹\ò][€ãÇÇà»»»ô\ù∞ÈŸBÇëYHöY[ﬁ[ù^ô\]Z\ôH[[›[ùà[ô€
+ããäX\›öX⁄\àZ›Y[H›[ôÇë\à\úŸ\àZﬁô\Y\ùô\]Z\ô\»ﬂX[ô[ú›\ô\»ﬂXÇÇüüüûô[\òBôõàô\Ÿ\ùôJ›ÿ⁄Œà[ù[[›[ùà[ù
+HOà[ùàô\]Z\ô\»¬à[[›[ùàà›ÿ⁄»èH[[›[ùàBà[ú›\ô\»¬àô\›[èHàô\›[OH›ÿ⁄»H[[›[ùàBû¬àô]\õà›ÿ⁄»H[[›[ùüBüüüÇÇîù\›ô\⁄]ùY\ô∞ÔàŸZ[à\ôZ›Z[ôŸXò]]\»0·]Z]ò[[ùàô\]Z\ô\ÿô\ÿ⁄ôZXùïõ‹òôY[ô›[ôŸ[ã[ú›\ô\ÿòX⁄ôY[ô›[ôŸ[ãàù[ù[YKT∞Ôù[ô»[ôõ‹õX[Bïô\öYöZÿ][€à⁄[ôô\úÿ⁄YY[éàô[\òHô\öYûXÿ[õàì’ëSòïSïSQW–“P“ÿòSîì’ëSòŸ\àêRSQY[[ãàZ[àùY‹öYôà]Yà[à[[àŸ\ù0Ôô\à€
+ããäXö\›öX⁄[\[Y[ùY\ùÇÇà»»»ÿ\Xö[]Y\¬Çüüüûô[\òBôõàÿYÿ›\›€Y\ú 
+HOà›\›€Y\ñ◊H\Ÿ\»]Xò\ŸH¬àô]\õà‹[›\›€Y\ñ◊Oà¬à—SP’Yò[YK[XZ[X›]ôHîì”H›\›€Y\ú¬àBüBüüüÇÇò\Ÿ\ÿXX⁄\õ]XùHŸZ][ôYôôZ›H[à\à⁄Y€ò]\à⁄X⁄ò\ãà]Xò\ŸXòô]€‹öÿö[Tﬁ\›[X[ùö\õ€õY[ùõÿŸ\‹ÿ€ÿ⁄ÿò[ô€X[ôò€€ú€€X⁄[ô[BòZ›Y[[àù[ù[YKP€ŸHôZÿ[õùHÿ\Xö[]Y\Ààù\›ô\⁄]ùŸZ[àY[ù\ÿ⁄\¬ôZ[ôŸXò]]\»ÿ\Xö[]KTﬁ\›[N»‹ùŸ\ô[àùY‹öYôôH\\ÿ⁄\ùŸZ\ŸH0Ôô\à\[ãïŸ\ùH[ôöXõ[›Z‹ÀPT\»‹ôÿ[ö\⁄Y\ùà[XZ[\›ŸZ[ôHô[\òKPÿ\Xö[]KÇÇà»»»ÿ\»ù\›RŸ[õô\à[àô[\òHöX⁄›X⁄[à€€[ÇÇñô[\òH€€∞Ôà\\ÿ⁄Hù\⁄[ô\‹ÿ[ùŸ[ô[ôŸ[àöX⁄ô\õ[ôŸ[ã[HŸ]ÌöõX⁄[Çê[ùŸ[ô[ô‹ÿ€ŸH^^ö]HYô][Y\»ùHÿ⁄ôZXô[ãõ‹úõ›⁄[ô»∞ÔàZ[ôòX⁄Bëõ‹õ][\ôHùHXùYŸŸ[ãù⁄\ÿ⁄[àöY[[àÿ[ûûòZúôZ][àùHÈ[àŸ\àZ[ÇïŸXôúò[Y]€‹ö»]\»òZôZX⁄[à‹ò]\»ù\ÿ[[Y[ûù\›[[ãà\»\›Z[ôBêXú›òZ›[€ãŸZ[ôHôZ]\[ôÀ\‹»‹ZX⁄\ãH[ô]YûôZ]úòYŸ[àô\úÿ⁄⁄[ô[ãÇÇïõ€àù\›[ú‹\öY\ù⁄[ô›]\ÿ⁄H\\⁄Y\ù[ôÀô\ú›0ÈôX⁄HXY€õ‹Ÿ[ãú⁄X⁄\ôH›[ô\ôZ[ú›[[ôŸ[ã^^ö]Hô\∞Èô\òò\öŸZ]]\õàX]⁄[ôÀîôX€‹ôÀ—[ù[\À€\ôH‹ô[ûô[ãô\õŸ^öY\òò\ô\»€€[ô»[ôõ‹õX[H∞Ôù[ôŸ[ãÇÇà»»»ÿ\»ô[\òHZYŸ[ú›0ÈôY»XX⁄Çüô[\òKSY\ö€X[ù]ô[à›]\»üKK_KK_KK_üZ[ôHòX⁄X⁄HYö[ö][€àŸ[öYŸ\à⁄Y\ú‹∞Ô⁄X⁄HYZôòX⁄Yö[ö][€ô[à<'ÈÍàüò]]ô\»Ÿ\∞Ôù\»‘S][òò[öŸôZ\àpÌô€X⁄›õ‹à]\Ÿ∞Ôù[ô»\öŸ[õô[à8ß!HüZ€\ò]]ô\»‘ïQ›[ô\ôô\ùÿ[[ôŸ[àZ]Ÿ[öY»€ŸH<'ÈÍàüYŸXÿ[UŸXöŸ\õàZ[ôòX⁄H\\⁄Y\ùHòYŸ\ùH[ôSP[ù€‹ù[à<'ÈÍàü⁄X⁄ò\ô\»X\öXQãT‘SòX⁄õ€öYZò\ôHÿ⁄[XpÈô\ù[ôŸ[à<'ÈÍàüô\]Z\ô\ÿ[ô[ú›\ô\ÿŸ\ÿ⁄0Èù‹ôYŸ[à]\Ÿ∞Ô⁄€X⁄ô\›YŸ[à8ß!Hüÿ\Xö[]Y\»\õ]XùHŸZ][ôYôôZ›H⁄X⁄ò\àXX⁄[à8ß!Hü[ùY‹öY\ù\»]Y]0·ô\ù[ôŸ[àòX⁄õ€öYZ[à<'ÈÍàÇà»»»ZõX⁄\»ò^ö]Çèàô[\òH⁄YZ[àZ[öYŸ[à›[[à0ÈõX⁄]\»⁄YHù\›ŸZ[ôZYH[Ÿ\õôKèà›]\ÿ⁄\\⁄Y\ùH‹òX⁄[àZ]Ÿ\ÿ⁄ŸZYù[à€[[Y\õà[ô€\ô[Çèàù[ö›[€ú‹⁄Y€ò]\ô[à⁄[ôàô[\òHô\ôõ€›ôYÿ⁄Z[à[ô\ô\¬èàõŸ‹ò[[ZY\õ[Ÿ[à][òò[öÀ‘Sõ‹õ][\ôK‘ïQöY]‹»[ôŸ\ÿ⁄0Èù‹ôYŸ[Çèà€€[àô\›[ôZ[HZ[ô\»Ÿ[YZ[úÿ[Y[à‹òX⁄ﬁ\›[\»ŸZ[ãàù\›\›\¬èàX⁄ö\ÿ⁄Hù[ô[Y[ù\»€€\[\ú»8†$»öX⁄YH‹òX⁄KYBèàô[\òKP[ùŸ[ô[ô‹Ÿ[ù⁄X⁄€\àÿ⁄ôZXô[ãÇÇèà
+äî›]\Œääàô[\òH\›\ûôZ]Z[à^\ö[Y[ù[\à‹òX⁄õ››\àZ[öYŸBèàŸ^ôZY›H‹òX⁄Y\ö€X[Hô\ÿ⁄ôZXô[à\»ô\òö[ôX⁄HöY[ö[[ô⁄[ôõÿ⁄èàöX⁄õ€›0ÈôY»[\[Y[ùY\ùà\à›]\»[àôY[HôZ\‹Y[ôZY›ÿ\¬èà]]H[H€ŸH]È⁄X⁄õ‹ö[ô[à[ôŸ\∞Ôù\›ÇÇïŸZ]\ô∞Ôô[ôà—Z[ô∞Ôù[ô◊JÃK]ÿ\À^ô[\òKX[ô\úÀ[XX⁄
+Kñ‘‹òX⁄‹ù[ôYŸ[óJÕK]ò\öXXõ[ã]\[ã][ôYù[ö›[€ô[äKñ”X\öXQóJÕÀ[X\öXYã][ô]Xô[[äK‘‘SJŒK[ò]]ô\À\‹[
+Kñ—õ‹õ][\ôWJÃLKYõ‹õ][\ôJK’öY]‹À’ŸXúŸZ][óJÃL]ŸXúŸZ][äK–‘ïQJÃLãX‹ùY
+Kñ–€€ùòX›◊JÃMKX€€ùòX›À][ô]ô\öYûJKñ–ÿ\Xö[]Y\◊JÃMXÿ\Xö[]Y\ K“[\[Y[ùY\ù[ô‹‹›]\◊JÃMÀYXY€õ‹Ÿ[ã][ôYôZ\ú›X⁄JBù[ô‘õÿYX\JÃåã\õÿYX\X]\ÀY[KXZ›Y[[ã\ô\‹⁄]‹ûJKà\à]Yô[ôHô\‹⁄]‹ûKT›[ô›Zûù\ÈõX⁄]Yà\à‘›]\‹ŸZ]WJŒãÀ‹⁄YY[X[õãò€€K‹›]\ KÇÇà»»åKà‹⁄][€öY\ù[ô»[ôZ›Y[\à[ù⁄X⁄€[ô‹‹›[ôÇëYHZ›Y[H‹⁄][€öY\ù[ô»[àÿ‹À‹‹⁄][€ö[ôÀôKõYô\ÿ⁄ôZXùô[\òH[¬ôZYŸ[ú›0ÈôYŸH‹òX⁄H∞Ôà][òò[öŸŸ\›0ÔùHù\⁄[ô\‹ÿ[ùŸ[ô[ôŸ[ãà⁄YH\úŸ]ùõöX⁄YHX⁄ö\ÿ⁄H∞Ôù[ô»[H€€\[\é»⁄YH\ö€0Èù€Ÿ∞ÔàYHò]\›Z[ôBûù\ÿ[[Y[àŸYX⁄⁄[ôÇÇà»»»ÿ\»ô[\òH[ù\úÿ⁄ZY]ÇåKà
+äëZ[ôH]Y[H\àÿZöZ]ääàÿ⁄[XK\[ã‘Sõ‹õ][\ôK‘ïQöY]‹»[ôàT\»€€[à]\»Z]Z[ò[ô\à∞Ôòò\ô[àYö[ö][€ô[à[ù›Z[ãÇåãà
+äî‘SõZXùö\ú›P€\‹Œääà‘S⁄\ôöX⁄[ù\àZ[ô\à‘ìKPXú›òZ›[€Çàô\ú›X⁄›€€ô\õà[»ô\›[ôZ[\»õŸ‹ò[[\»Z]Xô[[ã\ò[Y]\õà[ôà\ôŸXõö\Ÿõ‹õY[àŸ\∞ÔùÇåÀà
+äêù\⁄[ô\‹Ÿù[ö›[€ô[à⁄[ô‹òX⁄ò]\›Z[ôNääàXô[[ãõ‹õ][\ôK‘ïQàŸZ][ã]][ùYö^öY\ù[ôÀô\ôX⁄Y›[ôŸ[à[ô€€ùòX›»ŸZ0Ìúô[àù[HŸ[ô[Çà[Ÿ[Ççà
+äî⁄X⁄\ôHYò][»⁄[ô⁄X⁄ò\éääàSQ\ÿÿ\[ôÀ\ò[Y]ö\⁄Y\ùH‘SBàŸ\ùK‘‘ëãTÿ⁄]ãù[T⁄X⁄\öZ][ôŸ\ùô\úŸZ]YŸHô\ôX⁄Y›[ôŸ[à⁄[ôàŸZ[ôHõÁŸ[à[\ôZ[ôŸ[ãÇçKà
+äêô]ŸZ\ŸHŸ\ô[àZõX⁄ô^ôZX⁄ô]ääàì’ëSòïSïSQW–“P“ÿàSîì’ëSò[ôêRSQ[ù\úÿ⁄ZY[àX⁄H›]\ÿ⁄Hô]ŸZ\ŸHõ€Çà]YûôZ]∞Ôù[ôŸ[à[ôŸôô[ô[à∞È[ãÇçãà
+äí›\ûô\àZ[ú›YYÀõ€›0ÈôYŸH‹òX⁄Nääà\àZ€\ò]]ôH›[ô\ôò[\›à›\ûé»ZYŸ[ôHù[ö›[€ô[à[ôò]]ôH‘SõZXô[à∞Ôà€€\^HòX⁄Ÿ⁄Z¬àô\ô∞Ôÿò\ãÇçÀà
+äïŸ[öY»[ôúò\›ùZ›\à∞Ôà[à›\ùääà\àZ[ôŸXò]]HŸ\ùô\à[ôYH”Bà€€[à[à\õãH[ô[ù⁄X⁄€[ô‹›ŸY»⁄ôH\X⁄KŸ\àZ[àô\úõX⁄[ô\¬àúò[Y]€‹öÀP∞Ôô[\õpÌô€X⁄[ãÇÇë\àZ›Y[H›[ô\›õ›ô[HZ[à^\ö[Y[ù[\àõ››\àYHõÿYX\[ôôYHZ[ûô[ô[à›]\ﬁôZX⁄[à⁄[ô\⁄[à⁄X⁄YŸ\à[»Z[ôH[Ÿ[YZ[ôBîõŸZ›ôZ]\[ôÀÇÇà»»åãàõÿYX\]\»[HZ›Y[[àô\‹⁄]‹ûBÇëYHõ€Ÿ[ôHù\ÿ[[Y[ôò\‹›[ô»›[[]]\»ÿ‹À‘ì–QPTôKõY[HZ›Y[[Çñô[\òKTô\‹⁄]‹ûKà⁄YH\›Z[ôH[ù⁄X⁄€[ô‹‹[ù[ôÀŸZ[ôHù\ÿYŸH∞ÔàZ[Çîô[X\ŸKQ][KÇÇüô\ôZX⁄Z›Y[\àÿ⁄Ÿ\ú[ö›õÿ⁄Ÿôô[ôH]\ÿò]\›Yô[àüKK_KK_KK_üZ[ú›YY»[ô\›öXù][€à]Y[€ŸKH[ôô[X\ŸKR[ú›[\à
+[ù^’⁄[ô›‹»óÕç\à“KLçMäKô[\òHô]À⁄[ö]Z]›\ù\ãU[\]\»
+Z[ö[X[X\öXYãX‹ùYX\öXYãX]]X\öXYãXù\⁄[ô\‹ÿ
+Kÿ⁄Ÿ\ãK—ãT‹ùÀô[\òHŸ]\ô[\òHÿ›‹òLëKU\›»⁄Y€öY\ùHö[ò\öY\À[ù\òZ›]ô\àô\òö[ô[ô‹ÿ\‹⁄\›[ùô]ô\úŸKTõﬁKP]]€X]\⁄Y\ù[ô»ü‹òX⁄H[ô€€\[\à^\ã\úŸ\ãT’“Tã\∞Ôù[ôÀ‹[€òô\›[]\õàX]⁄[ôÀ]\ŸùX⁄‹ÀU\YR€\»
+ÿ
+Kÿ[õ€ö\ÿ⁄\»ô[\òHõ][Ÿ[K[\‹ùÀŸ[ô\öX‹À0Ô⁄Ÿ[à[àZ€\ò][€ô[à[ôõ€›0ÈôYŸHõ‹õX[Hô\öYöZÿ][€àü][òò[ö‹]õ‹õHX\öXQã‘S]H[ô‹›‹ôT‘S[Hÿ⁄[XKP”N»\\⁄Y\ù\»‘SŸZ]\ôHÿ⁄[XXXôX⁄›[ôÀõÿù\›\ôHõŸZ›[€úÿXõ0ÈYôHüöY]‹»[ôŸXàŸZ][ãô[ò[õùHöY]‹À€€\€ô[ù[ãYò][H[ôô[ò[õùH€›»Z]ò[òX⁄ÀR[ö[[ã⁄X⁄\ô\à›]][Y\ÀöY]ÀUô\ô\òù[ôÀúôZYH›[[ôÀR€€\€ô[ù[àüõ‹õ][\ôH[ô‘ïQò[YY\ù[ôÀ‘‘ëã›X⁄Kö[\ãY⁄[ò][€ãZ›[€ô[ã€Ÿù[]KŸ[YZ[úÿ[Y\»‘ïQUöY]ÀQô[õŸö[
+öY]ÀôöY[ÿ
+H\õX[ô[ùH0Ìúÿ⁄[ôÀ]Yòô]ÿZù[ôÀ\ò⁄]öY\ù[ô»[ôúôZ]\ôHöY]ÀP[ú\‹›[ô»ü]][ùYö^öY\ù[ô»[ô]Y]Ÿ⁄[ãŸ\‹⁄[€úÀõ€[ãô\ôX⁄Y›[ôŸ[ãúõ›‹Ÿ\ãPYZ[ã]Y][ô\⁄RŸ]HŸ[ãTŸ\ùöXŸKõÿ⁄[Yò\‹Ÿ[ô\ôH€XﬁKUô\ùÿ[[ô»[ô\ò⁄]ú›ò]Y⁄Y[àüT\»[ô[ùY‹ò][€à\\⁄Y\ùHT\À‹[êTK\Tÿ‹ö\P€Y[ù[ô”‘î»ô\ú⁄[€öY\ù[ôÀò]H[Z]»[ô–]]K“[ùY‹ò][€úÿò]\›Z[ôHüô\öYöZÿ][€à[ôô]öYXà€€ùòX›Àÿ\Xö[]KT∞Ôù[ô»[ô\ú›HôXô[õ0ÈYöY⁄ŸZ]ÿò]\›Z[ôHXòúùX⁄[Y[›]À][òò[öÀT€€R[ùY‹ò][€à[ôô[\›ò\ôH\ôõ‹õX[òŸ\òYHü“K[ò]]ôHÿ⁄ö]›[[àô[\òHõ]
+›YôHà8ß!JK]\ŸùX⁄‹ÀS0Ô⁄Ÿ[àÿ
+›YôH»<'ÈÍäKô[\òH[\X›Z]K\ﬁ[Xõ€
+›YôH<'ÈÍäKô[\òHY][Xô[ô[õù[ô»
+›YôHH<'ÈÍäH0Ô⁄Ÿ[à[àZ€\ò][€ô[ãÿ⁄[XKK”]YûôZ]R[\X›€€\^\ôHY]S‹\ò][€ô[ã“KPô[ò⁄X\ö»ü]X[]0È[ô€›ô\õò[òŸH\›À⁄›[Y[ù][€à[ôô\õŸ^öY\òò\ôH∞Ôù[ôŸ[àúôZ]\ôHZﬁô\[ûò[ùŸ[ô[ôŸ[à[ôõŸZ›[€ú⁄0Èù[ô»ÇìöX⁄[»ô\ô∞Ôÿò\à⁄›[Y[ùY\ô[éàKSXZ[H[ô[ù\ô‹ù[ôõÿãTﬁ\›[YKùõ€›0ÈôYŸH[Ÿ[K“[\‹ùÀúôZHYö[öY\òò\ôHöY]ÿR€€\€ô[ù[àZ]YZô\ô[Çî€›»Ÿ\àZ[ôH]]€X]\ÿ⁄HõŸZ›[€ú€ZY‹ò][€ãà∞ÔàôY[àY\Ÿ\àô\ôZX⁄Bô⁄[<'ÂÓªÓ#À€€[ôŸH\àZ›Y[H”KP€ŸHYHù[ö›[€àöX⁄õ€›0ÈôY»∞È›ÇÇëYH⁄[õùõ€›HôZZ[ôõ€ŸH∞ÔàZ[àZYŸ[ô\»\õúõ⁄ôZ›õZXùZ\éÇÇåKà⁄X⁄ÿ[ôù[ò∞ÔàYH‹òX⁄‹ù[ôYŸ[é¬åãàà‹ôX]Xà[ú‹X›à[ò[ô€€ùõ€Y\ù\»à\X¬åÀàZ[ôH€Z[ôHYŸXKõ‹õXHŸ\à‹ùYP[ùŸ[ô[ôŒ¬çà\ú›[òX⁄]][ùYö^öY\ù[ôÀõ€[ã]Y][ôTKR[ùY‹ò][€ãÇÇà»»åÀà“K[ò]]ôH[ù⁄X⁄€[ô¬ÇëYHZ›Y[[à\ò⁄]Z›\ãH[ô‹^öYöZÿ][€úŸ⁄›[Y[ùH\ôÈûô[àZ[à⁄X⁄YŸ\¬îö[ûö\ÇÇèà
+äëYH“Hÿ⁄ôZXùàô[\òH∞ÔùääÇÇñô[\òH€€∞ÔàY[úÿ⁄[à[ô“KTﬁ\›[YH€ZX⁄\õXpÁŸ[àù]òò\àŸZ[ãõZXùXô\Çùõ€›0ÈôY»“K][òXö0Èô⁄YÀà\à€€\[\à[ôYH\›»⁄[ôYHô\ùò]Y[úŸ‹ô[ûôN¬ôZ[ôH]\⁄XõH\ö€0Èù[ô»Z[ô\»[Ÿ[»\›ŸZ[à€‹úôZ›Z]€òX⁄ŸZ\Àà∞ÔÇõY[úÿ⁄X⁄[à[ôŸ[ô\öY\ù[à€ŸHŸ[[àY\Ÿ[ô[à∞Ôù[ôŸ[à∞Ôà^\ã\úŸ\ãìò[Y[ã\[ã‘Sÿ\Xö[]Y\À€€ùòX›À\›»[ô]YûôZ]ÇÇà»»»]]Hô\ô∞Ôÿò\ôHX\ÿ⁄[ô[úÿ⁄ö]›[[ÇÇº'ÈÍàYHî””ãP]\ŸÿXô[à∞ÔàŸ\öﬁô]YŸHô\ùŸ[ô[à\»Ÿ[YZ[úÿ[YHõ‹õX]Z]òÿ⁄[XW›ô\ú⁄[€éàåHòàY[úÿ⁄X⁄H]\ŸÿXôHõZXù›[ô\ô»î””à⁄\ôù\àZ]òKYõ‹õX]Zú€€ò[ôŸYõ‹ô\ùÇÇüüüöú€€Çû¬àúÿ⁄[XW›ô\ú⁄[€àéàåHãàò€€[X[ôéàò⁄X⁄»ãàú›XÿŸ\‹»éàò[ŸKàôXY€õ‹›X‹»éà◊BüBüüüÇÇëYH]\ŸÿXôH\›]\õZ[ö\›\ÿ⁄àÿ⁄[XW›ô\ú⁄[€ò\›ô\úõX⁄[ô»ô]YBõ‹[€ò[Hô[\à0Ôôô[à[õô\ö[àZ[ô\àô\ú⁄[€à\ôÈûùŸ\ô[ã[ö€€\]XõB∞·ô\ù[ôŸ[àô[∞ÌùYŸ[àZ[ôHô]YHô\ú⁄[€ãàî””àŸZ0Ìúù]\‹ÿ⁄YpÁ€X⁄]YÇò››]X⁄ö\ÿ⁄HY[[ôŸ[à]Yà›\úòà€›\òŸKT‹[ú»ô\ùŸ[ô[Çõù[ò\⁄Y\ùHUãNPû]KSŸôúŸ]ÀZ[úÿò\⁄Y\ùHôZ[[ãK–û]KT‹[[à[ôZ[Çö[ã[Ÿôô[ô\»[ù\ùò[àŸX‹ô]ÀôZ]›[\[ùYò[ÀRQÀXú€€]BõX\ÿ⁄[ô[òXö0Èô⁄YŸHòYH[ô]ôKQ][òò[ö⁄[ö[HŸZ0Ìúô[àöX⁄[àY\ŸBê]\ŸÿXô[ãÇÇà»»»»ÿ[õ€ö\ÿ⁄H]Y[õ‹õX]Y\ù[ô¬Ç∏ß!Hô[\òHõ]ö[Kûû[ò\ûô]Y›òX⁄\ôõ€‹ôZX⁄[H^[à[ô\úŸ[àZ[ôBô]\õZ[ö\›\ÿ⁄H]Y[õ‹õX]Y\ù[ôÀàô[\òHõ]ö[Kûû[àKX⁄X⁄ÿÿ⁄ôZXùöŸZ[ôH]ZY[à[ôYYô\ùZ[ô[àôZ\ò€ŸKŸ[õàZ[ôH0·ô\ù[ô»∞ÌùY»ÈôN¬ô[Z]ÿ[õà“Hÿ[õ€ö\ÿ⁄[à]Y[€ŸH\ûù⁄[ôŸ[ãÇÇüüüòò\⁄ûô[\òHõ]^[\\ÀŸöXõ€òXÿ⁄Kûû[ûô[\òHõ]^[\\ÀŸöXõ€òXÿ⁄Kûû[KX⁄X⁄¬üüüÇÇë\àõ‹õX]\àô]ÿZùôZ[[ö€€[Y[ù\ôH[ôôZ[ô[‘SH[ôSPõ0Ìò⁄ŸH[¬õ‹ZŸ[à]Y[^à\à\›Y[\›[ùàZ[àô\ôZ]»õ‹õX]Y\ù\»⁄›[Y[ù\ûô]Y›òû]KZY[ù\ÿ⁄Y\Ÿ[ôH]\ŸÿXôKÇÇà»»»»\\⁄Y\ùH0Ô⁄Ÿ[à
+\Y€\ BÇ∏ß!H]\ŸùX⁄‹ÀU\YR€\»Z]ÿ⁄[ô[»\ú›H⁄X⁄\ôH›YôHô\ô∞Ôÿò\ãà\Çê€€\[\àY[]€€ù^\⁄X⁄ò\ôHŸ\ùH[ôù[ö›[€ô[ãZ›]ôBêÿ\Xö[]Y\À€€ùòX›TõX⁄[à[ô€›\òŸKT‹[éÇÇüüüûô[\òBôõà›XõJà[ù
+HOà[ù¬àô]\õà¬üBüüüÇÇòô[\òH⁄X⁄ÿY[]YHXY€õ‹ŸHKR”KLXZ][H\ùÿ\ù][à\[ùù[ô[à⁄X⁄ò\ô[àô^ôZX⁄ô\õãàò]Xò\ôHôYôZH
+ùZ[ù[òŸ\ùôX
+HZô[Çù[ùõ€›0ÈôYŸ[à€ŸHõ‹à›Ÿ\ö[ô»[ô]\Ÿ∞Ôù[ô»Xãà0Ô⁄Ÿ[à[ÇëZ€\ò][€ú⁄€€ù^[àõZXô[àŸ\[ùÇÇà»»»»›ùZ›\öY\ùHõ⁄ôZ›0Ôô\ú⁄X⁄Ç∏ß!H€€ù^\›ÿ⁄ôZXôŸ\ÿ⁄0Ôù[ôô\òö[ô]⁄X⁄öX⁄Z]X\öXQãù]ùŸZ[Çìô]ùŸ\öÀ∞ÔùŸZ[ôHKSXZ[Ÿ\àõÿú»]\»[ô⁄XùŸZ[ôHŸZZ[[ö\‹ŸH]\ŒÇÇüüüòò\⁄ûô[\òH€€ù^^[\\Àÿ]]ÿ‹ùYÿ\Kûû[KYõ‹õX]Zú€€ÇüüüÇÇî⁄YHY[]Z€\öY\ùHù[ö›[€ô[ãXô[[ã‘SPXôúòYŸ[ã‘ïQTô\‹€›\òŸ[ãëõ‹õ][\ôKT\»[ô€›\òŸKT‹[úÀÇÇà»»»»]\õZ[ö\›\ÿ⁄H⁄\ö›[ô‹ÿ[ò[\ŸBÇº'ÈÍà]Y[^Xö0Èô⁄Y⁄ŸZ][àZ[ô\»õŸ‹ò[[\»\‹Ÿ[à⁄X⁄]\õZ[ö\›\ÿ⁄∞Ôô[éÇÇüüüòò\⁄ûô[\òH[\X›^[\\Àÿ]]ÿ‹ùYÿ\Kûû[KYõ‹õX]Zú€€Çûô[\òH[\X›^[\\Àÿ]]ÿ‹ùYÿ\Kûû[K\ﬁ[Xõ€XõNò›\›€Y\ú»KYõ‹õX]Zú€€ÇüüüÇÇëYH⁄\ö›[ô‹ÿ[ù€‹ùY[]]Y[^ò\⁄Y\ùHXô[[ã‘Sõ‹õ][\ôK‘ïQBîô\‹€›\òŸ[ãöY]‹ÀT\Àô\ôX⁄Y›[ôŸ[ã€€ùòX›»[ôZ[ôH]\õZ[ö\›\ÿ⁄BòôYô\ô[òŸ\ÿRÿ[ù[õ\›H∞ÔàôZÿ[õùHô^öYZ[ôŸ[ãàôYHôZÿ[õùHÿ[ùH[ù0Èî]Y[KöY[\ù[ô]Y[^‹[õôKàKSXZ[KõÿãK\›H[ôì]ôKTÿ⁄[XX]\›⁄\ö›[ôŸ[àõZXô[à]\Ÿ∞Ô⁄€X⁄Y\àŸ\àöX⁄ô\ô∞Ôÿò\é»\ÇêôYôZô\òö[ô]⁄X⁄öYHZ]X\öXQãÇÇìZ]K\ﬁ[Xõ€⁄[ôõò[YOòÿ[õàYH]\ŸÿXôH]YàZ[ô[àôZÿ[õù[à€õ›[à⁄YBòXõNò›\›€Y\úÿõ⁄›\‹⁄Y\ùŸ\ô[ãàYHõ⁄›\‹⁄Y\ùH[ù€‹ù[ù0Èù\à\ôZ›ùô\òù[ô[ôHôYô\ô[ûô[à[ôùYŸZ0ÌúöYŸH€õ›[ãRQÀà[òôZÿ[õùH€õ›[àYYô\õÇòKRSTP’LX[ôZ[ô[à^]P€ŸH[ô€ZX⁄ù[ÇÇà»»»»]€X\ôHŸ[X[ù\ÿ⁄H0·ô\ù[ôŸ[ÇÇº'ÈÍàZ[ôHò[YY\ùHﬁ[Xõ€U[Xô[ô[õù[ô»ÿ[õà⁄ôH0·ô\ù[ô»\»]Y[^¬ò[»õ‹úÿ⁄]Hô\ôX⁄ô]Ÿ\ô[éÇÇüüüöú€€Çû¬àúÿ⁄[XW›ô\ú⁄[€àéàåHãàô[ùûHéàô^[\\ÀŸöXõ€òXÿ⁄Kûû[ãàô^X›Y‹€›\òŸWŸö[ôŸ\úö[ùéàôõùåXMçåNåÕYXÿåŸLôéNXÕãàõ‹\ò][€ú»éà¬à»ö⁄[ôéàúô[ò[YHãúﬁ[Xõ€éàôù[ò›[€àãôúõ€HéàôöXõ€òXÿ⁄Hãù»éàôöXàüBàBüBüüüÇÇê[»⁄[ôŸKöú€€ò‹ZX⁄\õà[ô]\Ÿ∞Ôô[éÇÇüüüòò\⁄ûô[\òHY]KYõ‹õX]Zú€€à⁄[ôŸKöú€€ÇüüüÇÇëYH[ôúòYŸH\›ô\ú⁄[€öY\ù[ô\ôàù\à]YàZ[ôH^\›Y\ô[ôHûû[Q]ZBö[õô\ö[à\à]YôŸ[0Ìú›[àô[\òKTõ⁄ôZ››\ûô[ôZYŸ[ãà]Y[^õ‹à[ôòX⁄ô\à0·ô\ù[ô»]\‹»YH€€\[\ú∞Ôù[ôŸ[àô\›Z[ãà\»\ôŸXõö\»Y[]YBôŸ[ò]Y[à⁄Ÿ[ãT‹[ú»[ôZ[ô[à]\õZ[ö\›\ÿ⁄[à]Y[^Qö[ôŸ\úö[ùÇÇë∞ÔàKX\X]\‹»YH[ôúòYŸH[àö[ôŸ\úö[ù]\»\àõ‹úÿ⁄]H[ù[[é»€¬ù⁄\ôZ[ôHù⁄\ÿ⁄[ûôZ]X⁄ŸpÈô\ùH]ZHöX⁄0Ôô\úÿ⁄öYXô[à
+›[KT€›\òŸKBîÿ⁄]äKà⁄ôH[à]\Ÿ∞Ô⁄€X⁄[àKX\XTÿ⁄[\àõZXù\»Z[ôHôZ[ôBïõ‹úÿ⁄]NÇÇüüüòò\⁄ûô[\òHY]KYõ‹õX]Zú€€àKX\H⁄[ôŸKöú€€ÇüüüÇÇïõ‹à[H]€X\ô[à\úŸ]ô[à⁄\ô\à]Y[^\õô]]Ÿ\\ú›[ôõ€›0ÈôY¬ôŸ\∞Ôù»Z[à[ôÔYŸ\àŸ\àŸ[X[ù\ÿ⁄[ú⁄X⁄\ô\àõ‹úÿ⁄Y»ÿ[õàZ\àöX⁄ôŸ\ÿ⁄öYXô[àŸ\ô[ãÇÇï[Xô[ô[õù[ôŸ[àõ€àù[ö›[€ô[ã\[à[ôôX€‹ô»⁄[ôT’Xò\⁄Y\ùÇëZ€\ò][€ô[à[ôôZÿ[õùHôYô\ô[ûô[àŸ\ô[à[Xô[ò[õùÈô[ô⁄ÿ[Bêö[ô[ôŸ[àZ][\Ÿ[ô[àò[Y[à[ùô\∞Èô\ùõZXô[ãàXô[[ãKöY]ÀKõ‹õKH[ôê‘ïQQZ€\ò][€ô[à€›⁄YHZôH›ùZ›\öY\ù[àôYô\ô[ûô[àŸ\ô[àXô[ôò[¬ù[ù\ú›0ÔùàXô[[ù[Xô[ô[õù[ôŸ[àZ›X[\⁄Y\ô[àŸ\∞ÔùH‘SUXô[[ú‹⁄][€ô[Çäîì”Xì“SòSïÿTUX
+K\‹Ÿ[àXô\à]\ò[K€€[Y[ù\ôKî\ò[Y]\à[ôS[ùô\∞Èô\ùà€€\€ô[ù[ãU[Xô[ô[õù[ôŸ[àZ›X[\⁄Y\ô[àYBëZ€\ò][€à€›⁄YHôZÿ[õùH0Ìôôõô[ôH[ôÿ⁄YpÁŸ[ôH€€\€ô[ù[ùY‹»[ÇíSPõŸY\ÀÇÇà»»»⁄X⁄\öZ]Ÿ‹ô[ûôH[ôô[ò⁄X\ö¬Çí“KUŸ\öﬁô]YŸH0Ôôô[àöX⁄[òô[Y\ö›ÿ\Xö[]Y\»[ûùY∞ÔŸ[ãô\ôX⁄Y›[ôŸ[Çô\ùŸZ]\õã\›ùZ›]ô\»‘S]\Ÿ∞Ôô[ãXY€õ‹Ÿ[àXúÿ⁄È⁄[ã\›»XZ›]öY\ô[ÇõŸ\àŸZZ[[ö\‹ŸH]\ŸŸXô[ãà\›ùZ›]ôHÿ⁄[XpÈô\ù[ôŸ[à[ô⁄X⁄\öZ]‹ô[]ò[ùB∞·ô\ù[ôŸ[àúò]X⁄[àZ[ôH⁄X⁄ò\ôHY[úÿ⁄X⁄HúôZYÿXôKàô[\òHŸ[ô]ŸZ[ô[Çî]Y[^]]€X]\ÿ⁄[à^\õôH“KQY[ú›N»Ÿ\[ùH[ùY‹ò][€ô[à€€[ÇõŸôô[ã⁄ÿ[ù]òò\ã\ú›[\õô]]ò[[ôô\ú⁄[€öY\ùŸZ[ãÇÇë\àô]YH“KP]]‹ô[úÿ⁄Yùÿô[ò⁄X\ö»\›Z[ôH‹^öYöZÿ][€à[Çòÿ‹Àÿô[ò⁄X\ö‹ÀÿZKX]]‹ö[ôÀôKõYà\à€€Z]ô\ú⁄[€öY\ù[àö^\ô\»[ôöY[ù\ÿ⁄[à]YôÿXô[à[ù\à[ô\ô[H\ú›ô\ú›X⁄⁄€€\[Y\ù[ôÀ€‹úôZ›\úÿ⁄ZYô[ãñôZ]ö\»ùHô\›[ô[ô[à\›À⁄Ÿ[úÀ⁄X⁄\öZ]ŸôZ\ã0Ôô\úŸZ[ôBêXö0Èô⁄Y⁄ŸZ][ã[ú⁄X⁄\ôHÿ⁄[XpÈô\ù[ôŸ[à[ôY[úÿ⁄X⁄[à∞Ôò]Yùÿ[ôY\‹Ÿ[ãÇë\»⁄Xùõÿ⁄ŸZ[ôHô\∞Ìôôô[ùX⁄[àô\ô€ZX⁄Ÿ\ôŸXõö\‹ŸKàZ[àŸX‹ô]SXZ»Ÿ\ÇôZ[ôHöX⁄úôZYŸYŸXô[ôH\›ùZ›]ôH0·ô\ù[ô»õZXùZ[à⁄X⁄\öZ]ŸôZ\à[ôù⁄\ôöX⁄\ò⁄ô\õYZ[ùX⁄HõŸZ›]ö]0È]YôŸ]€ŸŸ[ãÇÇà»Sí0·ë—BÇãKKBÇà»»çàô\òö[ôX⁄H]Y[[à[ô€€\[\ãT∞Ôù[ô»
+€›\òŸH]]‹ö]JBÇèà
+äë‹ù[ôÿ]éääàô[\òH\›Z[ôHZYŸ[ú›0ÈôYŸH‹òX⁄Kà\úŸ\à[ôŸ\∞ÔùH\›»[ùÿ⁄ZY[ãÿ\»^\›Y\ùÇÇêôZH⁄Y\ú‹∞Ô⁄[à⁄[[[Y\àõ€Ÿ[ôHô\òö[ôX⁄HôZZ[ôõ€ŸNÇÇåKà
+äñ—õ‹õX[H‹òX⁄‹^öYöZÿ][€óJÿ‹À‹‹X⁄YöXÿ][€ãôKõY
+H[ô\Ÿ[ô⁄›[Y[ùJäÇåãà
+äê€€\[\ãP€ŸNääà^\ãKT’K\úŸ\ãKò[Y[úÿ]Yõ0Ìú›[ô‹ÀK\∞Ôù[ô‹ÀH[ôŸ[X[ù\ÿ⁄\à€ŸH[à[à‹ò]\»^\ò\úŸ\ò\›\ò€Xù[ù[YX]Xò\ŸXŸXò[ôõ‹õ\ÿåÀà
+äìŸôö^öY[H]]€X]\⁄Y\ùH‹òX⁄H[ô[ùY‹ò][€ú›\›Œääà€‹ö‹‹XŸKU\›»
+ÿ\ô€»\›K]€‹ö‹‹XŸX
+KXX⁄[ôKR[ù\ôòXŸKU\›»[ôLëKT⁄[⁄‹ö\H[à\›Àÿçà
+äëYHŸôö^öY[H›[ô\ôöXõ[›ZŒääà
+€ÿò[ZYŸ[ú›0ÈôY»›ùZ›\öY\ù
+BçKà
+äìŸôö^öY[Hô[\òKPôZ\‹Y[Nääàûû[Q]ZY[à[à^[\\ÀÿYHZ][HZ›Y[[à€€\[\à\ôõ€‹ôZX⁄ô\öYö^öY\ù›\ô[Ççãà
+äë⁄›[Y[ù][€à[ô[ôùX⁄
+äÇÇà»»»⁄X⁄YŸH[ùò\öX[ù[à∞Ôà[ù⁄X⁄€\à[ô“KP\‹⁄\›[ù[ÇÇãH
+äîõÿYX\\›[ù[ôÀŸZ[ôHﬁ[ù^ääàùZÔôùYŸH\Ÿ[ùõ‹úÿ⁄0ÈŸH0Ôôô[à\ú›òX⁄[\[Y[ùY\ù[ô»[à^\ã‘\úŸ\à[»ô\ô∞Ôÿò\ôHﬁ[ù^\ôŸ\›[Ÿ\ô[ãÇãH
+äê€€\[\ãR[\[Y[ùY\ù[ô‹‹‹òX⁄Hù\›\›ŸZ[àô[\òNääàô[\òH⁄\ô[àù\›[ù⁄X⁄Ÿ[Xô\àù\›Tﬁ[ù^[àZ[ô\àûû[Q]ZH\›[ôÔYÀ\»ŸZH[õãYHô[\òKQ‹ò[[X]Z»Yö[öY\ù⁄YH]\Ÿ∞Ô⁄€X⁄ÇãH
+äíŸZ[ôH\ôù[ô[ô[àôYôZNääà[H”KPôYôZHpÔ‹Ÿ[à[à€K‹‹òÀ€XZ[ãúúÿ^\›Y\ô[ãÇãH
+äî∞ÔûûZ€\ŒääàôYH\ùŸZ]\ù[ô»\ò⁄0ÈYùõ‹õX]Y\ù[ô»
+ÿ\ô€»õ]
+K\H[ô‹ò]KT∞Ôù[ô»
+ÿ\ô€»⁄X⁄ÿ
+K[ù\à
+ÿ\ô€»€\X
+H[ô\›»
+ÿ\ô€»\›
+KÇÇãKKBÇà»»[ö[ô»Nàÿ⁄ô[Z[ú›YY»»‹X⁄ﬁô][
+ﬁ[ù^P⁄X]T⁄Y]
+BÇà»»»‹ù[ôYŸ[ôHﬁ[ù^òô[\òBãÀ»ù[ö›[€ô[àZ]ô\ùòYYŸ[Çôõà›[[YJNà[ùéà[ù
+HOà[ùàô\]Z\ô\»»HèH	âààèHBà[ú›\ô\»»ô\›[èHBû¬àô]\õàH
+»ÇüBÇãÀ»Z[ú›YY‹‹[ö›[ôò\öXXõ[ÇôõàXZ[ä
+H¬àHLÀ»\XõZ][ô»
+[ùô\òY[ô\õX⁄
+Bà]]XõHòYZ\àHÀ»ô\òY[ô\õX⁄àò[YNà›ö[ô»Hñô[\òHàÀ»^^ö]\à\Çàö[ù
+›[[YJÀ JBüBòÇà»»»\[ÇãHòZ[éà[ù
+çPö]õ‹ûôZX⁄[òôZYù]
+KR[ù
+õ‹ûôZX⁄[õ‹ Kõÿ]X⁄[X[
+ô\›€€[XJBãH^	àôZX⁄[éà›ö[ôÿ⁄\òãHÿZöZ]›Ÿ\ùNàõ€€
+ùYXò[ŸX
+BãHÿ[[[[ôŸ[éà[ù◊X›ö[ô÷◊XãHXùŸ\Ÿ[öZ]à‹[€èò
+€€YJ
+Xõ€ôX
+K›\ûôõ‹õHÿãHôZ\éàô\›[Oò
+⁄ 
+X\úäJX
+BãHﬁ\›[H	àôZ]à[Y\›[\]X[YX\ò][€òÇà»»»€€ùõ€›ùZ›\ô[Çòô[\òBôõà€€ùõ€Jà[ù
+H¬àYààL¬àö[ù
+ë‹õ‹‹»äBàH[ŸH¬àö[ù
+í€Z[àäBàBÇàX]⁄¬àHOà»ö[ù
+ëZ[ú»äHBààOà»ö[ù
+ñùŸZHäHBà»Oà»ö[ù
+ê[ô\ôHäHBàBÇà]]XõHHHà⁄[HH»[ùò\öX[ù»HèHH¬àHHH
+»BàBÇàõ‹àà[àÃKã◊H¬àö[ù
+äBàBüBÇôõàXZ[ä
+H¬à€€ùõ€JJBüBòÇà»»»][òò[ö»	àŸXÇòô[\òBô]Xò\ŸHXZ[à¬à[ô⁄[ôNàX\öXYÇà]Xò\ŸNàò\ÇüBÇùXõH][\»¬àYàYö[X\ûH]]¬àô^ôZX⁄ù[ôŒà›ö[ô»ô\]Z\ôYüBÇúYŸHã⁄][\»à¬à[¬àOê\ùZŸ[\›O⁄OÇàBüBòÇãKKBÇà»»[ö[ô»éà[HôZ\õY[[ôŸ[àõ€àô[\òH]YàZ[ô[àõX⁄¬ÇüôZ\ò€ŸHÿ]Y€‹öYHô\ÿ⁄ôZXù[ô»\\ÿ⁄HôZXù[ô»üãKKHãKKHãKKHãKKHüKSVLX^\à[ô\ùÿ\ù]\»ôZX⁄[à»^Zÿ[\ÿ⁄\àôZ\à\ôZ\àŸ\à[ûù[0È‹⁄YŸ\»€€ô\ûôZX⁄[à[ùô\õô[àüKTTî—KLX\úŸ\àﬁ[ù^ôZ\à
+ãàãàôZ[ôH€[[Y\ãò[ÿ⁄\»⁄Ÿ[äHﬁ[ù^Ÿ[pÈ0Á»ô[\òKQ‹ò[[X]Z»€‹úöY⁄Y\ô[àüKSêSQKLX]Yõ0Ìú›[ô»[òôZÿ[õù\àò[YH»ò\öXXõHöX⁄ŸYù[ô[àZ€\ò][€à∞Ôô[àŸ\à\ôZ\à€‹úöY⁄Y\ô[àüKUTKLX\∞Ôù[ô»\€€ôõZ›
+ãàãà›ö[ô»ùYŸ]⁄Y\Ÿ[à[à[ù
+H\[à[ú\‹Ÿ[àŸ\à€€ùô\ùY\ù[ô»õ‹õôZY[àüKQëPUTëKLXôX]\ôKTÿ⁄[\àùY‹öYôà]YàZ[ôHXZ›]öY\ùH‹òX⁄ÿô\ôõ0È⁄H
+ŸXò\X‹ùY]]]Y]
+HôX]\ôH[àô[\òKù€[Ÿ\àô[ùòZ›]öY\ô[àüKP–TLX»KP–TLòÿ\Xö[]Y\»ôZ[ôHÿ\Xö[]KPô\ôX⁄Y›[ô»
+ãàãà]Xò\ŸXô]€‹öÿ
+H[àô[\òKù€[[ù\àÿÿ\Xö[]Y\◊XúôZYŸXô[àüKT”P÷KLX»òöX⁄[öY[àô\ú›Á»ŸYŸ[à⁄X⁄\öZ]ÀHŸ\à]Y]TöX⁄[öY[à⁄X⁄\öZ]ŸZ€\ò][€à∞Ôô[àüKQãLXHKQãLX][òò[ö»][òò[ö›ô\òö[ô[ô‹ÀHŸ\àôZXô\ôôZ\àUPêT—W’Tì∞Ôô[ãX\öXQãQY[ú››\ù[àüKT‘SLXHKT‘SL‘S[ôÔYŸ\»‘S»ÿ⁄[XKSZ\Ÿö]»‹[HöX⁄^\›[ù‘SP[ùŸZ\›[ô»ŸYŸ[àXô[[ôYö[ö][€à∞Ôô[àüKUíQUÀLXHKUíQUÀLXöY]‹»	àYŸ\»ôZ\à[àöY]ÀR[ù\ú€][€ã€›»Ÿ\à][òö[ô[ô»€›Sò[Y[à[ô][ù\[à\àYŸKPö[ô[ô»∞Ôô[àüKUíQUÀLLHKUíQUÀLMX]Y\ûKP€€ùõ€»[ôÔYŸH›X⁄K€‹ùY\ãKY⁄[öY\ù[ô‹ÀHŸ\àö[\ôô[\àZ€\öY\ùH⁄][\›
+ŸX\ò⁄€‹ùö[\ò
+H∞Ôô[àüKQì‘ìKLXHKQì‘ìKLõ‹õ][\ôHò[YY\ù[ô‹ŸôZ\àŸ\à[ôÔYŸHô[\[àõ‹õ][\ãQZ€\ò][€à[ôZ[ôÿXôY][à[ú\‹Ÿ[àüKP‘ïQLXHKP‘ïQLò‘ïQ[ôÔYŸH‘ïQTô\‹€›\òŸKÿ⁄[XKR€€ôõZ›Ÿ\à^[›]QôZ\àXô[[ùô\ö€∞Ôù[ô»[ô^[›]T€›»∞Ôô[àüKPUULXHKPUULé]][ùYö^öY\ù[ô»Ÿ\‹⁄[€ãK\‹›€‹ùHŸ\àô\ôX⁄Y›[ô‹⁄€€ôõZ›õ€[à
+\õZ]ÿ
+Kô\]Z\ô\»]][ô\⁄\»∞Ôô[àüKPUQULXHKPUQULL]Y]UòZ[ôZ\à[à\à‹û\Ÿ‹òYö\ÿ⁄[à\⁄RŸ]H\»]Y]SŸ‹»∞Ôú›[[Y[à[ô]Y]UXô[Hò[YY\ô[àüKT—UTLXHKT—UTLòŸ]\Qõ›»‹ù€€ôõZ›€ÿ⁄Ÿ]QôZ\àŸ\à€€\‹ŸKTõÿõ[HúôZYH‹ù»È[ãÿ⁄Ÿ\ãPô\ôX⁄Y›[ôŸ[à∞Ôô[àüKT—UTU—PãLXŸXãTŸ]\[ôÔYŸ\»Ÿ\àXôŸ[]Yô[ô\»Ÿ]\U⁄Ÿ[àŸ]\P\‹⁄\›[ù[àô]H›\ù[à[ô⁄Ÿ[ãUTìù]ô[àüKRSTP’LX[\X›P[ò[\ŸHûZ€\ÿ⁄HŸ\à[ôÔYŸHXö0Èô⁄Y⁄ŸZ][à]Y[€ŸKPXö0Èô⁄Y⁄ŸZ][à[ùõX⁄[àüKTïSïSQKLX]YûôZ][òôZ[ô[\à]YûôZ]ôZ\àô\ù∞ÈŸH
+ô\]Z\ô\ÿ[ú›\ô\ÿ
+HŸ\àôZ\ùŸ\ùH∞Ôô[àÇãKKBÇà»»[ö[ô»Œàô[\òKP”KTôYô\ô[ûÇÇüôYôZ‹[€à»õY»ô\ÿ⁄ôZXù[ô»üãKKHãKKHãKKHüô[\òHK]ô\ú⁄[€ò⁄Xù[àõ€›0ÈôYŸ[à€€\[\ãH[ôZŸ]ô\ú⁄[€ú‹›[ô]\»üô[\òHô]»\èòK][\]HZ[ö[X[X\öXYãX‹ùYããò\ú›[Z[àô]Y\»ô[\òKTõ⁄ôZ›Z]õ‹õYŸHüK[X\öXYò\ûô]Y›X\öXQãTõ⁄ôZ›Z]€€\‹ŸKÿ⁄Ÿ\ôö[H[ôô[ùòüK]ŸXã\‹ùàKZ‹›\‹ùàKYãZ‹›\‹ùò€€ôöY›\öY\ù€€ùZ[ô\ãH[ô‹›T‹ù»üô[\òH[ö]ÀK[X\öXYóX[ö]X[\⁄Y\ù\»Z›Y[Hô\ûôZX⁄ö\»[»ô[\òKTõ⁄ôZ›üô[\òH⁄X⁄»ö[Kûû[òÀKYõ‹õX]ú€€óX∞Ôùﬁ[ù^\[ãô\ù∞ÈŸH[ôÿ\Xö[]Y\»›]\ÿ⁄üô[\òHù[àö[Kûû[ò€€\[Y\ù[ô∞ÔùZ[àô[\òKTõŸ‹ò[[H]\»üô[\òHŸ\ùôHö[Kûû[ò⁄‹›ú‹ùX›\ù][à[ùY‹öY\ù[àUŸXúŸ\ùô\àüô[\òHŸ]\ÀKY]Xò\ŸWX›\ù]ÿ⁄Ÿ\à€€\‹ŸH»X\öXQàüÀK\ÿ⁄[XWX›\ù][YŸXù[ô»[ôŸ[ô]][òò[ö‹ÿ⁄[XH[àüÀKX[X∞Ôù€€ôöY›\ò][€ã›\ù[ôZY‹ò][€à[àZ[ô[Hÿ⁄ö]]\»üÀKZ‹›\‹ùóHÀKYãZ‹›\‹ùóXŸ]ùô\òö[ôX⁄H‹›T‹ù»∞ÔàYHô]YHô[ùòüô[\òHŸ]\K]ŸXòÀK\‹ùóX›\ù][à⁄ÿ[[ã⁄Ÿ[ãYŸ\ÿ⁄0Ôù[àúõ›‹Ÿ\ãTŸ]\P\‹⁄\›[ù[àüô[\òH€€ôöY»ö[Kûû[òÀKYõ‹õX]ú€€óXôZY›YH⁄\ö‹ÿ[YH€€ôöY›\ò][€à[ôôX]\ôKTÿ⁄[\àŸZZ[[ö\ŸúôZH[àüô[\òHÿ›‹àö[Kûû[òÀK\‹ùóHÀKZú€€óX∞Ôù€€⁄Z[ãX\öXQãÿ⁄Ÿ\à[ô‹ù»⁄ôHãp·ô\ù[ô»üÀKY[ùãYö[Hö[OóXY\›Ÿ^öY[UPêT—W’Tì]\»\à[ôŸYŸXô[ô[à]ZHüô[\òHõ]ö[Kûû[òÀKX⁄X⁄◊Xõ‹õX]Y\ù]Y[€ŸHòX⁄[HŸôö^öY[[à›[ô\ôüô[\òHô\öYûHö[Kûû[ò∞Ôùõ‹õX[Hô\ùòY‹›ô\öYöZÿ][€à\ò⁄üô[\òHÿ»ö[Kûû[òK[‹[ò\XŸ[ô\öY\ù‹[êTKLÀåT‹^öYöZÿ][€ô[àüK]\\ÿ‹ö\Ÿ[ô\öY\ù\\⁄Y\ù[ãXö0Èô⁄Y⁄ŸZ]ŸúôZY[à\Tÿ‹ö\P€Y[ùüô[\òHà[ö]ö[Kûû[ò[ö]X[\⁄Y\ù][òò[ö»[ôò\⁄\›Xô[[àüô[\òHàŸ]\ö[Kûû[òöX⁄]YHX\öXQãQ][òò[ö»[ö]X[Z[àüô[\òHà\Hö[Kûû[òŸ[ô]ÿ⁄[XKSZY‹ò][€ô[à⁄X⁄\à[àüô[\òH]]\⁄\\‹›€‹ôÀK\›[óX\ûô]Y›⁄X⁄\ôH\ô€€åãT\‹›€‹ù\⁄\»üô[\òHõ‹õHò[Y]Hö[Oàõ‹õOò∞Ôùõ‹õ][\ôHZ]\›Ÿ\ù[à]Yà\à€€ú€€Hüô[\òH€€ù^ö[Kûû[òÀKYõ‹õX]ú€€óX⁄Xù[àŸ[X[ù\ÿ⁄[à]Y[€ŸKR€€ù^∞Ôà€€»]\»ÇãKKBÇà»»[ö[ô»àYH›[ô\ôöXõ[›Z»[H0Áô\òõX⁄¬Çà»»»‹ù[ôù[ö›[€ô[à
+⁄ôHÿ\Xö[]Y\ BãHö[ù
+Ÿ\ù
+Xà⁄XùZ[ô[àô[YXöYŸ[àŸ\ù]Yà\à›[ô\ô]\ŸÿXôH]\ÀÇãH[ä\úò^JXàYYô\ùYH[ûòZ\à[[Y[ùH[àZ[ô[H\úò^H[»[ùÇãH\[ô
+\úò^K[[Y[ù
+Xà\ûô]Y›Z[àô]Y\»\úò^HZ][ôŸZ0Èô›[HŸ\ùÇãH€€ùZ[ú \úò^K[[Y[ù
+XOàõ€€à∞ÔùÿàZ[àŸ\ù[H\úò^H[ù[[à\›ÇãHö\ú›
+\úò^JXOà‹[€èòàYYô\ù\»\ú›H[[Y[ùŸ\àõ€ôXÇãH\›
+\úò^JXOà‹[€èòàYYô\ù\»]ùH[[Y[ùŸ\àõ€ôXÇãHŸ]
+X\Ÿ^JXOà‹[€èèòàÿ⁄0È›Z[ô[àÿ⁄0Ô‹Ÿ[[àZ[ô\àX\ÀèòòX⁄ÇãH]
+X\Ÿ^Kò[YJXOàX\Àèòà∞Ô›Z[àÿ⁄0Ô‹Ÿ[UŸ\ùTX\à[ûùHŸ\àZ›X[\⁄Y\ù\»ù[ö›[€ò[ÇãHŸ^\ X\
+XOà÷◊XàYYô\ù[Hÿ⁄0Ô‹Ÿ[Z[ô\àX\[»\úò^KÇãHò[Y\ X\
+XOàñ◊XàYYô\ù[HŸ\ùHZ[ô\àX\[»\úò^KÇãH€€YJŸ\ù
+X»õ€ôXà€€ú›ùZ›‹ô[à∞Ôà[à\‹[€èòÇãH⁄ Ÿ\ù
+X»\úäôZ\äXà€€ú›ùZ›‹ô[à∞Ôà[à\ô\›[OòÇãHú€€óŸ[ò€ŸJŸ\ù
+XOà›ö[ôÿàÿ[ô[][à[àî””à[KÇãHú€€óŸX€ŸOä^
+XOàà\ú›\\⁄Y\ù\»î””é»[ôÔYŸH][àŸ\ô[à[»]YûôZ]ôZ\àŸ[Y[]ÇÇà»»»ù[ö›[€ô[àZ]ÿ\Xö[]Y\¬ãH\Ÿ\»€€ú€€XÇàHôXYÿ€€ú€€Jõ€\à›ö[ô XOà›ö[ôœÿàôZY›[àõ€\[à[ôY\›Z[ôHôZ[N»õ€ôXôY]]]S—ãÇãH\Ÿ\»€ÿ⁄ÿÇàHõ› 
+XOà[Y\›[\àZ›Y[\àﬁ\›[^ôZ]›[\[ÇãH\Ÿ\»ò[ô€XÇàHò[ô€W⁄[ù
+Z[éà[ùX^à[ù
+XOà[ùàùYò[ﬁòZ[H[ù\ùò[ÇãH\Ÿ\»[ùö\õ€õY[ùÇàH[ùäò[YNà›ö[ô XOà‹[€è›ö[ôœòàY\›Z[ôH[YŸXù[ô‹›ò\öXXõKÇãH\Ÿ\»ö[Tﬁ\›[XÇàHôXY›^
+òYà›ö[ô XOà›ö[ôÿàY\›]ZZ[ö[[»^ÇàH‹ö]W›^
+òYà›ö[ôÀ[ö[à›ö[ô Xàÿ⁄ôZXù[ö[[à]ZKÇàH[]WŸö[JòYà›ö[ô Xà0Ìúÿ⁄Z[ôH]ZKÇàH\›Ÿ\ä‹ôô\éà›ö[ô XOà›ö[ô÷◊Xà\›]]Z[ò[Y[à]YãÇãH\Ÿ\»]Xò\ŸXÇàH‹[◊Oà»—SP’ããàXà∞Ôù\\⁄Y\ùH‘SPXôúòYŸ[à]\ÀÇàHò[úÿX›[€à»ããàXàò\‹›XôúòYŸ[àò[úÿZ›[€ò[ù\ÿ[[Y[ãÇÇãKKBÇà»»[ö[ô»Nà‘ST‹X⁄ﬁô][∞Ôàô[\òKQ[ù⁄X⁄€\ÇÇí[àô[\òHZ[ôŸXô]]\»‘S⁄\ôZ]‹[◊OòŸ\à‹[]\ŸŸY∞ÔùÇÇòô[\òBô]Xò\ŸHXZ[à¬à[ô⁄[ôNàX\öXYÇà]Xò\ŸNàò\ÇüBÇùXõH\⁄‹»¬àYàYö[X\ûH]]¬àò[YNà›ö[ô»ô\]Z\ôYà\õYY›àõ€€Yò][ò[ŸBüBÇôõà‹[ÿôZ\‹Y[J
+H\Ÿ\»]Xò\ŸH¬àÀ»Kà—SP’Z]\\⁄Y\ù[HùYX⁄ŸÿXô]\[ô⁄X⁄\ô[H\ò[Y]\Çà›]\»Hò[ŸBàŸYö[\ùH‹[\⁄÷◊Oà¬à—SP’Yò[YK\õYY›àîì”H\⁄‹¬à“TëH\õYY›Hú›]\¬àBÇàÀ»ãàSî—Tï[àZ[ô\àò[úÿZ›[€Çà^Hìô]YH]YôÿXôHÇàò[úÿX›[€à¬à‹[¬àSî—TïSï»\⁄‹»
+ò[YK\õYY›
+BàêSQT»
+ù^ò[ŸJBàBàBÇàÀ»ÀàTUBàöY[⁄YHBàò[úÿX›[€à¬à‹[¬àTUH\⁄‹¬à—U\õYY›HùYBà“TëHYHûöY[⁄YàBàBüBÇôõàXZ[ä
+H\Ÿ\»]Xò\ŸH¬àö[ù
+î‘S‹X⁄ﬁô][ò[YY\ùàäBüBòÇãKKBÇà»»[ö[ô»éàSH[ôŸXãTôYô\ô[ûà[àô[\òBÇà»»»ŸXãT›ùZ›\ô[à[ôZ€\ò][€ô[ÇÇü[[Y[ùZ€\ò][€àùŸX⁄»üãKKHãKKHãKKHü
+äîYŸJäàYŸHã‹òYﬁ‹\ò[_Hà»ããàXYö[öY\ùZ[ôHQ—UTõ›]HZ]òY\ò[Y]\õà[ôSP[ù€‹ùü
+äïöY]ÀS^[›]
+äàöY]»^[›]ò[YH»[»ããà€›œàããàHX⁄YY\ùô\ùŸ[ôò\ô\»^[›]Z]›[ô\ôH[ôô[ò[õù[à€›»ü
+äê€€\€ô[ù
+äà€€\€ô[ùò[YH»õ‹»»ããàH[»ããàHX⁄YY\ùô\ùŸ[ôò\ôHSR€€\€ô[ùHZ]\\⁄Y\ù[àZYŸ[úÿ⁄Yù[àü
+äìò[YY€›
+äà€›ò[YOHöXY\àèëò[òX⁄œ‹€›ò]ö[\à[H^[›]“€€\€ô[ùHZ]‹[€ò[[H›[ô\ô[ö[ü
+äî€›[öôX›[€ääà€›ò[YOHöXY\àèí[ö[‹€›ò0Áô\ôÿXôHõ€à⁄[ô[ö[[à[à[à\‹Ÿ[ô[à€›ü
+äë]HÿY[ô äàÿY][HH‹[][Oà»—SP’ããàX\\⁄Y\ù\»Y[àZ[ô\»Z[ûô[][úÿ]ô\»Z]ô[ùY‹öYôà⁄][KôöY[Xü
+äê€€X›[€à€‹
+äüõ‹à][H[à][\»»Oû⁄][Kõò[Y_O€OàX\\⁄Y\ùHŸ\ùô\úŸZ]YŸH]\ò][€à0Ôô\àŸ[Y[ôH][úÈôHü
+äîŸX\ò⁄€€ùõ€
+äàŸX\ò⁄»€€H€€àX⁄][\›YŸ\∞ÔùHTìT›X⁄HZ]\ò[Y]ö\⁄Y\ù\àR—XPXôúòYŸHü
+äî€‹ù€€ùõ€
+äà€‹ù»€€H€€àX\\⁄Y\ùH€‹ùY\ù[ô»0Ôô\à‹€‹ùX€€	õ‹ô\èX\ÿ◊\ÿÿü
+äîY⁄[ò][€ääàY⁄[ò]YçXY⁄[öY\ù[ô»Z]SRUÿ—ëî—UYŸXYŸ\ÿ[ô›[ü
+äëö[\à€€ùõ€
+äàö[\à»€€H€€àX\\⁄Y\ùHö[\õ‹\ò]‹ô[à
+\X€€ùZ[úÿ›\ù◊›⁄]›X]ÀäHü
+äê‘ïQ^[›]
+äà‹ùYô\»»XõHõ^[›]à^[›]ò[YHXö[ô]Ÿ[ô\öY\ùH‘ïQP[ú⁄X⁄[à[à€›»]Xò]ò€€ù[ùX›[€úÿZ[àÇãKKBÇà»»[ö[ô»Œà€‹‹ÿ\à\àòX⁄ôY‹öYôôBÇãH
+äêT’
+Xú›òX›ﬁ[ù^ôYJNääàYHY\ò\ò⁄\ÿ⁄Hò][\›ùZ›\ã[àYH\à€€\[\àZ[ô[à]Y[€ŸH0Ôô\úŸ]ùÇãH
+äêÿ\Xö[]H
+∞ÈY⁄ŸZ]
+Nääà]\Ÿ∞Ô⁄€X⁄Hô\ôX⁄Y›[ô»
+\Ÿ\»ö[Tﬁ\›[X]ÀäK⁄ôHYHZ[ôHù[ö›[€àŸZ[ôHŸ\ÿ⁄0Ôù[àô\‹€›\òŸ[àô\∞Ôô[à\ôãÇãH
+äë\⁄Y€àûH€€ùòX›ääà[ù›\ôú€Y]ŸKôZH\àù[ö›[€ô[à0Ôô\àõ‹òôY[ô›[ôŸ[à
+ô\]Z\ô\ÿ
+H[ôòX⁄ôY[ô›[ôŸ[à
+[ú›\ô\ÿ
+Hô\ùòY€X⁄XôŸ\⁄X⁄\ùŸ\ô[ãÇãH
+äí[[]]XõH
+[ùô\∞Èô\õX⁄
+Nääàò\öXXõ[àÌõõô[àòX⁄\à\ú›[àù]ŸZ\›[ô»öX⁄YZàô\∞Èô\ùŸ\ô[ãà[àô[\òH›[ô\ô\»ŸZH[õã⁄YHŸ\ô[àZ]]]XõXZ€\öY\ùÇãH
+äí[ùò\öX[ùääàZ[ôHôY[ô›[ô»
+ãàãà[àZ[ô\àÿ⁄ZYôJKYHõ‹à[ôòX⁄ôY[H\ò⁄]Yàÿ\ò[ùY\ùÿZàŸZ[à]\‹ÀÇãH
+äì‹[€éääà\
+€€YJäXŸ\àõ€ôX
+K\à\»pÌô€X⁄HôZ[àZ[ô\»Ÿ\ù\»\ú›[8†$»ô[\ò\»[ù€‹ù]YàŸY∞Ôò⁄]Hù[T⁄[ù\ãP‹ò\⁄\ÀÇãH
+äîô\›[ääà\
+⁄ äXŸ\à\úäJX
+K\à\»ÿ⁄Z]\õàZ[ô\à‹\ò][€à[»⁄X⁄\ô[àŸ\ùù\∞Ô⁄Ÿ⁄Xù›][ö€€ùõ€Y\ùHXú›0ÔûôH]\ﬁù[0ÌúŸ[ãÇãH
+äï\Y€H
+ÿ
+Nääà]ö[\à[H€ŸK\à[H€€\[\à[ô“KUŸ\öﬁô]YŸ[à⁄Y€ò[\⁄Y\ù[àY\Ÿ\à›[HZ[ôH\‹Ÿ[ôH[\[Y[ùY\ù[ô»ùH\ùÿ\ù[ãÇÇãKKBÇà»»[ö[ô»à0Ìú›[ôŸ[àùH[à0Áù[ô‹ÿ]YôÿXô[à\àÿ\][Çà»»»ÿ\][NàôY‹∞Ô0Á›[ô¬òô[\òBôõàXZ[ä
+H¬àö[ù
+í[»Ÿ[]\»ô[\òHHäBüBòÇà»»»ÿ\][NàòXò]ôZ\»ô\ôX⁄ô[Çòô[\òBôõàô\ôX⁄ôW‹òXò]
+‹öY⁄[ò[àõÿ]õﬁô[ùàõÿ]
+HOàõÿ]¬àô]\õà‹öY⁄[ò[
+à
+KåH
+õﬁô[ù»Lå
+JBüBÇôõàXZ[ä
+H¬àö[ù
+ô\ôX⁄ôW‹òXò]
+Lååå
+JBüBòÇà»»»ÿ\][LNàòZ[àô\ô‹[Çòô[\òBôõàô\ô‹JòZà[ù
+HOà[ù¬àô]\õàòZ
+àÇüBÇôõàXZ[ä
+H¬àö[ù
+ô\ô‹JåJJBüBòÇà»»»ÿ\][Léàõ‹ãH[ôòX⁄ôY[ô›[ôŸ[Çòô[\òBôõàôY‹ô[ûôJŸ\ùà[ùZ[ó›Œà[ùX^›Œà[ù
+HOà[ùàô\]Z\ô\»»Z[ó›»HX^›»Bà[ú›\ô\»»ô\›[èHZ[ó›»	âàô\›[HX^›»Bû¬àYàŸ\ùZ[ó›»»ô]\õàZ[ó›»BàYàŸ\ùàX^›»»ô]\õàX^›»Bàô]\õàŸ\ùüBÇôõàXZ[ä
+H¬àö[ù
+ôY‹ô[ûôJLåL
+JBüBòÇà»»»ÿ\][LŒà\úò^H›[[ZY\ô[Çòô[\òBôõà›[[YWÿ\úò^JòZ[éà[ù◊JHOà[ù¬à]]XõHŸ\ÿ[]Hàõ‹àà[àòZ[à¬àŸ\ÿ[]HŸ\ÿ[]
+»ÇàBàô]\õàŸ\ÿ[]üBÇôõàXZ[ä
+H¬à\›Nà[ù◊HHÃKãÀWBàö[ù
+›[[YWÿ\úò^J\›JJBüBòÇãKKBÇà»»[ö[ô»Nà0ÈYöYŸHúòYŸ[à[ô[ù€‹ù[à
+êTJBÇääëúòYŸNàÿ\ù[H⁄Xù\»[àô[\òHåÀåŸZ[ôH[\‹ùP[ùŸZ\›[ôœ äÇäê[ù€‹ùäà[àô\ú⁄[€àåÀå0Ôô\úŸ]ù\àô[\òKP€€\[\à[Hûû[Bî]Y[]ZY[à[Hõ⁄ôZ›€€ù^[»Z[àZ[öZ]X⁄\»ﬁ\›[KàZ[àôZ[ô‹ò[ù[\ô\¬ì[Ÿ[H[ô[\‹ùTﬁ\›[HõZXùZ[ôHùZÔôùYŸH\òôZ]\àõÿYX\ÇÇääëúòYŸNàÿ[õàX⁄Z]ô[\òH]X⁄ôZ[ôH€€ú€€[úõŸ‹ò[[YHÿ⁄ôZXô[è äÇäê[ù€‹ùäàòKàö[ù
+
+X⁄XùŸ\ùH]\ÀàôXYÿ€€ú€€Jîõ€\àäXY\›Z[ôHôZ[H[ôYYô\ù›ö[ôœÿ»Y∞Ôàúò]X⁄YHù[ö›[€à\Ÿ\»€€ú€€X[ô\»õ⁄ôZ›ŸYŸXô[ô[ôò[»€€ú€€HHùYXÇÇääëúòYŸNàÿ\ù[H[ù\ú›0Ôùô[\òHX\öXQà[»ô]õ‹ûùY›H[ô⁄[ôO äÇäê[ù€‹ùäàX\öXQàöY]]\ò]\‹òYŸ[ôH\ôõ‹õX[òŸK‹[ãT€›\òŸKQúôZZZ]›Xö[]0È[ôúôZ]H€›YU[ù\ú›0Ôù[ô»∞ÔàõŸô\‹⁄[€ô[HŸXò[ùŸ[ô[ôŸ[ãÇÇãKKBÇà»»[ö[ô»éàŸZ]\ô∞Ôô[ôHô\‹€›\òŸ[à[ô€€[][ö]BÇãH
+äìŸôö^öY[\»⁄]XãTô\‹⁄]‹ûNääà⁄ŒãÀŸ⁄]Xãò€€K‹ŸåNMÕãﬁô[\òWJŒãÀŸ⁄]Xãò€€K‹ŸåNMÕãﬁô[\òJBãH
+äë⁄›[Y[ù][€à	à€õ[ôKR[ôùX⁄ääà⁄ŒãÀ‹⁄YY[X[õãò€€K⁄[ôùX⁄JŒãÀ‹⁄YY[X[õãò€€K⁄[ôùX⁄
+H»⁄ŒãÀ‹⁄YY[X[õãò€€K⁄[ôõ€⁄◊JŒãÀ‹⁄YY[X[õãò€€K⁄[ôõ€⁄ BãH
+äêôZ\‹Y[H	àõ‹õYŸ[éääà[Hô\ûôZX⁄ö\»^[\\Àÿ\»ô\‹⁄]‹öY\»ö[ô\›H]Yô∞ÈYŸHõ‹õYŸ[à∞Ôà]][ùYö^öY\ù[ôÀ‘ïQP[ú⁄X⁄[ãT\»[ô][òò[öŸ[ãÇ

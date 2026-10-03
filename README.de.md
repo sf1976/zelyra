@@ -11,32 +11,24 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller Compilerstand: 0.2.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller Compilerstand: 0.3.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.2.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.3.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Der Workspace auf `main` hat die Version `0.3.0`. Das veröffentlichte [`v0.3.0-rc.2`-Vorab-Release](https://github.com/sf1976/zelyra/releases/tag/v0.3.0-rc.2) ist kein finales 0.3.0; stabil ist weiterhin 0.2.0 und die finalen 0.3.0-Abnahmekriterien sind noch offen.
+Das stabile [`v0.3.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.3.0) wurde am 03.10.2026 veröffentlicht. Es bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt; der Projektverantwortliche hat sie ausdrücklich auf das verpflichtende Abnahme-Gate für 0.4.0 verschoben. Siehe das [Entscheidungsprotokoll](docs/release-readiness/0.3.0-human-gate-decision.de.md).
 
-## Was ist neu in 0.2.0?
+## Was ist neu in 0.3.0?
 
-Dieses Release ergänzt wiederverwendbare View-Layouts und benannte
-Komponenten-Slots, projektlokale deutsche und englische UI-Kataloge,
-strengere Prüfungen von Schemaabweichungen mit Freigabeschritten und sicheren
-Vorprüfungen sowie zusätzliche Tests für MariaDB-Businessanwendungen.
-Browser-Origin-Prüfungen und eine konfigurierbare Host-Allowlist härten die
-Web-Laufzeit. Linux- und Windows-Release-Archive enthalten SHA-256-Prüfsummen;
-wiederholte Builds sind in den festgelegten CI-Toolchains byte-identisch.
+Zelyra 0.3.0 verbessert den Einstieg und die Projekteinstellungen, die
+Datenbank- und Schemasicherheit, erzeugte Businessanwendungen, typisierte
+Compiler-Schnittstellen und das Release-Packaging. Getestete Release-Artefakte
+stehen für Linux und Windows x86_64 bereit. Die genauen Kompatibilitätsgrenzen
+und Einschränkungen stehen in den [Release-Notizen](docs/release-notes/0.3.0.de.md).
 
-Die [Changelog-Einträge zu 0.2.0](CHANGELOG.md) enthalten die Release-Notizen;
-die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
-Diese Quellen enthalten die Details. Das README ist ein Projektüberblick und
-soll kein zweites Handbuch oder Changelog sein.
-
-Der [Entwurf der 0.3.0-Release-Notizen](docs/release-notes/0.3.0.de.md) führt
-geplanten Umfang und Grenzen auf; er ist keine veröffentlichte Release-
-Ankündigung.
+Die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
+Das README ist ein Projektüberblick und kein zweites Handbuch oder Changelog.
 
 ## Schnellstart
 
@@ -82,7 +74,7 @@ unter Unix nur Besitzerrechte (`0600`). Unter Windows gelten die ACLs des
 Verzeichnisses; vorhandene `.env`-Dateien werden nicht nachträglich mit neuen
 Rechten versehen. Die Datei darf nicht committet oder geteilt werden. Für den
 Produktiveinsatz geeignete Secret-Verwaltung und eigene Zugangsdaten nutzen;
-0.2.0 ist nicht für den Produktiveinsatz freigegeben.
+0.3.0 ist nicht für den Produktiveinsatz freigegeben.
 
 Ein neu erzeugtes MariaDB-Projekt verwendet standardmäßig Deutsch und den
 Lernmodus. Mit `ZELYRA_LANGUAGE=de|en` und `ZELYRA_LEVEL=learn|work` in der
@@ -94,11 +86,11 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
-| sehen möchtest, was Compiler 0.2.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| sehen möchtest, was Compiler 0.3.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md) · [English](docs/database-compatibility.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.3.0](docs/release-plans/0.3.0.de.md) · [0.5.0-Roadmapentwurf](docs/release-plans/0.5.0.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.4.0](docs/release-plans/0.4.0.de.md) · [0.5.0-Roadmapentwurf](docs/release-plans/0.5.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
