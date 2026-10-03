@@ -1895,15 +1895,21 @@ standardmäßig privat. Pfade beziehen sich auf das Verzeichnis der
 Einstiegsdatei. `check`, `build` und `run` laden die Imports, lehnen Zyklen und
 Pfade außerhalb des Projektstamms ab und behalten Typ-, Capability- und
 Contract-Prüfungen bei. Importierte Dateien dürfen derzeit Funktionen,
-Typ-Aliase und Records enthalten. Diese Deklarationen sind standardmäßig
-privat; öffentliche Records dürfen keine privaten Typen in ihren Feldern
-verbergen. `context --format=json` zeigt den vollständigen, deterministisch
-sortierten Modulgraphen; sein Deklarationsinventar enthält jedoch weiterhin
-nur die Einstiegsdatei. Auch `verify` prüft den verknüpften Graphen, weist
-Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu. `fmt`, `impact`,
-`edit` und Datenbankbefehle arbeiten weiterhin nur mit der ausdrücklich
-angegebenen Quelldatei. Dieses Branch-Verhalten ist experimentell und nicht im
-veröffentlichten 0.3.0-Binary enthalten.
+Typ-Aliase, Records, Tabellen und eine projektweite Datenbankdefinition
+enthalten. Tabellen fließen in ein gemeinsames Schema ein und behalten globale
+SQL-Namen; doppelte Namen werden abgelehnt. Funktions-, Typ- und
+Record-Deklarationen sind standardmäßig privat; Tabellen und die
+Datenbankdefinition werden durch den Import ihrer Datei aufgenommen.
+Öffentliche Records dürfen keine privaten Typen in ihren Feldern verbergen.
+`context --format=json`
+zeigt den vollständigen, deterministisch sortierten Modulgraphen. Die
+Kontextspannen importierter Tabellen und Datenbankdefinitionen enthalten den
+projektrelativen Quellpfad unter `span.file`; das Inventar für Webressourcen
+bleibt auf die Einstiegsdatei beschränkt. `verify` prüft den verknüpften
+Graphen, weist Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu.
+`fmt`, `impact`, `edit` und Datenbankbefehle arbeiten weiterhin nur mit der
+ausdrücklich angegebenen Quelldatei. Dieses Branch-Verhalten ist experimentell
+und nicht im veröffentlichten 0.3.0-Binary enthalten.
 
 Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
 einer Funktionssignatur verwendet:

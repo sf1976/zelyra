@@ -177,9 +177,11 @@ architecture requirement for every phase, not a provider-specific feature.
   containment, per-file source IDs, and
   type/capability/contract checks across imported calls. `check`, `build`,
   `run`, `context`, and `verify` validate this graph; machine context now emits
-  a deterministic, sorted module/import inventory. Its declaration inventory
-  is still entry-file-only, and verification results lack per-module source
-  provenance. Database configuration is not addressed through its alias and is
+  a deterministic, sorted module/import inventory. Imported database
+  definitions and tables join the shared schema; their context spans include
+  project-relative file paths. Web resources in the context inventory remain
+  entry-file-only, and verification results lack per-module source provenance.
+  Database configuration is not addressed through its alias and is
   limited to one connection per project. Imported tables join the shared
   schema and retain global SQL names; views and APIs, as well as integration
   with `fmt`, `impact`, `edit`, and database commands, remain incomplete. This

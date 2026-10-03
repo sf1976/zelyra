@@ -1906,23 +1906,25 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. `check`, `build`,
 and `run` load the imports, reject cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, and a project-wide
-database connection definition. Database configuration is composed into the
-application and is not accessed through the import alias; only one database
-definition is allowed in the complete project graph. Tables from imported
-files are composed into the application's shared physical schema. Their names
+currently contain functions, type aliases, records, tables, and one
+project-wide database connection definition. Database configuration is
+composed into the application and is not accessed through the import alias;
+only one database definition is allowed in the complete project graph.
+Imported tables join the application's shared physical schema. Their names
 are global SQL identifiers, not module-qualified names, and duplicate table
 names are rejected. Views, components, pages, forms, CRUD declarations, APIs,
 and authentication resources remain entry-file-only. Function, type, and
-record declarations are private by
-default, and public records cannot expose private field types.
+record declarations are private by default; tables and the database
+definition are included by importing their file. Public records cannot expose
+private field types.
 The database module is ordinary project configuration, not a separately named
 database service: the current runtime supports only one configured database
 for the composed application. The runnable example is in
 `examples/modules/`.
-`context --format=json` reports the complete,
-deterministically sorted module graph, although its declaration inventory
-still covers only the entry file. `verify` also checks the linked graph, but
+`context --format=json` reports the complete, deterministically sorted module
+graph. Context spans for imported tables and database definitions include
+their project-relative source path in `span.file`; the web-resource inventory
+remains entry-file-only. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `fmt`,
 `impact`, `edit`, and database commands still process only the explicitly
 named source file. This branch behavior is experimental and is not included

@@ -196,9 +196,11 @@ Feature eines bestimmten Anbieters.
   Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
   `check`, `build`, `run`, `context` und `verify` prüfen diesen Graphen; der
   maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
-  Modul-/Import-Überblick. Sein Deklarationsinventar umfasst weiterhin nur die
-  Einstiegsdatei; Verifikationsergebnisse haben noch keine Quellzuordnung pro
-  Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
+  Modul-/Import-Überblick. Importierte Datenbankdefinitionen und Tabellen
+  fließen in das gemeinsame Schema ein; ihre Kontextspannen enthalten den
+  projektrelativen Dateipfad. Webressourcen im Kontextinventar bleiben auf die
+  Einstiegsdatei begrenzt; Verifikationsergebnisse haben noch keine
+  Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen fließen in
   das gemeinsame Schema ein und behalten globale SQL-Namen; Views und APIs
   bleiben noch unvollständig. Auch die Integration mit `fmt`, `impact`, `edit`

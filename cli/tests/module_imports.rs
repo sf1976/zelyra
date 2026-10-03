@@ -154,6 +154,50 @@ fn context_exposes_the_transitive_module_graph_deterministically() {
 }
 
 #[test]
+fn context_reports_imported_table_spans_against_their_own_source_files() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\ntable customers { id: Id primary auto name: String(100) required }\nfn main() {}\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"context-test\" }\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "table invoices { id: Id primary auto number: String(40) required }\n",
+        ),
+    ]);
+    let output = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let tables = document["declarations"]["tables"].as_array().unwrap();
+    let imported = tables
+        .iter()
+        .find(|table| table["name"] == "invoices")
+        .unwrap();
+    assert_eq!(imported["span"]["file"], "src/invoices.zyl");
+    assert_eq!(imported["span"]["start"]["line"], 1);
+    assert_eq!(imported["fields"][1]["span"]["file"], "src/invoices.zyl");
+    assert_eq!(
+        document["declarations"]["databases"][0]["span"]["file"],
+        "src/database.zyl"
+    );
+    let entry = tables
+        .iter()
+        .find(|table| table["name"] == "customers")
+        .unwrap();
+    assert_eq!(entry["span"]["file"], "main.zyl");
+    assert_eq!(entry["span"]["start"]["line"], 3);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_rejects_import_cycles_and_private_symbols_before_execution() {
     let cycle = project(&[
         ("main.zyl", "import \"src/a.zyl\" as a\nfn main() {}\n"),

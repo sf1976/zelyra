@@ -371,14 +371,17 @@ pub fn total() -> money::Money {
 
 `check`, `build`, `run`, `context` und `verify` prüfen derzeit diesen
 Projektgraphen. Das maschinenlesbare Kontextdokument enthält jedes erreichbare
-Modul und seine sortierten Importkanten. Das Deklarationsinventar beschreibt
-weiterhin nur die Einstiegsdatei; `verify` prüft verknüpfte Funktionen, bewahrt
-in Verifikationsergebnissen aber noch keine Quellzuordnung pro Modul.
-Tabellen, Views, APIs und andere Anwendungsressourcen bleiben in der
-Einstiegsdatei. `fmt`, `impact`, `edit` und Datenbankbefehle arbeiten
-weiterhin nur mit der angegebenen Quelldatei. Diese Grenzen machen die
-Implementierung experimentell und noch nicht zu einem vollständigen
-Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen im
+Modul und seine sortierten Importkanten. Importierte Datenbankdefinitionen und
+Tabellen werden in das gemeinsame Projektschema übernommen; ihre
+Kontextspannen nennen unter `span.file` den projektrelativen Quelldateipfad.
+Das Kontextinventar für Webressourcen bleibt auf die Einstiegsdatei begrenzt.
+`verify` prüft verknüpfte Funktionen, bewahrt in Verifikationsergebnissen aber
+noch keine Quellzuordnung pro Modul. Views, APIs und andere
+Anwendungsressourcen bleiben in importierten Dateien unzulässig. `fmt`,
+`impact`, `edit` und Datenbankbefehle arbeiten weiterhin nur mit der
+angegebenen Quelldatei. Diese Grenzen machen die Implementierung experimentell
+und noch nicht zu einem vollständigen Mehrdatei-Projektmodell. Die
+vollständigen Anforderungen stehen im
 [Releaseplan 0.4.0](release-plans/0.4.0.de.md).
 
 Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination

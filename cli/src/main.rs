@@ -2156,9 +2156,15 @@ fn edit_error_document(path: &str, code: &str, message: &str) -> ExitCode {
     ExitCode::from(1)
 }
 
-fn context_span(source: &str, span: zelyra_ast::Span) -> Value {
-    let (end_line, end_column) = source_position(source, span.end);
+fn context_span(fallback_source: &str, span: zelyra_ast::Span) -> Value {
+    let source =
+        PROJECT_SOURCES.with(|sources| sources.borrow().get(span.source_id as usize).cloned());
+    let source_text = source
+        .as_ref()
+        .map_or(fallback_source, |source| source.text.as_str());
+    let (end_line, end_column) = source_position(source_text, span.end);
     json!({
+        "file": source.as_ref().map(|source| source.path.as_str()),
         "start": { "offset": span.start, "line": span.line, "column": span.column },
         "end": { "offset": span.end, "line": end_line, "column": end_column }
     })

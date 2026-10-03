@@ -433,13 +433,15 @@ pub fn total() -> money::Money {
 
 `check`, `build`, `run`, `context`, and `verify` currently validate this
 project graph. The machine-readable context document includes every reachable
-module and its sorted import edges. Its declaration inventory still describes
-the entry file; `verify` checks linked functions, but verification results do
-not yet preserve per-module source provenance. Tables, views, APIs, and other
-application-resource declarations remain in the entry file. `fmt`, `impact`,
-`edit`, and database commands remain source-file-local. These limits make the
-implementation experimental rather than a complete multi-file project model.
-The full requirements are tracked in the
+module and its sorted import edges. Imported database definitions and tables
+join the composed project schema; their context spans identify the
+project-relative source path in `span.file`. The context inventory for web
+resources remains entry-file-only. `verify` checks linked functions, but
+verification results do not yet preserve per-module source provenance. Views,
+APIs, and other application resources remain unsupported in imported files.
+`fmt`, `impact`, `edit`, and database commands remain source-file-local. These
+limits make the implementation experimental rather than a complete multi-file
+project model. The full requirements are tracked in the
 [0.4.0 release plan](release-plans/0.4.0.en.md).
 
 When a page collection declares search, filters, sorting, or pagination,
