@@ -562,6 +562,19 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
             && dependency["to"] == "table:users"
             && dependency["kind"] == "auth_table"
     }));
+    let plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "api:GET /api/status"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(plan["plan"]["selection_kind"], "resource");
+    assert_eq!(plan["plan"]["selected_resource"], "api:GET /api/status");
+    assert_eq!(plan["plan"]["selected_module"], "src/status_api.zyl");
     fs::remove_dir_all(directory).unwrap();
 }
 

@@ -79,8 +79,10 @@ architecture requirement for every phase, not a provider-specific feature.
   development branch also includes import edges and the currently supported
   public functions, types, and records per file (`modules[].exports`) in its
   deterministic module context. `zelyra module plan` also provides a read-only
-  closure of explicit imports plus statically recognized references from the
-  impact graph. It includes known page-to-view/component, page-SQL and
+  closure of explicit imports and statically recognized references from the
+  impact graph, starting either from a source module or a supported
+  page/API/CRUD/form/tableview resource root. It includes known
+  page-to-view/component, page-SQL and
   form/CRUD-action-SQL-to-table, API-handler-to-function,
   protected-resource-to-authentication, authentication-to-table,
   table-relation, and database-configuration edges, and reports references it

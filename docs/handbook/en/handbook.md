@@ -1957,6 +1957,20 @@ An experimental precursor for future module exports is:
 zelyra module plan main.zyl src/invoices.zyl
 ~~~
 
+You can also start the preview from a supported application resource instead
+of a source file. Quote IDs containing spaces so the CLI receives one
+argument:
+
+~~~sh
+zelyra module plan examples/modules/main.zyl 'page:/invoices'
+~~~
+
+Supported resource roots are `page:<path>`, `api:<METHOD> <path>`,
+`crud:<name>`, `form:<name>`, and `tableview:<name>`. The plan starts from the
+resource's owning source module and follows its known dependency closure; all
+declarations in that source module remain part of the preview. This is not yet
+an extracted resource-only application or a deployable unit.
+
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
 known page-to-view and page-to-component references, page and form/CRUD-action
@@ -8430,7 +8444,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Generates secure Argon2 password hashes |
 | `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
 | `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
-| `zelyra module plan <entry> <module>` | | Shows known import and resource-reference closure; not a deployment export |
+| `zelyra module plan <entry> <module-or-resource-id>` | | Shows known dependency closure from a source module or application resource; not a deployment export |
 
 ---
 

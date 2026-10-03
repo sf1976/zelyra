@@ -1935,6 +1935,20 @@ Ein weiterer experimenteller Vorläufer für spätere Modul-Exporte ist:
 zelyra module plan main.zyl src/invoices.zyl
 ~~~
 
+Die Vorschau kann statt bei einer Quelldatei auch bei einer unterstützten
+Anwendungsressource beginnen. IDs mit Leerzeichen müssen als ein Argument
+zitiert werden:
+
+~~~sh
+zelyra module plan examples/modules/main.zyl 'page:/invoices'
+~~~
+
+Unterstützte Ressourcen-Wurzeln sind `page:<pfad>`, `api:<METHODE> <pfad>`,
+`crud:<name>`, `form:<name>` und `tableview:<name>`. Der Plan startet beim
+Quellmodul der Ressource und verfolgt dessen bekannte Abhängigkeiten; alle
+Deklarationen derselben Quelldatei bleiben Teil der Vorschau. Das ist noch
+keine isolierte Ressource und keine eigenständig deploybare Anwendung.
+
 Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
@@ -8510,7 +8524,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Erzeugt sichere Argon2-Passworthashes |
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |
-| `zelyra module plan <entry> <module>` | | Zeigt den Abschluss bekannter Import- und Ressourcenverweise; kein Deploymentexport |
+| `zelyra module plan <entry> <module-or-resource-id>` | | Zeigt bekannte Abhängigkeiten ab Quelldatei oder Anwendungsressource; kein Deploymentexport |
 
 ---
 

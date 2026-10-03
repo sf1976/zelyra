@@ -88,7 +88,9 @@ Feature eines bestimmten Anbieters.
   Importkanten und die derzeit unterstützten öffentlichen Funktionen, Typen
   und Records je Quelldatei (`modules[].exports`). `zelyra module plan` zeigt
   zusätzlich schreibgeschützt den Abschluss expliziter Importe und statisch
-  erkannter Verweise aus dem Wirkungsgraphen. Enthalten sind bekannte Kanten
+  erkannter Verweise aus dem Wirkungsgraphen – wahlweise ab einer Quelldatei
+  oder einer unterstützten Seiten-/API-/CRUD-/Formular-/Tableview-Ressource.
+  Enthalten sind bekannte Kanten
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
   Authentifizierung, Authentifizierung zu Tabellen, Tabellenrelationen und
