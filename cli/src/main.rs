@@ -2454,6 +2454,10 @@ fn context_modules() -> Value {
                 "imports": module.imports.iter().map(|import| json!({
                     "alias": import.alias,
                     "path": import.path
+                })).collect::<Vec<_>>(),
+                "exports": module.exports.iter().map(|export| json!({
+                    "kind": export.kind,
+                    "name": export.name
                 })).collect::<Vec<_>>()
             }))
             .collect::<Vec<_>>())

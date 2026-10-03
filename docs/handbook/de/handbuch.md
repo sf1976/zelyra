@@ -1907,9 +1907,14 @@ Importierte Seiten werden projektweit als Routen zusammengesetzt;
 abgelehnt.
 Tableview-Abfragen laufen derzeit über MariaDB; SQLite-Tableviews werden noch
 nicht ausgeführt.
-`context --format=json` zeigt den deterministisch sortierten Modulgraphen sowie
-importierte Tabellen, `tableview`-Definitionen, Seiten, Views und Komponenten mit
-`span.file`-Quellpfad. Typ-,
+`context --format=json` zeigt den deterministisch sortierten Modulgraphen,
+Importkanten und pro Datei die derzeit unterstützten öffentlichen Funktionen,
+Typen und Records unter `modules[].exports`. Die Modul-Einträge enthalten auch
+Importalias und projektrelativen Quellpfad. Importierte Tabellen,
+`tableview`-Definitionen, Seiten, Views und Komponenten erscheinen mit ihrem
+`span.file`-Quellpfad in den Deklarationen. Diese Exportliste ist eine
+Introspektionshilfe; sie ist noch kein vollständiges Paket- oder
+Deploymentmanifest und macht UI-Ressourcen nicht öffentlich. Typ-,
 Capability- und Contract-Prüfungen bleiben aktiv; einige Template-Diagnosen
 brauchen noch eine vollständigere Zuordnung zur Quelldatei. `verify` bewahrt
 noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt` und `edit`
@@ -8114,7 +8119,7 @@ Release-Datum.
 | Bereich | Aktueller Schwerpunkt | Noch offene Ausbaustufen |
 |---|---|---|
 | Einstieg und Distribution | Quellcode- und Release-Installer (Linux/Windows x86_64 per SHA-256), `zelyra new/init` mit Starter-Templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker-/DB-Ports, `zelyra setup`, `zelyra doctor`, E2E-Tests | signierte Binaries, interaktiver Verbindungsassistent, Reverse-Proxy-Automatisierung |
-| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, Pattern Matching, Ausdrucks-Typed-Holes (`_`), kanonisches `zelyra fmt` | Module, Imports, Generics, Lücken in Deklarationen und vollständige formale Verifikation |
+| Sprache und Compiler | Lexer, Parser, AST/HIR, Typprüfung, `Option`, `Result`, Pattern Matching, Ausdrucks-Typed-Holes (`_`), kanonisches `zelyra fmt`; begrenzte projektlokale Importe sind im unveröffentlichten 0.4-Zweig experimentell | umfassendere Modul-Sichtbarkeit und Werkzeug-Integration, Generics, Lücken in Deklarationen und vollständige formale Verifikation |
 | Datenbankplattform | MariaDB, SQLite und PostgreSQL im Schema-CLI; typisiertes SQL | weitere Schemaabdeckung, robustere Produktionsabläufe |
 | Views und Web | Seiten, benannte Views, Komponenten, Default- und benannte Slots mit Fallback-Inhalten, sicherer Output | Themes, View-Vererbung, freie Styling-Komponenten |
 | Formulare und CRUD | Validierung, CSRF, Suche, Filter, Pagination, Aktionen, Soft Delete, gemeinsames CRUD-View-Feldprofil (`view.fields`) | permanente Löschung, Aufbewahrung, Archivierung und breitere View-Anpassung |

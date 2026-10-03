@@ -177,7 +177,7 @@ fn context_exposes_the_transitive_module_graph_deterministically() {
         ),
         (
             "src/invoice.zyl",
-            "import \"src/money.zyl\" as money\npub fn total() -> Int { return money::amount() }\n",
+            "import \"src/money.zyl\" as money\ntype LocalCache = Int\nfn helper() -> Int { return 0 }\npub type InvoiceId = Int\npub struct Invoice { id: InvoiceId }\npub fn total() -> Int { return money::amount() }\n",
         ),
         ("src/money.zyl", "pub fn amount() -> Int { return 25 }\n"),
     ]);
@@ -193,9 +193,9 @@ fn context_exposes_the_transitive_module_graph_deterministically() {
     assert_eq!(
         document["modules"],
         serde_json::json!([
-            {"path":"main.zyl","imports":[{"alias":"invoice","path":"src/invoice.zyl"}]},
-            {"path":"src/invoice.zyl","imports":[{"alias":"money","path":"src/money.zyl"}]},
-            {"path":"src/money.zyl","imports":[]}
+            {"path":"main.zyl","imports":[{"alias":"invoice","path":"src/invoice.zyl"}],"exports":[]},
+            {"path":"src/invoice.zyl","imports":[{"alias":"money","path":"src/money.zyl"}],"exports":[{"kind":"function","name":"total"},{"kind":"record","name":"Invoice"},{"kind":"type","name":"InvoiceId"}]},
+            {"path":"src/money.zyl","imports":[],"exports":[{"kind":"function","name":"amount"}]}
         ])
     );
     fs::remove_dir_all(directory).unwrap();

@@ -83,7 +83,11 @@ Feature eines bestimmten Anbieters.
   Ausgabe, eine schreibgeschützte Projektübersicht mit
   `context --format=json` und Format-Tests sind implementiert. Projektdateien
   verwenden projektrelative portable Pfade; weitere Befehle und eine
-  vollständige Secret-Redaction bleiben offen.
+  vollständige Secret-Redaction bleiben offen. Im unveröffentlichten
+  0.4-Entwicklungszweig enthält der deterministische Modulkontext außerdem
+  Importkanten und die derzeit unterstützten öffentlichen Funktionen, Typen
+  und Records je Quelldatei (`modules[].exports`). Das ist weder ein
+  vollständiges Exportmanifest noch Bestandteil des veröffentlichten 0.3.0.
 - [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
   Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und

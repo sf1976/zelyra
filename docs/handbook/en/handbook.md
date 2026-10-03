@@ -1930,10 +1930,14 @@ commands load the project graph. Database commands build the schema from the
 composed declarations; some schema diagnostics still lack complete module
 source attribution. `serve` can compose imported pages, MariaDB-backed
 tableviews, views, and components into the application; the tableview query
-runtime does not yet execute against SQLite. `context --format=json` reports the
-deterministically sorted module graph, including imported tables, tableviews,
-pages, views, and components with their project-relative source path in
-`span.file`.
+runtime does not yet execute against SQLite. `context --format=json` reports
+the deterministically sorted module graph, import edges, and the currently
+supported public functions, types, and records per file under
+`modules[].exports`. Module entries also include the import alias and
+project-relative source path. Imported tables, tableviews, pages, views, and
+components appear in declarations with their source path in `span.file`. This
+export list is an introspection aid, not a complete package or deployment
+manifest, and it does not make UI resources public.
 Some template diagnostics still need more complete per-module source
 attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`
@@ -8046,7 +8050,7 @@ is a development plan, not a release-date promise.
 | Area | Current focus | Open expansion |
 |---|---|---|
 | Beginner experience and distribution | source and release installers (Linux/Windows x86_64 via SHA-256), `zelyra new/init` with starter templates (`minimal`, `mariadb-crud`, `mariadb-auth`, `mariadb-business`), Docker/DB ports, `zelyra setup`, `zelyra doctor`, E2E tests | signed binaries, interactive connection assistant, reverse-proxy automation |
-| Language and compiler | lexer, parser, AST/HIR, type checking, `Option`, `Result`, pattern matching, expression typed holes (`_`), canonical `zelyra fmt` | modules, imports, generics, declaration holes, and complete formal verification |
+| Language and compiler | lexer, parser, AST/HIR, type checking, `Option`, `Result`, pattern matching, expression typed holes (`_`), canonical `zelyra fmt`; limited project-local imports are experimental in the unreleased 0.4 branch | broader module visibility and tooling integration, generics, declaration holes, and complete formal verification |
 | Database platform | MariaDB, SQLite, and PostgreSQL schema CLI; typed SQL | broader schema coverage and stronger production workflows |
 | Views and web | pages, named views, components, default and named slots with fallback content, safe output | themes, view inheritance, free-form styling components |
 | Forms and CRUD | validation, CSRF, search, filters, pagination, actions, soft delete, shared CRUD view field profile (`view.fields`) | permanent deletion, retention, archiving, and broader view customization |

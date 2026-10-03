@@ -75,7 +75,11 @@ architecture requirement for every phase, not a provider-specific feature.
   `check --format=json`, stable codes, source spans, deterministic output, a
   read-only `context --format=json` project summary, and machine-format tests
   are implemented. Project files use project-relative portable paths; other
-  commands and complete secret-redaction coverage remain.
+  commands and complete secret-redaction coverage remain. The unreleased 0.4
+  development branch also includes import edges and the currently supported
+  public functions, types, and records per file (`modules[].exports`) in its
+  deterministic module context. This is neither a complete export manifest
+  nor part of published 0.3.0.
 - [x] **Stage B — canonical source:** deterministic `zelyra fmt` formats
   parseable source, supports `--check` for CI, preserves comments and raw
   SQL/HTML bodies, and has idempotence and semantic-preservation coverage.

@@ -25,6 +25,13 @@ pub struct LoadedProject {
 pub struct ProjectModule {
     pub path: String,
     pub imports: Vec<ProjectImport>,
+    pub exports: Vec<ProjectExport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectExport {
+    pub kind: String,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,9 +131,47 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
                     .cmp(&right.alias)
                     .then_with(|| left.path.cmp(&right.path))
             });
+            let mut exports = module
+                .program
+                .functions
+                .iter()
+                .filter(|function| function.is_public)
+                .map(|function| ProjectExport {
+                    kind: "function".into(),
+                    name: function.name.clone(),
+                })
+                .chain(
+                    module
+                        .program
+                        .records
+                        .iter()
+                        .filter(|record| record.is_public)
+                        .map(|record| ProjectExport {
+                            kind: "record".into(),
+                            name: record.name.clone(),
+                        }),
+                )
+                .chain(
+                    module
+                        .program
+                        .types
+                        .iter()
+                        .filter(|definition| definition.is_public)
+                        .map(|definition| ProjectExport {
+                            kind: "type".into(),
+                            name: definition.name.clone(),
+                        }),
+                )
+                .collect::<Vec<_>>();
+            exports.sort_by(|left, right| {
+                left.kind
+                    .cmp(&right.kind)
+                    .then_with(|| left.name.cmp(&right.name))
+            });
             ProjectModule {
                 path: module.relative_path.clone(),
                 imports,
+                exports,
             }
         })
         .collect::<Vec<_>>();
@@ -1531,11 +1576,16 @@ mod tests {
                     imports: vec![ProjectImport {
                         alias: "math".into(),
                         path: "src/math.zyl".into()
-                    }]
+                    }],
+                    exports: vec![]
                 },
                 ProjectModule {
                     path: "src/math.zyl".into(),
-                    imports: vec![]
+                    imports: vec![],
+                    exports: vec![ProjectExport {
+                        kind: "function".into(),
+                        name: "add".into()
+                    }]
                 }
             ]
         );
