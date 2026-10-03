@@ -17,6 +17,8 @@ and native SQL available.
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
+The `main` branch workspace version is `0.3.0`. The published [`v0.3.0-rc.2` prerelease](https://github.com/sf1976/zelyra/releases/tag/v0.3.0-rc.2) is not a final 0.3.0 release; the latest stable release remains 0.2.0 and the final 0.3.0 gates remain open.
+
 ## What changed in 0.2.0
 
 This release adds reusable view layouts and named component slots,
@@ -91,7 +93,7 @@ other settings.
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [Release plan 0.3.0](docs/release-plans/0.3.0.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [Release plan 0.3.0](docs/release-plans/0.3.0.en.md) · [0.5.0 roadmap proposal](docs/release-plans/0.5.0.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 
