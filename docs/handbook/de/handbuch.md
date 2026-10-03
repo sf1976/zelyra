@@ -1924,6 +1924,19 @@ Quellzuordnung für Schemafehler aus importierten Dateien ist noch nicht in
 allen Fällen vollständig. Dieses Branch-Verhalten ist experimentell und nicht im
 veröffentlichten 0.3.0-Binary enthalten.
 
+Ein weiterer experimenteller Vorläufer für spätere Modul-Exporte ist:
+
+~~~sh
+zelyra module plan main.zyl src/invoices.zyl
+~~~
+
+Der JSON-Plan enthält das ausgewählte, vom Einstieg erreichbare Modul und folgt
+ausschließlich seinen expliziten transitiven Importkanten in stabiler
+Reihenfolge. Er ist schreibgeschützt und setzt `complete_deployment`
+ausdrücklich auf `false`: implizite globale Ressourcenverweise, Assets,
+Laufzeitkonfiguration, externe Dienste und Docker-Artefakte werden nicht
+ermittelt. Der Befehl exportiert oder startet keine Anwendung.
+
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
 verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen
 werden in der HTML-Deklaration derzeit nicht mit `ui::` qualifiziert:
@@ -8476,6 +8489,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Erzeugt sichere Argon2-Passworthashes |
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |
+| `zelyra module plan <entry> <module>` | | Zeigt den schreibgeschützten Quellcode-Abschluss; kein Deploymentexport |
 
 ---
 

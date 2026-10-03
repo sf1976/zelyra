@@ -2,7 +2,7 @@ use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env,
     fmt::Write as _,
     fs,
@@ -97,6 +97,7 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
+    eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl>` previews a source-only dependency closure");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
@@ -2462,6 +2463,103 @@ fn context_modules() -> Value {
             }))
             .collect::<Vec<_>>())
     })
+}
+
+fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
+    if arguments.next().as_deref() != Some("plan") {
+        usage();
+        return ExitCode::from(2);
+    }
+    let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
+        usage();
+        return ExitCode::from(2);
+    };
+    if arguments.next().is_some() {
+        usage();
+        return ExitCode::from(2);
+    }
+
+    let source = fs::read_to_string(&entry).unwrap_or_default();
+    begin_json_diagnostics(&entry, &source);
+    let validation = validate(&entry);
+    let modules = PROJECT_MODULES.with(|modules| modules.borrow().clone());
+    let mut plan = None;
+    if validation.is_ok() {
+        let selected = selected.replace('\\', "/");
+        let by_path = modules
+            .iter()
+            .map(|module| (module.path.as_str(), module))
+            .collect::<HashMap<_, _>>();
+        if !by_path.contains_key(selected.as_str()) {
+            diagnostic(
+                &entry,
+                "E-MOD-013",
+                &format!("module `{selected}` is not reachable from this project entry"),
+                1,
+                1,
+            );
+        } else {
+            let mut pending = vec![selected.clone()];
+            let mut included = BTreeSet::new();
+            let mut graph_is_complete = true;
+            while let Some(path) = pending.pop() {
+                if !included.insert(path.clone()) {
+                    continue;
+                }
+                let Some(module) = by_path.get(path.as_str()) else {
+                    diagnostic(
+                        &entry,
+                        "E-MOD-014",
+                        &format!("module dependency `{path}` is missing from the loaded graph"),
+                        1,
+                        1,
+                    );
+                    graph_is_complete = false;
+                    break;
+                };
+                pending.extend(module.imports.iter().map(|import| import.path.clone()));
+            }
+            if graph_is_complete {
+                let closure = included
+                    .iter()
+                    .filter_map(|path| by_path.get(path.as_str()).copied())
+                    .collect::<Vec<_>>();
+                plan = Some(json!({
+                    "kind": "explicit-import-closure",
+                    "closure_semantics": "transitive-imports-only",
+                    "selected_module": selected,
+                    "entry": context_entry(&entry),
+                    "source_files": included,
+                    "modules": closure.iter().map(|module| json!({
+                        "path": module.path,
+                        "imports": module.imports.iter().map(|import| json!({
+                            "alias": import.alias,
+                            "path": import.path
+                        })).collect::<Vec<_>>(),
+                        "exports": module.exports.iter().map(|export| json!({
+                            "kind": export.kind,
+                            "name": export.name
+                        })).collect::<Vec<_>>()
+                    })).collect::<Vec<_>>(),
+                    "complete_deployment": false,
+                    "note": "This read-only preview follows explicit import edges only. It is not a complete semantic dependency analysis, runnable application, or Docker export."
+                }));
+            }
+        }
+    }
+    let diagnostics = finish_json_diagnostics();
+    let success = plan.is_some() && diagnostics.is_empty();
+    print_machine_document(&machine_document(
+        "module plan",
+        success,
+        diagnostics,
+        [("plan".into(), plan.unwrap_or(Value::Null))],
+    ));
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
 
 fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
@@ -9197,6 +9295,9 @@ fn main() -> ExitCode {
     }
     if command == "context" {
         return context_command(args);
+    }
+    if command == "module" {
+        return module_command(args);
     }
     if command == "config" {
         return config_command(args);

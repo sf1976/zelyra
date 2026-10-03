@@ -1945,6 +1945,19 @@ analyzes the linked graph and marks spans with their source file. `fmt` and
 `edit` still process only the explicitly named source file. This branch
 behavior is experimental and is not included in the published 0.3.0 binary.
 
+An experimental precursor for future module exports is:
+
+~~~sh
+zelyra module plan main.zyl src/invoices.zyl
+~~~
+
+The JSON preview lists the selected reachable module and follows only its
+explicit transitive import edges in stable order. It is read-only and
+explicitly sets `complete_deployment` to `false`: implicit globally composed
+resource references, assets, runtime configuration, external services, and
+Docker artifacts are not resolved. The command does not export or run an
+application.
+
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:
 
@@ -8396,6 +8409,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Generates secure Argon2 password hashes |
 | `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
 | `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
+| `zelyra module plan <entry> <module>` | | Shows the read-only source closure; not a deployment export |
 
 ---
 

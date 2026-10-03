@@ -86,7 +86,9 @@ Feature eines bestimmten Anbieters.
   vollständige Secret-Redaction bleiben offen. Im unveröffentlichten
   0.4-Entwicklungszweig enthält der deterministische Modulkontext außerdem
   Importkanten und die derzeit unterstützten öffentlichen Funktionen, Typen
-  und Records je Quelldatei (`modules[].exports`). Das ist weder ein
+  und Records je Quelldatei (`modules[].exports`). `zelyra module plan` zeigt
+  zusätzlich schreibgeschützt den Abschluss expliziter Importkanten; implizite
+  globale Ressourcenverweise werden nicht aufgelöst. Das ist weder ein
   vollständiges Exportmanifest noch Bestandteil des veröffentlichten 0.3.0.
 - [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt

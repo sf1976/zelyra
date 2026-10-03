@@ -202,6 +202,85 @@ fn context_exposes_the_transitive_module_graph_deterministically() {
 }
 
 #[test]
+fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoices.zyl\" as invoices\nimport \"src/reports.zyl\" as reports\nfn main() {}\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "import \"src/money.zyl\" as money\npub fn total() -> Int { return money::amount() }\n",
+        ),
+        ("src/money.zyl", "pub fn amount() -> Int { return 42 }\n"),
+        ("src/reports.zyl", "pub fn count() -> Int { return 0 }\n"),
+    ]);
+    let result = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/invoices.zyl"],
+    );
+    let repeated = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/invoices.zyl"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert_eq!(result.stdout, repeated.stdout);
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["command"], "module plan");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["plan"]["kind"], "explicit-import-closure");
+    assert_eq!(
+        document["plan"]["closure_semantics"],
+        "transitive-imports-only"
+    );
+    assert_eq!(
+        document["plan"]["source_files"],
+        serde_json::json!(["src/invoices.zyl", "src/money.zyl"])
+    );
+    assert_eq!(
+        document["plan"]["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|module| module["path"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["src/invoices.zyl", "src/money.zyl"]
+    );
+    assert_eq!(document["plan"]["complete_deployment"], false);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_rejects_modules_outside_the_reachable_project_graph() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoices.zyl\" as invoices\nfn main() {}\n",
+        ),
+        ("src/invoices.zyl", "pub fn count() -> Int { return 0 }\n"),
+        ("src/unrelated.zyl", "pub fn other() -> Int { return 1 }\n"),
+    ]);
+    let result = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/unrelated.zyl"],
+    );
+    assert!(!result.status.success());
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(document["success"], false);
+    assert!(document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|diagnostic| diagnostic["code"] == "E-MOD-013"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn context_reports_imported_table_spans_against_their_own_source_files() {
     let directory = project(&[
         (
