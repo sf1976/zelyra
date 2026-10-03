@@ -1970,6 +1970,9 @@ Supported resource roots are `page:<path>`, `api:<METHOD> <path>`,
 resource's owning source module and follows its known dependency closure; all
 declarations in that source module remain part of the preview. This is not yet
 an extracted resource-only application or a deployable unit.
+The plan lists all recognized declarations in each included source file under
+`modules[].declarations`, in stable sorted order. This makes functions, types,
+records, and application resources co-located in the selected source visible.
 
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include

@@ -90,7 +90,8 @@ Feature eines bestimmten Anbieters.
   zusätzlich schreibgeschützt den Abschluss expliziter Importe und statisch
   erkannter Verweise aus dem Wirkungsgraphen – wahlweise ab einer Quelldatei
   oder einer unterstützten Seiten-/API-/CRUD-/Formular-/Tableview-Ressource.
-  Enthalten sind bekannte Kanten
+  `modules[].declarations` macht alle erkannten Deklarationen der einbezogenen
+  Quelldateien sichtbar. Enthalten sind bekannte Kanten
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
   Authentifizierung, Authentifizierung zu Tabellen, Tabellenrelationen und

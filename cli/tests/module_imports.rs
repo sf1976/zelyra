@@ -485,7 +485,7 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
         ),
         (
             "src/status_api.zyl",
-            "fn status() -> String { return \"ok\" }\napi GET \"/api/status\" { handler status requires auth permits \"status.read\" output String }\n",
+            "pub type StatusCode = Int\npub struct StatusPayload { status: String }\nfn status() -> String { return \"ok\" }\nfn unusedHelper() -> String { return \"co-located\" }\napi GET \"/api/status\" { handler status requires auth permits \"status.read\" output String }\n",
         ),
     ]);
     let check = run(&directory, &["check", "main.zyl"]);
@@ -575,6 +575,22 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
     assert_eq!(plan["plan"]["selection_kind"], "resource");
     assert_eq!(plan["plan"]["selected_resource"], "api:GET /api/status");
     assert_eq!(plan["plan"]["selected_module"], "src/status_api.zyl");
+    let api_module = plan["plan"]["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|module| module["path"] == "src/status_api.zyl")
+        .unwrap();
+    assert_eq!(
+        api_module["declarations"],
+        serde_json::json!([
+            "api:GET /api/status",
+            "function:status",
+            "function:unusedHelper",
+            "record:StatusPayload",
+            "type:StatusCode"
+        ])
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 

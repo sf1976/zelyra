@@ -1948,6 +1948,10 @@ Unterstützte Ressourcen-Wurzeln sind `page:<pfad>`, `api:<METHODE> <pfad>`,
 Quellmodul der Ressource und verfolgt dessen bekannte Abhängigkeiten; alle
 Deklarationen derselben Quelldatei bleiben Teil der Vorschau. Das ist noch
 keine isolierte Ressource und keine eigenständig deploybare Anwendung.
+Unter `modules[].declarations` listet der Plan alle erkannten Deklarationen
+der jeweils einbezogenen Quelldateien stabil sortiert auf. So ist sichtbar,
+welche Funktionen, Typen, Records und Anwendungsressourcen durch die gemeinsame
+Quelldatei zusätzlich enthalten sind.
 
 Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.

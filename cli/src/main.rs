@@ -2488,6 +2488,12 @@ fn module_declaration_owners(program: &zelyra_ast::Program) -> HashMap<String, S
     for tableview in &program.tableviews {
         insert(format!("tableview:{}", tableview.name), tableview.span);
     }
+    for definition in &program.types {
+        insert(format!("type:{}", definition.name), definition.span);
+    }
+    for record in &program.records {
+        insert(format!("record:{}", record.name), record.span);
+    }
     for page in &program.pages {
         insert(format!("page:{}", page.path), page.span);
     }
@@ -2767,7 +2773,8 @@ fn module_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                         "exports": module.exports.iter().map(|export| json!({
                             "kind": export.kind,
                             "name": export.name
-                        })).collect::<Vec<_>>()
+                        })).collect::<Vec<_>>(),
+                        "declarations": module.declarations
                     })).collect::<Vec<_>>(),
                     "resource_dependencies": resource_dependencies.values().cloned().collect::<Vec<_>>(),
                     "unresolved_references": unresolved_references.iter().map(|(module, from, to)| json!({

@@ -26,6 +26,7 @@ pub struct ProjectModule {
     pub path: String,
     pub imports: Vec<ProjectImport>,
     pub exports: Vec<ProjectExport>,
+    pub declarations: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -172,6 +173,7 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
                 path: module.relative_path.clone(),
                 imports,
                 exports,
+                declarations: module_declarations(&module.program),
             }
         })
         .collect::<Vec<_>>();
@@ -181,6 +183,90 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
         sources: loader.sources,
         modules,
     })
+}
+
+fn module_declarations(program: &Program) -> Vec<String> {
+    let mut declarations = Vec::new();
+    declarations.extend(
+        program
+            .databases
+            .iter()
+            .map(|declaration| format!("database:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .tables
+            .iter()
+            .map(|declaration| format!("table:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .tableviews
+            .iter()
+            .map(|declaration| format!("tableview:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .types
+            .iter()
+            .map(|declaration| format!("type:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .records
+            .iter()
+            .map(|declaration| format!("record:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .views
+            .iter()
+            .map(|declaration| format!("view:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .components
+            .iter()
+            .map(|declaration| format!("component:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .pages
+            .iter()
+            .map(|declaration| format!("page:{}", declaration.path)),
+    );
+    declarations.extend(
+        program
+            .forms
+            .iter()
+            .map(|declaration| format!("form:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .cruds
+            .iter()
+            .map(|declaration| format!("crud:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .auth
+            .iter()
+            .map(|declaration| format!("auth:{}", declaration.name)),
+    );
+    declarations.extend(
+        program
+            .apis
+            .iter()
+            .map(|declaration| format!("api:{} {}", declaration.method, declaration.path)),
+    );
+    declarations.extend(
+        program
+            .functions
+            .iter()
+            .map(|declaration| format!("function:{}", declaration.name)),
+    );
+    declarations.sort();
+    declarations
 }
 
 impl Loader {
@@ -1669,7 +1755,8 @@ mod tests {
                         alias: "math".into(),
                         path: "src/math.zyl".into()
                     }],
-                    exports: vec![]
+                    exports: vec![],
+                    declarations: vec!["function:main".into()]
                 },
                 ProjectModule {
                     path: "src/math.zyl".into(),
@@ -1677,7 +1764,8 @@ mod tests {
                     exports: vec![ProjectExport {
                         kind: "function".into(),
                         name: "add".into()
-                    }]
+                    }],
+                    declarations: vec!["function:add".into(), "function:double".into()]
                 }
             ]
         );
