@@ -1,0 +1,14 @@
+form InvoiceHeaderCreate -> invoice_headers {
+    fields {
+        invoice_number
+        total_cents
+    }
+}
+
+crud InvoiceHeader -> invoice_headers {
+    list {
+        id
+        invoice_number
+        total_cents
+    }
+}

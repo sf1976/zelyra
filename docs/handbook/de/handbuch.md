@@ -1891,7 +1891,9 @@ fn main() {
 ~~~
 
 Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
-`tableview`-Definitionen, Seiten, benannte Views und typisierte Komponenten enthalten.
+`tableview`-Definitionen, Seiten, benannte Views, typisierte Komponenten,
+Formulare und CRUD-Deklarationen enthalten. API- und Authentifizierungs-
+definitionen müssen weiterhin in der Einstiegsdatei stehen.
 Funktionen, Typen und Records brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
 Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
 verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
@@ -1901,7 +1903,8 @@ Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
 
 `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und die
 Datenbankbefehle laden den Projektgraphen. `serve` kann importierte
-`tableview`s, Seiten, Views und Komponenten in die Anwendung integrieren.
+`tableview`s, Seiten, Views, Komponenten, Formulare und CRUD-Ressourcen in die
+Anwendung integrieren.
 Importierte Seiten werden projektweit als Routen zusammengesetzt;
 überschneidende Seitenpfade werden mit Verweis auf die importierte Quelldatei
 abgelehnt.
@@ -1911,7 +1914,8 @@ nicht ausgeführt.
 Importkanten und pro Datei die derzeit unterstützten öffentlichen Funktionen,
 Typen und Records unter `modules[].exports`. Die Modul-Einträge enthalten auch
 Importalias und projektrelativen Quellpfad. Importierte Tabellen,
-`tableview`-Definitionen, Seiten, Views und Komponenten erscheinen mit ihrem
+`tableview`-Definitionen, Seiten, Views, Komponenten, Formulare und CRUD-
+Definitionen erscheinen mit ihrem
 `span.file`-Quellpfad in den Deklarationen. Diese Exportliste ist eine
 Introspektionshilfe; sie ist noch kein vollständiges Paket- oder
 Deploymentmanifest und macht UI-Ressourcen nicht öffentlich. Typ-,
@@ -1933,7 +1937,8 @@ zelyra module plan main.zyl src/invoices.zyl
 Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
-Page-SQL zu Tabellen, erkannte Tabellenrelationen und Datenbankkonfiguration.
+Page-SQL sowie Formularen/CRUD zu Tabellen, erkannte Tabellenrelationen und
+Datenbankkonfiguration.
 Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische
 oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
 Dienste und Docker-Artefakte sind nicht enthalten. `complete_deployment` bleibt
@@ -1976,6 +1981,17 @@ page "/" {
 Mit `zelyra serve main.zyl` wird die Seite aus dem verknüpften Projektgraphen
 gerendert. Die vollständige Beispieldatei mit Logik- und Datenbankmodulen liegt
 unter `examples/modules/`.
+Sie enthält außerdem `src/invoice_admin.zyl` mit importiertem Formular und
+CRUD. Prüfen und ausführen kannst du sie mit `zelyra check examples/modules/main.zyl`
+und `zelyra run examples/modules/main.zyl` (Ausgabe: `25`). Der experimentelle
+Modulplan für die Verwaltung lautet:
+
+~~~sh
+zelyra module plan examples/modules/main.zyl src/invoice_admin.zyl
+~~~
+
+Er zeigt die Form-/CRUD-Abhängigkeit zur Rechnungstabelle und die separate
+Datenbank-Konfigurationsdatei. Er ist weiterhin kein Docker-Export.
 
 Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
 einer Funktionssignatur verwendet:

@@ -392,7 +392,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules support functions, type aliases, records, tables, tableviews, pages, views, and components; forms, CRUD, APIs, and authentication resources must remain in the entry file".into(),
+                message: "imported modules support functions, types, records, tables, tableviews, pages, views, components, forms, and CRUD; APIs and authentication resources must remain in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -487,6 +487,45 @@ fn link_modules(
             function.name = internal_name(module_name, &function.name);
             linked.functions.push(function);
         }
+        for mut form in module.program.forms.clone() {
+            for field in &mut form.fields {
+                if let Some(ty) = &mut field.ty {
+                    linker.rewrite_type(ty, field.span)?;
+                }
+            }
+            for action in &mut form.actions {
+                linker.rewrite_action_types(action)?;
+                rewrite_action_functions(
+                    action,
+                    path,
+                    module_name,
+                    &module.imports,
+                    &function_sets,
+                    &module_names,
+                    &root_functions,
+                    &module.relative_path,
+                    false,
+                )?;
+            }
+            linked.forms.push(form);
+        }
+        for mut crud in module.program.cruds.clone() {
+            for action in &mut crud.actions {
+                linker.rewrite_action_types(action)?;
+                rewrite_action_functions(
+                    action,
+                    path,
+                    module_name,
+                    &module.imports,
+                    &function_sets,
+                    &module_names,
+                    &root_functions,
+                    &module.relative_path,
+                    false,
+                )?;
+            }
+            linked.cruds.push(crud);
+        }
         for mut tableview in module.program.tableviews.clone() {
             if linked
                 .tableviews
@@ -573,10 +612,7 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 }
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.forms.is_empty()
-        || !program.cruds.is_empty()
-        || !program.auth.is_empty()
-        || !program.apis.is_empty()
+    !program.auth.is_empty() || !program.apis.is_empty()
 }
 
 fn page_routes_overlap(left: &str, right: &str) -> bool {
@@ -600,12 +636,44 @@ fn page_routes_overlap(left: &str, right: &str) -> bool {
 
 fn first_unsupported_import_span(program: &Program) -> Option<Span> {
     program
-        .forms
+        .auth
         .first()
         .map(|item| item.span)
-        .or_else(|| program.cruds.first().map(|item| item.span))
-        .or_else(|| program.auth.first().map(|item| item.span))
         .or_else(|| program.apis.first().map(|item| item.span))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rewrite_action_functions(
+    action: &mut FormAction,
+    module_path: &Path,
+    module_name: &str,
+    imports: &HashMap<String, PathBuf>,
+    function_sets: &HashMap<PathBuf, HashMap<String, bool>>,
+    module_names: &HashMap<PathBuf, String>,
+    root_functions: &HashMap<String, bool>,
+    display_path: &str,
+    is_root: bool,
+) -> Result<(), ProjectError> {
+    let mut block = Block {
+        statements: std::mem::take(&mut action.statements),
+        span: action.span,
+    };
+    rewrite_block(
+        &mut block,
+        module_path,
+        module_name,
+        imports,
+        function_sets
+            .get(module_path)
+            .expect("current module functions are indexed"),
+        function_sets,
+        module_names,
+        root_functions,
+        display_path,
+        is_root,
+    )?;
+    action.statements = block.statements;
+    Ok(())
 }
 
 struct TypeLinker<'a> {
@@ -666,18 +734,22 @@ impl TypeLinker<'_> {
             }
         }
         for form in &mut program.forms {
-            for field in &mut form.fields {
-                if let Some(ty) = &mut field.ty {
-                    self.rewrite_type(ty, field.span)?;
+            if form.span.source_id == source_id {
+                for field in &mut form.fields {
+                    if let Some(ty) = &mut field.ty {
+                        self.rewrite_type(ty, field.span)?;
+                    }
                 }
-            }
-            for action in &mut form.actions {
-                self.rewrite_action_types(action)?;
+                for action in &mut form.actions {
+                    self.rewrite_action_types(action)?;
+                }
             }
         }
         for crud in &mut program.cruds {
-            for action in &mut crud.actions {
-                self.rewrite_action_types(action)?;
+            if crud.span.source_id == source_id {
+                for action in &mut crud.actions {
+                    self.rewrite_action_types(action)?;
+                }
             }
         }
         for api in &mut program.apis {
@@ -1739,7 +1811,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_still_reject_forms_and_other_unsupported_resources() {
+    fn imported_files_still_reject_api_and_auth_resources() {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1747,12 +1819,37 @@ mod tests {
             ),
             (
                 "src/domain.zyl",
-                "form Contact -> customers { fields { name } }\n",
+                "fn list_contacts() -> Int { return 0 }\napi GET \"/contacts\" { handler list_contacts output Int }\n",
             ),
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("forms"));
+        assert!(error.message.contains("APIs and authentication"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imported_forms_and_crud_join_the_composed_application() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/models.zyl\" as models\nimport \"src/customers.zyl\" as customers\nfn main() {}\n",
+            ),
+            (
+                "src/models.zyl",
+                "table customers { id: Id primary auto name: String(100) required }\n",
+            ),
+            (
+                "src/customers.zyl",
+                "form CustomerCreate -> customers { fields { name } }\ncrud Customer -> customers { list { id name } }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        assert_eq!(loaded.program.forms.len(), 1);
+        assert_eq!(loaded.program.forms[0].name, "CustomerCreate");
+        assert_eq!(loaded.program.cruds.len(), 1);
+        assert_eq!(loaded.program.cruds[0].name, "Customer");
+        assert!(check(&loaded.program).is_ok());
         cleanup(&directory);
     }
 

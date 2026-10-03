@@ -363,6 +363,87 @@ fn module_plan_includes_separate_database_configuration_source() {
 }
 
 #[test]
+fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/models.zyl\" as models\nimport \"src/customers.zyl\" as customers\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/models.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/customers.zyl",
+            "form CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } }\nfn normalize_name() -> String { return \"New customer\" }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    let context: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(
+        context["declarations"]["forms"][0]["span"]["file"],
+        "src/customers.zyl"
+    );
+    assert_eq!(
+        context["declarations"]["cruds"][0]["span"]["file"],
+        "src/customers.zyl"
+    );
+    let result = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/customers.zyl"],
+    );
+    let repeated = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/customers.zyl"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert_eq!(result.stdout, repeated.stdout);
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["source_files"],
+        serde_json::json!(["src/customers.zyl", "src/database.zyl", "src/models.zyl"])
+    );
+    assert_eq!(document["plan"]["database"]["required"], true);
+    let dependencies = document["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap();
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "form:CustomerCreate"
+            && dependency["to"] == "table:customers"
+            && dependency["kind"] == "table"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "crud:Customer"
+            && dependency["to"] == "table:customers"
+            && dependency["kind"] == "table"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["kind"] == "database_configuration"
+            && dependency["to_module"] == "src/database.zyl"
+    }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_rejects_modules_outside_the_reachable_project_graph() {
     let directory = project(&[
         (

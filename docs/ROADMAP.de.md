@@ -216,8 +216,9 @@ Feature eines bestimmten Anbieters.
   vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
   globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
-  werden abgelehnt. Formulare, CRUD, APIs und Authentifizierungsressourcen
-  bleiben in Importen unzulässig. MariaDB-gestützte `tableview`s werden nun
+  werden abgelehnt. Formulare und CRUD-Deklarationen werden aus importierten
+  Dateien zusammengesetzt; API- und Authentifizierungsressourcen bleiben dort
+  weiterhin unzulässig. MariaDB-gestützte `tableview`s werden nun
   zusammengesetzt und bereitgestellt.
   Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema.
   Ihre Diagnosen brauchen noch eine vollständige Modul-Quellzuordnung.

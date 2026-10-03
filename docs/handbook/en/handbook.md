@@ -1915,8 +1915,9 @@ names are rejected. Tableviews, views, and components are composed from
 imported files
 under their declared, unqualified names; they do not yet have `pub` visibility
 syntax. Imported pages join the application's route set; overlapping page
-patterns are rejected with their source location. Forms, CRUD
-declarations, APIs, and authentication resources remain entry-file-only.
+patterns are rejected with their source location. Forms and CRUD declarations
+also compose from imported files. API and authentication resources remain
+entry-file-only.
 Function, type, and
 record declarations are private by default; tables and the database
 definition are included by importing their file. Public records cannot expose
@@ -1929,13 +1930,15 @@ for the composed application. The runnable example is in
 commands load the project graph. Database commands build the schema from the
 composed declarations; some schema diagnostics still lack complete module
 source attribution. `serve` can compose imported pages, MariaDB-backed
-tableviews, views, and components into the application; the tableview query
+tableviews, views, components, forms, and CRUD resources into the application;
+the tableview query
 runtime does not yet execute against SQLite. `context --format=json` reports
 the deterministically sorted module graph, import edges, and the currently
 supported public functions, types, and records per file under
 `modules[].exports`. Module entries also include the import alias and
-project-relative source path. Imported tables, tableviews, pages, views, and
-components appear in declarations with their source path in `span.file`. This
+project-relative source path. Imported tables, tableviews, pages, views,
+components, forms, and CRUD declarations appear with their source path in
+`span.file`. This
 export list is an introspection aid, not a complete package or deployment
 manifest, and it does not make UI resources public.
 Some template diagnostics still need more complete per-module source
@@ -1953,8 +1956,9 @@ zelyra module plan main.zyl src/invoices.zyl
 
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
-known page-to-view and page-to-component references, page-SQL-to-table edges,
-recognized table relations, and database configuration. Unresolved references
+known page-to-view and page-to-component references, page-SQL-to-table and
+form/CRUD-to-table edges, recognized table relations, and database
+configuration. Unresolved references
 appear in `unresolved_references`. Dynamic or unmodeled dependencies, assets,
 runtime configuration, external services, and Docker artifacts are not
 included. `complete_deployment` remains explicitly `false`; the command does
@@ -1995,6 +1999,17 @@ page "/" {
 
 Run `zelyra serve main.zyl` to render the linked project. The complete example
 with logic and database modules is in `examples/modules/`.
+It also contains `src/invoice_admin.zyl` with an imported form and CRUD
+resource. Check and run it with `zelyra check examples/modules/main.zyl` and
+`zelyra run examples/modules/main.zyl` (output: `25`). The experimental plan
+for the admin module is:
+
+~~~sh
+zelyra module plan examples/modules/main.zyl src/invoice_admin.zyl
+~~~
+
+It shows the form/CRUD dependency on the invoice table and the separate
+database configuration file. It is still not a Docker export.
 
 A module can export a domain record for another module to use in a function
 signature:
