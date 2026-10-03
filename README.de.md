@@ -15,7 +15,9 @@ und natives SQL bleiben jederzeit möglich.
 >
 > Zelyra 0.2.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
-> begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
+ > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
+
+Der Workspace auf `main` hat die Version `0.3.0`. Das veröffentlichte [`v0.3.0-rc.2`-Vorab-Release](https://github.com/sf1976/zelyra/releases/tag/v0.3.0-rc.2) ist kein finales 0.3.0; stabil ist weiterhin 0.2.0 und die finalen 0.3.0-Abnahmekriterien sind noch offen.
 
 ## Was ist neu in 0.2.0?
 
@@ -96,7 +98,7 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md) · [English](docs/database-compatibility.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.3.0](docs/release-plans/0.3.0.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.3.0](docs/release-plans/0.3.0.de.md) · [0.5.0-Roadmapentwurf](docs/release-plans/0.5.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
