@@ -269,6 +269,8 @@ ZELYRA_DB_HOST_PORT={database_host_port}
 ZELYRA_LANGUAGE=de
 ZELYRA_LEVEL=learn
 ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
+ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
+ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -650,6 +652,8 @@ console = false
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
       ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
+      ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}
+      ZELYRA_DB_QUERY_TIMEOUT_SECS: ${ZELYRA_DB_QUERY_TIMEOUT_SECS:-30}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -3318,6 +3322,8 @@ ZELYRA_HOST_PORT=18080
 # Set DATABASE_URL to your MariaDB connection; never commit its real password.
 # DATABASE_URL=mariadb://USER:PASSWORD@host.docker.internal:3306/DATABASE
 DATABASE_URL=
+ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
+ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 "#;
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
             for (name, contents) in [
@@ -12052,6 +12058,13 @@ mod tests {
         assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
         assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={host_port}")));
         assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
+        assert!(env_example.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
+        assert!(env_example.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
+        assert!(compose
+            .contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}"));
+        assert!(
+            compose.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS: ${ZELYRA_DB_QUERY_TIMEOUT_SECS:-30}")
+        );
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
         assert!(compose.contains(&format!(
             "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"

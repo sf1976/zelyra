@@ -259,6 +259,28 @@ this purpose; Compose injects it, or it must be exported before invocation.
 `zelyra doctor --env-file <file>` specifically reads `DATABASE_URL` from that
 file for its read-only check.
 
+## MariaDB timeouts in the 0.4 development branch
+
+These settings exist in the unreleased 0.4 development branch; the stable
+0.3.0 binary does not support them. They are read only from the process
+environment. Zelyra does not load a `.env` file for these settings and has no
+matching `zelyra.toml` option. A Docker Compose service can receive them from
+Compose's `.env`; a running server must be restarted to inherit changed process
+values.
+
+| Variable | Default | Allowed | Precedence / source | Secret | Affected paths and tests |
+|---|---:|---:|---|---|---|
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | MariaDB connection establishment for database and runtime calls; bounds in `database/src/lib.rs` |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` seconds | integer `1`–`3600` | process environment; otherwise default | no | MariaDB runtime statements and read-only queries; not `db apply`/DDL; unit and MariaDB matrix test |
+
+Invalid values produce a secret-free configuration diagnostic; the supplied
+value is not echoed. The MariaDB client receives `--skip-reconnect`, so a lost
+connection cannot silently reconnect or replay a statement. MariaDB enforces
+the statement limit server-side. It does not bound large-result transfer or
+the full response/process lifecycle. DDL is currently excluded because an
+aborted schema command may leave partial state. There is still no connection
+pool or automatic retry.
+
 ## Runtime and authentication
 
 | Variable | Use | Security |
@@ -276,6 +298,7 @@ diagnostics, context output, or logs.
 | Variable | Status | Use |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implemented | user-local destination for install scripts |
+| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL used only by the timeout integration test; local/isolated test database only |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | test/development tool | root password for generated Docker E2E tests |

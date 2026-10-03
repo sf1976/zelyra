@@ -6388,6 +6388,32 @@ Die Verbindung kommt ausschließlich aus der Prozessumgebung:
 export DATABASE_URL='mariadb://zelyra:HIER_LOKALES_PASSWORT_EINTRAGEN@127.0.0.1:3307/adressverwaltung'
 ~~~
 
+🧪 **Nur im unveröffentlichten 0.4-Entwicklungszweig:** Der MariaDB-Client
+erhält ein Verbindungszeitlimit und native Runtime-Abfragen ein
+MariaDB-Statement-Zeitlimit. Beide Werte können über die Prozessumgebung
+angepasst werden:
+
+~~~bash
+export ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
+export ZELYRA_DB_QUERY_TIMEOUT_SECS=30
+~~~
+
+Der Standard für den Verbindungsaufbau beträgt 10 Sekunden; erlaubt sind
+Ganzzahlen von 1 bis 300. Das Statement-Limit beträgt standardmäßig 30 Sekunden
+und akzeptiert 1 bis 3600. Ungültige Werte werden abgelehnt, ohne den Eingabewert
+in die Diagnose aufzunehmen. Das Statement-Limit wird von MariaDB selbst
+durchgesetzt; es ist kein allgemeines Zeitlimit für das Übertragen sehr großer
+Ergebnisdaten. Schemaänderungen durch `db apply` erhalten dieses
+Statement-Limit derzeit nicht, damit ein abgebrochener DDL-Befehl nicht als
+sicher zurückgerollt dargestellt wird.
+
+Der CLI-Aufruf setzt außerdem `--skip-reconnect`: Der MariaDB-Client darf eine
+abgebrochene Verbindung nicht unbemerkt neu herstellen und ein Statement
+automatisch wiederholen. Zelyra implementiert hier keine automatischen Retries
+und keinen Connection-Pool; jede DB-Operation startet weiterhin einen
+MariaDB-Client-Prozess. Der veröffentlichte Stand `0.3.0` unterstützt diese
+Timeout-Optionen noch nicht.
+
 ⚠️ Zelyra lädt `.env` derzeit **nicht automatisch**. Eine `.env` ist eine
 sichere lokale Ablage, aber die Variablen müssen vor dem CLI-Aufruf in die
 Prozessumgebung gelangen. Siehe Abschnitt 16.
@@ -7666,6 +7692,8 @@ zelyra config main.zyl --format=json
 | `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container | nein |
 | `ZELYRA_HOST_PORT` | `3000` (oder autom. freier Port) | lokal veröffentlichter Webport | nein |
 | `ZELYRA_DB_HOST_PORT` | `3306` (oder autom. freier Port) | lokal veröffentlichter MariaDB-Port | nein |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | 0.4-Entwicklungszweig: `10` | MariaDB-Verbindungszeitlimit in Sekunden; gültig `1`–`300` | nein |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | 0.4-Entwicklungszweig: `30` | MariaDB-Runtime-Statement-Limit in Sekunden; gültig `1`–`3600`; kein Pool- oder Ergebnisübertragungs-Limit | nein |
 | `DATABASE_URL` | projektabhängig | MariaDB-Verbindungs-URI (`mariadb://user:pass@host:port/db`) | ja |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname | nein |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer | nein |

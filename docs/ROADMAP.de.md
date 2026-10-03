@@ -311,7 +311,17 @@ Feature eines bestimmten Anbieters.
   SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
   Änderungen bleiben nicht unterstützt. Allgemeine Zeilenschätzungen,
   Lock-Warnungen, Daten-Backfill-Pläne und Wartungsfenster bleiben geplant.
-- [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
+- [~] Der Entwicklungszweig begrenzt jetzt den MariaDB-Verbindungsaufbau
+  (Standard 10 s; zulässig 1–300) und Runtime-/Lese-Statements serverseitig
+  (Standard 30 s; zulässig 1–3600), lehnt ungültige Werte ohne Ausgabe des
+  Eingabewerts ab und deaktiviert transparentes Client-Reconnect. Der
+  Timeout-Integrationstest ist lokal gegen eine isolierte MariaDB 11.4 geprüft;
+  die CI-Kompatibilitätsmatrix muss noch alle unterstützten Serverversionen
+  durchlaufen. DDL wird nicht per Statement-Abbruch unterbrochen; die
+  Ergebnisübertragung ist nicht global
+  begrenzt. Das ist nicht Teil von 0.3.0 und ergänzt kein Pooling/Retry.
+  Native Pools, definierte Abbruchzustände, Antwortfristen und Health Checks
+  bleiben offen.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
   einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.

@@ -288,8 +288,16 @@ architecture requirement for every phase, not a provider-specific feature.
   fails closed if rows need repair. SQLite nullability and type/FK/unique-
   constraint alterations remain unsupported. General row estimates, lock
   warnings, data backfill plans, and maintenance-window planning remain planned.
-- [ ] Connection pooling, retry policies, timeouts, cancellation, and health
-  checks.
+- [~] The development branch now bounds MariaDB connection establishment
+  (default 10 s; allowed 1–300) and server-side runtime/read-query statements
+  (default 30 s; allowed 1–3600), rejects invalid values without echoing them,
+  and disables transparent client reconnect. The timeout integration test is
+  verified against isolated MariaDB 11.4 locally; the CI compatibility matrix
+  still needs to run against all supported server versions. DDL is not
+  statement-cancelled; response transfer is
+  not globally bounded. This is not in 0.3.0 and does not add pooling/retries.
+  Native pooling, known cancellation states, response deadlines, and health
+  checks remain open.
 - [ ] Streaming large results and bounded memory behavior.
 - [ ] N+1 query detection, query-plan hints, slow-query diagnostics, and
   application-owner-controlled, locally inspectable query observability.

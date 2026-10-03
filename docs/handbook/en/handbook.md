@@ -6426,6 +6426,29 @@ Supply the connection only through the process environment:
 export DATABASE_URL='mariadb://zelyra:ENTER_A_LOCAL_PASSWORD_HERE@127.0.0.1:3307/address_book'
 ~~~
 
+🧪 **Unreleased 0.4 development branch only:** the MariaDB client receives a
+connection timeout, and native runtime queries receive a MariaDB statement
+timeout. Override them through the process environment:
+
+~~~bash
+export ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
+export ZELYRA_DB_QUERY_TIMEOUT_SECS=30
+~~~
+
+Connection establishment defaults to 10 seconds and accepts integers from 1
+to 300. The statement limit defaults to 30 seconds and accepts 1 to 3600.
+Invalid values are rejected without echoing the supplied value. MariaDB itself
+enforces the statement limit; it is not a general deadline for transferring a
+very large result set. Schema changes performed by `db apply` do not receive
+this statement limit yet, so a cancelled DDL operation is never described as
+safely rolled back.
+
+The CLI also sets `--skip-reconnect`: the MariaDB client must not silently
+reconnect after a lost connection and automatically replay a statement. Zelyra
+does not implement automatic retries or a connection pool here; each database
+operation still starts a MariaDB client process. The published `0.3.0` release
+does not yet support these timeout options.
+
 ⚠️ Zelyra does **not** load `.env` automatically. It is a safe local place to
 store values, but the process must receive the variables before the CLI runs;
 see section 16.
@@ -7628,6 +7651,8 @@ zelyra config main.zyl --format=json
 | `ZELYRA_WEB_PORT` | `3000` | Port of internal web server inside container | no |
 | `ZELYRA_HOST_PORT` | `3000` (or auto-selected free port) | Locally published web port | no |
 | `ZELYRA_DB_HOST_PORT` | `3306` (or auto-selected free port) | Locally published MariaDB port | no |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | 0.4 development branch: `10` | MariaDB connection timeout in seconds; valid `1`–`300` | no |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | 0.4 development branch: `30` | MariaDB runtime statement limit in seconds; valid `1`–`3600`; not a pool or result-transfer limit | no |
 | `DATABASE_URL` | project-dependent | MariaDB connection URI (`mariadb://user:pass@host:port/db`) | yes |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: database name | no |
 | `MARIADB_USER` | `zelyra` | Compose: application user | no |

@@ -378,6 +378,8 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     assert!(dockerfile.contains("git -C /zelyra fetch --depth=1 origin \"$ZELYRA_REF\""));
     let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
     assert!(env_example.contains("DATABASE_URL="));
+    assert!(env_example.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
+    assert!(env_example.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
     assert!(!env_example.contains("must-not-be-copied"));
     assert!(!env_example.contains("example-secret"));
 

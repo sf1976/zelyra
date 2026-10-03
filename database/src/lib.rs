@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fmt;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -1391,6 +1392,87 @@ pub struct DatabaseError {
     pub message: String,
 }
 
+const MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS: u32 = 10;
+const MARIADB_MAX_CONNECT_TIMEOUT_SECS: u32 = 300;
+const MARIADB_DEFAULT_QUERY_TIMEOUT_SECS: u32 = 30;
+const MARIADB_MAX_QUERY_TIMEOUT_SECS: u32 = 3600;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MariaDbTimeouts {
+    connect_seconds: u32,
+    query_seconds: u32,
+}
+
+impl MariaDbTimeouts {
+    fn from_env() -> Result<Self, DatabaseError> {
+        let connect_value = env::var_os("ZELYRA_DB_CONNECT_TIMEOUT_SECS");
+        let query_value = env::var_os("ZELYRA_DB_QUERY_TIMEOUT_SECS");
+        let connect = connect_value.as_deref().and_then(|value| value.to_str());
+        let query = query_value.as_deref().and_then(|value| value.to_str());
+        if connect_value.is_some() && connect.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
+                    .into(),
+            });
+        }
+        if query_value.is_some() && query.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_QUERY_TIMEOUT_SECS must be a positive integer from 1 to 3600"
+                    .into(),
+            });
+        }
+        Self::parse(connect, query)
+    }
+
+    fn parse(connect: Option<&str>, query: Option<&str>) -> Result<Self, DatabaseError> {
+        Ok(Self {
+            connect_seconds: parse_timeout(
+                "ZELYRA_DB_CONNECT_TIMEOUT_SECS",
+                connect,
+                MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS,
+                MARIADB_MAX_CONNECT_TIMEOUT_SECS,
+            )?,
+            query_seconds: parse_timeout(
+                "ZELYRA_DB_QUERY_TIMEOUT_SECS",
+                query,
+                MARIADB_DEFAULT_QUERY_TIMEOUT_SECS,
+                MARIADB_MAX_QUERY_TIMEOUT_SECS,
+            )?,
+        })
+    }
+
+    fn connect_args(self) -> [String; 2] {
+        [
+            format!("--connect-timeout={}", self.connect_seconds),
+            "--skip-reconnect".into(),
+        ]
+    }
+
+    fn query_args(self) -> [String; 1] {
+        [format!(
+            "--init-command=SET SESSION max_statement_time={}",
+            self.query_seconds
+        )]
+    }
+}
+
+fn parse_timeout(
+    name: &str,
+    value: Option<&str>,
+    default: u32,
+    maximum: u32,
+) -> Result<u32, DatabaseError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    match value.parse::<u32>() {
+        Ok(value) if (1..=maximum).contains(&value) => Ok(value),
+        _ => Err(DatabaseError {
+            message: format!("{name} must be a positive integer from 1 to {maximum}"),
+        }),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
     Postgres,
@@ -1891,6 +1973,14 @@ fn query_value_sql(value: &QueryValue) -> String {
 }
 
 fn run_mariadb_query(database_url: &str, script: &str) -> Result<String, DatabaseError> {
+    run_mariadb_query_with_timeouts(database_url, script, MariaDbTimeouts::from_env()?)
+}
+
+fn run_mariadb_query_with_timeouts(
+    database_url: &str,
+    script: &str,
+    timeouts: MariaDbTimeouts,
+) -> Result<String, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let mut command = Command::new("mariadb");
     command
@@ -1906,6 +1996,8 @@ fn run_mariadb_query(database_url: &str, script: &str) -> Result<String, Databas
             "--database",
             &connection.database,
         ])
+        .args(timeouts.connect_args())
+        .args(timeouts.query_args())
         .env("MYSQL_PWD", &connection.password)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -2061,6 +2153,7 @@ fn run_mariadb(
     database_override: Option<&str>,
 ) -> Result<String, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
+    let timeouts = MariaDbTimeouts::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2079,6 +2172,8 @@ fn run_mariadb(
             "--execute",
             query,
         ])
+        .args(timeouts.connect_args())
+        .args(timeouts.query_args())
         .env("MYSQL_PWD", &connection.password);
     let output = command.output().map_err(|error| DatabaseError {
         message: format!("could not start mariadb: {error}"),
@@ -2097,6 +2192,7 @@ fn run_mariadb_sql(
     database_override: Option<&str>,
 ) -> Result<(), DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
+    let timeouts = MariaDbTimeouts::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2111,6 +2207,7 @@ fn run_mariadb_sql(
             "--database",
             database,
         ])
+        .args(timeouts.connect_args())
         .env("MYSQL_PWD", &connection.password)
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
@@ -2577,6 +2674,68 @@ mod tests {
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn mariadb_timeouts_have_bounded_defaults_and_client_options() {
+        let timeouts = MariaDbTimeouts::parse(None, None).unwrap();
+        assert_eq!(
+            timeouts,
+            MariaDbTimeouts {
+                connect_seconds: 10,
+                query_seconds: 30,
+            }
+        );
+        assert_eq!(
+            timeouts.connect_args(),
+            ["--connect-timeout=10", "--skip-reconnect"]
+        );
+        assert_eq!(
+            timeouts.query_args(),
+            ["--init-command=SET SESSION max_statement_time=30"]
+        );
+    }
+
+    #[test]
+    fn mariadb_timeouts_accept_only_bounded_positive_integers() {
+        assert_eq!(
+            MariaDbTimeouts::parse(Some("15"), Some("45")).unwrap(),
+            MariaDbTimeouts {
+                connect_seconds: 15,
+                query_seconds: 45,
+            }
+        );
+        for value in ["0", "-1", "301", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(Some(value), None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
+            );
+        }
+        for value in ["0", "-1", "3601", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, Some(value)).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_QUERY_TIMEOUT_SECS must be a positive integer from 1 to 3600"
+            );
+        }
+    }
+
+    #[test]
+    fn mariadb_query_timeout_aborts_long_statements_when_configured() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB timeout integration: test URL is not configured");
+            return;
+        };
+        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("1")).unwrap();
+        let started = std::time::Instant::now();
+        let error = run_mariadb_query_with_timeouts(&database_url, "SELECT SLEEP(5);", timeouts)
+            .expect_err("MariaDB should abort a statement over its configured time limit");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "statement timeout did not bound execution"
+        );
+        assert!(!error.message.contains(&database_url));
     }
 
     #[test]
