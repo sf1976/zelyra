@@ -16,10 +16,10 @@ web pages, forms, CRUD, authentication, capabilities, and contracts. This
 handbook builds a small machine-management application, starting with the first
 program and ending with a database-backed web application.
 
-> **Project status:** Zelyra 0.2.0 is experimental. The foundations described
-> here are implemented in a tested scope, but the project is not approved for
-> production use. The proposed 0.3.0 work is tracked in the [release
-> plan](../../release-plans/0.3.0.en.md).
+> **Project status:** Zelyra 0.3.0 is experimental and not approved for
+> production use. Its human onboarding study was explicitly deferred and is
+> mandatory before the final 0.4.0 release. See the [decision
+> record](../../release-readiness/0.3.0-human-gate-decision.en.md).
 
 The binding product goals for digital sovereignty and evidence-based
 correctness claims are described in the [Zelyra manifesto](../../MANIFESTO.md).
@@ -117,10 +117,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ~~~
 
-On Windows, use `-Release v0.2.0` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.3.0` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:

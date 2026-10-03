@@ -16,10 +16,10 @@ geprüftem SQL, Webseiten, Formularen, CRUD, Authentifizierung, Capabilities und
 Verträgen. Dieses Handbuch führt anhand einer kleinen Maschinenverwaltung vom
 ersten Programm bis zur datenbankgestützten Webanwendung.
 
-> **Projektstatus:** Zelyra 0.2.0 ist experimentell. Die hier beschriebenen
-> Grundlagen sind in einem getesteten Umfang implementiert, aber noch nicht für
-> den Produktionseinsatz freigegeben. Die geplanten 0.3.0-Arbeiten stehen im
-> [Releaseplan](../../release-plans/0.3.0.de.md).
+> **Projektstatus:** Zelyra 0.3.0 ist experimentell und nicht für den
+> Produktionseinsatz freigegeben. Die menschliche Einsteigerabnahme für 0.3.0
+> wurde ausdrücklich verschoben und ist vor dem finalen 0.4.0-Release
+> verpflichtend. Siehe das [Entscheidungsprotokoll](../../release-readiness/0.3.0-human-gate-decision.de.md).
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
 Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).
@@ -144,10 +144,10 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ~~~
 
-Unter Windows in PowerShell `-Release v0.2.0` mit `install.ps1` verwenden.
+Unter Windows in PowerShell `-Release v0.3.0` mit `install.ps1` verwenden.
 macOS nutzt derzeit weiterhin den Quellcode-Installer.
 
 Wenn die Shell `zelyra` nicht findet:

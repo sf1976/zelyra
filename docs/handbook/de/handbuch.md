@@ -6,7 +6,7 @@
 
 Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktische Lehrbuch **»Zelyra lernen – Verständlich programmieren von den Grundlagen bis zur eigenen Anwendung«** (Teil I bis X, Kapitel 1 bis 42) als auch das **technische Referenzhandbuch** (Kapitel 1 bis 23) sowie ausführliche **Anhänge** (A bis J).
 
-> **Projektstatus:** Compiler 0.2.0 implementiert einen geprüften, experimentellen Teil der Sprachlinie 0.1. Zelyra ist noch nicht für den Produktionseinsatz freigegeben.
+> **Projektstatus:** Compiler 0.3.0 implementiert einen geprüften, experimentellen Teil der Sprachlinie 0.1. Zelyra ist noch nicht für den Produktionseinsatz freigegeben.
 
 ## Statuszeichen
 
@@ -69,7 +69,7 @@ Willkommen beim vollständigen Zelyra-Handbuch. Es umfasst sowohl das didaktisch
   - [Kapitel 39: Bereitstellung und Betrieb](#kapitel-39-bereitstellung-und-betrieb)
 - **[TEIL X – ABSCHLUSSPROJEKT UND WEITERFÜHRUNG](#teil-x-abschlussprojekt-und-weiterfuhrung)**
   - [Kapitel 40: Das große Abschlussprojekt: Vollständige Aufgabenverwaltung](#kapitel-40-das-grosse-abschlussprojekt-vollstandige-aufgabenverwaltung)
-  - [Kapitel 41: Die Zelyra-Roadmap (Von 0.2.0 bis 1.0)](#kapitel-41-die-zelyra-roadmap-von-020-bis-10)
+  - [Kapitel 41: Die Zelyra-Roadmap (Von 0.3.0 bis 1.0)](#kapitel-41-die-zelyra-roadmap-von-030-bis-10)
   - [Kapitel 42: Dein Weg als Zelyra-Entwickler](#kapitel-42-dein-weg-als-zelyra-entwickler)
 
 ### Technisches Referenzhandbuch
@@ -313,7 +313,7 @@ fn main() {
 ### 1. Was lerne ich in diesem Kapitel?
 - Die Systemvoraussetzungen für die Zelyra-Entwicklungsumgebung auf Linux, macOS und Windows.
 - Plattformspezifische Docker-Installation und Verifikation mit `docker compose version`.
-- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder vorkompilierte Release-Archive (`--release v0.2.0`) installierst.
+- Wie du Zelyra über den Quellcode (`./install.sh` / `install.ps1`) oder das stabile Release-Archiv (`--release v0.3.0`) installierst.
 - Vollständige Versionsabfrage mit `zelyra --version` und Systemdiagnose mit `zelyra doctor`.
 - Den integrierten, token-geschützten Web-Setup-Assistenten (`zelyra setup --web`).
 - Typische Berechtigungs- und Port-Konflikte (z. B. Docker-Socket-Rechte, automatische Port-Wahl).
@@ -340,13 +340,13 @@ cd zelyra
 ```
 Oder direkt als vorkompiliertes Release ohne Rust-Toolchain:
 ```bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ```
 Unter Windows (PowerShell):
 ```powershell
 git clone https://github.com/sf1976/zelyra.git
 Set-Location zelyra
-.\install.ps1 -Release v0.2.0
+.\install.ps1 -Release v0.3.0
 ```
 
 **Schritt 2: Vollständige Version und Hilfe prüfen**
@@ -385,7 +385,7 @@ Zelyra öffnet einen lokalen HTTP-Server auf `127.0.0.1:3030` mit einem zufälli
 ### 6. Merksätze
 1. Das Zelyra-CLI bündelt Compiler, Runner, Formularprüfer, Migrator, Webserver und Setup-Assistenten in einem einzigen Werkzeug.
 2. Mit `docker compose version` und `zelyra doctor` überprüfst du jederzeit den Zustand deiner Toolchain.
-3. Releases können mit `--release v0.2.0` direkt ohne Rust-Compiler installiert werden.
+3. Das stabile Release kann mit `--release v0.3.0` direkt ohne Rust-Compiler installiert werden.
 4. `zelyra setup --web` bietet eine intuitive, browserbasierte Ersteinrichtung mit sicherem Einmal-Token.
 
 ### 7. Übungsaufgaben
@@ -5492,10 +5492,10 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 ---
 
-## Kapitel 41: Die Zelyra-Roadmap (Von 0.2.0 bis 1.0)
+## Kapitel 41: Die Zelyra-Roadmap (Von 0.3.0 bis 1.0)
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Die Entwicklung von Zelyra: Was das experimentelle Release 0.2.0 liefert und was als Nächstes kommt.
+- Die Entwicklung von Zelyra: Was das experimentelle Release 0.3.0 liefert und was als Nächstes kommt.
 - Geplante nächste Meilensteine: Modul-Imports, Package-Management und WebAssembly.
 - Wie Abwärtskompatibilität und Stabilitätsgarantien bis Version 1.0 gewährleistet werden.
 
@@ -5508,15 +5508,17 @@ Release-Meilensteine:
 - **Phase 1 bis 3 (Fundament):** Lexer, Parser, AST, Typsystem, Kontrollstrukturen, Funktionen und Verträge (`requires`, `ensures`). *(Abgeschlossen)*
 - **Phase 4 bis 6 (Datenbank & Daten):** MariaDB/SQLite-Engine, typisiertes `sql<T>`, Migrationen, Transaktionen, Dateisystem- und Zeit-Capabilities. *(Abgeschlossen)*
 - **Phase 7 bis 9 (Web & Sicherheit):** `page`, `html`, `form` mit CSRF/XSS-Schutz, `crud`-Views, `auth` mit Argon2, `api` mit OpenAPI-Generierung, Typed Holes, JSON-Compilerdiagnostik. *(Abgeschlossen)*
-- **0.2.0 (aktuelles experimentelles Release):** Typisierte Maps, deklarative
-  Suche, Filterung und Pagination, wiederverwendbare Views und Slots,
-  erzeugtes CRUD, Authentifizierung und Berechtigungen, Audit-Unterstützung,
-  Setup-/Doctor-Werkzeuge, maschinenlesbare Compiler-Schnittstellen sowie
-  getestete Distributionspfade für Linux/Windows x86_64.
-- **0.3.0 (vorgeschlagen):** Einfacherer Einstieg, Release-Nachweise,
-  Schema-Sicherheit und eine reproduzierbare Abnahme mit einer realen
-  Anwendung. Siehe den [Releaseplan](../../release-plans/0.3.0.de.md); er ist
-  kein Releaseversprechen.
+- **0.3.0 (aktuelles experimentelles Release):** geprüfte Compiler- und
+  Datenbankpfade, Installer und Update-Check, generierte Businessanwendungen
+  sowie Linux- und Windows-x86_64-Release-Artefakte. Die menschliche
+  Einsteigerabnahme wurde auf das verpflichtende 0.4.0-Gate verschoben.
+- **0.2.0 (vorheriges Release):** Typisierte Maps, deklarative Suche,
+  Filterung und Pagination, wiederverwendbare Views und Slots, erzeugtes CRUD,
+  Authentifizierung und Berechtigungen, Audit-Unterstützung, Setup-/Doctor-
+  Werkzeuge sowie maschinenlesbare Compiler-Schnittstellen.
+- **0.4.0 (vorgeschlagen):** Module, Datenbank-Lebenszyklus, sichere
+  Konto-/API-Abläufe und unabhängige menschliche Einsteigerabnahme. Siehe den
+  [Releaseplan](../../release-plans/0.4.0.de.md).
 - **Spätere Meilensteine:** Feingranulare Module/Imports, Paketmanager,
   WebAssembly und jede LTS-Zusage bleiben zukünftige Arbeiten.
 
@@ -5525,8 +5527,8 @@ Release-Meilensteine:
 - **Verlässliche Spezifikation:** Jedes Sprachmerkmal ist in der formalen Grammatik festgeschrieben.
 
 ### 5. Typische Missverständnisse
-- **Missverständnis:** „Zelyra 0.2.0 ist produktionsreif, weil die Kernpfade funktionieren.“
-  *Richtigstellung:* Zelyra 0.2.0 ist ein experimenteller, getesteter Umfang.
+- **Missverständnis:** „Zelyra 0.3.0 ist produktionsreif, weil die Kernpfade funktionieren.“
+  *Richtigstellung:* Zelyra 0.3.0 ist ein experimenteller, getesteter Umfang.
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
 - **Missverständnis:** Sprachsyntax aus anderen Sprachen blind voraussetzen.
@@ -5534,7 +5536,7 @@ Release-Meilensteine:
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
-   Release 0.2.0 zu späteren Meilensteinen.
+   Release 0.3.0 zu späteren Meilensteinen.
 2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
 3. Modul-Imports, Paketverteilung und WebAssembly bleiben zukünftige Arbeiten.
@@ -5556,7 +5558,7 @@ zelyra doctor
 - Das modulare Phasenkonzept garantiert kontinuierliche, stabile Weiterentwicklung.
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche Kernbausteine sind im getesteten Umfang von 0.2.0 implementiert?
+1. Welche Kernbausteine sind im getesteten Umfang von 0.3.0 implementiert?
 2. Für welchen zukünftigen Meilenstein sind feingliedrige `import`-Anweisungen geplant?
 3. Warum ist der experimentelle Status vor einem Produktiveinsatz wichtig?
 
@@ -5663,7 +5665,7 @@ oder Cargo installiert werden. Das gewählte Archiv wird über HTTPS geladen und
 per SHA-256 geprüft:
 
 ~~~bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ~~~
 
 Unter Windows steht `install.ps1` für PowerShell und `install.cmd` für die
@@ -5679,7 +5681,7 @@ zelyra --version
 Das Release-Archiv unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.2.0
+.\install.ps1 -Release v0.3.0
 ~~~
 
 Danach:
@@ -7619,7 +7621,7 @@ ausführbare Spracheigenschaft ausgegeben.
 | Jobs | externe Job-/Queue-Systeme | kein Hintergrundjob-Konstrukt | keine stabile Job-Syntax | ❌ |
 | Audit | externe Logs oder Audit-Crates | Audit-Tabelle, CLI-Auswertung und optionale Hash-Kette | an Auth/CRUD gebunden und noch experimentell | 🧪 |
 | Deployment | Cargo, Container, CI und Infrastruktur frei wählbar | generierte Docker-/Compose-Vorlage vorhanden | Vorlage ist Entwicklungsstart, keine Produktionsplattform | 🧪 |
-| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra Compiler 0.2.0 ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
+| Produktionsreife | Rust ist breit produktiv eingesetzt | Zelyra Compiler 0.3.0 ist experimentell | Reife und Ökosystem sind nicht vergleichbar | 🧪 |
 | Ökosystem | sehr groß: Crates, Tools, Frameworks | kleines eigenes Repository und wenige Integrationen | Zelyra kann Rust-Crates nicht direkt importieren | 🧪 |
 
 Rust ist also das technische Fundament, nicht die Anwendungssprache hinter
@@ -8550,8 +8552,8 @@ fn main() {
 
 ## Anhang I: Häufige Fragen und Antworten (FAQ)
 
-**Frage: Warum gibt es in Zelyra 0.2.0 keine `import`-Anweisung?**
-*Antwort:* In Version 0.2.0 übersetzt der Zelyra-Compiler alle `.zyl`-
+**Frage: Warum gibt es in Zelyra 0.3.0 keine `import`-Anweisung?**
+*Antwort:* In Version 0.3.0 übersetzt der Zelyra-Compiler alle `.zyl`-
 Quelldateien im Projektkontext als ein einheitliches System. Ein feingranulares
 Modul- und Import-System bleibt eine zukünftige Arbeit der Roadmap.
 

@@ -4,9 +4,9 @@
 
 This guide takes a new user from a repository checkout to the first Zelyra
 program, web page, schema, SQL block, and form validation. It describes the
-current Zelyra 0.3 development line, including the published `v0.3.0-rc.2`
-candidate, not only the long-term language vision. The latest stable release
-remains the experimental `v0.2.0` until the 0.3.0 release gates are complete.
+current Zelyra 0.3.0 release, not only the long-term language vision. The
+stable `v0.3.0` release is experimental and not approved for production. Its
+human onboarding study was explicitly deferred to the mandatory 0.4.0 gate.
 
 ## What is Zelyra?
 
@@ -174,7 +174,7 @@ tag. The installer downloads the matching archive over HTTPS and verifies its
 SHA-256 checksum before replacing the executable atomically:
 
 ~~~bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ~~~
 
 On Windows, use PowerShell from the repository directory:
@@ -197,7 +197,7 @@ directory and updates the user PATH. No administrator password is required.
 On Windows x86_64, use the matching PowerShell option:
 
 ~~~powershell
-.\install.ps1 -Release v0.2.0
+.\install.ps1 -Release v0.3.0
 ~~~
 
 The script builds the CLI in locked release mode and installs it at:

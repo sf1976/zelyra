@@ -544,14 +544,19 @@ integration, compiler self-hosting, full formal verification, or PostgreSQL
 runtime parity. Keep those as separate roadmap goals; do not blur planned
 capabilities into the 0.2.0 release claim.
 
-## Proposed release milestone 0.3.0
+## Release milestone 0.3.0 (published)
 
-The separate [0.3.0 release plan](release-plans/0.3.0.en.md) is a working
-proposal, not a release promise. It prioritizes beginner onboarding, an
-extensible distinctive Views/template system, MariaDB/schema safety, a
-reproducible real-application acceptance path, dependable compiler interfaces,
-and honest release evidence. Scope and status must be reviewed as work proceeds;
-the plan does not make all long-term roadmap items 0.3.0 requirements.
+Zelyra [`v0.3.0`](https://github.com/sf1976/zelyra/releases/tag/v0.3.0) was
+published as an experimental release on 2026-10-03. The completed [release
+plan](release-plans/0.3.0.en.md) records scope, verification evidence, and known
+limits. The release workflow built and verified Linux and Windows x86_64
+artifacts; the published Linux installer, including checksum, repeat install,
+and update check, subsequently passed its smoke test.
+
+The independent human onboarding study was not conducted for 0.3.0. The project
+owner explicitly deferred it to 0.4.0. This is risk acceptance, not user-test
+evidence; human acceptance is mandatory before the final 0.4.0 release. See the
+[decision record](release-readiness/0.3.0-human-gate-decision.en.md).
 
 The current database acceptance evidence is green in [CI run
 35571692858](https://github.com/sf1976/zelyra/actions/runs/35571692858): the
@@ -570,13 +575,11 @@ AI-native effects, and supply-chain/accessibility evidence. It deliberately
 does not turn PostgreSQL runtime parity, multi-tenancy, background jobs, MFA,
 OIDC, or a visual editor into automatic 0.4.0 promises.
 
-The verified upstream release state on 2026-10-03 is stable `v0.2.0` and
-prerelease `v0.3.0-rc.2`; the `main` workspace declares `0.3.0`, but final
-`v0.3.0` has not been published. The project owner explicitly deferred the
-0.3.0 human onboarding test to 0.4.0; this is a risk acceptance, not test
-evidence. The 0.4.0 plan requires that independent test before its final
-release. Scope and status remain subject to the plan's risk register and
-acceptance gates.
+The stable `v0.3.0` release was published on 2026-10-03. The project owner
+explicitly deferred the 0.3.0 human onboarding test to 0.4.0; this is risk
+acceptance, not test evidence. The 0.4.0 plan requires that independent test
+before its final release. Scope and status remain subject to the plan's risk
+register and acceptance gates.
 
 ## Proposed release milestone 0.5.0
 

@@ -4,10 +4,11 @@ Deutsch · [English](getting-started.md)
 
 Dieser Leitfaden führt vom Repository-Checkout zum ersten Zelyra-Programm,
 zur ersten Web-Seite, zum ersten Schema, zu nativem SQL und zur ersten
-Formularvalidierung. Er beschreibt die aktuelle Zelyra-Entwicklungslinie 0.3,
-einschließlich des veröffentlichten Kandidaten `v0.3.0-rc.2`, und nicht nur
-die langfristige Sprachvision. Das neueste stabile Release bleibt bis zum
-Abschluss der 0.3.0-Gates das experimentelle `v0.2.0`.
+Formularvalidierung. Er beschreibt die aktuelle Zelyra-Version 0.3.0 und nicht
+nur die langfristige Sprachvision. Das stabile Release `v0.3.0` ist
+experimentell und nicht für den Produktiveinsatz freigegeben. Die menschliche
+Einsteigerabnahme für 0.3.0 wurde ausdrücklich auf das verpflichtende
+0.4.0-Gate verschoben.
 
 ## Was ist Zelyra?
 
@@ -210,13 +211,13 @@ passende Archiv wird über HTTPS geladen, per SHA-256 geprüft und atomar
 ausgetauscht:
 
 ~~~bash
-./install.sh --release v0.2.0
+./install.sh --release v0.3.0
 ~~~
 
 Unter Windows:
 
 ~~~powershell
-.\install.ps1 -Release v0.2.0
+.\install.ps1 -Release v0.3.0
 ~~~
 
 Der Release-Modus unterstützt derzeit Linux x86_64 und Windows x86_64. macOS
