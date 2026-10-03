@@ -100,6 +100,10 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Test imported tableviews through composed project schema
+        env:
+          ZELYRA_MODULE_IMPORTS_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test -p zelyra-cli --test module_imports imported_tableviews_are_type_checked_and_served_from_the_composed_schema -- --nocapture
       - name: Run Linux release artifact smoke test
         env:
           ZELYRA_RELEASE_BINARY: target/release/zelyra

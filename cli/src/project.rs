@@ -347,7 +347,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules support functions, type aliases, records, tables, views, and components; pages, APIs, and other route-bound resources must remain in the entry file".into(),
+                message: "imported modules support functions, type aliases, records, tables, tableviews, views, and components; route-bound resources such as pages, forms, CRUD, APIs, and authentication must remain in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -417,6 +417,26 @@ fn link_modules(
             function.name = internal_name(module_name, &function.name);
             linked.functions.push(function);
         }
+        for mut tableview in module.program.tableviews.clone() {
+            if linked
+                .tableviews
+                .iter()
+                .any(|existing| existing.name == tableview.name)
+            {
+                return Err(ProjectError {
+                    code: "E-MOD-011",
+                    message: format!(
+                        "duplicate tableview `{}` across imported project modules",
+                        tableview.name
+                    ),
+                    path: module.relative_path.clone(),
+                    span: tableview.span,
+                    sources: Box::default(),
+                });
+            }
+            linker.rewrite_type(&mut tableview.result_type, tableview.span)?;
+            linked.tableviews.push(tableview);
+        }
         // Views and components are reusable project resources. They are
         // intentionally available by their declared names after import; the
         // current language does not yet define visibility modifiers for them.
@@ -484,7 +504,6 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
     !program.pages.is_empty()
-        || !program.tableviews.is_empty()
         || !program.forms.is_empty()
         || !program.cruds.is_empty()
         || !program.auth.is_empty()
@@ -498,7 +517,6 @@ fn first_unsupported_import_span(program: &Program) -> Option<Span> {
         .map(|item| item.span)
         .or_else(|| program.components.first().map(|item| item.span))
         .or_else(|| program.pages.first().map(|item| item.span))
-        .or_else(|| program.tableviews.first().map(|item| item.span))
         .or_else(|| program.forms.first().map(|item| item.span))
         .or_else(|| program.cruds.first().map(|item| item.span))
         .or_else(|| program.auth.first().map(|item| item.span))
@@ -556,7 +574,9 @@ impl TypeLinker<'_> {
             }
         }
         for view in &mut program.tableviews {
-            self.rewrite_type(&mut view.result_type, view.span)?;
+            if view.span.source_id == source_id {
+                self.rewrite_type(&mut view.result_type, view.span)?;
+            }
         }
         for form in &mut program.forms {
             for field in &mut form.fields {

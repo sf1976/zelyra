@@ -186,10 +186,13 @@ architecture requirement for every phase, not a provider-specific feature.
   provenance.
   Database configuration is not addressed through its alias and is
   limited to one connection per project. Imported tables retain global SQL
-  names; imported view and component names are global, with collisions rejected.
+  names; imported tableview, view, and component names are global, with
+  collisions rejected.
   APIs and route-bound declarations remain unsupported in imported files.
-  `impact` analyzes the linked graph with file-aware spans; `fmt`, `edit`, and
-  database commands remain file-local. This
+  Imported MariaDB-backed tableviews are now composed and served; database
+  commands load the linked graph when building the shared schema. Their diagnostics still need
+  complete module-level source attribution. `impact` analyzes the linked graph
+  with file-aware spans; `fmt` and `edit` remain file-local. This
   is not part of the published 0.3.0 binary.
 - [ ] Generics, interfaces/traits, enums, tagged unions, and pattern matching
   across all domain types.

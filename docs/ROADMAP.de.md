@@ -204,10 +204,14 @@ Feature eines bestimmten Anbieters.
   bei einigen Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
   vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
-  globale SQL-Namen; importierte View-/Komponentennamen sind global, Kollisionen
+  globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
   werden abgelehnt. APIs und routengebundene Ressourcen bleiben in Importen
-  unzulässig. `impact` analysiert den verknüpften Graphen mit
-  dateibezogenen Spannen; `fmt`, `edit` und Datenbankbefehle bleiben dateilokal.
+  unzulässig. Importierte MariaDB-gestützte `tableview`s werden nun
+  zusammengesetzt und bereitgestellt;
+  Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema.
+  Ihre Diagnosen brauchen noch eine vollständige Modul-Quellzuordnung.
+  `impact` analysiert den Graphen mit dateibezogenen Spannen; `fmt` und `edit`
+  bleiben dateilokal.
   Das Feature ist
   nicht im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching

@@ -6580,13 +6580,19 @@ fn configured_crud_filter_columns(
 }
 
 fn load_schema(path: &str) -> Result<Schema, ()> {
-    let program = load(path)?;
-    match build_schema(&program) {
+    let project = load_project(path)?;
+    match build_schema(&project.program) {
         Ok(schema) => Ok(schema),
         Err(errors) => {
             for error in errors {
+                let source_path = PROJECT_SOURCES.with(|sources| {
+                    sources
+                        .borrow()
+                        .get(error.span.source_id as usize)
+                        .map_or_else(|| path.to_owned(), |source| source.path.clone())
+                });
                 diagnostic(
-                    path,
+                    &source_path,
                     "E-DB-001",
                     &error.message,
                     error.span.line,

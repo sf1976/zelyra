@@ -1904,14 +1904,15 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. The project loader
 rejects cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, tables, named views, typed
-components, and one
+currently contain functions, type aliases, records, tables, tableviews, named
+views, typed components, and one
 project-wide database connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
 only one database definition is allowed in the complete project graph.
 Imported tables join the application's shared physical schema. Their names
 are global SQL identifiers, not module-qualified names, and duplicate table
-names are rejected. Views and components are composed from imported files
+names are rejected. Tableviews, views, and components are composed from
+imported files
 under their declared, unqualified names; they do not yet have `pub` visibility
 syntax. Pages, forms, CRUD declarations, APIs, and authentication resources
 remain entry-file-only. Function, type, and
@@ -1922,17 +1923,20 @@ The database module is ordinary project configuration, not a separately named
 database service: the current runtime supports only one configured database
 for the composed application. The runnable example is in
 `examples/modules/`.
-`check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the
-project graph. `serve` can compose imported views and components into pages.
-`context --format=json` reports the deterministically sorted module graph,
-including imported views and components with their project-relative source path in
-`span.file`. Some template diagnostics still need more complete per-module
-source attribution. `verify` also checks the linked graph, but
+`check`, `build`, `run`, `serve`, `context`, `verify`, `impact`, and database
+commands load the project graph. Database commands build the schema from the
+composed declarations; some schema diagnostics still lack complete module
+source attribution. `serve` can compose imported MariaDB-backed tableviews,
+views, and components into the application; the tableview query runtime does
+not yet execute against SQLite. `context --format=json` reports the
+deterministically sorted module graph, including imported tables, tableviews,
+views, and components with their project-relative source path in `span.file`.
+Some template diagnostics still need more complete per-module source
+attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`
-analyzes the linked graph and marks spans with their source file. `fmt`,
-`edit`, and database commands still process only the explicitly named source
-file. This branch behavior is experimental and is not included in the
-published 0.3.0 binary.
+analyzes the linked graph and marks spans with their source file. `fmt` and
+`edit` still process only the explicitly named source file. This branch
+behavior is experimental and is not included in the published 0.3.0 binary.
 
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:

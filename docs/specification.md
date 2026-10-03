@@ -379,17 +379,19 @@ fn main() {
 ~~~
 
 An imported source currently may declare functions, type aliases, records,
-tables, named views, typed components, and one project-wide database connection
-definition. Database configuration is
+tables, tableviews, named views, typed components, and one project-wide database
+connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
 the composed project may define at most one database. Tables in imported files
 are composed into the application's shared physical schema; table names are
 global SQL identifiers rather than module-qualified names, and duplicate table
-names are rejected. Imported views and components join the composed application
-under their declared, unqualified names; explicitly importing a source file
-makes its views and components available, because these declarations do not
-yet have `pub` visibility syntax. Duplicate view and component names are
-rejected. Pages, forms, CRUD declarations, APIs, and authentication resources
+names are rejected. Imported tableviews, views, and components join the
+composed application under their declared, unqualified names; explicitly
+importing a source file makes them available because these declarations do not
+yet have `pub` visibility syntax. Duplicate resource names are rejected.
+MariaDB-backed imported tableviews can be served as application routes; the
+current tableview query runtime does not yet execute against SQLite. Pages,
+forms, CRUD declarations, APIs, and authentication resources
 remain unsupported in imported files. Function,
 type, and record declarations are private by
 default; declarations cross a module boundary only with a
@@ -447,9 +449,11 @@ Some template-validation diagnostics still need more complete per-module source
 attribution. `verify` checks linked functions, but verification results do not
 yet preserve per-module source provenance. Pages, APIs, and other route-bound
 application resources remain unsupported in imported files.
-`fmt`, `edit`, and database commands remain source-file-local. `impact` now
-analyzes the linked module graph and attributes its spans to their source
-files. These limits make the implementation experimental rather than a
+`fmt` and `edit` remain source-file-local. Database commands now load the
+linked project graph when building the composed schema; their output and some
+schema diagnostics still have incomplete module-level source attribution.
+`impact` analyzes the linked module graph and attributes its spans to their
+source files. These limits make the implementation experimental rather than a
 complete multi-file project model. The full requirements are tracked in the
 [0.4.0 release plan](release-plans/0.4.0.en.md).
 

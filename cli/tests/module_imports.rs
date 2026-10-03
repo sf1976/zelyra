@@ -32,6 +32,51 @@ fn run(directory: &Path, arguments: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn run_test_database_sql(database_url: &str, sql: &str) -> std::process::Output {
+    let rest = database_url
+        .strip_prefix("mariadb://")
+        .or_else(|| database_url.strip_prefix("mysql://"))
+        .expect("test database URL must be MariaDB");
+    let (authority, database) = rest.split_once('/').unwrap();
+    let (credentials, host_port) = authority.split_once('@').unwrap();
+    let (user, password) = credentials.split_once(':').unwrap_or((credentials, ""));
+    let (host, port) = host_port.split_once(':').unwrap_or((host_port, "3306"));
+    Command::new("mariadb")
+        .args([
+            "--protocol=tcp",
+            "--host",
+            host,
+            "--port",
+            port,
+            "--user",
+            user,
+            "--database",
+            database,
+            "--execute",
+            sql,
+        ])
+        .env("MYSQL_PWD", password)
+        .output()
+        .expect("MariaDB client is required for the module integration test")
+}
+
+fn drop_test_database(database_url: &str) {
+    let rest = database_url
+        .strip_prefix("mariadb://")
+        .or_else(|| database_url.strip_prefix("mysql://"))
+        .expect("test database URL must be MariaDB");
+    let (_, database) = rest.split_once('/').unwrap();
+    let output = run_test_database_sql(
+        database_url,
+        &format!("DROP DATABASE IF EXISTS `{database}`"),
+    );
+    assert!(
+        output.status.success(),
+        "could not clean up the integration database: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn check_and_run_compile_imported_public_functions() {
     let directory = project(&[
@@ -197,6 +242,170 @@ fn context_reports_imported_table_spans_against_their_own_source_files() {
         .unwrap();
     assert_eq!(entry["span"]["file"], "main.zyl");
     assert_eq!(entry["span"]["start"]["line"], 3);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn imported_tableviews_are_type_checked_and_served_from_the_composed_schema() {
+    let Ok(base_database_url) = std::env::var("ZELYRA_MODULE_IMPORTS_DATABASE_URL") else {
+        eprintln!("skipping imported tableview serving test: MariaDB test URL is not configured");
+        return;
+    };
+    let database_root = base_database_url
+        .rsplit_once('/')
+        .map(|(root, _)| root)
+        .expect("configured MariaDB URL must include a database");
+    let database_name = format!(
+        "zelyra_module_imports_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let database_url = format!("{database_root}/{database_name}");
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoices.zyl\" as invoices\nfn main() {}\n",
+        ),
+        (
+            "src/invoices.zyl",
+            r#"database main {
+    engine: mariadb
+}
+
+table invoices {
+    id: Id primary auto
+    number: String(40) required
+}
+
+struct InvoiceRow {
+    id: Id
+    number: String
+}
+
+tableview InvoiceOverview {
+    source sql<InvoiceRow[]> {
+        SELECT id, number FROM invoices
+    }
+    columns { id number }
+}
+"#,
+        ),
+    ]);
+    let bootstrap = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&directory)
+        .env("DATABASE_URL", &database_url)
+        .args(["db", "bootstrap", "main.zyl"])
+        .output()
+        .unwrap();
+    assert!(
+        bootstrap.status.success(),
+        "{}",
+        String::from_utf8_lossy(&bootstrap.stderr)
+    );
+    let inserted = run_test_database_sql(
+        &database_url,
+        "INSERT INTO invoices (number) VALUES ('INV-IMPORT-001')",
+    );
+    assert!(
+        inserted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&inserted.stderr)
+    );
+
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    let document: Value = serde_json::from_slice(&context.stdout).unwrap();
+    let tableview = document["declarations"]["tableviews"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tableview| tableview["name"] == "InvoiceOverview")
+        .unwrap();
+    assert_eq!(tableview["span"]["file"], "src/invoices.zyl");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&directory)
+        .env("DATABASE_URL", &database_url)
+        .args(["serve", "main.zyl", &address])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let response = {
+        let socket: std::net::SocketAddr = address.parse().unwrap();
+        let mut response = String::new();
+        for _ in 0..75 {
+            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /views/invoiceoverview HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut candidate = String::new();
+                stream.read_to_string(&mut candidate).unwrap();
+                if !candidate.is_empty() {
+                    response = candidate;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        response
+    };
+    let _ = server.kill();
+    let server_output = server.wait_with_output().unwrap();
+    assert!(
+        response.contains("200 OK"),
+        "{response}\nserver stderr: {}",
+        String::from_utf8_lossy(&server_output.stderr)
+    );
+    assert!(response.contains("Number"), "{response}");
+    assert!(response.contains("INV-IMPORT-001"), "{response}");
+    drop_test_database(&database_url);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn duplicate_imported_tableviews_report_the_duplicate_module_source() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() {}\n",
+        ),
+        (
+            "src/a.zyl",
+            "tableview Shared { source sql<Int[]> { SELECT 1 AS value } columns { value } }\n",
+        ),
+        (
+            "src/b.zyl",
+            "tableview Shared { source sql<Int[]> { SELECT 2 AS value } columns { value } }\n",
+        ),
+    ]);
+    let result = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!result.status.success());
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let diagnostics = document["diagnostics"].as_array().unwrap();
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic["code"] == "E-MOD-011" && diagnostic["file"] == "src/b.zyl"
+        }),
+        "{document}"
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 

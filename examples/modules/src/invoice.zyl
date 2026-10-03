@@ -7,6 +7,20 @@ table invoice_headers {
     total_cents: Int required
 }
 
+struct InvoiceOverviewRow {
+    id: Id
+    invoice_number: String
+    total_cents: Int
+}
+
+tableview InvoiceOverview {
+    source sql<InvoiceOverviewRow[]> {
+        SELECT id, invoice_number, total_cents
+        FROM invoice_headers
+    }
+    columns { id invoice_number total_cents }
+}
+
 fn add_tax(net: Int, tax: Int) -> Int {
     return math::sum(net, tax)
 }

@@ -1890,24 +1890,30 @@ fn main() {
 }
 ~~~
 
-Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen, benannte
-Views und typisierte Komponenten enthalten. Funktionen, Typen und Records
-brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
+Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
+`tableview`-Definitionen, benannte Views und typisierte Komponenten enthalten.
+Funktionen, Typen und Records brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
 Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
 verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
 Tabellen fließen in ein gemeinsames Schema ein und behalten globale SQL-Namen;
-doppelte Tabellen-, View- und Komponentennamen werden abgelehnt. Eine
+doppelte Tabellen- und Ressourcennamen werden abgelehnt. Eine
 Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
 
-`check`, `build`, `run`, `serve`, `context`, `verify` und `impact` laden den
-Projektgraphen. `serve` kann damit importierte Views und Komponenten in Seiten
-einsetzen. `context --format=json` zeigt den deterministisch sortierten
-Modulgraphen sowie importierte Views und Komponenten mit `span.file`-Quellpfad. Typ-,
+`check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und die
+Datenbankbefehle laden den Projektgraphen. `serve` kann importierte
+`tableview`s, Views und Komponenten in die Anwendung integrieren.
+Tableview-Abfragen laufen derzeit über MariaDB; SQLite-Tableviews werden noch
+nicht ausgeführt.
+`context --format=json` zeigt den deterministisch sortierten Modulgraphen sowie
+importierte Tabellen, `tableview`-Definitionen, Views und Komponenten mit
+`span.file`-Quellpfad. Typ-,
 Capability- und Contract-Prüfungen bleiben aktiv; einige Template-Diagnosen
 brauchen noch eine vollständigere Zuordnung zur Quelldatei. `verify` bewahrt
-noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt`, `edit` und
-Datenbankbefehle bearbeiten weiterhin nur die ausdrücklich angegebene
-Quelldatei. Dieses Branch-Verhalten ist experimentell und nicht im
+noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt` und `edit`
+bearbeiten weiterhin nur die ausdrücklich angegebene Quelldatei.
+Datenbankbefehle bauen das Schema aus dem verknüpften Projektgraphen auf;
+Quellzuordnung für Schemafehler aus importierten Dateien ist noch nicht in
+allen Fällen vollständig. Dieses Branch-Verhalten ist experimentell und nicht im
 veröffentlichten 0.3.0-Binary enthalten.
 
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
