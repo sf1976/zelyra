@@ -130,6 +130,9 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
             "view AppShell { html { <html><body><slot /></body></html> } }\n",
         ),
         ("zelyra.toml", "[project]\nname = \"module-bundle-test\"\n"),
+        ("zelyra.theme.css", ":root { --test-color: blue; }\n"),
+        ("locales/en.json", "{}\n"),
+        ("locales/de.json", "{}\n"),
         (".env", "DATABASE_URL=mariadb://must-not-be-copied\n"),
         (".env.example", "DATABASE_URL=mariadb://replace-me\n"),
     ]);
@@ -155,6 +158,9 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     assert!(bundle.join("src/pages.zyl").is_file());
     assert!(bundle.join("src/ui.zyl").is_file());
     assert!(bundle.join("zelyra.toml").is_file());
+    assert!(bundle.join("zelyra.theme.css").is_file());
+    assert!(bundle.join("locales/en.json").is_file());
+    assert!(bundle.join("locales/de.json").is_file());
     assert!(!bundle.join(".env").exists());
     assert!(!bundle.join(".env.example").exists());
     assert!(!bundle.join("Dockerfile").exists());
