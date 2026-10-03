@@ -89,8 +89,10 @@ Feature eines bestimmten Anbieters.
   und Records je Quelldatei (`modules[].exports`). `zelyra module plan` zeigt
   zusätzlich schreibgeschützt den Abschluss expliziter Importe und statisch
   erkannter Verweise aus dem Wirkungsgraphen. Enthalten sind bekannte Kanten
-  von Seiten zu Views/Komponenten, Page-SQL zu Tabellen, Tabellenrelationen
-  und Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
+  von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
+  Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
+  Authentifizierung, Authentifizierung zu Tabellen, Tabellenrelationen und
+  Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
   Dynamische oder nicht modellierte Abhängigkeiten, Assets,
   Laufzeitkonfiguration, externe Dienstverträge und Docker-Paketierung bleiben
   außerhalb dieser Vorschau. `complete_deployment` bleibt `false`; der Plan ist

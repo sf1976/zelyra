@@ -80,7 +80,9 @@ architecture requirement for every phase, not a provider-specific feature.
   public functions, types, and records per file (`modules[].exports`) in its
   deterministic module context. `zelyra module plan` also provides a read-only
   closure of explicit imports plus statically recognized references from the
-  impact graph. It includes known page-to-view/component, page-SQL-to-table,
+  impact graph. It includes known page-to-view/component, page-SQL and
+  form/CRUD-action-SQL-to-table, API-handler-to-function,
+  protected-resource-to-authentication, authentication-to-table,
   table-relation, and database-configuration edges, and reports references it
   cannot resolve. Dynamic or unmodeled dependencies, assets, runtime
   configuration, external service contracts, and Docker packaging remain

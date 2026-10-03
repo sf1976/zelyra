@@ -308,6 +308,78 @@ fn semantic_references(
             }
         }
     }
+
+    if let Some(auth) = program.auth.first() {
+        let auth_node = format!("auth:{}", auth.name);
+        for page in &program.pages {
+            if page.requires_auth || !page.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("page:{}", page.path),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(page.span, sources),
+                );
+            }
+        }
+        for api in &program.apis {
+            if api.requires_auth || !api.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("api:{} {}", api.method, api.path),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(api.span, sources),
+                );
+            }
+        }
+        for form in &program.forms {
+            if form
+                .actions
+                .iter()
+                .any(|action| action.requires_auth || !action.permissions.is_empty())
+            {
+                add_reference(
+                    &mut references,
+                    format!("form:{}", form.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(form.span, sources),
+                );
+            }
+        }
+        for crud in &program.cruds {
+            if crud.requires_auth
+                || !crud.permissions.is_empty()
+                || !crud.create_permissions.is_empty()
+                || !crud.edit_permissions.is_empty()
+                || !crud.delete_permissions.is_empty()
+                || crud
+                    .actions
+                    .iter()
+                    .any(|action| action.requires_auth || !action.permissions.is_empty())
+            {
+                add_reference(
+                    &mut references,
+                    format!("crud:{}", crud.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(crud.span, sources),
+                );
+            }
+        }
+        for tableview in &program.tableviews {
+            if tableview.requires_auth || !tableview.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("tableview:{}", tableview.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(tableview.span, sources),
+                );
+            }
+        }
+    }
     for table in &program.tables {
         for column in &table.columns {
             let zelyra_ast::Type::Named(name) = &column.ty else {
@@ -331,10 +403,12 @@ fn semantic_references(
         let Some(tables) = entry.get("tables").and_then(Value::as_array) else {
             continue;
         };
-        let source_owner = if entry.get("kind").and_then(Value::as_str) == Some("function") {
-            format!("function:{owner}")
-        } else {
-            owner.to_owned()
+        let source_owner = match entry.get("kind").and_then(Value::as_str) {
+            Some("function") => format!("function:{owner}"),
+            Some("form_action" | "crud_action") => owner
+                .split_once(" action:")
+                .map_or_else(|| owner.to_owned(), |(resource, _)| resource.to_owned()),
+            _ => owner.to_owned(),
         };
         let span = entry.get("span").cloned().unwrap_or(Value::Null);
         for table in tables.iter().filter_map(Value::as_str) {
@@ -1081,16 +1155,32 @@ mod tests {
     fn builds_deterministic_source_impact() {
         let source = r#"
             table customers { id: Id }
+            table audit_events { id: Id message: String(100) }
+            table users { id: Id email: Email password_hash: String(255) }
+            auth users { table: users }
             component Badge { html { <strong>Ready</strong> } }
             view Shell { html { <Badge /><slot /> } }
             page "/customers" {
+                requires auth
                 view: Shell
                 load customers = sql<Customer[]> { SELECT id FROM customers }
                 html { <Badge /> }
             }
             table invoices { id: Id customer: Customer }
-            form CustomerForm -> customers { fields { id } }
-            crud Customer -> customers
+            form CustomerForm -> customers {
+                fields { id }
+                action save {
+                    requires auth
+                    permits "customers.write"
+                    sql { INSERT INTO audit_events (message) VALUES ('saved') }
+                }
+            }
+            crud Customer -> customers { requires auth }
+            tableview CustomerList {
+                source sql<Int[]> { SELECT id FROM customers }
+                columns { id }
+                requires auth
+            }
             fn load() uses Database {
                 return sql<Customer> { SELECT id FROM customers }
             }
@@ -1112,6 +1202,41 @@ mod tests {
             reference["from"] == "form:CustomerForm"
                 && reference["to"] == "table:customers"
                 && reference["kind"] == "table"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "form:CustomerForm"
+                && reference["to"] == "table:audit_events"
+                && reference["kind"] == "sql_table"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "form:CustomerForm"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "page:/customers"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "auth:users"
+                && reference["to"] == "table:users"
+                && reference["kind"] == "auth_table"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "api:GET /customers"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "crud:Customer"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "tableview:CustomerList"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
         }));
         assert!(references.iter().any(|reference| {
             reference["from"] == "function:load"

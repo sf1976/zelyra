@@ -367,15 +367,19 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
     let directory = project(&[
         (
             "main.zyl",
-            "import \"src/models.zyl\" as models\nimport \"src/customers.zyl\" as customers\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+            "import \"src/models.zyl\" as models\nimport \"src/customers.zyl\" as customers\nimport \"src/database.zyl\" as storage\nimport \"src/audit.zyl\" as audit\nfn main() {}\n",
         ),
         (
             "src/models.zyl",
             "table customers { id: Id primary auto name: String(100) required }\n",
         ),
         (
+            "src/audit.zyl",
+            "table audit_events { id: Id primary auto message: String(200) required }\n",
+        ),
+        (
             "src/customers.zyl",
-            "form CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } }\nfn normalize_name() -> String { return \"New customer\" }\n",
+            "form CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
         ),
         (
             "src/database.zyl",
@@ -420,7 +424,12 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
     let document: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(
         document["plan"]["source_files"],
-        serde_json::json!(["src/customers.zyl", "src/database.zyl", "src/models.zyl"])
+        serde_json::json!([
+            "src/audit.zyl",
+            "src/customers.zyl",
+            "src/database.zyl",
+            "src/models.zyl"
+        ])
     );
     assert_eq!(document["plan"]["database"]["required"], true);
     let dependencies = document["plan"]["resource_dependencies"]
@@ -430,6 +439,18 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         dependency["from"] == "form:CustomerCreate"
             && dependency["to"] == "table:customers"
             && dependency["kind"] == "table"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "form:CustomerCreate"
+            && dependency["to"] == "table:audit_events"
+            && dependency["kind"] == "sql_table"
+            && dependency["to_module"] == "src/audit.zyl"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "crud:Customer"
+            && dependency["to"] == "table:audit_events"
+            && dependency["kind"] == "sql_table"
+            && dependency["to_module"] == "src/audit.zyl"
     }));
     assert!(dependencies.iter().any(|dependency| {
         dependency["from"] == "crud:Customer"
@@ -511,6 +532,36 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
                 && dependency["to"] == "table:users"
                 && dependency["kind"] == "auth_table"
         }));
+    let plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/status_api.zyl"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}",
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        plan["plan"]["source_files"],
+        serde_json::json!([
+            "src/database.zyl",
+            "src/models.zyl",
+            "src/security.zyl",
+            "src/status_api.zyl"
+        ])
+    );
+    let dependencies = plan["plan"]["resource_dependencies"].as_array().unwrap();
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "api:GET /api/status"
+            && dependency["to"] == "auth:users"
+            && dependency["kind"] == "authentication"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "auth:users"
+            && dependency["to"] == "table:users"
+            && dependency["kind"] == "auth_table"
+    }));
     fs::remove_dir_all(directory).unwrap();
 }
 

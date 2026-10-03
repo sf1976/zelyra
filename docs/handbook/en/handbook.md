@@ -1959,9 +1959,10 @@ zelyra module plan main.zyl src/invoices.zyl
 
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
-known page-to-view and page-to-component references, page-SQL-to-table and
-form/CRUD-to-table edges, recognized table relations, and database
-configuration. Unresolved references
+known page-to-view and page-to-component references, page and form/CRUD-action
+SQL-to-table edges, API-handler-to-function, protected-resource-to-
+authentication, authentication-to-table, recognized table relations, and
+database configuration. Unresolved references
 appear in `unresolved_references`. Dynamic or unmodeled dependencies, assets,
 runtime configuration, external services, and Docker artifacts are not
 included. `complete_deployment` remains explicitly `false`; the command does

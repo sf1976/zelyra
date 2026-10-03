@@ -1938,7 +1938,9 @@ zelyra module plan main.zyl src/invoices.zyl
 Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
-Page-SQL sowie Formularen/CRUD zu Tabellen, erkannte Tabellenrelationen und
+Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
+Funktionen, von geschützten Ressourcen zur Authentifizierung, von
+Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
 Datenbankkonfiguration.
 Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische
 oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
