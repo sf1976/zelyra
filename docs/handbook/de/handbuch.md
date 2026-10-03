@@ -1891,7 +1891,7 @@ fn main() {
 ~~~
 
 Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
-`tableview`-Definitionen, benannte Views und typisierte Komponenten enthalten.
+`tableview`-Definitionen, Seiten, benannte Views und typisierte Komponenten enthalten.
 Funktionen, Typen und Records brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
 Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
 verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
@@ -1901,11 +1901,14 @@ Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
 
 `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` und die
 Datenbankbefehle laden den Projektgraphen. `serve` kann importierte
-`tableview`s, Views und Komponenten in die Anwendung integrieren.
+`tableview`s, Seiten, Views und Komponenten in die Anwendung integrieren.
+Importierte Seiten werden projektweit als Routen zusammengesetzt;
+überschneidende Seitenpfade werden mit Verweis auf die importierte Quelldatei
+abgelehnt.
 Tableview-Abfragen laufen derzeit über MariaDB; SQLite-Tableviews werden noch
 nicht ausgeführt.
 `context --format=json` zeigt den deterministisch sortierten Modulgraphen sowie
-importierte Tabellen, `tableview`-Definitionen, Views und Komponenten mit
+importierte Tabellen, `tableview`-Definitionen, Seiten, Views und Komponenten mit
 `span.file`-Quellpfad. Typ-,
 Capability- und Contract-Prüfungen bleiben aktiv; einige Template-Diagnosen
 brauchen noch eine vollständigere Zuordnung zur Quelldatei. `verify` bewahrt

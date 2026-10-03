@@ -180,17 +180,20 @@ architecture requirement for every phase, not a provider-specific feature.
   a deterministic, sorted module/import inventory. Imported database
   definitions and tables join the shared schema; imported views/components
   compose into the application and are rendered through `serve`. Their context
-  spans include project-relative file paths. Pages, forms, CRUD declarations,
-  APIs, and authentication resources remain entry-file-only; some template
+  spans include project-relative file paths. Imported pages join the
+  application route set; forms, CRUD declarations, APIs, and authentication
+  resources remain entry-file-only; some template
   diagnostics and verification results still lack complete per-module source
   provenance.
   Database configuration is not addressed through its alias and is
   limited to one connection per project. Imported tables retain global SQL
   names; imported tableview, view, and component names are global, with
   collisions rejected.
-  APIs and route-bound declarations remain unsupported in imported files.
-  Imported MariaDB-backed tableviews are now composed and served; database
-  commands load the linked graph when building the shared schema. Their diagnostics still need
+  Forms, CRUD, APIs, and authentication resources remain unsupported in
+  imported files.
+  Imported pages join the route set, with overlapping patterns rejected;
+  MariaDB-backed tableviews are composed and served. Database commands load
+  the linked graph when building the shared schema. Their diagnostics still need
   complete module-level source attribution. `impact` analyzes the linked graph
   with file-aware spans; `fmt` and `edit` remain file-local. This
   is not part of the published 0.3.0 binary.

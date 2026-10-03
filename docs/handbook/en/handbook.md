@@ -1904,8 +1904,8 @@ The imported file must declare `pub fn add(...)`; functions are private by
 default. Paths are relative to the entry file's directory. The project loader
 rejects cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, tables, tableviews, named
-views, typed components, and one
+currently contain functions, type aliases, records, tables, tableviews, pages,
+named views, typed components, and one
 project-wide database connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
 only one database definition is allowed in the complete project graph.
@@ -1914,8 +1914,10 @@ are global SQL identifiers, not module-qualified names, and duplicate table
 names are rejected. Tableviews, views, and components are composed from
 imported files
 under their declared, unqualified names; they do not yet have `pub` visibility
-syntax. Pages, forms, CRUD declarations, APIs, and authentication resources
-remain entry-file-only. Function, type, and
+syntax. Imported pages join the application's route set; overlapping page
+patterns are rejected with their source location. Forms, CRUD
+declarations, APIs, and authentication resources remain entry-file-only.
+Function, type, and
 record declarations are private by default; tables and the database
 definition are included by importing their file. Public records cannot expose
 private field types.
@@ -1926,11 +1928,12 @@ for the composed application. The runnable example is in
 `check`, `build`, `run`, `serve`, `context`, `verify`, `impact`, and database
 commands load the project graph. Database commands build the schema from the
 composed declarations; some schema diagnostics still lack complete module
-source attribution. `serve` can compose imported MariaDB-backed tableviews,
-views, and components into the application; the tableview query runtime does
-not yet execute against SQLite. `context --format=json` reports the
+source attribution. `serve` can compose imported pages, MariaDB-backed
+tableviews, views, and components into the application; the tableview query
+runtime does not yet execute against SQLite. `context --format=json` reports the
 deterministically sorted module graph, including imported tables, tableviews,
-views, and components with their project-relative source path in `span.file`.
+pages, views, and components with their project-relative source path in
+`span.file`.
 Some template diagnostics still need more complete per-module source
 attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`

@@ -390,9 +390,11 @@ composed application under their declared, unqualified names; explicitly
 importing a source file makes them available because these declarations do not
 yet have `pub` visibility syntax. Duplicate resource names are rejected.
 MariaDB-backed imported tableviews can be served as application routes; the
-current tableview query runtime does not yet execute against SQLite. Pages,
-forms, CRUD declarations, APIs, and authentication resources
-remain unsupported in imported files. Function,
+current tableview query runtime does not yet execute against SQLite. Imported
+pages are composed into the application's route set; overlapping page route
+patterns are rejected with the imported source location. Forms, CRUD
+declarations, APIs, and authentication resources remain unsupported in
+imported files. Function,
 type, and record declarations are private by
 default; declarations cross a module boundary only with a
 `pub` modifier and an explicit import alias. For example, use `pub fn`,

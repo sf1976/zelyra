@@ -546,6 +546,94 @@ view Shell {
 }
 
 #[test]
+fn imported_pages_are_type_checked_and_served_as_application_routes() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/reports.zyl\" as reports\nfn main() {}\n",
+        ),
+        (
+            "src/reports.zyl",
+            r#"type ReportId = Int
+
+page "/reports/{id}" {
+    input {
+        term: ReportId
+    }
+    html {
+        <h1>Imported report {term}</h1>
+    }
+}
+"#,
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(context.status.success());
+    let document: Value = serde_json::from_slice(&context.stdout).unwrap();
+    let page = document["declarations"]["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|page| page["path"] == "/reports/{id}")
+        .unwrap();
+    assert_eq!(page["span"]["file"], "src/reports.zyl");
+    assert_eq!(page["inputs"][0]["name"], "term");
+    assert_eq!(page["inputs"][0]["type"], "src/reports.zyl::ReportId");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&directory)
+        .args(["serve", "main.zyl", &address])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let response = {
+        let socket: std::net::SocketAddr = address.parse().unwrap();
+        let mut response = String::new();
+        for _ in 0..75 {
+            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                stream
+                    .write_all(
+                        b"GET /reports/42?term=7 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                let mut candidate = String::new();
+                stream.read_to_string(&mut candidate).unwrap();
+                if !candidate.is_empty() {
+                    response = candidate;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        response
+    };
+    let _ = server.kill();
+    let server_output = server.wait_with_output().unwrap();
+    assert!(
+        response.contains("200 OK"),
+        "{response}\nserver stderr: {}",
+        String::from_utf8_lossy(&server_output.stderr)
+    );
+    assert!(response.contains("Imported report 7"), "{response}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn duplicate_imported_components_report_their_own_source_file() {
     let directory = project(&[
         (

@@ -347,7 +347,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules support functions, type aliases, records, tables, tableviews, views, and components; route-bound resources such as pages, forms, CRUD, APIs, and authentication must remain in the entry file".into(),
+                message: "imported modules support functions, type aliases, records, tables, tableviews, pages, views, and components; forms, CRUD, APIs, and authentication resources must remain in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -377,6 +377,31 @@ fn link_modules(
             display_path: &module.relative_path,
             is_root: false,
         };
+        for mut page in module.program.pages.clone() {
+            if let Some(existing) = linked
+                .pages
+                .iter()
+                .find(|existing| page_routes_overlap(&existing.path, &page.path))
+            {
+                return Err(ProjectError {
+                    code: "E-MOD-012",
+                    message: format!(
+                        "page route `{}` overlaps existing project page `{}`",
+                        page.path, existing.path
+                    ),
+                    path: module.relative_path.clone(),
+                    span: page.span,
+                    sources: Box::default(),
+                });
+            }
+            for input in &mut page.inputs {
+                linker.rewrite_type(&mut input.ty, input.span)?;
+            }
+            for data in &mut page.data {
+                linker.rewrite_type(&mut data.result_type, data.span)?;
+            }
+            linked.pages.push(page);
+        }
         for mut table in module.program.tables.clone() {
             for column in &mut table.columns {
                 linker.rewrite_type(&mut column.ty, column.span)?;
@@ -503,21 +528,36 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 }
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.pages.is_empty()
-        || !program.forms.is_empty()
+    !program.forms.is_empty()
         || !program.cruds.is_empty()
         || !program.auth.is_empty()
         || !program.apis.is_empty()
 }
 
+fn page_routes_overlap(left: &str, right: &str) -> bool {
+    let left_parts = left
+        .trim_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    let right_parts = right
+        .trim_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    left_parts.len() == right_parts.len()
+        && left_parts.iter().zip(right_parts).all(|(left, right)| {
+            left == &right
+                || left.starts_with('{') && left.ends_with('}')
+                || right.starts_with('{') && right.ends_with('}')
+        })
+}
+
 fn first_unsupported_import_span(program: &Program) -> Option<Span> {
     program
-        .views
+        .forms
         .first()
         .map(|item| item.span)
-        .or_else(|| program.components.first().map(|item| item.span))
-        .or_else(|| program.pages.first().map(|item| item.span))
-        .or_else(|| program.forms.first().map(|item| item.span))
         .or_else(|| program.cruds.first().map(|item| item.span))
         .or_else(|| program.auth.first().map(|item| item.span))
         .or_else(|| program.apis.first().map(|item| item.span))
@@ -559,11 +599,13 @@ impl TypeLinker<'_> {
             }
         }
         for page in &mut program.pages {
-            for input in &mut page.inputs {
-                self.rewrite_type(&mut input.ty, input.span)?;
-            }
-            for data in &mut page.data {
-                self.rewrite_type(&mut data.result_type, data.span)?;
+            if page.span.source_id == source_id {
+                for input in &mut page.inputs {
+                    self.rewrite_type(&mut input.ty, input.span)?;
+                }
+                for data in &mut page.data {
+                    self.rewrite_type(&mut data.result_type, data.span)?;
+                }
             }
         }
         for component in &mut program.components {
@@ -1647,7 +1689,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_still_reject_route_bound_web_resources() {
+    fn imported_files_still_reject_forms_and_other_unsupported_resources() {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1655,12 +1697,31 @@ mod tests {
             ),
             (
                 "src/domain.zyl",
-                "page \"/domain\" { html { <h1>Domain</h1> } }\n",
+                "form Contact -> customers { fields { name } }\n",
             ),
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("route-bound resources"));
+        assert!(error.message.contains("forms"));
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn duplicate_page_routes_across_modules_report_the_imported_source() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/reports.zyl\" as reports\npage \"/reports/{id}\" { html { <h1>Root</h1> } }\nfn main() {}\n",
+            ),
+            (
+                "src/reports.zyl",
+                "page \"/reports/{slug}\" { html { <h1>Imported</h1> } }\n",
+            ),
+        ]);
+        let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
+        assert_eq!(error.code, "E-MOD-012");
+        assert_eq!(error.path, "src/reports.zyl");
+        assert!(error.message.contains("overlaps existing project page"));
         cleanup(&directory);
     }
 

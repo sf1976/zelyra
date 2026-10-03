@@ -199,15 +199,15 @@ Feature eines bestimmten Anbieters.
   Modul-/Import-Überblick. Importierte Datenbankdefinitionen und Tabellen
   fließen in das gemeinsame Schema ein; Views und Komponenten werden in die
   Anwendung integriert und durch `serve` gerendert. Ihre Kontextspannen
-  enthalten den projektrelativen Dateipfad. Seiten, Formulare, CRUD-, API- und
-  Authentifizierungsdefinitionen bleiben auf die Einstiegsdatei beschränkt;
-  bei einigen Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
+  enthalten den projektrelativen Dateipfad. Importierte Seiten werden in die
+  Anwendungsrouten integriert; überlappende Seitenpfade werden abgelehnt.
+  Bei einigen Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
   vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
   globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
-  werden abgelehnt. APIs und routengebundene Ressourcen bleiben in Importen
-  unzulässig. Importierte MariaDB-gestützte `tableview`s werden nun
-  zusammengesetzt und bereitgestellt;
+  werden abgelehnt. Formulare, CRUD, APIs und Authentifizierungsressourcen
+  bleiben in Importen unzulässig. MariaDB-gestützte `tableview`s werden nun
+  zusammengesetzt und bereitgestellt.
   Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema.
   Ihre Diagnosen brauchen noch eine vollständige Modul-Quellzuordnung.
   `impact` analysiert den Graphen mit dateibezogenen Spannen; `fmt` und `edit`
