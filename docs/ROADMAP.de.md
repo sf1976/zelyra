@@ -616,9 +616,10 @@ nicht automatisch zu 0.4.0-Versprechen.
 
 Der geprüfte Upstream-Release-Stand vom 2026-10-03 ist das stabile `v0.2.0`
 und der Vorabkandidat `v0.3.0-rc.2`; der Workspace auf `main` meldet `0.3.0`,
-aber ein finales `v0.3.0` wurde nicht veröffentlicht. Der 0.4.0-Plan gilt erst
-als begonnen, wenn dieses finale Release und der menschliche
-Onboarding-Nachweis festgehalten wurden. Umfang und Status bleiben dem
+aber ein finales `v0.3.0` wurde nicht veröffentlicht. Der Projektverantwortliche
+hat den menschlichen Einsteigertest für 0.3.0 ausdrücklich auf 0.4.0 vertagt;
+dies ist eine Risikoakzeptanz, kein Testnachweis. Der 0.4.0-Plan verlangt diese
+unabhängige Abnahme vor seinem finalen Release. Umfang und Status bleiben dem
 Risikoregister und den Abnahme-Gates des Plans unterstellt.
 
 ## Vorgeschlagener Release-Meilenstein 0.5.0
