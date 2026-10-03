@@ -2020,6 +2020,27 @@ binary, database service, or `.env`; credentials are not copied. Running it
 still requires a compatible Zelyra build, external runtime configuration, and
 MariaDB when applicable. This is not yet an independent Docker export.
 
+An experimental Docker package can additionally be generated:
+
+~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-docker --docker --compiler-ref 0123456789012345678901234567890123456789
+~~~
+
+`--compiler-ref` must be a full 40-character commit that contains the required
+module syntax. The generated Docker build fetches exactly that compiler commit
+from the public Zelyra repository and builds its runtime CLI. Compose starts
+the extracted application; MariaDB is not included. `.env.example` contains
+only placeholders and an empty `DATABASE_URL`. Copy it to `.env` and configure
+the database connection there if the application needs one. Credentials are
+neither copied nor built into the image.
+
+This Docker package is still not a complete module export:
+`source_closure_complete` and `complete_deployment` remain `false` because the
+static dependency graph does not yet prove every runtime and asset dependency.
+A successful `zelyra check` is not that proof. The Docker end-to-end test builds
+and starts one exported route separately; this validates that case, not the
+completeness of arbitrary projects.
+
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:
 
@@ -8464,6 +8485,9 @@ page "/items" {
 | `zelyra check <file.zyl>` | `[--format json]` | Statically checks syntax, types, contracts, and capabilities |
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
+| `zelyra module plan <entry> <module-or-resource>` | | Experimental read-only preview of known module dependencies |
+| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir>` | Creates a checked experimental source bundle; not a completeness claim |
+| | `--docker --compiler-ref <40-character-commit>` | Generates Dockerfile, Compose app, and `.env.example`; closure remains incomplete |
 | `zelyra setup` | `[--database]` | Starts Docker Compose / MariaDB |
 | | `[--schema]` | Starts environment and applies database schema |
 | | `[--all]` | Executes configuration, container startup, and schema migration |

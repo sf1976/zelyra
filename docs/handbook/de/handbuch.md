@@ -2004,6 +2004,28 @@ kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
 eine externe Laufzeitkonfiguration und gegebenenfalls eine MariaDB nötig. Ein
 eigenständiger Dockerexport ist damit noch nicht erreicht.
 
+Eine experimentelle Docker-Paketierung lässt sich zusätzlich erzeugen:
+
+~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-docker --docker --compiler-ref 0123456789012345678901234567890123456789
+~~~
+
+`--compiler-ref` muss ein vollständiger 40-stelliger Commit sein, der die
+benötigte Modulsyntax enthält. Der erzeugte Docker-Build lädt genau diesen
+Compiler-Commit aus dem öffentlichen Zelyra-Repository und baut daraus das
+Runtime-CLI. Die Compose-Datei startet die extrahierte Anwendung; eine
+MariaDB wird ausdrücklich nicht mitgeliefert. `.env.example` enthält nur
+Platzhalter und eine leere `DATABASE_URL`. Kopiere sie nach `.env` und
+konfiguriere dort die Datenbankverbindung, falls die Anwendung sie benötigt.
+Die Zugangsdaten werden weder kopiert noch in das Image gebaut.
+
+Auch diese Docker-Paketierung ist noch kein vollständiger Modul-Export:
+`source_closure_complete` und `complete_deployment` bleiben `false`, weil der
+statische Abhängigkeitsgraph noch nicht alle Laufzeit- und Asset-Abhängigkeiten
+beweist. Ein erfolgreicher `zelyra check` ersetzt diesen Nachweis nicht. Der
+Docker-End-to-End-Test baut und startet eine exportierte Route separat; das
+belegt den geprüften Fall, nicht die Vollständigkeit beliebiger Projekte.
+
 Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
 verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen
 werden in der HTML-Deklaration derzeit nicht mit `ui::` qualifiziert:
@@ -8549,6 +8571,9 @@ page "/items" {
 | `zelyra check <file.zyl>` | `[--format json]` | Prüft Syntax, Typen, Verträge und Capabilities statisch |
 | `zelyra run <file.zyl>` | | Kompiliert und führt ein Zelyra-Programm aus |
 | `zelyra serve <file.zyl>` | `[host:port]` | Startet den integrierten HTTP-Webserver |
+| `zelyra module plan <entry> <module-or-resource>` | | Experimentelle, schreibgeschützte Vorschau bekannter Modulabhängigkeiten |
+| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir>` | Erzeugt ein geprüftes experimentelles Quellpaket; kein Vollständigkeitsnachweis |
+| | `--docker --compiler-ref <40-stelliger-Commit>` | Erzeugt Dockerfile, Compose-App und `.env.example`; Abhängigkeitsschluss bleibt unvollständig |
 | `zelyra setup` | `[--database]` | Startet Docker Compose / MariaDB |
 | | `[--schema]` | Startet Umgebung und wendet Datenbankschema an |
 | | `[--all]` | Führt Konfiguration, Start und Migration in einem Schritt aus |

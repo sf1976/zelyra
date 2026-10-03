@@ -255,6 +255,101 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
 }
 
 #[test]
+fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nfn main() {}\n",
+        ),
+        (
+            "src/pages.zyl",
+            "page \"/invoices\" { html { <h1>Bundled invoices</h1> } }\n",
+        ),
+        (
+            ".env",
+            "DATABASE_URL=mariadb://must-not-be-copied\nPRIVATE_TOKEN=do-not-copy\n",
+        ),
+        (
+            ".env.example",
+            "DATABASE_URL=mariadb://example-secret-must-not-be-copied\n",
+        ),
+    ]);
+    let bundle = directory.with_extension("docker-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let compiler_ref = "a".repeat(40);
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/pages.zyl",
+            "--output",
+            &bundle_arg,
+            "--docker",
+            "--compiler-ref",
+            &compiler_ref,
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    for file in [
+        "Dockerfile",
+        "docker-compose.yml",
+        ".dockerignore",
+        ".env.example",
+    ] {
+        assert!(bundle.join(file).is_file(), "missing generated {file}");
+    }
+    assert!(!bundle.join(".env").exists());
+    let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
+    assert!(dockerfile.contains(&format!("ARG ZELYRA_REF={compiler_ref}")));
+    assert!(dockerfile.contains("git -C /zelyra fetch --depth=1 origin \"$ZELYRA_REF\""));
+    let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
+    assert!(env_example.contains("DATABASE_URL="));
+    assert!(!env_example.contains("must-not-be-copied"));
+    assert!(!env_example.contains("example-secret"));
+
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["kind"], "experimental-docker-source-package");
+    assert_eq!(manifest["docker"]["compiler_commit"], compiler_ref);
+    assert_eq!(manifest["source_closure_complete"], false);
+    assert_eq!(manifest["complete_deployment"], false);
+    let check = run(&bundle, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stdout)
+    );
+
+    let invalid_bundle = bundle.with_extension("invalid-docker-bundle");
+    let invalid_arg = invalid_bundle.to_string_lossy().into_owned();
+    let invalid = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/pages.zyl",
+            "--output",
+            &invalid_arg,
+            "--docker",
+            "--compiler-ref",
+            "main; touch /tmp/unsafe",
+        ],
+    );
+    assert!(!invalid.status.success());
+    assert!(!invalid_bundle.exists());
+    fs::remove_dir_all(bundle).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_and_run_support_public_records_and_qualified_types() {
     let directory = project(&[
         (

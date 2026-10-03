@@ -98,10 +98,10 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
-    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir>` writes a checked source-only bundle (not Docker)");
+    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-char-commit>]` writes a checked experimental bundle");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -687,7 +687,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
-RUN cargo install --path /zelyra/cli --root /out
+RUN cargo install --locked --path /zelyra/cli --root /out
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -2941,17 +2941,25 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
     }
 }
 
+type ModuleBundleFiles = (Vec<String>, Vec<String>, Vec<String>);
+
 fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
         usage();
         return ExitCode::from(2);
     };
     let mut output = None;
+    let mut docker = false;
+    let mut compiler_ref = None;
     while let Some(argument) = arguments.next() {
         if argument == "--output" && output.is_none() {
             output = arguments.next().map(PathBuf::from);
+        } else if argument == "--docker" && !docker {
+            docker = true;
+        } else if argument == "--compiler-ref" && compiler_ref.is_none() {
+            compiler_ref = arguments.next();
         } else {
-            eprintln!("error[E-CLI-001]: expected one `--output <directory>` option");
+            eprintln!("error[E-CLI-001]: expected `--output <directory>` and optional `--docker --compiler-ref <40-character-commit>`");
             return ExitCode::from(2);
         }
     }
@@ -2959,6 +2967,14 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         eprintln!("error[E-CLI-001]: `module bundle` requires `--output <directory>`");
         return ExitCode::from(2);
     };
+    if docker && !compiler_ref.as_deref().is_some_and(is_full_git_commit) {
+        eprintln!("error[E-CLI-001]: `--docker` requires `--compiler-ref` with a full 40-character hexadecimal Git commit");
+        return ExitCode::from(2);
+    }
+    if !docker && compiler_ref.is_some() {
+        eprintln!("error[E-CLI-001]: `--compiler-ref` can only be used together with `--docker`");
+        return ExitCode::from(2);
+    }
 
     let executable = match env::current_exe() {
         Ok(executable) => executable,
@@ -3114,8 +3130,9 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         return ExitCode::from(1);
     };
 
-    let build_result = (|| -> Result<(Vec<String>, Vec<String>), String> {
+    let build_result = (|| -> Result<ModuleBundleFiles, String> {
         let mut copied = Vec::new();
+        let mut docker_files = Vec::new();
         if full_project {
             copy_bundle_source(project_root, &staging, &entry_relative, "main.zyl")?;
             copied.push("main.zyl".to_owned());
@@ -3181,9 +3198,67 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         }
 
         let database = plan.get("database").cloned().unwrap_or(Value::Null);
+        if docker {
+            let compiler_ref = compiler_ref.as_deref().expect("validated compiler ref");
+            let dockerfile = format!(
+                r#"FROM rust:1-bookworm AS build
+ARG ZELYRA_REF={compiler_ref}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+RUN git init /zelyra \
+    && git -C /zelyra remote add origin https://github.com/sf1976/zelyra.git \
+    && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \
+    && git -C /zelyra checkout --detach FETCH_HEAD
+RUN cargo install --locked --path /zelyra/cli --root /out
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
+WORKDIR /app
+COPY . ./
+EXPOSE 8080
+CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:8080"]
+"#
+            );
+            let compose = r#"services:
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${ZELYRA_HOST_PORT:-18080}:8080"
+"#;
+            let env_example = r#"# Copy this file to .env and configure values for this deployment.
+# Never commit .env or put production credentials in this example.
+ZELYRA_HOST_PORT=18080
+# Required only when the selected application accesses a database.
+# Set DATABASE_URL to your MariaDB connection; never commit its real password.
+# DATABASE_URL=mariadb://USER:PASSWORD@host.docker.internal:3306/DATABASE
+DATABASE_URL=
+"#;
+            let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
+            for (name, contents) in [
+                ("Dockerfile", dockerfile),
+                ("docker-compose.yml", compose.to_owned()),
+                (".env.example", env_example.to_owned()),
+                (".dockerignore", dockerignore.to_owned()),
+            ] {
+                fs::write(staging.join(name), contents)
+                    .map_err(|error| format!("cannot write {name}: {error}"))?;
+                docker_files.push(name.to_owned());
+            }
+        }
+
         let manifest = json!({
             "format_version": 1,
-            "kind": "experimental-source-bundle",
+            "kind": if docker { "experimental-docker-source-package" } else { "experimental-source-bundle" },
             "selected": selected,
             "selected_module": selected_module,
             "selected_resource": plan.get("selected_resource"),
@@ -3192,9 +3267,19 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             "database": database,
             "source_closure_complete": false,
             "complete_deployment": false,
+            "docker": if docker {
+                json!({
+                    "compiler_repository": "https://github.com/sf1976/zelyra",
+                    "compiler_commit": compiler_ref,
+                    "files": docker_files,
+                    "database_connection": "external, configured per exported Compose project via DATABASE_URL"
+                })
+            } else {
+                Value::Null
+            },
             "limitations": [
                 "The static dependency graph is incomplete; this bundle is not a deployment manifest.",
-                "No Dockerfile, Compose stack, runtime binary, database service, or .env file is included.",
+                if docker { "The Docker package builds the compiler from the pinned source commit; runtime deployment completeness is not yet proven." } else { "No Dockerfile, Compose stack, runtime binary, database service, or .env file is included." },
                 "Database credentials and other runtime secrets are intentionally not copied.",
                 "The selected source file is included in full; resource selection does not remove co-located declarations."
             ]
@@ -3206,11 +3291,13 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             format!("{manifest_text}\n"),
         )
         .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
-        fs::write(
-            staging.join("README.md"),
-            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n",
-        )
-        .map_err(|error| format!("cannot write bundle README: {error}"))?;
+        let readme = if docker {
+            "# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `DATABASE_URL` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Never commit `.env`.\n"
+        } else {
+            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n"
+        };
+        fs::write(staging.join("README.md"), readme)
+            .map_err(|error| format!("cannot write bundle README: {error}"))?;
 
         let check = Command::new(&executable)
             .current_dir(&staging)
@@ -3223,11 +3310,11 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 String::from_utf8_lossy(&check.stdout)
             ));
         }
-        Ok((copied, support_files))
+        Ok((copied, support_files, docker_files))
     })();
 
     match build_result {
-        Ok((source_files, support_files)) => {
+        Ok((source_files, support_files, docker_files)) => {
             if fs::symlink_metadata(&output).is_ok() {
                 let _ = fs::remove_dir_all(&staging);
                 eprintln!(
@@ -3241,14 +3328,19 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 eprintln!("error[E-MOD-018]: cannot publish source bundle: {error}");
                 return ExitCode::from(1);
             }
-            println!("created experimental source bundle: {}", output.display());
             println!(
-                "{} Zelyra source files; {} support files",
+                "created experimental {} bundle: {}",
+                if docker { "Docker source" } else { "source" },
+                output.display()
+            );
+            println!(
+                "{} Zelyra source files; {} support files; {} Docker files",
                 source_files.len(),
-                support_files.len()
+                support_files.len(),
+                docker_files.len()
             );
             println!("the generated bundle passed `zelyra check`");
-            println!("this is not a complete deployment or Docker export; see zelyra.bundle.json");
+            println!("the static dependency graph is incomplete; complete_deployment remains false in zelyra.bundle.json");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -3282,6 +3374,10 @@ fn copy_bundle_source(
     fs::copy(&source, &destination)
         .map_err(|error| format!("cannot copy `{source_relative}`: {error}"))?;
     Ok(())
+}
+
+fn is_full_git_commit(value: &str) -> bool {
+    value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {

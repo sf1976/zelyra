@@ -639,6 +639,14 @@ end-to-end independent startup are P0 acceptance requirements. The plan keeps
 unimplemented features clearly marked and excludes any presumption of
 PostgreSQL runtime parity or production readiness.
 
+- [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
+  a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
+  a separate-container smoke test for an imported route passes. Each exported
+  app receives its own `DATABASE_URL`, while MariaDB remains external. The
+  manifest still records `source_closure_complete: false` and
+  `complete_deployment: false`. Complete dependency analysis, a modular
+  database interface, and full 0.5.0 acceptance remain open.
+
 ## Real-world acceptance applications
 
 - [~] The machine-management application is available as a MariaDB template

@@ -7,8 +7,10 @@ zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
 web_port="${ZELYRA_DOCKER_E2E_WEB_PORT:-8081}"
 host_port="${ZELYRA_DOCKER_E2E_HOST_PORT:-18082}"
 database_host_port="${ZELYRA_DOCKER_E2E_DB_HOST_PORT:-3309}"
+bundle_host_port="${ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT:-18083}"
 address="${ZELYRA_DOCKER_E2E_ADDRESS:-127.0.0.1:${host_port}}"
 zelyra_ref="${ZELYRA_DOCKER_E2E_REF:-$(git -C "${repo_dir}" branch --show-current 2>/dev/null || true)}"
+bundle_compiler_commit="${ZELYRA_DOCKER_E2E_MODULE_COMMIT:-$(git -C "${repo_dir}" rev-parse HEAD)}"
 
 if [[ ! -x "${zelyra_bin}" ]]; then
     echo "error: Zelyra binary not found at ${zelyra_bin}; run cargo build -p zelyra-cli first" >&2
@@ -27,9 +29,16 @@ fi
 
 project_root="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-generated-docker-e2e.XXXXXX")"
 project_dir="${project_root}/app"
+bundle_dir="${project_root}/module-bundle"
 compose_project="zelyra-generated-docker-e2e-$$"
+bundle_compose_project="zelyra-module-docker-e2e-$$"
 
 cleanup() {
+    if [[ -f "${bundle_dir}/.env" ]]; then
+        docker compose --project-name "${bundle_compose_project}" \
+            -f "${bundle_dir}/docker-compose.yml" \
+            down --remove-orphans >/dev/null 2>&1 || true
+    fi
     if [[ -f "${project_dir}/.env" ]]; then
         docker compose --project-name "${compose_project}" \
             --env-file "${project_dir}/.env" \
@@ -40,7 +49,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[1/4] generating a fresh MariaDB CRUD project"
+echo "[1/5] generating a fresh MariaDB CRUD project"
 "${zelyra_bin}" new "${project_dir}" --template mariadb-crud \
     --web-port "${web_port}" \
     --host-port "${host_port}" \
@@ -69,7 +78,7 @@ if [[ -n "${zelyra_ref}" ]]; then
     mv "${project_dir}/Dockerfile.e2e" "${project_dir}/Dockerfile"
 fi
 
-echo "[2/4] validating the generated Compose configuration"
+echo "[2/5] validating the generated Compose configuration"
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" config >/dev/null
@@ -113,7 +122,7 @@ assert_file_contains() {
     fi
 }
 
-echo "[3/4] running the complete first-run setup"
+echo "[3/5] running the complete first-run setup"
 if [[ -n "${zelyra_ref}" ]]; then
     echo "building the test runtime from the requested Zelyra ref without cached compiler layers"
     docker compose --project-name "${compose_project}" \
@@ -138,7 +147,7 @@ if ! cmp -s "${project_root}/env.before-setup" "${project_dir}/.env"; then
     exit 1
 fi
 
-echo "[4/4] checking recovery, CRUD pages, and published ports"
+echo "[4/5] checking recovery, CRUD pages, and published ports"
 if ! recovery_output="$(COMPOSE_PROJECT_NAME="${compose_project}" \
     "${zelyra_bin}" setup --all "${project_dir}" 2>&1)"; then
     printf '%s\n' "${recovery_output}" >&2
@@ -193,4 +202,39 @@ docker compose --project-name "${compose_project}" \
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
+echo "[5/5] building the selected source closure as its own Docker app"
+if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" page:/docker-module \
+    --output "${bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
+    echo "error: selected-module Docker package generation failed" >&2
+    exit 1
+fi
+cp "${bundle_dir}/.env.example" "${bundle_dir}/.env"
+sed -i "s/^ZELYRA_HOST_PORT=.*/ZELYRA_HOST_PORT=${bundle_host_port}/" "${bundle_dir}/.env"
+docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" config >/dev/null
+docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" up --build --detach
+bundle_address="127.0.0.1:${bundle_host_port}"
+for _ in $(seq 1 60); do
+    if curl --silent --show-error --fail "http://${bundle_address}/docker-module" \
+        -o "${project_root}/bundled-module.html"; then
+        break
+    fi
+    sleep 2
+done
+if ! curl --silent --show-error --fail "http://${bundle_address}/docker-module" \
+    -o "${project_root}/bundled-module.html"; then
+    echo "error: selected-module Docker container did not become ready" >&2
+    docker compose --project-name "${bundle_compose_project}" \
+        -f "${bundle_dir}/docker-compose.yml" logs >&2 || true
+    exit 1
+fi
+assert_file_contains "${project_root}/bundled-module.html" '<h1>Imported Docker module</h1>' \
+    "selected module route in its independent Docker container"
+if ! grep -Fq '"complete_deployment": false' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: experimental selected-module package overstated deployment completeness" >&2
+    exit 1
+fi
+docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" down --remove-orphans
 echo "generated Docker project E2E passed"
