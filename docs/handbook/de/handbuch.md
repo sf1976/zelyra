@@ -354,7 +354,7 @@ Set-Location zelyra
 zelyra --version
 zelyra --help
 ```
-`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.2.0`). Die Sprachkompatibilitätslinie bleibt 0.1.
+`zelyra --version` gibt den vollständigen Compiler- und Paketversionsstand aus (z. B. `zelyra 0.3.0`). Die Sprachkompatibilitätslinie bleibt 0.1.
 
 **Schritt 3: Docker Compose prüfen (für MariaDB-Projekte)**
 ```bash
@@ -500,7 +500,7 @@ zelyra fmt main.zyl
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Erstelle ein neues Projekt `mein_erstes_projekt` mit `zelyra new` und führe es aus.
-- **Stufe 2 (Mittel):** Ändere in `zelyra.toml` die Version auf `0.2.0` und gib in `main()` die neue Versionsnummer aus.
+- **Stufe 2 (Mittel):** Ändere in `zelyra.toml` die Version auf `0.3.0` und gib in `main()` die neue Versionsnummer aus.
 - **Stufe 3 (Anspruchsvoll):** Verändere die Einrückungen in `main.zyl` absichtlich unordentlich und beobachte, wie `zelyra fmt main.zyl` den Quelltext wieder perfekt ausrichtet.
 
 ### 8. Praxisaufgabe: Die Aufgabenverwaltung als echtes Projekt initialisieren
@@ -1904,7 +1904,7 @@ In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anf
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Erstelle mit `zelyra new aufgaben_app` eine neue Projektstruktur und untersuche die erzeugten Dateien.
-- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und die Versionsnummer `0.2.0`.
+- **Stufe 2 (Mittel):** Konfiguriere in `zelyra.toml` eine Beschreibung und die Versionsnummer `0.3.0`.
 - **Stufe 3 (Anspruchsvoll):** Schreibe ein Programm mit drei separaten Funktionen für Initialisierung, Verarbeitung und Ausgabe.
 
 ### 8. Praxisaufgabe: Projektstruktur für die Aufgabenverwaltung
