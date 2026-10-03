@@ -2024,6 +2024,9 @@ publishes the directory after that check succeeds. It also copies
 `zelyra.toml`, `zelyra.theme.css`, and JSON locale catalogs when present. An
 existing destination, unresolved reference, or dependency on the original
 entry is rejected. The selected source file is included in full.
+If the checked project graph contains multiple database declarations, planning
+stops with `E-DB-001` before any bundle files are written. Only one
+project-wide `DATABASE_URL` connection is currently implemented.
 
 The result is explicitly only an experimental source bundle:
 `zelyra.bundle.json` sets both `source_closure_complete` and

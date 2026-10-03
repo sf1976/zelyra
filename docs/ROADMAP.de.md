@@ -696,7 +696,9 @@ unterstellt.
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
   geheimnisfreies `.env.example`; ein eigenständiger Container-Smoke-Test für
   eine importierte Route ist grün. Die exportierte Anwendung erhält ihre
-  `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Das Manifest
+  `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Mehrere
+  Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
+  Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
   modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.

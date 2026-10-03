@@ -646,7 +646,9 @@ PostgreSQL runtime parity or production readiness.
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
   a separate-container smoke test for an imported route passes. Each exported
   app receives its own `DATABASE_URL`, while MariaDB remains external. The
-  manifest still records `source_closure_complete: false` and
+  bundle rejects multiple database definitions with `E-DB-001` before writing
+  files; only one project-wide connection is supported. The manifest still
+  records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
   database interface, and full 0.5.0 acceptance remain open.
 

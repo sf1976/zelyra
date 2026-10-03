@@ -255,6 +255,46 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
 }
 
 #[test]
+fn module_bundle_rejects_multiple_database_definitions_before_writing() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoices.zyl\" as invoices\nimport \"src/db_primary.zyl\" as storage\nimport \"src/db_reporting.zyl\" as analytics\nfn main() {}\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "table invoices { id: Id primary auto number: String(30) required }\ncrud Invoice -> invoices\n",
+        ),
+        (
+            "src/db_primary.zyl",
+            "database main { engine: mariadb database: \"billing\" }\n",
+        ),
+        (
+            "src/db_reporting.zyl",
+            "database reporting { engine: mariadb database: \"reports\" }\n",
+        ),
+    ]);
+    let bundle = directory.with_extension("multiple-database-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "crud:Invoice",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr)
+        .contains("single project-wide DATABASE_URL connection"));
+    assert!(!bundle.exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     let directory = project(&[
         (

@@ -2007,7 +2007,10 @@ veröffentlicht den Ordner erst nach erfolgreicher Prüfung. Er kopiert außerde
 `zelyra.toml`, `zelyra.theme.css` und JSON-Sprachkataloge, sofern vorhanden.
 Ein vorhandenes Ziel, ein nicht auflösbarer Verweis oder eine Abhängigkeit vom
 ursprünglichen Einstieg wird abgelehnt. Die ausgewählte Quelldatei bleibt
-vollständig enthalten.
+vollständig enthalten. Enthält der geprüfte Projektgraph mehrere
+Datenbankdeklarationen, stoppt die Planung mit `E-DB-001`, bevor Dateien
+geschrieben werden. Derzeit ist nur eine projektweite `DATABASE_URL`-Verbindung
+implementiert.
 
 Das Ergebnis ist ausdrücklich nur ein experimentelles Quellpaket:
 `zelyra.bundle.json` setzt sowohl `source_closure_complete` als auch

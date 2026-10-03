@@ -71,7 +71,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     let mut errors = Vec::new();
     if program.databases.len() > 1 {
         errors.push(SchemaError {
-            message: "only one database definition is supported in Phase 3".into(),
+            message: "only one database definition is supported per project graph; the runtime uses a single project-wide DATABASE_URL connection".into(),
             span: program.databases[1].span,
         });
     }
