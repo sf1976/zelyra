@@ -32,6 +32,28 @@ fn run(directory: &Path, arguments: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+fn get_until_response(address: &str, request: &[u8]) -> String {
+    let socket: std::net::SocketAddr = address.parse().unwrap();
+    for _ in 0..75 {
+        if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100)) {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            if stream.write_all(request).is_ok() {
+                let mut response = String::new();
+                match stream.read_to_string(&mut response) {
+                    Ok(_) if !response.is_empty() => return response,
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {}
+                    Err(error) => panic!("failed to read HTTP response: {error}"),
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(40));
+    }
+    String::new()
+}
+
 fn run_test_database_sql(database_url: &str, sql: &str) -> std::process::Output {
     let rest = database_url
         .strip_prefix("mariadb://")
@@ -214,31 +236,10 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let response = {
-        let socket: std::net::SocketAddr = address.parse().unwrap();
-        let mut response = String::new();
-        for _ in 0..75 {
-            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
-            {
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                stream
-                    .write_all(
-                        b"GET /invoices HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                    )
-                    .unwrap();
-                let mut candidate = String::new();
-                stream.read_to_string(&mut candidate).unwrap();
-                if !candidate.is_empty() {
-                    response = candidate;
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(40));
-        }
-        response
-    };
+    let response = get_until_response(
+        &address,
+        b"GET /invoices HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
     let _ = server.kill();
     let server_output = server.wait_with_output().unwrap();
     assert!(
@@ -1176,31 +1177,10 @@ fn serve_dispatches_an_imported_api_to_its_module_handler() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let response = {
-        let socket: std::net::SocketAddr = address.parse().unwrap();
-        let mut response = String::new();
-        for _ in 0..75 {
-            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
-            {
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                stream
-                    .write_all(
-                        b"GET /api/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                    )
-                    .unwrap();
-                let mut candidate = String::new();
-                stream.read_to_string(&mut candidate).unwrap();
-                if !candidate.is_empty() {
-                    response = candidate;
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(40));
-        }
-        response
-    };
+    let response = get_until_response(
+        &address,
+        b"GET /api/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
     let _ = server.kill();
     let server_output = server.wait_with_output().unwrap();
     assert!(
@@ -1378,31 +1358,10 @@ tableview InvoiceOverview {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let response = {
-        let socket: std::net::SocketAddr = address.parse().unwrap();
-        let mut response = String::new();
-        for _ in 0..75 {
-            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
-            {
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                stream
-                    .write_all(
-                        b"GET /views/invoiceoverview HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                    )
-                    .unwrap();
-                let mut candidate = String::new();
-                stream.read_to_string(&mut candidate).unwrap();
-                if !candidate.is_empty() {
-                    response = candidate;
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(40));
-        }
-        response
-    };
+    let response = get_until_response(
+        &address,
+        b"GET /views/invoiceoverview HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
     let _ = server.kill();
     let server_output = server.wait_with_output().unwrap();
     assert!(
@@ -1546,29 +1505,10 @@ view Shell {
         .spawn()
         .unwrap();
 
-    let response = {
-        let socket: std::net::SocketAddr = address.parse().unwrap();
-        let mut response = String::new();
-        for _ in 0..75 {
-            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
-            {
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                stream
-                    .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-                    .unwrap();
-                let mut candidate = String::new();
-                stream.read_to_string(&mut candidate).unwrap();
-                if !candidate.is_empty() {
-                    response = candidate;
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(40));
-        }
-        response
-    };
+    let response = get_until_response(
+        &address,
+        b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
     let _ = server.kill();
     let _ = server.wait();
 
@@ -1633,31 +1573,10 @@ page "/reports/{id}" {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    let response = {
-        let socket: std::net::SocketAddr = address.parse().unwrap();
-        let mut response = String::new();
-        for _ in 0..75 {
-            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
-            {
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                stream
-                    .write_all(
-                        b"GET /reports/42?term=7 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                    )
-                    .unwrap();
-                let mut candidate = String::new();
-                stream.read_to_string(&mut candidate).unwrap();
-                if !candidate.is_empty() {
-                    response = candidate;
-                    break;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(40));
-        }
-        response
-    };
+    let response = get_until_response(
+        &address,
+        b"GET /reports/42?term=7 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
     let _ = server.kill();
     let server_output = server.wait_with_output().unwrap();
     assert!(
