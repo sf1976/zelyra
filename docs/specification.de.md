@@ -331,15 +331,20 @@ fn main() {
 }
 ~~~
 
-Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase, Records und
-eine projektweite Datenbankverbindungsdefinition enthalten. Die
+Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase, Records,
+Tabellen, benannte Views, typisierte Komponenten und eine projektweite
+Datenbankverbindungsdefinition enthalten. Die
 Datenbankkonfiguration wird in die Anwendung übernommen und nicht über den
 Importalias angesprochen; im gesamten Projektgraphen ist höchstens eine
 Datenbank zulässig. Tabellen aus importierten Dateien werden in das gemeinsame
 physische Schema der Anwendung aufgenommen. Tabellennamen sind globale
 SQL-Bezeichner statt modulqualifizierter Namen; doppelte Tabellennamen werden
-abgelehnt. Views, Komponenten, Seiten, Formulare, CRUD-, API- und
-Authentifizierungsdefinitionen bleiben in importierten Dateien unzulässig.
+abgelehnt. Importierte Views und Komponenten werden unter ihren deklarierten,
+nicht qualifizierten Namen in die Anwendung aufgenommen. Mit dem Import der
+Quelldatei werden sie verfügbar, da es für diese Deklarationen noch keine
+`pub`-Sichtbarkeitssyntax gibt. Doppelte View- und Komponentennamen werden
+abgelehnt. Seiten, Formulare, CRUD-, API- und Authentifizierungsdefinitionen
+bleiben in importierten Dateien unzulässig.
 Funktions-, Typ- und Record-Deklarationen sind standardmäßig privat;
 Deklarationen überschreiten eine Modulgrenze nur mit `pub` und einem
 ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type` oder
@@ -369,15 +374,19 @@ pub fn total() -> money::Money {
 }
 ~~~
 
-`check`, `build`, `run`, `context` und `verify` prüfen derzeit diesen
+`check`, `build`, `run`, `serve`, `context` und `verify` prüfen derzeit diesen
 Projektgraphen. Das maschinenlesbare Kontextdokument enthält jedes erreichbare
 Modul und seine sortierten Importkanten. Importierte Datenbankdefinitionen und
 Tabellen werden in das gemeinsame Projektschema übernommen; ihre
 Kontextspannen nennen unter `span.file` den projektrelativen Quelldateipfad.
-Das Kontextinventar für Webressourcen bleibt auf die Einstiegsdatei begrenzt.
-`verify` prüft verknüpfte Funktionen, bewahrt in Verifikationsergebnissen aber
-noch keine Quellzuordnung pro Modul. Views, APIs und andere
-Anwendungsressourcen bleiben in importierten Dateien unzulässig. `fmt`,
+Das Kontextinventar enthält außerdem importierte Views und Komponenten mit
+ihren Quellspannen. `serve` verknüpft importierte Views/Komponenten mit den
+Seiten und startet die zusammengesetzte Anwendung. Bei einigen
+Template-Diagnosen fehlt noch eine vollständige Zuordnung zum jeweiligen
+Modul. `verify` prüft verknüpfte Funktionen, bewahrt in
+Verifikationsergebnissen aber noch keine Quellzuordnung pro Modul. Seiten,
+APIs und andere routengebundene Anwendungsressourcen bleiben in importierten
+Dateien unzulässig. `fmt`,
 `edit` und Datenbankbefehle arbeiten weiterhin nur mit der angegebenen
 Quelldatei. `impact` wertet den verknüpften Modulgraphen aus und weist seine
 Spannen der jeweiligen Quelldatei zu. Diese Grenzen machen die

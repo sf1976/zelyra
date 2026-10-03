@@ -188,22 +188,25 @@ Feature eines bestimmten Anbieters.
 ## 2. Sprache und Compiler
 
 - [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [~] Experimentelle Funktions-/Typ-/Record-/Tabellen-Imports und projektweite
+- [~] Experimentelle Funktions-/Typ-/Record-/Tabellen-/View-/Komponenten-Imports und projektweite
   Datenbankkonfiguration im aktuellen
   Entwicklungszweig unterstützen projektrelative Imports, `pub`-Deklarationen,
   qualifizierte Aufrufe und Typreferenzen, Zyklenerkennung,
   Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
   Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
-  `check`, `build`, `run`, `context` und `verify` prüfen diesen Graphen; der
+  `check`, `build`, `run`, `serve`, `context` und `verify` prüfen diesen Graphen; der
   maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
   Modul-/Import-Überblick. Importierte Datenbankdefinitionen und Tabellen
-  fließen in das gemeinsame Schema ein; ihre Kontextspannen enthalten den
-  projektrelativen Dateipfad. Webressourcen im Kontextinventar bleiben auf die
-  Einstiegsdatei begrenzt; Verifikationsergebnisse haben noch keine
-  Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
+  fließen in das gemeinsame Schema ein; Views und Komponenten werden in die
+  Anwendung integriert und durch `serve` gerendert. Ihre Kontextspannen
+  enthalten den projektrelativen Dateipfad. Seiten, Formulare, CRUD-, API- und
+  Authentifizierungsdefinitionen bleiben auf die Einstiegsdatei beschränkt;
+  bei einigen Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
+  vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
-  globale SQL-Namen; Views und APIs
-  bleiben noch unvollständig. `impact` analysiert den verknüpften Graphen mit
+  globale SQL-Namen; importierte View-/Komponentennamen sind global, Kollisionen
+  werden abgelehnt. APIs und routengebundene Ressourcen bleiben in Importen
+  unzulässig. `impact` analysiert den verknüpften Graphen mit
   dateibezogenen Spannen; `fmt`, `edit` und Datenbankbefehle bleiben dateilokal.
   Das Feature ist
   nicht im veröffentlichten 0.3.0-Binary enthalten.

@@ -1,8 +1,11 @@
 use serde_json::Value;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
@@ -222,6 +225,170 @@ fn check_rejects_import_cycles_and_private_symbols_before_execution() {
     assert!(!private_result.status.success());
     assert!(String::from_utf8_lossy(&private_result.stderr).contains("E-MOD-007"));
     fs::remove_dir_all(private).unwrap();
+}
+
+#[test]
+fn imported_views_and_components_are_composed_and_served() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            r#"import "src/shell.zyl" as shell
+page "/" {
+    view: Shell
+    html {
+        <p>Entry page content</p>
+    }
+}
+fn main() {}
+"#,
+        ),
+        (
+            "src/shell.zyl",
+            r#"component Brand {
+    props {
+        label: String
+    }
+    html {
+        <strong>{label}</strong>
+    }
+}
+view Shell {
+    html {
+        <html><body><header><Brand label="Shared module" /></header><main><slot /></main></body></html>
+    }
+}
+"#,
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stderr)
+    );
+    let document: Value = serde_json::from_slice(&context.stdout).unwrap();
+    let shell = document["declarations"]["views"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|view| view["name"] == "Shell")
+        .unwrap();
+    assert_eq!(shell["span"]["file"], "src/shell.zyl");
+    let brand = document["declarations"]["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|component| component["name"] == "Brand")
+        .unwrap();
+    assert_eq!(brand["span"]["file"], "src/shell.zyl");
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(env!("CARGO_BIN_EXE_zelyra"))
+        .current_dir(&directory)
+        .args(["serve", "main.zyl", &address])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let response = {
+        let socket: std::net::SocketAddr = address.parse().unwrap();
+        let mut response = String::new();
+        for _ in 0..75 {
+            if let Ok(mut stream) = TcpStream::connect_timeout(&socket, Duration::from_millis(100))
+            {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                stream
+                    .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                    .unwrap();
+                let mut candidate = String::new();
+                stream.read_to_string(&mut candidate).unwrap();
+                if !candidate.is_empty() {
+                    response = candidate;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(40));
+        }
+        response
+    };
+    let _ = server.kill();
+    let _ = server.wait();
+
+    assert!(response.contains("200 OK"), "{response}");
+    assert!(
+        response.contains("<strong>Shared module</strong>"),
+        "{response}"
+    );
+    assert!(response.contains("Entry page content"), "{response}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn duplicate_imported_components_report_their_own_source_file() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() {}\n",
+        ),
+        (
+            "src/a.zyl",
+            "component Badge { html { <strong>A</strong> } }\n",
+        ),
+        (
+            "src/b.zyl",
+            "component Badge { html { <strong>B</strong> } }\n",
+        ),
+    ]);
+    let result = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!result.status.success());
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let diagnostics = document["diagnostics"].as_array().unwrap();
+    assert!(
+        diagnostics
+            .iter()
+            .any(|item| { item["code"] == "E-VIEW-005" && item["file"] == "src/b.zyl" }),
+        "{document}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn duplicate_imported_views_report_their_own_source_file() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/a.zyl\" as a\nimport \"src/b.zyl\" as b\nfn main() {}\n",
+        ),
+        (
+            "src/a.zyl",
+            "view Shell { html { <main><slot /></main> } }\n",
+        ),
+        (
+            "src/b.zyl",
+            "view Shell { html { <main><slot /></main> } }\n",
+        ),
+    ]);
+    let result = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!result.status.success());
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let diagnostics = document["diagnostics"].as_array().unwrap();
+    assert!(diagnostics
+        .iter()
+        .any(|item| { item["code"] == "E-VIEW-001" && item["file"] == "src/b.zyl" }));
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

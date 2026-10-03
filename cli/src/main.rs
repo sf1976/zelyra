@@ -1119,24 +1119,22 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut names = HashSet::new();
     for view in &program.views {
         if !names.insert(view.name.as_str()) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-001",
                 &format!("duplicate view definition `{}`", view.name),
-                view.span.line,
-                view.span.column,
+                view.span,
             );
             valid = false;
         }
         let slots = match slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-028",
                     &format!("view `{}` has invalid slots: {message}", view.name),
-                    view.span.line,
-                    view.span.column,
+                    view.span,
                 );
                 valid = false;
                 Vec::new()
@@ -1144,30 +1142,28 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
         };
         let default_slots = slots.iter().filter(|slot| slot.name.is_none()).count();
         if default_slots != 1 {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-002",
                 &format!(
                     "view `{}` must contain exactly one default `<slot />` content slot (found {default_slots})",
                     view.name,
                 ),
-                view.span.line,
-                view.span.column,
+                view.span,
             );
             valid = false;
         }
         let mut named_slots = HashSet::new();
         for slot in slots.iter().filter_map(|slot| slot.name.as_deref()) {
             if !named_slots.insert(slot) {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-028",
                     &format!(
                         "view `{}` declares named slot `{slot}` more than once",
                         view.name
                     ),
-                    view.span.line,
-                    view.span.column,
+                    view.span,
                 );
                 valid = false;
             }
@@ -2314,6 +2310,21 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
             })
         })
         .collect::<Vec<_>>();
+    let components = program
+        .components
+        .iter()
+        .map(|component| {
+            json!({
+                "name": component.name,
+                "props": component.props.iter().map(|prop| json!({
+                    "name": prop.name,
+                    "type": prop.ty.to_string()
+                })).collect::<Vec<_>>(),
+                "slots": context_view_slots(&component.html),
+                "span": context_span(source, component.span)
+            })
+        })
+        .collect::<Vec<_>>();
     let pages = program
         .pages
         .iter()
@@ -2410,6 +2421,7 @@ fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
         "cruds": cruds,
         "pages": pages,
         "views": views,
+        "components": components,
         "tableviews": tableviews,
         "forms": forms,
         "apis": apis,
@@ -2424,6 +2436,7 @@ fn empty_context_declarations() -> Value {
         "cruds": [],
         "pages": [],
         "views": [],
+        "components": [],
         "tableviews": [],
         "forms": [],
         "apis": [],
@@ -3395,50 +3408,46 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             .next()
             .is_some_and(|character| character.is_ascii_uppercase())
         {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-004",
                 &format!(
                     "view component `{}` must start with an uppercase letter",
                     component.name
                 ),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         if !names.insert(component.name.as_str()) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-005",
                 &format!("duplicate view component `{}`", component.name),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         if let Err(message) = declared_component_slots(component) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-011",
                 &format!("component `{}`: {message}", component.name),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         let mut props = HashSet::new();
         for prop in &component.props {
             if !props.insert(prop.name.as_str()) {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-005",
                     &format!(
                         "duplicate property `{}` in component `{}`",
                         prop.name, component.name
                     ),
-                    prop.span.line,
-                    prop.span.column,
+                    prop.span,
                 );
                 valid = false;
             }
@@ -6867,7 +6876,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let program = match load(&path) {
+    let program = match validate(&path) {
         Ok(program) => program,
         Err(()) => return ExitCode::from(1),
     };

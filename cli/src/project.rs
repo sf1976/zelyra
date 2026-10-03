@@ -347,7 +347,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules support functions, type aliases, records, tables, and a project-wide database definition; keep views, APIs, and other application resources in the entry file".into(),
+                message: "imported modules support functions, type aliases, records, tables, views, and components; pages, APIs, and other route-bound resources must remain in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -417,6 +417,16 @@ fn link_modules(
             function.name = internal_name(module_name, &function.name);
             linked.functions.push(function);
         }
+        // Views and components are reusable project resources. They are
+        // intentionally available by their declared names after import; the
+        // current language does not yet define visibility modifiers for them.
+        linked.views.extend(module.program.views.clone());
+        for mut component in module.program.components.clone() {
+            for prop in &mut component.props {
+                linker.rewrite_type(&mut prop.ty, prop.span)?;
+            }
+            linked.components.push(component);
+        }
     }
 
     let root_linker = TypeLinker {
@@ -473,9 +483,7 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 }
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.views.is_empty()
-        || !program.components.is_empty()
-        || !program.pages.is_empty()
+    !program.pages.is_empty()
         || !program.tableviews.is_empty()
         || !program.forms.is_empty()
         || !program.cruds.is_empty()
@@ -541,8 +549,10 @@ impl TypeLinker<'_> {
             }
         }
         for component in &mut program.components {
-            for prop in &mut component.props {
-                self.rewrite_type(&mut prop.ty, prop.span)?;
+            if component.span.source_id == source_id {
+                for prop in &mut component.props {
+                    self.rewrite_type(&mut prop.ty, prop.span)?;
+                }
             }
         }
         for view in &mut program.tableviews {
@@ -1617,7 +1627,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_still_reject_web_resources_for_now() {
+    fn imported_files_still_reject_route_bound_web_resources() {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1630,7 +1640,7 @@ mod tests {
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("other application resources"));
+        assert!(error.message.contains("route-bound resources"));
         cleanup(&directory);
     }
 

@@ -1887,12 +1887,10 @@ console = false
 `src/schema.zyl` is checked only if you invoke `zelyra check src/schema.zyl`
 separately. Names and types declared in one file are therefore not
 automatically available in the other. The published release contains no
-module imports. An experimental function-import slice exists in the current
-development branch; complete modules and deterministic multi-file projects
-remain work for 0.4.0.
+module imports. The current development branch has an experimental import slice;
+complete modules and deterministic multi-file projects remain work for 0.4.0.
 
-**🧪 Current unreleased development branch:** an experimental module slice for
-functions, type aliases, and records is implemented and tested. Its syntax is:
+**🧪 Current unreleased development branch:** an experimental first project-module slice is implemented and tested. Its syntax is:
 
 ~~~zelyra
 import "src/math.zyl" as math
@@ -1903,17 +1901,20 @@ fn main() {
 ~~~
 
 The imported file must declare `pub fn add(...)`; functions are private by
-default. Paths are relative to the entry file's directory. `check`, `build`,
-and `run` load the imports, reject cycles and paths outside the project root,
+default. Paths are relative to the entry file's directory. The project loader
+rejects cycles and paths outside the project root,
 and keep type, capability, and contract checks active. Imported files may
-currently contain functions, type aliases, records, tables, and one
+currently contain functions, type aliases, records, tables, named views, typed
+components, and one
 project-wide database connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
 only one database definition is allowed in the complete project graph.
 Imported tables join the application's shared physical schema. Their names
 are global SQL identifiers, not module-qualified names, and duplicate table
-names are rejected. Views, components, pages, forms, CRUD declarations, APIs,
-and authentication resources remain entry-file-only. Function, type, and
+names are rejected. Views and components are composed from imported files
+under their declared, unqualified names; they do not yet have `pub` visibility
+syntax. Pages, forms, CRUD declarations, APIs, and authentication resources
+remain entry-file-only. Function, type, and
 record declarations are private by default; tables and the database
 definition are included by importing their file. Public records cannot expose
 private field types.
@@ -1921,15 +1922,53 @@ The database module is ordinary project configuration, not a separately named
 database service: the current runtime supports only one configured database
 for the composed application. The runnable example is in
 `examples/modules/`.
-`context --format=json` reports the complete, deterministically sorted module
-graph. Context spans for imported tables and database definitions include
-their project-relative source path in `span.file`; the web-resource inventory
-remains entry-file-only. `verify` also checks the linked graph, but
+`check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the
+project graph. `serve` can compose imported views and components into pages.
+`context --format=json` reports the deterministically sorted module graph,
+including imported views and components with their project-relative source path in
+`span.file`. Some template diagnostics still need more complete per-module
+source attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`
 analyzes the linked graph and marks spans with their source file. `fmt`,
 `edit`, and database commands still process only the explicitly named source
 file. This branch behavior is experimental and is not included in the
 published 0.3.0 binary.
+
+Imported UI resources can be used by a page in the entry file. The alias
+includes the file; view and component names are currently unqualified in HTML:
+
+~~~zelyra
+// src/ui.zyl
+component Banner {
+    props {
+        title: String
+    }
+    html {
+        <header><strong>{title}</strong></header>
+    }
+}
+
+view Shell {
+    html {
+        <html><body><Banner title="Invoices" /><main><slot /></main></body></html>
+    }
+}
+~~~
+
+~~~zelyra
+// main.zyl
+import "src/ui.zyl" as ui
+
+page "/" {
+    view: Shell
+    html {
+        <p>This page uses imported UI resources.</p>
+    }
+}
+~~~
+
+Run `zelyra serve main.zyl` to render the linked project. The complete example
+with logic and database modules is in `examples/modules/`.
 
 A module can export a domain record for another module to use in a function
 signature:
@@ -5624,9 +5663,10 @@ milestones:
   workflows, and independent human onboarding acceptance. See the [release
   plan](../../release-plans/0.4.0.en.md).
 - **Later milestones:** a package manager, WebAssembly compilation, and any
-  LTS commitment remain future work. The current branch has only the limited
-  function-import experiment described in Chapter 15; it is not in release
-  0.3.0 and does not yet provide full project modules.
+  LTS commitment remain future work. The current branch has an experimental
+  import slice for functions, types, records, tables, views, components, and
+  project-wide database configuration. It is not in release 0.3.0 and does
+  not yet provide a complete, stable project-module model.
 
 ### 4. Small, progressive examples: Zelyra's Guarantees to Developers
 - **No breaking changes without deprecation cycles:** Syntax changes are introduced with generous transition periods and explicit compiler hints.
@@ -5638,7 +5678,7 @@ milestones:
   documents its supported paths and residual risks; production approval is not
   claimed.
 - **Misconception:** Assuming that imports work in every Zelyra version like they do in another language.
-  *Correction:* Published 0.3.0 has no module imports. The current development branch supports only static, project-local imports of function files through `check`, `build`, and `run`; the wider module model remains planned.
+  *Correction:* Published 0.3.0 has no module imports. The current development branch supports static, project-local imports for a limited set of declarations through `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact`; complete module packaging, visibility, and tool integration remain planned.
 
 ### 6. Key takeaways
 1. Zelyra follows a disciplined, transparent roadmap from the current 0.3.0
@@ -5646,8 +5686,9 @@ milestones:
 2. The core platform has tested experimental paths for database integration,
    web applications, static safety, and AI-native tooling; it is not approved
    for production today.
-3. A full module model, package distribution, and WebAssembly remain future
-   work; only limited function imports exist in the current development branch.
+3. A complete module model, package distribution, and WebAssembly remain
+   future work; the current development branch has a limited experimental
+   multi-file compiler slice.
 
 ### 7. Exercises (Level 1 Easy, Level 2 Medium, Level 3 Challenging)
 - **Level 1 (Easy):** Read the official `CHANGELOG.md` in the Zelyra GitHub repository.
@@ -7683,8 +7724,8 @@ and was checked with the installed Rust toolchain or Zelyra CLI. `🧪`, `🗺�
 | Indentation | readability, not block semantics | readability, not block semantics | whitespace is not Python-style structure | ✅ |
 | Error handling | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra has no Rust `?` operator | ✅ |
 | String interpolation | HTML bodies may use `{name}` | `format!("{name}")` or `println!("{}", name)` | no general Zelyra string interpolation | 🧪 |
-| Modules | `pub fn` in an imported file (experimental branch) | `mod name {}`, files and modules | only imported function declarations are currently supported; release 0.3.0 has none | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` (experimental branch) | `use crate::module::Item;` | project-local file imports; only `check`, `build`, and `run` load the graph so far | 🧪 |
+| Modules | `pub fn` and other declarations in imported files (development branch) | `mod name {}`, files and modules | experimental; release 0.3.0 has none, and views/components still lack visibility modifiers | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` (development branch) | `use crate::module::Item;` | project-local imports; `check`, `build`, `run`, `serve`, `context`, `verify`, and `impact` load the graph | 🧪 |
 | Generics | `Option<T>`, `Result<T, E>`, limited built-in type arguments | general generics and traits | no user-defined Zelyra generics | 🧪 |
 | Async functions | no `async fn`; `await`/`parallel` are limited | `async fn`, `.await`, futures | no stable Zelyra async model | 🧪 |
 | Tables | `table customers { ... }` | no language construct | Zelyra connects table and schema | ✅ |
@@ -8541,10 +8582,10 @@ fn main() {
 **Question: Why is there no `import` statement in Zelyra 0.3.0?**
 *Answer:* The published 0.3.0 binary has no module imports. A CLI invocation
 checks only the explicitly named `.zyl` source file. The current unreleased
-development branch has experimental imports for functions, type aliases, and
-records, validated by `check`, `build`, `run`, `context`, and `verify`. Complete
-project modules remain planned work and must not be confused with this limited
-implementation.
+development branch has experimental imports for functions, types, records,
+tables, views, components, and project-wide database configuration. Commands
+including `serve` can use the linked project graph, but complete stable modules
+and package exports remain planned work.
 
 **Question: Can I build command-line applications with Zelyra?**
 *Answer:* Yes. `print()` emits values. `read_console("Prompt: ")` reads a line and returns `String?`; the function needs `uses Console` and the project may also need `console = true`.

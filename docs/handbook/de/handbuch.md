@@ -1875,12 +1875,12 @@ implementiert. `zelyra check main.zyl` prüft `main.zyl`; eine zusätzliche Date
 wie `src/schema.zyl` wird nur mit einem eigenen Aufruf wie
 `zelyra check src/schema.zyl` geprüft. Namen und Typen aus einer Datei stehen
 der anderen dadurch nicht automatisch zur Verfügung. Das veröffentlichte
-Release enthält keine Modulimporte. Ein experimenteller Funktions-Import ist
-im aktuellen Entwicklungszweig vorhanden; vollständige Module und
+Release enthält keine Modulimporte. Ein experimenteller, begrenzter
+Modul-Importpfad ist im aktuellen Entwicklungszweig vorhanden; vollständige Module und
 deterministische Mehrdateiprojekte bleiben Arbeit für 0.4.0.
 
 **🧪 Aktueller, noch unveröffentlichter Entwicklungszweig:** Ein erster
-Funktions-Modulschnitt ist implementiert und getestet. Die Syntax lautet:
+Projekt-Modulschnitt ist implementiert und getestet. Die Syntax lautet:
 
 ~~~zelyra
 import "src/math.zyl" as math
@@ -1890,27 +1890,63 @@ fn main() {
 }
 ~~~
 
-Die importierte Datei muss `pub fn add(...)` deklarieren; Funktionen sind
-standardmäßig privat. Pfade beziehen sich auf das Verzeichnis der
-Einstiegsdatei. `check`, `build` und `run` laden die Imports, lehnen Zyklen und
-Pfade außerhalb des Projektstamms ab und behalten Typ-, Capability- und
-Contract-Prüfungen bei. Importierte Dateien dürfen derzeit Funktionen,
-Typ-Aliase, Records, Tabellen und eine projektweite Datenbankdefinition
-enthalten. Tabellen fließen in ein gemeinsames Schema ein und behalten globale
-SQL-Namen; doppelte Namen werden abgelehnt. Funktions-, Typ- und
-Record-Deklarationen sind standardmäßig privat; Tabellen und die
-Datenbankdefinition werden durch den Import ihrer Datei aufgenommen.
-Öffentliche Records dürfen keine privaten Typen in ihren Feldern verbergen.
-`context --format=json`
-zeigt den vollständigen, deterministisch sortierten Modulgraphen. Die
-Kontextspannen importierter Tabellen und Datenbankdefinitionen enthalten den
-projektrelativen Quellpfad unter `span.file`; das Inventar für Webressourcen
-bleibt auf die Einstiegsdatei beschränkt. `verify` prüft den verknüpften
-Graphen, weist Ergebnisse aber noch keiner Quelldatei im Modulgraphen zu.
-`impact` wertet den verknüpften Modulgraphen aus und kennzeichnet Spannen mit
-dem jeweiligen Quelldateipfad. `fmt`, `edit` und Datenbankbefehle bearbeiten
-weiterhin nur die ausdrücklich angegebene Quelldatei. Dieses Branch-Verhalten
-ist experimentell und nicht im veröffentlichten 0.3.0-Binary enthalten.
+Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen, benannte
+Views und typisierte Komponenten enthalten. Funktionen, Typen und Records
+brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
+Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
+verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
+Tabellen fließen in ein gemeinsames Schema ein und behalten globale SQL-Namen;
+doppelte Tabellen-, View- und Komponentennamen werden abgelehnt. Eine
+Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
+
+`check`, `build`, `run`, `serve`, `context`, `verify` und `impact` laden den
+Projektgraphen. `serve` kann damit importierte Views und Komponenten in Seiten
+einsetzen. `context --format=json` zeigt den deterministisch sortierten
+Modulgraphen sowie importierte Views und Komponenten mit `span.file`-Quellpfad. Typ-,
+Capability- und Contract-Prüfungen bleiben aktiv; einige Template-Diagnosen
+brauchen noch eine vollständigere Zuordnung zur Quelldatei. `verify` bewahrt
+noch keine Modul-Quellzuordnung in seinen Ergebnissen. `fmt`, `edit` und
+Datenbankbefehle bearbeiten weiterhin nur die ausdrücklich angegebene
+Quelldatei. Dieses Branch-Verhalten ist experimentell und nicht im
+veröffentlichten 0.3.0-Binary enthalten.
+
+Importierte Oberflächenbausteine können von einer Seite der Einstiegsdatei
+verwendet werden. Der Alias bindet die Datei ein; View- und Komponentennamen
+werden in der HTML-Deklaration derzeit nicht mit `ui::` qualifiziert:
+
+~~~zelyra
+// src/ui.zyl
+component Banner {
+    props {
+        title: String
+    }
+    html {
+        <header><strong>{title}</strong></header>
+    }
+}
+
+view Shell {
+    html {
+        <html><body><Banner title="Rechnungen" /><main><slot /></main></body></html>
+    }
+}
+~~~
+
+~~~zelyra
+// main.zyl
+import "src/ui.zyl" as ui
+
+page "/" {
+    view: Shell
+    html {
+        <p>Die Seite verwendet importierte Bausteine.</p>
+    }
+}
+~~~
+
+Mit `zelyra serve main.zyl` wird die Seite aus dem verknüpften Projektgraphen
+gerendert. Die vollständige Beispieldatei mit Logik- und Datenbankmodulen liegt
+unter `examples/modules/`.
 
 Ein Modul kann einen fachlichen Record exportieren, den ein anderes Modul in
 einer Funktionssignatur verwendet:
@@ -1954,7 +1990,9 @@ In `zelyra.toml` legst du fest, welche Systemzugriffe das Projekt überhaupt anf
 
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Modulimporte mit dem veröffentlichten Zelyra-0.3.0-Binary verwenden.
-  *Ursache:* `import` gehört nicht zu diesem Release. Der Entwicklungszweig enthält eine experimentelle Implementierung nur für Funktionen; sie ist kein unterstütztes 0.3.0-Feature.
+  *Ursache:* `import` gehört nicht zu diesem Release. Der Entwicklungszweig
+  unterstützt experimentell mehrere Deklarationstypen, aber noch kein
+  vollständiges, stabiles Modul- und Paketmodell.
 - **Fehler:** `zelyra.toml` löschen oder im falschen Verzeichnis ausführen.
   *Ursache:* `zelyra run` sucht im aktuellen Verzeichnis nach der Konfiguration.
 
@@ -5581,10 +5619,10 @@ Release-Meilensteine:
   Konto-/API-Abläufe und unabhängige menschliche Einsteigerabnahme. Siehe den
   [Releaseplan](../../release-plans/0.4.0.de.md).
 - **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
-  bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält nur das
-  in Kapitel 15 beschriebene Experiment für Funktions-, Typ-, Record-, Tabellen-
-  und Datenbankkonfigurations-Imports; es ist nicht in
-  0.3.0 enthalten und bietet noch keine vollständigen Projektmodule.
+  bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält
+  experimentelle Imports für Funktionen, Typen, Records, Tabellen, Views,
+  Komponenten und projektweite Datenbankkonfiguration. Sie sind nicht in
+  0.3.0 enthalten und bilden noch kein vollständiges, stabiles Modulmodell.
 
 ### 4. Zelyras Versprechen an Entwickler
 - **Keine Breaking Changes ohne Deprecation:** Änderungen an der Syntax werden mit klaren Übergangsfristen und Compiler-Hinweisen eingeführt.
@@ -5596,7 +5634,7 @@ Release-Meilensteine:
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
 - **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
-  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen, Records, Tabellen und einer projektweiten Datenbankkonfiguration. Tabellen fließen in ein gemeinsames Schema ein und sind nicht modulqualifiziert; Views und andere Anwendungsressourcen bleiben ausgeschlossen. Das umfassendere Modulmodell ist geplant.
+  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports einer begrenzten Auswahl von Deklarationen über `check`, `build`, `run`, `serve`, `context`, `verify` und `impact`. Vollständiges Packaging, Sichtbarkeit und die Integration aller Werkzeuge bleiben geplant.
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
@@ -5604,8 +5642,8 @@ Release-Meilensteine:
 2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
 3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
-   zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es begrenzte
-   Funktions-, Typ-, Record-, Tabellen- und Datenbankkonfigurations-Imports.
+   zukünftige Arbeiten; der aktuelle Entwicklungszweig enthält einen
+   begrenzten, experimentellen Mehrdatei-Compilerpfad.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
@@ -7732,8 +7770,8 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Einrückung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Blöcken | ✅ |
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
 | Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
-| Module | `pub fn` in importierter Datei (Entwicklungszweig) | `mod name {}`, Dateien und Module | derzeit nur importierte Funktionsdeklarationen; Release 0.3.0 hat keine Module | 🧪 |
-| Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektrelative Datei-Imports; bisher laden nur `check`, `build` und `run` den Graphen | 🧪 |
+| Module | `pub fn` und weitere Deklarationen in importierten Dateien (Entwicklungszweig) | `mod name {}`, Dateien und Module | experimentell; Release 0.3.0 hat keine Module, Sichtbarkeit für Views/Komponenten fehlt noch | 🧪 |
+| Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
 | Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
 | Tabellen | `table customers { ... }` | kein Sprachkonstrukt | Zelyra verbindet Tabelle und Schema | ✅ |
@@ -8622,11 +8660,10 @@ fn main() {
 *Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
 CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
 unveröffentlichten Entwicklungszweig gibt es experimentelle Imports für
-Funktions-, Typ-, Record- und Tabellendeklarationen sowie eine projektweite
-Datenbankkonfiguration, die `check`, `build`, `run`,
-`context` und `verify` im Modulgraphen prüfen. Vollständige
-Projektmodule sind weiterhin geplante Arbeit und dürfen nicht mit diesem
-begrenzten Stand verwechselt werden.
+Funktionen, Typen, Records, Tabellen, Views, Komponenten und eine projektweite
+Datenbankkonfiguration. Unter anderem `serve` kann den verknüpften
+Projektgraphen verwenden; ein vollständiges, stabiles Modul- und Paketmodell
+bleibt geplante Arbeit.
 
 **Frage: Kann ich mit Zelyra auch reine Konsolenprogramme schreiben?**
 *Antwort:* Ja. `print()` gibt Werte aus. `read_console("Prompt: ")` liest eine Zeile und liefert `String?`; dafür braucht die Funktion `uses Console` und das Projekt gegebenenfalls `console = true`.

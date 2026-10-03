@@ -170,20 +170,24 @@ architecture requirement for every phase, not a provider-specific feature.
 ## 2. Language and compiler
 
 - [ ] Stable grammar specification and versioned compatibility rules.
-- [~] Experimental function/type/record/table imports and project-wide database
+- [~] Experimental function/type/record/table/view/component imports and project-wide database
   configuration in the current development
   branch support project-root-relative imports, `pub` declarations, qualified
   calls and type references, dependency-cycle rejection, project-root/symlink
   containment, per-file source IDs, and
   type/capability/contract checks across imported calls. `check`, `build`,
-  `run`, `context`, and `verify` validate this graph; machine context now emits
+  `run`, `serve`, `context`, and `verify` validate this graph; machine context now emits
   a deterministic, sorted module/import inventory. Imported database
-  definitions and tables join the shared schema; their context spans include
-  project-relative file paths. Web resources in the context inventory remain
-  entry-file-only, and verification results lack per-module source provenance.
+  definitions and tables join the shared schema; imported views/components
+  compose into the application and are rendered through `serve`. Their context
+  spans include project-relative file paths. Pages, forms, CRUD declarations,
+  APIs, and authentication resources remain entry-file-only; some template
+  diagnostics and verification results still lack complete per-module source
+  provenance.
   Database configuration is not addressed through its alias and is
   limited to one connection per project. Imported tables retain global SQL
-  names; views and APIs remain unsupported.
+  names; imported view and component names are global, with collisions rejected.
+  APIs and route-bound declarations remain unsupported in imported files.
   `impact` analyzes the linked graph with file-aware spans; `fmt`, `edit`, and
   database commands remain file-local. This
   is not part of the published 0.3.0 binary.

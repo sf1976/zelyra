@@ -378,14 +378,19 @@ fn main() {
 }
 ~~~
 
-An imported source currently may declare functions, type aliases, records, and
-one project-wide database connection definition. Database configuration is
+An imported source currently may declare functions, type aliases, records,
+tables, named views, typed components, and one project-wide database connection
+definition. Database configuration is
 composed into the application and is not accessed through the import alias;
 the composed project may define at most one database. Tables in imported files
 are composed into the application's shared physical schema; table names are
 global SQL identifiers rather than module-qualified names, and duplicate table
-names are rejected. Views, components, pages, forms, CRUD declarations, APIs,
-and authentication resources remain unsupported in imported files. Function,
+names are rejected. Imported views and components join the composed application
+under their declared, unqualified names; explicitly importing a source file
+makes its views and components available, because these declarations do not
+yet have `pub` visibility syntax. Duplicate view and component names are
+rejected. Pages, forms, CRUD declarations, APIs, and authentication resources
+remain unsupported in imported files. Function,
 type, and record declarations are private by
 default; declarations cross a module boundary only with a
 `pub` modifier and an explicit import alias. For example, use `pub fn`,
@@ -431,14 +436,17 @@ pub fn total() -> money::Money {
 }
 ~~~
 
-`check`, `build`, `run`, `context`, and `verify` currently validate this
+`check`, `build`, `run`, `serve`, `context`, and `verify` currently validate this
 project graph. The machine-readable context document includes every reachable
 module and its sorted import edges. Imported database definitions and tables
 join the composed project schema; their context spans identify the
-project-relative source path in `span.file`. The context inventory for web
-resources remains entry-file-only. `verify` checks linked functions, but
-verification results do not yet preserve per-module source provenance. Views,
-APIs, and other application resources remain unsupported in imported files.
+project-relative source path in `span.file`. Context also includes imported
+views and components with their source spans. `serve` composes imported
+views/components into pages and starts the application from the linked graph.
+Some template-validation diagnostics still need more complete per-module source
+attribution. `verify` checks linked functions, but verification results do not
+yet preserve per-module source provenance. Pages, APIs, and other route-bound
+application resources remain unsupported in imported files.
 `fmt`, `edit`, and database commands remain source-file-local. `impact` now
 analyzes the linked module graph and attributes its spans to their source
 files. These limits make the implementation experimental rather than a
