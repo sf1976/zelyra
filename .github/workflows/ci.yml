@@ -291,10 +291,10 @@ jobs:
           esac
           echo "Testing MariaDB ${server_version}"
           docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
-      - name: Verify bounded MariaDB statement timeouts
+      - name: Verify MariaDB database tests, pool limits, and statement timeouts
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
-        run: cargo test -p zelyra-database mariadb_query_timeout_aborts_long_statements_when_configured
+        run: cargo test -p zelyra-database
       - name: Run MariaDB database and CRUD HTTP integration
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

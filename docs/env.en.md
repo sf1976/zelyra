@@ -259,7 +259,7 @@ this purpose; Compose injects it, or it must be exported before invocation.
 `zelyra doctor --env-file <file>` specifically reads `DATABASE_URL` from that
 file for its read-only check.
 
-## MariaDB timeouts in the 0.4 development branch
+## MariaDB timeouts and connection pool in the 0.4 development branch
 
 These settings exist in the unreleased 0.4 development branch; the stable
 0.3.0 binary does not support them. They are read only from the process
@@ -272,14 +272,23 @@ values.
 |---|---:|---:|---|---|---|
 | `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | MariaDB connection establishment for database and runtime calls; bounds in `database/src/lib.rs` |
 | `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` seconds | integer `1`–`3600` | process environment; otherwise default | no | MariaDB runtime statements and read-only queries; not `db apply`/DDL; unit and MariaDB matrix test |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` connections | integer `1`–`64` | process environment; otherwise default | no | Hard maximum pool size per Zelyra process; unit and MariaDB pool tests |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | Maximum wait for an available pooled connection; unit and MariaDB pool tests |
 
 Invalid values produce a secret-free configuration diagnostic; the supplied
 value is not echoed. The MariaDB client receives `--skip-reconnect`, so a lost
-connection cannot silently reconnect or replay a statement. MariaDB enforces
-the statement limit server-side. It does not bound large-result transfer or
-the full response/process lifecycle. DDL is currently excluded because an
-aborted schema command may leave partial state. There is still no connection
-pool or automatic retry.
+connection cannot silently reconnect or replay a statement. The runtime SQL
+path in the 0.4 development branch uses a process-wide bounded pool. Connections
+are checked on checkout; after statement errors they are discarded, and a
+rollback is attempted inside a transaction. There are no automatic retries. A
+process can use only one database URL and one pool configuration; changes
+require a restart. Schema inspection and DDL are not routed through this pool
+and still use the MariaDB client process. MariaDB enforces the statement limit
+server-side. It does not bound large-result transfer or the full
+response/process lifecycle. TLS is not yet configurable for the native pool;
+this development state must not be used for unprotected connections over
+untrusted networks. DDL remains excluded because an aborted schema command may
+leave partial state.
 
 ## Runtime and authentication
 
@@ -298,7 +307,7 @@ diagnostics, context output, or logs.
 | Variable | Status | Use |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implemented | user-local destination for install scripts |
-| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL used only by the timeout integration test; local/isolated test database only |
+| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI/test variable | MariaDB URL for timeout and pool integration tests; local/isolated test database only |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | test/development tool | password for local MariaDB test runs |
 | `ZELYRA_MARIADB_PASSWORD` | test/development tool | user password for local MariaDB test runs |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | test/development tool | root password for generated Docker E2E tests |

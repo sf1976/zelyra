@@ -965,6 +965,8 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
     assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
     assert!(contents.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
     assert!(contents.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
+    assert!(contents.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
+    assert!(contents.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(contents.contains("MARIADB_PASSWORD="));
     assert!(contents.contains("MARIADB_ROOT_PASSWORD="));
 

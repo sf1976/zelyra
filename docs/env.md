@@ -275,7 +275,7 @@ allgemein automatisch; entweder Compose injiziert die Variable oder sie wird
 vor dem Aufruf exportiert. `zelyra doctor --env-file <datei>` liest für seine
 read-only Prüfung gezielt `DATABASE_URL` aus der angegebenen Datei.
 
-## MariaDB-Zeitlimits im 0.4-Entwicklungszweig
+## MariaDB-Zeitlimits und Connection-Pool im 0.4-Entwicklungszweig
 
 Diese Einstellungen sind im unveröffentlichten 0.4-Entwicklungszweig vorhanden;
 das stabile 0.3.0-Binary unterstützt sie nicht. Sie werden ausschließlich aus
@@ -288,15 +288,25 @@ Neustart nötig, damit er neue Prozesswerte erhält.
 |---|---:|---:|---|---|---|
 | `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Verbindungsaufbau bei Datenbank- und Runtime-Aufrufen; Grenzen in `database/src/lib.rs` |
 | `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Runtime-Statements und Leseabfragen; nicht `db apply`/DDL; Unit- und MariaDB-Matrixtest |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale Poolgröße pro Zelyra-Prozess; Unit- und MariaDB-Pooltest |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie Poolverbindung; Unit- und MariaDB-Pooltest |
 
 Ungültige Werte führen zu einer geheimnisfreien Konfigurationsdiagnose; der
 übergebene Wert wird nicht ausgegeben. Der MariaDB-Client erhält
 `--skip-reconnect`, damit ein Verbindungsverlust nicht unbemerkt zu einem
-Wiederverbinden oder automatischen Wiederholen führt. Das Statement-Limit wird
-serverseitig von MariaDB durchgesetzt. Es begrenzt weder die Übertragung großer
-Ergebnismengen noch den gesamten Antwort-/Prozesslebenszyklus. DDL ist derzeit
-ausgenommen, da ein abgebrochener Schema-Befehl einen Teilzustand hinterlassen
-kann. Es gibt weiterhin weder einen Connection-Pool noch automatische Retries.
+Wiederverbinden oder automatischen Wiederholen führt. Der Runtime-SQL-Pfad
+verwendet im 0.4-Entwicklungszweig einen prozessweiten, begrenzten Pool. Beim
+Checkout wird die Verbindung geprüft; nach Statementfehlern wird sie verworfen,
+und innerhalb einer Transaktion wird ein Rollback versucht. Es gibt keine
+automatischen Retries. Ein Prozess kann nur eine Datenbank-URL und eine
+Poolkonfiguration verwenden; Änderungen erfordern einen Neustart. Der Pool gilt
+nicht für Schema-Inspektion oder DDL, die weiterhin den MariaDB-Clientprozess
+verwenden. Das Statement-Limit wird serverseitig durchgesetzt und begrenzt
+weder die Übertragung großer Ergebnismengen noch den gesamten
+Antwort-/Prozesslebenszyklus. TLS ist im nativen Pool derzeit nicht konfigurierbar;
+dieser Entwicklungsstand sollte deshalb nicht für ungeschützte Verbindungen
+über nicht vertrauenswürdige Netze verwendet werden. DDL bleibt vom
+Statement-Limit ausgenommen, da ein Abbruch einen Teilzustand hinterlassen kann.
 
 ## Laufzeit und Authentifizierung
 
@@ -315,7 +325,7 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | Variable | Status | Verwendung |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implementiert | benutzerbezogenes Ziel der Installationsskripte |
-| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL nur für den Timeout-Integrationstest; ausschließlich lokale/isolierte Testdatenbank |
+| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL für Timeout- und Pool-Integrationstests; ausschließlich lokale/isolierte Testdatenbank |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Passwort für lokale MariaDB-Testläufe |
 | `ZELYRA_MARIADB_PASSWORD` | Test-/Entwicklungswerkzeug | Benutzerpasswort für lokale MariaDB-Testläufe |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Root-Passwort des generierten Docker-E2E-Tests |

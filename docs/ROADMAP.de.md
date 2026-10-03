@@ -311,17 +311,21 @@ Feature eines bestimmten Anbieters.
   SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
   Änderungen bleiben nicht unterstützt. Allgemeine Zeilenschätzungen,
   Lock-Warnungen, Daten-Backfill-Pläne und Wartungsfenster bleiben geplant.
-- [~] Der Entwicklungszweig begrenzt jetzt den MariaDB-Verbindungsaufbau
-  (Standard 10 s; zulässig 1–300) und Runtime-/Lese-Statements serverseitig
-  (Standard 30 s; zulässig 1–3600), lehnt ungültige Werte ohne Ausgabe des
-  Eingabewerts ab und deaktiviert transparentes Client-Reconnect. Der
-  Timeout-Integrationstest ist lokal gegen eine isolierte MariaDB 11.4 geprüft;
-  die CI-Kompatibilitätsmatrix muss noch alle unterstützten Serverversionen
-  durchlaufen. DDL wird nicht per Statement-Abbruch unterbrochen; die
-  Ergebnisübertragung ist nicht global
-  begrenzt. Das ist nicht Teil von 0.3.0 und ergänzt kein Pooling/Retry.
-  Native Pools, definierte Abbruchzustände, Antwortfristen und Health Checks
-  bleiben offen.
+- [~] Der Entwicklungszweig begrenzt den MariaDB-Verbindungsaufbau (Standard
+  10 s; zulässig 1–300) und Runtime-/Lese-Statements serverseitig (Standard
+  30 s; zulässig 1–3600), lehnt ungültige Werte ohne Ausgabe des Eingabewerts
+  ab und deaktiviert transparentes Client-Reconnect. Der Runtime-SQL-Pfad hat
+  jetzt einen prozessweiten Pool mit harter Obergrenze (Standard 8; zulässig
+  1–64), Checkout-Healthchecks, begrenzter Wartezeit (Standard 10 s; zulässig
+  1–300) und verwirft Verbindungen nach Statementfehlern. Timeout- und
+  Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 geprüft;
+  die vollständigen Datenbank-CI-Tests aller unterstützten MariaDB-Versionen
+  stehen noch aus. Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
+  TLS ist im nativen Pool nicht konfigurierbar, Ergebnisübertragung ist nicht
+  global begrenzt und automatische Retries gibt es nicht. Den nativen Pool
+  dieses Entwicklungszweigs nicht über nicht vertrauenswürdige Netze verwenden.
+  Nicht Teil von 0.3.0. Antwortfristen, konfigurierbares TLS und
+  Health-Diagnostik bleiben offen.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
   einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.

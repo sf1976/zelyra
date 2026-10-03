@@ -380,6 +380,8 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
     assert!(env_example.contains("DATABASE_URL="));
     assert!(env_example.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
     assert!(env_example.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
+    assert!(env_example.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
+    assert!(env_example.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(!env_example.contains("must-not-be-copied"));
     assert!(!env_example.contains("example-secret"));
 

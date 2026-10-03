@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+mysql.workspace = true
+r2d2.workspace = true
+sha2.workspace = true
 zelyra-ast.workspace = true
 
 [dev-dependencies]

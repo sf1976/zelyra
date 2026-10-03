@@ -1,8 +1,14 @@
+use mysql::prelude::Queryable;
+use mysql::{Conn, OptsBuilder, Value};
+use r2d2::{ManageConnection, Pool};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use zelyra_ast::*;
 
 pub mod sql;
@@ -1396,19 +1402,29 @@ const MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS: u32 = 10;
 const MARIADB_MAX_CONNECT_TIMEOUT_SECS: u32 = 300;
 const MARIADB_DEFAULT_QUERY_TIMEOUT_SECS: u32 = 30;
 const MARIADB_MAX_QUERY_TIMEOUT_SECS: u32 = 3600;
+const MARIADB_DEFAULT_POOL_MAX_SIZE: u32 = 8;
+const MARIADB_MAX_POOL_SIZE: u32 = 64;
+const MARIADB_DEFAULT_POOL_WAIT_TIMEOUT_SECS: u32 = 10;
+const MARIADB_MAX_POOL_WAIT_TIMEOUT_SECS: u32 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct MariaDbTimeouts {
     connect_seconds: u32,
     query_seconds: u32,
+    pool_max_size: u32,
+    pool_wait_seconds: u32,
 }
 
 impl MariaDbTimeouts {
     fn from_env() -> Result<Self, DatabaseError> {
         let connect_value = env::var_os("ZELYRA_DB_CONNECT_TIMEOUT_SECS");
         let query_value = env::var_os("ZELYRA_DB_QUERY_TIMEOUT_SECS");
+        let pool_size_value = env::var_os("ZELYRA_DB_POOL_MAX_SIZE");
+        let pool_wait_value = env::var_os("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS");
         let connect = connect_value.as_deref().and_then(|value| value.to_str());
         let query = query_value.as_deref().and_then(|value| value.to_str());
+        let pool_size = pool_size_value.as_deref().and_then(|value| value.to_str());
+        let pool_wait = pool_wait_value.as_deref().and_then(|value| value.to_str());
         if connect_value.is_some() && connect.is_none() {
             return Err(DatabaseError {
                 message: "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
@@ -1421,10 +1437,25 @@ impl MariaDbTimeouts {
                     .into(),
             });
         }
-        Self::parse(connect, query)
+        if pool_size_value.is_some() && pool_size.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_POOL_MAX_SIZE must be an integer from 1 to 64".into(),
+            });
+        }
+        if pool_wait_value.is_some() && pool_wait.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS must be an integer from 1 to 300".into(),
+            });
+        }
+        Self::parse(connect, query, pool_size, pool_wait)
     }
 
-    fn parse(connect: Option<&str>, query: Option<&str>) -> Result<Self, DatabaseError> {
+    fn parse(
+        connect: Option<&str>,
+        query: Option<&str>,
+        pool_size: Option<&str>,
+        pool_wait: Option<&str>,
+    ) -> Result<Self, DatabaseError> {
         Ok(Self {
             connect_seconds: parse_timeout(
                 "ZELYRA_DB_CONNECT_TIMEOUT_SECS",
@@ -1437,6 +1468,18 @@ impl MariaDbTimeouts {
                 query,
                 MARIADB_DEFAULT_QUERY_TIMEOUT_SECS,
                 MARIADB_MAX_QUERY_TIMEOUT_SECS,
+            )?,
+            pool_max_size: parse_timeout(
+                "ZELYRA_DB_POOL_MAX_SIZE",
+                pool_size,
+                MARIADB_DEFAULT_POOL_MAX_SIZE,
+                MARIADB_MAX_POOL_SIZE,
+            )?,
+            pool_wait_seconds: parse_timeout(
+                "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS",
+                pool_wait,
+                MARIADB_DEFAULT_POOL_WAIT_TIMEOUT_SECS,
+                MARIADB_MAX_POOL_WAIT_TIMEOUT_SECS,
             )?,
         })
     }
@@ -1861,51 +1904,146 @@ pub fn execute_mariadb_queries(
     queries: &[Query],
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
-    let _ = parse_mariadb_url(database_url)?;
-    let mut script = String::new();
-    if transaction {
-        script.push_str("START TRANSACTION;\n");
+    let settings = MariaDbTimeouts::from_env()?;
+    let pool = mariadb_pool(database_url, settings)?;
+    execute_mariadb_queries_on_pool(&pool, settings, queries, transaction)
+}
+
+fn execute_mariadb_queries_on_pool(
+    pool: &MariaDbPool,
+    settings: MariaDbTimeouts,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let prepared = queries
+        .iter()
+        .map(prepare_mariadb_query)
+        .collect::<Result<Vec<_>, _>>()?;
+    if prepared.is_empty() && !transaction {
+        return Ok(Vec::new());
     }
-    for (query_index, query) in queries.iter().enumerate() {
-        let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
-        for (parameter_index, parameter_name) in parameter_order.iter().enumerate() {
-            let value = query
+
+    let mut connection = acquire_mariadb_connection(pool, settings)?;
+    if transaction {
+        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+    }
+
+    let mut results = Vec::with_capacity(prepared.len());
+    for (sql, parameters) in prepared {
+        match execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters) {
+            Ok(result) => results.push(result),
+            Err(error) => {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(error);
+            }
+        }
+    }
+
+    if transaction {
+        if let Err(error) = connection.connection.query_drop("COMMIT") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+        Ok(Vec::new())
+    } else {
+        Ok(results)
+    }
+}
+
+fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), DatabaseError> {
+    let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
+    let parameters = parameter_order
+        .iter()
+        .map(|parameter_name| {
+            query
                 .params
                 .iter()
                 .find(|(name, _)| name == parameter_name)
-                .map(|(_, value)| value)
+                .map(|(_, value)| mysql_parameter_value(value))
                 .ok_or_else(|| DatabaseError {
                     message: format!("missing SQL parameter `:{parameter_name}`"),
-                })?;
-            script.push_str(&format!(
-                "SET @zelyra_p{query_index}_{parameter_index} = {};\n",
-                query_value_sql(value)
-            ));
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((sql, parameters))
+}
+
+fn mysql_parameter_value(value: &QueryValue) -> Value {
+    match value {
+        QueryValue::Null => Value::NULL,
+        QueryValue::Int(value) => Value::Int(*value),
+        QueryValue::UInt(value) => Value::UInt(*value),
+        QueryValue::Float(value) if value.is_finite() => Value::Double(*value),
+        QueryValue::Float(_) => Value::NULL,
+        QueryValue::Bool(value) => Value::Int(i64::from(*value)),
+        QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
+    }
+}
+
+fn execute_prepared_mariadb_query(
+    connection: &mut Conn,
+    sql: &str,
+    parameters: Vec<Value>,
+) -> Result<QueryResult, DatabaseError> {
+    let result = connection
+        .exec_iter(sql, parameters)
+        .map_err(mariadb_driver_error)?;
+    let columns = result
+        .columns()
+        .as_ref()
+        .iter()
+        .map(|column| column.name_str().into_owned())
+        .collect();
+    let rows = result
+        .map(|row| {
+            row.map(|row| row.unwrap().into_iter().map(mariadb_value_string).collect())
+                .map_err(mariadb_driver_error)
+        })
+        .collect::<Result<Vec<Vec<String>>, _>>()?;
+    Ok(QueryResult { columns, rows })
+}
+
+fn mariadb_value_string(value: Value) -> String {
+    match value {
+        Value::NULL => "\\N".into(),
+        Value::Bytes(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        Value::Int(value) => value.to_string(),
+        Value::UInt(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Double(value) => value.to_string(),
+        Value::Date(year, month, day, hour, minute, second, micros) => {
+            if hour == 0 && minute == 0 && second == 0 && micros == 0 {
+                format!("{year:04}-{month:02}-{day:02}")
+            } else if micros == 0 {
+                format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
+            } else {
+                format!(
+                    "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}.{micros:06}"
+                )
+            }
         }
-        let statement_name = format!("zelyra_stmt_{query_index}");
-        let prepared_sql = quote_string(&sql.replace('\\', "\\\\"));
-        script.push_str(&format!("PREPARE {statement_name} FROM {prepared_sql};\n"));
-        if parameter_order.is_empty() {
-            script.push_str(&format!("EXECUTE {statement_name};\n"));
-        } else {
-            let variables = parameter_order
-                .iter()
-                .enumerate()
-                .map(|(parameter_index, _)| format!("@zelyra_p{query_index}_{parameter_index}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            script.push_str(&format!("EXECUTE {statement_name} USING {variables};\n"));
+        Value::Time(negative, days, hour, minute, second, micros) => {
+            let hours = days * 24 + u32::from(hour);
+            let sign = if negative { "-" } else { "" };
+            if micros == 0 {
+                format!("{sign}{hours:02}:{minute:02}:{second:02}")
+            } else {
+                format!("{sign}{hours:02}:{minute:02}:{second:02}.{micros:06}")
+            }
         }
-        script.push_str(&format!("DEALLOCATE PREPARE {statement_name};\n"));
     }
-    if transaction {
-        script.push_str("COMMIT;\n");
+}
+
+fn mariadb_driver_error(error: mysql::Error) -> DatabaseError {
+    DatabaseError {
+        message: error.to_string(),
     }
-    let output = run_mariadb_query(database_url, &script)?;
-    if transaction {
-        return Ok(Vec::new());
-    }
-    Ok(vec![parse_query_result(&output)])
 }
 
 fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
@@ -1916,6 +2054,12 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
     let mut quote = None;
     while index < bytes.len() {
         let byte = bytes[index];
+        if byte >= 0x80 {
+            let character = sql[index..].chars().next().expect("valid UTF-8 boundary");
+            bound.push(character);
+            index += character.len_utf8();
+            continue;
+        }
         if let Some(active_quote) = quote {
             bound.push(byte as char);
             if byte == active_quote {
@@ -1956,86 +2100,6 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
         index += 1;
     }
     Ok((bound, parameters))
-}
-
-fn query_value_sql(value: &QueryValue) -> String {
-    match value {
-        QueryValue::Null => "NULL".into(),
-        QueryValue::Int(value) => value.to_string(),
-        QueryValue::UInt(value) => value.to_string(),
-        QueryValue::Float(value) if value.is_finite() => value.to_string(),
-        QueryValue::Float(_) => "NULL".into(),
-        QueryValue::Bool(value) => if *value { "1" } else { "0" }.into(),
-        QueryValue::String(value) => {
-            format!("'{}'", value.replace('\\', "\\\\").replace('\'', "''"))
-        }
-    }
-}
-
-fn run_mariadb_query(database_url: &str, script: &str) -> Result<String, DatabaseError> {
-    run_mariadb_query_with_timeouts(database_url, script, MariaDbTimeouts::from_env()?)
-}
-
-fn run_mariadb_query_with_timeouts(
-    database_url: &str,
-    script: &str,
-    timeouts: MariaDbTimeouts,
-) -> Result<String, DatabaseError> {
-    let connection = parse_mariadb_url(database_url)?;
-    let mut command = Command::new("mariadb");
-    command
-        .args([
-            "--batch",
-            "--raw",
-            "--host",
-            &connection.host,
-            "--port",
-            &connection.port,
-            "--user",
-            &connection.user,
-            "--database",
-            &connection.database,
-        ])
-        .args(timeouts.connect_args())
-        .args(timeouts.query_args())
-        .env("MYSQL_PWD", &connection.password)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|error| DatabaseError {
-        message: format!("could not start mariadb: {error}"),
-    })?;
-    child
-        .stdin
-        .take()
-        .expect("mariadb stdin was piped")
-        .write_all(script.as_bytes())
-        .map_err(|error| DatabaseError {
-            message: format!("could not send SQL to mariadb: {error}"),
-        })?;
-    let output = child.wait_with_output().map_err(|error| DatabaseError {
-        message: format!("could not wait for mariadb: {error}"),
-    })?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    } else {
-        Err(DatabaseError {
-            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        })
-    }
-}
-
-fn parse_query_result(output: &str) -> QueryResult {
-    let mut lines = output.lines();
-    let Some(header) = lines.next() else {
-        return QueryResult::default();
-    };
-    QueryResult {
-        columns: header.split('\t').map(str::to_owned).collect(),
-        rows: lines
-            .map(|line| line.split('\t').map(str::to_owned).collect())
-            .collect(),
-    }
 }
 
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
@@ -2145,6 +2209,128 @@ struct MariaConnection {
     host: String,
     port: String,
     database: String,
+}
+
+struct MariaDbConnectionManager {
+    options: mysql::Opts,
+}
+
+struct ManagedMariaDbConnection {
+    connection: Conn,
+    discard: bool,
+}
+
+impl ManageConnection for MariaDbConnectionManager {
+    type Connection = ManagedMariaDbConnection;
+    type Error = mysql::Error;
+
+    fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        Conn::new(self.options.clone()).map(|connection| ManagedMariaDbConnection {
+            connection,
+            discard: false,
+        })
+    }
+
+    fn is_valid(&self, connection: &mut Self::Connection) -> Result<(), Self::Error> {
+        connection.connection.ping()
+    }
+
+    fn has_broken(&self, connection: &mut Self::Connection) -> bool {
+        connection.discard
+    }
+}
+
+type MariaDbPool = Pool<MariaDbConnectionManager>;
+
+struct MariaDbPoolEntry {
+    database_fingerprint: [u8; 32],
+    settings: MariaDbTimeouts,
+    pool: MariaDbPool,
+}
+
+static MARIADB_POOL: OnceLock<Mutex<Option<MariaDbPoolEntry>>> = OnceLock::new();
+
+fn mariadb_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+) -> Result<MariaDbPool, DatabaseError> {
+    let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
+    let cache = MARIADB_POOL.get_or_init(|| Mutex::new(None));
+    let mut cache = cache.lock().map_err(|_| DatabaseError {
+        message: "MariaDB connection-pool state is unavailable".into(),
+    })?;
+
+    if let Some(entry) = cache.as_ref() {
+        if entry.database_fingerprint != fingerprint {
+            return Err(DatabaseError {
+                message: "this process already owns a MariaDB pool for another database URL; restart the process to change databases".into(),
+            });
+        }
+        if entry.settings != settings {
+            return Err(DatabaseError {
+                message: "MariaDB pool settings changed while the process is running; restart the process to apply them".into(),
+            });
+        }
+        return Ok(entry.pool.clone());
+    }
+
+    let pool = build_mariadb_pool(database_url, settings)?;
+
+    *cache = Some(MariaDbPoolEntry {
+        database_fingerprint: fingerprint,
+        settings,
+        pool: pool.clone(),
+    });
+    Ok(pool)
+}
+
+fn build_mariadb_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+) -> Result<MariaDbPool, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    let port = connection.port.parse::<u16>().map_err(|_| DatabaseError {
+        message: "MariaDB URL has an invalid TCP port".into(),
+    })?;
+    let options = OptsBuilder::new()
+        .ip_or_hostname(Some(connection.host))
+        .tcp_port(port)
+        .prefer_socket(false)
+        .user(Some(connection.user))
+        .pass(Some(connection.password))
+        .db_name(Some(connection.database))
+        .connect_attrs(None::<HashMap<String, String>>)
+        .tcp_connect_timeout(Some(Duration::from_secs(u64::from(
+            settings.connect_seconds,
+        ))))
+        .read_timeout(Some(Duration::from_secs(u64::from(settings.query_seconds))))
+        .init(vec![format!(
+            "SET SESSION max_statement_time={}",
+            settings.query_seconds
+        )]);
+    let manager = MariaDbConnectionManager {
+        options: options.into(),
+    };
+    Pool::builder()
+        .max_size(settings.pool_max_size)
+        .min_idle(Some(0))
+        .connection_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
+        .test_on_check_out(true)
+        .error_handler(Box::new(r2d2::NopErrorHandler))
+        .build(manager)
+        .map_err(|_| DatabaseError {
+            message: "could not initialize the MariaDB connection pool".into(),
+        })
+}
+
+fn acquire_mariadb_connection(
+    pool: &MariaDbPool,
+    settings: MariaDbTimeouts,
+) -> Result<r2d2::PooledConnection<MariaDbConnectionManager>, DatabaseError> {
+    pool.get_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
+        .map_err(|_| DatabaseError {
+            message: "timed out waiting for an available MariaDB connection".into(),
+        })
 }
 
 fn run_mariadb(
@@ -2678,12 +2864,14 @@ mod tests {
 
     #[test]
     fn mariadb_timeouts_have_bounded_defaults_and_client_options() {
-        let timeouts = MariaDbTimeouts::parse(None, None).unwrap();
+        let timeouts = MariaDbTimeouts::parse(None, None, None, None).unwrap();
         assert_eq!(
             timeouts,
             MariaDbTimeouts {
                 connect_seconds: 10,
                 query_seconds: 30,
+                pool_max_size: 8,
+                pool_wait_seconds: 10,
             }
         );
         assert_eq!(
@@ -2699,24 +2887,40 @@ mod tests {
     #[test]
     fn mariadb_timeouts_accept_only_bounded_positive_integers() {
         assert_eq!(
-            MariaDbTimeouts::parse(Some("15"), Some("45")).unwrap(),
+            MariaDbTimeouts::parse(Some("15"), Some("45"), Some("12"), Some("20")).unwrap(),
             MariaDbTimeouts {
                 connect_seconds: 15,
                 query_seconds: 45,
+                pool_max_size: 12,
+                pool_wait_seconds: 20,
             }
         );
         for value in ["0", "-1", "301", "1.5", "secret"] {
-            let error = MariaDbTimeouts::parse(Some(value), None).unwrap_err();
+            let error = MariaDbTimeouts::parse(Some(value), None, None, None).unwrap_err();
             assert_eq!(
                 error.message,
                 "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
             );
         }
         for value in ["0", "-1", "3601", "1.5", "secret"] {
-            let error = MariaDbTimeouts::parse(None, Some(value)).unwrap_err();
+            let error = MariaDbTimeouts::parse(None, Some(value), None, None).unwrap_err();
             assert_eq!(
                 error.message,
                 "ZELYRA_DB_QUERY_TIMEOUT_SECS must be a positive integer from 1 to 3600"
+            );
+        }
+        for value in ["0", "-1", "65", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, None, Some(value), None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_POOL_MAX_SIZE must be a positive integer from 1 to 64"
+            );
+        }
+        for value in ["0", "-1", "301", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, None, None, Some(value)).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS must be a positive integer from 1 to 300"
             );
         }
     }
@@ -2727,15 +2931,84 @@ mod tests {
             eprintln!("skipping MariaDB timeout integration: test URL is not configured");
             return;
         };
-        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("1")).unwrap();
+        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
+        let pool = build_mariadb_pool(&database_url, timeouts).unwrap();
+        let first_connection = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap()[0]
+            .rows[0][0]
+            .clone();
         let started = std::time::Instant::now();
-        let error = run_mariadb_query_with_timeouts(&database_url, "SELECT SLEEP(5);", timeouts)
-            .expect_err("MariaDB should abort a statement over its configured time limit");
+        let error = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT SLEEP(5)".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .expect_err("MariaDB should abort a statement over its configured time limit");
         assert!(
             started.elapsed() < std::time::Duration::from_secs(5),
             "statement timeout did not bound execution"
         );
         assert!(!error.message.contains(&database_url));
+        let replacement_connection = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap()[0]
+            .rows[0][0]
+            .clone();
+        assert_ne!(first_connection, replacement_connection);
+    }
+
+    #[test]
+    fn mariadb_connection_pool_reuses_connections_and_enforces_its_limit() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB pool integration: test URL is not configured");
+            return;
+        };
+        let settings = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("1")).unwrap();
+        let pool = build_mariadb_pool(&database_url, settings).unwrap();
+        let query_connection_id = || {
+            execute_mariadb_queries_on_pool(
+                &pool,
+                settings,
+                &[Query {
+                    sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                    params: Vec::new(),
+                }],
+                false,
+            )
+            .unwrap()[0]
+                .rows[0][0]
+                .clone()
+        };
+
+        let first_connection = query_connection_id();
+        let reused_connection = query_connection_id();
+        assert_eq!(first_connection, reused_connection);
+
+        let held = pool.get_timeout(Duration::from_secs(1)).unwrap();
+        let started = std::time::Instant::now();
+        let second_checkout = pool.get_timeout(Duration::from_millis(100));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(second_checkout.is_err());
+        drop(held);
     }
 
     #[test]
@@ -3554,5 +3827,11 @@ mod tests {
             "SELECT ':literal', name FROM customers WHERE id = ? OR id = ?"
         );
         assert_eq!(parameters, ["id", "id"]);
+
+        let (sql, parameters) =
+            bind_named_parameters("SELECT 'Grüße', city FROM customers WHERE city = :city")
+                .unwrap();
+        assert_eq!(sql, "SELECT 'Grüße', city FROM customers WHERE city = ?");
+        assert_eq!(parameters, ["city"]);
     }
 }
