@@ -115,6 +115,31 @@ fn check_and_run_compile_imported_public_functions() {
 }
 
 #[test]
+fn checked_in_multifile_example_checks_and_runs_without_external_services() {
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/modules");
+
+    let check = run(&example, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let run_result = run(&example, &["run", "main.zyl"]);
+    assert!(
+        run_result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&run_result.stdout),
+        String::from_utf8_lossy(&run_result.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&run_result.stdout).trim(), "25");
+}
+
+#[test]
 fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     let directory = project(&[
         (
