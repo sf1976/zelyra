@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::project::ProjectSource;
 use serde_json::{json, Value};
-use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt};
+use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt, Type};
 
 pub fn build_impact_with_sources(
     program: &Program,
@@ -523,12 +523,209 @@ fn semantic_references(
         }
     }
 
+    let type_names = program
+        .types
+        .iter()
+        .map(|definition| definition.name.as_str())
+        .collect::<HashSet<_>>();
+    let record_names = program
+        .records
+        .iter()
+        .map(|record| record.name.as_str())
+        .collect::<HashSet<_>>();
+    for definition in &program.types {
+        add_type_references(
+            &mut references,
+            format!("type:{}", definition.name),
+            &definition.target,
+            &type_names,
+            &record_names,
+            definition.span,
+            sources,
+        );
+    }
+    for record in &program.records {
+        let owner = format!("record:{}", record.name);
+        for field in &record.fields {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &field.ty,
+                &type_names,
+                &record_names,
+                field.span,
+                sources,
+            );
+        }
+    }
+    for function in &program.functions {
+        let owner = format!("function:{}", function.name);
+        for parameter in &function.params {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &parameter.ty,
+                &type_names,
+                &record_names,
+                parameter.span,
+                sources,
+            );
+        }
+        if let Some(return_type) = &function.return_type {
+            add_type_references(
+                &mut references,
+                owner,
+                return_type,
+                &type_names,
+                &record_names,
+                function.span,
+                sources,
+            );
+        }
+    }
+    for page in &program.pages {
+        let owner = format!("page:{}", page.path);
+        for input in &page.inputs {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &input.ty,
+                &type_names,
+                &record_names,
+                input.span,
+                sources,
+            );
+        }
+        for data in &page.data {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &data.result_type,
+                &type_names,
+                &record_names,
+                data.span,
+                sources,
+            );
+        }
+    }
+    for component in &program.components {
+        let owner = format!("component:{}", component.name);
+        for prop in &component.props {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &prop.ty,
+                &type_names,
+                &record_names,
+                prop.span,
+                sources,
+            );
+        }
+    }
+    for tableview in &program.tableviews {
+        add_type_references(
+            &mut references,
+            format!("tableview:{}", tableview.name),
+            &tableview.result_type,
+            &type_names,
+            &record_names,
+            tableview.span,
+            sources,
+        );
+    }
+    for api in &program.apis {
+        let owner = format!("api:{} {}", api.method, api.path);
+        for input in &api.input {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &input.ty,
+                &type_names,
+                &record_names,
+                input.span,
+                sources,
+            );
+        }
+        add_type_references(
+            &mut references,
+            owner.clone(),
+            &api.output,
+            &type_names,
+            &record_names,
+            api.span,
+            sources,
+        );
+        for error in &api.errors {
+            if let Some(payload) = &error.payload {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    payload,
+                    &type_names,
+                    &record_names,
+                    error.span,
+                    sources,
+                );
+            }
+        }
+    }
+
     references.sort_by(|left, right| {
         let left_key = reference_sort_key(left);
         let right_key = reference_sort_key(right);
         left_key.cmp(&right_key)
     });
     references
+}
+
+fn add_type_references(
+    references: &mut Vec<Value>,
+    owner: String,
+    ty: &Type,
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    span: Span,
+    sources: &ImpactSources<'_>,
+) {
+    let node = match ty {
+        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            add_type_references(
+                references,
+                owner,
+                inner,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            return;
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            add_type_references(
+                references,
+                owner.clone(),
+                ok,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            add_type_references(
+                references,
+                owner,
+                error,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            return;
+        }
+        Type::Named(name) if record_names.contains(name.as_str()) => format!("record:{name}"),
+        Type::Named(name) if type_names.contains(name.as_str()) => format!("type:{name}"),
+        _ => return,
+    };
+    add_reference(references, owner, node, "type", span_value(span, sources));
 }
 
 fn add_reference(references: &mut Vec<Value>, from: String, to: String, kind: &str, span: Value) {

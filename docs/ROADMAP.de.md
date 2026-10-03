@@ -98,7 +98,8 @@ Feature eines bestimmten Anbieters.
   Enthalten sind bekannte Kanten
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
-  Authentifizierung, Authentifizierung zu Tabellen, Tabellenrelationen und
+  Authentifizierung, Authentifizierung zu Tabellen sowie Typreferenzen aus
+  APIs, Funktionssignaturen, Records und Type Aliases, Tabellenrelationen und
   Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
   Dynamische oder nicht modellierte Abhängigkeiten, Assets,
   Laufzeitkonfiguration, externe Dienstverträge und Docker-Paketierung bleiben

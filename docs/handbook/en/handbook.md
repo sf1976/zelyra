@@ -1974,8 +1974,10 @@ The plan lists all recognized declarations in each included source file under
 `modules[].declarations`, in stable sorted order. This makes functions, types,
 records, and application resources co-located in the selected source visible.
 `declaration_closure` separately reports the selected resource and declarations
-reachable through the current static impact graph. Its `edges` show language
-references and `configuration_edges` shows database configuration;
+reachable through the current static impact graph. Its `edges` show known
+language and type references, such as API input/output types, function
+signatures, records, and type aliases. `configuration_edges` reports database
+configuration separately;
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
 the known graph: `complete` remains `false`, and unrecognized dependencies may
@@ -1984,7 +1986,8 @@ be missing.
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
 known page-to-view and page-to-component references, page and form/CRUD-action
-SQL-to-table edges, API-handler-to-function, protected-resource-to-
+SQL-to-table edges, API-handler-to-function and type references from API fields,
+function signatures, records, and type aliases, protected-resource-to-
 authentication, authentication-to-table, recognized table relations, and
 database configuration. Unresolved references
 appear in `unresolved_references`. Dynamic or unmodeled dependencies, assets,

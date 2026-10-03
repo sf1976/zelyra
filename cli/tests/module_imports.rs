@@ -485,7 +485,7 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
         ),
         (
             "src/status_api.zyl",
-            "pub type StatusCode = Int\npub struct StatusPayload { status: String }\nfn status() -> String { return \"ok\" }\nfn unusedHelper() -> String { return \"co-located\" }\napi GET \"/api/status\" { handler status requires auth permits \"status.read\" output String }\n",
+            "pub type StatusCode = Int\npub struct StatusPayload { status: String }\nstruct UnusedPayload { note: String }\nfn status(payload: StatusPayload) -> String { return \"ok\" }\nfn unusedHelper() -> String { return \"co-located\" }\napi GET \"/api/status\" { handler status requires auth permits \"status.read\" input { payload: StatusPayload } output String }\n",
         ),
     ]);
     let check = run(&directory, &["check", "main.zyl"]);
@@ -593,6 +593,7 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
             "function:status",
             "function:unusedHelper",
             "record:StatusPayload",
+            "record:UnusedPayload",
             "type:StatusCode"
         ])
     );
@@ -603,14 +604,15 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
             "src/models.zyl::table:users",
             "src/security.zyl::auth:users",
             "src/status_api.zyl::api:GET /api/status",
-            "src/status_api.zyl::function:status"
+            "src/status_api.zyl::function:status",
+            "src/status_api.zyl::record:StatusPayload"
         ])
     );
     assert_eq!(
         plan["plan"]["declaration_closure"]["additional_declarations_in_included_source_files"],
         serde_json::json!([
             "src/status_api.zyl::function:unusedHelper",
-            "src/status_api.zyl::record:StatusPayload",
+            "src/status_api.zyl::record:UnusedPayload",
             "src/status_api.zyl::type:StatusCode"
         ])
     );
@@ -623,6 +625,15 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
             edge["from"] == "api:GET /api/status"
                 && edge["to"] == "auth:users"
                 && edge["kind"] == "authentication"
+        }));
+    assert!(plan["plan"]["declaration_closure"]["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|edge| {
+            edge["from"] == "api:GET /api/status"
+                && edge["to"] == "record:src/status_api.zyl::StatusPayload"
+                && edge["kind"] == "type"
         }));
     assert!(plan["plan"]["declaration_closure"]["configuration_edges"]
         .as_array()

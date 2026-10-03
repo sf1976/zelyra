@@ -1954,7 +1954,9 @@ welche Funktionen, Typen, Records und Anwendungsressourcen durch die gemeinsame
 Quelldatei zusätzlich enthalten sind.
 `declaration_closure` trennt davon die ausgewählte Ressource und die über den
 aktuellen statischen Wirkungsgraphen erreichbaren Deklarationen. `edges` zeigt
-bekannte Sprachreferenzen und `configuration_edges` die Datenbankkonfiguration;
+bekannte Sprach- und Typreferenzen, zum Beispiel API-Ein-/Ausgaben,
+Funktionssignaturen, Records und Type Aliases. `configuration_edges` weist die
+Datenbankkonfiguration separat aus;
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt
@@ -1964,7 +1966,8 @@ Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
 Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
-Funktionen, von geschützten Ressourcen zur Authentifizierung, von
+Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records und
+Type Aliases, von geschützten Ressourcen zur Authentifizierung, von
 Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
 Datenbankkonfiguration.
 Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische

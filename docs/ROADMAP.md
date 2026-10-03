@@ -87,7 +87,8 @@ architecture requirement for every phase, not a provider-specific feature.
   analysis is incomplete; `configuration_edges` reports database configuration
   separately. Known
   page-to-view/component, page-SQL and
-  form/CRUD-action-SQL-to-table, API-handler-to-function,
+  form/CRUD-action-SQL-to-table, API-handler-to-function, declaration type
+  references for APIs, function signatures, records, and type aliases,
   protected-resource-to-authentication, authentication-to-table,
   table-relation, and database-configuration edges, and reports references it
   cannot resolve. Dynamic or unmodeled dependencies, assets, runtime
