@@ -456,6 +456,8 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
         let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
         assert!(env_example.contains("DATABASE_URL="));
         assert!(env_example.lines().any(|line| line == "DATABASE_URL="));
+        let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
+        assert!(dockerfile.contains("ca-certificates mariadb-client"));
         let manifest: Value =
             serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
         assert_eq!(manifest["database"]["required"], true);
@@ -475,6 +477,7 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
             manifest["docker"]["supports_multiple_connections_per_process"],
             false
         );
+        assert_eq!(manifest["docker"]["runtime_packages"][1], "mariadb-client");
         assert_eq!(manifest["source_closure_complete"], false);
         assert_eq!(manifest["complete_deployment"], false);
 

@@ -3252,6 +3252,28 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         }
 
         let database = plan.get("database").cloned().unwrap_or(Value::Null);
+        let database_is_required = database["required"].as_bool().unwrap_or(false);
+        let configured_backends = database["configurations"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let needs_mariadb_client = database_is_required
+            && (configured_backends.is_empty()
+                || configured_backends.iter().any(|configuration| {
+                    configuration["engine"]
+                        .as_str()
+                        .is_some_and(|engine| engine.eq_ignore_ascii_case("mariadb"))
+                }));
+        let runtime_packages = if needs_mariadb_client {
+            "ca-certificates mariadb-client"
+        } else {
+            "ca-certificates"
+        };
+        let runtime_package_manifest = if needs_mariadb_client {
+            vec!["ca-certificates", "mariadb-client"]
+        } else {
+            vec!["ca-certificates"]
+        };
         if docker {
             let compiler_ref = compiler_ref.as_deref().expect("validated compiler ref");
             let dockerfile = format!(
@@ -3268,7 +3290,7 @@ RUN cargo install --locked --path /zelyra/cli --root /out
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends {runtime_packages} \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 WORKDIR /app
@@ -3326,6 +3348,7 @@ DATABASE_URL=
                     "compiler_repository": "https://github.com/sf1976/zelyra",
                     "compiler_commit": compiler_ref,
                     "files": docker_files,
+                    "runtime_packages": runtime_package_manifest,
                     "database_connection": "external, configured per exported Compose project via DATABASE_URL",
                     "database_connection_scope": "per_exported_compose_project",
                     "supports_multiple_connections_per_process": false

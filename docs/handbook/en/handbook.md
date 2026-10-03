@@ -2060,6 +2060,10 @@ the extracted application; MariaDB is not included. `.env.example` contains
 only placeholders and an empty `DATABASE_URL`. Copy it to `.env` and configure
 the database connection there if the application needs one. Credentials are
 neither copied nor built into the image.
+When the selected module needs MariaDB, the image installs the currently
+required `mariadb-client`; the database itself remains external. The runtime
+packages selected for the image are listed in `docker.runtime_packages` in
+the manifest.
 Each exported Compose package has its own `.env.example` and, after the local
 copy, an independently configurable `DATABASE_URL`. This is one connection
 per running application unit, not a database module with multiple named
@@ -2070,10 +2074,12 @@ This Docker package is still not a complete module export:
 `source_closure_complete` and `complete_deployment` remain `false` because the
 static dependency graph does not yet prove every runtime and asset dependency.
 A successful `zelyra check` is not that proof. The Docker end-to-end test
-exports two routes from separate source files into separate Compose projects,
-builds both images, and requests both routes independently. This is bounded
-evidence for these static routes, not proof that a complete business
-application or arbitrary project can be extracted.
+exports two CRUD resources from separate source files into separate Compose
+projects. Both packages automatically include the database configuration
+module, receive their own `DATABASE_URL`, and read their respective test row
+using a MariaDB user with read-only access to that table. This is bounded CRUD
+and database evidence for this test application, not proof that complete
+business modules or arbitrary projects can be extracted.
 
 Imported UI resources can be used by a page in the entry file. The alias
 includes the file; view and component names are currently unqualified in HTML:

@@ -35,8 +35,15 @@ second_bundle_dir="${project_root}/inventory-bundle"
 compose_project="zelyra-generated-docker-e2e-$$"
 bundle_compose_project="zelyra-module-docker-e2e-$$"
 second_bundle_compose_project="zelyra-inventory-module-docker-e2e-$$"
+database_container_id=""
 
 cleanup() {
+    if [[ -n "${database_container_id}" ]]; then
+        docker network disconnect "${second_bundle_compose_project}_default" \
+            "${database_container_id}" >/dev/null 2>&1 || true
+        docker network disconnect "${bundle_compose_project}_default" \
+            "${database_container_id}" >/dev/null 2>&1 || true
+    fi
     if [[ -f "${second_bundle_dir}/.env" ]]; then
         docker compose --project-name "${second_bundle_compose_project}" \
             -f "${second_bundle_dir}/docker-compose.yml" \
@@ -62,8 +69,18 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
     --web-port "${web_port}" \
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
+sed -i '/^database main {/,/^}/d' "${project_dir}/main.zyl"
+sed -i '1i import "src/database.zyl" as storage' "${project_dir}/main.zyl"
+sed -i '1i import "src/invoices.zyl" as invoices' "${project_dir}/main.zyl"
+sed -i '1i import "src/inventory.zyl" as inventory' "${project_dir}/main.zyl"
 sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory-smoke.zyl" as inventory_smoke' "${project_dir}/main.zyl"
+printf 'database main { engine: mariadb database: "zelyra_app" }\n' \
+    > "${project_dir}/src/database.zyl"
+printf 'table invoices { id: Id primary auto number: String(30) required unique }\ncrud Invoice -> invoices\n' \
+    > "${project_dir}/src/invoices.zyl"
+printf 'table inventory { id: Id primary auto sku: String(30) required unique }\ncrud Inventory -> inventory\n' \
+    > "${project_dir}/src/inventory.zyl"
 printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
     > "${project_dir}/src/docker-smoke.zyl"
 printf 'page "/inventory-module" { html { <h1>Imported inventory module</h1> } }\n' \
@@ -213,92 +230,146 @@ docker compose --project-name "${compose_project}" \
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
-echo "[5/5] exporting two selected modules as independent Docker apps"
-if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" page:/docker-module \
+echo "[5/5] exporting two database-backed CRUD modules as independent Docker apps"
+database_test_sql="CREATE USER 'invoice_module'@'%' IDENTIFIED BY 'invoice-module-test-only';
+GRANT SELECT ON zelyra_app.invoices TO 'invoice_module'@'%';
+CREATE USER 'inventory_module'@'%' IDENTIFIED BY 'inventory-module-test-only';
+GRANT SELECT ON zelyra_app.inventory TO 'inventory_module'@'%';
+INSERT INTO zelyra_app.invoices (number) VALUES ('INV-MODULE-ONLY');
+INSERT INTO zelyra_app.inventory (sku) VALUES ('SKU-MODULE-ONLY');"
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" \
+    exec -T mariadb sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
+    sh "${database_test_sql}" >/dev/null
+
+write_bundle_environment() {
+    local directory="$1"
+    local port="$2"
+    local username="$3"
+    local password="$4"
+    (
+        umask 077
+        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/zelyra_app\n' \
+            "${port}" "${username}" "${password}" \
+            > "${directory}/.env"
+    )
+}
+
+if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" crud:Invoice \
     --output "${bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
     echo "error: selected-module Docker package generation failed" >&2
     exit 1
 fi
-if ! grep -Fq 'src/docker-smoke.zyl' "${bundle_dir}/zelyra.bundle.json"; then
-    echo "error: Docker bundle omitted the selected route module" >&2
+if ! grep -Fq 'src/invoices.zyl' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: invoice Docker bundle omitted its selected CRUD module" >&2
     exit 1
 fi
-if grep -Fq 'src/inventory-smoke.zyl' "${bundle_dir}/zelyra.bundle.json"; then
-    echo "error: Docker bundle included the unrelated inventory route module" >&2
+if ! grep -Fq 'src/database.zyl' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: invoice Docker bundle omitted the shared database module" >&2
     exit 1
 fi
-cp "${bundle_dir}/.env.example" "${bundle_dir}/.env"
-sed -i "s/^ZELYRA_HOST_PORT=.*/ZELYRA_HOST_PORT=${bundle_host_port}/" "${bundle_dir}/.env"
+if grep -Fq 'src/inventory.zyl' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: invoice Docker bundle included the unrelated inventory module" >&2
+    exit 1
+fi
+if ! grep -Fq '"database_connection_scope": "per_exported_compose_project"' \
+    "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: invoice Docker bundle omitted its database configuration scope" >&2
+    exit 1
+fi
+write_bundle_environment "${bundle_dir}" "${bundle_host_port}" \
+    invoice_module invoice-module-test-only
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" up --build --detach
+database_container_id="$(docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" ps -q mariadb)"
+docker network connect --alias mariadb \
+    "${bundle_compose_project}_default" "${database_container_id}"
 bundle_address="127.0.0.1:${bundle_host_port}"
 for _ in $(seq 1 60); do
-    if curl --silent --show-error --fail "http://${bundle_address}/docker-module" \
+    if curl --silent --show-error --fail "http://${bundle_address}/invoices" \
         -o "${project_root}/bundled-module.html"; then
         break
     fi
     sleep 2
 done
-if ! curl --silent --show-error --fail "http://${bundle_address}/docker-module" \
+if ! curl --silent --show-error --fail "http://${bundle_address}/invoices" \
     -o "${project_root}/bundled-module.html"; then
-    echo "error: selected-module Docker container did not become ready" >&2
+    echo "error: invoice Docker app could not read its MariaDB table" >&2
     docker compose --project-name "${bundle_compose_project}" \
         -f "${bundle_dir}/docker-compose.yml" logs >&2 || true
     exit 1
 fi
-assert_file_contains "${project_root}/bundled-module.html" '<h1>Imported Docker module</h1>' \
-    "selected module route in its independent Docker container"
+assert_file_contains "${project_root}/bundled-module.html" 'INV-MODULE-ONLY' \
+    "invoice CRUD data read with the invoice-only database user"
 if ! grep -Fq '"complete_deployment": false' "${bundle_dir}/zelyra.bundle.json"; then
     echo "error: experimental selected-module package overstated deployment completeness" >&2
     exit 1
 fi
+docker network disconnect "${bundle_compose_project}_default" \
+    "${database_container_id}"
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" down --remove-orphans
 
-if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" page:/inventory-module \
+if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" crud:Inventory \
     --output "${second_bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
-    echo "error: second selected-module Docker package generation failed" >&2
+    echo "error: inventory Docker package generation failed" >&2
     exit 1
 fi
-if ! grep -Fq 'src/inventory-smoke.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
-    echo "error: inventory bundle omitted the selected route module" >&2
+if ! grep -Fq 'src/inventory.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory Docker bundle omitted its selected CRUD module" >&2
     exit 1
 fi
-if grep -Fq 'src/docker-smoke.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
-    echo "error: inventory bundle included the unrelated Docker route module" >&2
+if ! grep -Fq 'src/database.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory Docker bundle omitted the shared database module" >&2
     exit 1
 fi
-cp "${second_bundle_dir}/.env.example" "${second_bundle_dir}/.env"
-sed -i "s/^ZELYRA_HOST_PORT=.*/ZELYRA_HOST_PORT=${second_bundle_host_port}/" \
-    "${second_bundle_dir}/.env"
+if grep -Fq 'src/invoices.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory Docker bundle included the unrelated invoice module" >&2
+    exit 1
+fi
+if ! grep -Fq '"database_connection_scope": "per_exported_compose_project"' \
+    "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory Docker bundle omitted its database configuration scope" >&2
+    exit 1
+fi
+write_bundle_environment "${second_bundle_dir}" "${second_bundle_host_port}" \
+    inventory_module inventory-module-test-only
 docker compose --project-name "${second_bundle_compose_project}" \
     -f "${second_bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${second_bundle_compose_project}" \
     -f "${second_bundle_dir}/docker-compose.yml" up --build --detach
+docker network connect --alias mariadb \
+    "${second_bundle_compose_project}_default" "${database_container_id}"
 second_bundle_address="127.0.0.1:${second_bundle_host_port}"
 for _ in $(seq 1 60); do
-    if curl --silent --show-error --fail "http://${second_bundle_address}/inventory-module" \
+    if curl --silent --show-error --fail "http://${second_bundle_address}/inventory" \
         -o "${project_root}/bundled-inventory.html"; then
         break
     fi
     sleep 2
 done
-if ! curl --silent --show-error --fail "http://${second_bundle_address}/inventory-module" \
+if ! curl --silent --show-error --fail "http://${second_bundle_address}/inventory" \
     -o "${project_root}/bundled-inventory.html"; then
-    echo "error: second selected-module Docker container did not become ready" >&2
+    echo "error: inventory Docker app could not read its MariaDB table" >&2
     docker compose --project-name "${second_bundle_compose_project}" \
         -f "${second_bundle_dir}/docker-compose.yml" logs >&2 || true
     exit 1
 fi
 assert_file_contains "${project_root}/bundled-inventory.html" \
-    '<h1>Imported inventory module</h1>' \
-    "second selected module route in its independent Docker container"
+    'SKU-MODULE-ONLY' \
+    "inventory CRUD data read with the inventory-only database user"
 if ! grep -Fq '"complete_deployment": false' "${second_bundle_dir}/zelyra.bundle.json"; then
     echo "error: second experimental module package overstated deployment completeness" >&2
     exit 1
 fi
+docker network disconnect "${second_bundle_compose_project}_default" \
+    "${database_container_id}"
 docker compose --project-name "${second_bundle_compose_project}" \
     -f "${second_bundle_dir}/docker-compose.yml" down --remove-orphans
 echo "generated Docker project E2E passed"
