@@ -8,6 +8,7 @@ web_port="${ZELYRA_DOCKER_E2E_WEB_PORT:-8081}"
 host_port="${ZELYRA_DOCKER_E2E_HOST_PORT:-18082}"
 database_host_port="${ZELYRA_DOCKER_E2E_DB_HOST_PORT:-3309}"
 bundle_host_port="${ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT:-18083}"
+second_bundle_host_port="${ZELYRA_DOCKER_E2E_SECOND_BUNDLE_HOST_PORT:-18084}"
 address="${ZELYRA_DOCKER_E2E_ADDRESS:-127.0.0.1:${host_port}}"
 zelyra_ref="${ZELYRA_DOCKER_E2E_REF:-$(git -C "${repo_dir}" branch --show-current 2>/dev/null || true)}"
 bundle_compiler_commit="${ZELYRA_DOCKER_E2E_MODULE_COMMIT:-$(git -C "${repo_dir}" rev-parse HEAD)}"
@@ -30,10 +31,17 @@ fi
 project_root="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-generated-docker-e2e.XXXXXX")"
 project_dir="${project_root}/app"
 bundle_dir="${project_root}/module-bundle"
+second_bundle_dir="${project_root}/inventory-bundle"
 compose_project="zelyra-generated-docker-e2e-$$"
 bundle_compose_project="zelyra-module-docker-e2e-$$"
+second_bundle_compose_project="zelyra-inventory-module-docker-e2e-$$"
 
 cleanup() {
+    if [[ -f "${second_bundle_dir}/.env" ]]; then
+        docker compose --project-name "${second_bundle_compose_project}" \
+            -f "${second_bundle_dir}/docker-compose.yml" \
+            down --remove-orphans >/dev/null 2>&1 || true
+    fi
     if [[ -f "${bundle_dir}/.env" ]]; then
         docker compose --project-name "${bundle_compose_project}" \
             -f "${bundle_dir}/docker-compose.yml" \
@@ -55,8 +63,11 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
 sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"
+sed -i '1i import "src/inventory-smoke.zyl" as inventory_smoke' "${project_dir}/main.zyl"
 printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
     > "${project_dir}/src/docker-smoke.zyl"
+printf 'page "/inventory-module" { html { <h1>Imported inventory module</h1> } }\n' \
+    > "${project_dir}/src/inventory-smoke.zyl"
 if [[ ! -f "${project_dir}/.env" ]]; then
     echo "error: zelyra new did not create the protected local .env file" >&2
     exit 1
@@ -202,10 +213,18 @@ docker compose --project-name "${compose_project}" \
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
-echo "[5/5] building the selected source closure as its own Docker app"
+echo "[5/5] exporting two selected modules as independent Docker apps"
 if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" page:/docker-module \
     --output "${bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
     echo "error: selected-module Docker package generation failed" >&2
+    exit 1
+fi
+if ! grep -Fq 'src/docker-smoke.zyl' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: Docker bundle omitted the selected route module" >&2
+    exit 1
+fi
+if grep -Fq 'src/inventory-smoke.zyl' "${bundle_dir}/zelyra.bundle.json"; then
+    echo "error: Docker bundle included the unrelated inventory route module" >&2
     exit 1
 fi
 cp "${bundle_dir}/.env.example" "${bundle_dir}/.env"
@@ -237,4 +256,49 @@ if ! grep -Fq '"complete_deployment": false' "${bundle_dir}/zelyra.bundle.json";
 fi
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" down --remove-orphans
+
+if ! "${zelyra_bin}" module bundle "${project_dir}/main.zyl" page:/inventory-module \
+    --output "${second_bundle_dir}" --docker --compiler-ref "${bundle_compiler_commit}"; then
+    echo "error: second selected-module Docker package generation failed" >&2
+    exit 1
+fi
+if ! grep -Fq 'src/inventory-smoke.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory bundle omitted the selected route module" >&2
+    exit 1
+fi
+if grep -Fq 'src/docker-smoke.zyl' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: inventory bundle included the unrelated Docker route module" >&2
+    exit 1
+fi
+cp "${second_bundle_dir}/.env.example" "${second_bundle_dir}/.env"
+sed -i "s/^ZELYRA_HOST_PORT=.*/ZELYRA_HOST_PORT=${second_bundle_host_port}/" \
+    "${second_bundle_dir}/.env"
+docker compose --project-name "${second_bundle_compose_project}" \
+    -f "${second_bundle_dir}/docker-compose.yml" config >/dev/null
+docker compose --project-name "${second_bundle_compose_project}" \
+    -f "${second_bundle_dir}/docker-compose.yml" up --build --detach
+second_bundle_address="127.0.0.1:${second_bundle_host_port}"
+for _ in $(seq 1 60); do
+    if curl --silent --show-error --fail "http://${second_bundle_address}/inventory-module" \
+        -o "${project_root}/bundled-inventory.html"; then
+        break
+    fi
+    sleep 2
+done
+if ! curl --silent --show-error --fail "http://${second_bundle_address}/inventory-module" \
+    -o "${project_root}/bundled-inventory.html"; then
+    echo "error: second selected-module Docker container did not become ready" >&2
+    docker compose --project-name "${second_bundle_compose_project}" \
+        -f "${second_bundle_dir}/docker-compose.yml" logs >&2 || true
+    exit 1
+fi
+assert_file_contains "${project_root}/bundled-inventory.html" \
+    '<h1>Imported inventory module</h1>' \
+    "second selected module route in its independent Docker container"
+if ! grep -Fq '"complete_deployment": false' "${second_bundle_dir}/zelyra.bundle.json"; then
+    echo "error: second experimental module package overstated deployment completeness" >&2
+    exit 1
+fi
+docker compose --project-name "${second_bundle_compose_project}" \
+    -f "${second_bundle_dir}/docker-compose.yml" down --remove-orphans
 echo "generated Docker project E2E passed"
