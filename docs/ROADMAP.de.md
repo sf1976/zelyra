@@ -105,6 +105,12 @@ Feature eines bestimmten Anbieters.
   Authentifizierung, Authentifizierung zu Tabellen sowie Typreferenzen aus
   APIs, Funktionssignaturen, Records und Type Aliases, Tabellenrelationen und
   Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
+  SQL-Tabellenkanten zeigen außerdem den konservativ erkannten Modus
+  `read`, `write`, `read_write` oder `unknown`; komplexe verbundene
+  `UPDATE`-/`DELETE`-Formen bleiben `unknown`. `schema_ownership` meldet den
+  Tabellenbesitzer nur als aus der Quelldatei abgeleitete Vermutung und setzt
+  `enforced: false`. Diese Analyse ist Beobachtung, keine Berechtigungs- oder
+  Eigentumsdurchsetzung; nicht erkannte SQL-Formen können fehlen.
   Dynamische oder nicht modellierte Abhängigkeiten, Assets,
   Laufzeitkonfiguration, externe Dienstverträge und Docker-Paketierung bleiben
   außerhalb dieser Vorschau. `complete_deployment` bleibt `false`; der Plan ist

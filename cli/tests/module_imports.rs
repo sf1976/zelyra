@@ -668,6 +668,87 @@ fn module_plan_includes_separate_database_configuration_source() {
 }
 
 #[test]
+fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_service.zyl\" as customers\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/customer_service.zyl",
+            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
+        ),
+        (
+            "src/customer_schema.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+    ]);
+    let plan = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/customer_service.zyl"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        plan["plan"]["schema_ownership"]["model"],
+        "inferred_from_table_declaration_source_module"
+    );
+    assert_eq!(plan["plan"]["schema_ownership"]["enforced"], false);
+    assert_eq!(
+        plan["plan"]["schema_ownership"]["tables"],
+        serde_json::json!([{
+            "table": "customers",
+            "inferred_owner_module": "src/customer_schema.zyl",
+            "ownership_enforced": false
+        }])
+    );
+    let edges = plan["plan"]["declaration_closure"]["edges"]
+        .as_array()
+        .unwrap();
+    assert!(
+        edges.iter().any(|edge| {
+            edge["from"] == "function:src/customer_service.zyl::listCustomers"
+                && edge["to"] == "table:customers"
+                && edge["kind"] == "sql_table"
+                && edge["access"] == "read"
+        }),
+        "{edges:#?}"
+    );
+    assert!(edges.iter().any(|edge| {
+        edge["from"] == "function:src/customer_service.zyl::renameCustomer"
+            && edge["to"] == "table:customers"
+            && edge["kind"] == "sql_table"
+            && edge["access"] == "write"
+    }));
+    let dependencies = plan["plan"]["resource_dependencies"].as_array().unwrap();
+    assert!(
+        dependencies.iter().any(|dependency| {
+            dependency["from_module"] == "src/customer_service.zyl"
+                && dependency["to_module"] == "src/customer_schema.zyl"
+                && dependency["to"] == "table:customers"
+                && dependency["access"] == "read"
+        }),
+        "{dependencies:#?}"
+    );
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from_module"] == "src/customer_service.zyl"
+            && dependency["to_module"] == "src/customer_schema.zyl"
+            && dependency["to"] == "table:customers"
+            && dependency["access"] == "write"
+    }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
     let directory = project(&[
         (

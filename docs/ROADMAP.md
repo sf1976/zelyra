@@ -94,7 +94,13 @@ architecture requirement for every phase, not a provider-specific feature.
   references for APIs, function signatures, records, and type aliases,
   protected-resource-to-authentication, authentication-to-table,
   table-relation, and database-configuration edges, and reports references it
-  cannot resolve. Dynamic or unmodeled dependencies, assets, runtime
+  cannot resolve. SQL-to-table edges additionally report conservative
+  `read`, `write`, `read_write`, or `unknown` access modes; complex joined
+  `UPDATE`/`DELETE` forms remain `unknown`. `schema_ownership` reports only an
+  inferred table owner based on declaration source and explicitly sets
+  `enforced` to `false`. This is observational metadata, not permission or
+  ownership enforcement; unrecognized SQL forms may be absent. Dynamic or
+  unmodeled dependencies, assets, runtime
   configuration, external service contracts, and Docker packaging remain
   outside this preview. `complete_deployment` remains `false`; it is neither a
   complete export manifest nor part of published 0.3.0.

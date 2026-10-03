@@ -2012,6 +2012,18 @@ configuration, external services, and Docker artifacts are not included.
 `complete_deployment` remains explicitly `false`; the command does not export
 or run an application.
 
+SQL table edges also carry `access`: `read`, `write`, `read_write`, or
+`unknown`. The observer recognizes known unqualified table names in the simple
+`SELECT`, `INSERT`, `UPDATE`, and `DELETE` forms covered by the analyzer. For
+`INSERT ... SELECT`, it reports a write to the target table and a read from
+the source table. Complex joined `UPDATE`/`DELETE` forms are conservatively
+marked `unknown`. Unrecognized SQL forms and tables that cannot be mapped to
+the project's known tables may be absent from the analysis. These values
+describe observed dependencies; they do not enforce permissions or schema
+ownership and do not make the graph complete. `schema_ownership` reports the
+source file of a table declaration as `inferred_owner_module`; `enforced` and
+`ownership_enforced` are explicitly `false`.
+
 The next experimental step is `zelyra module bundle`:
 
 ~~~sh

@@ -2804,12 +2804,17 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         .get("kind")
                         .and_then(Value::as_str)
                         .unwrap_or("reference");
+                    let access = reference
+                        .get("access")
+                        .and_then(Value::as_str)
+                        .unwrap_or("none");
                     let key = (
                         from_path.clone(),
                         from.to_owned(),
                         to_path.clone(),
                         to.to_owned(),
                         kind.to_owned(),
+                        access.to_owned(),
                     );
                     resource_dependencies.insert(
                         key,
@@ -2819,6 +2824,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                             "to_module": to_path,
                             "to": to,
                             "kind": kind,
+                            "access": reference.get("access").and_then(Value::as_str),
                             "span": reference.get("span")
                         }),
                     );
@@ -2842,6 +2848,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                                 database_path.clone(),
                                 database_node.clone(),
                                 "database_configuration".into(),
+                                "none".into(),
                             );
                             resource_dependencies.insert(
                                 key,
@@ -2883,6 +2890,24 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         })
                     })
                     .collect::<BTreeMap<_, _>>();
+                let schema_ownership = program
+                    .tables
+                    .iter()
+                    .filter_map(|table| {
+                        let declaration = format!("table:{}", table.name);
+                        let module_path = owners.get(&declaration)?;
+                        included.contains(module_path).then(|| {
+                            (
+                                table.name.clone(),
+                                json!({
+                                    "table": table.name,
+                                    "inferred_owner_module": module_path,
+                                    "ownership_enforced": false
+                                }),
+                            )
+                        })
+                    })
+                    .collect::<BTreeMap<_, _>>();
                 plan = Some(json!({
                     "kind": "known-semantic-dependency-closure",
                     "closure_semantics": "explicit-imports-plus-statically-recognized-references",
@@ -2917,6 +2942,11 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "declarations": module.declarations
                     })).collect::<Vec<_>>(),
                     "resource_dependencies": resource_dependencies.values().cloned().collect::<Vec<_>>(),
+                    "schema_ownership": {
+                        "model": "inferred_from_table_declaration_source_module",
+                        "enforced": false,
+                        "tables": schema_ownership.values().collect::<Vec<_>>()
+                    },
                     "unresolved_references": unresolved_references.iter().map(|(module, from, to)| json!({
                         "from_module": module,
                         "from": from,

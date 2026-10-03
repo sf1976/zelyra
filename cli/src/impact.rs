@@ -285,25 +285,31 @@ fn semantic_references(
         }
     }
     for tableview in &program.tableviews {
-        for table in referenced_tables(&tableview.source, table_names) {
-            add_reference(
+        let (_, accesses) =
+            zelyra_database::sql::analyze_table_access(&tableview.source, table_names);
+        for access in accesses {
+            add_reference_with_access(
                 &mut references,
                 format!("tableview:{}", tableview.name),
-                format!("table:{table}"),
+                format!("table:{}", access.table),
                 "table",
                 span_value(tableview.span, sources),
+                access.mode.as_str(),
             );
         }
     }
     for page in &program.pages {
         for data in &page.data {
-            for table in referenced_tables(&data.query, table_names) {
-                add_reference(
+            let (_, accesses) =
+                zelyra_database::sql::analyze_table_access(&data.query, table_names);
+            for access in accesses {
+                add_reference_with_access(
                     &mut references,
                     format!("page:{}", page.path),
-                    format!("table:{table}"),
+                    format!("table:{}", access.table),
                     "page_data_sql",
                     span_value(data.span, sources),
+                    access.mode.as_str(),
                 );
             }
         }
@@ -400,7 +406,7 @@ fn semantic_references(
         let Some(owner) = entry.get("owner").and_then(Value::as_str) else {
             continue;
         };
-        let Some(tables) = entry.get("tables").and_then(Value::as_array) else {
+        let Some(accesses) = entry.get("table_accesses").and_then(Value::as_array) else {
             continue;
         };
         let source_owner = match entry.get("kind").and_then(Value::as_str) {
@@ -411,13 +417,20 @@ fn semantic_references(
             _ => owner.to_owned(),
         };
         let span = entry.get("span").cloned().unwrap_or(Value::Null);
-        for table in tables.iter().filter_map(Value::as_str) {
-            add_reference(
+        for access in accesses {
+            let (Some(table), Some(mode)) = (
+                access.get("table").and_then(Value::as_str),
+                access.get("mode").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            add_reference_with_access(
                 &mut references,
                 source_owner.clone(),
                 format!("table:{table}"),
                 "sql_table",
                 span.clone(),
+                mode,
             );
         }
     }
@@ -740,6 +753,31 @@ fn add_reference(references: &mut Vec<Value>, from: String, to: String, kind: &s
         "from": from,
         "to": to,
         "kind": kind,
+        "span": span,
+    }));
+}
+
+fn add_reference_with_access(
+    references: &mut Vec<Value>,
+    from: String,
+    to: String,
+    kind: &str,
+    span: Value,
+    access: &str,
+) {
+    if references.iter().any(|reference| {
+        reference.get("from").and_then(Value::as_str) == Some(from.as_str())
+            && reference.get("to").and_then(Value::as_str) == Some(to.as_str())
+            && reference.get("kind").and_then(Value::as_str) == Some(kind)
+            && reference.get("access").and_then(Value::as_str) == Some(access)
+    }) {
+        return;
+    }
+    references.push(json!({
+        "from": from,
+        "to": to,
+        "kind": kind,
+        "access": access,
         "span": span,
     }));
 }
@@ -1070,10 +1108,14 @@ fn sql_entries(
         }
     }
     for tableview in &program.tableviews {
+        let (operation, tables, table_accesses) =
+            analyzed_sql_accesses(&tableview.source, table_names);
         entries.push(json!({
             "owner": format!("tableview:{}", tableview.name),
             "kind": "tableview",
-            "tables": referenced_tables(&tableview.source, table_names),
+            "operation": operation,
+            "tables": tables,
+            "table_accesses": table_accesses,
             "span": span_value(tableview.span, sources),
         }));
     }
@@ -1189,12 +1231,17 @@ fn collect_expr_sql(
     entries: &mut Vec<Value>,
 ) {
     match &expression.kind {
-        ExprKind::Sql { query, .. } => entries.push(json!({
-            "owner": owner,
-            "kind": kind,
-            "tables": referenced_tables(query, table_names),
-            "span": span_value(expression.span, sources),
-        })),
+        ExprKind::Sql { query, .. } => {
+            let (operation, tables, table_accesses) = analyzed_sql_accesses(query, table_names);
+            entries.push(json!({
+                "owner": owner,
+                "kind": kind,
+                "operation": operation,
+                "tables": tables,
+                "table_accesses": table_accesses,
+                "span": span_value(expression.span, sources),
+            }));
+        }
         ExprKind::Array(values) => values
             .iter()
             .for_each(|value| collect_expr_sql(value, owner, kind, table_names, sources, entries)),
@@ -1238,6 +1285,19 @@ fn referenced_tables(query: &str, table_names: &[String]) -> Vec<String> {
         .filter(|table| contains_identifier(query, table))
         .cloned()
         .collect()
+}
+
+fn analyzed_sql_accesses(
+    query: &str,
+    table_names: &[String],
+) -> (Option<&'static str>, Vec<String>, Vec<Value>) {
+    let (operation, accesses) = zelyra_database::sql::analyze_table_access(query, table_names);
+    let tables = accesses.iter().map(|access| access.table.clone()).collect();
+    let accesses = accesses
+        .into_iter()
+        .map(|access| json!({ "table": access.table, "mode": access.mode.as_str() }))
+        .collect();
+    (operation, tables, accesses)
 }
 
 fn relation_table(name: &str, table_names: &[String]) -> Option<String> {

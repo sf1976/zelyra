@@ -1995,6 +1995,20 @@ oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
 Dienste und Docker-Artefakte sind nicht enthalten. `complete_deployment` bleibt
 ausdrücklich `false`; der Befehl exportiert oder startet keine Anwendung.
 
+SQL-Tabellenkanten tragen zusätzlich `access`: `read`, `write`, `read_write`
+oder `unknown`. Der Beobachter erkennt bekannte, nicht qualifizierte
+Tabellennamen in den einfachen `SELECT`-, `INSERT`-, `UPDATE`- und `DELETE`-
+Formen, die der Analyzer abdeckt. Bei `INSERT ... SELECT` wird die Zieltabelle
+als Schreibzugriff und die gelesene Quelle als Lesezugriff ausgewiesen.
+Komplexe verbundene `UPDATE`-/`DELETE`-Formen werden konservativ als
+`unknown` markiert. Nicht erkannte SQL-Formen oder nicht zugeordnete Tabellen
+können in der Analyse fehlen. Diese Angaben beschreiben beobachtete
+Abhängigkeiten; sie sind weder Berechtigungsprüfung noch Durchsetzung von
+Schemaeigentum und machen den Graphen nicht vollständig. `schema_ownership`
+weist die Quelldatei einer Tabellendeklaration als
+`inferred_owner_module` aus; `enforced` und `ownership_enforced` stehen
+ausdrücklich auf `false`.
+
 Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
 
 ~~~sh
