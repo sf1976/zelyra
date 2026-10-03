@@ -347,7 +347,7 @@ fn link_modules(
             let span = first_unsupported_import_span(&module.program).unwrap_or_default();
             return Err(ProjectError {
                 code: "E-MOD-008",
-                message: "imported modules support functions, type aliases, records, and a project-wide database definition; keep tables, views, APIs, and other application resources in the entry file".into(),
+                message: "imported modules support functions, type aliases, records, tables, and a project-wide database definition; keep views, APIs, and other application resources in the entry file".into(),
                 path: module.relative_path.clone(),
                 span,
                 sources: Box::default(),
@@ -365,8 +365,8 @@ fn link_modules(
         let module = modules.get(path).expect("ordered module was loaded");
         let module_name = module_names.get(path).expect("module name exists");
         // A database declaration is project-wide connection configuration.
-        // Keep it in the composed program while tables and web resources stay
-        // entry-file-only until their own linking semantics are defined.
+        // Tables also contribute to the application's shared physical schema;
+        // their SQL names are global rather than module-qualified.
         linked.databases.extend(module.program.databases.clone());
         let linker = TypeLinker {
             current_path: path,
@@ -377,6 +377,12 @@ fn link_modules(
             display_path: &module.relative_path,
             is_root: false,
         };
+        for mut table in module.program.tables.clone() {
+            for column in &mut table.columns {
+                linker.rewrite_type(&mut column.ty, column.span)?;
+            }
+            linked.tables.push(table);
+        }
         for mut definition in module.program.types.clone() {
             if definition.is_public {
                 linker.ensure_exported_type_is_public(&definition.target, definition.span)?;
@@ -467,8 +473,7 @@ fn type_visibility(program: &Program) -> HashMap<String, bool> {
 }
 
 fn has_unsupported_import_declarations(program: &Program) -> bool {
-    !program.tables.is_empty()
-        || !program.views.is_empty()
+    !program.views.is_empty()
         || !program.components.is_empty()
         || !program.pages.is_empty()
         || !program.tableviews.is_empty()
@@ -480,10 +485,9 @@ fn has_unsupported_import_declarations(program: &Program) -> bool {
 
 fn first_unsupported_import_span(program: &Program) -> Option<Span> {
     program
-        .tables
+        .views
         .first()
         .map(|item| item.span)
-        .or_else(|| program.views.first().map(|item| item.span))
         .or_else(|| program.components.first().map(|item| item.span))
         .or_else(|| program.pages.first().map(|item| item.span))
         .or_else(|| program.tableviews.first().map(|item| item.span))
@@ -522,8 +526,10 @@ impl TypeLinker<'_> {
             }
         }
         for table in &mut program.tables {
-            for column in &mut table.columns {
-                self.rewrite_type(&mut column.ty, column.span)?;
+            if table.span.source_id == source_id {
+                for column in &mut table.columns {
+                    self.rewrite_type(&mut column.ty, column.span)?;
+                }
             }
         }
         for page in &mut program.pages {
@@ -1611,7 +1617,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_files_reject_application_resource_declarations_for_now() {
+    fn imported_files_still_reject_web_resources_for_now() {
         let directory = project(&[
             (
                 "main.zyl",
@@ -1619,12 +1625,12 @@ mod tests {
             ),
             (
                 "src/domain.zyl",
-                "table customers { id: Id primary auto }\npub fn count() -> Int { return 0 }\n",
+                "page \"/domain\" { html { <h1>Domain</h1> } }\n",
             ),
         ]);
         let error = load(directory.join("main.zyl").to_str().unwrap()).unwrap_err();
         assert_eq!(error.code, "E-MOD-008");
-        assert!(error.message.contains("project-wide database definition"));
+        assert!(error.message.contains("other application resources"));
         cleanup(&directory);
     }
 
@@ -1647,6 +1653,46 @@ mod tests {
             schema.database.as_ref().unwrap().database.as_deref(),
             Some("invoices")
         );
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imported_tables_join_the_project_schema_and_resolve_local_aliases() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/invoices.zyl\" as invoices\nfn main() {}\n",
+            ),
+            (
+                "src/invoices.zyl",
+                "type Cents = Int\ntable invoices { id: Id primary auto total: Cents required }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        let schema = build_schema(&loaded.program).unwrap();
+        assert_eq!(schema.tables.len(), 1);
+        assert_eq!(schema.tables[0].name, "invoices");
+        assert_eq!(schema.tables[0].columns[1].sql_type, "BIGINT");
+        cleanup(&directory);
+    }
+
+    #[test]
+    fn imported_table_name_collisions_are_reported() {
+        let directory = project(&[
+            (
+                "main.zyl",
+                "import \"src/invoices.zyl\" as invoices\ntable invoices { id: Id primary auto }\nfn main() {}\n",
+            ),
+            (
+                "src/invoices.zyl",
+                "table invoices { id: Id primary auto }\n",
+            ),
+        ]);
+        let loaded = load(directory.join("main.zyl").to_str().unwrap()).unwrap();
+        let errors = build_schema(&loaded.program).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message == "duplicate table definition invoices"));
         cleanup(&directory);
     }
 

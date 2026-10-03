@@ -180,10 +180,10 @@ architecture requirement for every phase, not a provider-specific feature.
   a deterministic, sorted module/import inventory. Its declaration inventory
   is still entry-file-only, and verification results lack per-module source
   provenance. Database configuration is not addressed through its alias and is
-  limited to one connection per project. Application resources such as tables,
-  views, and APIs, and
-  integration with `fmt`, `impact`, `edit`, and database commands remain
-  incomplete; this is not part of the published 0.3.0 binary.
+  limited to one connection per project. Imported tables join the shared
+  schema and retain global SQL names; views and APIs, as well as integration
+  with `fmt`, `impact`, `edit`, and database commands, remain incomplete. This
+  is not part of the published 0.3.0 binary.
 - [ ] Generics, interfaces/traits, enums, tagged unions, and pattern matching
   across all domain types.
 - [ ] Better type inference with precise source spans and fix suggestions.

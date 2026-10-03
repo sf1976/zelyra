@@ -5575,8 +5575,8 @@ Release-Meilensteine:
   [Releaseplan](../../release-plans/0.4.0.de.md).
 - **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
   bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält nur das
-  in Kapitel 15 beschriebene Experiment für Funktions-, Typ-, Record- und
-  Datenbankkonfigurations-Imports; es ist nicht in
+  in Kapitel 15 beschriebene Experiment für Funktions-, Typ-, Record-, Tabellen-
+  und Datenbankkonfigurations-Imports; es ist nicht in
   0.3.0 enthalten und bietet noch keine vollständigen Projektmodule.
 
 ### 4. Zelyras Versprechen an Entwickler
@@ -5589,7 +5589,7 @@ Release-Meilensteine:
   Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
   Produktion wird nicht behauptet.
 - **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
-  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen, Records und einer projektweiten Datenbankkonfiguration. Tabellen, Views und andere Anwendungsressourcen bleiben ausgeschlossen; das umfassendere Modulmodell ist geplant.
+  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports von Funktionen, Typ-Aliasen, Records, Tabellen und einer projektweiten Datenbankkonfiguration. Tabellen fließen in ein gemeinsames Schema ein und sind nicht modulqualifiziert; Views und andere Anwendungsressourcen bleiben ausgeschlossen. Das umfassendere Modulmodell ist geplant.
 
 ### 6. Merksätze
 1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
@@ -5597,8 +5597,8 @@ Release-Meilensteine:
 2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
    experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
 3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
-   zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es nur begrenzte
-   Funktions-, Typ-, Record- und Datenbankkonfigurations-Imports.
+   zukünftige Arbeiten; im aktuellen Entwicklungszweig gibt es begrenzte
+   Funktions-, Typ-, Record-, Tabellen- und Datenbankkonfigurations-Imports.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
@@ -8615,7 +8615,7 @@ fn main() {
 *Antwort:* Das veröffentlichte 0.3.0-Binary enthält keine Modulimporte. Ein
 CLI-Aufruf prüft die ausdrücklich angegebene `.zyl`-Datei. Im aktuellen,
 unveröffentlichten Entwicklungszweig gibt es experimentelle Imports für
-Funktions-, Typ- und Record-Deklarationen sowie eine projektweite
+Funktions-, Typ-, Record- und Tabellendeklarationen sowie eine projektweite
 Datenbankkonfiguration, die `check`, `build`, `run`,
 `context` und `verify` im Modulgraphen prüfen. Vollständige
 Projektmodule sind weiterhin geplante Arbeit und dürfen nicht mit diesem

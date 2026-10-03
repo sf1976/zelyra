@@ -211,7 +211,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
     let directory = project(&[
         (
             "main.zyl",
-            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\ntable customers { id: Id primary auto }\nfn main() uses Database { invoices::count() }\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/invoices.zyl\" as invoices\nfn main() uses Database { invoices::count() }\n",
         ),
         (
             "src/database.zyl",
@@ -219,7 +219,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
         ),
         (
             "src/invoices.zyl",
-            "pub fn count() -> Int uses Database { return 0 }\n",
+            "table invoices { id: Id primary auto number: String(40) required total: Decimal required }\npub fn count() -> Int uses Database { rows = sql<Invoice[]> { SELECT id, number, total FROM invoices } return 0 }\n",
         ),
         (
             "zelyra.toml",
@@ -262,5 +262,30 @@ fn check_rejects_more_than_one_database_across_the_project_graph() {
                     .unwrap_or_default()
                     .contains("only one database definition")
         }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn check_resolves_relations_between_tables_in_imported_modules() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/departments.zyl\" as departments\nimport \"src/machines.zyl\" as machines\nfn main() {}\n",
+        ),
+        (
+            "src/departments.zyl",
+            "table departments { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/machines.zyl",
+            "table machines { id: Id primary auto name: String(100) required department: Department required }\n",
+        ),
+    ]);
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
     fs::remove_dir_all(directory).unwrap();
 }

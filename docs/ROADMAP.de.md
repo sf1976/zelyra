@@ -199,9 +199,10 @@ Feature eines bestimmten Anbieters.
   Modul-/Import-Überblick. Sein Deklarationsinventar umfasst weiterhin nur die
   Einstiegsdatei; Verifikationsergebnisse haben noch keine Quellzuordnung pro
   Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
-  pro Projekt auf eine Verbindung begrenzt. Anwendungsressourcen wie Tabellen,
-  Views und APIs sowie `fmt`,
-  `impact`, `edit` und Datenbankbefehle bleiben unvollständig; das Feature ist
+  pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen fließen in
+  das gemeinsame Schema ein und behalten globale SQL-Namen; Views und APIs
+  bleiben noch unvollständig. Auch die Integration mit `fmt`, `impact`, `edit`
+  und Datenbankbefehlen fehlt noch; das Feature ist
   nicht im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
   für alle Fachdaten-Typen.

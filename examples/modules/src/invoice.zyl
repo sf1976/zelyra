@@ -1,5 +1,12 @@
 import "src/math.zyl" as math
 import "src/money.zyl" as money
+
+table invoice_headers {
+    id: Id primary auto
+    invoice_number: String(40) required unique
+    total_cents: Int required
+}
+
 fn add_tax(net: Int, tax: Int) -> Int {
     return math::sum(net, tax)
 }

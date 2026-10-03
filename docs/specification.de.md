@@ -335,8 +335,11 @@ Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase, Records und
 eine projektweite Datenbankverbindungsdefinition enthalten. Die
 Datenbankkonfiguration wird in die Anwendung übernommen und nicht über den
 Importalias angesprochen; im gesamten Projektgraphen ist höchstens eine
-Datenbank zulässig. Importierte Tabellen, Views, Komponenten, Seiten, Formulare,
-CRUD-, API- und Authentifizierungsdefinitionen bleiben weiterhin unzulässig.
+Datenbank zulässig. Tabellen aus importierten Dateien werden in das gemeinsame
+physische Schema der Anwendung aufgenommen. Tabellennamen sind globale
+SQL-Bezeichner statt modulqualifizierter Namen; doppelte Tabellennamen werden
+abgelehnt. Views, Komponenten, Seiten, Formulare, CRUD-, API- und
+Authentifizierungsdefinitionen bleiben in importierten Dateien unzulässig.
 Funktions-, Typ- und Record-Deklarationen sind standardmäßig privat;
 Deklarationen überschreiten eine Modulgrenze nur mit `pub` und einem
 ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type` oder

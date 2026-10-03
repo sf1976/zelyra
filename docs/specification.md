@@ -381,9 +381,12 @@ fn main() {
 An imported source currently may declare functions, type aliases, records, and
 one project-wide database connection definition. Database configuration is
 composed into the application and is not accessed through the import alias;
-the composed project may define at most one database. Imported tables, views,
-components, pages, forms, CRUD declarations, APIs, and authentication resources
-remain unsupported. Function, type, and record declarations are private by
+the composed project may define at most one database. Tables in imported files
+are composed into the application's shared physical schema; table names are
+global SQL identifiers rather than module-qualified names, and duplicate table
+names are rejected. Views, components, pages, forms, CRUD declarations, APIs,
+and authentication resources remain unsupported in imported files. Function,
+type, and record declarations are private by
 default; declarations cross a module boundary only with a
 `pub` modifier and an explicit import alias. For example, use `pub fn`,
 `pub type`, or `pub struct`. A qualified type reference such as

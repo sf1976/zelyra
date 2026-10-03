@@ -87,11 +87,15 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
         });
     }
     let backend = backend.and_then(Result::ok).unwrap_or(Backend::MariaDb);
-    let table_names = program
-        .tables
-        .iter()
-        .map(|table| table.name.clone())
-        .collect::<HashSet<_>>();
+    let mut table_names = HashSet::new();
+    for table in &program.tables {
+        if !table_names.insert(table.name.clone()) {
+            errors.push(SchemaError {
+                message: format!("duplicate table definition {}", table.name),
+                span: table.span,
+            });
+        }
+    }
     let mut tables = Vec::new();
     for table in &program.tables {
         let mut column_names = HashSet::new();
