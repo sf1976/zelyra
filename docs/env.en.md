@@ -259,7 +259,7 @@ this purpose; Compose injects it, or it must be exported before invocation.
 `zelyra doctor --env-file <file>` specifically reads `DATABASE_URL` from that
 file for its read-only check.
 
-## MariaDB timeouts and connection pool in the 0.4 development branch
+## MariaDB timeouts, connection pool, and TLS in the 0.4 development branch
 
 These settings exist in the unreleased 0.4 development branch; the stable
 0.3.0 binary does not support them. They are read only from the process
@@ -274,21 +274,35 @@ values.
 | `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` seconds | integer `1`–`3600` | process environment; otherwise default | no | MariaDB runtime statements and read-only queries; not `db apply`/DDL; unit and MariaDB matrix test |
 | `ZELYRA_DB_POOL_MAX_SIZE` | `8` connections | integer `1`–`64` | process environment; otherwise default | no | Hard maximum pool size per Zelyra process; unit and MariaDB pool tests |
 | `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | Maximum wait for an available pooled connection; unit and MariaDB pool tests |
+| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled`, or `required` | process environment; otherwise `auto` | no, but security-critical | TLS policy for runtime pool and MariaDB CLI; restart to change |
+| `ZELYRA_DB_TLS_CA_CERT_FILE` | unset | absolute path to readable PEM/DER CA file | process environment; optional; invalid with `disabled` | no; certificate is public, trust anchor is security-critical | Additional trusted CA for runtime pool and MariaDB CLI |
 
 Invalid values produce a secret-free configuration diagnostic; the supplied
-value is not echoed. The MariaDB client receives `--skip-reconnect`, so a lost
-connection cannot silently reconnect or replay a statement. The runtime SQL
-path in the 0.4 development branch uses a process-wide bounded pool. Connections
-are checked on checkout; after statement errors they are discarded, and a
-rollback is attempted inside a transaction. There are no automatic retries. A
-process can use only one database URL and one pool configuration; changes
-require a restart. Schema inspection and DDL are not routed through this pool
-and still use the MariaDB client process. MariaDB enforces the statement limit
+value is not echoed. In `auto` mode, Zelyra requires TLS for non-local hosts and
+verifies both the certificate chain and hostname; `localhost`, names under
+`.localhost`, and loopback IP addresses remain plaintext for local development.
+`required` enforces verified TLS even locally. `disabled` explicitly turns TLS
+off and is intended only for isolated local networks; TLS failures never fall
+back to an insecure connection. Without a custom CA, the Rustls driver uses its
+bundled public roots. An optional CA file must be an absolute PEM/DER path
+readable by the process. For schema inspection and DDL, the MariaDB client gets
+the same TLS policy through `--ssl` and `--ssl-verify-server-cert`, plus
+`--ssl-ca` when configured. With Docker, mount a private CA into the container
+and make it readable at the configured path.
+
+The MariaDB client also receives `--skip-reconnect`, so a lost connection
+cannot silently reconnect or replay a statement. The runtime SQL path in the
+0.4 development branch uses a process-wide bounded pool. Connections are
+checked on checkout; after statement errors they are discarded, and a rollback
+is attempted inside a transaction. There are no automatic retries. A process
+can use only one database URL and one pool configuration; changes require a
+restart. Schema inspection and DDL are not routed through this pool and still
+use the MariaDB client process. MariaDB enforces the statement limit
 server-side. It does not bound large-result transfer or the full
-response/process lifecycle. TLS is not yet configurable for the native pool;
-this development state must not be used for unprotected connections over
-untrusted networks. DDL remains excluded because an aborted schema command may
-leave partial state.
+response/process lifecycle. DDL remains excluded because an aborted schema
+command may leave partial state. The positive TLS handshake and rejection of an
+untrusted CA are tested automatically in the MariaDB compatibility matrix;
+Windows TLS has not been tested separately.
 
 ## Runtime and authentication
 

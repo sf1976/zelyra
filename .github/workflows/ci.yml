@@ -295,6 +295,10 @@ jobs:
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
         run: cargo test -p zelyra-database
+      - name: Verify MariaDB TLS handshake and certificate rejection
+        env:
+          MARIADB_TLS_TEST_IMAGE: mariadb:${{ matrix.version }}
+        run: bash ./tests/mariadb-tls-e2e.sh
       - name: Run MariaDB database and CRUD HTTP integration
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci

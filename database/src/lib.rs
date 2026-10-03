@@ -1,11 +1,12 @@
 use mysql::prelude::Queryable;
-use mysql::{Conn, OptsBuilder, Value};
+use mysql::{Conn, OptsBuilder, SslOpts, Value};
 use r2d2::{ManageConnection, Pool};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -1499,6 +1500,103 @@ impl MariaDbTimeouts {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MariaDbTlsSettings {
+    mode: MariaDbTlsMode,
+    ca_cert_file: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MariaDbTlsMode {
+    Auto,
+    Disabled,
+    Required,
+}
+
+impl MariaDbTlsSettings {
+    fn from_env() -> Result<Self, DatabaseError> {
+        let mode = match env::var("ZELYRA_DB_TLS_MODE") {
+            Ok(value) => value,
+            Err(env::VarError::NotPresent) => "auto".into(),
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`".into(),
+                })
+            }
+        };
+        let ca_cert_file = env::var_os("ZELYRA_DB_TLS_CA_CERT_FILE")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Self::parse(&mode, ca_cert_file)
+    }
+
+    fn parse(mode: &str, ca_cert_file: Option<PathBuf>) -> Result<Self, DatabaseError> {
+        let mode = match mode {
+            "auto" => MariaDbTlsMode::Auto,
+            "disabled" => MariaDbTlsMode::Disabled,
+            "required" => MariaDbTlsMode::Required,
+            _ => {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`".into(),
+                })
+            }
+        };
+        if ca_cert_file.is_some() && mode == MariaDbTlsMode::Disabled {
+            return Err(DatabaseError {
+                message:
+                    "ZELYRA_DB_TLS_CA_CERT_FILE cannot be used when ZELYRA_DB_TLS_MODE=disabled"
+                        .into(),
+            });
+        }
+        if let Some(path) = &ca_cert_file {
+            if !path.is_absolute() || !path.is_file() || path.to_str().is_none() {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+                });
+            }
+            std::fs::File::open(path).map_err(|_| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+            })?;
+        }
+        Ok(Self { mode, ca_cert_file })
+    }
+
+    fn tls_required_for_host(&self, host: &str) -> bool {
+        match self.mode {
+            MariaDbTlsMode::Disabled => false,
+            MariaDbTlsMode::Required => true,
+            MariaDbTlsMode::Auto => self.ca_cert_file.is_some() || !is_local_database_host(host),
+        }
+    }
+
+    fn ssl_opts_for_host(&self, host: &str) -> Option<SslOpts> {
+        self.tls_required_for_host(host)
+            .then(|| SslOpts::default().with_root_cert_path(self.ca_cert_file.clone()))
+    }
+
+    fn client_args_for_host(&self, host: &str) -> Result<Vec<String>, DatabaseError> {
+        if !self.tls_required_for_host(host) {
+            return Ok(Vec::new());
+        }
+        let mut args = vec!["--ssl".into(), "--ssl-verify-server-cert".into()];
+        if let Some(path) = &self.ca_cert_file {
+            let path = path.to_str().ok_or_else(|| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+            })?;
+            args.push(format!("--ssl-ca={path}"));
+        }
+        Ok(args)
+    }
+}
+
+fn is_local_database_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
+}
+
 fn parse_timeout(
     name: &str,
     value: Option<&str>,
@@ -1905,7 +2003,8 @@ pub fn execute_mariadb_queries(
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
     let settings = MariaDbTimeouts::from_env()?;
-    let pool = mariadb_pool(database_url, settings)?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
     execute_mariadb_queries_on_pool(&pool, settings, queries, transaction)
 }
 
@@ -2245,6 +2344,7 @@ type MariaDbPool = Pool<MariaDbConnectionManager>;
 struct MariaDbPoolEntry {
     database_fingerprint: [u8; 32],
     settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
     pool: MariaDbPool,
 }
 
@@ -2253,6 +2353,7 @@ static MARIADB_POOL: OnceLock<Mutex<Option<MariaDbPoolEntry>>> = OnceLock::new()
 fn mariadb_pool(
     database_url: &str,
     settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
 ) -> Result<MariaDbPool, DatabaseError> {
     let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
     let cache = MARIADB_POOL.get_or_init(|| Mutex::new(None));
@@ -2271,14 +2372,20 @@ fn mariadb_pool(
                 message: "MariaDB pool settings changed while the process is running; restart the process to apply them".into(),
             });
         }
+        if entry.tls != tls {
+            return Err(DatabaseError {
+                message: "MariaDB TLS settings changed while the process is running; restart the process to apply them".into(),
+            });
+        }
         return Ok(entry.pool.clone());
     }
 
-    let pool = build_mariadb_pool(database_url, settings)?;
+    let pool = build_mariadb_pool(database_url, settings, &tls)?;
 
     *cache = Some(MariaDbPoolEntry {
         database_fingerprint: fingerprint,
         settings,
+        tls,
         pool: pool.clone(),
     });
     Ok(pool)
@@ -2287,11 +2394,13 @@ fn mariadb_pool(
 fn build_mariadb_pool(
     database_url: &str,
     settings: MariaDbTimeouts,
+    tls: &MariaDbTlsSettings,
 ) -> Result<MariaDbPool, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let port = connection.port.parse::<u16>().map_err(|_| DatabaseError {
         message: "MariaDB URL has an invalid TCP port".into(),
     })?;
+    let ssl_opts = tls.ssl_opts_for_host(&connection.host);
     let options = OptsBuilder::new()
         .ip_or_hostname(Some(connection.host))
         .tcp_port(port)
@@ -2308,6 +2417,10 @@ fn build_mariadb_pool(
             "SET SESSION max_statement_time={}",
             settings.query_seconds
         )]);
+    let options = match ssl_opts {
+        Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
+        None => options,
+    };
     let manager = MariaDbConnectionManager {
         options: options.into(),
     };
@@ -2328,9 +2441,20 @@ fn acquire_mariadb_connection(
     settings: MariaDbTimeouts,
 ) -> Result<r2d2::PooledConnection<MariaDbConnectionManager>, DatabaseError> {
     pool.get_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
-        .map_err(|_| DatabaseError {
-            message: "timed out waiting for an available MariaDB connection".into(),
+        .map_err(|error| DatabaseError {
+            message: mariadb_pool_acquisition_message(&error.to_string()).into(),
         })
+}
+
+fn mariadb_pool_acquisition_message(detail: &str) -> &'static str {
+    let detail = detail.to_ascii_lowercase();
+    if detail.contains("certificate") || detail.contains("tls") || detail.contains("ssl") {
+        "could not establish a verified MariaDB TLS connection; check CA trust, the certificate hostname, and server TLS configuration"
+    } else if detail.contains("access denied") {
+        "MariaDB rejected authentication; check the database username and grants"
+    } else {
+        "timed out obtaining a MariaDB connection; check connectivity and pool saturation"
+    }
 }
 
 fn run_mariadb(
@@ -2340,6 +2464,7 @@ fn run_mariadb(
 ) -> Result<String, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2360,6 +2485,7 @@ fn run_mariadb(
         ])
         .args(timeouts.connect_args())
         .args(timeouts.query_args())
+        .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password);
     let output = command.output().map_err(|error| DatabaseError {
         message: format!("could not start mariadb: {error}"),
@@ -2932,7 +3058,8 @@ mod tests {
             return;
         };
         let timeouts = MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
-        let pool = build_mariadb_pool(&database_url, timeouts).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, timeouts, &tls).unwrap();
         let first_connection = execute_mariadb_queries_on_pool(
             &pool,
             timeouts,
@@ -2983,7 +3110,8 @@ mod tests {
             return;
         };
         let settings = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("1")).unwrap();
-        let pool = build_mariadb_pool(&database_url, settings).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, settings, &tls).unwrap();
         let query_connection_id = || {
             execute_mariadb_queries_on_pool(
                 &pool,
@@ -3009,6 +3137,134 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
         assert!(second_checkout.is_err());
         drop(held);
+    }
+
+    #[test]
+    fn mariadb_pool_uses_verified_tls_when_enabled_for_the_test_database() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB TLS integration: test URL is not configured");
+            return;
+        };
+        let connection = parse_mariadb_url(&database_url).unwrap();
+        let tls = MariaDbTlsSettings::from_env().unwrap();
+        if !tls.tls_required_for_host(&connection.host) {
+            eprintln!(
+                "skipping MariaDB TLS integration: TLS mode does not require TLS for this host"
+            );
+            return;
+        }
+        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("1")).unwrap();
+        let pool = build_mariadb_pool(&database_url, timeouts, &tls).unwrap();
+        let result = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SHOW SESSION STATUS LIKE 'Ssl_version'".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap();
+        let tls_version = result
+            .first()
+            .and_then(|result| result.rows.first())
+            .and_then(|row| row.get(1))
+            .expect("MariaDB TLS session should report its negotiated TLS version");
+        assert!(
+            tls_version.starts_with("TLSv"),
+            "unexpected TLS status: {tls_version}"
+        );
+    }
+
+    #[test]
+    fn mariadb_tls_requires_explicit_mode_and_keeps_certificate_checks_enabled() {
+        let disabled = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        assert!(disabled.ssl_opts_for_host("db.example.test").is_none());
+        assert!(disabled
+            .client_args_for_host("db.example.test")
+            .unwrap()
+            .is_empty());
+
+        let required = MariaDbTlsSettings::parse("required", None).unwrap();
+        let ssl_opts = required
+            .ssl_opts_for_host("localhost")
+            .expect("required mode must enable the TLS backend");
+        assert!(!ssl_opts.accept_invalid_certs());
+        assert!(!ssl_opts.skip_domain_validation());
+        assert_eq!(
+            required.client_args_for_host("localhost").unwrap(),
+            vec!["--ssl", "--ssl-verify-server-cert"]
+        );
+
+        let auto = MariaDbTlsSettings::parse("auto", None).unwrap();
+        assert!(auto.ssl_opts_for_host("localhost").is_none());
+        assert!(auto.ssl_opts_for_host("127.0.0.1").is_none());
+        assert!(auto.ssl_opts_for_host("::1").is_none());
+        assert!(auto.ssl_opts_for_host("db.example.test").is_some());
+        assert_eq!(
+            auto.client_args_for_host("localhost").unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            auto.client_args_for_host("db.example.test").unwrap(),
+            vec!["--ssl", "--ssl-verify-server-cert"]
+        );
+
+        for mode in ["optional", "verify", "true", ""] {
+            let error = MariaDbTlsSettings::parse(mode, None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`"
+            );
+        }
+    }
+
+    #[test]
+    fn mariadb_tls_ca_file_must_be_absolute_readable_and_enables_auto_tls() {
+        let relative =
+            MariaDbTlsSettings::parse("required", Some(PathBuf::from("ca.pem"))).unwrap_err();
+        assert_eq!(
+            relative.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file"
+        );
+
+        let disabled =
+            MariaDbTlsSettings::parse("disabled", Some(PathBuf::from("/tmp/zelyra-ca.pem")))
+                .unwrap_err();
+        assert_eq!(
+            disabled.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE cannot be used when ZELYRA_DB_TLS_MODE=disabled"
+        );
+
+        let custom_ca =
+            std::env::temp_dir().join(format!("zelyra-test-ca-{}.pem", std::process::id()));
+        std::fs::write(&custom_ca, "test-only CA placeholder").unwrap();
+        let auto_with_ca = MariaDbTlsSettings::parse("auto", Some(custom_ca.clone())).unwrap();
+        assert!(auto_with_ca.tls_required_for_host("localhost"));
+        assert!(auto_with_ca.ssl_opts_for_host("localhost").is_some());
+        std::fs::remove_file(custom_ca).unwrap();
+
+        let missing = MariaDbTlsSettings::parse(
+            "required",
+            Some(
+                std::env::temp_dir().join(format!("zelyra-missing-ca-{}.pem", std::process::id())),
+            ),
+        )
+        .unwrap_err();
+        assert_eq!(
+            missing.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file"
+        );
+    }
+
+    #[test]
+    fn mariadb_pool_connection_failures_use_safe_actionable_diagnostics() {
+        assert!(mariadb_pool_acquisition_message("invalid peer certificate")
+            .contains("verified MariaDB TLS"));
+        assert!(mariadb_pool_acquisition_message("Access denied for user")
+            .contains("rejected authentication"));
+        assert!(mariadb_pool_acquisition_message("timed out").contains("pool saturation"));
+        assert!(!mariadb_pool_acquisition_message("password=secret").contains("secret"));
     }
 
     #[test]

@@ -321,12 +321,16 @@ Feature eines bestimmten Anbieters.
   Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 sowie im
   [PR-CI-Lauf 37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
   gegen MariaDB 10.11.19, 11.4.13, 11.8.9 und 12.3.3 geprüft.
-  Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
-  TLS ist im nativen Pool nicht konfigurierbar, Ergebnisübertragung ist nicht
-  global begrenzt und automatische Retries gibt es nicht. Den nativen Pool
-  dieses Entwicklungszweigs nicht über nicht vertrauenswürdige Netze verwenden.
-  Nicht Teil von 0.3.0. Antwortfristen, konfigurierbares TLS und
-  Health-Diagnostik bleiben offen.
+  Runtime- und CLI-Verbindungen unterstützen jetzt verifiziertes TLS: `auto`
+  verlangt geprüfte Zertifikatskette und Hostnamen für externe Hosts,
+  `required` erzwingt TLS und `disabled` schaltet es ausdrücklich ab. Eine
+  eigene CA-Datei ist unterstützt. Erfolgreicher Handshake, CLI-Inspektion und
+  Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4;
+  der neue TLS-Integrationstest wird in jeden MariaDB-CI-Matrixeintrag
+  aufgenommen. Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
+  Ergebnisübertragung ist nicht global begrenzt und automatische Retries gibt
+  es nicht. Windows-TLS wurde noch nicht separat geprüft. Nicht Teil von 0.3.0.
+  Antwortfristen und Health-Diagnostik bleiben offen.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
   einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.

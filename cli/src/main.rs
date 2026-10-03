@@ -273,6 +273,11 @@ ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
 ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 ZELYRA_DB_POOL_MAX_SIZE=8
 ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
+# Local Docker MariaDB uses an isolated bridge network. For a remote database,
+# use `required` and configure a trusted CA if it is not in the built-in roots.
+ZELYRA_DB_TLS_MODE=disabled
+# Optional absolute CA path, readable inside the Zelyra container/process.
+# ZELYRA_DB_TLS_CA_CERT_FILE=
 DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -658,6 +663,8 @@ console = false
       ZELYRA_DB_QUERY_TIMEOUT_SECS: ${ZELYRA_DB_QUERY_TIMEOUT_SECS:-30}
       ZELYRA_DB_POOL_MAX_SIZE: ${ZELYRA_DB_POOL_MAX_SIZE:-8}
       ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}
+      ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}
+      ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -3330,6 +3337,8 @@ ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
 ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 ZELYRA_DB_POOL_MAX_SIZE=8
 ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
+ZELYRA_DB_TLS_MODE=disabled
+# ZELYRA_DB_TLS_CA_CERT_FILE=/absolute/path/to/your/database-ca.pem
 "#;
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
             for (name, contents) in [
@@ -12068,6 +12077,7 @@ mod tests {
         assert!(env_example.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
         assert!(env_example.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
         assert!(env_example.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
+        assert!(env_example.contains("ZELYRA_DB_TLS_MODE=disabled"));
         assert!(compose
             .contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}"));
         assert!(
@@ -12076,6 +12086,8 @@ mod tests {
         assert!(compose.contains("ZELYRA_DB_POOL_MAX_SIZE: ${ZELYRA_DB_POOL_MAX_SIZE:-8}"));
         assert!(compose
             .contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}"));
+        assert!(compose.contains("ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}"));
+        assert!(compose.contains("ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}"));
         assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
         assert!(compose.contains(&format!(
             "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
