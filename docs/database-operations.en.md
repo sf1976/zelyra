@@ -31,7 +31,9 @@ interactively and is not part of the command.
 set -eu
 umask 077
 mkdir -p backups
-backup_file="backups/adressverwaltung-$(date -u +%Y%m%dT%H%M%SZ).sql"
+backup_file="backups/adressverwaltung-$(date -u +%Y%m%dT%H%M%SZ)-$$.sql"
+temporary_file="${backup_file}.partial"
+trap 'rm -f -- "$temporary_file"' EXIT
 
 mariadb-dump \
     --host=127.0.0.1 \
@@ -40,10 +42,16 @@ mariadb-dump \
     --password \
     --single-transaction \
     --skip-lock-tables \
-    adressverwaltung > "$backup_file"
+    adressverwaltung > "$temporary_file"
 
+chmod 600 "$temporary_file"
+mv -- "$temporary_file" "$backup_file"
 sha256sum "$backup_file"
 ```
+
+The dump is published under its final name only after it succeeds. An
+interrupted dump therefore does not leave a file that looks like a complete
+backup.
 
 `--single-transaction` provides a snapshot for transactional InnoDB tables
 when no schema changes occur during the dump. It is not a general consistency

@@ -32,7 +32,9 @@ wird interaktiv abgefragt und steht nicht im Befehl.
 set -eu
 umask 077
 mkdir -p backups
-backup_file="backups/adressverwaltung-$(date -u +%Y%m%dT%H%M%SZ).sql"
+backup_file="backups/adressverwaltung-$(date -u +%Y%m%dT%H%M%SZ)-$$.sql"
+temporary_file="${backup_file}.partial"
+trap 'rm -f -- "$temporary_file"' EXIT
 
 mariadb-dump \
     --host=127.0.0.1 \
@@ -41,10 +43,16 @@ mariadb-dump \
     --password \
     --single-transaction \
     --skip-lock-tables \
-    adressverwaltung > "$backup_file"
+    adressverwaltung > "$temporary_file"
 
+chmod 600 "$temporary_file"
+mv -- "$temporary_file" "$backup_file"
 sha256sum "$backup_file"
 ```
+
+Die Sicherung wird erst nach erfolgreichem Dump unter ihrem endgültigen Namen
+abgelegt. Ein abgebrochener Dump hinterlässt daher keine Datei, die wie ein
+fertiges Backup aussieht.
 
 `--single-transaction` liefert einen Snapshot für transaktionale InnoDB-
 Tabellen, sofern während des Dumps keine Schemaänderungen stattfinden. Das ist
