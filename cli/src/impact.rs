@@ -631,6 +631,16 @@ fn semantic_references(
                 );
             }
         }
+        for action in &form.actions {
+            add_statement_type_references(
+                &mut references,
+                &owner,
+                &action.statements,
+                &type_names,
+                &record_names,
+                sources,
+            );
+        }
     }
     for crud in &program.cruds {
         let owner = format!("crud:{}", crud.name);
@@ -646,6 +656,16 @@ fn semantic_references(
                     sources,
                 );
             }
+        }
+        for action in &crud.actions {
+            add_statement_type_references(
+                &mut references,
+                &owner,
+                &action.statements,
+                &type_names,
+                &record_names,
+                sources,
+            );
         }
     }
     for function in &program.functions {
@@ -664,11 +684,29 @@ fn semantic_references(
         if let Some(return_type) = &function.return_type {
             add_type_references(
                 &mut references,
-                owner,
+                owner.clone(),
                 return_type,
                 &type_names,
                 &record_names,
                 function.span,
+                sources,
+            );
+        }
+        add_statement_type_references(
+            &mut references,
+            &owner,
+            &function.body.statements,
+            &type_names,
+            &record_names,
+            sources,
+        );
+        for expression in function.requires.iter().chain(function.ensures.iter()) {
+            add_expression_type_references(
+                &mut references,
+                &owner,
+                expression,
+                &type_names,
+                &record_names,
                 sources,
             );
         }
@@ -816,6 +854,363 @@ fn add_type_references(
         _ => return,
     };
     add_reference(references, owner, node, "type", span_value(span, sources));
+}
+
+fn add_statement_type_references(
+    references: &mut Vec<Value>,
+    owner: &str,
+    statements: &[Stmt],
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    sources: &ImpactSources<'_>,
+) {
+    for statement in statements {
+        match statement {
+            Stmt::Let {
+                ty, value, span, ..
+            } => {
+                if let Some(ty) = ty {
+                    add_type_references(
+                        references,
+                        owner.to_owned(),
+                        ty,
+                        type_names,
+                        record_names,
+                        *span,
+                        sources,
+                    );
+                }
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Return { value, .. } => {
+                if let Some(value) = value {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        value,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    condition,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &then_block.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                if let Some(else_block) = else_block {
+                    add_statement_type_references(
+                        references,
+                        owner,
+                        &else_block.statements,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    condition,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                for invariant in invariants {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        invariant,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::For { iterable, body, .. } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    iterable,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        invariant,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Match { value, arms, .. } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                for arm in arms {
+                    add_statement_type_references(
+                        references,
+                        owner,
+                        &arm.body.statements,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn add_expression_type_references(
+    references: &mut Vec<Value>,
+    owner: &str,
+    expression: &Expr,
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    sources: &ImpactSources<'_>,
+) {
+    match &expression.kind {
+        ExprKind::Array(values) => {
+            for value in values {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    key,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Record { type_name, fields } => {
+            let ty = Type::Named(type_name.clone());
+            add_type_references(
+                references,
+                owner.to_owned(),
+                &ty,
+                type_names,
+                record_names,
+                expression.span,
+                sources,
+            );
+            for (_, value) in fields {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Index { target, index } => {
+            add_expression_type_references(
+                references,
+                owner,
+                target,
+                type_names,
+                record_names,
+                sources,
+            );
+            add_expression_type_references(
+                references,
+                owner,
+                index,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+            add_expression_type_references(
+                references,
+                owner,
+                target,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Call {
+            type_args, args, ..
+        } => {
+            for ty in type_args {
+                add_type_references(
+                    references,
+                    owner.to_owned(),
+                    ty,
+                    type_names,
+                    record_names,
+                    expression.span,
+                    sources,
+                );
+            }
+            for argument in args {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    argument,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Unary { expr, .. } => add_expression_type_references(
+            references,
+            owner,
+            expr,
+            type_names,
+            record_names,
+            sources,
+        ),
+        ExprKind::Binary { left, right, .. } => {
+            add_expression_type_references(
+                references,
+                owner,
+                left,
+                type_names,
+                record_names,
+                sources,
+            );
+            add_expression_type_references(
+                references,
+                owner,
+                right,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Sql { result_type, .. } => add_type_references(
+            references,
+            owner.to_owned(),
+            result_type,
+            type_names,
+            record_names,
+            expression.span,
+            sources,
+        ),
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::Variable(_) => {}
+    }
 }
 
 fn add_reference(references: &mut Vec<Value>, from: String, to: String, kind: &str, span: Value) {

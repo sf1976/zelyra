@@ -92,8 +92,10 @@ architecture requirement for every phase, not a provider-specific feature.
   mapping is not a reusable multi-database interface. Known
   page-to-view/component, page-SQL and
   form/CRUD-action-SQL-to-table, API-handler-to-function, type references in
-  API fields, function signatures, records, and aliases (including aliases
-  referenced by table columns), protected-resource-to-authentication,
+  API fields, function signatures and bodies (including explicit local types,
+  record literals, and SQL result types), records, and aliases (including
+  aliases referenced by table columns and typed resource fields),
+  protected-resource-to-authentication,
   authentication-to-table,
   table-relation, and database-configuration edges, and reports references it
   cannot resolve. SQL-to-table edges additionally report conservative
@@ -713,7 +715,11 @@ PostgreSQL runtime parity or production readiness.
   resource edge and closure. Typed fields on forms, form actions, and CRUD
   actions now link to their named type aliases as well; an integration test
   checks both form and CRUD resource plans. This remains a statically recognized
-  subset.
+  subset. Function-body annotations, record constructors, and SQL result types
+  also contribute type edges. MariaDB SQL result mapping now accepts a
+  module-qualified record name by removing the module qualifier before
+  matching the backing table; focused tests cover the resolver and composed
+  project path.
   staged-directory publication now uses atomic no-replace operations on Linux,
   macOS, and Windows, so a destination created during export cannot be
   overwritten; a regression test covers both the collision and successful

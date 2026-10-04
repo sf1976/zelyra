@@ -1996,7 +1996,8 @@ Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
 Funktionen, benannte Funktionsaufrufe in Formular-/CRUD-Aktionen zu ihren
 Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records,
 Type Aliases, Tabellenspalten sowie typisierten Feldern von Formularen,
-Formularaktionen und CRUD-Aktionen, von geschützten Ressourcen zur
+Formularaktionen und CRUD-Aktionen, Typannotationen in Funktionskörpern,
+Record-Literalen und SQL-Ergebnistypen, von geschützten Ressourcen zur
 Authentifizierung, von
 Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
 Datenbankkonfiguration. `database.configurations` macht die im Abschluss

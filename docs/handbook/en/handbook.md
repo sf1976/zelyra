@@ -2009,9 +2009,10 @@ The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
 known page-to-view and page-to-component references, page and form/CRUD-action
 SQL-to-table edges, API-handler-to-function edges, named function calls inside
-form/CRUD actions, and type references from API fields, function signatures,
-records, type aliases, table columns, and typed fields on forms, form actions,
-and CRUD actions; protected-resource-to-authentication,
+form/CRUD actions, and type references from API fields, function signatures
+and bodies (including explicit local types, record literals, and SQL result
+types), records, type aliases, table columns, and typed fields on forms, form
+actions, and CRUD actions; protected-resource-to-authentication,
 authentication-to-table, recognized table relations, and database
 configuration. Unresolved references appear in
 `unresolved_references`. `database.configurations` identifies declarations in

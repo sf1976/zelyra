@@ -104,8 +104,10 @@ Feature eines bestimmten Anbieters.
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
   Authentifizierung, Authentifizierung zu Tabellen sowie Typreferenzen aus
-  APIs, Funktionssignaturen, Records und Type Aliases (einschließlich
-  Aliasverweisen aus Tabellenspalten), Tabellenrelationen und
+  APIs, Funktionssignaturen und Funktionskörpern (einschließlich expliziter
+  lokaler Typen, Record-Literalen und SQL-Ergebnistypen), Records und Type
+  Aliases (einschließlich Verweisen aus Tabellenspalten und typisierten
+  Ressourcenfeldern), Tabellenrelationen und
   Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
   SQL-Tabellenkanten zeigen außerdem den konservativ erkannten Modus
   `read`, `write`, `read_write` oder `unknown`; komplexe verbundene
@@ -767,7 +769,11 @@ unterstellt.
   und Schließung. Typisierte Felder von Formularen, Formularaktionen und CRUD-
   Aktionen verweisen jetzt ebenfalls auf ihre benannten Type Aliases; ein
   Integrationstest prüft Formular- und CRUD-Ressourcenpläne. Auch dies bleibt
-  eine statisch erkannte Teilmenge.
+  eine statisch erkannte Teilmenge. Typannotationen in Funktionskörpern,
+  Record-Konstruktoren und SQL-Ergebnistypen liefern jetzt ebenfalls Typkanten.
+  Die MariaDB-Ergebnistypprüfung akzeptiert qualifizierte Record-Namen, indem
+  sie vor der Zuordnung zur Tabelle den Modulpräfix entfernt; gezielte
+  Tests prüfen den Resolver und den zusammengesetzten Projektpfad.
   Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
   macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
   Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch
