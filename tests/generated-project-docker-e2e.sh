@@ -76,9 +76,9 @@ sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.z
 sed -i '1i import "src/inventory-smoke.zyl" as inventory_smoke' "${project_dir}/main.zyl"
 printf 'database main { engine: mariadb database: "zelyra_app" }\n' \
     > "${project_dir}/src/database.zyl"
-printf 'table invoices { id: Id primary auto number: String(30) required unique }\ncrud Invoice -> invoices\n' \
+printf 'import "src/database.zyl" as storage\ntable invoices { id: Id primary auto number: String(30) required unique }\ncrud Invoice -> invoices\n' \
     > "${project_dir}/src/invoices.zyl"
-printf 'table inventory { id: Id primary auto sku: String(30) required unique }\ncrud Inventory -> inventory\n' \
+printf 'import "src/database.zyl" as storage\ntable inventory { id: Id primary auto sku: String(30) required unique }\ncrud Inventory -> inventory\n' \
     > "${project_dir}/src/inventory.zyl"
 printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
     > "${project_dir}/src/docker-smoke.zyl"
