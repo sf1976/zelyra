@@ -2483,7 +2483,7 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     } else {
         Vec::new()
     };
-    let sessions = if let Some(session_table) = auth.session_table.as_deref() {
+    let sessions = if let Some(session_table) = administrable_session_table(auth) {
         zelyra_database::execute_mariadb_query(
             database_url,
             &format!(
@@ -2549,10 +2549,10 @@ fn dispatch_auth_admin_post(
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let result = match operation {
         "revoke_session" => {
-            let Some(session_table) = auth.session_table.as_deref() else {
+            let Some(session_table) = administrable_session_table(auth) else {
                 return Response::html(
                     409,
-                    "<h1>409 Conflict</h1><p>Persistent sessions are required.</p>",
+                    "<h1>409 Conflict</h1><p>Session administration requires a persistent session table with an id column.</p>",
                 );
             };
             let Some(session_id) = input
@@ -3069,7 +3069,7 @@ fn render_auth_admin(
         }
     }
     html.push_str("</table>");
-    if auth.session_table.is_some() {
+    if administrable_session_table(auth).is_some() {
         html.push_str(&render_auth_sessions(auth, sessions, language));
     }
     html.push_str("<h2>");
@@ -3236,6 +3236,15 @@ fn load_user_permissions(
         );
     }
     Ok(permissions)
+}
+
+fn administrable_session_table(auth: &AuthRoute) -> Option<&str> {
+    let name = auth.session_table.as_deref()?;
+    auth.schema
+        .tables
+        .iter()
+        .find(|table| table.name == name && table.columns.iter().any(|column| column.name == "id"))
+        .map(|_| name)
 }
 
 fn render_auth_sessions(
@@ -9501,6 +9510,63 @@ mod tests {
         assert!(memory_session(&app, "expired").is_none());
         assert!(!app.sessions.lock().unwrap().contains_key("expired"));
         assert_eq!(memory_session(&app, "valid").unwrap().user_id, Some(7));
+    }
+
+    #[test]
+    fn session_administration_preserves_legacy_tables_and_escapes_rows() {
+        let mut auth = AuthRoute {
+            table: "users".into(),
+            session_table: Some("sessions".into()),
+            permissions_table: None,
+            roles_table: None,
+            role_permissions_table: None,
+            audit_table: None,
+            audit_chain: false,
+            admin_path: Some("/admin/access".into()),
+            admin_permission: Some("auth.manage".into()),
+            admin_role: None,
+            schema: Schema {
+                database: None,
+                tables: vec![zelyra_database::Table {
+                    name: "sessions".into(),
+                    columns: vec![],
+                    foreign_keys: vec![],
+                    indexes: vec![],
+                    uniques: vec![],
+                }],
+            },
+            csrf: CsrfProtection::new("csrf-token"),
+        };
+        assert!(administrable_session_table(&auth).is_none());
+        assert!(
+            !render_auth_admin(&auth, &[], &[], &[], &[], &[], UiLanguage::English)
+                .contains("revoke_session")
+        );
+        auth.schema.tables[0].columns.push(zelyra_database::Column {
+            name: "id".into(),
+            sql_type: "BIGINT".into(),
+            nullable: false,
+            primary_key: true,
+            auto: true,
+            unique: false,
+            default: None,
+        });
+        assert_eq!(administrable_session_table(&auth), Some("sessions"));
+        let rows = vec![vec![
+            "1".into(),
+            "7".into(),
+            "<script>@example.test".into(),
+            "2026-10-05".into(),
+        ]];
+        let html = render_auth_sessions(&auth, &rows, UiLanguage::English);
+        assert!(html.contains("&lt;script&gt;@example.test"));
+        assert!(!html.contains("<script>"));
+        assert!(html.contains("name=\"session_id\" value=\"1\""));
+        assert!(localize_html(
+            &render_auth_sessions(&auth, &rows, UiLanguage::German),
+            UiLanguage::German
+        )
+        .contains("Sitzung sperren"));
     }
 
     #[test]

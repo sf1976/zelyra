@@ -4394,7 +4394,7 @@ page "/dashboard" {
 
 #### Sitzungsverwaltung im 0.4-Entwicklungszweig
 
-Sind dauerhafte Sitzungen und die Rollenverwaltung konfiguriert, sehen
+Sind dauerhafte Sitzungen mit einer `id`-Spalte und die Rollenverwaltung konfiguriert, sehen
 berechtigte Administratoren bis zu 100 noch nicht abgelaufene Sitzungen,
 nach Ablauf sortiert. Jede Zeile zeigt die Datenbank-ID, die E-Mail-Adresse
 und den Ablaufzeitpunkt in Datenbankzeit. Weder Browser-Token noch dessen

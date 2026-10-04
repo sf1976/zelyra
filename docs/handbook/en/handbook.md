@@ -4409,7 +4409,7 @@ page "/dashboard" {
 
 #### Session administration in the 0.4 development branch
 
-When persistent sessions and the role administration page are configured,
+When persistent sessions with an `id` column and the role administration page are configured,
 authorized administrators see up to 100 unexpired sessions, ordered by expiry.
 Each row contains its database ID, user email and expiry in database time.
 Neither the browser token nor its hash is displayed. Device names and IP

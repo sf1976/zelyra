@@ -28,6 +28,8 @@ principles; the roadmap below tracks what is actually implemented.
   persistent sessions, CSRF/permission checks and an audit request event.
   In-memory sessions also expire after 24 hours. Device tracking and password
   recovery remain open; this does not complete the account lifecycle milestone.
+  Legacy session tables without an `id` column retain their previous behavior;
+  the new administrative controls require that column.
 
 - [~] The [Docker module acceptance](module-docker-acceptance.en.md) checks
   the combined application, separate invoice/inventory exports, missing `.env`,
