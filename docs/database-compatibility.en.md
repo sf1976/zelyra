@@ -87,4 +87,5 @@ approve `REVIEW` changes; use `--allow-risky` after reviewing the plan.
 Use the database version deployed in production for acceptance tests as well.
 Before upgrading MariaDB or changing Zelyra's schema/runtime behavior, take a
 verified backup and test the resulting plan against a disposable copy of the
-real schema and representative data.
+real schema and representative data. See the operator steps in
+[MariaDB backup and recovery](database-operations.en.md).
