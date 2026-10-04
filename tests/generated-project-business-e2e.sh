@@ -56,15 +56,21 @@ docker compose --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" config >/dev/null
 
 TEST_DATABASE_URL="${database_url}" awk '
-    BEGIN { updated = 0 }
+    BEGIN { updated_named = 0; updated_legacy = 0 }
+    /^ZELYRA_DATABASE_MAIN_URL=/ {
+        print "ZELYRA_DATABASE_MAIN_URL=" ENVIRON["TEST_DATABASE_URL"]
+        updated_named = 1
+        next
+    }
     /^DATABASE_URL=/ {
         print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
-        updated = 1
+        updated_legacy = 1
         next
     }
     { print }
     END {
-        if (!updated) print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
+        if (!updated_named) print "ZELYRA_DATABASE_MAIN_URL=" ENVIRON["TEST_DATABASE_URL"]
+        if (!updated_legacy) print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
     }
 ' "${project_dir}/.env" > "${project_dir}/.env.e2e"
 doctor_json="$("${zelyra_bin}" doctor "${project_dir}/main.zyl" \
@@ -99,6 +105,7 @@ print("generated business project API documentation: ready")
 PY
 
 echo "[3/4] running authentication, CRUD, API, and permission integration"
+ZELYRA_DATABASE_MAIN_URL="${database_url}" \
 DATABASE_URL="${database_url}" \
     ZELYRA_LANGUAGE=en \
     ZELYRA_PROTECTED_E2E_DB_PASSWORD="${root_password}" \
