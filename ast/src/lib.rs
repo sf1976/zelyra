@@ -429,7 +429,16 @@ pub struct TableDef {
     pub columns: Vec<ColumnDef>,
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
+    pub access: TableAccessDef,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TableAccessDef {
+    pub read: Vec<String>,
+    pub write: Vec<String>,
+    pub read_write: Vec<String>,
+    pub span: Option<Span>,
 }
 
 #[derive(Clone, Debug)]

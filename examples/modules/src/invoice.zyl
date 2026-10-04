@@ -5,6 +5,9 @@ table invoice_headers {
     id: Id primary auto
     invoice_number: String(40) required unique
     total_cents: Int required
+    access {
+        read_write: ["src/invoice_admin.zyl"]
+    }
 }
 
 struct InvoiceOverviewRow {

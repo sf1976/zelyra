@@ -1487,12 +1487,18 @@ impl<'a> Parser<'a> {
         let mut columns = Vec::new();
         let mut indexes = Vec::new();
         let mut uniques = Vec::new();
+        let mut access = zelyra_ast::TableAccessDef::default();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Index) {
                 indexes.push(self.index_definition(TokenKind::Index)?);
             } else if self.at(&TokenKind::Unique) {
                 uniques.push(self.index_definition(TokenKind::Unique)?);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "access") {
+                if access.span.is_some() {
+                    return self.error("a table may declare its access contract only once");
+                }
+                access = self.table_access_definition()?;
             } else {
                 columns.push(self.column_definition()?);
             }
@@ -1504,8 +1510,75 @@ impl<'a> Parser<'a> {
             columns,
             indexes,
             uniques,
+            access,
             span: start.join(end),
         })
+    }
+
+    fn table_access_definition(&mut self) -> Result<zelyra_ast::TableAccessDef, ParseError> {
+        let (name, start) = self.ident("`access`")?;
+        if name != "access" {
+            return self.error("expected `access`");
+        }
+        self.expect(TokenKind::LBrace, "`{` after table access")?;
+        let mut access = zelyra_ast::TableAccessDef {
+            span: Some(start),
+            ..zelyra_ast::TableAccessDef::default()
+        };
+        let mut seen = std::collections::HashSet::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (mode, _) = self.ident("`read`, `write`, or `read_write`")?;
+            if !matches!(mode.as_str(), "read" | "write" | "read_write") {
+                return self.error("table access mode must be `read`, `write`, or `read_write`");
+            }
+            if !seen.insert(mode.clone()) {
+                return self.error(format!(
+                    "table access mode `{mode}` is declared more than once"
+                ));
+            }
+            self.expect(TokenKind::Colon, "`:` after table access mode")?;
+            let modules = self.table_access_module_list()?;
+            match mode.as_str() {
+                "read" => access.read = modules,
+                "write" => access.write = modules,
+                "read_write" => access.read_write = modules,
+                _ => unreachable!(),
+            }
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after table access contract")?;
+        Ok(access)
+    }
+
+    fn table_access_module_list(&mut self) -> Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::LBracket, "`[` before granted module paths")?;
+        let mut modules = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+            let path = match self.current().kind.clone() {
+                TokenKind::String(path) => {
+                    self.advance();
+                    path
+                }
+                _ => {
+                    return self.error("table access grants must be project-relative path strings")
+                }
+            };
+            if modules.contains(&path) {
+                return self.error(format!("table access grant `{path}` is repeated"));
+            }
+            modules.push(path);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            } else if !self.at(&TokenKind::RBracket) {
+                return self.error("expected `,` between table access grants");
+            }
+        }
+        self.expect(TokenKind::RBracket, "`]` after granted module paths")?;
+        Ok(modules)
     }
     fn column_definition(&mut self) -> Result<ColumnDef, ParseError> {
         let (name, span) = self.ident("column name")?;
@@ -3308,6 +3381,37 @@ mod tests {
         assert!(invalid_visibility
             .message
             .contains("functions, types, records, views, and components"));
+    }
+
+    #[test]
+    fn parses_table_module_access_grants() {
+        let program = parse(
+            &lex(
+                "table customers { id: Id primary auto access { read: [\"src/reports.zyl\"] write: [\"src/importer.zyl\"] read_write: [\"src/admin.zyl\"] } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].access.read, ["src/reports.zyl"]);
+        assert_eq!(program.tables[0].access.write, ["src/importer.zyl"]);
+        assert_eq!(program.tables[0].access.read_write, ["src/admin.zyl"]);
+        assert!(program.tables[0].access.span.is_some());
+    }
+
+    #[test]
+    fn rejects_duplicate_table_access_modes_and_grants() {
+        let duplicate_mode = parse(
+            &lex("table customers { id: Id primary auto access { read: [] read: [] } }").unwrap(),
+        )
+        .unwrap_err();
+        assert!(duplicate_mode.message.contains("declared more than once"));
+
+        let duplicate_grant = parse(
+            &lex("table customers { id: Id primary auto access { write: [\"src/admin.zyl\", \"src/admin.zyl\"] } }")
+                .unwrap(),
+        )
+        .unwrap_err();
+        assert!(duplicate_grant.message.contains("is repeated"));
     }
 
     #[test]

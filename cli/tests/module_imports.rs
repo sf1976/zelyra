@@ -867,7 +867,7 @@ fn module_plan_adds_cross_module_views_components_and_database_tables() {
         ),
         (
             "src/models.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\ntable invoices { id: Id primary auto customer: Customer required }\n",
+            "table customers { id: Id primary auto name: String(100) required }\ntable invoices { id: Id primary auto customer: Customer required access { read: [\"src/pages.zyl\"] } }\n",
         ),
     ]);
     let result = run(&directory, &["module", "plan", "main.zyl", "src/pages.zyl"]);
@@ -992,11 +992,11 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         ),
         (
             "src/customer_service.zyl",
-            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
+            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { schema::renameCustomer(id, name) }\n",
         ),
         (
             "src/customer_schema.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
         ),
         (
             "src/database.zyl",
@@ -1024,8 +1024,12 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         true
     );
     assert_eq!(
-        plan["plan"]["table_access_contract"]["read_write_permissions_enforced"],
-        false
+        plan["plan"]["table_access_contract"]["cross_module_mutation_policy"],
+        "explicit-table-access-grant"
+    );
+    assert_eq!(
+        plan["plan"]["table_access_contract"]["module_access_grants_enforced"],
+        true
     );
     assert_eq!(
         plan["plan"]["table_access_contract"]["entry_module_tables_project_visible"],
@@ -1036,7 +1040,13 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         serde_json::json!([{
             "table": "customers",
             "inferred_owner_module": "src/customer_schema.zyl",
-            "ownership_enforced": false
+            "ownership_enforced": false,
+            "cross_module_access_grants_enforced": true,
+            "access_grants": {
+                "read": ["src/customer_service.zyl"],
+                "write": [],
+                "read_write": []
+            }
         }])
     );
     let edges = plan["plan"]["declaration_closure"]["edges"]
@@ -1052,7 +1062,7 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         "{edges:#?}"
     );
     assert!(edges.iter().any(|edge| {
-        edge["from"] == "function:src/customer_service.zyl::renameCustomer"
+        edge["from"] == "function:src/customer_schema.zyl::renameCustomer"
             && edge["to"] == "table:customers"
             && edge["kind"] == "sql_table"
             && edge["access"] == "write"
@@ -1067,7 +1077,7 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
         }),
         "{dependencies:#?}"
     );
-    assert!(dependencies.iter().any(|dependency| {
+    assert!(!dependencies.iter().any(|dependency| {
         dependency["from_module"] == "src/customer_service.zyl"
             && dependency["to_module"] == "src/customer_schema.zyl"
             && dependency["to"] == "table:customers"
@@ -1086,15 +1096,11 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
         ),
         (
             "src/customer_service.zyl",
-            "import \"src/customer_contracts.zyl\" as contracts\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
-        ),
-        (
-            "src/customer_contracts.zyl",
-            "import \"src/customer_schema.zyl\" as schema\nimport \"src/database.zyl\" as storage\n",
+            "import \"src/customer_schema.zyl\" as schema\npub fn listCustomers() uses Database { return schema::listCustomers() }\npub fn renameCustomer(id: Id, name: String) uses Database { schema::renameCustomer(id, name) }\n",
         ),
         (
             "src/customer_schema.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/customer_service.zyl\"] } }\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
         ),
         (
             "src/database.zyl",
@@ -1114,7 +1120,10 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
             "main.zyl",
             "import \"src/customer_service.zyl\" as customers\nimport \"src/customer_schema.zyl\" as schema\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
         ),
-        ("src/customer_service.zyl", source),
+        (
+            "src/customer_service.zyl",
+            &format!("import \"src/customer_schema.zyl\" as schema\n{source}"),
+        ),
         (
             "src/customer_schema.zyl",
             "table customers { id: Id primary auto name: String(100) required }\n",
@@ -1131,18 +1140,90 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|diagnostic| diagnostic["code"] == "E-MOD-019")
-        .expect("missing module table dependency diagnostic");
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-021")
+        .expect("non-owner table writes must be rejected");
     assert_eq!(boundary["file"], "src/customer_service.zyl");
-    assert!(boundary["message"]
-        .as_str()
-        .unwrap()
-        .contains("read, write"));
+    assert!(boundary["message"].as_str().unwrap().contains("write"));
     assert!(boundary["message"]
         .as_str()
         .unwrap()
         .contains("src/customer_schema.zyl"));
+    assert!(boundary["message"]
+        .as_str()
+        .unwrap()
+        .contains("matching table access grant"));
     fs::remove_dir_all(denied).unwrap();
+}
+
+#[test]
+fn generated_crud_writes_require_the_table_owning_module() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_ui.zyl\" as customers\nimport \"src/customer_schema.zyl\" as schema\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/customer_ui.zyl",
+            "import \"src/customer_schema.zyl\" as schema\ncrud Customer -> customers\n",
+        ),
+        (
+            "src/customer_schema.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&check.stdout).unwrap();
+    let boundary = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-021")
+        .expect("generated CRUD must not silently write another module's table");
+    assert_eq!(boundary["file"], "src/customer_ui.zyl");
+    assert!(boundary["message"].as_str().unwrap().contains("read_write"));
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn an_unmatched_table_access_grant_does_not_authorize_a_consumer() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/report.zyl\" as report\nimport \"src/schema.zyl\" as schema\nfn main() {}\n",
+        ),
+        (
+            "src/report.zyl",
+            "import \"src/schema.zyl\" as schema\nfn load() uses Database { return sql<Int[]> { SELECT id FROM customers } }\n",
+        ),
+        (
+            "src/schema.zyl",
+            "table customers { id: Id primary auto access { read: [\"src/missing.zyl\"] } }\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&check.stdout).unwrap();
+    let invalid_grant = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-021")
+        .expect("a grant for another module must not authorize the consumer");
+    assert_eq!(invalid_grant["file"], "src/report.zyl");
+    assert!(invalid_grant["message"]
+        .as_str()
+        .unwrap()
+        .contains("matching table access grant"));
+
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -1182,11 +1263,11 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         ),
         (
             "src/models.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "table customers { id: Id primary auto name: String(100) required access { read_write: [\"src/customers.zyl\"] } }\n",
         ),
         (
             "src/audit.zyl",
-            "table audit_events { id: Id primary auto message: String(200) required }\n",
+            "table audit_events { id: Id primary auto message: String(200) required access { write: [\"src/customers.zyl\"] } }\n",
         ),
         (
             "src/customers.zyl",
@@ -1288,7 +1369,7 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
         ),
         (
             "src/models.zyl",
-            "table users { id: Id primary auto email: Email required password_hash: String(255) required }\n",
+            "table users { id: Id primary auto email: Email required password_hash: String(255) required access { read_write: [\"src/security.zyl\"] } }\n",
         ),
         (
             "src/database.zyl",
@@ -1981,7 +2062,7 @@ crud Customer -> customers {
         ),
         (
             "src/models.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "table customers { id: Id primary auto name: String(100) required access { read_write: [\"src/admin.zyl\"] } }\n",
         ),
         (
             "src/shells.zyl",

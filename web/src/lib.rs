@@ -8246,6 +8246,7 @@ mod tests {
             }],
             indexes: Vec::new(),
             uniques: Vec::new(),
+            access: Default::default(),
             span: zelyra_ast::Span::default(),
         });
         route.schema = Some(zelyra_database::Schema {
@@ -8288,6 +8289,7 @@ mod tests {
             columns: Vec::new(),
             indexes: Vec::new(),
             uniques: Vec::new(),
+            access: Default::default(),
             span: zelyra_ast::Span::default(),
         });
         route.form.fields.push(zelyra_ast::FormField {

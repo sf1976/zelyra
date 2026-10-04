@@ -2030,13 +2030,41 @@ der Tabellendeklaration direkt oder transitiv importieren. Andernfalls meldet
 `read`-/`write`-Modi. Auch Tabellen in `main.zyl` sind importierten Modulen
 nicht implizit zugänglich: Ein Kind kann den Einstieg nicht zurückimportieren.
 Lege gemeinsam genutzte Tabellen deshalb in ein eigenes Schema-Modul und
-importiere es sowohl im Einstieg als auch in jedem Verbraucher. Die Regel
-erzwingt eine deklarierte Abhängigkeit, aber keine Tabellenberechtigung oder
-Schemaeigentümerschaft. `schema_ownership.enforced` bleibt `false`, und nicht
-erkannte SQL-Formen können weiterhin fehlen.
-Der maschinenlesbare Modulplan hält diese Grenze unter `table_access_contract`
-fest: Abhängigkeitsdeklarationen werden erzwungen; Lese-/Schreibberechtigungen
-nicht.
+importiere es sowohl im Einstieg als auch in jedem Verbraucher.
+
+Die unveröffentlichte 0.4-Implementierung prüft außerdem modulbezogene
+Tabellenfreigaben. Der Eigentümer kann sie direkt in der Tabellendeklaration
+festlegen:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    access {
+        read: ["src/reports.zyl"]
+        write: ["src/importer.zyl"]
+        read_write: ["src/customer_admin.zyl"]
+    }
+}
+~~~
+
+Die Pfade sind exakt projekt-relative `.zyl`-Dateipfade. Ein Verbraucher muss
+weiterhin das Eigentümermodul importieren und zusätzlich in der passenden
+Liste stehen. `read` erlaubt erkannte Lesezugriffe, `write` erkannte
+Schreibzugriffe, `read_write` beides. Ein kombiniertes SQL-Muster braucht
+entweder `read_write` oder getrennte Lese- und Schreibfreigaben. Bei
+`unknown`-SQL-Zugriffen reicht nur `read_write`; CRUD-, Formular- und
+Authentifizierungsressourcen benötigen ebenfalls `read_write`. Ohne passende
+Freigabe meldet `zelyra check` `E-MOD-021`; eine fehlende Importkante bleibt
+weiterhin `E-MOD-019`.
+
+Die Freigaben sind Compiler-Verträge für erkannte Abhängigkeiten, keine
+MariaDB-`GRANT`-Anweisungen und keine Datenbankkonto-Sicherheit. Unbekannte
+SQL-Formen können der Analyse entgehen; Rechte für Schemaänderungen werden
+nicht geprüft, `schema_ownership.enforced` bleibt `false`. Ein nicht exakt
+passender Grant-Pfad erteilt keinen Zugriff; der Fehler erscheint beim
+Verbraucher. Der maschinenlesbare Modulplan gibt erkannte Grants und die
+unvollständige Analyse unter `table_access_contract` aus.
 
 Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
 
@@ -8672,6 +8700,7 @@ page "/items" {
 | `E-IMPACT-001` | Impact-Analyse | Zyklische oder ungültige Abhängigkeiten | Quellcode-Abhängigkeiten entflechten |
 | `E-MOD-019` | Modul-/Tabellenabhängigkeit | Tabellenmodul liegt nicht im Importabschluss des Verbrauchers | Tabellenbesitzermodul direkt oder transitiv importieren |
 | `E-MOD-020` | Modul-/UI-Abhängigkeit | Referenzierte öffentliche View oder Komponente liegt außerhalb des Importgraphs | UI-Besitzermodul direkt oder transitiv importieren |
+| `E-MOD-021` | Modul-/Tabellenfreigabe | Erkannter Lese-/Schreibzugriff hat keinen passenden Grant des Tabellenbesitzers | `access`-Liste der Tabelle und exakten Modulpfad prüfen |
 | `E-RUNTIME-001` | Laufzeit | Unbehandelter Laufzeitfehler | Verträge (`requires`, `ensures`) oder Fehlerwerte prüfen |
 
 ---

@@ -1039,6 +1039,7 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
         .collect::<HashMap<_, _>>();
 
     let mut table_owners = HashMap::new();
+    let mut table_definitions = HashMap::new();
     let mut duplicate_tables = HashSet::new();
     for table in &loaded.program.tables {
         let Some(owner) = loaded
@@ -1051,10 +1052,13 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
         if table_owners.insert(table.name.as_str(), owner).is_some() {
             duplicate_tables.insert(table.name.as_str());
         }
+        table_definitions.insert(table.name.as_str(), table);
     }
 
     let impact = build_impact_with_sources(&loaded.program, &loaded.sources, "");
     let mut violations = BTreeMap::<(String, String), (zelyra_ast::Span, BTreeSet<String>)>::new();
+    let mut access_violations =
+        BTreeMap::<(String, String), (zelyra_ast::Span, BTreeSet<String>)>::new();
     for reference in impact
         .get("references")
         .and_then(Value::as_array)
@@ -1080,6 +1084,31 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
         let Some(owner_path) = table_owners.get(table_name).copied() else {
             continue;
         };
+        let kind = reference
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let from = reference
+            .get("from")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let access_mode = match kind {
+            "sql_table" | "page_data_sql" => Some(
+                reference
+                    .get("access")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+            ),
+            "auth_table" => Some("read_write"),
+            "table" if from.starts_with("crud:") || from.starts_with("form:") => Some("read_write"),
+            "table" if from.starts_with("tableview:") => Some(
+                reference
+                    .get("access")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+            ),
+            _ => None,
+        };
         if source_path == owner_path {
             continue;
         }
@@ -1102,10 +1131,6 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
                     .copied(),
             );
         }
-        if reaches_owner {
-            continue;
-        }
-
         let Some(source_id) = source_paths.get(source_path).copied() else {
             continue;
         };
@@ -1126,6 +1151,22 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
             .and_then(Value::as_u64)
             .unwrap_or(1) as usize;
         let span = zelyra_ast::Span::new(start, end, line, column).with_source_id(source_id);
+        if reaches_owner {
+            if let Some(mode) = access_mode {
+                let granted = table_definitions
+                    .get(table_name)
+                    .is_some_and(|table| table_access_granted(table, source_path, mode));
+                if !granted {
+                    let key = (source_path.to_owned(), table_name.to_owned());
+                    let entry = access_violations
+                        .entry(key)
+                        .or_insert_with(|| (span, BTreeSet::new()));
+                    entry.1.insert(mode.to_owned());
+                }
+            }
+            continue;
+        }
+
         let key = (source_path.to_owned(), table_name.to_owned());
         let entry = violations
             .entry(key)
@@ -1154,7 +1195,34 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
             *span,
         );
     }
-    violations.is_empty()
+    for ((source_path, table_name), (span, accesses)) in &access_violations {
+        let owner_path = table_owners[table_name.as_str()];
+        let access = accesses.iter().cloned().collect::<Vec<_>>().join(", ");
+        diagnostic_with_span(
+            path,
+            "E-MOD-021",
+            &format!(
+                "module `{source_path}` attempts {access} access to table `{table_name}`, owned by `{owner_path}`, without a matching table access grant; add the module path to the appropriate `access` list or expose a public operation from the owning module"
+            ),
+            *span,
+        );
+    }
+    violations.is_empty() && access_violations.is_empty()
+}
+
+fn table_access_granted(table: &zelyra_ast::TableDef, module: &str, mode: &str) -> bool {
+    let read = table.access.read.iter().any(|grant| grant == module);
+    let write = table.access.write.iter().any(|grant| grant == module);
+    let read_write = table.access.read_write.iter().any(|grant| grant == module);
+    match mode {
+        "read" => read || read_write,
+        "write" => write || read_write,
+        "read_write" => read_write || (read && write),
+        // An unknown SQL access mode must never inherit separate read or write
+        // grants; only the explicit combined grant is broad enough.
+        "unknown" => read_write,
+        _ => false,
+    }
 }
 
 fn validate_program(
@@ -3082,9 +3150,15 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                             (
                                 table.name.clone(),
                                 json!({
-                                    "table": table.name,
-                                    "inferred_owner_module": module_path,
-                                    "ownership_enforced": false
+                                "table": table.name,
+                                "inferred_owner_module": module_path,
+                                "ownership_enforced": false,
+                                "cross_module_access_grants_enforced": true,
+                                "access_grants": {
+                                    "read": table.access.read,
+                                    "write": table.access.write,
+                                    "read_write": table.access.read_write
+                                }
                                 }),
                             )
                         })
@@ -3127,12 +3201,16 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     "schema_ownership": {
                         "model": "inferred_from_table_declaration_source_module",
                         "enforced": false,
+                        "cross_module_access_grants_enforced": true,
+                        "schema_change_ownership_enforced": false,
                         "tables": schema_ownership.values().collect::<Vec<_>>()
                     },
                     "table_access_contract": {
                         "model": "table-owner-module-in-consumer-import-closure",
                         "dependency_enforced": true,
-                        "read_write_permissions_enforced": false,
+                        "module_access_grants_enforced": true,
+                        "cross_module_mutation_policy": "explicit-table-access-grant",
+                        "unknown_sql_access_requires_read_write_grant": true,
                         "entry_module_tables_project_visible": false,
                         "analysis_complete": false
                     },
@@ -10825,6 +10903,44 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn table_module_grants_apply_least_privilege_and_unknown_requires_combined_access() {
+        let program = parse(
+            &lex(
+                "table customers { id: Id primary auto access { read: [\"src/report.zyl\"] write: [\"src/importer.zyl\"] read_write: [\"src/admin.zyl\"] } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let table = &program.tables[0];
+
+        assert!(table_access_granted(table, "src/report.zyl", "read"));
+        assert!(!table_access_granted(table, "src/report.zyl", "write"));
+        assert!(!table_access_granted(table, "src/report.zyl", "read_write"));
+        assert!(table_access_granted(table, "src/importer.zyl", "write"));
+        assert!(!table_access_granted(table, "src/importer.zyl", "read"));
+        assert!(!table_access_granted(table, "src/importer.zyl", "unknown"));
+        assert!(table_access_granted(table, "src/admin.zyl", "unknown"));
+
+        let separate = parse(
+            &lex(
+                "table customers { id: Id primary auto access { read: [\"src/service.zyl\"] write: [\"src/service.zyl\"] } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(table_access_granted(
+            &separate.tables[0],
+            "src/service.zyl",
+            "read_write"
+        ));
+        assert!(!table_access_granted(
+            &separate.tables[0],
+            "src/service.zyl",
+            "unknown"
+        ));
+    }
 
     #[cfg(any(
         target_os = "linux",

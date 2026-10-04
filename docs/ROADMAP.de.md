@@ -736,8 +736,12 @@ unterstellt.
   lehnt erkannte modulübergreifende Tabellenverweise ohne erreichbaren
   Importabhängigkeitspfad mit `E-MOD-019` ab, auch für Tabellen im Einstieg;
   gemeinsam genutzte Tabellen müssen in einem importierbaren Schema-Modul
-  liegen. Lese-/Schreibberechtigungen oder Schemaeigentum werden damit nicht
-  erzwungen. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
+  liegen. Tabellen unterstützen außerdem explizite `access`-Listen für
+  `read`, `write` und `read_write`; erkannte modulübergreifende Zugriffe ohne
+  passenden Grant scheitern mit `E-MOD-021`. CRUD/Formular/Auth sowie unbekannte
+  SQL-Zugriffe verlangen `read_write`. Das sind Compiler-Verträge, keine
+  MariaDB-Grants; Schemaänderungsrechte und unbekannte SQL-Formen bleiben
+  ungeprüft. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
   in `src/database.zyl` ab und importiert sie aus `main.zyl`; das trennt nur
   die Quelle, nicht mehrere unabhängig konfigurierbare Verbindungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle

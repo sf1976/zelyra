@@ -417,6 +417,7 @@ mod tests {
             }],
             indexes: Vec::new(),
             uniques: Vec::new(),
+            access: Default::default(),
             span: Span::default(),
         };
         let input = HashMap::from([(String::from("name"), String::from("Anna!"))]);

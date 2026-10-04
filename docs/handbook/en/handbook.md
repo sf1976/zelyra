@@ -2042,13 +2042,39 @@ table. Otherwise `zelyra check` reports `E-MOD-019`; for recognized SQL access,
 the diagnostic also lists `read`/`write` modes. Tables declared in `main.zyl`
 are not implicitly visible to imported modules: a child cannot import the
 entry module back. Put shared tables in a dedicated schema module and import
-it from both the entry point and each consumer. This rule requires a declared
-dependency, not a table permission or schema ownership.
-`schema_ownership.enforced` remains `false`, and unrecognized SQL forms may
-still be missed.
-The machine-readable module plan records this distinction in
-`table_access_contract`: dependency declarations are enforced; read/write
-permissions are not.
+it from both the entry point and each consumer.
+
+The unreleased 0.4 implementation also checks module-specific table grants.
+The owner can declare them directly on the table:
+
+~~~zelyra
+table customers {
+    id: Id primary auto
+    name: String(100) required
+    access {
+        read: ["src/reports.zyl"]
+        write: ["src/importer.zyl"]
+        read_write: ["src/customer_admin.zyl"]
+    }
+}
+~~~
+
+Paths are exact project-relative `.zyl` file paths. A consumer must still
+import the owner module and also appear in the matching list. `read` allows
+recognized reads, `write` allows recognized writes, and `read_write` allows
+both. A combined SQL access needs either `read_write` or separate read and
+write grants. `unknown` SQL access requires `read_write`; CRUD, form, and
+authentication resources also require `read_write`. Without a matching grant,
+`zelyra check` reports `E-MOD-021`; a missing import edge still reports
+`E-MOD-019`.
+
+These grants are compiler contracts for recognized dependencies, not MariaDB
+`GRANT` statements or database-account security. Unrecognized SQL forms may
+still escape analysis; schema-change permissions are not checked, and
+`schema_ownership.enforced` remains `false`. A grant path that does not match
+exactly authorizes nothing; the error appears when a consumer attempts access.
+The machine-readable module plan exposes recognized grants and incomplete
+analysis in `table_access_contract`.
 
 The next experimental step is `zelyra module bundle`:
 
@@ -8576,6 +8602,7 @@ page "/items" {
 | `E-IMPACT-001` | Impact analysis | Cyclical or invalid dependencies | Untangle code dependencies |
 | `E-MOD-019` | Module/table dependency | Table owner is missing from the consumer's import closure | Import the table-owning module directly or transitively |
 | `E-MOD-020` | Module/UI dependency | Referenced public view or component is outside the consumer's import graph | Import the UI-owning module directly or transitively |
+| `E-MOD-021` | Module/table grant | A recognized read/write access has no matching grant from the table owner | Check the table's `access` list and exact module path |
 | `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
 
 ---

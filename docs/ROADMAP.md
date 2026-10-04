@@ -682,9 +682,13 @@ PostgreSQL runtime parity or production readiness.
   app receives its own `DATABASE_URL`, while MariaDB remains external. The
   compiler also rejects recognized cross-module table references without an
   import dependency path (`E-MOD-019`), including tables declared in the entry
-  module; shared tables must live in an importable schema module. This does
-  not enforce read/write permissions or schema ownership. The
-  MariaDB project generator now places the database declaration in
+  module; shared tables must live in an importable schema module. Tables also
+  accept explicit `access` lists for `read`, `write`, and `read_write`;
+  recognized cross-module accesses without a matching grant fail with
+  `E-MOD-021`. CRUD/forms/auth and unknown SQL accesses require `read_write`.
+  These are compiler contracts, not MariaDB grants; schema-change rights and
+  unknown SQL forms remain unchecked. The MariaDB project generator now places
+  the database declaration in
   `src/database.zyl` and imports it from `main.zyl`; this is source separation,
   not multiple independently configurable connections. The
   bundle rejects multiple database definitions with `E-DB-001` before writing
