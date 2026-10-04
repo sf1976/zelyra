@@ -1809,6 +1809,55 @@ fn imported_ui_resources_must_be_public_and_explicitly_imported() {
     assert!(!dependency_result.status.success());
     assert!(String::from_utf8_lossy(&dependency_result.stderr).contains("E-MOD-020"));
     fs::remove_dir_all(undeclared_dependency).unwrap();
+
+    let private_crud_layout = project(&[
+        (
+            "main.zyl",
+            "import \"src/admin.zyl\" as admin\nimport \"src/ui.zyl\" as ui\nfn main() {}\n",
+        ),
+        (
+            "src/admin.zyl",
+            "import \"src/ui.zyl\" as ui\ncrud Customer -> customers { layout: Shell }\n",
+        ),
+        (
+            "src/ui.zyl",
+            "view Shell { html { <main><slot /></main> } }\n",
+        ),
+    ]);
+    let crud_result = run(&private_crud_layout, &["check", "main.zyl"]);
+    assert!(!crud_result.status.success());
+    assert!(String::from_utf8_lossy(&crud_result.stderr).contains("E-MOD-007"));
+    assert!(String::from_utf8_lossy(&crud_result.stderr).contains("pub view"));
+    fs::remove_dir_all(private_crud_layout).unwrap();
+
+    let private_crud_slot_component = project(&[
+        (
+            "main.zyl",
+            "import \"src/admin.zyl\" as admin\nimport \"src/ui.zyl\" as ui\nfn main() {}\n",
+        ),
+        (
+            "src/admin.zyl",
+            r#"import "src/ui.zyl" as ui
+crud Customer -> customers {
+    layout: Shell
+    slots {
+        header {
+            html { <Badge /> }
+        }
+    }
+}
+"#,
+        ),
+        (
+            "src/ui.zyl",
+            "pub view Shell { html { <main><slot name=\"header\" /></main> } }\ncomponent Badge { html { <strong>Badge</strong> } }\n",
+        ),
+    ]);
+    let slot_result = run(&private_crud_slot_component, &["check", "main.zyl"]);
+    assert!(!slot_result.status.success());
+    assert!(String::from_utf8_lossy(&slot_result.stderr).contains("E-MOD-007"));
+    assert!(String::from_utf8_lossy(&slot_result.stderr).contains("pub component"));
+    fs::remove_dir_all(private_crud_slot_component).unwrap();
 }
 
 #[test]

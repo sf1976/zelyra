@@ -342,12 +342,13 @@ SQL-Bezeichner statt modulqualifizierter Namen; doppelte Tabellennamen werden
 abgelehnt. Importierte Views und Komponenten werden unter ihren deklarierten,
 nicht qualifizierten Namen in die Anwendung aufgenommen. Sie sind wie andere
 Modulressourcen standardmäßig privat und werden mit `pub view` beziehungsweise
-`pub component` exportiert. Eine modulübergreifende Page-View-Referenz und
-erkannte Komponenten-Tags benötigen außerdem einen direkten oder transitiven
-Importpfad zum Besitzer. Private UI-Verweise melden `E-MOD-007`, fehlende
-Importkanten `E-MOD-020`. Komponenten-Tags werden aktuell durch Abgleich
-bekannter Namen im HTML-Text erkannt; das ist keine vollständige HTML- oder
-Namespace-Analyse. Doppelte View- und Komponentennamen werden abgelehnt.
+`pub component` exportiert. Modulübergreifende Page- und CRUD-Layout-Verweise
+sowie erkannte Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML
+benötigen außerdem einen direkten oder transitiven Importpfad zum Besitzer.
+Private UI-Verweise melden `E-MOD-007`, fehlende Importkanten `E-MOD-020`.
+Komponenten-Tags werden aktuell durch Abgleich bekannter Namen im HTML-Text
+erkannt; das ist keine vollständige HTML- oder Namespace-Analyse. Doppelte
+View- und Komponentennamen werden abgelehnt.
 Importierte Pages, Formulare, CRUD-, API- und Authentifizierungsdefinitionen
 werden im aktuellen Entwicklungszweig unterstützt; die veröffentlichte
 Version 0.3.0 enthält das Modulmodell nicht.

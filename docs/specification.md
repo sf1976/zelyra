@@ -388,12 +388,12 @@ global SQL identifiers rather than module-qualified names, and duplicate table
 names are rejected. Imported tableviews, views, and components join the
 composed application under their declared, unqualified names. Like other
 module resources, they are private by default and exported with `pub view` or
-`pub component`. Cross-module page-view references and recognized component
-tags also require a direct or transitive import path to the owner. Private UI
-references report `E-MOD-007`; missing import edges report `E-MOD-020`.
-Component tags are currently discovered by matching known names in HTML text;
-this is not a complete HTML or namespace analysis. Duplicate resource names
-are rejected.
+`pub component`. Cross-module page and CRUD layout references, plus recognized
+component tags in page, view, component, and CRUD slot HTML, require a direct
+or transitive import path to the owner. Private UI references report
+`E-MOD-007`; missing import edges report `E-MOD-020`. Component tags are
+currently discovered by matching known names in HTML text; this is not a
+complete HTML or namespace analysis. Duplicate resource names are rejected.
 MariaDB-backed imported tableviews can be served as application routes; the
 current tableview query runtime does not yet execute against SQLite. Imported
 pages are composed into the application's route set; overlapping page route

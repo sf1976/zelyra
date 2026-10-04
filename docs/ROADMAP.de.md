@@ -744,8 +744,9 @@ unterstellt.
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
   modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
   Derselbe unveröffentlichte Zweig unterstützt nun `pub view` und
-  `pub component`; importierte Page-View- und erkannte Komponenten-Tag-Verweise
-  verlangen eine öffentliche Deklaration und einen ausdrücklichen Importpfad
+  `pub component`; importierte Page-/CRUD-Layout-Verweise und erkannte
+  Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML verlangen
+  eine öffentliche Deklaration und einen ausdrücklichen Importpfad
   (`E-MOD-007` / `E-MOD-020`). Dies ist ein getesteter Sichtbarkeitsschritt,
   kein vollständiges HTML-Namespace- oder Modulvertragssystem.
 

@@ -1905,11 +1905,12 @@ Authentifizierungstabellen werden gegen das gemeinsame Schema geprüft.
 Funktionen, Typen, Records, Views und Komponenten brauchen `pub`, wenn andere
 Dateien sie über einen Alias verwenden. Views und Komponenten sind
 standardmäßig privat und werden mit `pub view` beziehungsweise
-`pub component` exportiert. Modulübergreifende Page-View-Referenzen und
-erkannte Komponenten-Tags benötigen einen direkten oder transitiven
-Importpfad zum Besitzer. Private UI-Verweise melden `E-MOD-007`, fehlende
-Kanten `E-MOD-020`. Die Komponentenerkennung scannt bekannte Tagnamen im
-HTML-Text; sie ist keine vollständige HTML- oder Namespace-Analyse.
+`pub component` exportiert. Modulübergreifende Page- und CRUD-Layout-Verweise
+sowie erkannte Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML
+benötigen einen direkten oder transitiven Importpfad zum Besitzer. Private
+UI-Verweise melden `E-MOD-007`, fehlende Kanten `E-MOD-020`. Die
+Komponentenerkennung scannt bekannte Tagnamen im HTML-Text; sie ist keine
+vollständige HTML- oder Namespace-Analyse.
 Tabellen fließen in ein gemeinsames Schema ein und behalten globale SQL-Namen;
 doppelte Tabellen- und Ressourcennamen werden abgelehnt. Eine
 Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.

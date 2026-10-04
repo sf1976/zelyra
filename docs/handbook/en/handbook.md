@@ -1925,10 +1925,11 @@ are global SQL identifiers, not module-qualified names, and duplicate table
 names are rejected. Tableviews, views, and components are composed from
 imported files under their declared, unqualified names. Views and components
 are private by default; use `pub view` and `pub component` to export them.
-Cross-module page-view references and recognized component tags require a
-direct or transitive import path to the owner. Private UI references report
-`E-MOD-007`; missing edges report `E-MOD-020`. Component discovery scans known
-tag names in HTML text and is not a full HTML or namespace analysis. Imported
+Cross-module page/CRUD layout references and recognized component tags in
+page, view, component, and CRUD slot HTML require a direct or transitive import
+path to the owner. Private UI references report `E-MOD-007`; missing edges
+report `E-MOD-020`. Component discovery scans known tag names in HTML text and
+is not a full HTML or namespace analysis. Imported
 pages join the application's route set; overlapping page
 patterns are rejected with their source location. Forms, CRUD declarations,
 API routes, and authentication definitions also compose from imported files.

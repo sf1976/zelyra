@@ -801,6 +801,29 @@ fn validate_module_ui_visibility(
                 )?;
             }
         }
+        for crud in &module.program.cruds {
+            if let Some(view_name) = crud.layout.as_deref() {
+                if let Some((owner, is_public)) = views.get(view_name) {
+                    validate_ui_reference(
+                        path, owner, "view", view_name, *is_public, crud.span, modules,
+                    )?;
+                }
+            }
+            for slot in &crud.layout_slots {
+                for component_name in component_tags(&slot.html, &component_names) {
+                    let (owner, is_public) = &components[&component_name];
+                    validate_ui_reference(
+                        path,
+                        owner,
+                        "component",
+                        &component_name,
+                        *is_public,
+                        slot.span,
+                        modules,
+                    )?;
+                }
+            }
+        }
     }
     Ok(())
 }
