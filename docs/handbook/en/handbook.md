@@ -469,6 +469,12 @@ zelyra new taskmanager-web --mariadb
 cd taskmanager-web
 ```
 
+> **🧪 Unreleased 0.4 development:** newly generated MariaDB projects place the
+> database declaration in `src/database.zyl` and explicitly import that module
+> from `main.zyl`. This separates ownership in the source tree, but does not yet
+> provide multiple named connections; the runtime still uses one project-wide
+> `DATABASE_URL`. The published 0.3.0 templates are unchanged.
+
 **First-time setup in one command:**
 ```bash
 zelyra setup --all

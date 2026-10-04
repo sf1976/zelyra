@@ -70,7 +70,6 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
 sed -i '/^database main {/,/^}/d' "${project_dir}/main.zyl"
-sed -i '1i import "src/database.zyl" as storage' "${project_dir}/main.zyl"
 sed -i '1i import "src/invoices.zyl" as invoices' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory.zyl" as inventory' "${project_dir}/main.zyl"
 sed -i '1i import "src/docker-smoke.zyl" as docker_smoke' "${project_dir}/main.zyl"

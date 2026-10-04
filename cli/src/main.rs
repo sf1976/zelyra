@@ -55,6 +55,8 @@ const MACHINE_MANAGEMENT_DEMO_DATA: &str =
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
+const MARIADB_DATABASE_DECLARATION: &str = "database main {\n    engine: mariadb\n}\n\n";
+const MARIADB_DATABASE_MODULE: &str = "database main {\n    engine: mariadb\n}\n";
 const PROJECT_THEME_TEMPLATE: &str = r#"/*
 Optional project-local overrides for the built-in Zelyra web design.
 Uncomment a token below and change its value. This file is sent to browsers;
@@ -584,7 +586,7 @@ console = false
         version = env!("CARGO_PKG_VERSION"),
         database_section = database_section
     );
-    let main_source = if options.business_template {
+    let main_template = if options.business_template {
         MARIADB_BUSINESS_TEMPLATE
     } else if options.crud_template {
         MARIADB_CRUD_TEMPLATE
@@ -598,9 +600,17 @@ console = false
 }
 "#
     };
+    let main_source = if options.with_mariadb {
+        let source = main_template
+            .strip_prefix(MARIADB_DATABASE_DECLARATION)
+            .unwrap_or(main_template);
+        format!("import \"src/database.zyl\" as storage\n\n{source}")
+    } else {
+        main_template.to_owned()
+    };
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
-        ("main.zyl", main_source.to_owned()),
+        ("main.zyl", main_source),
         // Keep the conventional module source directory present so the
         // generated Dockerfile can copy it even for a fresh single-file app.
         ("src/.keep", String::new()),
@@ -608,6 +618,9 @@ console = false
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
     ];
+    if options.with_mariadb {
+        files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
+    }
     if options.crud_template {
         files.push((
             "machine-management-demo.sql",

@@ -64,6 +64,26 @@ fn temporary_directory(name: &str) -> PathBuf {
     ))
 }
 
+fn assert_generated_database_module(directory: &Path) {
+    let entry = directory.join("main.zyl");
+    let source = fs::read_to_string(&entry).unwrap();
+    assert!(source.starts_with("import \"src/database.zyl\" as storage\n"));
+    assert!(!source.contains("database main"));
+    assert_eq!(
+        fs::read_to_string(directory.join("src/database.zyl"))
+            .unwrap()
+            .trim(),
+        "database main {\n    engine: mariadb\n}"
+    );
+    let check = run(&["check", entry.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+}
+
 fn free_test_port() -> String {
     TcpListener::bind(("127.0.0.1", 0))
         .expect("a test port should be available")
@@ -257,6 +277,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let env_file = fs::read_to_string(directory.join(".env")).unwrap();
     let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
@@ -770,6 +791,7 @@ fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     assert!(source.contains("class=\"zelyra-app\""));
     assert!(source.contains("data-zelyra-language"));
@@ -809,6 +831,7 @@ fn new_mariadb_crud_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("table departments"));
@@ -842,6 +865,7 @@ fn new_mariadb_auth_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("auth users"));
@@ -876,6 +900,7 @@ fn new_mariadb_business_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("auth users"));

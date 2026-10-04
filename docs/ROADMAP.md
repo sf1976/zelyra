@@ -681,6 +681,9 @@ PostgreSQL runtime parity or production readiness.
   import dependency path (`E-MOD-019`), including tables declared in the entry
   module; shared tables must live in an importable schema module. This does
   not enforce read/write permissions or schema ownership. The
+  MariaDB project generator now places the database declaration in
+  `src/database.zyl` and imports it from `main.zyl`; this is source separation,
+  not multiple independently configurable connections. The
   bundle rejects multiple database definitions with `E-DB-001` before writing
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and

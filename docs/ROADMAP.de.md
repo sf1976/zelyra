@@ -734,7 +734,9 @@ unterstellt.
   Importabhängigkeitspfad mit `E-MOD-019` ab, auch für Tabellen im Einstieg;
   gemeinsam genutzte Tabellen müssen in einem importierbaren Schema-Modul
   liegen. Lese-/Schreibberechtigungen oder Schemaeigentum werden damit nicht
-  erzwungen. Mehrere
+  erzwungen. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
+  in `src/database.zyl` ab und importiert sie aus `main.zyl`; das trennt nur
+  die Quelle, nicht mehrere unabhängig konfigurierbare Verbindungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
