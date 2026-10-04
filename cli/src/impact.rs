@@ -521,6 +521,33 @@ fn semantic_references(
         }
     }
 
+    for form in &program.forms {
+        for action in &form.actions {
+            for call in called_functions(&action.statements, &function_names) {
+                add_reference(
+                    &mut references,
+                    format!("form:{}", form.name),
+                    format!("function:{call}"),
+                    "call",
+                    span_value(action.span, sources),
+                );
+            }
+        }
+    }
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            for call in called_functions(&action.statements, &function_names) {
+                add_reference(
+                    &mut references,
+                    format!("crud:{}", crud.name),
+                    format!("function:{call}"),
+                    "call",
+                    span_value(action.span, sources),
+                );
+            }
+        }
+    }
+
     let handler_names = function_names;
     for api in &program.apis {
         if let Some(handler) = &api.handler {

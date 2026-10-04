@@ -1395,7 +1395,11 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         ),
         (
             "src/customers.zyl",
-            "import \"src/database.zyl\" as storage\nimport \"src/models.zyl\" as models\nimport \"src/audit.zyl\" as audit\nform CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/models.zyl\" as models\nimport \"src/audit.zyl\" as audit\nimport \"src/helpers.zyl\" as helpers\nform CustomerCreate -> customers { fields { name } action save { let clean_name = helpers::normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { let message = helpers::audit_message() sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\n",
+        ),
+        (
+            "src/helpers.zyl",
+            "pub fn normalize_name() -> String { return \"New customer\" }\npub fn audit_message() -> String { return \"crud\" }\n",
         ),
         (
             "src/database.zyl",
@@ -1444,6 +1448,7 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
             "src/audit.zyl",
             "src/customers.zyl",
             "src/database.zyl",
+            "src/helpers.zyl",
             "src/models.zyl"
         ])
     );
@@ -1472,6 +1477,18 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         dependency["from"] == "crud:Customer"
             && dependency["to"] == "table:customers"
             && dependency["kind"] == "table"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "form:CustomerCreate"
+            && dependency["to"] == "function:src/helpers.zyl::normalize_name"
+            && dependency["kind"] == "call"
+            && dependency["to_module"] == "src/helpers.zyl"
+    }));
+    assert!(dependencies.iter().any(|dependency| {
+        dependency["from"] == "crud:Customer"
+            && dependency["to"] == "function:src/helpers.zyl::audit_message"
+            && dependency["kind"] == "call"
+            && dependency["to_module"] == "src/helpers.zyl"
     }));
     assert!(dependencies.iter().any(|dependency| {
         dependency["kind"] == "database_configuration"

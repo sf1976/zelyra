@@ -1993,6 +1993,7 @@ Der JSON-Plan folgt schreibgeschützt und deterministisch den expliziten
 Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
 Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
+Funktionen, benannte Funktionsaufrufe in Formular-/CRUD-Aktionen zu ihren
 Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records und
 Type Aliases, von geschützten Ressourcen zur Authentifizierung, von
 Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
@@ -2005,8 +2006,10 @@ Verbindungen oder eine benannte DB-Schnittstelle werden noch nicht unterstützt.
 Zugangsdaten erscheinen nicht im Plan.
 Nicht auflösbare Verweise erscheinen in `unresolved_references`. Dynamische
 oder nicht modellierte Abhängigkeiten, Assets, Laufzeitkonfiguration, externe
-Dienste und Docker-Artefakte sind nicht enthalten. `complete_deployment` bleibt
-ausdrücklich `false`; der Befehl exportiert oder startet keine Anwendung.
+Dienste und Docker-Artefakte sind nicht enthalten. Aktionsaufrufe werden
+statisch anhand der aufgelösten Funktionsnamen erkannt; das macht die Analyse
+noch nicht vollständig. `complete_deployment` bleibt ausdrücklich `false`; der
+Befehl exportiert oder startet keine Anwendung.
 
 SQL-Tabellenkanten tragen zusätzlich `access`: `read`, `write`, `read_write`
 oder `unknown`. Der Beobachter erkennt bekannte, nicht qualifizierte

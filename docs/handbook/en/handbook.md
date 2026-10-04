@@ -2008,10 +2008,11 @@ be missing.
 The read-only, deterministic JSON preview follows explicit imports and
 references currently recognized by the static impact graph. These include
 known page-to-view and page-to-component references, page and form/CRUD-action
-SQL-to-table edges, API-handler-to-function and type references from API fields,
-function signatures, records, and type aliases, protected-resource-to-
-authentication, authentication-to-table, recognized table relations, and
-database configuration. Unresolved references appear in
+SQL-to-table edges, API-handler-to-function edges, named function calls inside
+form/CRUD actions, and type references from API fields, function signatures,
+records, and type aliases, protected-resource-to-authentication,
+authentication-to-table, recognized table relations, and database
+configuration. Unresolved references appear in
 `unresolved_references`. `database.configurations` identifies declarations in
 the closure with their backend, logical database name, source file, and current
 runtime variable `DATABASE_URL`. The plan reports
@@ -2021,7 +2022,8 @@ connections and a named database interface are not implemented. Credentials
 are not included. Dynamic or unmodeled dependencies, assets, runtime
 configuration, external services, and Docker artifacts are not included.
 `complete_deployment` remains explicitly `false`; the command does not export
-or run an application.
+or run an application. Action calls are statically detected by their resolved
+function names; this does not make the analysis complete.
 
 SQL table edges also carry `access`: `read`, `write`, `read_write`, or
 `unknown`. The observer recognizes known unqualified table names in the simple

@@ -756,6 +756,10 @@ unterstellt.
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
   modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
+  CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
+  ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
+  Kantenmenge, beweist aber keine vollständige Abhängigkeitsanalyse.
   Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
   macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
   Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch
