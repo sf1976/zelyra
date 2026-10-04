@@ -207,6 +207,10 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Run MariaDB backup and restore rehearsal
+        env:
+          ZELYRA_BACKUP_RESTORE_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Run PostgreSQL schema safety integration test
         env:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -311,5 +315,9 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Run MariaDB backup and restore rehearsal
+        env:
+          ZELYRA_BACKUP_RESTORE_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py
