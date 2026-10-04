@@ -84,6 +84,14 @@ CREATE TABLE \`${source_database}\`.restore_probe (
 INSERT INTO \`${source_database}\`.restore_probe VALUES (1, 'backup restore test', REPEAT('x', 100000));
 SQL
 
+if MYSQL_PWD="${backup_password}" mariadb \
+    --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${backup_user}" \
+    --database="${source_database}" \
+    --execute="INSERT INTO restore_probe VALUES (2, 'must not write', 'x')" >/dev/null 2>&1; then
+    echo "error: source-scoped backup account unexpectedly wrote to the source database" >&2
+    exit 1
+fi
+
 echo "[MariaDB backup/restore] dump using a source-scoped read-only account"
 (
     set -eu
