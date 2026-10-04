@@ -995,7 +995,6 @@ fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
 }
 
 fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProject) -> bool {
-    let entry_module = loaded.sources.first().map(|source| source.path.as_str());
     let module_imports = loaded
         .modules
         .iter()
@@ -1062,13 +1061,6 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
         if source_path == owner_path {
             continue;
         }
-        // The entry module is the project composition root and cannot be
-        // imported back by its children. Its legacy schema declarations stay
-        // project-visible until projects move them into dedicated modules.
-        if Some(owner_path) == entry_module {
-            continue;
-        }
-
         let mut pending = vec![source_path];
         let mut visited = HashSet::new();
         let mut reaches_owner = false;
@@ -3119,7 +3111,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "model": "table-owner-module-in-consumer-import-closure",
                         "dependency_enforced": true,
                         "read_write_permissions_enforced": false,
-                        "entry_module_tables_project_visible": true,
+                        "entry_module_tables_project_visible": false,
                         "analysis_complete": false
                     },
                     "unresolved_references": unresolved_references.iter().map(|(module, from, to)| json!({

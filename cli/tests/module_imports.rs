@@ -946,7 +946,7 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
     );
     assert_eq!(
         plan["plan"]["table_access_contract"]["entry_module_tables_project_visible"],
-        true
+        false
     );
     assert_eq!(
         plan["plan"]["schema_ownership"]["tables"],
@@ -1060,6 +1060,34 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
         .unwrap()
         .contains("src/customer_schema.zyl"));
     fs::remove_dir_all(denied).unwrap();
+}
+
+#[test]
+fn imported_modules_must_import_schema_instead_of_inheriting_entry_tables() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_service.zyl\" as customers\ntable customers { id: Id primary auto name: String(100) required }\nfn main() {}\n",
+        ),
+        (
+            "src/customer_service.zyl",
+            "pub fn listCustomers() -> Customer[] uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&check.stdout).unwrap();
+    let boundary = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-019")
+        .expect("entry-module tables must not be implicitly visible to children");
+    assert_eq!(boundary["file"], "src/customer_service.zyl");
+    assert!(boundary["message"].as_str().unwrap().contains("main.zyl"));
+
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]

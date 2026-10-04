@@ -2028,10 +2028,11 @@ The compiler now also checks recognized cross-module table edges: a module
 using a table through SQL, CRUD, forms, table views, authentication, or a table
 relation must directly or transitively import the module that declares that
 table. Otherwise `zelyra check` reports `E-MOD-019`; for recognized SQL access,
-the diagnostic also lists `read`/`write` modes. The `main.zyl` entry module is
-a documented composition-root exception: its tables remain project-visible
-to imported modules because children cannot import the entry back. This rule
-requires a declared dependency, not a table permission.
+the diagnostic also lists `read`/`write` modes. Tables declared in `main.zyl`
+are not implicitly visible to imported modules: a child cannot import the
+entry module back. Put shared tables in a dedicated schema module and import
+it from both the entry point and each consumer. This rule requires a declared
+dependency, not a table permission or schema ownership.
 `schema_ownership.enforced` remains `false`, and unrecognized SQL forms may
 still be missed.
 The machine-readable module plan records this distinction in

@@ -20,7 +20,7 @@ and a format version are distinct pieces of information.
 | Interface | Verified current state | Meaning |
 |---|---|---|
 | CLI machine output | Shared envelope `schema_version: "1"` with `command`, `success`, and `diagnostics` | JSON commands such as `check`, `context`, and `impact` use this envelope. Human terminal output is not a machine API. |
-| Cross-module table references | Experimental `E-MOD-019` validation in unreleased 0.4 development | Recognized table references require the owner module in the consumer's import closure, except for entry-module tables; does not enforce read/write permissions. |
+| Cross-module table references | Experimental `E-MOD-019` validation in unreleased 0.4 development | Recognized references require the owner module in the consumer's import closure, including when a table is declared in `main.zyl`. Put shared tables in an importable schema module. This enforces dependency declarations, not read/write permissions or schema ownership. |
 | `module bundle --dry-run` | Experimental `schema_version: "1"` envelope with a sorted file list and `writes_performed: false` | Lists planned destination paths after validating a temporary bundle; this is not a stable published interface and never marks deployment completeness true. |
 | Edit request | Exact `schema_version: "1"` | Missing or other versions are rejected. |
 | `zelyra.toml` | No generally interpreted format-version field is established | The existing feature reader recognizes `[features]`; this does not version the entire project manifest. |

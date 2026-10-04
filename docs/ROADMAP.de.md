@@ -731,9 +731,10 @@ unterstellt.
   exportierte Anwendung erhält ihre
   `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Der Compiler
   lehnt erkannte modulübergreifende Tabellenverweise ohne erreichbaren
-  Importabhängigkeitspfad mit `E-MOD-019` ab; Tabellen der
-  Zusammensetzungswurzel sind ausgenommen. Lese-/Schreibberechtigungen oder
-  Schemaeigentum werden damit nicht erzwungen. Mehrere
+  Importabhängigkeitspfad mit `E-MOD-019` ab, auch für Tabellen im Einstieg;
+  gemeinsam genutzte Tabellen müssen in einem importierbaren Schema-Modul
+  liegen. Lese-/Schreibberechtigungen oder Schemaeigentum werden damit nicht
+  erzwungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und

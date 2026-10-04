@@ -2014,12 +2014,13 @@ Das Modul, das eine Tabelle über SQL, CRUD, Formulare, Tableviews,
 Authentifizierung oder eine Tabellenbeziehung verwendet, muss das Modul mit
 der Tabellendeklaration direkt oder transitiv importieren. Andernfalls meldet
 `zelyra check` `E-MOD-019`; bei erkanntem SQL-Zugriff nennt die Diagnose auch
-`read`-/`write`-Modi. Der Einstieg `main.zyl` bleibt als
-Zusammensetzungswurzel eine dokumentierte Ausnahme: Seine Tabellen sind für
-importierte Module projektweit sichtbar, weil Kinder den Einstieg nicht zurück
-importieren können. Die Regel erzwingt eine deklarierte Abhängigkeit, aber
-keine Tabellenberechtigung. `schema_ownership.enforced` bleibt `false`, und
-nicht erkannte SQL-Formen können weiterhin fehlen.
+`read`-/`write`-Modi. Auch Tabellen in `main.zyl` sind importierten Modulen
+nicht implizit zugänglich: Ein Kind kann den Einstieg nicht zurückimportieren.
+Lege gemeinsam genutzte Tabellen deshalb in ein eigenes Schema-Modul und
+importiere es sowohl im Einstieg als auch in jedem Verbraucher. Die Regel
+erzwingt eine deklarierte Abhängigkeit, aber keine Tabellenberechtigung oder
+Schemaeigentümerschaft. `schema_ownership.enforced` bleibt `false`, und nicht
+erkannte SQL-Formen können weiterhin fehlen.
 Der maschinenlesbare Modulplan hält diese Grenze unter `table_access_contract`
 fest: Abhängigkeitsdeklarationen werden erzwungen; Lese-/Schreibberechtigungen
 nicht.
