@@ -2092,6 +2092,10 @@ analysis in `table_access_contract`.
 
 The next experimental step is `zelyra module bundle`:
 
+The [invoice and inventory Docker acceptance guide](../../module-docker-acceptance.en.md)
+describes the repeatable test of the combined application and both exports,
+including separate credentials and negative permission checks.
+
 ~~~sh
 zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
 ~~~

@@ -230,7 +230,9 @@ docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
 echo "[5/5] exporting two database-backed CRUD modules as independent Docker apps"
-database_test_sql="CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+database_test_sql="INSERT INTO zelyra_app.invoices (number) VALUES ('INV-COMBINED');
+INSERT INTO zelyra_app.inventory (sku) VALUES ('SKU-COMBINED');
+CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE zelyra_invoice.invoices LIKE zelyra_app.invoices;
 INSERT INTO zelyra_invoice.invoices (number) VALUES ('INV-MODULE-ONLY');
 CREATE USER 'invoice_module'@'%' IDENTIFIED BY 'invoice-module-test-only';
@@ -246,6 +248,48 @@ docker compose --project-name "${compose_project}" \
     exec -T mariadb sh -c \
     'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb --user=root --database=zelyra_app --execute="$1"' \
     sh "${database_test_sql}" >/dev/null
+
+for resource in invoices inventory; do
+    curl --silent --show-error --fail "http://${address}/${resource}" \
+        -o "${project_root}/combined-${resource}.html"
+done
+assert_file_contains "${project_root}/combined-invoices.html" 'INV-COMBINED' \
+    "invoice data in the combined application"
+assert_file_contains "${project_root}/combined-inventory.html" 'SKU-COMBINED' \
+    "inventory data in the combined application"
+# The exported apps must work without the original web process.
+docker compose --project-name "${compose_project}" \
+    --env-file "${project_dir}/.env" \
+    -f "${project_dir}/docker-compose.mariadb.yml" stop web
+
+assert_bundle_isolation() {
+    local directory="$1" project="$2" port="$3" other_route="$4"
+    local username="$5" password="$6" own_table="$7" other_table="$8"
+    local status
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        "http://127.0.0.1:${port}/${other_route}")"
+    if [[ "${status}" != 404 ]]; then
+        echo "error: unrelated module route returned ${status}, expected 404" >&2
+        return 1
+    fi
+    docker compose --project-name "${project}" -f "${directory}/docker-compose.yml" \
+        exec -T app test ! -e /app/.env
+    # These are disposable fixture credentials, never production credentials.
+    # Check actual database denial, not just the presence of GRANT statements.
+    for query in "SELECT * FROM ${other_table}" "DELETE FROM ${own_table} WHERE 1=0"; do
+        if docker compose --project-name "${project}" -f "${directory}/docker-compose.yml" \
+            exec -T -e MYSQL_PWD="${password}" app mariadb --protocol=tcp \
+            --host=mariadb --user="${username}" --execute="${query}" \
+            >"${project_root}/permission-check.log" 2>&1; then
+            echo "error: read-only module account exceeded its database permissions" >&2
+            return 1
+        fi
+        if ! grep -Eq 'ERROR (1044|1142)' "${project_root}/permission-check.log"; then
+            echo "error: database denial was not a permission error" >&2
+            return 1
+        fi
+    done
+}
 
 write_bundle_environment() {
     local directory="$1"
@@ -287,6 +331,13 @@ if ! grep -Fq 'ZELYRA_DB_TLS_MODE=auto' "${bundle_dir}/.env.example"; then
     echo "error: Docker bundle does not default remote MariaDB connections to verified TLS" >&2
     exit 1
 fi
+if docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" config \
+    >"${project_root}/missing-env.log" 2>&1; then
+    echo "error: bundle Compose accepted its missing required .env" >&2
+    exit 1
+fi
+assert_file_contains "${project_root}/missing-env.log" '.env' "missing configuration diagnostic"
 write_bundle_environment "${bundle_dir}" "${bundle_host_port}" \
     invoice_module invoice-module-test-only zelyra_invoice
 if ! grep -Fq 'ZELYRA_DATABASE_MAIN_URL=mariadb://invoice_module:invoice-module-test-only@mariadb:3306/zelyra_invoice' \
@@ -328,6 +379,8 @@ if ! curl --silent --show-error --fail "http://${bundle_address}/invoices" \
 fi
 assert_file_contains "${project_root}/bundled-module.html" 'INV-MODULE-ONLY' \
     "invoice CRUD data read with the invoice-only database user"
+assert_bundle_isolation "${bundle_dir}" "${bundle_compose_project}" "${bundle_host_port}" \
+    inventory invoice_module invoice-module-test-only zelyra_invoice.invoices zelyra_inventory.inventory
 if ! grep -Fq '"complete_deployment": false' "${bundle_dir}/zelyra.bundle.json"; then
     echo "error: experimental selected-module package overstated deployment completeness" >&2
     exit 1
@@ -398,6 +451,8 @@ fi
 assert_file_contains "${project_root}/bundled-inventory.html" \
     'SKU-MODULE-ONLY' \
     "inventory CRUD data read with the inventory-only database user"
+assert_bundle_isolation "${second_bundle_dir}" "${second_bundle_compose_project}" "${second_bundle_host_port}" \
+    invoices inventory_module inventory-module-test-only zelyra_inventory.inventory zelyra_invoice.invoices
 if ! grep -Fq '"complete_deployment": false' "${second_bundle_dir}/zelyra.bundle.json"; then
     echo "error: second experimental module package overstated deployment completeness" >&2
     exit 1

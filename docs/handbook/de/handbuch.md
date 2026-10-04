@@ -2085,6 +2085,10 @@ unvollständige Analyse unter `table_access_contract` aus.
 
 Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
 
+Die [Docker-Abnahme für Rechnungen und Inventar](../../module-docker-acceptance.de.md)
+zeigt den wiederholbaren Test der Gesamtanwendung und der beiden Einzelexporte,
+einschließlich eigener Zugangsdaten und negativer Berechtigungsprüfungen.
+
 ~~~sh
 zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
 ~~~
