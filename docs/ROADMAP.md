@@ -91,9 +91,10 @@ architecture requirement for every phase, not a provider-specific feature.
   fallback). The runtime still has one project-wide connection; this name
   mapping is not a reusable multi-database interface. Known
   page-to-view/component, page-SQL and
-  form/CRUD-action-SQL-to-table, API-handler-to-function, declaration type
-  references for APIs, function signatures, records, and type aliases,
-  protected-resource-to-authentication, authentication-to-table,
+  form/CRUD-action-SQL-to-table, API-handler-to-function, type references in
+  API fields, function signatures, records, and aliases (including aliases
+  referenced by table columns), protected-resource-to-authentication,
+  authentication-to-table,
   table-relation, and database-configuration edges, and reports references it
   cannot resolve. SQL-to-table edges additionally report conservative
   `read`, `write`, `read_write`, or `unknown` access modes; complex joined
@@ -706,7 +707,10 @@ PostgreSQL runtime parity or production readiness.
   dependency preview now follows named function calls in form and CRUD action
   bodies to their declarations and source modules; a multi-module integration
   test covers both cases. This expands known edges but does not establish
-  complete dependency analysis.
+  complete dependency analysis. Table columns now also link to named type
+  aliases, so selecting a schema module includes the alias declaration in its
+  known declaration closure; a multi-module regression test verifies the
+  resource edge and closure. This remains a statically recognized subset.
   staged-directory publication now uses atomic no-replace operations on Linux,
   macOS, and Windows, so a destination created during export cannot be
   overwritten; a regression test covers both the collision and successful

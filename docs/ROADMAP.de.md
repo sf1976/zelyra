@@ -104,7 +104,8 @@ Feature eines bestimmten Anbieters.
   von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
   Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
   Authentifizierung, Authentifizierung zu Tabellen sowie Typreferenzen aus
-  APIs, Funktionssignaturen, Records und Type Aliases, Tabellenrelationen und
+  APIs, Funktionssignaturen, Records und Type Aliases (einschließlich
+  Aliasverweisen aus Tabellenspalten), Tabellenrelationen und
   Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
   SQL-Tabellenkanten zeigen außerdem den konservativ erkannten Modus
   `read`, `write`, `read_write` oder `unknown`; komplexe verbundene
@@ -760,6 +761,10 @@ unterstellt.
   CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
   ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
   Kantenmenge, beweist aber keine vollständige Abhängigkeitsanalyse.
+  Tabellenspalten verweisen jetzt außerdem auf verwendete benannte Type Aliases;
+  dadurch nimmt die bekannte Deklarationsschließung beim Schema-Modul auch die
+  Aliasdeklaration auf. Ein Mehrmodul-Regressionstest prüft Ressourcen-Kante
+  und Schließung. Auch das bleibt eine statisch erkannte Teilmenge.
   Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
   macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
   Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch

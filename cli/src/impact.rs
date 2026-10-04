@@ -573,6 +573,20 @@ fn semantic_references(
         .iter()
         .map(|record| record.name.as_str())
         .collect::<HashSet<_>>();
+    for table in &program.tables {
+        let owner = format!("table:{}", table.name);
+        for column in &table.columns {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &column.ty,
+                &type_names,
+                &record_names,
+                column.span,
+                sources,
+            );
+        }
+    }
     for definition in &program.types {
         add_type_references(
             &mut references,

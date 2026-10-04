@@ -248,8 +248,9 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     let check = run(&bundle, &["check", "main.zyl", "--format=json"]);
     assert!(
         check.status.success(),
-        "{}",
-        String::from_utf8_lossy(&check.stdout)
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
     );
 
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -1494,6 +1495,60 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         dependency["kind"] == "database_configuration"
             && dependency["to_module"] == "src/database.zyl"
     }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn module_plan_tracks_types_used_by_table_columns() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/schema.zyl\" as schema\nfn main() {}\n",
+        ),
+        (
+            "src/schema.zyl",
+            "import \"src/types.zyl\" as types\ntable customers { id: Id primary auto code: types::CustomerCode required }\n",
+        ),
+        (
+            "src/types.zyl",
+            "pub type CustomerCode = Int\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stdout)
+    );
+    let output = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/schema.zyl"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let dependency = document["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|dependency| {
+            dependency["from"] == "table:customers"
+                && dependency["to"] == "type:src/types.zyl::CustomerCode"
+                && dependency["kind"] == "type"
+        })
+        .expect("table column type must be a semantic dependency");
+    assert_eq!(dependency["from_module"], "src/schema.zyl");
+    assert_eq!(dependency["to_module"], "src/types.zyl");
+    assert!(document["plan"]["declaration_closure"]["declarations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|declaration| declaration == "src/types.zyl::type:CustomerCode"));
+
     fs::remove_dir_all(directory).unwrap();
 }
 
