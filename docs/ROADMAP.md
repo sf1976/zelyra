@@ -86,9 +86,10 @@ architecture requirement for every phase, not a provider-specific feature.
   declaration closure from additional declarations in those files. This
   analysis is incomplete; `configuration_edges` reports database configuration
   separately, and `database.configurations` identifies the declared backend,
-  logical database name, source file, and current `DATABASE_URL` runtime
-  setting. The runtime still has one project-wide connection; this is not a
-  reusable named database interface. Known
+  logical database name, source file, and preferred
+  `ZELYRA_DATABASE_<NAME>_URL` runtime setting (`DATABASE_URL` remains a
+  fallback). The runtime still has one project-wide connection; this name
+  mapping is not a reusable multi-database interface. Known
   page-to-view/component, page-SQL and
   form/CRUD-action-SQL-to-table, API-handler-to-function, declaration type
   references for APIs, function signatures, records, and type aliases,

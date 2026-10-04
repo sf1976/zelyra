@@ -74,7 +74,7 @@ Nachholbefehl für bestehende MariaDB-Projekte verfügbar.
 
 Die erzeugte `.env` aktiviert nur die für Compose und lokale
 Datenbankbefehle notwendigen Werte. Der gewählte MariaDB-Host-Port bleibt
-aktiv, damit `DATABASE_URL` und Compose denselben Port verwenden.
+aktiv, damit `ZELYRA_DATABASE_MAIN_URL` und Compose denselben Port verwenden.
 Web-Portüberschreibungen, Feature-Schalter,
 Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
 `.env.example` enthält dieselbe Struktur, aber die Platzhalter
@@ -85,7 +85,8 @@ Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
 | `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container |
 | `ZELYRA_HOST_PORT` | `3000` | lokal veröffentlichter Webport |
 | `ZELYRA_DB_HOST_PORT` | `3306` | lokal veröffentlichter MariaDB-Port |
-| `DATABASE_URL` | projektabhängig | Datenbankverbindung für CLI/RUNTIME; Secret enthalten möglich |
+| `ZELYRA_DATABASE_MAIN_URL` | projektabhängig | bevorzugte Datenbankverbindung der Deklaration `database main`; Secret enthalten möglich |
+| `DATABASE_URL` | projektabhängig | rückwärtskompatibler Fallback für die Datenbankverbindung; Secret enthalten möglich |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer |
 | `MARIADB_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: Passwort des Anwendungsbenutzers |
@@ -269,11 +270,23 @@ Danach:
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 ```
 
-`DATABASE_URL` wird vom normalen `run`, `serve` und den `db`-/`auth`-/`audit`-
-Befehlen aus der Prozessumgebung gelesen. Die CLI lädt `.env` dafür nicht
-allgemein automatisch; entweder Compose injiziert die Variable oder sie wird
-vor dem Aufruf exportiert. `zelyra doctor --env-file <datei>` liest für seine
-read-only Prüfung gezielt `DATABASE_URL` aus der angegebenen Datei.
+Im unveröffentlichten 0.4-Entwicklungszweig verwendet eine Deklaration
+`database <name> { ... }` bevorzugt `ZELYRA_DATABASE_<NAME>_URL`; der Name wird
+für die Variable in Großbuchstaben umgewandelt und Nicht-Buchstaben/Ziffern
+werden zu `_`. Für `database main` lautet der Schlüssel also
+`ZELYRA_DATABASE_MAIN_URL`. Ist dieser Schlüssel nicht gesetzt, bleibt
+`DATABASE_URL` der rückwärtskompatible Fallback. Wenn beide gesetzt sind, hat
+der namensgebundene Schlüssel Vorrang. Eine gesetzte, leere Variable zählt als
+gesetzt und löst keinen Fallback aus.
+
+Normale `run`-, `serve`-, `db`-, `auth`- und `audit`-Befehle lesen diese Werte
+aus der Prozessumgebung. Die CLI lädt `.env` dafür nicht allgemein
+automatisch; Compose injiziert die Werte oder sie werden vor dem Aufruf
+exportiert. `zelyra doctor --env-file <datei>` sucht in dieser Reihenfolge in
+der angegebenen Datei: namensgebundener Schlüssel, dann `DATABASE_URL`.
+Zelyra-Server müssen mit den aktualisierten Prozesswerten neu gestartet
+werden. Die stabile Version 0.3.0 kennt die namensgebundenen Variablen noch
+nicht.
 
 ## MariaDB-Zeitlimits, Connection-Pool und TLS im 0.4-Entwicklungszweig
 

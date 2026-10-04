@@ -297,7 +297,15 @@ fi
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${bundle_compose_project}" \
-    -f "${bundle_dir}/docker-compose.yml" up --build --detach
+    -f "${bundle_dir}/docker-compose.yml" build --no-cache
+docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" up --no-build --detach
+if ! docker compose --project-name "${bundle_compose_project}" \
+    -f "${bundle_dir}/docker-compose.yml" exec -T app sh -c 'zelyra db --help 2>&1 || :' \
+    | grep -Fq 'ZELYRA_DATABASE_<NAME>_URL'; then
+    echo "error: invoice Docker image does not contain the pinned named-database CLI" >&2
+    exit 1
+fi
 database_container_id="$(docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps -q mariadb)"
@@ -361,7 +369,15 @@ fi
 docker compose --project-name "${second_bundle_compose_project}" \
     -f "${second_bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${second_bundle_compose_project}" \
-    -f "${second_bundle_dir}/docker-compose.yml" up --build --detach
+    -f "${second_bundle_dir}/docker-compose.yml" build --no-cache
+docker compose --project-name "${second_bundle_compose_project}" \
+    -f "${second_bundle_dir}/docker-compose.yml" up --no-build --detach
+if ! docker compose --project-name "${second_bundle_compose_project}" \
+    -f "${second_bundle_dir}/docker-compose.yml" exec -T app sh -c 'zelyra db --help 2>&1 || :' \
+    | grep -Fq 'ZELYRA_DATABASE_<NAME>_URL'; then
+    echo "error: inventory Docker image does not contain the pinned named-database CLI" >&2
+    exit 1
+fi
 docker network connect --alias mariadb \
     "${second_bundle_compose_project}_default" "${database_container_id}"
 second_bundle_address="127.0.0.1:${second_bundle_host_port}"
