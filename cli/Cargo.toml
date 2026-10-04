@@ -23,3 +23,6 @@ zelyra-parser.workspace = true
 zelyra-runtime.workspace = true
 zelyra-web.workspace = true
 zelyra-forms.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

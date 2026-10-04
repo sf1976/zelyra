@@ -745,7 +745,11 @@ unterstellt.
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
   modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
-  Derselbe unveröffentlichte Zweig unterstützt nun `pub view` und
+  Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
+  macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
+  Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch
+  die Veröffentlichung bei freiem Ziel.
+  Unabhängig davon unterstützt derselbe unveröffentlichte Zweig nun `pub view` und
   `pub component`; importierte Page-/CRUD-Layout-Verweise und erkannte
   Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML verlangen
   eine öffentliche Deklaration und einen ausdrücklichen Importpfad

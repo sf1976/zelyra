@@ -1333,6 +1333,7 @@ version = "0.3.0"
 name = "zelyra-cli"
 version = "0.3.0"
 dependencies = [
+ "libc",
  "rand_core",
  "rpassword",
  "semver",

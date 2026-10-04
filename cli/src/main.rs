@@ -3188,6 +3188,113 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
 
 type ModuleBundleFiles = (Vec<String>, Vec<String>, Vec<String>);
 
+fn publish_directory_no_replace(
+    staging: &std::path::Path,
+    output: &std::path::Path,
+) -> std::io::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let staging = std::ffi::CString::new(staging.as_os_str().as_bytes()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "staging path contains a NUL byte",
+            )
+        })?;
+        let output = std::ffi::CString::new(output.as_os_str().as_bytes()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "output path contains a NUL byte",
+            )
+        })?;
+        // renameat2 with RENAME_NOREPLACE is atomic and cannot replace a
+        // destination created after the earlier user-facing existence check.
+        let result = unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                staging.as_ptr(),
+                libc::AT_FDCWD,
+                output.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        };
+        return if result == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        };
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let staging = std::ffi::CString::new(staging.as_os_str().as_bytes()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "staging path contains a NUL byte",
+            )
+        })?;
+        let output = std::ffi::CString::new(output.as_os_str().as_bytes()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "output path contains a NUL byte",
+            )
+        })?;
+        // RENAME_EXCL gives renameatx_np the same no-replacement guarantee.
+        let result = unsafe {
+            libc::renameatx_np(
+                libc::AT_FDCWD,
+                staging.as_ptr(),
+                libc::AT_FDCWD,
+                output.as_ptr(),
+                libc::RENAME_EXCL,
+            )
+        };
+        return if result == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        };
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+
+        #[link(name = "Kernel32")]
+        extern "system" {
+            fn MoveFileW(existing_file_name: *const u16, new_file_name: *const u16) -> i32;
+        }
+
+        let staging = staging
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        let output = output
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        // MoveFileW fails when the destination already exists (unlike APIs
+        // that request MOVEFILE_REPLACE_EXISTING).
+        let result = unsafe { MoveFileW(staging.as_ptr(), output.as_ptr()) };
+        return if result != 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        };
+    }
+
+    #[allow(unreachable_code)]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "atomic no-replace directory publication is unsupported on this platform",
+    ))
+}
+
 fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     let (Some(entry), Some(selected)) = (arguments.next(), arguments.next()) else {
         usage();
@@ -3659,9 +3766,16 @@ ZELYRA_DB_TLS_MODE=auto
                 );
                 return ExitCode::from(1);
             }
-            if let Err(error) = fs::rename(&staging, &output) {
+            if let Err(error) = publish_directory_no_replace(&staging, &output) {
                 let _ = fs::remove_dir_all(&staging);
-                eprintln!("error[E-MOD-018]: cannot publish source bundle: {error}");
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    eprintln!(
+                        "error[E-MOD-018]: output `{}` appeared during bundle creation; it was not changed",
+                        output.display()
+                    );
+                } else {
+                    eprintln!("error[E-MOD-018]: cannot publish source bundle: {error}");
+                }
                 return ExitCode::from(1);
             }
             println!(
@@ -10711,6 +10825,49 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios",
+        windows
+    ))]
+    #[test]
+    fn bundle_publish_never_replaces_an_existing_empty_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "zelyra-bundle-no-replace-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let staging = root.join("staging");
+        let output = root.join("output");
+        fs::create_dir_all(&staging).unwrap();
+        fs::create_dir(&output).unwrap();
+        fs::write(staging.join("bundle.txt"), "staged bundle").unwrap();
+
+        let error = publish_directory_no_replace(&staging, &output)
+            .expect_err("existing destination must not be replaced");
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_to_string(staging.join("bundle.txt")).unwrap(),
+            "staged bundle"
+        );
+
+        fs::remove_dir(&output).unwrap();
+        publish_directory_no_replace(&staging, &output)
+            .expect("a missing destination should accept the complete staged directory");
+        assert_eq!(
+            fs::read_to_string(output.join("bundle.txt")).unwrap(),
+            "staged bundle"
+        );
+        assert!(!staging.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn database_environment_names_are_derived_from_database_declarations() {

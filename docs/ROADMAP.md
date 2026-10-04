@@ -692,7 +692,11 @@ PostgreSQL runtime parity or production readiness.
   records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
   database interface, and full 0.5.0 acceptance remain open. The same
-  unreleased branch now supports `pub view` and `pub component`; imported
+  staged-directory publication now uses atomic no-replace operations on Linux,
+  macOS, and Windows, so a destination created during export cannot be
+  overwritten; a regression test covers both the collision and successful
+  publication cases. Separately, the unreleased branch now supports `pub view`
+  and `pub component`; imported
   page/CRUD layout references and recognized component tags in page, view,
   component, and CRUD slot HTML require a public declaration plus an explicit
   import path (`E-MOD-007` / `E-MOD-020`). This is a tested visibility
