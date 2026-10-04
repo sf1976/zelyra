@@ -2,7 +2,7 @@ use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     env,
     fmt::Write as _,
     fs,
@@ -2794,24 +2794,25 @@ fn empty_context_declarations() -> Value {
     })
 }
 
-fn context_modules() -> Value {
-    PROJECT_MODULES.with(|modules| {
-        json!(modules
-            .borrow()
-            .iter()
-            .map(|module| json!({
-                "path": module.path,
-                "imports": module.imports.iter().map(|import| json!({
-                    "alias": import.alias,
-                    "path": import.path
-                })).collect::<Vec<_>>(),
-                "exports": module.exports.iter().map(|export| json!({
-                    "kind": export.kind,
-                    "name": export.name
-                })).collect::<Vec<_>>()
-            }))
-            .collect::<Vec<_>>())
-    })
+fn context_modules() -> Vec<project::ProjectModule> {
+    PROJECT_MODULES.with(|modules| modules.borrow().clone())
+}
+
+fn context_modules_json(modules: &[project::ProjectModule]) -> Value {
+    json!(modules
+        .iter()
+        .map(|module| json!({
+            "path": module.path,
+            "imports": module.imports.iter().map(|import| json!({
+                "alias": import.alias,
+                "path": import.path
+            })).collect::<Vec<_>>(),
+            "exports": module.exports.iter().map(|export| json!({
+                "kind": export.kind,
+                "name": export.name
+            })).collect::<Vec<_>>()
+        }))
+        .collect::<Vec<_>>())
 }
 
 fn module_declaration_owners(program: &zelyra_ast::Program) -> HashMap<String, String> {
@@ -4039,6 +4040,12 @@ fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         |_| empty_context_declarations(),
         |program| context_declarations(program, &source),
     );
+    let project_modules = context_modules();
+    let modules = context_modules_json(&project_modules);
+    let database = program.as_ref().map_or_else(
+        |_| empty_database_context(),
+        |program| database_context(program, &project_modules),
+    );
     let fields = [
         (
             "project".into(),
@@ -4048,7 +4055,8 @@ fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             }),
         ),
         ("declarations".into(), declarations),
-        ("modules".into(), context_modules()),
+        ("modules".into(), modules),
+        ("database".into(), database),
     ];
     print_machine_document(&machine_document("context", success, diagnostics, fields));
     if success {
@@ -4056,6 +4064,109 @@ fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     } else {
         ExitCode::from(1)
     }
+}
+
+fn empty_database_context() -> Value {
+    json!({
+        "required": false,
+        "connection_model": "single-project-wide-connection",
+        "supports_multiple_connections": false,
+        "configuration": null,
+        "consumers": [],
+        "fallback_connection_environment": null,
+        "credentials_included": false
+    })
+}
+
+fn database_context(program: &zelyra_ast::Program, modules: &[project::ProjectModule]) -> Value {
+    let owners = module_declaration_owners(program);
+    let provider = program.databases.first().map(|database| {
+        let declaration = format!("database:{}", database.name);
+        json!({
+            "declaration": declaration,
+            "module": owners.get(&declaration),
+            "name": database.name,
+            "engine": database.engine,
+            "database": database.database,
+            "connection_environment": database_url_environment_name(&database.name),
+            "fallback_connection_environment": "DATABASE_URL"
+        })
+    });
+    let provider_module = program
+        .databases
+        .first()
+        .and_then(|database| owners.get(&format!("database:{}", database.name)));
+    let mut module_definitions = modules.to_vec();
+    module_definitions.sort_by(|left, right| left.path.cmp(&right.path));
+    let consumers = module_definitions
+        .iter()
+        .filter(|module| module_uses_database(program, &module.path, &owners))
+        .map(|module| {
+            let path = &module.path;
+            let resolution = provider_module.map_or("legacy_project_environment", |provider| {
+                if path == provider {
+                    "provider_module"
+                } else {
+                    match module_import_distance(&module_definitions, path, provider) {
+                        Some(1) => "direct_import",
+                        Some(_) => "transitive_import",
+                        None => "unresolved",
+                    }
+                }
+            });
+            json!({
+                "module": path,
+                "provider_module": provider_module,
+                "connection_environment": program.databases.first()
+                    .map(|database| database_url_environment_name(&database.name))
+                    .unwrap_or_else(|| "DATABASE_URL".to_owned()),
+                "fallback_connection_environment": program
+                    .databases
+                    .first()
+                    .map(|_| "DATABASE_URL"),
+                "resolution": resolution
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "required": !consumers.is_empty(),
+        "connection_model": "single-project-wide-connection",
+        "supports_multiple_connections": false,
+        "configuration": provider,
+        "consumers": consumers,
+        "fallback_connection_environment": program
+            .databases
+            .first()
+            .map(|_| "DATABASE_URL"),
+        "credentials_included": false
+    })
+}
+
+fn module_import_distance(
+    modules: &[project::ProjectModule],
+    start: &str,
+    target: &str,
+) -> Option<usize> {
+    let mut pending = VecDeque::from([(start.to_owned(), 0_usize)]);
+    let mut visited = HashSet::new();
+    while let Some((path, distance)) = pending.pop_front() {
+        if !visited.insert(path.clone()) {
+            continue;
+        }
+        if path == target {
+            return Some(distance);
+        }
+        if let Some(module) = modules.iter().find(|module| module.path == path) {
+            pending.extend(
+                module
+                    .imports
+                    .iter()
+                    .map(|import| (import.path.clone(), distance + 1)),
+            );
+        }
+    }
+    None
 }
 
 fn feature_settings_json(features: &ProjectFeatures) -> Value {

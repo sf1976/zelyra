@@ -690,7 +690,11 @@ PostgreSQL runtime parity or production readiness.
   unknown SQL forms remain unchecked. Database-consuming modules must also
   directly or transitively import the provider (`E-MOD-022`); an entry-only
   import is not inherited. An entry-local declaration must move to an
-  importable module. The MariaDB project generator now places
+  importable module. `context --format=json` now lists the provider, each
+  database-consuming module, its direct/transitive binding, and the runtime
+  variable and actual `DATABASE_URL` fallback without exposing credentials.
+  Runtime remains one connection per process; this is introspection, not
+  routing. The MariaDB project generator now places
   the database declaration in
   `src/database.zyl` and imports it from `main.zyl`; this is source separation,
   not multiple independently configurable connections. The

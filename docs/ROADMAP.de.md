@@ -744,7 +744,11 @@ unterstellt.
   ungeprüft. Datenbanknutzende Module müssen den Provider außerdem direkt oder
   transitiv importieren (`E-MOD-022`); ein Import nur im Einstieg wird nicht
   vererbt. Eine Einstiegskonfiguration muss dafür in ein importierbares Modul
-  verschoben werden. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
+  verschoben werden. `context --format=json` weist Provider, DB-Verbraucher,
+  direkte/transitive Bindung und Verbindungsvariable samt tatsächlichem
+  `DATABASE_URL`-Fallback ohne Zugangsdaten aus. Die Laufzeit nutzt weiterhin
+  eine Verbindung pro Prozess; das ist Auskunft, kein Routing. Der
+  MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
   in `src/database.zyl` ab und importiert sie aus `main.zyl`; das trennt nur
   die Quelle, nicht mehrere unabhängig konfigurierbare Verbindungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle

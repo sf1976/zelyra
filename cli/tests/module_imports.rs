@@ -793,6 +793,130 @@ fn context_exposes_the_transitive_module_graph_deterministically() {
 }
 
 #[test]
+fn context_reports_database_provider_bindings_without_exposing_credentials() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/billing.zyl\" as billing\nimport \"src/report.zyl\" as report\nfn main() {}\n",
+        ),
+        (
+            "src/billing.zyl",
+            "import \"src/storage.zyl\" as storage\ntable invoices { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM invoices } return 0 }\n",
+        ),
+        (
+            "src/storage.zyl",
+            "import \"src/database.zyl\" as dbconfig\n",
+        ),
+        (
+            "src/report.zyl",
+            "import \"src/database.zyl\" as dbconfig\ntable reports { id: Id primary auto }\npub fn report_count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"accounting\" }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"context-database\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+
+    let context = run(&directory, &["context", "main.zyl", "--format=json"]);
+    let repeated = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        context.status.success(),
+        "{}",
+        String::from_utf8_lossy(&context.stdout)
+    );
+    assert_eq!(context.stdout, repeated.stdout);
+    let document: Value = serde_json::from_slice(&context.stdout).unwrap();
+    assert_eq!(
+        document["database"]["configuration"],
+        serde_json::json!({
+            "declaration": "database:main",
+            "module": "src/database.zyl",
+            "name": "main",
+            "engine": "mariadb",
+            "database": "accounting",
+            "connection_environment": "ZELYRA_DATABASE_MAIN_URL",
+            "fallback_connection_environment": "DATABASE_URL"
+        })
+    );
+    assert_eq!(
+        document["database"]["consumers"],
+        serde_json::json!([
+            {
+                "module": "src/billing.zyl",
+                "provider_module": "src/database.zyl",
+                "connection_environment": "ZELYRA_DATABASE_MAIN_URL",
+                "fallback_connection_environment": "DATABASE_URL",
+                "resolution": "transitive_import"
+            },
+            {
+                "module": "src/report.zyl",
+                "provider_module": "src/database.zyl",
+                "connection_environment": "ZELYRA_DATABASE_MAIN_URL",
+                "fallback_connection_environment": "DATABASE_URL",
+                "resolution": "direct_import"
+            }
+        ])
+    );
+    assert_eq!(document["database"]["supports_multiple_connections"], false);
+    assert_eq!(document["database"]["credentials_included"], false);
+    assert_eq!(
+        document["database"]["fallback_connection_environment"],
+        "DATABASE_URL"
+    );
+    assert!(!String::from_utf8_lossy(&context.stdout).contains("PASSWORD"));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn context_marks_legacy_database_url_when_no_provider_is_declared() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/reports.zyl\" as reports\nfn main() {}\n",
+        ),
+        (
+            "src/reports.zyl",
+            "table reports { id: Id primary auto }\npub fn report_count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM reports } return 0 }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"context-legacy-database\"\nversion = \"0.3.0\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+
+    let output = run(&directory, &["context", "main.zyl", "--format=json"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["database"]["required"], true);
+    assert_eq!(document["database"]["configuration"], Value::Null);
+    assert_eq!(
+        document["database"]["consumers"],
+        serde_json::json!([{
+            "module": "src/reports.zyl",
+            "provider_module": null,
+            "connection_environment": "DATABASE_URL",
+            "fallback_connection_environment": null,
+            "resolution": "legacy_project_environment"
+        }])
+    );
+    assert_eq!(document["database"]["credentials_included"], false);
+    assert_eq!(
+        document["database"]["fallback_connection_environment"],
+        Value::Null
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
     let directory = project(&[
         (

@@ -1649,7 +1649,16 @@ fn context_exposes_safe_structural_project_information() {
         .unwrap()
         .iter()
         .any(|crud| crud["table"] == "customers"));
-    assert!(!String::from_utf8_lossy(&output.stdout).contains("DATABASE_URL"));
+    assert_eq!(
+        document["database"]["connection_model"],
+        "single-project-wide-connection"
+    );
+    assert_eq!(
+        document["database"]["consumers"][0]["connection_environment"],
+        "DATABASE_URL"
+    );
+    assert_eq!(document["database"]["credentials_included"], false);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("mariadb://"));
 }
 
 #[test]

@@ -8396,7 +8396,16 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 It reports declared functions, tables, SQL queries, CRUD resources, forms, APIs,
-and source spans.
+and source spans. In the experimental 0.4 development branch, `database` also
+reports the database declaration, its owning provider module, and the direct
+or transitive import binding for each database consumer. It exposes only the
+environment-variable name, such as `ZELYRA_DATABASE_MAIN_URL`—never the
+connection value or password. For a named database, the report also identifies
+`DATABASE_URL` as the fallback accepted by the runtime. Without a `database`
+declaration, `DATABASE_URL` is the primary variable; the binding is marked
+`legacy_project_environment` and `configuration` remains `null`. The report
+explicitly describes one connection per process; it does not enable
+multi-database routing.
 
 #### Deterministic impact analysis
 

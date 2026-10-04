@@ -8488,7 +8488,18 @@ zelyra context examples/auth_crud_api.zyl --format=json
 ~~~
 
 Sie meldet deklarierte Funktionen, Tabellen, SQL-Abfragen, CRUD-Ressourcen,
-Formulare, APIs und Source-Spans.
+Formulare, APIs und Source-Spans. Im experimentellen 0.4-Entwicklungsstand
+enthält `database` außerdem die Datenbankdeklaration, das besitzende
+Provider-Modul und je datenbanknutzendem Modul dessen direkte oder transitive
+Importbindung. Sichtbar ist nur der Name der Umgebungsvariablen, etwa
+`ZELYRA_DATABASE_MAIN_URL` – niemals der Verbindungswert oder ein Passwort.
+Bei einer benannten Datenbank weist `fallback_connection_environment` zusätzlich
+auf den von der Laufzeit akzeptierten Fallback `DATABASE_URL` hin. Gibt es keine
+`database`-Deklaration, ist `DATABASE_URL` die primäre Variable; der Kontext
+kennzeichnet die Bindung als `legacy_project_environment` und lässt
+`configuration` auf `null`.
+Der Bericht weist ausdrücklich eine Verbindung pro Prozess aus; er aktiviert
+kein Routing mehrerer Datenbanken.
 
 #### Deterministische Wirkungsanalyse
 
