@@ -764,7 +764,10 @@ unterstellt.
   Tabellenspalten verweisen jetzt außerdem auf verwendete benannte Type Aliases;
   dadurch nimmt die bekannte Deklarationsschließung beim Schema-Modul auch die
   Aliasdeklaration auf. Ein Mehrmodul-Regressionstest prüft Ressourcen-Kante
-  und Schließung. Auch das bleibt eine statisch erkannte Teilmenge.
+  und Schließung. Typisierte Felder von Formularen, Formularaktionen und CRUD-
+  Aktionen verweisen jetzt ebenfalls auf ihre benannten Type Aliases; ein
+  Integrationstest prüft Formular- und CRUD-Ressourcenpläne. Auch dies bleibt
+  eine statisch erkannte Teilmenge.
   Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
   macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
   Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch

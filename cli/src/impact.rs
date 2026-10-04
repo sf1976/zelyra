@@ -612,6 +612,42 @@ fn semantic_references(
             );
         }
     }
+    for form in &program.forms {
+        let owner = format!("form:{}", form.name);
+        for field in form
+            .fields
+            .iter()
+            .chain(form.actions.iter().flat_map(|action| action.fields.iter()))
+        {
+            if let Some(ty) = &field.ty {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    ty,
+                    &type_names,
+                    &record_names,
+                    field.span,
+                    sources,
+                );
+            }
+        }
+    }
+    for crud in &program.cruds {
+        let owner = format!("crud:{}", crud.name);
+        for field in crud.actions.iter().flat_map(|action| action.fields.iter()) {
+            if let Some(ty) = &field.ty {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    ty,
+                    &type_names,
+                    &record_names,
+                    field.span,
+                    sources,
+                );
+            }
+        }
+    }
     for function in &program.functions {
         let owner = format!("function:{}", function.name);
         for parameter in &function.params {

@@ -710,7 +710,10 @@ PostgreSQL runtime parity or production readiness.
   complete dependency analysis. Table columns now also link to named type
   aliases, so selecting a schema module includes the alias declaration in its
   known declaration closure; a multi-module regression test verifies the
-  resource edge and closure. This remains a statically recognized subset.
+  resource edge and closure. Typed fields on forms, form actions, and CRUD
+  actions now link to their named type aliases as well; an integration test
+  checks both form and CRUD resource plans. This remains a statically recognized
+  subset.
   staged-directory publication now uses atomic no-replace operations on Linux,
   macOS, and Windows, so a destination created during export cannot be
   overwritten; a regression test covers both the collision and successful

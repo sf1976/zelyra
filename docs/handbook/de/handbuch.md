@@ -1994,8 +1994,10 @@ Importen sowie den Verweisen, die der statische Wirkungsgraph derzeit erkennt.
 Dazu gehören bekannte Verweise von Seiten zu Views und Komponenten, von
 Page-SQL und Formular-/CRUD-Aktions-SQL zu Tabellen, von API-Handlern zu
 Funktionen, benannte Funktionsaufrufe in Formular-/CRUD-Aktionen zu ihren
-Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records und
-Type Aliases, von geschützten Ressourcen zur Authentifizierung, von
+Funktionen, Typreferenzen aus API-Feldern, Funktionssignaturen, Records,
+Type Aliases, Tabellenspalten sowie typisierten Feldern von Formularen,
+Formularaktionen und CRUD-Aktionen, von geschützten Ressourcen zur
+Authentifizierung, von
 Authentifizierung zu Tabellen, erkannte Tabellenrelationen und
 Datenbankkonfiguration. `database.configurations` macht die im Abschluss
 liegenden Deklarationen mit Backend, logischem Datenbanknamen, Quelldatei und

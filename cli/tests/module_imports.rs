@@ -1553,6 +1553,74 @@ fn module_plan_tracks_types_used_by_table_columns() {
 }
 
 #[test]
+fn module_plan_tracks_types_used_by_form_and_crud_fields() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_admin.zyl\" as admin\nfn main() {}\n",
+        ),
+        (
+            "src/customer_admin.zyl",
+            "import \"src/types.zyl\" as types\nform CustomerSearch { field code: types::SearchCode { label: \"Code\" } action refine { field minimum: types::MinimumCode { label: \"Minimum\" } } }\ntable customers { id: Id primary auto code: Int }\ncrud Customer -> customers { action reset_code { field code: types::ResetCode { label: \"Code\" } sql { UPDATE customers SET code = :code } } }\n",
+        ),
+        (
+            "src/types.zyl",
+            "pub type SearchCode = Int\npub type MinimumCode = Int\npub type ResetCode = Int\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    for (resource, aliases) in [
+        (
+            "form:CustomerSearch",
+            ["SearchCode", "MinimumCode"].as_slice(),
+        ),
+        ("crud:Customer", ["ResetCode"].as_slice()),
+    ] {
+        let output = run(&directory, &["module", "plan", "main.zyl", resource]);
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let dependencies = document["plan"]["resource_dependencies"]
+            .as_array()
+            .unwrap();
+        let declarations = document["plan"]["declaration_closure"]["declarations"]
+            .as_array()
+            .unwrap();
+        for alias in aliases {
+            let target = format!("type:src/types.zyl::{alias}");
+            let dependency = dependencies
+                .iter()
+                .find(|dependency| {
+                    dependency["from"] == resource
+                        && dependency["to"] == target
+                        && dependency["kind"] == "type"
+                })
+                .unwrap_or_else(|| panic!("{resource} must depend on field type {alias}"));
+            assert_eq!(dependency["from_module"], "src/customer_admin.zyl");
+            assert_eq!(dependency["to_module"], "src/types.zyl");
+            let expected_declaration = format!("src/types.zyl::type:{alias}");
+            assert!(declarations
+                .iter()
+                .any(|declaration| declaration.as_str() == Some(expected_declaration.as_str())));
+        }
+    }
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_composes_imported_api_routes_and_authentication_configuration() {
     let directory = project(&[
         (
