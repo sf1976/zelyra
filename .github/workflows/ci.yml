@@ -2,7 +2,9 @@ name: Zelyra CI
 
 on:
   push:
-    branches: [main, 'feature/**']
+    # Feature branches are checked through pull_request (including drafts).
+    # Avoid running the same full database/Docker matrix twice per push.
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
