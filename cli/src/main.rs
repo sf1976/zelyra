@@ -3422,12 +3422,18 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 return Err("refusing to copy a symlinked locales directory".into());
             }
             Ok(metadata) if metadata.is_dir() => {
-                for item in fs::read_dir(&locales)
+                let mut locale_files = fs::read_dir(&locales)
                     .map_err(|error| format!("cannot read locales directory: {error}"))?
-                {
-                    let item =
-                        item.map_err(|error| format!("cannot read locale entry: {error}"))?;
-                    let name = item.file_name().to_string_lossy().into_owned();
+                    .map(|item| {
+                        let item =
+                            item.map_err(|error| format!("cannot read locale entry: {error}"))?;
+                        item.file_name()
+                            .into_string()
+                            .map_err(|_| "locale filenames must be valid UTF-8".to_owned())
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                locale_files.sort_unstable();
+                for name in locale_files {
                     if !name.ends_with(".json") {
                         continue;
                     }

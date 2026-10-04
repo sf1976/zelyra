@@ -727,8 +727,10 @@ unterstellt.
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
   geheimnisfreies `.env.example`; `--dry-run` liefert außerdem eine
   deterministische JSON-Dateiliste der geplanten Ausgaben, ohne das angeforderte
-  Ziel anzulegen; das temporäre Testpaket wird geprüft und entfernt. Ein
-  eigenständiger Container-Smoke-Test für eine importierte Route ist grün. Die
+  Ziel anzulegen; das temporäre Testpaket wird geprüft und entfernt. Locale-
+  JSON-Dateien werden im Manifest sortiert; ein Wiederholungstest bestätigt
+  byte-identische Dateien zweier Exporte desselben Bundles. Ein eigenständiger
+  Container-Smoke-Test für eine importierte Route ist grün. Die
   exportierte Anwendung erhält ihre
   `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Der Compiler
   lehnt erkannte modulübergreifende Tabellenverweise ohne erreichbaren

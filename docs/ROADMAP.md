@@ -675,7 +675,9 @@ PostgreSQL runtime parity or production readiness.
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
   `--dry-run` also returns a deterministic JSON inventory of intended output
   paths without creating the requested destination; the temporary candidate
-  package is checked and removed. A separate-container smoke test for an
+  package is checked and removed. Locale JSON files are sorted in the manifest,
+  and a repeated-export integration test verifies byte-identical bundle files.
+  A separate-container smoke test for an
   imported route passes. Each exported
   app receives its own `DATABASE_URL`, while MariaDB remains external. The
   compiler also rejects recognized cross-module table references without an

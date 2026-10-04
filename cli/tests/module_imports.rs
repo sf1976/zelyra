@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -30,6 +31,32 @@ fn run(directory: &Path, arguments: &[&str]) -> std::process::Output {
         .args(arguments)
         .output()
         .unwrap()
+}
+
+fn directory_snapshot(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn collect(root: &Path, directory: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
+        let mut entries = fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                collect(root, &path, files);
+            } else {
+                let relative = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                files.insert(relative, fs::read(path).unwrap());
+            }
+        }
+    }
+
+    let mut files = BTreeMap::new();
+    collect(root, root, &mut files);
+    files
 }
 
 fn get_until_response(address: &str, request: &[u8]) -> String {
@@ -522,6 +549,60 @@ fn module_bundle_dry_run_lists_every_output_without_creating_the_target() {
             "Docker plan omitted {expected}: {docker_files:#?}"
         );
     }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn repeated_module_bundles_are_byte_identical_with_locale_files() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nfn main() {}\n",
+        ),
+        (
+            "src/pages.zyl",
+            "page \"/invoices\" { html { <h1>Invoices</h1> } }\n",
+        ),
+        ("locales/zz.json", "{\"title\":\"Last\"}\n"),
+        ("locales/en.json", "{\"title\":\"Invoices\"}\n"),
+        ("locales/de.json", "{\"title\":\"Rechnungen\"}\n"),
+    ]);
+    let first_bundle = directory.with_extension("deterministic-bundle-a");
+    let second_bundle = directory.with_extension("deterministic-bundle-b");
+    let first_path = first_bundle.to_string_lossy().into_owned();
+    let second_path = second_bundle.to_string_lossy().into_owned();
+
+    for output in [&first_path, &second_path] {
+        let result = run(
+            &directory,
+            &[
+                "module",
+                "bundle",
+                "main.zyl",
+                "src/pages.zyl",
+                "--output",
+                output,
+            ],
+        );
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    let first = directory_snapshot(&first_bundle);
+    let second = directory_snapshot(&second_bundle);
+    assert_eq!(first, second);
+    let manifest: Value = serde_json::from_slice(&first["zelyra.bundle.json"]).unwrap();
+    assert_eq!(
+        manifest["support_files"],
+        serde_json::json!(["locales/de.json", "locales/en.json", "locales/zz.json"])
+    );
+
+    fs::remove_dir_all(first_bundle).unwrap();
+    fs::remove_dir_all(second_bundle).unwrap();
     fs::remove_dir_all(directory).unwrap();
 }
 
