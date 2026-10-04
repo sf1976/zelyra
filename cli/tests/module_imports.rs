@@ -1878,6 +1878,49 @@ crud Customer -> customers {
 }
 
 #[test]
+fn imported_crud_can_use_public_layout_and_component_from_transitive_imports() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/admin.zyl\" as admin\nfn main() {}\n",
+        ),
+        (
+            "src/admin.zyl",
+            r#"import "src/models.zyl" as models
+import "src/shells.zyl" as shells
+crud Customer -> customers {
+    layout: CustomerShell
+    slots {
+        header {
+            html { <CustomerBadge label="Customers" /> }
+        }
+    }
+}
+"#,
+        ),
+        (
+            "src/models.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/shells.zyl",
+            "import \"src/ui.zyl\" as ui\npub view CustomerShell { html { <main><slot name=\"header\" /><slot /></main> } }\n",
+        ),
+        (
+            "src/ui.zyl",
+            "pub component CustomerBadge { props { label: String } html { <strong>{label}</strong> } }\n",
+        ),
+    ]);
+    let result = run(&directory, &["check", "main.zyl"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn imported_pages_are_type_checked_and_served_as_application_routes() {
     let directory = project(&[
         (
