@@ -590,8 +590,10 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
         assert!(!bundle.join(".env").exists());
 
         let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
-        assert!(env_example.contains("DATABASE_URL="));
-        assert!(env_example.lines().any(|line| line == "DATABASE_URL="));
+        assert!(env_example.contains("ZELYRA_DATABASE_MAIN_URL="));
+        assert!(env_example
+            .lines()
+            .any(|line| line == "ZELYRA_DATABASE_MAIN_URL="));
         let dockerfile = fs::read_to_string(bundle.join("Dockerfile")).unwrap();
         assert!(dockerfile.contains("ca-certificates mariadb-client"));
         let manifest: Value =
@@ -599,7 +601,7 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
         assert_eq!(manifest["database"]["required"], true);
         assert_eq!(
             manifest["database"]["connection_environment"],
-            "DATABASE_URL"
+            "ZELYRA_DATABASE_MAIN_URL"
         );
         assert_eq!(
             manifest["database"]["connection_model"],
@@ -881,7 +883,7 @@ fn module_plan_includes_separate_database_configuration_source() {
             "module": "src/database.zyl",
             "engine": "mariadb",
             "database": "invoices",
-            "connection_environment": "DATABASE_URL"
+            "connection_environment": "ZELYRA_DATABASE_MAIN_URL"
         }])
     );
     assert_eq!(

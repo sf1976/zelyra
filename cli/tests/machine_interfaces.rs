@@ -291,7 +291,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(compose.contains("${ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}"));
     assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
-    assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(env_file.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
@@ -762,7 +762,9 @@ fn init_creates_a_ready_commented_mariadb_env() {
         env_file
             .find(&format!("ZELYRA_DB_HOST_PORT={database_host_port}"))
             .unwrap()
-            < env_file.find("DATABASE_URL=mariadb://").unwrap()
+            < env_file
+                .find("ZELYRA_DATABASE_MAIN_URL=mariadb://")
+                .unwrap()
     );
     assert!(!env_file
         .lines()
@@ -1020,7 +1022,7 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
             .unwrap()
     ));
     assert!(!contents.contains("change-me"));
-    assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(contents.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(contents.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
     assert!(contents.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
     assert!(contents.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
@@ -1133,7 +1135,7 @@ fn setup_selects_free_ports_for_a_new_local_environment() {
     fs::write(
         directory.join(".env.example"),
         format!(
-            "ZELYRA_DB_HOST_PORT={requested_database_port}\nDATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n# ZELYRA_HOST_PORT={requested_web_port}\n"
+            "ZELYRA_DB_HOST_PORT={requested_database_port}\nZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n# ZELYRA_HOST_PORT={requested_web_port}\n"
         ),
     )
     .unwrap();

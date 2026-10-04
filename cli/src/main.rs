@@ -128,7 +128,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -281,7 +281,7 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 ZELYRA_DB_TLS_MODE=disabled
 # Optional absolute CA path, readable inside the Zelyra container/process.
 # ZELYRA_DB_TLS_CA_CERT_FILE=
-DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
+ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me
@@ -387,7 +387,7 @@ fn prepared_local_env_template(
         && !template.contains("${ZELYRA_DB_HOST_PORT")
     {
         return Err(
-            "cannot safely select a MariaDB port because DATABASE_URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
+            "cannot safely select a MariaDB port because the database URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
                 .into(),
         );
     }
@@ -406,6 +406,12 @@ fn render_local_env(template: &str) -> Result<String, String> {
     let database_password = generate_local_secret()?;
     let root_password = generate_local_secret()?;
     Ok(template
+        .replace(
+            "ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/zelyra_app",
+            &format!(
+                "ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:{database_password}@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app"
+            ),
+        )
         .replace(
             "DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/zelyra_app",
             &format!(
@@ -671,6 +677,7 @@ console = false
     build: .
     command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     environment:
+      ZELYRA_DATABASE_MAIN_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
@@ -3059,7 +3066,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                                     "module": module_path,
                                     "engine": database.engine,
                                     "database": database.database,
-                                    "connection_environment": "DATABASE_URL"
+                                    "connection_environment": database_url_environment_name(&database.name)
                                 }),
                             )
                         })
@@ -3139,7 +3146,9 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "configuration_sources": database_configuration_sources,
                         "configurations": database_configurations.values().collect::<Vec<_>>(),
                         "connection_model": "single-project-wide-connection",
-                        "connection_environment": "DATABASE_URL",
+                        "connection_environment": program.databases.first()
+                            .map(|database| database_url_environment_name(&database.name))
+                            .unwrap_or_else(|| "DATABASE_URL".to_owned()),
                         "supports_multiple_connections": false
                     },
                     "complete_deployment": false,
@@ -3459,6 +3468,10 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
         } else {
             vec!["ca-certificates"]
         };
+        let connection_environment = configured_backends
+            .first()
+            .and_then(|configuration| configuration["connection_environment"].as_str())
+            .unwrap_or("DATABASE_URL");
         if docker {
             let compiler_ref = compiler_ref.as_deref().expect("validated compiler ref");
             let dockerfile = format!(
@@ -3496,13 +3509,14 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:8080"]
     ports:
       - "127.0.0.1:${ZELYRA_HOST_PORT:-18080}:8080"
 "#;
-            let env_example = r#"# Copy this file to .env and configure values for this deployment.
+            let env_example = format!(
+                r#"# Copy this file to .env and configure values for this deployment.
 # Never commit .env or put production credentials in this example.
 ZELYRA_HOST_PORT=18080
 # Required only when the selected application accesses a database.
-# Set DATABASE_URL to your MariaDB connection; never commit its real password.
-# DATABASE_URL=mariadb://USER:PASSWORD@host.docker.internal:3306/DATABASE
-DATABASE_URL=
+# Set {connection_environment} to your MariaDB connection; never commit its real password.
+# {connection_environment}=mariadb://USER:PASSWORD@host.docker.internal:3306/DATABASE
+{connection_environment}=
 ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
 ZELYRA_DB_QUERY_TIMEOUT_SECS=30
 ZELYRA_DB_POOL_MAX_SIZE=8
@@ -3510,7 +3524,8 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 # Remote database connections use verified TLS automatically.
 ZELYRA_DB_TLS_MODE=auto
 # ZELYRA_DB_TLS_CA_CERT_FILE=/absolute/path/to/your/database-ca.pem
-"#;
+"#
+            );
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
             for (name, contents) in [
                 ("Dockerfile", dockerfile),
@@ -3541,7 +3556,7 @@ ZELYRA_DB_TLS_MODE=auto
                     "compiler_commit": compiler_ref,
                     "files": docker_files,
                     "runtime_packages": runtime_package_manifest,
-                    "database_connection": "external, configured per exported Compose project via DATABASE_URL",
+                    "database_connection": format!("external, configured per exported Compose project via {}", database["connection_environment"].as_str().unwrap_or("DATABASE_URL")),
                     "database_connection_scope": "per_exported_compose_project",
                     "supports_multiple_connections_per_process": false
                 })
@@ -3563,9 +3578,9 @@ ZELYRA_DB_TLS_MODE=auto
         )
         .map_err(|error| format!("cannot write bundle manifest: {error}"))?;
         let readme = if docker {
-            "# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `DATABASE_URL` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n"
+            format!("# Experimental Zelyra Docker package\n\nThis package contains the selected known source closure and a Docker Compose app service. It is experimental, not a verified complete deployment; inspect `zelyra.bundle.json` (`complete_deployment: false`). The Dockerfile builds Zelyra from the exact compiler commit recorded in that manifest.\n\nCopy `.env.example` to `.env`, set a private `{connection_environment}` if needed, then run `docker compose up --build`. The MariaDB service is external and is not created by this package. The default `host.docker.internal` address is for a database on the Docker host; adjust it for your network. Remote database connections use verified TLS by default. For a private CA, mount its file into the app container and set `ZELYRA_DB_TLS_CA_CERT_FILE` to that in-container path. Disable TLS only for an isolated local network. Never commit `.env`.\n")
         } else {
-            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n"
+            "# Experimental Zelyra source bundle\n\nThis directory contains the selected project module and source files in the dependency preview. It is not a Docker export or a complete deployment. Review `zelyra.bundle.json`; its `complete_deployment` value is `false`.\n\nRun `zelyra check main.zyl` with a compiler build that supports project imports. Configure any required external database and runtime settings separately. No `.env` file or credentials were copied.\n".to_owned()
         };
         fs::write(staging.join("README.md"), readme)
             .map_err(|error| format!("cannot write bundle README: {error}"))?;
@@ -4860,6 +4875,58 @@ fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
     Ok(None)
 }
 
+fn database_url_environment_name(database_name: &str) -> String {
+    let normalized = database_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("ZELYRA_DATABASE_{normalized}_URL")
+}
+
+fn database_url_from_environment(database_name: Option<&str>) -> Option<String> {
+    database_name
+        .map(database_url_environment_name)
+        .and_then(|name| env::var(name).ok())
+        .or_else(|| env::var("DATABASE_URL").ok())
+}
+
+fn database_url_from_program(program: &zelyra_ast::Program) -> Option<String> {
+    database_url_from_environment(
+        program
+            .databases
+            .first()
+            .map(|database| database.name.as_str()),
+    )
+}
+
+fn database_url_from_schema(schema: &Schema) -> Option<String> {
+    database_url_from_environment(
+        schema
+            .database
+            .as_ref()
+            .map(|database| database.name.as_str()),
+    )
+}
+
+fn database_url_from_env_file(
+    path: &str,
+    database_name: Option<&str>,
+) -> Result<Option<(String, String)>, String> {
+    if let Some(database_name) = database_name {
+        let environment_name = database_url_environment_name(database_name);
+        if let Some(url) = read_env_value(path, &environment_name)? {
+            return Ok(Some((url, environment_name)));
+        }
+    }
+    Ok(read_env_value(path, "DATABASE_URL")?.map(|url| (url, "DATABASE_URL".to_owned())))
+}
+
 fn project_ui_setting(path: &str, key: &str, default: &str) -> Result<String, String> {
     if let Ok(value) = env::var(key) {
         return Ok(value);
@@ -5171,8 +5238,23 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
 
 fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
     let env_path = directory.join(".env");
-    let url = read_env_value(env_path.to_str().unwrap_or(".env"), "DATABASE_URL")?
-        .ok_or_else(|| "`.env` does not define DATABASE_URL".to_owned())?;
+    let database_name = directory
+        .join("main.zyl")
+        .to_str()
+        .and_then(|path| load_project(path).ok())
+        .and_then(|project| {
+            project
+                .program
+                .databases
+                .first()
+                .map(|database| database.name.clone())
+        });
+    let url = database_url_from_env_file(
+        env_path.to_str().unwrap_or(".env"),
+        database_name.as_deref(),
+    )?
+    .map(|(url, _)| url)
+    .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())?;
     let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
         .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
     Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
@@ -5556,41 +5638,6 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 
     let mut checks = Vec::new();
-    let file_database_url = if let Some(env_file) = env_file.as_deref() {
-        match read_env_value(env_file, "DATABASE_URL") {
-            Ok(Some(url)) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    category: "configuration",
-                    status: "pass",
-                    message: format!(
-                        "loaded DATABASE_URL from {env_file} without exposing credentials"
-                    ),
-                });
-                Some(url)
-            }
-            Ok(None) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    category: "configuration",
-                    status: "warn",
-                    message: format!("{env_file} does not define DATABASE_URL"),
-                });
-                None
-            }
-            Err(error) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    category: "configuration",
-                    status: "fail",
-                    message: error,
-                });
-                None
-            }
-        }
-    } else {
-        None
-    };
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
             name: "project_file",
@@ -5628,6 +5675,47 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         None
     };
 
+    let file_database_url = if let Some(env_file) = env_file.as_deref() {
+        let database_name = program
+            .as_ref()
+            .and_then(|program| program.databases.first())
+            .map(|database| database.name.as_str());
+        match database_url_from_env_file(env_file, database_name) {
+            Ok(Some((url, key))) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "pass",
+                    message: format!("loaded {key} from {env_file} without exposing credentials"),
+                });
+                Some(url)
+            }
+            Ok(None) => {
+                let expected_key = database_name
+                    .map(database_url_environment_name)
+                    .unwrap_or_else(|| "DATABASE_URL".to_owned());
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "warn",
+                    message: format!("{env_file} does not define {expected_key} or DATABASE_URL"),
+                });
+                None
+            }
+            Err(error) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "fail",
+                    message: error,
+                });
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     match Command::new("cargo").arg("--version").output() {
         Ok(output) if output.status.success() => checks.push(DoctorCheck {
             name: "rust_toolchain",
@@ -5647,7 +5735,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         match build_schema(program) {
             Ok(schema) => {
                 let backend = schema.backend();
-                match file_database_url.or_else(|| env::var("DATABASE_URL").ok()) {
+                match file_database_url.or_else(|| database_url_from_program(program)) {
                     Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
@@ -7974,7 +8062,7 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::SUCCESS
         }
         "setup" | "bootstrap" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
+            let Some(url) = database_url_from_schema(&schema) else {
                 eprintln!(
                     "error[E-DB-003]: DATABASE_URL is required for db {}",
                     subcommand
@@ -8013,8 +8101,8 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 }
             }
         }
-        "inspect" => match env::var("DATABASE_URL") {
-            Ok(url) => match inspect_for_backend(schema.backend(), &url) {
+        "inspect" => match database_url_from_schema(&schema) {
+            Some(url) => match inspect_for_backend(schema.backend(), &url) {
                 Ok(current) => {
                     println!("{}", current.summary());
                     ExitCode::SUCCESS
@@ -8024,21 +8112,21 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     ExitCode::from(1)
                 }
             },
-            Err(_) => {
+            None => {
                 eprintln!("error[E-DB-003]: DATABASE_URL is required for db inspect");
                 ExitCode::from(1)
             }
         },
         "plan" => {
-            let current = match env::var("DATABASE_URL") {
-                Ok(url) => match inspect_for_backend(schema.backend(), &url) {
+            let current = match database_url_from_schema(&schema) {
+                Some(url) => match inspect_for_backend(schema.backend(), &url) {
                     Ok(current) => current,
                     Err(error) => {
                         eprintln!("error[E-DB-002]: {error}");
                         return ExitCode::from(1);
                     }
                 },
-                Err(_) => {
+                None => {
                     eprintln!("note: DATABASE_URL is not set; planning against an empty database");
                     Schema {
                         database: None,
@@ -8050,7 +8138,7 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::SUCCESS
         }
         "apply" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
+            let Some(url) = database_url_from_schema(&schema) else {
                 eprintln!("error[E-DB-003]: DATABASE_URL is required for db apply");
                 return ExitCode::from(1);
             };
@@ -8560,7 +8648,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         runtime_policy.as_ref(),
     );
     eprintln!("Zelyra server listening on http://{address}");
-    let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+    let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
         .with_project_theme_css(theme_css)
         .with_project_ui_catalogs(ui_catalogs)
@@ -8794,7 +8882,7 @@ fn generated_api_routes(
     capability_grants: Option<&HashSet<String>>,
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
-    let database_url = env::var("DATABASE_URL").ok();
+    let database_url = database_url_from_program(program);
     program
         .apis
         .iter()
@@ -9462,7 +9550,7 @@ fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
 
 fn auth_usage() {
     eprintln!(
-        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n  zelyra auth role grant <file.zyl> <user-id> <role>\n  zelyra auth role revoke <file.zyl> <user-id> <role>\n  zelyra auth role-permission grant <file.zyl> <role> <permission>\n  zelyra auth role-permission revoke <file.zyl> <role> <permission>\n\nRole commands use DATABASE_URL and the role tables declared in the first auth definition.\nThe interactive password form does not echo passwords. Use --stdin for automation."
+        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n  zelyra auth role grant <file.zyl> <user-id> <role>\n  zelyra auth role revoke <file.zyl> <user-id> <role>\n  zelyra auth role-permission grant <file.zyl> <role> <permission>\n  zelyra auth role-permission revoke <file.zyl> <role> <permission>\n\nRole commands use ZELYRA_DATABASE_<NAME>_URL (with DATABASE_URL as compatibility fallback) and the role tables declared in the first auth definition.\nThe interactive password form does not echo passwords. Use --stdin for automation."
     );
 }
 
@@ -9500,15 +9588,19 @@ fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
     })
 }
 
-fn auth_role_database_url() -> Result<String, ExitCode> {
-    match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
-        Ok(_) => {
-            eprintln!("error[E-AUTH-016]: role commands require a MariaDB DATABASE_URL");
+fn auth_role_database_url(path: &str) -> Result<String, ExitCode> {
+    let program = match validate(path) {
+        Ok(program) => program,
+        Err(()) => return Err(ExitCode::from(1)),
+    };
+    match database_url_from_program(&program) {
+        Some(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
+        Some(_) => {
+            eprintln!("error[E-AUTH-016]: role commands require a MariaDB database URL");
             Err(ExitCode::from(1))
         }
-        Err(_) => {
-            eprintln!("error[E-AUTH-017]: DATABASE_URL is required for role commands");
+        None => {
+            eprintln!("error[E-AUTH-017]: a database URL is required for role commands");
             Err(ExitCode::from(1))
         }
     }
@@ -9563,7 +9655,7 @@ fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(tables) => tables,
         Err(code) => return code,
     };
-    let database_url = match auth_role_database_url() {
+    let database_url = match auth_role_database_url(&path) {
         Ok(url) => url,
         Err(code) => return code,
     };
@@ -9642,7 +9734,7 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
         Ok(tables) => tables,
         Err(code) => return code,
     };
-    let database_url = match auth_role_database_url() {
+    let database_url = match auth_role_database_url(&path) {
         Ok(url) => url,
         Err(code) => return code,
     };
@@ -9694,7 +9786,7 @@ fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitC
 
 fn audit_usage() {
     eprintln!(
-        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000. Prune never changes data without --confirm."
+        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n\nAudit commands use ZELYRA_DATABASE_<NAME>_URL (with DATABASE_URL as compatibility fallback) and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000. Prune never changes data without --confirm."
     );
 }
 
@@ -9713,14 +9805,14 @@ fn audit_project(path: &str) -> Result<(String, String, bool), ExitCode> {
         );
         return Err(ExitCode::from(1));
     };
-    let database_url = match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
-        Ok(_) => {
-            eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB DATABASE_URL");
+    let database_url = match database_url_from_program(&program) {
+        Some(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
+        Some(_) => {
+            eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB database URL");
             return Err(ExitCode::from(1));
         }
-        Err(_) => {
-            eprintln!("error[E-AUDIT-003]: DATABASE_URL is required for audit commands");
+        None => {
+            eprintln!("error[E-AUDIT-003]: a database URL is required for audit commands");
             return Err(ExitCode::from(1));
         }
     };
@@ -10572,14 +10664,14 @@ fn main() -> ExitCode {
                     return Err(());
                 }
             };
-            let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => execute_with_database_and_capabilities_and_policies(
+            let result = match database_url_from_program(&program) {
+                Some(database_url) => execute_with_database_and_capabilities_and_policies(
                     &program,
                     &database_url,
                     grants.as_ref(),
                     runtime_policy.as_ref(),
                 ),
-                Err(_) => execute_with_capabilities_and_policies(
+                None => execute_with_capabilities_and_policies(
                     &program,
                     grants.as_ref(),
                     runtime_policy.as_ref(),
@@ -10613,6 +10705,59 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn database_environment_names_are_derived_from_database_declarations() {
+        assert_eq!(
+            database_url_environment_name("main"),
+            "ZELYRA_DATABASE_MAIN_URL"
+        );
+        assert_eq!(
+            database_url_environment_name("sales_2"),
+            "ZELYRA_DATABASE_SALES_2_URL"
+        );
+        assert_eq!(
+            database_url_environment_name("sales-west"),
+            "ZELYRA_DATABASE_SALES_WEST_URL"
+        );
+    }
+
+    #[test]
+    fn named_database_url_in_env_file_precedes_legacy_url_and_falls_back() {
+        let directory = std::env::temp_dir().join(format!(
+            "zelyra-database-env-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let env_file = directory.join(".env");
+        fs::write(
+            &env_file,
+            "DATABASE_URL=mariadb://legacy.invalid/app\nZELYRA_DATABASE_MAIN_URL=mariadb://named.invalid/app\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            database_url_from_env_file(env_file.to_str().unwrap(), Some("main")).unwrap(),
+            Some((
+                "mariadb://named.invalid/app".to_owned(),
+                "ZELYRA_DATABASE_MAIN_URL".to_owned()
+            ))
+        );
+
+        fs::write(&env_file, "DATABASE_URL=mariadb://legacy.invalid/app\n").unwrap();
+        assert_eq!(
+            database_url_from_env_file(env_file.to_str().unwrap(), Some("main")).unwrap(),
+            Some((
+                "mariadb://legacy.invalid/app".to_owned(),
+                "DATABASE_URL".to_owned()
+            ))
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn feature_defaults_are_simple_and_enabled() {
@@ -12461,7 +12606,7 @@ mod tests {
             ExitCode::SUCCESS
         );
         let env_file = fs::read_to_string(path.join(".env")).unwrap();
-        assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
+        assert!(env_file.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
         assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
 
         fs::remove_dir_all(path).unwrap();

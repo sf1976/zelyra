@@ -114,7 +114,7 @@ assert_secret_free_setup_output() {
     local output="$1"
     while IFS='=' read -r key value; do
         case "${key}" in
-            DATABASE_URL|MARIADB_PASSWORD|MARIADB_ROOT_PASSWORD)
+            DATABASE_URL|ZELYRA_DATABASE_MAIN_URL|MARIADB_PASSWORD|MARIADB_ROOT_PASSWORD)
                 if [[ -n "${value}" && "${output}" == *"${value}"* ]]; then
                     echo "error: setup output exposed a value from .env (${key})" >&2
                     return 1
@@ -255,7 +255,7 @@ write_bundle_environment() {
     local database="$5"
     (
         umask 077
-        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/%s\nZELYRA_DB_TLS_MODE=disabled\n' \
+        printf 'ZELYRA_HOST_PORT=%s\nZELYRA_DATABASE_MAIN_URL=mariadb://%s:%s@mariadb:3306/%s\nZELYRA_DB_TLS_MODE=disabled\n' \
             "${port}" "${username}" "${password}" "${database}" \
             > "${directory}/.env"
     )
@@ -289,7 +289,7 @@ if ! grep -Fq 'ZELYRA_DB_TLS_MODE=auto' "${bundle_dir}/.env.example"; then
 fi
 write_bundle_environment "${bundle_dir}" "${bundle_host_port}" \
     invoice_module invoice-module-test-only zelyra_invoice
-if ! grep -Fq 'DATABASE_URL=mariadb://invoice_module:invoice-module-test-only@mariadb:3306/zelyra_invoice' \
+if ! grep -Fq 'ZELYRA_DATABASE_MAIN_URL=mariadb://invoice_module:invoice-module-test-only@mariadb:3306/zelyra_invoice' \
     "${bundle_dir}/.env"; then
     echo "error: invoice app was not configured for its independently provisioned database" >&2
     exit 1
@@ -353,7 +353,7 @@ if ! grep -Fq '"database_connection_scope": "per_exported_compose_project"' \
 fi
 write_bundle_environment "${second_bundle_dir}" "${second_bundle_host_port}" \
     inventory_module inventory-module-test-only zelyra_inventory
-if ! grep -Fq 'DATABASE_URL=mariadb://inventory_module:inventory-module-test-only@mariadb:3306/zelyra_inventory' \
+if ! grep -Fq 'ZELYRA_DATABASE_MAIN_URL=mariadb://inventory_module:inventory-module-test-only@mariadb:3306/zelyra_inventory' \
     "${second_bundle_dir}/.env"; then
     echo "error: inventory app was not configured for its independently provisioned database" >&2
     exit 1
