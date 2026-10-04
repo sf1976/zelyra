@@ -1858,6 +1858,23 @@ crud Customer -> customers {
     assert!(String::from_utf8_lossy(&slot_result.stderr).contains("E-MOD-007"));
     assert!(String::from_utf8_lossy(&slot_result.stderr).contains("pub component"));
     fs::remove_dir_all(private_crud_slot_component).unwrap();
+
+    let deterministic_component_diagnostic = project(&[
+        (
+            "main.zyl",
+            "import \"src/ui.zyl\" as ui\npage \"/\" { html { <Zulu /><Alpha /> } }\nfn main() {}\n",
+        ),
+        (
+            "src/ui.zyl",
+            "component Zulu { html { <strong>Z</strong> } }\ncomponent Alpha { html { <strong>A</strong> } }\n",
+        ),
+    ]);
+    let deterministic_result = run(&deterministic_component_diagnostic, &["check", "main.zyl"]);
+    assert!(!deterministic_result.status.success());
+    let stderr = String::from_utf8_lossy(&deterministic_result.stderr);
+    assert!(stderr.contains("E-MOD-007"));
+    assert!(stderr.contains("component `Alpha`"), "{stderr}");
+    fs::remove_dir_all(deterministic_component_diagnostic).unwrap();
 }
 
 #[test]

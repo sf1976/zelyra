@@ -886,7 +886,7 @@ fn module_import_reaches(start: &Path, target: &Path, modules: &HashMap<PathBuf,
     false
 }
 
-fn component_tags(html: &str, known_components: &HashSet<String>) -> HashSet<String> {
+fn component_tags(html: &str, known_components: &HashSet<String>) -> Vec<String> {
     let mut names = HashSet::new();
     let mut cursor = 0;
     while let Some(relative_start) = html[cursor..].find('<') {
@@ -911,6 +911,8 @@ fn component_tags(html: &str, known_components: &HashSet<String>) -> HashSet<Str
         }
         cursor = start;
     }
+    let mut names = names.into_iter().collect::<Vec<_>>();
+    names.sort();
     names
 }
 
