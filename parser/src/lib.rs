@@ -118,9 +118,13 @@ impl<'a> Parser<'a> {
                     types.push(self.type_definition(true)?);
                 } else if self.at(&TokenKind::Struct) {
                     records.push(self.record_definition(true)?);
+                } else if self.at(&TokenKind::View) {
+                    views.push(self.view_definition(true)?);
+                } else if self.at(&TokenKind::Component) {
+                    components.push(self.component_definition(true)?);
                 } else {
                     return self
-                        .error("`pub` currently applies only to functions, types, and records");
+                        .error("`pub` currently applies only to functions, types, records, views, and components");
                 }
             } else if self.at(&TokenKind::Database) {
                 declarations_started = true;
@@ -136,10 +140,10 @@ impl<'a> Parser<'a> {
                 records.push(self.record_definition(false)?);
             } else if self.at(&TokenKind::View) {
                 declarations_started = true;
-                views.push(self.view_definition()?);
+                views.push(self.view_definition(false)?);
             } else if self.at(&TokenKind::Component) {
                 declarations_started = true;
-                components.push(self.component_definition()?);
+                components.push(self.component_definition(false)?);
             } else if self.at(&TokenKind::Page) {
                 declarations_started = true;
                 pages.push(self.page_definition()?);
@@ -1027,7 +1031,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn view_definition(&mut self) -> Result<ViewDef, ParseError> {
+    fn view_definition(&mut self, is_public: bool) -> Result<ViewDef, ParseError> {
         let start = self.expect(TokenKind::View, "`view`")?;
         let (name, _) = self.ident("view name")?;
         self.expect(TokenKind::LBrace, "`{` after view name")?;
@@ -1057,6 +1061,7 @@ impl<'a> Parser<'a> {
         };
         Ok(ViewDef {
             name,
+            is_public,
             html,
             span: start.join(end),
         })
@@ -1164,7 +1169,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn component_definition(&mut self) -> Result<ComponentDef, ParseError> {
+    fn component_definition(&mut self, is_public: bool) -> Result<ComponentDef, ParseError> {
         let start = self.expect(TokenKind::Component, "`component`")?;
         let (name, _) = self.ident("component name")?;
         self.expect(TokenKind::LBrace, "`{` after component name")?;
@@ -1211,6 +1216,7 @@ impl<'a> Parser<'a> {
         };
         Ok(ComponentDef {
             name,
+            is_public,
             props,
             html,
             span: start.join(end),
@@ -3276,6 +3282,20 @@ mod tests {
     }
 
     #[test]
+    fn parses_public_views_and_components() {
+        let program = parse(
+            &lex(
+                "pub view Shell { html { <main><slot /></main> } }\npub component Badge { html { <strong>Badge</strong> } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert!(program.views[0].is_public);
+        assert!(program.components[0].is_public);
+    }
+
+    #[test]
     fn rejects_imports_after_declarations_and_public_unsupported_declarations() {
         let late_import =
             parse(&lex("fn main() {}\nimport \"src/math.zyl\" as math").unwrap()).unwrap_err();
@@ -3287,7 +3307,7 @@ mod tests {
             parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
         assert!(invalid_visibility
             .message
-            .contains("functions, types, and records"));
+            .contains("functions, types, records, views, and components"));
     }
 
     #[test]

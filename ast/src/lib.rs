@@ -149,6 +149,7 @@ pub struct PageDataDef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ViewDef {
     pub name: String,
+    pub is_public: bool,
     pub html: String,
     pub span: Span,
 }
@@ -156,6 +157,7 @@ pub struct ViewDef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComponentDef {
     pub name: String,
+    pub is_public: bool,
     pub props: Vec<ComponentProp>,
     pub html: String,
     pub span: Span,

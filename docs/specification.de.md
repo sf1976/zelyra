@@ -340,15 +340,21 @@ Datenbank zulässig. Tabellen aus importierten Dateien werden in das gemeinsame
 physische Schema der Anwendung aufgenommen. Tabellennamen sind globale
 SQL-Bezeichner statt modulqualifizierter Namen; doppelte Tabellennamen werden
 abgelehnt. Importierte Views und Komponenten werden unter ihren deklarierten,
-nicht qualifizierten Namen in die Anwendung aufgenommen. Mit dem Import der
-Quelldatei werden sie verfügbar, da es für diese Deklarationen noch keine
-`pub`-Sichtbarkeitssyntax gibt. Doppelte View- und Komponentennamen werden
-abgelehnt. Seiten, Formulare, CRUD-, API- und Authentifizierungsdefinitionen
-bleiben in importierten Dateien unzulässig.
+nicht qualifizierten Namen in die Anwendung aufgenommen. Sie sind wie andere
+Modulressourcen standardmäßig privat und werden mit `pub view` beziehungsweise
+`pub component` exportiert. Eine modulübergreifende Page-View-Referenz und
+erkannte Komponenten-Tags benötigen außerdem einen direkten oder transitiven
+Importpfad zum Besitzer. Private UI-Verweise melden `E-MOD-007`, fehlende
+Importkanten `E-MOD-020`. Komponenten-Tags werden aktuell durch Abgleich
+bekannter Namen im HTML-Text erkannt; das ist keine vollständige HTML- oder
+Namespace-Analyse. Doppelte View- und Komponentennamen werden abgelehnt.
+Importierte Pages, Formulare, CRUD-, API- und Authentifizierungsdefinitionen
+werden im aktuellen Entwicklungszweig unterstützt; die veröffentlichte
+Version 0.3.0 enthält das Modulmodell nicht.
 Funktions-, Typ- und Record-Deklarationen sind standardmäßig privat;
 Deklarationen überschreiten eine Modulgrenze nur mit `pub` und einem
-ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type` oder
-`pub struct`. Ein qualifizierter Typ wie
+ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type`,
+`pub struct`, `pub view` oder `pub component`. Ein qualifizierter Typ wie
 `money::Amount` wird über den Import `money` der aktuellen Datei aufgelöst.
 Private Hilfsfunktionen und Typen bleiben innerhalb ihrer Datei verfügbar.
 Öffentliche Signaturen dürfen keine privaten Typen offenlegen. Der Compiler

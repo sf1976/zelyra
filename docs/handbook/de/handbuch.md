@@ -1902,9 +1902,14 @@ Die importierte Datei darf Funktionen, Typ-Aliase, Records, Tabellen,
 Formulare, CRUD-Deklarationen, API-Routen und Authentifizierungsdefinitionen
 enthalten. API-Handler und Typen werden im jeweiligen Modulkontext aufgelöst;
 Authentifizierungstabellen werden gegen das gemeinsame Schema geprüft.
-Funktionen, Typen und Records brauchen weiterhin `pub`, wenn andere Dateien sie über den Alias verwenden.
-Views und Komponenten sind im Modulgraphen unter ihren deklarierten Namen
-verfügbar; für sie ist noch keine `pub`-Sichtbarkeitssyntax festgelegt.
+Funktionen, Typen, Records, Views und Komponenten brauchen `pub`, wenn andere
+Dateien sie über einen Alias verwenden. Views und Komponenten sind
+standardmäßig privat und werden mit `pub view` beziehungsweise
+`pub component` exportiert. Modulübergreifende Page-View-Referenzen und
+erkannte Komponenten-Tags benötigen einen direkten oder transitiven
+Importpfad zum Besitzer. Private UI-Verweise melden `E-MOD-007`, fehlende
+Kanten `E-MOD-020`. Die Komponentenerkennung scannt bekannte Tagnamen im
+HTML-Text; sie ist keine vollständige HTML- oder Namespace-Analyse.
 Tabellen fließen in ein gemeinsames Schema ein und behalten globale SQL-Namen;
 doppelte Tabellen- und Ressourcennamen werden abgelehnt. Eine
 Datenbankdefinition gilt projektweit und höchstens eine ist zulässig.
@@ -8006,7 +8011,7 @@ geplante oder derzeit nicht verfügbare Sprachmerkmale.
 | Einrückung | Lesbarkeit, keine Blocksemantik | Lesbarkeit, keine Blocksemantik | Leerzeichen/Tabs werden nicht zu Python-Blöcken | ✅ |
 | Fehlerbehandlung | `Result<T, E>`, `Some`/`None` | `Result<T, E>`, `?`, `panic!` | Zelyra hat keinen Rust-Operator `?` | ✅ |
 | Stringinterpolation | HTML kann `{name}` in `html`-Bodies verwenden | `format!("{name}")` oder `println!("{}", name)` | keine allgemeine Zelyra-Stringinterpolation dokumentieren | 🧪 |
-| Module | `pub fn` und weitere Deklarationen in importierten Dateien (Entwicklungszweig) | `mod name {}`, Dateien und Module | experimentell; Release 0.3.0 hat keine Module, Sichtbarkeit für Views/Komponenten fehlt noch | 🧪 |
+| Module | `pub fn`, `pub view`, `pub component` und weitere Deklarationen in importierten Dateien (Entwicklungszweig) | `mod name {}`, Dateien und Module | experimentell; Release 0.3.0 hat keine Module; UI-Sichtbarkeit und Namespace-Auflösung bleiben eingeschränkt | 🧪 |
 | Imports | `import "src/math.zyl" as math`, `math::add()` (Entwicklungszweig) | `use crate::module::Item;` | projektlokale Imports; `check`, `build`, `run`, `serve`, `context`, `verify`, `impact` verarbeiten den Graphen | 🧪 |
 | Generics | `Option<T>`, `Result<T, E>` und begrenzte Built-in-Typargumente | allgemeine Generics und Traits | keine benutzerdefinierten Zelyra-Generics | 🧪 |
 | asynchrone Funktionen | `async fn` nicht vorhanden; `await`/`parallel` nur eingeschränkt | `async fn`, `.await`, Futures | kein stabiles Zelyra-Async-Modell | 🧪 |
@@ -8665,6 +8670,7 @@ page "/items" {
 | `E-SETUP-WEB-001` | Web-Setup | Ungültiges oder abgelaufenes Setup-Token | Setup-Assistenten neu starten und Token-URL nutzen |
 | `E-IMPACT-001` | Impact-Analyse | Zyklische oder ungültige Abhängigkeiten | Quellcode-Abhängigkeiten entflechten |
 | `E-MOD-019` | Modul-/Tabellenabhängigkeit | Tabellenmodul liegt nicht im Importabschluss des Verbrauchers | Tabellenbesitzermodul direkt oder transitiv importieren |
+| `E-MOD-020` | Modul-/UI-Abhängigkeit | Referenzierte öffentliche View oder Komponente liegt außerhalb des Importgraphs | UI-Besitzermodul direkt oder transitiv importieren |
 | `E-RUNTIME-001` | Laufzeit | Unbehandelter Laufzeitfehler | Verträge (`requires`, `ensures`) oder Fehlerwerte prüfen |
 
 ---

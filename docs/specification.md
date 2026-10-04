@@ -386,19 +386,23 @@ the composed project may define at most one database. Tables in imported files
 are composed into the application's shared physical schema; table names are
 global SQL identifiers rather than module-qualified names, and duplicate table
 names are rejected. Imported tableviews, views, and components join the
-composed application under their declared, unqualified names; explicitly
-importing a source file makes them available because these declarations do not
-yet have `pub` visibility syntax. Duplicate resource names are rejected.
+composed application under their declared, unqualified names. Like other
+module resources, they are private by default and exported with `pub view` or
+`pub component`. Cross-module page-view references and recognized component
+tags also require a direct or transitive import path to the owner. Private UI
+references report `E-MOD-007`; missing import edges report `E-MOD-020`.
+Component tags are currently discovered by matching known names in HTML text;
+this is not a complete HTML or namespace analysis. Duplicate resource names
+are rejected.
 MariaDB-backed imported tableviews can be served as application routes; the
 current tableview query runtime does not yet execute against SQLite. Imported
 pages are composed into the application's route set; overlapping page route
 patterns are rejected with the imported source location. Forms, CRUD
-declarations, APIs, and authentication resources remain unsupported in
-imported files. Function,
-type, and record declarations are private by
-default; declarations cross a module boundary only with a
-`pub` modifier and an explicit import alias. For example, use `pub fn`,
-`pub type`, or `pub struct`. A qualified type reference such as
+declarations, APIs, and authentication resources also compose from imported
+files. Function, type, and record declarations are private by default;
+declarations cross a module boundary only with a `pub` modifier and an explicit
+import alias. For example, use `pub fn`, `pub type`, `pub struct`, `pub view`,
+or `pub component`. A qualified type reference such as
 `money::Amount` resolves through the current file's `money` import. Private
 helpers and types remain available within their own file. Public signatures
 may not expose private types. The compiler rejects missing files, duplicate

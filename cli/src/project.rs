@@ -163,6 +163,28 @@ pub fn load(entry: &str) -> Result<LoadedProject, ProjectError> {
                             name: definition.name.clone(),
                         }),
                 )
+                .chain(
+                    module
+                        .program
+                        .views
+                        .iter()
+                        .filter(|view| view.is_public)
+                        .map(|view| ProjectExport {
+                            kind: "view".into(),
+                            name: view.name.clone(),
+                        }),
+                )
+                .chain(
+                    module
+                        .program
+                        .components
+                        .iter()
+                        .filter(|component| component.is_public)
+                        .map(|component| ProjectExport {
+                            kind: "component".into(),
+                            name: component.name.clone(),
+                        }),
+                )
                 .collect::<Vec<_>>();
             exports.sort_by(|left, right| {
                 left.kind
@@ -478,6 +500,8 @@ fn link_modules(
         type_sets.insert(path.clone(), type_visibility(&module.program));
     }
 
+    validate_module_ui_visibility(modules, order)?;
+
     let mut linked = root.program.clone();
     for path in order {
         if path == entry {
@@ -662,9 +686,9 @@ fn link_modules(
             linker.rewrite_type(&mut tableview.result_type, tableview.span)?;
             linked.tableviews.push(tableview);
         }
-        // Views and components are reusable project resources. They are
-        // intentionally available by their declared names after import; the
-        // current language does not yet define visibility modifiers for them.
+        // UI references were visibility-checked against the explicit import
+        // graph before flattening; rendering currently resolves their names
+        // globally, so duplicate declarations remain a separate diagnostic.
         linked.views.extend(module.program.views.clone());
         for mut component in module.program.components.clone() {
             for prop in &mut component.props {
@@ -703,6 +727,168 @@ fn link_modules(
     }
     linked.imports.clear();
     Ok(linked)
+}
+
+fn validate_module_ui_visibility(
+    modules: &HashMap<PathBuf, Module>,
+    order: &[PathBuf],
+) -> Result<(), ProjectError> {
+    let mut views = HashMap::<String, (PathBuf, bool)>::new();
+    let mut components = HashMap::<String, (PathBuf, bool)>::new();
+    for path in order {
+        let module = modules.get(path).expect("ordered module was loaded");
+        for view in &module.program.views {
+            views
+                .entry(view.name.clone())
+                .or_insert_with(|| (path.clone(), view.is_public));
+        }
+        for component in &module.program.components {
+            components
+                .entry(component.name.clone())
+                .or_insert_with(|| (path.clone(), component.is_public));
+        }
+    }
+    let component_names = components.keys().cloned().collect::<HashSet<_>>();
+
+    for path in order {
+        let module = modules.get(path).expect("ordered module was loaded");
+        for page in &module.program.pages {
+            if let Some(view_name) = page.view.as_deref() {
+                if let Some((owner, is_public)) = views.get(view_name) {
+                    validate_ui_reference(
+                        path, owner, "view", view_name, *is_public, page.span, modules,
+                    )?;
+                }
+            }
+            for component_name in component_tags(&page.html, &component_names) {
+                let (owner, is_public) = &components[&component_name];
+                validate_ui_reference(
+                    path,
+                    owner,
+                    "component",
+                    &component_name,
+                    *is_public,
+                    page.span,
+                    modules,
+                )?;
+            }
+        }
+        for view in &module.program.views {
+            for component_name in component_tags(&view.html, &component_names) {
+                let (owner, is_public) = &components[&component_name];
+                validate_ui_reference(
+                    path,
+                    owner,
+                    "component",
+                    &component_name,
+                    *is_public,
+                    view.span,
+                    modules,
+                )?;
+            }
+        }
+        for component in &module.program.components {
+            for component_name in component_tags(&component.html, &component_names) {
+                let (owner, is_public) = &components[&component_name];
+                validate_ui_reference(
+                    path,
+                    owner,
+                    "component",
+                    &component_name,
+                    *is_public,
+                    component.span,
+                    modules,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_ui_reference(
+    module_path: &Path,
+    owner: &Path,
+    kind: &str,
+    name: &str,
+    is_public: bool,
+    span: Span,
+    modules: &HashMap<PathBuf, Module>,
+) -> Result<(), ProjectError> {
+    let module = modules
+        .get(module_path)
+        .expect("current module belongs to the loaded project");
+    if owner == module_path {
+        return Ok(());
+    }
+    if !is_public {
+        return Err(project_error(
+            "E-MOD-007",
+            format!(
+                "{kind} `{name}` in module `{}` is private; declare it with `pub {kind}` to use it from another module",
+                modules[owner].relative_path
+            ),
+            &module.relative_path,
+            span,
+        ));
+    }
+    if !module_import_reaches(module_path, owner, modules) {
+        return Err(project_error(
+            "E-MOD-020",
+            format!(
+                "module `{}` references {kind} `{name}` from `{}`, but that module is not in its declared import dependency graph",
+                module.relative_path,
+                modules[owner].relative_path
+            ),
+            &module.relative_path,
+            span,
+        ));
+    }
+    Ok(())
+}
+
+fn module_import_reaches(start: &Path, target: &Path, modules: &HashMap<PathBuf, Module>) -> bool {
+    let mut pending = vec![start.to_path_buf()];
+    let mut visited = HashSet::new();
+    while let Some(path) = pending.pop() {
+        if !visited.insert(path.clone()) {
+            continue;
+        }
+        if path == target {
+            return true;
+        }
+        if let Some(current) = modules.get(&path) {
+            pending.extend(current.imports.values().cloned());
+        }
+    }
+    false
+}
+
+fn component_tags(html: &str, known_components: &HashSet<String>) -> HashSet<String> {
+    let mut names = HashSet::new();
+    let mut cursor = 0;
+    while let Some(relative_start) = html[cursor..].find('<') {
+        let start = cursor + relative_start + 1;
+        let bytes = html.as_bytes();
+        let mut name_start = start;
+        while name_start < bytes.len() && matches!(bytes[name_start], b'/' | b'!' | b'?' | b' ') {
+            name_start += 1;
+        }
+        let mut name_end = name_start;
+        while name_end < bytes.len()
+            && (bytes[name_end].is_ascii_alphanumeric() || matches!(bytes[name_end], b'_' | b'-'))
+        {
+            name_end += 1;
+        }
+        if name_end > name_start {
+            if let Some(name) = html.get(name_start..name_end) {
+                if known_components.contains(name) {
+                    names.insert(name.to_owned());
+                }
+            }
+        }
+        cursor = start;
+    }
+    names
 }
 
 fn function_visibility(program: &Program) -> HashMap<String, bool> {

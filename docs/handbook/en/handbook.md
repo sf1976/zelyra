@@ -1923,9 +1923,13 @@ local runtime configuration, never in source files.
 Imported tables join the application's shared physical schema. Their names
 are global SQL identifiers, not module-qualified names, and duplicate table
 names are rejected. Tableviews, views, and components are composed from
-imported files
-under their declared, unqualified names; they do not yet have `pub` visibility
-syntax. Imported pages join the application's route set; overlapping page
+imported files under their declared, unqualified names. Views and components
+are private by default; use `pub view` and `pub component` to export them.
+Cross-module page-view references and recognized component tags require a
+direct or transitive import path to the owner. Private UI references report
+`E-MOD-007`; missing edges report `E-MOD-020`. Component discovery scans known
+tag names in HTML text and is not a full HTML or namespace analysis. Imported
+pages join the application's route set; overlapping page
 patterns are rejected with their source location. Forms, CRUD declarations,
 API routes, and authentication definitions also compose from imported files.
 API handler references and types resolve in their owning module, and auth
@@ -1947,14 +1951,14 @@ authentication configuration into the application;
 the tableview query
 runtime does not yet execute against SQLite. `context --format=json` reports
 the deterministically sorted module graph, import edges, and the currently
-supported public functions, types, and records per file under
+supported public functions, types, records, views, and components per file under
 `modules[].exports`. Module entries also include the import alias and
 project-relative source path. Imported tables, tableviews, pages, views,
 components, forms, CRUD declarations, API routes, and authentication
 definitions appear with their source path in
 `span.file`. This
 export list is an introspection aid, not a complete package or deployment
-manifest, and it does not make UI resources public.
+manifest. UI exports still do not define a complete namespace system.
 Some template diagnostics still need more complete per-module source
 attribution. `verify` also checks the linked graph, but
 does not yet attribute results to individual module source files. `impact`
@@ -8570,6 +8574,7 @@ page "/items" {
 | `E-SETUP-WEB-001` | Web setup | Invalid or expired setup token | Restart setup assistant and use tokenized URL |
 | `E-IMPACT-001` | Impact analysis | Cyclical or invalid dependencies | Untangle code dependencies |
 | `E-MOD-019` | Module/table dependency | Table owner is missing from the consumer's import closure | Import the table-owning module directly or transitively |
+| `E-MOD-020` | Module/UI dependency | Referenced public view or component is outside the consumer's import graph | Import the UI-owning module directly or transitively |
 | `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
 
 ---

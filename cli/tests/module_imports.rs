@@ -170,11 +170,11 @@ fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
         ),
         (
             "src/pages.zyl",
-            "page \"/invoices\" { view: AppShell html { <h1>Bundled invoices</h1> } }\n",
+            "import \"src/ui.zyl\" as ui\npage \"/invoices\" { view: AppShell html { <h1>Bundled invoices</h1> } }\n",
         ),
         (
             "src/ui.zyl",
-            "view AppShell { html { <html><body><slot /></body></html> } }\n",
+            "pub view AppShell { html { <html><body><slot /></body></html> } }\n",
         ),
         ("zelyra.toml", "[project]\nname = \"module-bundle-test\"\n"),
         ("zelyra.theme.css", ":root { --test-color: blue; }\n"),
@@ -778,11 +778,11 @@ fn module_plan_adds_cross_module_views_components_and_database_tables() {
         ),
         (
             "src/pages.zyl",
-            "import \"src/models.zyl\" as models\npage \"/invoices\" { view: InvoiceLayout load invoices = sql<Invoice[]> { SELECT id, customer_id FROM invoices } html { <InvoiceBadge label=\"Invoices\" /> } }\n",
+            "import \"src/models.zyl\" as models\nimport \"src/ui.zyl\" as ui\npage \"/invoices\" { view: InvoiceLayout load invoices = sql<Invoice[]> { SELECT id, customer_id FROM invoices } html { <InvoiceBadge label=\"Invoices\" /> } }\n",
         ),
         (
             "src/ui.zyl",
-            "component InvoiceBadge { props { label: String } html { <strong>{label}</strong> } }\nview InvoiceLayout { html { <main><InvoiceBadge label=\"Title\" /><slot /></main> } }\n",
+            "pub component InvoiceBadge { props { label: String } html { <strong>{label}</strong> } }\npub view InvoiceLayout { html { <main><InvoiceBadge label=\"Title\" /><slot /></main> } }\n",
         ),
         (
             "src/models.zyl",
@@ -1660,6 +1660,7 @@ page "/" {
     view: Shell
     html {
         <p>Entry page content</p>
+        <Brand label="Used by entry" />
     }
 }
 fn main() {}
@@ -1667,7 +1668,7 @@ fn main() {}
         ),
         (
             "src/shell.zyl",
-            r#"component Brand {
+            r#"pub component Brand {
     props {
         label: String
     }
@@ -1675,7 +1676,7 @@ fn main() {}
         <strong>{label}</strong>
     }
 }
-view Shell {
+pub view Shell {
     html {
         <html><body><header><Brand label="Shared module" /></header><main><slot /></main></body></html>
     }
@@ -1703,6 +1704,22 @@ view Shell {
         .iter()
         .find(|view| view["name"] == "Shell")
         .unwrap();
+    let module = document["modules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|module| module["path"] == "src/shell.zyl")
+        .unwrap();
+    assert!(module["exports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|export| { export["kind"] == "view" && export["name"] == "Shell" }));
+    assert!(module["exports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|export| { export["kind"] == "component" && export["name"] == "Brand" }));
     assert_eq!(shell["span"]["file"], "src/shell.zyl");
     let brand = document["declarations"]["components"]
         .as_array()
@@ -1738,6 +1755,60 @@ view Shell {
     );
     assert!(response.contains("Entry page content"), "{response}");
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn imported_ui_resources_must_be_public_and_explicitly_imported() {
+    let private_view = project(&[
+        (
+            "main.zyl",
+            "import \"src/ui.zyl\" as ui\npage \"/\" { view: Shell html { <p>Home</p> } }\nfn main() {}\n",
+        ),
+        (
+            "src/ui.zyl",
+            "view Shell { html { <main><slot /></main> } }\n",
+        ),
+    ]);
+    let private_result = run(&private_view, &["check", "main.zyl"]);
+    assert!(!private_result.status.success());
+    assert!(String::from_utf8_lossy(&private_result.stderr).contains("E-MOD-007"));
+    assert!(String::from_utf8_lossy(&private_result.stderr).contains("pub view"));
+    fs::remove_dir_all(private_view).unwrap();
+
+    let private_component = project(&[
+        (
+            "main.zyl",
+            "import \"src/ui.zyl\" as ui\npage \"/\" { view: Shell html { <Badge /> } }\nfn main() {}\n",
+        ),
+        (
+            "src/ui.zyl",
+            "component Badge { html { <strong>Badge</strong> } }\npub view Shell { html { <main><slot /></main> } }\n",
+        ),
+    ]);
+    let component_result = run(&private_component, &["check", "main.zyl"]);
+    assert!(!component_result.status.success());
+    assert!(String::from_utf8_lossy(&component_result.stderr).contains("E-MOD-007"));
+    assert!(String::from_utf8_lossy(&component_result.stderr).contains("pub component"));
+    fs::remove_dir_all(private_component).unwrap();
+
+    let undeclared_dependency = project(&[
+        (
+            "main.zyl",
+            "import \"src/pages.zyl\" as pages\nimport \"src/ui.zyl\" as ui\nfn main() {}\n",
+        ),
+        (
+            "src/pages.zyl",
+            "page \"/\" { view: Shell html { <p>Home</p> } }\n",
+        ),
+        (
+            "src/ui.zyl",
+            "pub view Shell { html { <main><slot /></main> } }\n",
+        ),
+    ]);
+    let dependency_result = run(&undeclared_dependency, &["check", "main.zyl"]);
+    assert!(!dependency_result.status.success());
+    assert!(String::from_utf8_lossy(&dependency_result.stderr).contains("E-MOD-020"));
+    fs::remove_dir_all(undeclared_dependency).unwrap();
 }
 
 #[test]

@@ -689,7 +689,12 @@ PostgreSQL runtime parity or production readiness.
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
-  database interface, and full 0.5.0 acceptance remain open.
+  database interface, and full 0.5.0 acceptance remain open. The same
+  unreleased branch now supports `pub view` and `pub component`; imported
+  page-view and recognized component-tag references require a public
+  declaration plus an explicit import path (`E-MOD-007` / `E-MOD-020`). This
+  is a tested visibility increment, not a complete HTML namespace or module
+  contract system.
 
 ## Real-world acceptance applications
 
