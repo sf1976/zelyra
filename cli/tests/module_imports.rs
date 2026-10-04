@@ -619,11 +619,11 @@ fn independent_database_using_bundles_get_separate_connection_configuration() {
         ),
         (
             "src/invoices.zyl",
-            "table invoices { id: Id primary auto number: String(30) required }\ncrud Invoice -> invoices\n",
+            "import \"src/database.zyl\" as storage\ntable invoices { id: Id primary auto number: String(30) required }\ncrud Invoice -> invoices\n",
         ),
         (
             "src/inventory.zyl",
-            "table inventory { id: Id primary auto sku: String(30) required }\ncrud Inventory -> inventory\n",
+            "import \"src/database.zyl\" as storage\ntable inventory { id: Id primary auto sku: String(30) required }\ncrud Inventory -> inventory\n",
         ),
     ]);
 
@@ -934,7 +934,7 @@ fn module_plan_includes_separate_database_configuration_source() {
         ),
         (
             "src/pages.zyl",
-            "table invoices { id: Id primary auto }\npage \"/invoices\" { load invoices = sql<Invoice[]> { SELECT id FROM invoices } html { <p>Invoices</p> } }\n",
+            "import \"src/database.zyl\" as storage\ntable invoices { id: Id primary auto }\npage \"/invoices\" { load invoices = sql<Invoice[]> { SELECT id FROM invoices } html { <p>Invoices</p> } }\n",
         ),
         (
             "src/database.zyl",
@@ -1126,7 +1126,7 @@ fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
         ),
         (
             "src/customer_schema.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required }\n",
         ),
         (
             "src/database.zyl",
@@ -1168,7 +1168,7 @@ fn generated_crud_writes_require_the_table_owning_module() {
         ),
         (
             "src/customer_schema.zyl",
-            "table customers { id: Id primary auto name: String(100) required }\n",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required }\n",
         ),
         (
             "src/database.zyl",
@@ -1271,7 +1271,7 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         ),
         (
             "src/customers.zyl",
-            "import \"src/models.zyl\" as models\nimport \"src/audit.zyl\" as audit\nform CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/models.zyl\" as models\nimport \"src/audit.zyl\" as audit\nform CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
         ),
         (
             "src/database.zyl",
@@ -1365,7 +1365,7 @@ fn check_composes_imported_api_routes_and_authentication_configuration() {
         ),
         (
             "src/security.zyl",
-            "import \"src/models.zyl\" as models\nauth users { table: users }\n",
+            "import \"src/database.zyl\" as storage\nimport \"src/models.zyl\" as models\nauth users { table: users }\n",
         ),
         (
             "src/models.zyl",
@@ -2243,7 +2243,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
         ),
         (
             "src/invoices.zyl",
-            "table invoices { id: Id primary auto number: String(40) required total: Decimal required }\npub fn count() -> Int uses Database { rows = sql<Invoice[]> { SELECT id, number, total FROM invoices } return 0 }\n",
+            "import \"src/database.zyl\" as storage\ntable invoices { id: Id primary auto number: String(40) required total: Decimal required }\npub fn count() -> Int uses Database { rows = sql<Invoice[]> { SELECT id, number, total FROM invoices } return 0 }\n",
         ),
         (
             "zelyra.toml",
@@ -2275,7 +2275,7 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
     assert_eq!(sql.len(), 1);
     assert_eq!(sql[0]["owner"], "src/invoices.zyl::count");
     assert_eq!(sql[0]["span"]["file"], "src/invoices.zyl");
-    assert_eq!(sql[0]["span"]["start"]["line"], 2);
+    assert_eq!(sql[0]["span"]["start"]["line"], 3);
     assert_eq!(sql[0]["tables"][0], "invoices");
     let focused = run(
         &directory,
@@ -2291,6 +2291,102 @@ fn check_composes_a_project_database_from_an_imported_configuration_module() {
     let focused: Value = serde_json::from_slice(&focused.stdout).unwrap();
     assert_eq!(focused["impact"]["references"].as_array().unwrap().len(), 1);
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn database_consumers_must_import_the_provider_module_through_their_own_graph() {
+    let allowed = project(&[
+        (
+            "main.zyl",
+            "import \"src/service.zyl\" as service\nfn main() uses Database { service::count() }\n",
+        ),
+        (
+            "src/service.zyl",
+            "import \"src/storage_facade.zyl\" as storage\ntable things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+        ),
+        (
+            "src/storage_facade.zyl",
+            "import \"src/database.zyl\" as db\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"things\" }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"database-boundary\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+    let allowed_check = run(&allowed, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        allowed_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed_check.stdout)
+    );
+    fs::remove_dir_all(allowed).unwrap();
+
+    let denied = project(&[
+        (
+            "main.zyl",
+            "import \"src/service.zyl\" as service\nimport \"src/database.zyl\" as db\nfn main() uses Database { service::count() }\n",
+        ),
+        (
+            "src/service.zyl",
+            "table things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"things\" }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"database-boundary\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+    let denied_check = run(&denied, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied_check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&denied_check.stdout).unwrap();
+    let boundary = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-022")
+        .expect("a main-module import must not silently configure an unrelated consumer");
+    assert_eq!(boundary["file"], "src/service.zyl");
+    assert!(boundary["message"]
+        .as_str()
+        .unwrap()
+        .contains("src/database.zyl"));
+    fs::remove_dir_all(denied).unwrap();
+
+    let misplaced = project(&[
+        (
+            "main.zyl",
+            "import \"src/service.zyl\" as service\ndatabase main { engine: mariadb database: \"things\" }\nfn main() uses Database { service::count() }\n",
+        ),
+        (
+            "src/service.zyl",
+            "table things { id: Id primary auto }\npub fn count() -> Int uses Database { rows = sql<Int[]> { SELECT id FROM things } return 0 }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"database-boundary\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+    let misplaced_check = run(&misplaced, &["check", "main.zyl", "--format=json"]);
+    assert!(!misplaced_check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&misplaced_check.stdout).unwrap();
+    let boundary = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-022")
+        .expect("an entry-local database declaration cannot serve imported modules");
+    assert!(boundary["message"]
+        .as_str()
+        .unwrap()
+        .contains("move `database main` from the entry module"));
+    fs::remove_dir_all(misplaced).unwrap();
 }
 
 #[test]

@@ -687,7 +687,10 @@ PostgreSQL runtime parity or production readiness.
   recognized cross-module accesses without a matching grant fail with
   `E-MOD-021`. CRUD/forms/auth and unknown SQL accesses require `read_write`.
   These are compiler contracts, not MariaDB grants; schema-change rights and
-  unknown SQL forms remain unchecked. The MariaDB project generator now places
+  unknown SQL forms remain unchecked. Database-consuming modules must also
+  directly or transitively import the provider (`E-MOD-022`); an entry-only
+  import is not inherited. An entry-local declaration must move to an
+  importable module. The MariaDB project generator now places
   the database declaration in
   `src/database.zyl` and imports it from `main.zyl`; this is source separation,
   not multiple independently configurable connections. The

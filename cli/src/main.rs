@@ -1006,7 +1006,9 @@ fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     let loaded = load_project(path)?;
-    if !validate_module_table_dependencies(path, &loaded) {
+    let table_dependencies_valid = validate_module_table_dependencies(path, &loaded);
+    let database_dependencies_valid = validate_module_database_dependencies(path, &loaded);
+    if !table_dependencies_valid || !database_dependencies_valid {
         return Err(());
     }
     let source = loaded
@@ -1208,6 +1210,95 @@ fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProjec
         );
     }
     violations.is_empty() && access_violations.is_empty()
+}
+
+fn validate_module_database_dependencies(path: &str, loaded: &project::LoadedProject) -> bool {
+    if loaded.program.databases.len() != 1 {
+        return true;
+    }
+    let database = &loaded.program.databases[0];
+    let owners = module_declaration_owners(&loaded.program);
+    let database_node = format!("database:{}", database.name);
+    let Some(database_module) = owners.get(&database_node) else {
+        return true;
+    };
+    let import_graph = loaded
+        .modules
+        .iter()
+        .map(|module| {
+            (
+                module.path.as_str(),
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let source_ids = loaded
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(id, source)| (source.path.as_str(), id as u32))
+        .collect::<HashMap<_, _>>();
+    let mut valid = true;
+
+    for module in &loaded.modules {
+        if module.path == *database_module
+            || !module_uses_database(&loaded.program, &module.path, &owners)
+        {
+            continue;
+        }
+
+        let mut pending = vec![module.path.as_str()];
+        let mut visited = HashSet::new();
+        let imports_database = loop {
+            let Some(current) = pending.pop() else {
+                break false;
+            };
+            if !visited.insert(current) {
+                continue;
+            }
+            if current == database_module {
+                break true;
+            }
+            pending.extend(import_graph.get(current).into_iter().flatten().copied());
+        };
+        if imports_database {
+            continue;
+        }
+
+        valid = false;
+        let span = source_ids
+            .get(module.path.as_str())
+            .copied()
+            .map(|source_id| zelyra_ast::Span::new(0, 0, 1, 1).with_source_id(source_id))
+            .unwrap_or_default();
+        let entry_is_database_module = loaded
+            .sources
+            .first()
+            .is_some_and(|entry| entry.path == *database_module);
+        let hint = if entry_is_database_module {
+            format!(
+                "move `database {}` from the entry module into an importable source module",
+                database.name
+            )
+        } else {
+            format!("import `{database_module}` directly or through another module")
+        };
+        diagnostic_with_span(
+            path,
+            "E-MOD-022",
+            &format!(
+                "module `{}` uses the project database but its import graph does not include the database provider module `{database_module}`; {hint}",
+                module.path
+            ),
+            span,
+        );
+    }
+
+    valid
 }
 
 fn table_access_granted(table: &zelyra_ast::TableDef, module: &str, mode: &str) -> bool {
@@ -2786,13 +2877,9 @@ fn module_uses_database(
 ) -> bool {
     let owned = |node: &str| owners.get(node).is_some_and(|path| path == module_path);
     program
-        .tables
+        .tableviews
         .iter()
-        .any(|table| owned(&format!("table:{}", table.name)))
-        || program
-            .tableviews
-            .iter()
-            .any(|view| owned(&format!("tableview:{}", view.name)))
+        .any(|view| owned(&format!("tableview:{}", view.name)))
         || program
             .pages
             .iter()

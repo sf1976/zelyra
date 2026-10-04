@@ -2044,6 +2044,16 @@ are not implicitly visible to imported modules: a child cannot import the
 entry module back. Put shared tables in a dedicated schema module and import
 it from both the entry point and each consumer.
 
+A database consumer also needs an import edge to the database provider module.
+Modules with database functions (`uses Database`), data-loading pages,
+tableviews, forms, CRUD, or authentication must import the provider directly or
+transitively. Importing database configuration only in `main.zyl` does not
+inherit it sideways into other modules. Otherwise, `zelyra check` reports
+`E-MOD-022`. If the `database` declaration is still in the entry file, move it
+to a dedicated file such as `src/database.zyl` and import that module wherever
+database functionality is used. This is a checked source dependency; it does
+not create multiple runtime connections or MariaDB permissions.
+
 The unreleased 0.4 implementation also checks module-specific table grants.
 The owner can declare them directly on the table:
 
@@ -8603,6 +8613,7 @@ page "/items" {
 | `E-MOD-019` | Module/table dependency | Table owner is missing from the consumer's import closure | Import the table-owning module directly or transitively |
 | `E-MOD-020` | Module/UI dependency | Referenced public view or component is outside the consumer's import graph | Import the UI-owning module directly or transitively |
 | `E-MOD-021` | Module/table grant | A recognized read/write access has no matching grant from the table owner | Check the table's `access` list and exact module path |
+| `E-MOD-022` | Module/database dependency | A database-using module does not import the provider | Import the provider directly or transitively; move configuration out of `main.zyl` |
 | `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
 
 ---

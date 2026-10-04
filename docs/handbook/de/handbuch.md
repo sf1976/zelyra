@@ -2032,6 +2032,17 @@ nicht implizit zugänglich: Ein Kind kann den Einstieg nicht zurückimportieren.
 Lege gemeinsam genutzte Tabellen deshalb in ein eigenes Schema-Modul und
 importiere es sowohl im Einstieg als auch in jedem Verbraucher.
 
+Ein Verbraucher von Datenbankfunktionen braucht außerdem eine Importkante zum
+Datenbankmodul selbst. Module mit SQL-Funktionen (`uses Database`), Daten-
+Pages, Tableviews, Formularen, CRUD oder Authentifizierung müssen den Provider
+direkt oder transitiv importieren. Ein Import der Datenbankkonfiguration nur in
+`main.zyl` wird nicht seitwärts an andere Module vererbt. Andernfalls meldet
+`zelyra check` `E-MOD-022`. Liegt die `database`-Deklaration noch im Einstieg,
+verschiebe sie in eine eigene Datei wie `src/database.zyl` und importiere diese
+aus den Modulen, die Datenbankfunktionen verwenden. Das ist eine geprüfte
+Quellcodeabhängigkeit; es erzeugt weder mehrere Laufzeitverbindungen noch
+MariaDB-Berechtigungen.
+
 Die unveröffentlichte 0.4-Implementierung prüft außerdem modulbezogene
 Tabellenfreigaben. Der Eigentümer kann sie direkt in der Tabellendeklaration
 festlegen:
@@ -8701,6 +8712,7 @@ page "/items" {
 | `E-MOD-019` | Modul-/Tabellenabhängigkeit | Tabellenmodul liegt nicht im Importabschluss des Verbrauchers | Tabellenbesitzermodul direkt oder transitiv importieren |
 | `E-MOD-020` | Modul-/UI-Abhängigkeit | Referenzierte öffentliche View oder Komponente liegt außerhalb des Importgraphs | UI-Besitzermodul direkt oder transitiv importieren |
 | `E-MOD-021` | Modul-/Tabellenfreigabe | Erkannter Lese-/Schreibzugriff hat keinen passenden Grant des Tabellenbesitzers | `access`-Liste der Tabelle und exakten Modulpfad prüfen |
+| `E-MOD-022` | Modul-/Datenbankabhängigkeit | Ein datenbanknutzendes Modul importiert den Provider nicht | Datenbankmodul direkt oder transitiv importieren; Konfiguration aus `main.zyl` auslagern |
 | `E-RUNTIME-001` | Laufzeit | Unbehandelter Laufzeitfehler | Verträge (`requires`, `ensures`) oder Fehlerwerte prüfen |
 
 ---

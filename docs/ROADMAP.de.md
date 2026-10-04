@@ -741,7 +741,10 @@ unterstellt.
   passenden Grant scheitern mit `E-MOD-021`. CRUD/Formular/Auth sowie unbekannte
   SQL-Zugriffe verlangen `read_write`. Das sind Compiler-Verträge, keine
   MariaDB-Grants; Schemaänderungsrechte und unbekannte SQL-Formen bleiben
-  ungeprüft. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
+  ungeprüft. Datenbanknutzende Module müssen den Provider außerdem direkt oder
+  transitiv importieren (`E-MOD-022`); ein Import nur im Einstieg wird nicht
+  vererbt. Eine Einstiegskonfiguration muss dafür in ein importierbares Modul
+  verschoben werden. Der MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
   in `src/database.zyl` ab und importiert sie aus `main.zyl`; das trennt nur
   die Quelle, nicht mehrere unabhängig konfigurierbare Verbindungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
