@@ -4403,8 +4403,32 @@ page "/dashboard" {
 ### 5. Typical errors and their causes
 - **Error:** Storing plaintext passwords inside the user table.
   *Cause:* Zelyra expects a `password_hash` column and provides `zelyra auth hash-password` for hashing.
-- **Error:** Omitting the `auth_sessions` table.
-  *Cause:* Zelyra requires an explicit table for tracking session tokens cryptographically.
+- **Error:** Expecting sessions to survive a restart without a session table.
+  *Cause:* Without `sessions: auth_sessions`, sessions are held in process memory.
+  Declare the table for persistence and administrative session revocation.
+
+#### Session administration in the 0.4 development branch
+
+When persistent sessions and the role administration page are configured,
+authorized administrators see up to 100 unexpired sessions, ordered by expiry.
+Each row contains its database ID, user email and expiry in database time.
+Neither the browser token nor its hash is displayed. Device names and IP
+history are not recorded or inferred.
+
+Use **Revoke session** to end an individual session. The POST requires the
+configured administration permission, a valid CSRF token and same-origin
+evidence. The session ID and user ID must match. Repeating a request for an
+already removed session is harmless. If audit is configured, the transaction
+records `auth.session_revoke_requested`, including the numeric session ID;
+this event records a request, not proof that a row existed.
+
+Revoking your current session makes subsequent protected requests fail with
+401. Sign in again: the operation does not disable the account or remove the
+last administrator's role. Persistent sessions expire after one day. The
+development branch also bounds in-memory sessions to 24 hours; they disappear
+on restart and are not listed by this persistent-session administration page.
+Expiry is checked on access. Revocation does not cancel requests already in
+progress. These controls do not implement password recovery or device tracking.
 
 ### 6. Key takeaways
 1. `auth` declares user, session, and permission schemas at a single centralized location.
