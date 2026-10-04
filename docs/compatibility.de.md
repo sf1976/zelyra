@@ -22,6 +22,7 @@ die Version eines Formats sind verschiedene Angaben.
 | Schnittstelle | Nachgewiesener Stand | Bedeutung |
 |---|---|---|
 | CLI-Maschinenausgaben | Gemeinsamer Umschlag `schema_version: "1"` mit `command`, `success` und `diagnostics` | JSON-Befehle wie `check`, `context` und `impact` verwenden diesen Umschlag. Menschliche Terminalausgaben sind keine Maschinen-API. |
+| Modulübergreifende Tabellenverweise | Experimentelle `E-MOD-019`-Prüfung im unveröffentlichten 0.4-Entwicklungsstand | Erkannte Tabellenverweise verlangen das Besitzermodul im Importabschluss des Verbrauchers; Tabellen im Einstieg sind ausgenommen. Lese-/Schreibberechtigungen werden nicht erzwungen. |
 | `module bundle --dry-run` | Experimenteller Umschlag `schema_version: "1"` mit sortierter Dateiliste und `writes_performed: false` | Listet Zielpfade nach Prüfung eines temporären Pakets auf; keine stabile veröffentlichte Schnittstelle und kein Nachweis eines vollständigen Deployments. |
 | Edit-Anfrage | Exakte `schema_version: "1"` | Andere oder fehlende Versionen werden abgelehnt. |
 | `zelyra.toml` | Kein allgemein ausgewertetes Formatversionsfeld nachgewiesen | Die vorhandene Feature-Auswertung kennt `[features]`; daraus folgt keine Versionierung des gesamten Projektmanifests. |

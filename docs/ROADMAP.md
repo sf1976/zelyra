@@ -677,6 +677,10 @@ PostgreSQL runtime parity or production readiness.
   package is checked and removed. A separate-container smoke test for an
   imported route passes. Each exported
   app receives its own `DATABASE_URL`, while MariaDB remains external. The
+  compiler also rejects recognized cross-module table references without an
+  import dependency path (`E-MOD-019`), except for tables owned by the entry
+  composition root. This does not enforce read/write permissions or schema
+  ownership. The
   bundle rejects multiple database definitions with `E-DB-001` before writing
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and

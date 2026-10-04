@@ -776,7 +776,7 @@ fn module_plan_adds_cross_module_views_components_and_database_tables() {
         ),
         (
             "src/pages.zyl",
-            "page \"/invoices\" { view: InvoiceLayout load invoices = sql<Invoice[]> { SELECT id, customer_id FROM invoices } html { <InvoiceBadge label=\"Invoices\" /> } }\n",
+            "import \"src/models.zyl\" as models\npage \"/invoices\" { view: InvoiceLayout load invoices = sql<Invoice[]> { SELECT id, customer_id FROM invoices } html { <InvoiceBadge label=\"Invoices\" /> } }\n",
         ),
         (
             "src/ui.zyl",
@@ -937,6 +937,18 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
     );
     assert_eq!(plan["plan"]["schema_ownership"]["enforced"], false);
     assert_eq!(
+        plan["plan"]["table_access_contract"]["dependency_enforced"],
+        true
+    );
+    assert_eq!(
+        plan["plan"]["table_access_contract"]["read_write_permissions_enforced"],
+        false
+    );
+    assert_eq!(
+        plan["plan"]["table_access_contract"]["entry_module_tables_project_visible"],
+        true
+    );
+    assert_eq!(
         plan["plan"]["schema_ownership"]["tables"],
         serde_json::json!([{
             "table": "customers",
@@ -982,6 +994,75 @@ fn module_plan_reports_inferred_table_owner_and_sql_access_modes() {
 }
 
 #[test]
+fn cross_module_table_access_requires_the_owner_in_the_import_graph() {
+    let source = "pub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n";
+    let allowed = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_service.zyl\" as customers\nfn main() {}\n",
+        ),
+        (
+            "src/customer_service.zyl",
+            "import \"src/customer_contracts.zyl\" as contracts\npub fn listCustomers() uses Database { return sql<Customer[]> { SELECT id, name FROM customers } }\npub fn renameCustomer(id: Id, name: String) uses Database { sql { UPDATE customers SET name = :name WHERE id = :id } }\n",
+        ),
+        (
+            "src/customer_contracts.zyl",
+            "import \"src/customer_schema.zyl\" as schema\nimport \"src/database.zyl\" as storage\n",
+        ),
+        (
+            "src/customer_schema.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+    ]);
+    let allowed_check = run(&allowed, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        allowed_check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed_check.stdout)
+    );
+    fs::remove_dir_all(allowed).unwrap();
+
+    let denied = project(&[
+        (
+            "main.zyl",
+            "import \"src/customer_service.zyl\" as customers\nimport \"src/customer_schema.zyl\" as schema\nimport \"src/database.zyl\" as storage\nfn main() {}\n",
+        ),
+        ("src/customer_service.zyl", source),
+        (
+            "src/customer_schema.zyl",
+            "table customers { id: Id primary auto name: String(100) required }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+    ]);
+    let denied_check = run(&denied, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied_check.status.success());
+    let diagnostics: Value = serde_json::from_slice(&denied_check.stdout).unwrap();
+    let boundary = diagnostics["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|diagnostic| diagnostic["code"] == "E-MOD-019")
+        .expect("missing module table dependency diagnostic");
+    assert_eq!(boundary["file"], "src/customer_service.zyl");
+    assert!(boundary["message"]
+        .as_str()
+        .unwrap()
+        .contains("read, write"));
+    assert!(boundary["message"]
+        .as_str()
+        .unwrap()
+        .contains("src/customer_schema.zyl"));
+    fs::remove_dir_all(denied).unwrap();
+}
+
+#[test]
 fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
     let directory = project(&[
         (
@@ -998,7 +1079,7 @@ fn module_plan_composes_imported_forms_and_crud_with_database_dependencies() {
         ),
         (
             "src/customers.zyl",
-            "form CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
+            "import \"src/models.zyl\" as models\nimport \"src/audit.zyl\" as audit\nform CustomerCreate -> customers { fields { name } action save { let clean_name = normalize_name() sql { INSERT INTO customers (name) VALUES (:clean_name) } sql { INSERT INTO audit_events (message) VALUES (:clean_name) } } }\ncrud Customer -> customers { list { id name } action audit { sql { INSERT INTO audit_events (message) VALUES ('crud') } } }\nfn normalize_name() -> String { return \"New customer\" }\n",
         ),
         (
             "src/database.zyl",
@@ -1883,7 +1964,7 @@ fn check_resolves_relations_between_tables_in_imported_modules() {
         ),
         (
             "src/machines.zyl",
-            "table machines { id: Id primary auto name: String(100) required department: Department required }\n",
+            "import \"src/departments.zyl\" as departments\ntable machines { id: Id primary auto name: String(100) required department: Department required }\n",
         ),
     ]);
     let check = run(&directory, &["check", "main.zyl"]);

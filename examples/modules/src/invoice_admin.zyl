@@ -1,3 +1,5 @@
+import "src/invoice.zyl" as invoice
+
 form InvoiceHeaderCreate -> invoice_headers {
     fields {
         invoice_number

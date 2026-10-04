@@ -729,7 +729,11 @@ unterstellt.
   Ziel anzulegen; das temporäre Testpaket wird geprüft und entfernt. Ein
   eigenständiger Container-Smoke-Test für eine importierte Route ist grün. Die
   exportierte Anwendung erhält ihre
-  `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Mehrere
+  `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Der Compiler
+  lehnt erkannte modulübergreifende Tabellenverweise ohne erreichbaren
+  Importabhängigkeitspfad mit `E-MOD-019` ab; Tabellen der
+  Zusammensetzungswurzel sind ausgenommen. Lese-/Schreibberechtigungen oder
+  Schemaeigentum werden damit nicht erzwungen. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und

@@ -2009,6 +2009,21 @@ weist die Quelldatei einer Tabellendeklaration als
 `inferred_owner_module` aus; `enforced` und `ownership_enforced` stehen
 ausdrücklich auf `false`.
 
+Der Compiler prüft jetzt zusätzlich erkannte modulübergreifende Tabellenkanten:
+Das Modul, das eine Tabelle über SQL, CRUD, Formulare, Tableviews,
+Authentifizierung oder eine Tabellenbeziehung verwendet, muss das Modul mit
+der Tabellendeklaration direkt oder transitiv importieren. Andernfalls meldet
+`zelyra check` `E-MOD-019`; bei erkanntem SQL-Zugriff nennt die Diagnose auch
+`read`-/`write`-Modi. Der Einstieg `main.zyl` bleibt als
+Zusammensetzungswurzel eine dokumentierte Ausnahme: Seine Tabellen sind für
+importierte Module projektweit sichtbar, weil Kinder den Einstieg nicht zurück
+importieren können. Die Regel erzwingt eine deklarierte Abhängigkeit, aber
+keine Tabellenberechtigung. `schema_ownership.enforced` bleibt `false`, und
+nicht erkannte SQL-Formen können weiterhin fehlen.
+Der maschinenlesbare Modulplan hält diese Grenze unter `table_access_contract`
+fest: Abhängigkeitsdeklarationen werden erzwungen; Lese-/Schreibberechtigungen
+nicht.
+
 Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
 
 ~~~sh
@@ -8641,6 +8656,7 @@ page "/items" {
 | `E-SETUP-001` - `E-SETUP-006` | Setup-Flow | Portkonflikt, Socket-Fehler oder Compose-Problem | Freie Ports wählen, Docker-Berechtigungen prüfen |
 | `E-SETUP-WEB-001` | Web-Setup | Ungültiges oder abgelaufenes Setup-Token | Setup-Assistenten neu starten und Token-URL nutzen |
 | `E-IMPACT-001` | Impact-Analyse | Zyklische oder ungültige Abhängigkeiten | Quellcode-Abhängigkeiten entflechten |
+| `E-MOD-019` | Modul-/Tabellenabhängigkeit | Tabellenmodul liegt nicht im Importabschluss des Verbrauchers | Tabellenbesitzermodul direkt oder transitiv importieren |
 | `E-RUNTIME-001` | Laufzeit | Unbehandelter Laufzeitfehler | Verträge (`requires`, `ensures`) oder Fehlerwerte prüfen |
 
 ---

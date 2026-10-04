@@ -984,11 +984,163 @@ fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
 
 fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
     let loaded = load_project(path)?;
+    if !validate_module_table_dependencies(path, &loaded) {
+        return Err(());
+    }
     let source = loaded
         .sources
         .first()
         .map_or_else(String::new, |source| source.text.clone());
     validate_program(path, &source, loaded.program)
+}
+
+fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProject) -> bool {
+    let entry_module = loaded.sources.first().map(|source| source.path.as_str());
+    let module_imports = loaded
+        .modules
+        .iter()
+        .map(|module| {
+            (
+                module.path.as_str(),
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let source_paths = loaded
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(id, source)| (source.path.as_str(), id as u32))
+        .collect::<HashMap<_, _>>();
+
+    let mut table_owners = HashMap::new();
+    let mut duplicate_tables = HashSet::new();
+    for table in &loaded.program.tables {
+        let Some(owner) = loaded
+            .sources
+            .get(table.span.source_id as usize)
+            .map(|source| source.path.as_str())
+        else {
+            continue;
+        };
+        if table_owners.insert(table.name.as_str(), owner).is_some() {
+            duplicate_tables.insert(table.name.as_str());
+        }
+    }
+
+    let impact = build_impact_with_sources(&loaded.program, &loaded.sources, "");
+    let mut violations = BTreeMap::<(String, String), (zelyra_ast::Span, BTreeSet<String>)>::new();
+    for reference in impact
+        .get("references")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(table_name) = reference
+            .get("to")
+            .and_then(Value::as_str)
+            .and_then(|target| target.strip_prefix("table:"))
+        else {
+            continue;
+        };
+        if duplicate_tables.contains(table_name) {
+            continue;
+        }
+        let Some(span_value) = reference.get("span") else {
+            continue;
+        };
+        let Some(source_path) = span_value.get("file").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(owner_path) = table_owners.get(table_name).copied() else {
+            continue;
+        };
+        if source_path == owner_path {
+            continue;
+        }
+        // The entry module is the project composition root and cannot be
+        // imported back by its children. Its legacy schema declarations stay
+        // project-visible until projects move them into dedicated modules.
+        if Some(owner_path) == entry_module {
+            continue;
+        }
+
+        let mut pending = vec![source_path];
+        let mut visited = HashSet::new();
+        let mut reaches_owner = false;
+        while let Some(module_path) = pending.pop() {
+            if !visited.insert(module_path) {
+                continue;
+            }
+            if module_path == owner_path {
+                reaches_owner = true;
+                break;
+            }
+            pending.extend(
+                module_imports
+                    .get(module_path)
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            );
+        }
+        if reaches_owner {
+            continue;
+        }
+
+        let Some(source_id) = source_paths.get(source_path).copied() else {
+            continue;
+        };
+        let start = span_value
+            .pointer("/start/offset")
+            .and_then(Value::as_u64)
+            .unwrap_or_default() as usize;
+        let end = span_value
+            .pointer("/end/offset")
+            .and_then(Value::as_u64)
+            .unwrap_or(start as u64) as usize;
+        let line = span_value
+            .pointer("/start/line")
+            .and_then(Value::as_u64)
+            .unwrap_or(1) as usize;
+        let column = span_value
+            .pointer("/start/column")
+            .and_then(Value::as_u64)
+            .unwrap_or(1) as usize;
+        let span = zelyra_ast::Span::new(start, end, line, column).with_source_id(source_id);
+        let key = (source_path.to_owned(), table_name.to_owned());
+        let entry = violations
+            .entry(key)
+            .or_insert_with(|| (span, BTreeSet::new()));
+        if let Some(access) = reference.get("access").and_then(Value::as_str) {
+            entry.1.insert(access.to_owned());
+        }
+    }
+
+    for ((source_path, table_name), (span, accesses)) in &violations {
+        let owner_path = table_owners[table_name.as_str()];
+        let access = if accesses.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " ({})",
+                accesses.iter().cloned().collect::<Vec<_>>().join(", ")
+            )
+        };
+        diagnostic_with_span(
+            path,
+            "E-MOD-019",
+            &format!(
+                "module `{source_path}` references table `{table_name}`{access}, owned by `{owner_path}`, but that module is not in its import dependency graph; import the table-owning module explicitly"
+            ),
+            *span,
+        );
+    }
+    violations.is_empty()
 }
 
 fn validate_program(
@@ -2962,6 +3114,13 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "model": "inferred_from_table_declaration_source_module",
                         "enforced": false,
                         "tables": schema_ownership.values().collect::<Vec<_>>()
+                    },
+                    "table_access_contract": {
+                        "model": "table-owner-module-in-consumer-import-closure",
+                        "dependency_enforced": true,
+                        "read_write_permissions_enforced": false,
+                        "entry_module_tables_project_visible": true,
+                        "analysis_complete": false
                     },
                     "unresolved_references": unresolved_references.iter().map(|(module, from, to)| json!({
                         "from_module": module,

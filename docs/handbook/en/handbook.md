@@ -2024,6 +2024,20 @@ ownership and do not make the graph complete. `schema_ownership` reports the
 source file of a table declaration as `inferred_owner_module`; `enforced` and
 `ownership_enforced` are explicitly `false`.
 
+The compiler now also checks recognized cross-module table edges: a module
+using a table through SQL, CRUD, forms, table views, authentication, or a table
+relation must directly or transitively import the module that declares that
+table. Otherwise `zelyra check` reports `E-MOD-019`; for recognized SQL access,
+the diagnostic also lists `read`/`write` modes. The `main.zyl` entry module is
+a documented composition-root exception: its tables remain project-visible
+to imported modules because children cannot import the entry back. This rule
+requires a declared dependency, not a table permission.
+`schema_ownership.enforced` remains `false`, and unrecognized SQL forms may
+still be missed.
+The machine-readable module plan records this distinction in
+`table_access_contract`: dependency declarations are enforced; read/write
+permissions are not.
+
 The next experimental step is `zelyra module bundle`:
 
 ~~~sh
@@ -8548,6 +8562,7 @@ page "/items" {
 | `E-SETUP-001` - `E-SETUP-006` | Setup flow | Port conflict, socket error, or Compose failure | Choose free ports, check Docker socket permissions |
 | `E-SETUP-WEB-001` | Web setup | Invalid or expired setup token | Restart setup assistant and use tokenized URL |
 | `E-IMPACT-001` | Impact analysis | Cyclical or invalid dependencies | Untangle code dependencies |
+| `E-MOD-019` | Module/table dependency | Table owner is missing from the consumer's import closure | Import the table-owning module directly or transitively |
 | `E-RUNTIME-001` | Runtime | Unhandled runtime error | Check contracts (`requires`, `ensures`) or error values |
 
 ---
