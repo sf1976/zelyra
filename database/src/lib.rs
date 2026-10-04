@@ -1407,6 +1407,7 @@ const MARIADB_DEFAULT_POOL_MAX_SIZE: u32 = 8;
 const MARIADB_MAX_POOL_SIZE: u32 = 64;
 const MARIADB_DEFAULT_POOL_WAIT_TIMEOUT_SECS: u32 = 10;
 const MARIADB_MAX_POOL_WAIT_TIMEOUT_SECS: u32 = 300;
+const MARIADB_MAX_CACHED_POOLS: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct MariaDbTimeouts {
@@ -2342,53 +2343,76 @@ impl ManageConnection for MariaDbConnectionManager {
 type MariaDbPool = Pool<MariaDbConnectionManager>;
 
 struct MariaDbPoolEntry {
-    database_fingerprint: [u8; 32],
     settings: MariaDbTimeouts,
     tls: MariaDbTlsSettings,
     pool: MariaDbPool,
 }
 
-static MARIADB_POOL: OnceLock<Mutex<Option<MariaDbPoolEntry>>> = OnceLock::new();
+#[derive(Default)]
+struct MariaDbPoolRegistry {
+    entries: HashMap<[u8; 32], MariaDbPoolEntry>,
+    #[cfg(test)]
+    builds: usize,
+}
+
+impl MariaDbPoolRegistry {
+    fn get_or_build(
+        &mut self,
+        database_url: &str,
+        settings: MariaDbTimeouts,
+        tls: MariaDbTlsSettings,
+    ) -> Result<MariaDbPool, DatabaseError> {
+        let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
+        if let Some(entry) = self.entries.get(&fingerprint) {
+            if entry.settings != settings {
+                return Err(DatabaseError {
+                    message: "MariaDB pool settings changed while the process is running; restart the process to apply them".into(),
+                });
+            }
+            if entry.tls != tls {
+                return Err(DatabaseError {
+                    message: "MariaDB TLS settings changed while the process is running; restart the process to apply them".into(),
+                });
+            }
+            return Ok(entry.pool.clone());
+        }
+        if self.entries.len() >= MARIADB_MAX_CACHED_POOLS {
+            return Err(DatabaseError {
+                message: format!(
+                    "this process already owns the maximum number of distinct MariaDB pools ({MARIADB_MAX_CACHED_POOLS})"
+                ),
+            });
+        }
+
+        let pool = build_mariadb_pool(database_url, settings, &tls)?;
+        #[cfg(test)]
+        {
+            self.builds += 1;
+        }
+        self.entries.insert(
+            fingerprint,
+            MariaDbPoolEntry {
+                settings,
+                tls,
+                pool: pool.clone(),
+            },
+        );
+        Ok(pool)
+    }
+}
+
+static MARIADB_POOLS: OnceLock<Mutex<MariaDbPoolRegistry>> = OnceLock::new();
 
 fn mariadb_pool(
     database_url: &str,
     settings: MariaDbTimeouts,
     tls: MariaDbTlsSettings,
 ) -> Result<MariaDbPool, DatabaseError> {
-    let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
-    let cache = MARIADB_POOL.get_or_init(|| Mutex::new(None));
+    let cache = MARIADB_POOLS.get_or_init(|| Mutex::new(MariaDbPoolRegistry::default()));
     let mut cache = cache.lock().map_err(|_| DatabaseError {
         message: "MariaDB connection-pool state is unavailable".into(),
     })?;
-
-    if let Some(entry) = cache.as_ref() {
-        if entry.database_fingerprint != fingerprint {
-            return Err(DatabaseError {
-                message: "this process already owns a MariaDB pool for another database URL; restart the process to change databases".into(),
-            });
-        }
-        if entry.settings != settings {
-            return Err(DatabaseError {
-                message: "MariaDB pool settings changed while the process is running; restart the process to apply them".into(),
-            });
-        }
-        if entry.tls != tls {
-            return Err(DatabaseError {
-                message: "MariaDB TLS settings changed while the process is running; restart the process to apply them".into(),
-            });
-        }
-        return Ok(entry.pool.clone());
-    }
-
-    let pool = build_mariadb_pool(database_url, settings, &tls)?;
-
-    *cache = Some(MariaDbPoolEntry {
-        database_fingerprint: fingerprint,
-        settings,
-        tls,
-        pool: pool.clone(),
-    });
-    Ok(pool)
+    cache.get_or_build(database_url, settings, tls)
 }
 
 fn build_mariadb_pool(
@@ -3008,6 +3032,105 @@ mod tests {
             timeouts.query_args(),
             ["--init-command=SET SESSION max_statement_time=30"]
         );
+    }
+
+    #[test]
+    fn mariadb_pool_registry_reuses_and_isolates_named_connection_profiles() {
+        let settings = MariaDbTimeouts::parse(None, None, None, None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 1);
+        assert_eq!(registry.builds, 1);
+
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 1);
+        assert_eq!(registry.builds, 1, "the same profile should reuse its pool");
+
+        registry
+            .get_or_build(
+                "mariadb://inventory:secret@127.0.0.1:3307/inventory",
+                settings,
+                tls,
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 2);
+        assert_eq!(registry.builds, 2);
+    }
+
+    #[test]
+    fn mariadb_pool_registry_rejects_profile_changes_without_rejecting_other_urls() {
+        let settings = MariaDbTimeouts::parse(None, None, None, None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+
+        let changed_settings = MariaDbTimeouts::parse(None, Some("45"), None, None).unwrap();
+        let changed_profile = registry.get_or_build(
+            "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+            changed_settings,
+            tls.clone(),
+        );
+        let Err(error) = changed_profile else {
+            panic!("changing a live pool profile must be rejected");
+        };
+        assert!(error.message.contains("pool settings changed"));
+
+        registry
+            .get_or_build(
+                "mariadb://inventory:secret@127.0.0.1:3307/inventory",
+                changed_settings,
+                tls,
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 2);
+        assert_eq!(registry.builds, 2);
+    }
+
+    #[test]
+    fn mariadb_pool_registry_bounds_distinct_profiles() {
+        let settings = MariaDbTimeouts::parse(None, None, Some("1"), None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+
+        for index in 0..MARIADB_MAX_CACHED_POOLS {
+            registry
+                .get_or_build(
+                    &format!("mariadb://zelyra:secret@127.0.0.1:{}/app", 3307 + index),
+                    settings,
+                    tls.clone(),
+                )
+                .unwrap();
+        }
+        let over_limit =
+            registry.get_or_build("mariadb://zelyra:secret@127.0.0.1:3315/app", settings, tls);
+        let Err(error) = over_limit else {
+            panic!("the pool registry must reject profiles beyond its bound");
+        };
+        assert!(error
+            .message
+            .contains("maximum number of distinct MariaDB pools"));
+        assert_eq!(registry.entries.len(), MARIADB_MAX_CACHED_POOLS);
+        assert_eq!(registry.builds, MARIADB_MAX_CACHED_POOLS);
     }
 
     #[test]
