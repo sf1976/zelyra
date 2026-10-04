@@ -230,12 +230,16 @@ docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
 echo "[5/5] exporting two database-backed CRUD modules as independent Docker apps"
-database_test_sql="CREATE USER 'invoice_module'@'%' IDENTIFIED BY 'invoice-module-test-only';
-GRANT SELECT ON zelyra_app.invoices TO 'invoice_module'@'%';
+database_test_sql="CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE zelyra_invoice.invoices LIKE zelyra_app.invoices;
+INSERT INTO zelyra_invoice.invoices (number) VALUES ('INV-MODULE-ONLY');
+CREATE USER 'invoice_module'@'%' IDENTIFIED BY 'invoice-module-test-only';
+GRANT SELECT ON zelyra_invoice.invoices TO 'invoice_module'@'%';
+CREATE DATABASE zelyra_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE zelyra_inventory.inventory LIKE zelyra_app.inventory;
+INSERT INTO zelyra_inventory.inventory (sku) VALUES ('SKU-MODULE-ONLY');
 CREATE USER 'inventory_module'@'%' IDENTIFIED BY 'inventory-module-test-only';
-GRANT SELECT ON zelyra_app.inventory TO 'inventory_module'@'%';
-INSERT INTO zelyra_app.invoices (number) VALUES ('INV-MODULE-ONLY');
-INSERT INTO zelyra_app.inventory (sku) VALUES ('SKU-MODULE-ONLY');"
+GRANT SELECT ON zelyra_inventory.inventory TO 'inventory_module'@'%';"
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" \
@@ -248,10 +252,11 @@ write_bundle_environment() {
     local port="$2"
     local username="$3"
     local password="$4"
+    local database="$5"
     (
         umask 077
-        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/zelyra_app\nZELYRA_DB_TLS_MODE=disabled\n' \
-            "${port}" "${username}" "${password}" \
+        printf 'ZELYRA_HOST_PORT=%s\nDATABASE_URL=mariadb://%s:%s@mariadb:3306/%s\nZELYRA_DB_TLS_MODE=disabled\n' \
+            "${port}" "${username}" "${password}" "${database}" \
             > "${directory}/.env"
     )
 }
@@ -283,7 +288,12 @@ if ! grep -Fq 'ZELYRA_DB_TLS_MODE=auto' "${bundle_dir}/.env.example"; then
     exit 1
 fi
 write_bundle_environment "${bundle_dir}" "${bundle_host_port}" \
-    invoice_module invoice-module-test-only
+    invoice_module invoice-module-test-only zelyra_invoice
+if ! grep -Fq 'DATABASE_URL=mariadb://invoice_module:invoice-module-test-only@mariadb:3306/zelyra_invoice' \
+    "${bundle_dir}/.env"; then
+    echo "error: invoice app was not configured for its independently provisioned database" >&2
+    exit 1
+fi
 docker compose --project-name "${bundle_compose_project}" \
     -f "${bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${bundle_compose_project}" \
@@ -342,7 +352,12 @@ if ! grep -Fq '"database_connection_scope": "per_exported_compose_project"' \
     exit 1
 fi
 write_bundle_environment "${second_bundle_dir}" "${second_bundle_host_port}" \
-    inventory_module inventory-module-test-only
+    inventory_module inventory-module-test-only zelyra_inventory
+if ! grep -Fq 'DATABASE_URL=mariadb://inventory_module:inventory-module-test-only@mariadb:3306/zelyra_inventory' \
+    "${second_bundle_dir}/.env"; then
+    echo "error: inventory app was not configured for its independently provisioned database" >&2
+    exit 1
+fi
 docker compose --project-name "${second_bundle_compose_project}" \
     -f "${second_bundle_dir}/docker-compose.yml" config >/dev/null
 docker compose --project-name "${second_bundle_compose_project}" \
