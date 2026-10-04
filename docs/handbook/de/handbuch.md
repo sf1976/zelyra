@@ -2012,6 +2012,20 @@ ausdrücklich auf `false`.
 Als nächste experimentelle Stufe gibt es `zelyra module bundle`:
 
 ~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
+~~~
+
+Mit `--dry-run` gibt der Befehl einen JSON-Plan mit jedem relativen Dateinamen
+und seinem vollständigen Zielpfad aus. Der Plan weist außerdem aus, dass keine
+Geheimnisse übernommen und keine Zieldateien veröffentlicht werden. Das
+gewünschte Ausgabeverzeichnis wird nicht angelegt; intern erzeugt Zelyra ein
+temporäres Paket, prüft es mit `zelyra check` und entfernt es anschließend.
+Der Plan bleibt experimentell und kennzeichnet weiterhin
+`source_closure_complete: false` sowie `complete_deployment: false`.
+
+Für den eigentlichen Export lässt du `--dry-run` weg:
+
+~~~sh
 zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
 ~~~
 
@@ -8644,7 +8658,7 @@ page "/items" {
 | `zelyra run <file.zyl>` | | Kompiliert und führt ein Zelyra-Programm aus |
 | `zelyra serve <file.zyl>` | `[host:port]` | Startet den integrierten HTTP-Webserver |
 | `zelyra module plan <entry> <module-or-resource>` | | Experimentelle, schreibgeschützte Vorschau bekannter Modulabhängigkeiten |
-| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir>` | Erzeugt ein geprüftes experimentelles Quellpaket; kein Vollständigkeitsnachweis |
+| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Exportiert ein geprüftes experimentelles Paket oder zeigt vorher einen JSON-Dateiplan; kein Vollständigkeitsnachweis |
 | | `--docker --compiler-ref <40-stelliger-Commit>` | Erzeugt Dockerfile, Compose-App und `.env.example`; Abhängigkeitsschluss bleibt unvollständig |
 | `zelyra setup` | `[--database]` | Startet Docker Compose / MariaDB |
 | | `[--schema]` | Startet Umgebung und wendet Datenbankschema an |

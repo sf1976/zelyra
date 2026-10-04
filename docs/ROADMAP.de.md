@@ -724,8 +724,11 @@ unterstellt.
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
-  geheimnisfreies `.env.example`; ein eigenständiger Container-Smoke-Test für
-  eine importierte Route ist grün. Die exportierte Anwendung erhält ihre
+  geheimnisfreies `.env.example`; `--dry-run` liefert außerdem eine
+  deterministische JSON-Dateiliste der geplanten Ausgaben, ohne das angeforderte
+  Ziel anzulegen; das temporäre Testpaket wird geprüft und entfernt. Ein
+  eigenständiger Container-Smoke-Test für eine importierte Route ist grün. Die
+  exportierte Anwendung erhält ihre
   `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Mehrere
   Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
   Dateien schreibt. Das Manifest

@@ -2027,6 +2027,20 @@ source file of a table declaration as `inferred_owner_module`; `enforced` and
 The next experimental step is `zelyra module bundle`:
 
 ~~~sh
+zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle --dry-run
+~~~
+
+With `--dry-run`, the command emits a JSON plan listing every relative file
+name and its full destination path. It also states that no secrets are copied
+and no destination files are published. The requested output directory is not
+created; internally, Zelyra builds a temporary package, checks it with
+`zelyra check`, and removes it afterward. The plan remains experimental and
+continues to report `source_closure_complete: false` and
+`complete_deployment: false`.
+
+For the actual export, omit `--dry-run`:
+
+~~~sh
 zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invoices-bundle
 ~~~
 
@@ -8551,7 +8565,7 @@ page "/items" {
 | `zelyra run <file.zyl>` | | Compiles and executes a Zelyra program |
 | `zelyra serve <file.zyl>` | `[host:port]` | Starts the built-in HTTP web server |
 | `zelyra module plan <entry> <module-or-resource>` | | Experimental read-only preview of known module dependencies |
-| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir>` | Creates a checked experimental source bundle; not a completeness claim |
+| `zelyra module bundle <entry> <module-or-resource>` | `--output <dir> [--dry-run] [--docker --compiler-ref <commit>]` | Writes a checked experimental bundle or previews its JSON file plan; not a completeness claim |
 | | `--docker --compiler-ref <40-character-commit>` | Generates Dockerfile, Compose app, and `.env.example`; closure remains incomplete |
 | `zelyra setup` | `[--database]` | Starts Docker Compose / MariaDB |
 | | `[--schema]` | Starts environment and applies database schema |

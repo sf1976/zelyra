@@ -98,7 +98,8 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
-    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-char-commit>]` writes a checked experimental bundle");
+    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
+    eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
@@ -3019,10 +3020,13 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
     };
     let mut output = None;
     let mut docker = false;
+    let mut dry_run = false;
     let mut compiler_ref = None;
     while let Some(argument) = arguments.next() {
         if argument == "--output" && output.is_none() {
             output = arguments.next().map(PathBuf::from);
+        } else if argument == "--dry-run" && !dry_run {
+            dry_run = true;
         } else if argument == "--docker" && !docker {
             docker = true;
         } else if argument == "--compiler-ref" && compiler_ref.is_none() {
@@ -3416,6 +3420,50 @@ ZELYRA_DB_TLS_MODE=auto
 
     match build_result {
         Ok((source_files, support_files, docker_files)) => {
+            if dry_run {
+                let mut files = source_files
+                    .iter()
+                    .chain(support_files.iter())
+                    .chain(docker_files.iter())
+                    .map(String::as_str)
+                    .collect::<BTreeSet<_>>();
+                files.insert("README.md");
+                files.insert("zelyra.bundle.json");
+                let planned_files = files
+                    .into_iter()
+                    .map(|relative_path| {
+                        json!({
+                            "relative_path": relative_path,
+                            "destination": output.join(relative_path).to_string_lossy()
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let document = json!({
+                    "schema_version": "1",
+                    "command": "module bundle",
+                    "success": true,
+                    "diagnostics": [],
+                    "plan": {
+                        "kind": "experimental-bundle-write-plan",
+                        "selected": selected,
+                        "selected_module": selected_module,
+                        "output_directory": output,
+                        "docker": docker,
+                        "compiler_commit": compiler_ref,
+                        "files": planned_files,
+                        "secrets_included": false,
+                        "source_closure_complete": false,
+                        "complete_deployment": false,
+                        "writes_performed": false
+                    }
+                });
+                if let Err(error) = fs::remove_dir_all(&staging) {
+                    eprintln!("error[E-MOD-018]: cannot remove temporary plan files: {error}");
+                    return ExitCode::from(1);
+                }
+                println!("{}", serde_json::to_string_pretty(&document).unwrap());
+                return ExitCode::SUCCESS;
+            }
             if fs::symlink_metadata(&output).is_ok() {
                 let _ = fs::remove_dir_all(&staging);
                 eprintln!(

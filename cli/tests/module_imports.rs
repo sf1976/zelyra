@@ -422,6 +422,110 @@ fn module_bundle_can_generate_a_pinned_experimental_docker_package() {
 }
 
 #[test]
+fn module_bundle_dry_run_lists_every_output_without_creating_the_target() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/invoices.zyl\" as invoices\nfn main() {}\n",
+        ),
+        (
+            "src/invoices.zyl",
+            "table invoices { id: Id primary auto number: String(30) required }\ncrud Invoice -> invoices\n",
+        ),
+    ]);
+    let bundle = directory.with_extension("bundle-plan");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let arguments = [
+        "module",
+        "bundle",
+        "main.zyl",
+        "src/invoices.zyl",
+        "--output",
+        &bundle_arg,
+        "--dry-run",
+    ];
+    let first = run(&directory, &arguments);
+    let second = run(&directory, &arguments);
+    assert!(
+        first.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stdout, second.stdout);
+    assert!(!bundle.exists());
+    let document: Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["command"], "module bundle");
+    assert_eq!(document["success"], true);
+    assert_eq!(document["diagnostics"], serde_json::json!([]));
+    assert_eq!(document["plan"]["writes_performed"], false);
+    assert_eq!(document["plan"]["secrets_included"], false);
+    assert_eq!(document["plan"]["source_closure_complete"], false);
+    assert_eq!(document["plan"]["complete_deployment"], false);
+    let files = document["plan"]["files"].as_array().unwrap();
+    for expected in [
+        "main.zyl",
+        "src/invoices.zyl",
+        "README.md",
+        "zelyra.bundle.json",
+    ] {
+        assert!(
+            files.iter().any(|file| file["relative_path"] == expected),
+            "planned files omitted {expected}: {files:#?}"
+        );
+    }
+    assert!(files.iter().all(|file| {
+        file["destination"]
+            .as_str()
+            .is_some_and(|path| path.starts_with(bundle_arg.as_str()))
+    }));
+
+    let docker_bundle = directory.with_extension("docker-bundle-plan");
+    let docker_bundle_arg = docker_bundle.to_string_lossy().into_owned();
+    let compiler_ref = "b".repeat(40);
+    let docker_plan = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/invoices.zyl",
+            "--output",
+            &docker_bundle_arg,
+            "--docker",
+            "--compiler-ref",
+            &compiler_ref,
+            "--dry-run",
+        ],
+    );
+    assert!(
+        docker_plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&docker_plan.stdout),
+        String::from_utf8_lossy(&docker_plan.stderr)
+    );
+    assert!(!docker_bundle.exists());
+    let docker_document: Value = serde_json::from_slice(&docker_plan.stdout).unwrap();
+    assert_eq!(docker_document["plan"]["docker"], true);
+    assert_eq!(docker_document["plan"]["compiler_commit"], compiler_ref);
+    let docker_files = docker_document["plan"]["files"].as_array().unwrap();
+    for expected in [
+        "Dockerfile",
+        "docker-compose.yml",
+        ".env.example",
+        ".dockerignore",
+    ] {
+        assert!(
+            docker_files
+                .iter()
+                .any(|file| file["relative_path"] == expected),
+            "Docker plan omitted {expected}: {docker_files:#?}"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn independent_database_using_bundles_get_separate_connection_configuration() {
     let directory = project(&[
         (

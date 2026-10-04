@@ -672,7 +672,10 @@ PostgreSQL runtime parity or production readiness.
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
-  a separate-container smoke test for an imported route passes. Each exported
+  `--dry-run` also returns a deterministic JSON inventory of intended output
+  paths without creating the requested destination; the temporary candidate
+  package is checked and removed. A separate-container smoke test for an
+  imported route passes. Each exported
   app receives its own `DATABASE_URL`, while MariaDB remains external. The
   bundle rejects multiple database definitions with `E-DB-001` before writing
   files; only one project-wide connection is supported. The manifest still
