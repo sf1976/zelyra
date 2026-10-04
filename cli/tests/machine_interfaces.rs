@@ -775,6 +775,39 @@ fn init_creates_a_ready_commented_mariadb_env() {
 }
 
 #[test]
+fn init_with_mariadb_preserves_an_existing_main_without_adding_an_unused_database_module() {
+    let directory = temporary_directory("init-existing-main-mariadb");
+    fs::create_dir_all(&directory).unwrap();
+    let main_source = "fn main() {\n    print(\"existing application\")\n}\n";
+    fs::write(directory.join("main.zyl"), main_source).unwrap();
+
+    let web_host_port = free_test_port();
+    let database_host_port = free_test_port();
+    let output = run(&[
+        "init",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--host-port",
+        &web_host_port,
+        "--db-host-port",
+        &database_host_port,
+    ]);
+
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(directory.join("main.zyl")).unwrap(),
+        main_source
+    );
+    assert!(!directory.join("src/database.zyl").exists());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
     let directory = temporary_directory("new-mariadb-starter-localized");
     let database_host_port = free_test_port();

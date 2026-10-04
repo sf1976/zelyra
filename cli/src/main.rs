@@ -600,6 +600,8 @@ console = false
 }
 "#
     };
+    let preserve_existing_main =
+        options.allow_current_directory && directory.join("main.zyl").is_file();
     let main_source = if options.with_mariadb {
         let source = main_template
             .strip_prefix(MARIADB_DATABASE_DECLARATION)
@@ -618,7 +620,7 @@ console = false
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
     ];
-    if options.with_mariadb {
+    if options.with_mariadb && !preserve_existing_main {
         files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
     }
     if options.crud_template {
