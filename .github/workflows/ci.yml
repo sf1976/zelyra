@@ -206,6 +206,8 @@ jobs:
           docker tag public.ecr.aws/docker/library/rust:1-bookworm rust:1-bookworm
           docker pull public.ecr.aws/docker/library/debian:bookworm-slim
           docker tag public.ecr.aws/docker/library/debian:bookworm-slim debian:bookworm-slim
+          docker pull public.ecr.aws/docker/library/mariadb:11
+          docker tag public.ecr.aws/docker/library/mariadb:11 mariadb:11
           docker pull public.ecr.aws/docker/library/mariadb:11.4
           docker tag public.ecr.aws/docker/library/mariadb:11.4 mariadb:11.4
       - name: Run generated-project Docker end-to-end test
