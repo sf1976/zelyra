@@ -657,8 +657,10 @@ Feature eines bestimmten Anbieters.
 - [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
 - [~] Begrenzte deterministische Mutationsregressionen prüfen Lexer/Parser,
   SQL-Binder, Template-Renderer und HTTP-Parser im normalen CI-Lauf (2.048
-  Eingaben je Pfad). Coverage-guided-Fuzzing und ein minimiertes Fehlerkorpus
-  bleiben offen.
+  Eingaben je Pfad). Coverage-guided-Fuzzing fand einen Parser-Stack-Overflow;
+  rekursive Parser-Aufrufe haben nun eine 32-Frame-Grenze mit Diagnose,
+  gezielte Regressionen und einen aufbewahrten Crash-Seed. Vier lokale 60-Sekunden-Läufe bestanden
+  danach; der 15-Sekunden-CI-Lauf auf dem korrigierten Stand steht noch aus.
 - [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen teilweise
   in CI; ein vollständiger menschlicher Audit und weitere Security-Regressionen
   bleiben offen.

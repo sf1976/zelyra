@@ -2,6 +2,8 @@ use std::fmt;
 use zelyra_ast::*;
 use zelyra_lexer::{Token, TokenKind};
 
+const MAX_NESTING_DEPTH: usize = 32;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParseError {
     pub message: String,
@@ -31,6 +33,7 @@ pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
     Parser {
         tokens: &complete_tokens,
         pos: 0,
+        nesting_depth: 0,
     }
     .program()
 }
@@ -38,9 +41,25 @@ pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
 struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
+    nesting_depth: usize,
 }
 
 impl<'a> Parser<'a> {
+    fn with_nesting<T>(
+        &mut self,
+        parse: impl FnOnce(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError> {
+        if self.nesting_depth >= MAX_NESTING_DEPTH {
+            return self.error(format!(
+                "maximum parser nesting depth of {MAX_NESTING_DEPTH} exceeded"
+            ));
+        }
+        self.nesting_depth += 1;
+        let result = parse(self);
+        self.nesting_depth -= 1;
+        result
+    }
+
     fn current(&self) -> &'a Token {
         &self.tokens[self.pos]
     }
@@ -1975,6 +1994,10 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
+        self.with_nesting(Self::type_name_inner)
+    }
+
+    fn type_name_inner(&mut self) -> Result<Type, ParseError> {
         let (mut name, _) = self.ident("type name")?;
         while self.at(&TokenKind::DoubleColon) {
             self.advance();
@@ -2037,6 +2060,10 @@ impl<'a> Parser<'a> {
         Ok(ty)
     }
     fn block(&mut self) -> Result<Block, ParseError> {
+        self.with_nesting(Self::block_inner)
+    }
+
+    fn block_inner(&mut self) -> Result<Block, ParseError> {
         let start = self.expect(TokenKind::LBrace, "`{`")?;
         let mut statements = Vec::new();
         self.skip_newlines();
@@ -2239,6 +2266,10 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Expr(self.expression()?))
     }
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
+        self.with_nesting(Self::pattern_inner)
+    }
+
+    fn pattern_inner(&mut self) -> Result<Pattern, ParseError> {
         let token = self.advance().clone();
         match token.kind {
             TokenKind::Ident(name) if name == "_" => Ok(Pattern {
@@ -2289,7 +2320,7 @@ impl<'a> Parser<'a> {
         }
     }
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.binary(0)
+        self.with_nesting(|parser| parser.binary(0))
     }
     fn binary(&mut self, min_prec: u8) -> Result<Expr, ParseError> {
         let mut left = self.unary()?;
@@ -2330,6 +2361,10 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
     fn unary(&mut self) -> Result<Expr, ParseError> {
+        self.with_nesting(Self::unary_inner)
+    }
+
+    fn unary_inner(&mut self) -> Result<Expr, ParseError> {
         self.skip_newlines();
         if self.at(&TokenKind::Await) {
             let start = self.advance().span;
@@ -2616,6 +2651,54 @@ mod tests {
         let tokens = lex("fn e(){n*").unwrap();
         let error = parse(&tokens).unwrap_err();
         assert!(error.message.contains("expected expression"));
+    }
+
+    #[test]
+    fn fuzzed_recursive_input_returns_a_parse_error() {
+        let source = std::str::from_utf8(include_bytes!(
+            "../../fuzz/corpus/lexer_parser/parser_recursive_stack_overflow"
+        ))
+        .unwrap();
+        let tokens = lex(source).unwrap();
+        let error = parse(&tokens).unwrap_err();
+        assert!(error.message.contains("maximum parser nesting depth"));
+    }
+
+    #[test]
+    fn excessive_recursive_syntax_returns_a_parse_error() {
+        let depth = 256;
+        let cases = [
+            format!(
+                "fn main() {{ value = {}0{} }}",
+                "[".repeat(depth),
+                "]".repeat(depth)
+            ),
+            format!("fn main() {{ value = {}true }}", "!".repeat(depth)),
+            format!(
+                "fn main() {{ {} }}",
+                "if true { ".repeat(depth) + &"}".repeat(depth)
+            ),
+            format!(
+                "fn main(value: {}Int{}) {{}}",
+                "Option<".repeat(depth),
+                ">".repeat(depth)
+            ),
+            format!(
+                "fn main() {{ match value {{ {}value{} => {{}} }} }}",
+                "Some(".repeat(depth),
+                ")".repeat(depth)
+            ),
+        ];
+
+        for source in cases {
+            let tokens = lex(&source).unwrap();
+            let error = parse(&tokens).unwrap_err();
+            assert!(
+                error.message.contains("maximum parser nesting depth"),
+                "unexpected error for deeply nested source: {}",
+                error.message
+            );
+        }
     }
 
     #[test]

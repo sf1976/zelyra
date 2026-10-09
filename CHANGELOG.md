@@ -6,6 +6,17 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Coverage-guided fuzzing found a parser stack overflow after deeply nested
+  array/index input. Recursive parser calls now stop at 32 frames with a
+  diagnostic; the failing input is retained in the fuzz corpus and tests cover
+  arrays, unary operators, blocks, types, and match patterns. Four 60-second
+  local fuzz runs passed after the fix; CI must still rerun on this revision. /
+  Coverage-guided-Fuzzing fand einen Parser-Stack-Overflow bei tief
+  verschachtelten Array-/Indexeingaben. Rekursive Parser-Aufrufe werden nun
+  nach 32 Frames mit einer Diagnose abgewiesen; die Fehler-Eingabe bleibt im
+  Fuzz-Korpus, und Tests prüfen Arrays, Unary-Operatoren, Blöcke, Typen und
+  Match-Patterns. Vier lokale Fuzz-Läufe mit je 60 Sekunden bestanden nach dem
+  Fix; CI muss den korrigierten Stand noch prüfen.
 - Split the English and German master handbooks into linked textbook, technical-reference, and appendix files; the snippet validator covers all chapters. / Die englischen und deutschen Master-Handbücher sind in verlinkte Lehrbuch-, Referenz- und Anhangdateien aufgeteilt; der Snippet-Validator prüft alle Kapitel.
 - Schema-build failures in imported modules now retain the originating file
   and source span in `db create` diagnostics; an integration regression covers

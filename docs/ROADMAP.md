@@ -613,8 +613,10 @@ architecture requirement for every phase, not a provider-specific feature.
   versions.
 - [~] Deterministic bounded mutation regressions exercise the lexer/parser, SQL
   binder, template renderer, and HTTP parser in normal CI (2,048 inputs per
-  path). Coverage-guided fuzzing and minimized crash-corpus retention remain
-  open.
+  path). Coverage-guided runs found a parser stack overflow; recursive syntax
+  now has a 32-frame recursion limit, focused regressions, and a retained crash
+  seed. Four post-fix 60-second local runs passed; the 15-second CI rerun for
+  the fixed revision remains open.
 - [~] Security regression coverage and dependency/license scanning run in CI;
   a complete human audit and the remaining security regressions are still open.
 - [ ] Regression guard against unsolicited network or telemetry activity;
