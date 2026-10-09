@@ -6,6 +6,8 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-10
+
 - Coverage-guided fuzzing found a parser stack overflow after deeply nested
   array/index input. Recursive parser calls now stop at 32 frames with a
   diagnostic; the failing input is retained in the fuzz corpus and tests cover

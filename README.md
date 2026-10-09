@@ -11,21 +11,21 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current compiler release: 0.3.0 · language compatibility line: 0.1 · experimental**
+> **Current compiler release: 0.4.0 · language compatibility line: 0.1 · experimental**
 >
-> Zelyra 0.3.0 is not approved for production use. “Prove correctness” is a
+> Zelyra 0.4.0 is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.3.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.3.0) was published on 2026-10-03. It is experimental, not production-approved. No independent human onboarding study was conducted for 0.3.0; the project owner explicitly deferred that study to the mandatory 0.4.0 acceptance gate. See the [decision record](docs/release-readiness/0.3.0-human-gate-decision.en.md).
+The stable [`v0.4.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) was published on 2026-10-10. It is experimental, not production-approved. No independent human acceptance study was conducted for 0.4.0; the project owner explicitly deferred it to the mandatory 0.5.0 gate. This is not acceptance evidence. See the [decision record](docs/release-readiness/0.4.0-human-acceptance.en.md).
 
-## What changed in 0.3.0
+## What changed in 0.4.0
 
-Zelyra 0.3.0 strengthens the first-run and project setup flows, database and
-schema safety, generated business applications, typed compiler interfaces,
-and release packaging. It includes tested Linux and Windows x86_64 artifacts;
+Zelyra 0.4.0 adds experimental multi-file modules, safer database operations,
+password recovery with a durable encrypted mail outbox, and bounded runtime
+controls. It includes verified Linux and Windows x86_64 release artifacts;
 the precise compatibility boundaries and limitations are in the [release
-notes](docs/release-notes/0.3.0.en.md).
+notes](docs/release-notes/0.4.0.en.md).
 
 The [roadmap](docs/ROADMAP.md) tracks implementation status and limitations.
 This README is a project overview, not a second handbook or changelog.
@@ -71,7 +71,7 @@ excluded from Git and Docker build contexts; Zelyra sets newly created files to
 owner-only permissions (`0600`) on Unix. On Windows, the file inherits the
 directory's ACL, and existing `.env` files are not re-permissioned. Do not
 commit or share the file. For production, use an appropriate secrets manager
-and deployment-specific credentials; 0.3.0 is not production-approved.
+and deployment-specific credentials; 0.4.0 is not production-approved.
 
 The generated MariaDB project defaults to German and learn mode. Set
 `ZELYRA_LANGUAGE=de|en` and `ZELYRA_LEVEL=learn|work` in its `.env` to change
@@ -83,7 +83,7 @@ other settings.
 | If you want to… | Read |
 | --- | --- |
 | Learn Zelyra step by step | [Getting started](docs/getting-started.md) · [English handbook](docs/handbook/en/handbook.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) |
-| See what works in compiler 0.3.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
+| See what works in compiler 0.4.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
