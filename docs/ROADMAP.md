@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 13369)
-Total output lines: 843
-
 # Zelyra Roadmap
 
 This is the maintained roadmap for Zelyra. It records both required work and
@@ -316,7 +313,210 @@ architecture requirement for every phase, not a provider-specific feature.
 - [🧪] `zelyra db plan --format=json` emits a versioned
   `zelyra.schema-plan/v1` plan with a stable ID, schema fingerprints, drift,
   SQL steps, preflights, and an explicit approval flag. A database migration
-  ID can now be supplied to `db apply`, which recomputes and rejects s…3369 tokens truncated…action-specific `error_page`
+  ID can now be supplied to `db apply`, which recomputes and rejects stale
+  reviewed plans before preflights or SQL; a SQLite CLI integration test checks
+  stale rejection and applying a freshly reviewed ID. Applying without an ID
+  remains supported for existing workflows. MariaDB `db apply` now journals
+  plan fingerprints and per-DDL checkpoints in `_zelyra_schema_history`; `db
+  history` reports applied, failed, active, and interrupted attempts. A
+  database-scoped advisory lock prevents concurrent Zelyra migrations. E2E
+  tests interrupt between DDL steps and while a submitted `ALTER TABLE` waits
+  on a held metadata lock, then verify fresh-plan recovery. A crash during
+  actual MariaDB DDL execution can still leave that statement's result
+  ambiguous. SQLite and PostgreSQL have no persistent history, and safe inverse
+  SQL is not generated; the JSON plan reports `rollback.generated: false`.
+  PostgreSQL and SQLite `db apply` run transactionally and tests verify rollback
+  after a failing step; MariaDB DDL can still leave partial state. Before any
+  plan SQL, read-only checks now
+  reject duplicate values for new unique indexes and orphan values for new
+  foreign keys; the checks also cover required-column and nullability changes.
+  They do not prevent concurrent-write races. Backups remain the operator's
+  responsibility.
+- [~] Live schema inspection detects MariaDB default, primary-key, and
+  auto-increment drift; SQLite default, primary-key, and explicit
+  `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and
+  serial/identity drift. MariaDB and PostgreSQL default additions, changes,
+  and removals now generate `REVIEW` plans and require `--allow-risky`; E2E
+  tests verify retained rows and idempotent replanning. SQLite default changes
+  and key/auto-increment metadata changes remain `UNSUPPORTED`. MariaDB and
+  PostgreSQL key/auto-increment changes also remain `UNSUPPORTED`. PostgreSQL
+  schema safety is exercised against PostgreSQL 16 in CI, not as a
+  runtime-parity claim.
+- [~] The schema planner classifies required columns without defaults, unique
+  constraints, and generated-name-managed index/FK additions and removals;
+  unknown external indexes are preserved and untracked FK removals fail closed.
+  Adding a required no-default column to an existing table now runs a read-only
+  empty-table preflight; a populated table blocks the entire plan before SQL.
+  New unique indexes and foreign keys also run read-only duplicate and orphan
+  checks before any SQL; concurrent writes can still race these checks.
+  MariaDB and PostgreSQL nullability changes require `REVIEW`; tightening to
+  `NOT NULL` performs a read-only NULL-row preflight before any plan SQL and
+  fails closed if rows need repair. SQLite nullability and type/FK/unique-
+  constraint alterations remain unsupported. General row estimates, lock
+  warnings, data backfill plans, and maintenance-window planning remain planned.
+- [~] The development branch bounds MariaDB connection establishment (default
+  10 s; allowed 1–300) and server-side runtime/read-query statements (default
+  30 s; allowed 1–3600), rejects invalid values without echoing them, and
+  disables transparent client reconnect. The runtime SQL path now has a hard-
+  bounded process-wide pool (default 8; allowed 1–64), checkout health checks,
+  bounded pool waits (default 10 s; allowed 1–300), and discards connections
+  after statement failures. Timeout and pool integration tests pass locally
+  against isolated MariaDB 11.4 and in [PR CI run
+  37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
+  across MariaDB 10.11.19, 11.4.13, 11.8.9, and 12.3.3. Runtime and CLI
+  connections now support verified TLS: `auto` requires certificate- and
+  hostname-verified TLS for non-local hosts, `required` forces it, and
+  `disabled` is explicit. A custom CA path is supported. Positive handshake,
+  CLI inspection, and untrusted-CA rejection passed locally on MariaDB 11.4
+  and in PR CI run 37161345832 across all four MariaDB matrix versions.
+  Standalone Docker module exports default to `auto`; only the full local
+  Compose template
+  opts out for its isolated internal database network.
+  Schema inspection/DDL still uses the CLI; response transfer is not globally
+  bounded, and there are no automatic retries. Windows TLS has not been tested
+  separately. This is not in 0.3.0. Response deadlines and health diagnostics
+  remain open.
+- [ ] Streaming large results and bounded memory behavior.
+- [ ] N+1 query detection, query-plan hints, slow-query diagnostics, and
+  application-owner-controlled, locally inspectable query observability.
+- [ ] Typed relations, joins, aggregates, subqueries, CTEs, unions, and
+  database-specific extensions.
+- [ ] Read replicas, read/write routing, tenant isolation, and migration
+  environments.
+- [?] Database seed, fixture, snapshot, and anonymized test-data commands.
+
+## 4. Views and web presentation
+
+- [~] The minimal and machine-management starters include a responsive branded
+  shell and catalog-backed German/English copy; the machine starter uses the
+  learn-mode guide. The `mariadb-crud` starter now defines richer machine and
+  department records, localized CRUD list/detail/form/delete states, card views,
+  and a repeatable optional fixture containing six fictional areas and 30
+  machines. Generated CRUD, standalone form, tableview, login, and
+  authentication-admin pages now also receive that responsive default shell;
+  explicit CRUD layouts win and authored pages are not rewritten. CRUD, form,
+  authentication, validation, learning-guide, and standard HTTP-error copy use
+  the same catalogs. Project locale overlays can add or override every
+  catalog-backed generated label, including parameterized field labels and
+  generated identifier labels, in addition to explicitly marked view/text
+  entries. Business records and unmarked user-authored content remain
+  unchanged. Project-local `zelyra.theme.css` token overrides are available;
+  broader template coverage and full theme replacement remain open.
+
+- [~] Named views/layouts with a page-level `view: Name` assignment, a
+  validated default `<slot />` content insertion point, and validated named
+  slots with fallback content.
+- [~] Typed view expressions check identifier and record-field interpolations,
+  page route bindings, component properties, and dynamic component-property
+  types. Optional field-aware expressions and richer view data remain open.
+- [~] Named components with typed properties are available; typed events remain
+  planned.
+- [~] Declarative MariaDB-backed `tableview` routes with checked SQL sources,
+  declared columns, typed filters, search, sorting, pagination, URL state, and
+  escaping are available for table- and struct-backed result types.
+- [~] Components and named views support default and named slots, safe fallback
+  content, and nested composition. View layouts validate declared slot names
+  and replace them deterministically without global state; view inheritance and
+  richer nested scenarios remain open.
+- [~] CRUD resources can reuse a validated named view with `layout: ViewName`.
+  The default slot receives generated lists, details, and generated CRUD forms
+  without bypassing SQL, validation, CSRF, authorization, or escaping; named
+  slots may be filled per resource with compile-checked static markup and
+  components. Generated CRUD content remains confined to the layout's default
+  slot; record-bound custom slot content remains open.
+- [~] View-local data loading supports explicit, schema-checked record and
+  record-collection queries using `load name = sql<Type> { ... }`. Array
+  results can be rendered with typed `for item in collection { ... }` blocks.
+  Route authorization, the `Database` capability, parameter binding, generic
+  error boundaries, and HTML escaping are enforced; optional field handling
+  and richer view composition remain planned.
+- [~] Typed CRUD filter operators (`eq`, text matching, numeric comparisons,
+  and null checks) are compiled to safe server-side SQL.
+- [~] Generated CRUD filter controls preserve operator and value state in URLs;
+  deterministic filter ordering, semantic fieldsets, and separate operator/value
+  labels are available; broader accessibility improvements remain open.
+- [~] The unified typed view pipeline covers declarative `tableview` controls,
+  explicit page-local record loading, and typed collection loops; filters,
+  sorting, search, and pagination are available for declared page collections;
+  richer arbitrary-view data remains planned.
+- [~] Page-local typed query inputs (`input { search: String? }`) are checked,
+  safely bound to native SQL, exposed to HTML interpolation, and rejected with
+  controlled HTTP 400 responses when required values are missing or scalar
+  values are invalid. Automatically generated controls now cover declared page
+  collections; arbitrary input-only pages remain manual by design.
+- [~] Page-local collection pagination via `paginated <size>` is available.
+  It validates a positive `page` URL value, exposes it as `UInt`, and applies a
+  parameterized `LIMIT`/`OFFSET` wrapper; generated controls and safe total/page
+  counts are available for declared page collections.
+- [~] Page-local collection sorting via `sort { field ... }` is available.
+  Only compiler-validated result fields and `asc`/`desc` order values are
+  accepted; generated sort controls preserve URL state.
+- [~] Page-local collection search via `search { field ... }` is available.
+  Search terms are parameterized and applied to compiler-validated fields with
+  server-side `LIKE` conditions; generated search controls preserve URL state.
+- [~] Page-local typed filters via `filter { field ... }` are available.
+  Operators are derived from the declared result types, values are bound as
+  parameters, and undeclared fields or unsupported operators are rejected;
+  generated filter controls preserve URL state.
+- [ ] Composable filter expressions with typed operators for dates, booleans,
+  relations, and full-text search.
+- [ ] Reusable navigation, tables, forms, dialogs, alerts, pagination, and
+  validation-error components.
+- [~] CRUD list view overrides support a safe `table`/`cards` mode and a custom
+  empty-state message while preserving generated query, auth, and action guards.
+- [~] Shared schema-based CRUD view fields can drive generated list, detail, and
+  create/edit forms; explicit list selections remain local overrides.
+- [~] CRUD detail view overrides support a safe `standard`/`cards` mode and a
+  custom heading while preserving generated action, CSRF, auth, and escaping
+  guards.
+- [~] CRUD form view overrides support a safe `standard`/`cards` mode and
+  custom heading/submit labels while preserving validation, CSRF, parameter,
+  and permission guards.
+- [~] CRUD delete confirmation overrides support custom headings, warning
+  messages, and submit labels while preserving POST-only, CSRF, and auth guards.
+- [~] CRUD loading metadata and configurable error views preserve escaping and
+  generic database-error boundaries; client-side loading UI remains open.
+- [~] Custom CRUD actions can execute parameterized, POST-only business SQL
+  with CSRF, database-capability, authentication, and permission checks;
+  custom labels and browser confirmations are available; action-specific view
+  configuration remains open.
+- [~] A first design-token system exposes colors, typeface, card/control
+  radii, and content width; spacing, breakpoints, density, and coverage across
+  all components remain open.
+- [~] Optional project-local `zelyra.theme.css` is loaded after the built-in
+  design, bounded to 128 KiB, and copied by generated Dockerfiles. A full theme
+  engine/editor, dark mode, built-in theme choices, and user-selectable
+  appearance remain open.
+- [ ] Scoped CSS, asset pipelines, cache-busting, static files, and CSP-aware
+  inline assets.
+- [~] Responsive generated shells, labeled navigation, keyboard focus styles,
+  and a localized skip link are implemented; broader semantic/ARIA review and
+  automated accessibility checks remain open.
+- [ ] Localization, pluralization, timezone/locale formatting, and RTL support.
+- [ ] Secure raw HTML escape hatch with diagnostics and review markers.
+- [ ] Progressive enhancement: server-rendered HTML first, optional client
+  state and hydration second.
+- [ ] WebSocket/SSE support and typed client-server events where needed.
+- [~] Browser integration coverage now includes MariaDB-backed struct tableviews;
+  view snapshots and deterministic rendering tests remain planned.
+- [?] Optional alternate renderers (email, PDF, text, native desktop).
+
+## 5. Forms, CRUD, and business applications
+
+- [ ] Nested forms, repeatable fields, file uploads, multi-step workflows, and
+  conditional fields.
+- [ ] Cross-field and database-backed validation with explicit transaction
+  boundaries.
+- [ ] Optimistic locking and conflict-aware editing.
+- [ ] Bulk actions, import/export, saved searches, column preferences, and
+  server-side reporting.
+- [~] Custom action labels and browser confirmations are available.
+- [x] Typed custom action inputs use normal form validation and parameter
+  binding; relationship fields render checked MariaDB-backed select widgets.
+- [x] Custom action icons and escaped success notices are available.
+- [x] Server-rendered `confirm_page` views with fresh CSRF-protected POST
+  confirmation are available.
+- [x] Structured `success_page` notices and safe action-specific `error_page`
   responses are available.
 - [x] Reversible CRUD soft delete with archived lists and CSRF-protected
   restore actions.

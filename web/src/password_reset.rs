@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 10196)
-Total output lines: 995
-
 use super::*;
 use lettre::{
     message::{header::ContentType, Mailbox},
@@ -470,7 +467,24 @@ pub(super) fn dispatch_password_reset(
                 return reset_invalid_response(app.ui_language);
             }
             Response::redirect("/reset-password")
-                .with_header("Set-Cookie", format!("{RESET_COOKIE}={token}; Path={RESET_COOKIE_PATH}; HttpOnly; SameSite=Strict; Max-Age={};{}", RESET_TOKEN_TTL_MINUTES * 6…196 tokens truncated…r")
+                .with_header("Set-Cookie", format!("{RESET_COOKIE}={token}; Path={RESET_COOKIE_PATH}; HttpOnly; SameSite=Strict; Max-Age={};{}", RESET_TOKEN_TTL_MINUTES * 60, secure_cookie_attribute(request)))
+                .with_header("Cache-Control", "no-store")
+                .with_header("Referrer-Policy", "no-referrer")
+        }
+        ("/reset-password", "GET") => {
+            let token = cookie_value(request, RESET_COOKIE);
+            if !token.as_deref().is_some_and(valid_token)
+                || !reset_token_exists(
+                    database_url,
+                    reset_table,
+                    token.as_deref().unwrap_or_default(),
+                )
+            {
+                return reset_invalid_response(app.ui_language);
+            }
+            reset_form_response(auth, app.ui_language, true)
+                .with_header("Cache-Control", "no-store")
+                .with_header("Referrer-Policy", "no-referrer")
         }
         ("/reset-password", "POST") => {
             let input = match parse_urlencoded(&request.body) {
