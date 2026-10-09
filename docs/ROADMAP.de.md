@@ -30,6 +30,8 @@ den tatsächlich implementierten Stand.
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
   Speichersitzungen laufen ebenfalls nach 24 Stunden ab. Geräteerkennung und
   Passwortwiederherstellung bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
+  Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
+  die neuen Verwaltungsfunktionen setzen diese Spalte voraus.
 
 - [~] Die [Docker-Modulabnahme](module-docker-acceptance.de.md) prüft die
   Gesamtanwendung, getrennte Rechnungs-/Inventarexporte, fehlende `.env`,
