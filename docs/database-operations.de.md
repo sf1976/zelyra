@@ -105,6 +105,13 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
 
 ## Freigabe, Unterbrechung und Grenzen
 
+- `zelyra db plan <datei.zyl> --format=json` gibt einen versionierten
+  `zelyra.schema-plan/v1`-Plan mit SHA-256-Fingerprints des beobachteten und
+  gewünschten Schemas, stabiler Plan-ID, Drift, SQL-Schritten, Vorprüfungen
+  und Freigabebedarf aus. Die Datenbank-URL wird nicht ausgegeben.
+- Der JSON-Plan erzeugt noch keinen Datenbank-Migrationsverlauf und kein
+  sicheres inverses SQL. `rollback.generated` bleibt `false`; sichere
+  Wiederherstellung benötigt weiterhin ein geprüftes Betreiber-Backup.
 - `zelyra db plan` zeigt den erkannten Schemaunterschied; es sichert keine
   Daten und reserviert den Datenbankzustand nicht.
 - `zelyra db apply` führt unterstützte SQL-Schritte aus. MariaDB-DDL kann

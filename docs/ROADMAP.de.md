@@ -313,7 +313,11 @@ Feature eines bestimmten Anbieters.
   Siehe die [deutsche Kompatibilitätsmatrix](database-compatibility.de.md) und
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
-- [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
+- [🧪] `zelyra db plan --format=json` erzeugt einen versionierten
+  `zelyra.schema-plan/v1`-Plan mit stabiler ID, Schema-Fingerprints, Drift,
+  SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. Ein Datenbank-
+  Migrationsverlauf und sicheres inverses SQL fehlen weiterhin; der Plan weist
+  `rollback.generated: false` aus. Backups bleiben Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
   `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und

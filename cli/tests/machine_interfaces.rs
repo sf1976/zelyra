@@ -827,6 +827,60 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 }
 
 #[test]
+fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
+    let directory = temporary_directory("migration-plan-json");
+    fs::create_dir_all(&directory).unwrap();
+    let database_path = directory.join("current.sqlite");
+    let database_url = format!("sqlite://{}", database_path.display());
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT);",
+    )
+    .unwrap();
+    let source = temporary_source(
+        "migration-plan-json",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto name: String(30) required }\n",
+    );
+    let run_plan = || {
+        Command::new(binary())
+            .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+            .env("DATABASE_URL", &database_url)
+            .env_remove("ZELYRA_DATABASE_MAIN_URL")
+            .output()
+            .unwrap()
+    };
+    let first = run_plan();
+    let second = run_plan();
+    assert!(
+        first.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stdout, second.stdout);
+    assert!(!String::from_utf8_lossy(&first.stdout).contains(database_path.to_str().unwrap()));
+    let document: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["format"], "zelyra.schema-plan/v1");
+    assert_eq!(document["backend"], "sqlite");
+    assert_eq!(document["drift"], "present");
+    assert!(document["requires_operator_approval"].as_bool().unwrap());
+    assert_eq!(document["rollback"]["generated"], false);
+    assert_eq!(document["automatic_retries"], false);
+    assert!(document["plan_id"].as_str().unwrap().starts_with("sha256:"));
+    assert_eq!(
+        document["current_schema_sha256"].as_str().unwrap().len(),
+        64
+    );
+    assert_eq!(
+        document["desired_schema_sha256"].as_str().unwrap().len(),
+        64
+    );
+    fs::remove_file(&source).unwrap();
+    fs::remove_dir_all(source.parent().unwrap()).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
     let database_host_port = free_test_port();

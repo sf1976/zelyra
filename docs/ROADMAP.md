@@ -293,7 +293,11 @@ architecture requirement for every phase, not a provider-specific feature.
   compatibility matrix](database-compatibility.en.md) and [German
   compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
-- [ ] Reversible migration plans, rollback guidance, backups, and drift reports.
+- [🧪] `zelyra db plan --format=json` emits a versioned
+  `zelyra.schema-plan/v1` plan with a stable ID, schema fingerprints, drift,
+  SQL steps, preflights, and an explicit approval flag. A database migration
+  history and safe inverse SQL remain unimplemented; the plan reports
+  `rollback.generated: false`. Backups remain the operator's responsibility.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
   auto-increment drift; SQLite default, primary-key, and explicit
   `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and

@@ -1,5 +1,6 @@
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
@@ -128,7 +129,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -8455,6 +8456,162 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
     }
 }
 
+fn schema_fingerprint(schema: &Schema) -> String {
+    let mut tables = schema.tables.iter().collect::<Vec<_>>();
+    tables.sort_by(|left, right| left.name.cmp(&right.name));
+    let tables = tables
+        .into_iter()
+        .map(|table| {
+            let mut columns = table.columns.iter().collect::<Vec<_>>();
+            columns.sort_by(|left, right| left.name.cmp(&right.name));
+            let columns = columns
+                .into_iter()
+                .map(|column| {
+                    json!({
+                        "name": column.name,
+                        "sql_type": column.sql_type,
+                        "nullable": column.nullable,
+                        "primary_key": column.primary_key,
+                        "auto_increment": column.auto,
+                        "unique": column.unique,
+                        "default": column.default,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut foreign_keys = table.foreign_keys.iter().collect::<Vec<_>>();
+            foreign_keys.sort_by_key(|key| {
+                (
+                    key.name.as_deref().unwrap_or_default(),
+                    key.column.as_str(),
+                    key.referenced_table.as_str(),
+                    key.referenced_column.as_str(),
+                )
+            });
+            let foreign_keys = foreign_keys
+                .into_iter()
+                .map(|key| {
+                    json!({
+                        "name": key.name,
+                        "column": key.column,
+                        "referenced_table": key.referenced_table,
+                        "referenced_column": key.referenced_column,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut indexes = table
+                .indexes
+                .iter()
+                .chain(table.uniques.iter())
+                .collect::<Vec<_>>();
+            indexes.sort_by_key(|index| {
+                (
+                    index.name.as_str(),
+                    index.unique,
+                    index.columns.join("\0"),
+                    index.constraint_owned,
+                )
+            });
+            let indexes = indexes
+                .into_iter()
+                .map(|index| {
+                    json!({
+                        "name": index.name,
+                        "columns": index.columns,
+                        "unique": index.unique,
+                        "constraint_owned": index.constraint_owned,
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "name": table.name,
+                "columns": columns,
+                "foreign_keys": foreign_keys,
+                "indexes": indexes,
+            })
+        })
+        .collect::<Vec<_>>();
+    let canonical = json!({ "backend": schema.backend().name(), "tables": tables });
+    let bytes = serde_json::to_vec(&canonical).expect("schema fingerprint JSON is serializable");
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn schema_plan_json(
+    desired: &Schema,
+    current: &Schema,
+    plan: &zelyra_database::SchemaPlan,
+) -> Value {
+    let current_fingerprint = schema_fingerprint(current);
+    let desired_fingerprint = schema_fingerprint(desired);
+    let changes = plan
+        .changes
+        .iter()
+        .map(|change| {
+            let risk = match change.risk {
+                Risk::Safe => "safe",
+                Risk::RequiresApproval => "requires_approval",
+                Risk::Destructive => "destructive",
+                Risk::Unsupported => "unsupported",
+            };
+            json!({
+                "description": change.description,
+                "sql": change.sql,
+                "risk": risk,
+            })
+        })
+        .collect::<Vec<_>>();
+    let preflights = plan
+        .nullability_preflights
+        .iter()
+        .map(|check| {
+            json!({
+                "kind": "no_null_values",
+                "table": check.table,
+                "column": check.column,
+            })
+        })
+        .chain(plan.required_column_preflights.iter().map(|check| {
+            json!({
+                "kind": "table_must_be_empty",
+                "table": check.table,
+                "column": check.column,
+            })
+        }))
+        .collect::<Vec<_>>();
+    let identity = json!({
+        "format": "zelyra.schema-plan/v1",
+        "backend": desired.backend().name(),
+        "current_schema_sha256": current_fingerprint,
+        "desired_schema_sha256": desired_fingerprint,
+        "changes": changes,
+        "preflights": preflights,
+    });
+    let identity_bytes =
+        serde_json::to_vec(&identity).expect("schema plan identity is serializable");
+    let plan_id = format!("sha256:{:x}", Sha256::digest(identity_bytes));
+    json!({
+        "format": "zelyra.schema-plan/v1",
+        "plan_id": plan_id,
+        "backend": desired.backend().name(),
+        "current_schema_sha256": current_fingerprint,
+        "desired_schema_sha256": desired_fingerprint,
+        "drift": if plan.changes.is_empty() { "none" } else { "present" },
+        "changes": changes,
+        "preflights": preflights,
+        "requires_operator_approval": plan.requires_approval(),
+        "has_unsupported_changes": plan.has_unsupported(),
+        "rollback": {
+            "generated": false,
+            "safe_to_apply_automatically": false,
+            "hint": if plan.changes.is_empty() {
+                "No schema changes; rollback is not applicable."
+            } else {
+                "No data-safe reverse plan is available. Take and verify an operator-managed backup before applying changes."
+            },
+        },
+        "automatic_retries": false,
+    })
+}
+
 fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(subcommand) = args.next() else {
         database_usage();
@@ -8532,6 +8689,15 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }
         },
         "plan" => {
+            let json_format = match remaining_args.as_slice() {
+                [] => false,
+                [format] if format == "--format=text" => false,
+                [format] if format == "--format=json" => true,
+                _ => {
+                    database_usage();
+                    return ExitCode::from(2);
+                }
+            };
             let current = match database_url_from_schema(&schema) {
                 Some(url) => match inspect_for_backend(schema.backend(), &url) {
                     Ok(current) => current,
@@ -8548,7 +8714,16 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                     }
                 }
             };
-            print_plan(&diff(&schema, &current));
+            let plan = diff(&schema, &current);
+            if json_format {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&schema_plan_json(&schema, &current, &plan))
+                        .expect("schema plan JSON is serializable")
+                );
+            } else {
+                print_plan(&plan);
+            }
             ExitCode::SUCCESS
         }
         "apply" => {
@@ -11128,6 +11303,75 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn migration_fixture_schema(columns: Vec<zelyra_database::Column>) -> Schema {
+        Schema {
+            database: Some(zelyra_database::DatabaseConfig {
+                name: "main".into(),
+                engine: "mariadb".into(),
+                database: Some("zelyra_test".into()),
+            }),
+            tables: vec![zelyra_database::Table {
+                name: "customers".into(),
+                columns,
+                foreign_keys: Vec::new(),
+                indexes: Vec::new(),
+                uniques: Vec::new(),
+            }],
+        }
+    }
+
+    fn migration_fixture_column(
+        name: &str,
+        sql_type: &str,
+        nullable: bool,
+    ) -> zelyra_database::Column {
+        zelyra_database::Column {
+            name: name.into(),
+            sql_type: sql_type.into(),
+            nullable,
+            primary_key: name == "id",
+            auto: name == "id",
+            unique: false,
+            default: None,
+        }
+    }
+
+    #[test]
+    fn schema_plan_json_is_versioned_deterministic_and_fails_closed_on_rollback() {
+        let current =
+            migration_fixture_schema(vec![migration_fixture_column("id", "BIGINT", false)]);
+        let desired = migration_fixture_schema(vec![
+            migration_fixture_column("id", "BIGINT", false),
+            migration_fixture_column("name", "VARCHAR(30)", false),
+        ]);
+        let plan = diff(&desired, &current);
+        let first = schema_plan_json(&desired, &current, &plan);
+        let second = schema_plan_json(&desired, &current, &plan);
+        assert_eq!(first, second);
+        assert_eq!(first["format"], "zelyra.schema-plan/v1");
+        assert_eq!(first["drift"], "present");
+        assert!(first["requires_operator_approval"].as_bool().unwrap());
+        assert_eq!(first["preflights"][0]["kind"], "table_must_be_empty");
+        assert_eq!(first["rollback"]["generated"], false);
+        assert_eq!(first["automatic_retries"], false);
+        assert!(first["plan_id"].as_str().unwrap().starts_with("sha256:"));
+        assert_eq!(first["current_schema_sha256"].as_str().unwrap().len(), 64);
+        assert_eq!(first["desired_schema_sha256"].as_str().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn schema_fingerprint_ignores_inspection_order() {
+        let first = migration_fixture_schema(vec![
+            migration_fixture_column("name", "VARCHAR(30)", true),
+            migration_fixture_column("id", "BIGINT", false),
+        ]);
+        let second = migration_fixture_schema(vec![
+            migration_fixture_column("id", "BIGINT", false),
+            migration_fixture_column("name", "VARCHAR(30)", true),
+        ]);
+        assert_eq!(schema_fingerprint(&first), schema_fingerprint(&second));
+    }
 
     #[test]
     fn table_module_grants_apply_least_privilege_and_unknown_requires_combined_access() {

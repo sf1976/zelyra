@@ -6,6 +6,11 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- `zelyra db plan --format=json` now emits a versioned schema plan with stable
+  fingerprints, drift, preflights, and approval requirements; safe inverse SQL
+  remains unimplemented. / `zelyra db plan --format=json` gibt jetzt einen
+  versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
+  Freigabebedarf aus; sicheres inverses SQL bleibt offen.
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
   normalized email keys are hashed, configured lockout durations are honored
   independently of the failure window, and new keys fail closed at capacity. /

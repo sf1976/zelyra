@@ -104,6 +104,13 @@ verifying the target again.
 
 ## Approval, interruption, and limits
 
+- `zelyra db plan <file.zyl> --format=json` emits a versioned
+  `zelyra.schema-plan/v1` document with SHA-256 fingerprints of the observed
+  and desired schemas, a stable plan ID, drift, SQL steps, preflights, and
+  approval requirements. It does not expose the database URL.
+- The JSON plan does not create a database migration history or safe inverse
+  SQL. `rollback.generated` remains `false`; safe recovery still requires a
+  verified operator-managed backup.
 - `zelyra db plan` previews the detected schema difference; it does not back
   up data or reserve the database state.
 - `zelyra db apply` executes supported SQL steps. MariaDB DDL may implicitly
