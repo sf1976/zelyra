@@ -42,6 +42,10 @@ den tatsächlich implementierten Stand.
   Linux und Windows und prüft den Binary-Hash. Dependency-/Lizenzaudit,
   Provenance und Prüfung der nativen Artefakte bleiben offen.
 
+- [~] Der HTTP-Server begrenzt Lesen und Schreiben je Verbindung auf 30
+  Sekunden und verwirft danach verspätete Antworten. Synchrone Handler sind
+  nicht abbrechbar und können den einzelnen Serverprozess weiter blockieren.
+
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
   Maps, Records, Option, Result und Pattern Matching.

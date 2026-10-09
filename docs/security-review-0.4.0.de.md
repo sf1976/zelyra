@@ -21,6 +21,9 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Die ID ist Korrelationsmetadatum, keine Authentifizierung und kein Geheimnis.
 - Rate Limits erschöpfen mit `429` und `Retry-After`. Sie sind keine
   DDoS-Abwehr und ersetzen weder Edge-Limits noch persistente Kontrollen.
+- HTTP-Verbindungen haben eine feste 30-Sekunden-Frist. Sie schließt Lese- und
+  Schreibvorgänge ein, bricht synchrone Handler aber nicht ab; ein blockierter
+  Handler kann weiter den einzelnen Serverprozess belegen.
 
 ## Konten und Datenbankbetrieb
 

@@ -21,6 +21,9 @@ or human acceptance.
   authentication and not a secret.
 - Exhausted rate limits return `429` and `Retry-After`. They are not DDoS
   protection and do not replace edge limits or persistent controls.
+- HTTP connections have a fixed 30-second deadline. It covers reads and writes
+  but does not cancel synchronous handlers; a blocked handler can still occupy
+  the single server process.
 
 ## Accounts and database operations
 

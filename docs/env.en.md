@@ -158,6 +158,14 @@ the public `Host`, overwrite `X-Forwarded-Proto`, and prevent direct access to
 the app port. This setting only extends the host allowlist; it does not disable
 CSRF or origin checks.
 
+In the 0.4 development branch, each accepted HTTP connection has a fixed
+30-second deadline for reading the complete request and writing the response.
+A timeout closes the connection; there is no configurable retry. Synchronous
+handlers are not interrupted while running: if a handler exceeds the deadline,
+its late response is discarded, and the server cannot accept another
+connection until the handler returns. External TLS proxies should also set
+their own deadlines and connection limits.
+
 ## Integration-test only
 
 | Variable | Default | Precedence / source | Security classification | Affected commands and tests |

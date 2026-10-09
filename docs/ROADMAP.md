@@ -40,6 +40,10 @@ principles; the roadmap below tracks what is actually implemented.
   and Windows and verifies each binary hash. Dependency/license auditing,
   provenance, and native artifact review remain open.
 
+- [~] The HTTP server limits connection reads and writes to 30 seconds and
+  drops late responses. Synchronous handlers cannot be cancelled and can still
+  block the single server process.
+
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
   Option, Result, and pattern matching.

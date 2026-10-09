@@ -6,6 +6,12 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- HTTP connections now have a fixed 30-second read/write deadline; late
+  responses are dropped and timed-out clients no longer stop the listener.
+  Synchronous handlers still cannot be interrupted. / HTTP-Verbindungen haben
+  jetzt eine feste Lese-/Schreibfrist von 30 Sekunden; verspätete Antworten
+  entfallen und Zeitüberschreitungen beenden den Listener nicht mehr.
+  Synchrone Handler lassen sich weiterhin nicht abbrechen.
 - Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
   verification binds each SBOM to its binary SHA-256. Dependency/license audit
   and provenance remain incomplete. / Release-Builds hängen jetzt

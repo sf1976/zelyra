@@ -3745,6 +3745,7 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
 
 pub const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
+const HTTP_EXCHANGE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug)]
 enum RequestReadError {
@@ -3841,8 +3842,30 @@ fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, RequestRead
     })
 }
 
-fn read_http_request(stream: &mut TcpStream) -> Result<String, RequestReadError> {
-    read_http_request_from(stream)
+struct DeadlineReader<'a> {
+    stream: &'a mut TcpStream,
+    deadline: Instant,
+}
+
+impl Read for DeadlineReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "HTTP exchange deadline exceeded",
+            ));
+        }
+        self.stream.set_read_timeout(Some(remaining))?;
+        self.stream.read(buffer)
+    }
+}
+
+fn read_http_request(
+    stream: &mut TcpStream,
+    deadline: Instant,
+) -> Result<String, RequestReadError> {
+    read_http_request_from(&mut DeadlineReader { stream, deadline })
 }
 
 pub fn html_escape(value: &str) -> String {
@@ -8085,7 +8108,11 @@ pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
     let listener = TcpListener::bind(address)?;
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => handle_connection(&mut stream, &app)?,
+            Ok(mut stream) => {
+                if let Err(error) = handle_connection(&mut stream, &app) {
+                    eprintln!("zelyra web: request failed: {error}");
+                }
+            }
             Err(error) => eprintln!("zelyra web: connection failed: {error}"),
         }
     }
@@ -8093,7 +8120,15 @@ pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
 }
 
 fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
-    let response = match read_http_request(stream) {
+    handle_connection_until(stream, app, Instant::now() + HTTP_EXCHANGE_TIMEOUT)
+}
+
+fn handle_connection_until(
+    stream: &mut TcpStream,
+    app: &WebApp,
+    deadline: Instant,
+) -> io::Result<()> {
+    let response = match read_http_request(stream, deadline) {
         Ok(raw) => match parse_request(&raw) {
             Ok(mut request) => {
                 request.remote_addr = stream.peer_addr().ok();
@@ -8113,6 +8148,11 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
             drop(error);
             Response::html(400, "<h1>400 Bad Request</h1>")
         }
+        Err(RequestReadError::Io(error))
+            if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) =>
+        {
+            return Ok(())
+        }
         Err(RequestReadError::Io(error)) => return Err(error),
     };
     let mut response = response;
@@ -8125,7 +8165,36 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
             .headers
             .push(("X-Request-ID".into(), new_request_id()));
     }
-    stream.write_all(response.to_http().as_bytes())
+    let response = response.to_http().into_bytes();
+    let mut written_total = 0;
+    while written_total < response.len() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Ok(());
+        }
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(&response[written_total..]) {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write HTTP response",
+                ))
+            }
+            Ok(written) => {
+                written_total += written;
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Ok(())
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -9728,6 +9797,32 @@ mod tests {
         let mut reader = std::io::Cursor::new(raw.into_bytes());
         let request = parse_request(&read_http_request_from(&mut reader).unwrap()).unwrap();
         assert_eq!(request.body, body);
+    }
+
+    #[test]
+    fn incomplete_http_request_is_closed_at_absolute_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let app = WebApp::new(Vec::new(), Vec::new());
+            handle_connection_until(
+                &mut stream,
+                &app,
+                Instant::now() + Duration::from_millis(100),
+            )
+            .unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n")
+            .unwrap();
+        let started = Instant::now();
+        server.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.is_empty());
     }
 
     #[test]
