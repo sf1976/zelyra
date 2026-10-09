@@ -375,6 +375,7 @@ fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
 }
 
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
+    let name = name.rsplit("::").next().unwrap_or(name);
     let snake = name.to_ascii_lowercase();
     if table_names.contains(&snake) {
         return Some(snake);
@@ -3010,6 +3011,16 @@ mod tests {
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn table_result_types_accept_module_qualified_record_names() {
+        let table_names = HashSet::from(["customers".to_owned()]);
+
+        assert_eq!(
+            table_for_type("src/models.zyl::Customer", &table_names),
+            Some("customers".to_owned())
+        );
     }
 
     #[test]

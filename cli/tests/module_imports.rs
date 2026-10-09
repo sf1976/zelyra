@@ -1621,6 +1621,91 @@ fn module_plan_tracks_types_used_by_form_and_crud_fields() {
 }
 
 #[test]
+fn module_plan_tracks_types_used_inside_function_bodies() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/logic.zyl\" as logic\nfn main() {}\n",
+        ),
+        (
+            "src/logic.zyl",
+            "import \"src/database.zyl\" as storage\nimport \"src/schema.zyl\" as schema\nimport \"src/models.zyl\" as models\npub fn load() -> Int {\n id: models::CustomerId? = None\n customer = models::Customer { name: \"Example\" }\n return 0\n}\npub fn count() -> Int uses Database {\n customers = sql<models::Customer[]> { SELECT name FROM customers }\n return 0\n}\n",
+        ),
+        (
+            "src/schema.zyl",
+            "import \"src/database.zyl\" as storage\ntable customers { id: Id primary auto name: String(100) required access { read: [\"src/logic.zyl\"] } }\n",
+        ),
+        (
+            "src/models.zyl",
+            "pub type CustomerId = Int\npub struct Customer { name: String }\n",
+        ),
+        (
+            "src/database.zyl",
+            "database main { engine: mariadb database: \"customers\" }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"module-type-closure\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase = true\n",
+        ),
+    ]);
+
+    let check = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    let output = run(&directory, &["module", "plan", "main.zyl", "src/logic.zyl"]);
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let dependencies = document["plan"]["resource_dependencies"]
+        .as_array()
+        .unwrap();
+    for (function, target) in [
+        (
+            "function:src/logic.zyl::load",
+            "type:src/models.zyl::CustomerId",
+        ),
+        (
+            "function:src/logic.zyl::load",
+            "record:src/models.zyl::Customer",
+        ),
+        (
+            "function:src/logic.zyl::count",
+            "record:src/models.zyl::Customer",
+        ),
+    ] {
+        assert!(
+            dependencies.iter().any(|dependency| {
+                dependency["from"] == function
+                    && dependency["to"] == target
+                    && dependency["kind"] == "type"
+                    && dependency["to_module"] == "src/models.zyl"
+            }),
+            "missing function type dependency {function} -> {target}"
+        );
+    }
+    for declaration in [
+        "src/models.zyl::type:CustomerId",
+        "src/models.zyl::record:Customer",
+    ] {
+        assert!(document["plan"]["declaration_closure"]["declarations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|candidate| candidate == declaration));
+    }
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_composes_imported_api_routes_and_authentication_configuration() {
     let directory = project(&[
         (
