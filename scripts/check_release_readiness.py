@@ -30,11 +30,13 @@ REQUIRED_DECISION_RECORDS = {
         "not conducted for 0.3.0",
         "mandatory release gate for 0.4.0",
         "not a test result",
+        "decision authority: project owner",
     ),
     "docs/release-readiness/0.3.0-human-gate-decision.de.md": (
         "nicht durchgeführt",
         "0.4.0",
         "kein testergebnis",
+        "entscheidungsträger: projektverantwortlicher",
     ),
 }
 
@@ -62,11 +64,13 @@ def unfinished_gates(root: Path, version: str) -> list[str]:
         path = root / relative_path
         try:
             text = " ".join(path.read_text(encoding="utf-8").casefold().split())
+            text = re.sub(r"[*_`]", "", text)
         except FileNotFoundError:
             failures.append(f"human onboarding decision record missing ({relative_path})")
             continue
         for marker in markers:
-            if " ".join(marker.casefold().split()) not in text:
+            normalized_marker = re.sub(r"[*_`]", "", " ".join(marker.casefold().split()))
+            if normalized_marker not in text:
                 failures.append(f"human onboarding decision record incomplete ({relative_path})")
                 break
     return failures

@@ -305,7 +305,7 @@ jobs:
 
             Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.
 
-            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/main/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
 
-            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/main/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
           files: release-assets/*

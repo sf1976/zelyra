@@ -54,10 +54,12 @@ class ReleaseReadinessTests(unittest.TestCase):
 
             records = {
                 "docs/release-readiness/0.3.0-human-gate-decision.en.md": (
-                    "not conducted for 0.3.0; mandatory release gate for 0.4.0; not a test result"
+                    "not conducted for 0.3.0; mandatory release gate for 0.4.0; "
+                    "not a test result; Decision authority: project owner"
                 ),
                 "docs/release-readiness/0.3.0-human-gate-decision.de.md": (
-                    "nicht durchgeführt für 0.3.0; verpflichtendes Gate 0.4.0; kein Testergebnis"
+                    "nicht durchgeführt für 0.3.0; verpflichtendes Gate 0.4.0; "
+                    "kein Testergebnis; Entscheidungsträger: Projektverantwortlicher"
                 ),
             }
             for relative_path, content in records.items():
@@ -66,6 +68,51 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text(content, encoding="utf-8")
 
             self.assertEqual(unfinished_gates(root, "0.3.0"), [])
+
+            for relative_path, without_owner_approval in (
+                (
+                    "docs/release-readiness/0.3.0-human-gate-decision.en.md",
+                    "not conducted for 0.3.0; mandatory release gate for 0.4.0; not a test result",
+                ),
+                (
+                    "docs/release-readiness/0.3.0-human-gate-decision.de.md",
+                    "nicht durchgeführt für 0.3.0; verpflichtendes Gate 0.4.0; kein Testergebnis",
+                ),
+            ):
+                (root / relative_path).write_text(
+                    without_owner_approval, encoding="utf-8"
+                )
+                failures = unfinished_gates(root, "0.3.0")
+                self.assertTrue(
+                    any("decision record incomplete" in failure for failure in failures),
+                    f"missing owner approval was accepted in {relative_path}",
+                )
+                (root / relative_path).write_text(
+                    without_owner_approval
+                    + (
+                        "; Decision authority: project owner"
+                        if relative_path.endswith(".en.md")
+                        else "; Entscheidungsträger: Projektverantwortlicher"
+                    ),
+                    encoding="utf-8",
+                )
+
+    def test_release_notice_links_to_tag_pinned_decision_records(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md",
+            workflow,
+        )
+        self.assertIn(
+            "blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md",
+            workflow,
+        )
+        self.assertNotIn(
+            "blob/main/docs/release-readiness/0.3.0-human-gate-decision", workflow
+        )
 
     def test_human_gate_checkbox_without_decision_record_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
