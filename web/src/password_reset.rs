@@ -300,17 +300,7 @@ fn deliver_if_current_reset(
         &guard.lock_name,
         RESET_ADVISORY_LOCK_WAIT_SECONDS,
         |transaction| {
-            let query = zelyra_database::Query {
-                sql: format!(
-                    "SELECT user_id FROM {} WHERE token_hash = :token_hash AND {} LIMIT 1 FOR UPDATE",
-                    quote_identifier(&guard.reset_table),
-                    active_reset_token_predicate(None)
-                ),
-                params: vec![(
-                    "token_hash".into(),
-                    QueryValue::String(guard.token_hash.clone()),
-                )],
-            };
+            let query = active_pending_reset_query(&guard.reset_table, &guard.token_hash);
             let current = !transaction.execute(&query)?.rows.is_empty();
             if !current {
                 transaction.execute(&zelyra_database::Query {
@@ -359,6 +349,41 @@ fn deliver_if_current_reset(
     }
 }
 
+fn active_pending_reset_query(reset_table: &str, token_hash: &str) -> zelyra_database::Query {
+    zelyra_database::Query {
+        sql: format!(
+            "SELECT user_id FROM {} WHERE token_hash = :token_hash AND delivery_payload IS NOT NULL AND {} LIMIT 1 FOR UPDATE",
+            quote_identifier(reset_table),
+            active_reset_token_predicate(None)
+        ),
+        params: vec![(
+            "token_hash".into(),
+            QueryValue::String(token_hash.to_owned()),
+        )],
+    }
+}
+
+#[cfg(not(test))]
+fn defer_invalid_reset_delivery(
+    database_url: &str,
+    reset_table: &str,
+    token_hash: &str,
+) -> Result<(), String> {
+    let query = zelyra_database::Query {
+        sql: format!(
+            "UPDATE {} SET delivery_retry_at = DATE_ADD(NOW(), INTERVAL {RESET_OUTBOX_RETRY_DELAY_SECONDS} SECOND) WHERE token_hash = :token_hash AND delivery_payload IS NOT NULL",
+            quote_identifier(reset_table)
+        ),
+        params: vec![(
+            "token_hash".into(),
+            QueryValue::String(token_hash.to_owned()),
+        )],
+    };
+    zelyra_database::execute_mariadb_queries(database_url, &[query], false)
+        .map(|_| ())
+        .map_err(|_| "could not defer invalid password reset delivery".to_owned())
+}
+
 #[cfg(not(test))]
 fn process_reset_outbox(
     database_url: &str,
@@ -392,6 +417,7 @@ fn process_reset_outbox(
                 eprintln!(
                     "zelyra web: pending password reset delivery could not be decrypted: {error}"
                 );
+                defer_invalid_reset_delivery(database_url, reset_table, token_hash)?;
                 continue;
             }
         };
@@ -401,10 +427,12 @@ fn process_reset_outbox(
             payload.get("language").and_then(serde_json::Value::as_str),
         ) else {
             eprintln!("zelyra web: pending password reset delivery payload is invalid");
+            defer_invalid_reset_delivery(database_url, reset_table, token_hash)?;
             continue;
         };
         let Some(language) = UiLanguage::parse(language) else {
             eprintln!("zelyra web: pending password reset delivery language is invalid");
+            defer_invalid_reset_delivery(database_url, reset_table, token_hash)?;
             continue;
         };
         let lock_name = zelyra_database::mariadb_advisory_lock_name(
@@ -1013,6 +1041,15 @@ mod tests {
         assert_eq!(parse_delivery_key(&"ab".repeat(32)).unwrap(), [0xabu8; 32]);
         assert!(parse_delivery_key("too-short").is_err());
         assert!(parse_delivery_key(&"gg".repeat(32)).is_err());
+    }
+
+    #[test]
+    fn reset_delivery_guard_requires_an_outbox_item_still_pending() {
+        let query = active_pending_reset_query("password_resets", &"ab".repeat(32));
+        assert!(query.sql.contains("delivery_payload IS NOT NULL"));
+        assert!(query.sql.contains("consumed_at IS NULL"));
+        assert!(query.sql.contains("expires_at > NOW()"));
+        assert_eq!(query.params.len(), 1);
     }
 
     #[test]
