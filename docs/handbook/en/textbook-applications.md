@@ -1067,6 +1067,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1095,6 +1096,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1133,6 +1135,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1162,6 +1165,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1197,15 +1201,19 @@ Revoking the current session clears its cookie and redirects to sign-in. For
 persistent sessions, the page supports both session tables with and without an
 `id` column. In-memory sessions are listed only while the process is running.
 Bearer tokens are never emitted. For legacy session tables without an `id`
-column, the stored token hash is used as a hidden revocation selector. The page
-does not record or show device names, IP addresses or browser history. The
-`/account/sessions` path is reserved when authentication is configured.
+column, the stored token hash is used as a hidden revocation selector. A
+`device_label: String(255)` column enables a bounded browser label for each new
+session; values are user supplied, may be misleading, and are HTML-escaped.
+The server does not store IP addresses or browser history. Without that column,
+device labels are not persisted. The `/account/sessions` path is reserved when
+authentication is configured.
 
 When persistent sessions with an `id` column and the role administration page are configured,
 authorized administrators see up to 100 unexpired sessions, ordered by expiry.
 Each row contains its database ID, user email and expiry in database time.
-Neither the browser token nor its hash is displayed. Device names and IP
-history are not recorded or inferred.
+Neither the browser token nor its hash is displayed. Administrators see the
+optional user-agent label only when the session table declares that column.
+The value is not verified as a device identity; IP history is not recorded.
 
 Use **Revoke session** to end an individual session. The POST requires the
 configured administration permission, a valid CSRF token and same-origin
@@ -1253,6 +1261,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -2499,6 +2508,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {

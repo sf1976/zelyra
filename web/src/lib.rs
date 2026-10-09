@@ -453,6 +453,7 @@ struct Session {
     user_id: Option<i64>,
     permissions: Vec<String>,
     expires_at: Instant,
+    device: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -1766,14 +1767,18 @@ fn dispatch_login(
             else {
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             };
+            let device = request_device_metadata(request);
             if let Some(session_table) = &auth.session_table {
                 let Some(user_id) = login_user_id else {
                     return Response::html(500, "<h1>500 Internal Server Error</h1>");
                 };
+                let has_device_column = auth_session_has_column(auth, "device_label");
                 let query = zelyra_database::Query {
                     sql: format!(
-                        "INSERT INTO {} (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY))",
-                        quote_identifier(session_table)
+                        "INSERT INTO {} (user_id, token_hash, expires_at{}) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY){})",
+                        quote_identifier(session_table),
+                        if has_device_column { ", device_label" } else { "" },
+                        if has_device_column { ", :device_label" } else { "" },
                     ),
                     params: vec![
                         ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
@@ -1781,7 +1786,16 @@ fn dispatch_login(
                             "token_hash".into(),
                             zelyra_database::QueryValue::String(session_token_hash(&session_id)),
                         ),
-                    ],
+                    ]
+                    .into_iter()
+                    .chain(has_device_column.then(|| (
+                        "device_label".into(),
+                        device
+                            .clone()
+                            .map(zelyra_database::QueryValue::String)
+                            .unwrap_or(zelyra_database::QueryValue::Null),
+                    )))
+                    .collect(),
                 };
                 if let Err(error) = execute_auth_admin_mutation(
                     auth,
@@ -1817,6 +1831,7 @@ fn dispatch_login(
                         user_id: Some(user_id),
                         permissions,
                         expires_at: Instant::now() + SESSION_LIFETIME,
+                        device,
                     },
                 );
                 if auth.audit_table.is_some() {
@@ -2052,6 +2067,7 @@ struct AccountSessionRow {
     expires: String,
     expires_relative: bool,
     current: bool,
+    device: Option<String>,
 }
 
 fn dispatch_account_sessions(
@@ -2299,11 +2315,13 @@ fn account_sessions_for_user(
     let current_hash = current_token.map(session_token_hash);
     if let (Some(table), Some(database_url)) = (auth.session_table.as_deref(), database_url) {
         let has_id = session_table_has_id(auth);
+        let has_device = auth_session_has_column(auth, "device_label");
         let first_column = if has_id { "id" } else { "token_hash" };
         let result = zelyra_database::execute_mariadb_query(
             database_url,
             &format!(
-                "SELECT {first_column}, token_hash, expires_at FROM {} WHERE user_id = :user_id AND expires_at > CURRENT_TIMESTAMP ORDER BY expires_at DESC LIMIT 100",
+                "SELECT {first_column}, token_hash, expires_at, {} FROM {} WHERE user_id = :user_id AND expires_at > CURRENT_TIMESTAMP ORDER BY expires_at DESC LIMIT 100",
+                if has_device { "device_label" } else { "''" },
                 quote_identifier(table)
             ),
             vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
@@ -2326,6 +2344,10 @@ fn account_sessions_for_user(
                     expires: expires.clone(),
                     expires_relative: false,
                     current: current_hash.as_deref() == Some(token_hash.as_str()),
+                    device: row
+                        .get(3)
+                        .filter(|value| !value.is_empty() && *value != "NULL")
+                        .cloned(),
                 })
             })
             .collect());
@@ -2351,6 +2373,7 @@ fn account_sessions_for_user(
                     .to_string(),
                 expires_relative: true,
                 current: current_hash.as_deref() == Some(hash.as_str()),
+                device: session.device.clone(),
             }
         })
         .collect::<Vec<_>>();
@@ -2366,11 +2389,12 @@ fn render_account_sessions(
 ) -> String {
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
         tr(language, "auth.self_sessions_title"),
         tr(language, "auth.self_sessions_help"),
         tr(language, "auth.session_label"),
         tr(language, "auth.session_expiry"),
+        tr(language, "auth.session_device"),
         tr(language, "auth.actions"),
     );
     for session in sessions {
@@ -2399,10 +2423,16 @@ fn render_account_sessions(
         } else {
             html_escape(&session.expires)
         };
+        let device = session
+            .device
+            .as_deref()
+            .map(html_escape)
+            .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
         html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
             label,
             expires,
+            device,
             ACCOUNT_SESSIONS_PATH,
             csrf,
             html_escape(&session.key),
@@ -2737,7 +2767,8 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
         zelyra_database::execute_mariadb_query(
             database_url,
             &format!(
-                "SELECT s.id, s.user_id, u.email, s.expires_at FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.expires_at > CURRENT_TIMESTAMP ORDER BY s.expires_at, s.id LIMIT 100",
+                "SELECT s.id, s.user_id, u.email, s.expires_at, {} FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.expires_at > CURRENT_TIMESTAMP ORDER BY s.expires_at, s.id LIMIT 100",
+                if auth_session_has_column(auth, "device_label") { "s.device_label" } else { "''" },
                 quote_identifier(session_table),
                 quote_identifier(&auth.table),
             ),
@@ -3497,6 +3528,31 @@ fn administrable_session_table(auth: &AuthRoute) -> Option<&str> {
         .map(|_| name)
 }
 
+fn auth_session_has_column(auth: &AuthRoute, name: &str) -> bool {
+    auth.session_table.as_deref().is_some_and(|table_name| {
+        auth.schema
+            .tables
+            .iter()
+            .find(|table| table.name == table_name)
+            .is_some_and(|table| table.columns.iter().any(|column| column.name == name))
+    })
+}
+
+fn request_device_metadata(request: &Request) -> Option<String> {
+    let value = request.headers.get("user-agent")?.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let mut result = String::with_capacity(value.len().min(255));
+    for character in value.chars().filter(|character| !character.is_control()) {
+        if result.len() + character.len_utf8() > 255 {
+            break;
+        }
+        result.push(character);
+    }
+    (!result.is_empty()).then_some(result)
+}
+
 fn render_auth_sessions(
     auth: &AuthRoute,
     sessions: &[Vec<String>],
@@ -3505,17 +3561,24 @@ fn render_auth_sessions(
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
     let csrf = html_escape(auth.csrf.token());
     let mut html = format!(
-        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th></tr>",
+        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr>",
         tr(language, "auth.sessions"),
         tr(language, "auth.sessions_help"),
         tr(language, "auth.email"),
         tr(language, "auth.session_expires"),
+        tr(language, "auth.session_device"),
         tr(language, "auth.actions")
     );
     for row in sessions {
         if let [id, user_id, email, expires, ..] = row.as_slice() {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
-                html_escape(id), html_escape(email), html_escape(expires), html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
+            let device = row
+                .get(4)
+                .map(String::as_str)
+                .filter(|device| !device.is_empty() && *device != "NULL")
+                .map(html_escape)
+                .unwrap_or_else(|| tr(language, "auth.session_device_unknown"));
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                html_escape(id), html_escape(email), html_escape(expires), device, html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
         }
     }
     html.push_str("</table>");
@@ -3564,6 +3627,7 @@ fn account_sessions_are_scoped_to_the_signed_in_user_and_hide_bearer_tokens() {
                     user_id: Some(user_id),
                     permissions: Vec::new(),
                     expires_at: Instant::now() + Duration::from_secs(3600),
+                    device: None,
                 },
             );
         }
@@ -3607,6 +3671,7 @@ fn account_sessions_revoke_only_owned_sessions_and_sign_out_if_current_is_revoke
                     user_id: Some(user_id),
                     permissions: Vec::new(),
                     expires_at: Instant::now() + Duration::from_secs(3600),
+                    device: None,
                 },
             );
         }
@@ -3661,6 +3726,7 @@ fn account_session_revocation_requires_valid_csrf() {
             user_id: Some(7),
             permissions: Vec::new(),
             expires_at: Instant::now() + Duration::from_secs(3600),
+            device: None,
         },
     );
     let key = format!("hash:{}", session_token_hash("current-bearer"));
@@ -3754,6 +3820,7 @@ fn session_from_request(
         user_id: Some(user_id),
         permissions,
         expires_at: Instant::now() + SESSION_LIFETIME,
+        device: None,
     })
 }
 

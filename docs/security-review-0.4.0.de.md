@@ -63,9 +63,12 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Tokens. Das E2E weist außerdem die Ablehnung mit `expires_at = NOW()` nach.
   Ein Gleichheitstest mit eingefrorener Uhr, SMTP-Ausfall und Mail-/Token-
   Lebenszyklus bleiben unabhängig zu prüfen.
-- Sitzungsadministration ist teilweise umgesetzt. Gerätemetadaten und die
-  vollständige Selbstverwaltung bleiben offen; die Kontolebenszyklus-Abnahme
-  ist nicht bestanden.
+- Sitzungsadministration ist teilweise umgesetzt. Sitzungslisten zeigen eine
+  begrenzte, HTML-escaped `User-Agent`-Angabe, wenn das Schema dauerhafter
+  Sitzungen `device_label` deklariert; flüchtige Sitzungen erfassen dieselbe
+  Angabe. Der Wert ist clientkontrolliert und bestätigt keine Geräteidentität.
+  IP-Adressen werden nicht erfasst. Die Kontolebenszyklus-Abnahme ist nicht
+  bestanden.
 - MariaDB-TLS prüft Zertifikatskette und Hostnamen gemäß dokumentiertem Modus.
   TLS endet weiterhin am jeweiligen Datenbankserver; App-HTTP bleibt separat.
   Windows-TLS braucht noch einen eigenen Matrixnachweis.

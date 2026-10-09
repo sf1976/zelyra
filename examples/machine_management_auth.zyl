@@ -26,6 +26,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {

@@ -30,8 +30,10 @@ den tatsächlich implementierten Stand.
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
   Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
   dauerhafte und flüchtige Sitzungen mit CSRF- und Same-Origin-Prüfung anzeigen
-  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten
-  bleiben offen. Passwortwiederherstellung ist im 0.4-Entwicklungszweig
+  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Eine begrenzte,
+  escaped `User-Agent`-Angabe wird optional gespeichert, wenn die Sitzungstabelle
+  `device_label` deklariert; sie bestätigt keine Geräteidentität.
+  Passwortwiederherstellung ist im 0.4-Entwicklungszweig
   teilweise umgesetzt:
   MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
   Loopback-/HTTPS-SMTP-Konfiguration, begrenzte asynchrone Zustellung und
