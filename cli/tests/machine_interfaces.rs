@@ -976,6 +976,26 @@ fn db_apply_rejects_a_stale_reviewed_plan_before_applying_sql() {
         stale_stderr.contains("no SQL was applied"),
         "{stale_stderr}"
     );
+    let empty_history = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(empty_history.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&empty_history.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    assert_eq!(
+        zelyra_database::query_sqlite(
+            &database_url,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_zelyra_schema_history'"
+        )
+        .unwrap()
+        .trim(),
+        "0"
+    );
     let after_stale_apply = zelyra_database::inspect_sqlite(&database_url).unwrap();
     let customers = after_stale_apply
         .tables
@@ -1019,6 +1039,31 @@ fn db_apply_rejects_a_stale_reviewed_plan_before_applying_sql() {
         .find(|table| table.name == "customers")
         .unwrap();
     assert!(customers.columns.iter().any(|column| column.name == "name"));
+    assert!(!after_apply
+        .tables
+        .iter()
+        .any(|table| table.name == "_zelyra_schema_history"));
+
+    let history = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        history.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&history.stdout),
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let history_json: serde_json::Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history_json.as_array().unwrap().len(), 1);
+    assert_eq!(history_json[0]["status"], "applied");
+    assert_eq!(history_json[0]["plan_id"], fresh_plan_id);
+    assert_eq!(
+        history_json[0]["completed_changes"],
+        history_json[0]["change_count"]
+    );
 
     fs::remove_file(&source).unwrap();
     fs::remove_dir_all(source.parent().unwrap()).unwrap();

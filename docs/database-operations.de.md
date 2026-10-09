@@ -109,12 +109,15 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   `zelyra.schema-plan/v1`-Plan mit SHA-256-Fingerprints des beobachteten und
   gewünschten Schemas, stabiler Plan-ID, Drift, SQL-Schritten, Vorprüfungen
   und Freigabebedarf aus. Die Datenbank-URL wird nicht ausgegeben.
-- `db apply` speichert MariaDB-Pläne und den Fortschritt jedes Schritts in der
+- Alle drei Backends speichern Plan-Fingerprints und Ergebnisse in der
   reservierten Tabelle `_zelyra_schema_history`. `zelyra db history
-  <datei.zyl>` zeigt angewendete, fehlgeschlagene, aktive und unterbrochene
-  Läufe; JSON gibt es mit `--format=json`. Die interne Tabelle erscheint nicht
-  in der normalen Schemaansicht. SQLite und PostgreSQL haben noch keinen
-  persistenten Migrationsverlauf.
+  <datei.zyl>` unterstützt MariaDB, SQLite und PostgreSQL; JSON gibt es mit
+  `--format=json`. MariaDB speichert Prüfpunkte je DDL-Schritt und kann aktive
+  Migrationen anzeigen. SQLite und PostgreSQL schreiben DDL und Status
+  `applied` in derselben Transaktion. History-Abfragen warten auf die jeweilige
+  Migrationssperre und markieren verbliebene `running`-Einträge als
+  unterbrochen. Die interne Tabelle erscheint nicht in der normalen
+  Schemaansicht.
 - Der JSON-Plan erzeugt kein sicheres inverses SQL. `rollback.generated`
   bleibt `false`; sichere Wiederherstellung benötigt weiterhin ein geprüftes
   Betreiber-Backup.

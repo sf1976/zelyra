@@ -235,6 +235,10 @@ pub(super) fn schema_plan_json(
 
 const MARIADB_SCHEMA_HISTORY_TABLE: &str = "_zelyra_schema_history";
 
+fn native_sql_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
 fn mariadb_sql_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -460,6 +464,191 @@ fn print_mariadb_migration_history(
     Ok(())
 }
 
+fn ensure_native_schema_history(backend: Backend, database_url: &str) -> Result<(), DatabaseError> {
+    let create = format!(
+        "CREATE TABLE IF NOT EXISTS {MARIADB_SCHEMA_HISTORY_TABLE} (\
+            plan_id TEXT PRIMARY KEY, before_schema_sha256 TEXT NOT NULL, \
+            desired_schema_sha256 TEXT NOT NULL, status TEXT NOT NULL, \
+            attempt_count INTEGER NOT NULL DEFAULT 1, change_count INTEGER NOT NULL, \
+            completed_changes INTEGER NOT NULL DEFAULT 0, current_change_index INTEGER, \
+            current_change_description TEXT, started_at TEXT NOT NULL, updated_at TEXT NOT NULL, \
+            finished_at TEXT)"
+    );
+    match backend {
+        Backend::Sqlite => zelyra_database::query_sqlite(database_url, &create).map(|_| ()),
+        Backend::Postgres => apply_postgres(database_url, &create),
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    }
+}
+
+fn native_history_query(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Sqlite => {
+            "SELECT COALESCE(json_group_array(json_object(\
+            'plan_id', plan_id, 'before_schema_sha256', before_schema_sha256, \
+            'desired_schema_sha256', desired_schema_sha256, 'status', status, \
+            'attempt_count', attempt_count, 'change_count', change_count, \
+            'completed_changes', completed_changes, 'current_change_index', current_change_index, \
+            'current_change_description', current_change_description, 'started_at', started_at, \
+            'updated_at', updated_at, 'finished_at', finished_at)), '[]') \
+            FROM (SELECT * FROM _zelyra_schema_history ORDER BY started_at DESC, plan_id DESC)"
+        }
+        Backend::Postgres => {
+            "SELECT COALESCE(json_agg(json_build_object(\
+            'plan_id', plan_id, 'before_schema_sha256', before_schema_sha256, \
+            'desired_schema_sha256', desired_schema_sha256, 'status', status, \
+            'attempt_count', attempt_count, 'change_count', change_count, \
+            'completed_changes', completed_changes, 'current_change_index', current_change_index, \
+            'current_change_description', current_change_description, 'started_at', started_at, \
+            'updated_at', updated_at, 'finished_at', finished_at) \
+            ORDER BY started_at DESC, plan_id DESC), '[]'::json)::text \
+            FROM _zelyra_schema_history"
+        }
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    }
+}
+
+fn read_native_migration_history(
+    backend: Backend,
+    database_url: &str,
+) -> Result<Value, DatabaseError> {
+    let exists_query = match backend {
+        Backend::Sqlite => "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_zelyra_schema_history'",
+        Backend::Postgres => "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='_zelyra_schema_history'",
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    };
+    let exists = match backend {
+        Backend::Sqlite => zelyra_database::query_sqlite(database_url, exists_query)?,
+        Backend::Postgres => zelyra_database::query_postgres(database_url, exists_query)?,
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    };
+    if exists.trim() == "0" {
+        return Ok(json!([]));
+    }
+    let result = match backend {
+        Backend::Sqlite => zelyra_database::query_sqlite(
+            database_url,
+            &format!(
+                "BEGIN IMMEDIATE; UPDATE _zelyra_schema_history SET status='interrupted', updated_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP WHERE status='running'; {}; COMMIT;",
+                native_history_query(backend)
+            ),
+        )?,
+        Backend::Postgres => zelyra_database::query_postgres(
+            database_url,
+            &format!(
+                "BEGIN; SELECT pg_advisory_xact_lock(hashtext('zelyra-schema-migration'), hashtext(current_database())); UPDATE _zelyra_schema_history SET status='interrupted', updated_at=CURRENT_TIMESTAMP, finished_at=CURRENT_TIMESTAMP WHERE status='running'; {}; COMMIT;",
+                native_history_query(backend)
+            ),
+        )?,
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    };
+    let json_line = result
+        .lines()
+        .find(|line| line.trim_start().starts_with('['))
+        .unwrap_or(result.trim());
+    serde_json::from_str(json_line).map_err(|error| DatabaseError {
+        message: format!("database returned invalid migration history JSON: {error}"),
+    })
+}
+
+fn apply_native_plan(
+    backend: Backend,
+    database_url: &str,
+    sql: &str,
+    plan_id: &str,
+    before_fingerprint: &str,
+    desired_fingerprint: &str,
+    change_count: usize,
+) -> Result<(), DatabaseError> {
+    ensure_native_schema_history(backend, database_url)?;
+    let now = "CURRENT_TIMESTAMP";
+    let start = format!(
+        "INSERT INTO _zelyra_schema_history \
+         (plan_id, before_schema_sha256, desired_schema_sha256, status, attempt_count, change_count, completed_changes, started_at, updated_at) \
+         VALUES ({}, {}, {}, 'running', 1, {change_count}, 0, {now}, {now}) \
+         ON CONFLICT(plan_id) DO UPDATE SET before_schema_sha256=excluded.before_schema_sha256, \
+         desired_schema_sha256=excluded.desired_schema_sha256, status='running', \
+         attempt_count=_zelyra_schema_history.attempt_count+1, change_count=excluded.change_count, \
+         completed_changes=0, current_change_index=NULL, current_change_description=NULL, \
+         started_at={now}, updated_at={now}, finished_at=NULL",
+        native_sql_literal(plan_id), native_sql_literal(before_fingerprint),
+        native_sql_literal(desired_fingerprint),
+    );
+    match backend {
+        Backend::Sqlite => {
+            zelyra_database::query_sqlite(database_url, &start)?;
+        }
+        Backend::Postgres => {
+            apply_postgres(database_url, &start)?;
+        }
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    }
+
+    let complete = format!(
+        "UPDATE _zelyra_schema_history SET status='applied', completed_changes={change_count}, \
+         current_change_index=NULL, current_change_description=NULL, updated_at=CURRENT_TIMESTAMP, \
+         finished_at=CURRENT_TIMESTAMP WHERE plan_id={}",
+        native_sql_literal(plan_id)
+    );
+    let migration = match backend {
+        Backend::Sqlite => format!("{sql}\n{complete};"),
+        Backend::Postgres => format!(
+            "SELECT pg_advisory_xact_lock(hashtext('zelyra-schema-migration'), hashtext(current_database()));\n{sql}\n{complete};"
+        ),
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    };
+    let result = match backend {
+        Backend::Sqlite => apply_sqlite(database_url, &migration),
+        Backend::Postgres => apply_postgres(database_url, &migration),
+        Backend::MariaDb => unreachable!("native history is only used for SQLite and PostgreSQL"),
+    };
+    if let Err(error) = result {
+        let failed = format!(
+            "UPDATE _zelyra_schema_history SET status='failed', updated_at=CURRENT_TIMESTAMP, \
+             finished_at=CURRENT_TIMESTAMP WHERE plan_id={}",
+            native_sql_literal(plan_id)
+        );
+        let _ = match backend {
+            Backend::Sqlite => zelyra_database::query_sqlite(database_url, &failed).map(|_| ()),
+            Backend::Postgres => apply_postgres(database_url, &failed),
+            Backend::MariaDb => {
+                unreachable!("native history is only used for SQLite and PostgreSQL")
+            }
+        };
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn print_native_migration_history(
+    backend: Backend,
+    database_url: &str,
+    json_format: bool,
+) -> Result<(), DatabaseError> {
+    let history = read_native_migration_history(backend, database_url)?;
+    if json_format {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&history).expect("history JSON is serializable")
+        );
+    } else if let Some(entries) = history.as_array() {
+        if entries.is_empty() {
+            println!("No schema migrations recorded.");
+        }
+        for entry in entries {
+            println!(
+                "{}  {}  {}/{} changes  {}",
+                entry["status"].as_str().unwrap_or("unknown"),
+                entry["plan_id"].as_str().unwrap_or("unknown plan"),
+                entry["completed_changes"].as_u64().unwrap_or_default(),
+                entry["change_count"].as_u64().unwrap_or_default(),
+                entry["started_at"].as_str().unwrap_or("unknown time")
+            );
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(subcommand) = args.next() else {
         database_usage();
@@ -475,13 +664,11 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
     };
-    if schema.backend() == Backend::MariaDb
-        && schema.tables.iter().any(|table| {
-            table
-                .name
-                .eq_ignore_ascii_case(MARIADB_SCHEMA_HISTORY_TABLE)
-        })
-    {
+    if schema.tables.iter().any(|table| {
+        table
+            .name
+            .eq_ignore_ascii_case(MARIADB_SCHEMA_HISTORY_TABLE)
+    }) {
         eprintln!(
             "error[E-DB-001]: `{MARIADB_SCHEMA_HISTORY_TABLE}` is reserved for Zelyra migration history"
         );
@@ -558,15 +745,15 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                     database_usage();
                     return ExitCode::from(2);
                 };
-            if schema.backend() != Backend::MariaDb {
-                eprintln!("error[E-DB-008]: db history currently supports MariaDB projects");
-                return ExitCode::from(1);
-            }
             let Some(url) = database_url_from_schema(&schema) else {
                 eprintln!("error[E-DB-003]: DATABASE_URL is required for db history");
                 return ExitCode::from(1);
             };
-            match print_mariadb_migration_history(&url, json_format) {
+            let result = match schema.backend() {
+                Backend::MariaDb => print_mariadb_migration_history(&url, json_format),
+                backend => print_native_migration_history(backend, &url, json_format),
+            };
+            match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("error[E-DB-005]: {error}");
@@ -789,10 +976,24 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                     "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{sql}"
                 );
             }
+            let plan_json = schema_plan_json(&schema, &current, &plan);
+            let before_fingerprint = plan_json["current_schema_sha256"]
+                .as_str()
+                .expect("schema plan includes current fingerprint");
+            let desired_fingerprint = plan_json["desired_schema_sha256"]
+                .as_str()
+                .expect("schema plan includes desired fingerprint");
             let result = match schema.backend() {
-                Backend::Postgres => apply_postgres(&url, &sql),
+                Backend::Postgres | Backend::Sqlite => apply_native_plan(
+                    schema.backend(),
+                    &url,
+                    &sql,
+                    &actual_plan_id,
+                    before_fingerprint,
+                    desired_fingerprint,
+                    plan.changes.len(),
+                ),
                 Backend::MariaDb => apply_mariadb_plan(&url, &schema, &plan, &actual_plan_id),
-                Backend::Sqlite => apply_sqlite(&url, &sql),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,

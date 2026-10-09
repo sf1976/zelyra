@@ -316,15 +316,19 @@ architecture requirement for every phase, not a provider-specific feature.
   ID can now be supplied to `db apply`, which recomputes and rejects stale
   reviewed plans before preflights or SQL; a SQLite CLI integration test checks
   stale rejection and applying a freshly reviewed ID. Applying without an ID
-  remains supported for existing workflows. MariaDB `db apply` now journals
-  plan fingerprints and per-DDL checkpoints in `_zelyra_schema_history`; `db
-  history` reports applied, failed, active, and interrupted attempts. A
-  database-scoped advisory lock prevents concurrent Zelyra migrations. E2E
-  tests interrupt between DDL steps and while a submitted `ALTER TABLE` waits
-  on a held metadata lock, then verify fresh-plan recovery. A crash during
+  remains supported for existing workflows. All three backends journal schema
+  fingerprints and migration outcomes in `_zelyra_schema_history`; `db history`
+  supports MariaDB, SQLite, and PostgreSQL and reports applied, failed, and
+  interrupted attempts. MariaDB can also report an active migration; SQLite
+  and PostgreSQL history reads wait for the transactional migration lock, then
+  mark leftover `running` rows as interrupted. MariaDB uses a database-scoped
+  advisory lock. SQLite and PostgreSQL apply DDL and the `applied` journal
+  update in one transaction; E2E coverage checks persisted history. MariaDB
+  E2E tests interrupt between DDL steps and while a submitted `ALTER TABLE`
+  waits on a held metadata lock, then verify fresh-plan recovery. A crash during
   actual MariaDB DDL execution can still leave that statement's result
-  ambiguous. SQLite and PostgreSQL have no persistent history, and safe inverse
-  SQL is not generated; the JSON plan reports `rollback.generated: false`.
+  ambiguous. Safe inverse SQL is not generated; the JSON plan reports
+  `rollback.generated: false`.
   PostgreSQL and SQLite `db apply` run transactionally and tests verify rollback
   after a failing step; MariaDB DDL can still leave partial state. Before any
   plan SQL, read-only checks now

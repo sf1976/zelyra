@@ -92,6 +92,9 @@ after="${fixture_dir}/schema_safety_metadata_after_postgres.zyl"
 
 echo "[PostgreSQL] create isolated schema and verify serial metadata"
 DATABASE_URL="${test_url}" "${zelyra_bin}" db apply "${before}" >/dev/null
+postgres_history="$(DATABASE_URL="${test_url}" "${zelyra_bin}" db history "${before}" --format=json)"
+grep -Fq '"status": "applied"' <<<"${postgres_history}"
+echo "[PostgreSQL] migration history records the applied plan"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
     --command='DROP TABLE public.identity_records;' >/dev/null
@@ -280,6 +283,8 @@ atomic_state="$(psql -X -At --dbname="${atomic_url}" --command="
         (SELECT count(*)::text FROM public.atomic_existing_records);
 ")"
 [[ "${atomic_state}" == "false:2" ]]
+failed_history="$(DATABASE_URL="${atomic_url}" "${zelyra_bin}" db history "${atomic_after}" --format=json)"
+grep -Fq '"status": "failed"' <<<"${failed_history}"
 psql -X -v ON_ERROR_STOP=1 --dbname="${atomic_url}" \
     --command="UPDATE public.atomic_existing_records SET label = 'fix' WHERE label = 'toolong';" >/dev/null
 DATABASE_URL="${atomic_url}" "${zelyra_bin}" db apply "${atomic_after}" --allow-risky >/dev/null

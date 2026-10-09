@@ -1741,6 +1741,7 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
                 c.column_default
             FROM information_schema.columns c
             WHERE c.table_schema = 'public'
+                AND c.table_name <> '_zelyra_schema_history'
         )
         SELECT
             table_name,
@@ -1762,12 +1763,12 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
     let mut schema = parse_inspection_output(&output)?;
     let index_output = run_psql(
         database_url,
-        "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'u') FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'p') ORDER BY t.relname, i.relname",
+        "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'u') FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND t.relname <> '_zelyra_schema_history' AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'p') ORDER BY t.relname, i.relname",
     )?;
     parse_index_output(&mut schema, &index_output)?;
     let foreign_keys = run_psql(
         database_url,
-        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' ORDER BY child.relname, constraint_row.conname, child_key.position",
+        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' AND child.relname <> '_zelyra_schema_history' ORDER BY child.relname, constraint_row.conname, child_key.position",
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
@@ -2572,7 +2573,7 @@ pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> 
 
 pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
     let path = sqlite_path(database_url)?;
-    let tables_output = run_sqlite(&path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")?;
+    let tables_output = run_sqlite(&path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_zelyra_schema_history' ORDER BY name;")?;
     let mut schema = Schema {
         database: Some(DatabaseConfig {
             name: "sqlite".into(),
@@ -2619,6 +2620,14 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
         parse_sqlite_foreign_keys(table, &output)?;
     }
     Ok(schema)
+}
+
+pub fn query_postgres(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_psql(database_url, query)
+}
+
+pub fn query_sqlite(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_sqlite(&sqlite_path(database_url)?, query)
 }
 
 pub fn apply_sqlite(database_url: &str, sql: &str) -> Result<(), DatabaseError> {

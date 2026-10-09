@@ -355,17 +355,23 @@ Feature eines bestimmten Anbieters.
   Plan-ID entgegennehmen und lehnt einen veralteten Plan vor Vorprüfungen oder
   SQL ab; ein SQLite-CLI-Integrationstest prüft Ablehnung und Anwendung mit
   einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. `db apply` speichert
-  MariaDB-Plan-Fingerprints und Prüfpunkte je DDL-Schritt in
-  `_zelyra_schema_history`; `db history` zeigt angewendete, fehlgeschlagene,
-  aktive und unterbrochene Läufe. Eine datenbankweite Advisory-Sperre
-  verhindert parallele Zelyra-Migrationen. E2E-Tests unterbrechen zwischen
+  Alle drei Backends speichern Schema-Fingerprints und Migrationsergebnisse in
+  `_zelyra_schema_history`; `db history` unterstützt MariaDB, SQLite und
+  PostgreSQL und zeigt angewendete, fehlgeschlagene und unterbrochene Läufe.
+  Aktive Migrationen zeigt `db history` zusätzlich bei MariaDB an. SQLite- und
+  PostgreSQL-Abfragen warten auf die transaktionale Migrationssperre und
+  markieren danach verbliebene `running`-Einträge als unterbrochen. MariaDB
+  verwendet eine datenbankweite Advisory-Sperre. SQLite und PostgreSQL wenden
+  DDL und den Status `applied` in derselben Transaktion an.
+  SQLite- und PostgreSQL-E2E-Tests prüfen den gespeicherten Verlauf.
+  MariaDB-E2E-Tests unterbrechen zwischen
   DDL-Schritten und während ein gesendetes `ALTER TABLE` auf eine gehaltene
   Metadatensperre wartet und prüfen anschließend die Wiederherstellung mit
   einem neuen Plan. Ein Absturz während der eigentlichen MariaDB-DDL-Ausführung
-  kann deren Ergebnis weiterhin unklar lassen. SQLite und PostgreSQL haben
-  keinen persistenten Verlauf; sicheres inverses SQL wird nicht erzeugt und der
-  JSON-Plan weist `rollback.generated: false` aus. `db apply` führt PostgreSQL-
-  und SQLite-DDL transaktional aus; Tests prüfen das Rollback bei einem Fehler.
+  kann deren Ergebnis weiterhin unklar lassen. Sicheres inverses SQL wird nicht
+  erzeugt und der JSON-Plan weist `rollback.generated: false` aus. `db apply`
+  führt PostgreSQL- und SQLite-DDL transaktional aus; Tests prüfen das Rollback
+  bei einem Fehler.
   MariaDB-DDL kann Teilzustände hinterlassen. Backups bleiben
   Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
