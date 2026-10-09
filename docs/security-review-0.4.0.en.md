@@ -7,6 +7,11 @@ or human acceptance.
 
 ## HTTP and API boundaries
 
+- Health-check categories, the 30-second connection deadline, and safe retry
+  boundaries are documented in the [HTTP operations guide](http-operations.en.md).
+  Listener reachability is a TCP check; readiness is application-owned.
+  Zelyra has no built-in health endpoint and does not retry requests or
+  transactions.
 - Zelyra's built-in HTTP server does not terminate TLS. Public or LAN-facing
   deployments need a trusted TLS proxy, and the application port must be
   protected from direct access.

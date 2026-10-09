@@ -7,6 +7,11 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 
 ## HTTP- und API-Grenzen
 
+- Healthcheck-Kategorien, die 30-Sekunden-Verbindungsfrist und sichere
+  Wiederholungsgrenzen stehen in der
+  [HTTP-Betriebsanleitung](http-operations.de.md). Die TCP-Probe prüft die
+  Listener-Erreichbarkeit; Readiness gehört zur Anwendung. Zelyra bietet keinen
+  eingebauten Health-Endpunkt und wiederholt keine Requests oder Transaktionen.
 - Zelyras eingebauter HTTP-Server terminiert kein TLS. Für öffentliche oder
   LAN-erreichbare Dienste ist ein vertrauenswürdiger TLS-Proxy erforderlich;
   der Anwendungsport muss vor direktem Zugriff geschützt sein.
