@@ -1064,6 +1064,26 @@ fn db_apply_rejects_a_stale_reviewed_plan_before_applying_sql() {
         history_json[0]["completed_changes"],
         history_json[0]["change_count"]
     );
+    zelyra_database::query_sqlite(
+        &database_url,
+        "UPDATE _zelyra_schema_history SET status='running'",
+    )
+    .unwrap();
+    let interrupted = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(interrupted.status.success());
+    let interrupted_json: serde_json::Value = serde_json::from_slice(&interrupted.stdout).unwrap();
+    assert_eq!(interrupted_json[0]["status"], "interrupted");
+    assert_eq!(
+        zelyra_database::query_sqlite(&database_url, "SELECT status FROM _zelyra_schema_history",)
+            .unwrap()
+            .trim(),
+        "interrupted"
+    );
 
     fs::remove_file(&source).unwrap();
     fs::remove_dir_all(source.parent().unwrap()).unwrap();
