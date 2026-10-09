@@ -12,6 +12,12 @@ on:
       - '**/src/**'
       - 'scripts/generate_sbom.py'
       - 'scripts/verify_sbom.py'
+      - 'scripts/check_release_readiness.py'
+      - 'scripts/test_release_readiness.py'
+      - 'docs/release-plans/0.4.0.en.md'
+      - 'docs/release-plans/0.4.0.de.md'
+      - 'docs/release-readiness/0.4.0-human-acceptance.en.md'
+      - 'docs/release-readiness/0.4.0-human-acceptance.de.md'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -69,9 +75,7 @@ jobs:
           fi
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
-          if [[ "${release_tag}" == "v0.3.0" ]]; then
-            python3 scripts/check_release_readiness.py --version "${package_version}"
-          fi
+          python3 scripts/check_release_readiness.py --version "${package_version}"
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 
   build:
@@ -308,4 +312,6 @@ jobs:
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
 
             ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'The required independent human acceptance was recorded for the published 0.4.0 candidate. See the [tag-pinned acceptance record](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'Die verpflichtende unabhängige menschliche Abnahme wurde für den veröffentlichten 0.4.0-Kandidaten dokumentiert. Siehe das [taggebundene Abnahmeprotokoll](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.de.md).' || '' }}
           files: release-assets/*

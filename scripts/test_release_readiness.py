@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_release_readiness import unfinished_gates
+from check_release_readiness import REQUIRED_GATES_040, unfinished_gates
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -28,6 +28,49 @@ class ReleaseReadinessTests(unittest.TestCase):
         german = (root / "docs/release-plans/0.4.0.de.md").read_text(encoding="utf-8")
         self.assertIn("- [ ] Run a real human acceptance test", english)
         self.assertIn("- [ ] Einen echten menschlichen Abnahmetest", german)
+
+    def test_current_040_plan_blocks_release_on_open_gates(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        failures = unfinished_gates(root, "0.4.0")
+        self.assertTrue(any("independent human acceptance" in item for item in failures))
+        self.assertTrue(any("P0 implementation and tests" in item for item in failures))
+
+    def test_all_040_gates_require_bilingual_human_acceptance_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative_path, gates in REQUIRED_GATES_040.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    "\n".join(f"- [x] {marker}" for _, marker in gates),
+                    encoding="utf-8",
+                )
+
+            records = {
+                "docs/release-readiness/0.4.0-human-acceptance.en.md": (
+                    "Candidate commit: abc123\nCompleted on: 2026-10-09\n"
+                    "Decision: accepted\nDecision authority: project owner\n"
+                ),
+                "docs/release-readiness/0.4.0-human-acceptance.de.md": (
+                    "Kandidaten-Commit: abc123\nAbgeschlossen am: 2026-10-09\n"
+                    "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
+                ),
+            }
+            for relative_path, content in records.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+
+            self.assertEqual(unfinished_gates(root, "0.4.0"), [])
+
+            english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
+            english.write_text(
+                "Candidate commit: PENDING\nCompleted on: 2026-10-09\n"
+                "Decision: accepted\nDecision authority: project owner\n",
+                encoding="utf-8",
+            )
+            failures = unfinished_gates(root, "0.4.0")
+            self.assertTrue(any("contains placeholders" in item for item in failures))
 
     def test_all_required_gates_can_be_checked(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -112,6 +155,18 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertNotIn(
             "blob/main/docs/release-readiness/0.3.0-human-gate-decision", workflow
+        )
+        self.assertIn(
+            "python3 scripts/check_release_readiness.py --version",
+            workflow,
+        )
+        self.assertIn(
+            "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md",
+            workflow,
+        )
+        self.assertIn(
+            "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.de.md",
+            workflow,
         )
 
     def test_human_gate_checkbox_without_decision_record_is_blocked(self) -> None:
