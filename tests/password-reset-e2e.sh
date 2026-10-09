@@ -486,4 +486,57 @@ PY
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL")" == "0" ]]
 ! grep -Fq "${recovered_token}" "${temp_dir}/server-c-restarted.log"
 
+echo "[10b/10] preserve retry backoff when two workers poll one outbox item"
+kill "${server_c_pid}" "${smtp_c_pid}"
+wait "${server_c_pid}" 2>/dev/null || true
+wait "${smtp_c_pid}" 2>/dev/null || true
+server_c_pid=""
+smtp_c_pid=""
+python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-d.eml" "${temp_dir}/smtp-d.port" 8 "${temp_dir}/smtp-d.started" &
+smtp_c_pid=$!
+for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-d.port" ]] && break; sleep 0.1; done
+[[ -s "${temp_dir}/smtp-d.port" ]]
+address_d="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+base_url_d="http://${address_d}"
+env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
+    ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-d.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
+    ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    "${zelyra_bin}" serve "${project_file}" "${address_c}" >"${temp_dir}/server-c-race.log" 2>&1 &
+server_c_pid=$!
+env ZELYRA_PUBLIC_BASE_URL="${base_url_d}" ZELYRA_SMTP_HOST=127.0.0.1 \
+    ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-d.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
+    ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    "${zelyra_bin}" serve "${project_file}" "${address_d}" >"${temp_dir}/server-d.log" 2>&1 &
+server_b_pid=$!
+for _ in $(seq 1 40); do
+    if curl --silent --show-error "${base_url_c}/forgot-password" -o "${temp_dir}/forgot-c-race.html" && \
+        curl --silent --show-error "${base_url_d}/forgot-password" -o /dev/null; then break; fi
+    sleep 0.25
+done
+csrf_c_race="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/forgot-c-race.html")"
+[[ -n "${csrf_c_race}" ]]
+# Align both workers' first five-second poll near the inserted outbox row.
+# The sink replies after the SMTP client's five-second timeout, leaving the
+# first worker with an uncertain delivery and a scheduled retry.
+sleep 4.2
+race_delivery_status="$(curl --silent --show-error --output "${temp_dir}/race-delivery.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url_c}" \
+    --data-urlencode "_zelyra_csrf=${csrf_c_race}" --data-urlencode "email=${email}" \
+    "${base_url_c}/forgot-password")"
+[[ "${race_delivery_status}" == "202" ]]
+# Keep both workers alive long enough to observe any immediate retry from the
+# stale selection. The configured 30-second retry must not be bypassed.
+sleep 22
+python3 - "${temp_dir}/message-d.eml" <<'PY'
+from pathlib import Path
+import sys
+base = Path(sys.argv[1])
+messages = ([base] if base.is_file() else []) + list(base.parent.glob(base.name + ".*"))
+if len(messages) != 1:
+    raise SystemExit(f"expected one delivery for the shared outbox row, got {len(messages)}")
+PY
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL")" == "0" ]]
+
 echo "password-reset E2E passed"

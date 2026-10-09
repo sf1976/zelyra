@@ -352,7 +352,7 @@ fn deliver_if_current_reset(
 fn active_pending_reset_query(reset_table: &str, token_hash: &str) -> zelyra_database::Query {
     zelyra_database::Query {
         sql: format!(
-            "SELECT user_id FROM {} WHERE token_hash = :token_hash AND delivery_payload IS NOT NULL AND {} LIMIT 1 FOR UPDATE",
+            "SELECT user_id FROM {} WHERE token_hash = :token_hash AND delivery_payload IS NOT NULL AND (delivery_retry_at IS NULL OR delivery_retry_at <= NOW()) AND {} LIMIT 1 FOR UPDATE",
             quote_identifier(reset_table),
             active_reset_token_predicate(None)
         ),
@@ -1047,6 +1047,9 @@ mod tests {
     fn reset_delivery_guard_requires_an_outbox_item_still_pending() {
         let query = active_pending_reset_query("password_resets", &"ab".repeat(32));
         assert!(query.sql.contains("delivery_payload IS NOT NULL"));
+        assert!(query
+            .sql
+            .contains("delivery_retry_at IS NULL OR delivery_retry_at <= NOW()"));
         assert!(query.sql.contains("consumed_at IS NULL"));
         assert!(query.sql.contains("expires_at > NOW()"));
         assert_eq!(query.params.len(), 1);
