@@ -161,6 +161,10 @@ class ReleaseReadinessTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
+            'if [[ "${release_tag}" == "v${package_version}" ]]; then',
+            workflow,
+        )
+        self.assertIn(
             "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md",
             workflow,
         )
