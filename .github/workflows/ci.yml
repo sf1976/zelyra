@@ -206,10 +206,7 @@ jobs:
           docker tag public.ecr.aws/docker/library/rust:1-bookworm rust:1-bookworm
           docker pull public.ecr.aws/docker/library/debian:bookworm-slim
           docker tag public.ecr.aws/docker/library/debian:bookworm-slim debian:bookworm-slim
-          docker pull public.ecr.aws/docker/library/mariadb:11
           docker tag public.ecr.aws/docker/library/mariadb:11 mariadb:11
-          docker pull public.ecr.aws/docker/library/mariadb:11.4
-          docker tag public.ecr.aws/docker/library/mariadb:11.4 mariadb:11.4
       - name: Run generated-project Docker end-to-end test
         env:
           ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
@@ -319,6 +316,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
     services:
