@@ -127,6 +127,11 @@ deferral). Keep the English and German roadmaps semantically synchronized.
   what remains for the next release. State blockers and limitations explicitly.
   Estimate remaining effort from identified gaps; do not invent speedup claims.
 
+Keep implementation files organized around cohesive responsibilities. When a
+file grows beyond roughly 8,000 lines, look for bounded feature or layer
+extractions that improve navigation and review. Do not split at arbitrary
+line counts; keep each resulting module self-contained and discoverable.
+
 ## Git workflow
 
 - Create a commit after each completed and tested subfeature.
