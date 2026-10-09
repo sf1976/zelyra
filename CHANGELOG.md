@@ -6,6 +6,12 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- HTTP responses now include a validated `X-Request-ID` that API handlers can
+  read from their request context. Invalid client values are replaced, and a
+  handler cannot override the response correlation ID. / HTTP-Antworten
+  enthalten jetzt eine geprüfte `X-Request-ID`, die API-Handler aus ihrem
+  Request-Kontext lesen können. Ungültige Clientwerte werden ersetzt und ein
+  Handler kann die Korrelations-ID in der Antwort nicht überschreiben.
 - Record the project-owner decision to defer the 0.3.0 human onboarding study
   without claiming it passed; independent human acceptance remains mandatory
   for 0.4.0. / Die Entscheidung des Projektverantwortlichen dokumentiert, die

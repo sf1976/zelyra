@@ -36,6 +36,14 @@ headers, and a bounded `Access-Control-Max-Age`. A disallowed origin or method
 receives a structured JSON error. Method mismatches on API routes include an
 `Allow` header.
 
+Every HTTP response also contains exactly one `X-Request-ID` header. An
+incoming `X-Request-ID` is reused only when it contains at most 128 ASCII
+letters, digits, dots, underscores, or hyphens; otherwise the server generates
+a new ID. API handlers receive the same sanitized value as
+`request.headers["x-request-id"]`. This lets clients correlate failures with
+operator logs or diagnostics without reflecting arbitrary header values. The
+ID is not authentication and does not claim distributed request tracing.
+
 No CORS headers are added to pages, forms, or CRUD responses by this phase.
 The policy is only applied to declared API routes, and adding an origin does
 not bypass authentication or permission checks.

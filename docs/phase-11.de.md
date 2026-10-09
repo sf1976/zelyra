@@ -38,6 +38,15 @@ angeforderten Headern und einer begrenzten `Access-Control-Max-Age`. Eine
 verbotene Origin oder Methode erhält einen strukturierten JSON-Fehler.
 Methodenfehler bei API-Routen enthalten den `Allow`-Header.
 
+Jede HTTP-Antwort enthält außerdem genau einen `X-Request-ID`-Header. Ein
+eingehender `X-Request-ID` wird nur übernommen, wenn er aus höchstens 128
+ASCII-Buchstaben, Ziffern, Punkten, Unterstrichen oder Bindestrichen besteht;
+andernfalls erzeugt der Server eine neue ID. API-Handler sehen dieselbe
+bereinigte ID unter `request.headers["x-request-id"]`. Das ermöglicht die
+Zuordnung von Clientfehlern zu Logs oder Betreiberdiagnosen, ohne beliebige
+Headerwerte in Antworten zu spiegeln. Die ID ist keine Authentifizierung und
+belegt keine verteilte Request-Verfolgung.
+
 Diese Phase fügt CORS-Header nur bei deklarierten API-Routen hinzu, nicht bei
 Seiten, Formularen oder CRUD-Antworten. CORS umgeht weder Authentifizierung
 noch Berechtigungsprüfungen.

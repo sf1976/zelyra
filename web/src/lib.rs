@@ -1,7 +1,7 @@
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -826,6 +826,31 @@ const LOGIN_FAILURE_LIMIT: u32 = 5;
 const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
 const LOGIN_BLOCK_DURATION: Duration = Duration::from_secs(60);
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
+static REQUEST_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn valid_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn request_id(request: &Request) -> String {
+    if let Some(value) = request.headers.get("x-request-id") {
+        if valid_request_id(value) {
+            return value.clone();
+        }
+    }
+
+    let mut random = [0_u8; 16];
+    if OsRng.try_fill_bytes(&mut random).is_ok() {
+        return hex_encode(&random);
+    }
+
+    let sequence = REQUEST_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("local-{sequence}")
+}
 
 #[derive(Clone, Debug)]
 pub struct WebApp {
@@ -1094,7 +1119,14 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
-        if (request.headers.contains_key("host") || request_has_browser_origin_or_session(request))
+        let request_id = request_id(request);
+        let mut correlated_request = request.clone();
+        correlated_request
+            .headers
+            .insert("x-request-id".into(), request_id.clone());
+
+        let mut response = if (correlated_request.headers.contains_key("host")
+            || request_has_browser_origin_or_session(&correlated_request))
             && !request_host_is_allowed(request, &self.allowed_hosts)
         {
             let title = framework_text_with_catalog(
@@ -1109,19 +1141,20 @@ impl WebApp {
                 &self.project_ui_catalogs,
             )
             .unwrap_or_default();
-            return Response::html(
+            Response::html(
                 400,
                 format!(
                     "<h1>{}</h1><p>{}</p>",
                     html_escape(&title),
                     html_escape(&message)
                 ),
-            );
-        }
-        let mut response = self.dispatch_inner(request);
+            )
+        } else {
+            self.dispatch_inner(&correlated_request)
+        };
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
-                if let Some(context) = self.default_ui_context(request) {
+                if let Some(context) = self.default_ui_context(&correlated_request) {
                     response.body = render_default_application_shell(
                         &response.body,
                         &context,
@@ -1132,7 +1165,7 @@ impl WebApp {
             response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
         }
         if self.ui_level == UiLevel::Learn
-            && request.method == "GET"
+            && correlated_request.method == "GET"
             && response.status == 200
             && response.content_type.starts_with("text/html")
         {
@@ -1142,7 +1175,7 @@ impl WebApp {
                 .any(|crud| crud_route_matches_path(crud, &request.path));
             response.body = append_learning_assistant(
                 &response.body,
-                &request.path,
+                &correlated_request.path,
                 self.ui_language,
                 generated_crud,
             );
@@ -1154,6 +1187,10 @@ impl WebApp {
                 &self.project_ui_catalogs,
             );
         }
+        response
+            .headers
+            .retain(|(name, _)| !name.eq_ignore_ascii_case("x-request-id"));
+        response.headers.push(("X-Request-ID".into(), request_id));
         response
     }
 
@@ -3501,7 +3538,13 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         let name = name.trim().to_ascii_lowercase();
         if matches!(
             name.as_str(),
-            "host" | "origin" | "referer" | "x-forwarded-proto" | "cookie" | "authorization"
+            "host"
+                | "origin"
+                | "referer"
+                | "x-forwarded-proto"
+                | "cookie"
+                | "authorization"
+                | "x-request-id"
         ) && headers.contains_key(&name)
         {
             return Err(HttpError {
@@ -8710,6 +8753,57 @@ mod tests {
             app.dispatch(&parse_request("POST /customers/42 HTTP/1.1\r\n\r\n").unwrap())
                 .status,
             405
+        );
+    }
+
+    #[test]
+    fn request_correlation_id_is_validated_propagated_and_returned_once() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
+            "GET",
+            "/correlated",
+            |request, _| {
+                Response::json(
+                    200,
+                    request
+                        .headers
+                        .get("x-request-id")
+                        .cloned()
+                        .unwrap_or_default(),
+                )
+                .with_header("x-request-id", "handler-controlled")
+            },
+        )]);
+
+        let valid = parse_request(
+            "GET /correlated HTTP/1.1\r\nHost: localhost\r\nX-Request-ID: trace_42.a\r\n\r\n",
+        )
+        .unwrap();
+        let valid_response = app.dispatch(&valid);
+        assert_eq!(valid_response.body, "trace_42.a");
+        assert_eq!(
+            valid_response
+                .headers
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("x-request-id"))
+                .map(|(_, value)| value.as_str())
+                .collect::<Vec<_>>(),
+            ["trace_42.a"]
+        );
+
+        let invalid = parse_request(
+            "GET /correlated HTTP/1.1\r\nHost: localhost\r\nX-Request-ID: injected%0d%0aheader\r\n\r\n",
+        )
+        .unwrap();
+        let invalid_response = app.dispatch(&invalid);
+        assert!(valid_request_id(&invalid_response.body));
+        assert_ne!(invalid_response.body, "injected%0d%0aheader");
+        assert_eq!(
+            invalid_response
+                .headers
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("x-request-id"))
+                .count(),
+            1
         );
     }
 
