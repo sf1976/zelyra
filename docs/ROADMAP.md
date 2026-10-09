@@ -24,6 +24,11 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [~] The [Docker module acceptance](module-docker-acceptance.en.md) checks
+  the combined application, separate invoice/inventory exports, missing `.env`,
+  excluded routes and denied MariaDB access. Fixture accounts are read-only;
+  full writable CRUD acceptance remains open.
+
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
   Option, Result, and pattern matching.

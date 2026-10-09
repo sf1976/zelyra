@@ -26,6 +26,11 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [~] Die [Docker-Modulabnahme](module-docker-acceptance.de.md) prüft die
+  Gesamtanwendung, getrennte Rechnungs-/Inventarexporte, fehlende `.env`,
+  ausgeschlossene Routen und verweigerte MariaDB-Zugriffe. Die Testkonten
+  erlauben nur Lesen; vollständige schreibende CRUD-Abnahme bleibt offen.
+
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
   Maps, Records, Option, Result und Pattern Matching.
