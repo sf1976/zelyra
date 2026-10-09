@@ -1511,11 +1511,13 @@ dependencies = [
  "blake2",
  "lettre",
  "rand_core",
+ "ring",
  "serde_json",
  "url",
  "zelyra-ast",
  "zelyra-database",
  "zelyra-forms",
+ "zeroize",
 ]
 
 [[package]]

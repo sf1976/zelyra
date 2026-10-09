@@ -43,19 +43,26 @@ or human acceptance.
   Password recovery is partially implemented in the 0.4 branch: MariaDB stores
   Blake2s hashes of random single-use tokens with a 15-minute expiry; generic
   responses, CSRF/origin checks, audit, and persistent/in-memory session
-  revocation are present. A bounded single-worker queue holds up to 64 emails
-  and keeps SMTP delivery outside the HTTP request; a token is removed if the
-  queue is full. SMTP failures after enqueue are logged but not retried. Limits
+  revocation are present. A database-backed outbox stores the email/link payload
+  authenticated and encrypted with AES-256-GCM under the required
+  `ZELYRA_RESET_DELIVERY_KEY`. The worker retries 30 seconds after SMTP failure and after process
+  restart; the MariaDB E2E confirms encrypted-at-rest storage and recovery after
+  restarting the sole active instance. Delivery is at least once, so a crash
+  after SMTP acceptance but before database acknowledgement can duplicate an
+  email. Losing the key prevents pending messages from being decrypted. Limits
   are process-local and not shared between instances; database access timing
   can still vary. A MariaDB/SMTP-sink E2E checks enumeration, delayed delivery,
   token hashing, replay, expiry, CSRF/origin, and session revocation. The
   E2E now also submits the same reset token concurrently and verifies that one
   request succeeds, the other is rejected, and only the winning password can
-  authenticate. Token replacement and FIFO mail enqueue are serialized within
-  one process, and the E2E verifies the last delivered message matches the
-  active token. An E2E sets `expires_at = NOW()` and verifies rejection; an
-  equality test with a frozen clock, SMTP outage handling, and the mail/token
-  lifecycle still need independent review.
+  authenticate. Token replacement and outbox insertion are serialized by a
+  MariaDB advisory lock; the worker reads pending rows ordered by ID, and the
+  E2E verifies the last delivered message matches the
+  active token. An E2E sets `expires_at = NOW()` and verifies rejection. A
+  frozen-clock test exercises the production lookup predicate before, exactly at,
+  and after expiry; equality is rejected. SMTP outage and restart recovery now
+  have E2E coverage; the mail/token lifecycle, key-rotation procedure, and
+  broader operational/threat review still need review.
 - Session administration is partially implemented. Session lists can show a
   bounded, HTML-escaped `User-Agent` label when the persistent session schema
   declares `device_label`; in-memory sessions capture the same label. The value

@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: mariadb:11
+        image: public.ecr.aws/docker/library/mariadb:11
         env:
           MARIADB_DATABASE: zelyra_ci
           MARIADB_ROOT_PASSWORD: root
@@ -80,7 +80,7 @@ jobs:
           --health-timeout=5s
           --health-retries=30
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_DB: zelyra_ci
           POSTGRES_USER: zelyra_ci
@@ -200,6 +200,13 @@ jobs:
           ZELYRA_GENERATED_E2E_ADDRESS: 127.0.0.1:38520
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-mariadb-e2e.sh
+      - name: Cache Docker Official Images through ECR Public
+        run: |
+          docker pull public.ecr.aws/docker/library/rust:1-bookworm
+          docker tag public.ecr.aws/docker/library/rust:1-bookworm rust:1-bookworm
+          docker pull public.ecr.aws/docker/library/debian:bookworm-slim
+          docker tag public.ecr.aws/docker/library/debian:bookworm-slim debian:bookworm-slim
+          docker tag public.ecr.aws/docker/library/mariadb:11 mariadb:11
       - name: Run generated-project Docker end-to-end test
         env:
           ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
@@ -309,11 +316,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         version: ["10.11.19", "11.4.13", "11.8.9", "12.3.3"]
     services:
       mariadb:
-        image: mariadb:${{ matrix.version }}
+        image: public.ecr.aws/docker/library/mariadb:${{ matrix.version }}
         env:
           MARIADB_DATABASE: zelyra_ci
           MARIADB_ROOT_PASSWORD: root
@@ -345,14 +353,14 @@ jobs:
             *) echo "Expected MariaDB ${expected_version}, got ${server_version}" >&2; exit 1 ;;
           esac
           echo "Testing MariaDB ${server_version}"
-          docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+          docker image inspect "public.ecr.aws/docker/library/mariadb:${expected_version}" --format '{{json .RepoDigests}}'
       - name: Verify MariaDB database tests, pool limits, and statement timeouts
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
         run: cargo test -p zelyra-database
       - name: Verify MariaDB TLS handshake and certificate rejection
         env:
-          MARIADB_TLS_TEST_IMAGE: mariadb:${{ matrix.version }}
+          MARIADB_TLS_TEST_IMAGE: public.ecr.aws/docker/library/mariadb:${{ matrix.version }}
         run: bash ./tests/mariadb-tls-e2e.sh
       - name: Run MariaDB database and CRUD HTTP integration
         env:

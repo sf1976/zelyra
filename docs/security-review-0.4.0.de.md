@@ -46,12 +46,15 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Passwortzurücksetzung ist im 0.4-Zweig teilweise implementiert: MariaDB
   speichert Blake2s-Hashes zufälliger Einweg-Tokens mit 15 Minuten Ablaufzeit;
   generische Antworten, CSRF/Origin-Prüfung, Audit und Widerruf persistenter
-  sowie flüchtiger Sitzungen sind vorhanden. Eine begrenzte Ein-Worker-Queue
-  mit bis zu 64 E-Mails hält den SMTP-Versand aus dem HTTP-Request heraus; bei
-  vollem Queue wird der nicht zugestellte Token entfernt. SMTP-Ausfälle nach
-  Einreihung werden protokolliert, aber nicht erneut zugestellt. Die Limits
-  sind prozesslokal und nicht zwischen Instanzen geteilt; DB-Zugriffszeiten
-  können weiterhin variieren. Ein MariaDB-/SMTP-Senken-E2E prüft Enumeration,
+  sowie flüchtiger Sitzungen sind vorhanden. Eine datenbankgestützte Outbox
+  speichert E-Mail und Link authentifiziert und AES-256-GCM-verschlüsselt unter
+  dem erforderlichen `ZELYRA_RESET_DELIVERY_KEY`. Der Worker versucht 30 Sekunden
+  nach SMTP-Ausfall und nach Prozessneustart erneut; das MariaDB-E2E prüft Verschlüsselung
+  im Ruhezustand und Wiederaufnahme nach Neustart der einzigen aktiven Instanz.
+  Zustellung ist mindestens einmalig; ein Absturz nach SMTP-Annahme, aber vor
+  Bestätigung kann doppelte E-Mails erzeugen. Ohne Schlüssel sind wartende
+  Nachrichten nicht entschlüsselbar. Die Limits sind prozesslokal und nicht
+  zwischen Instanzen geteilt; DB-Zugriffszeiten können weiterhin variieren. Ein MariaDB-/SMTP-Senken-E2E prüft Enumeration,
   verzögerte Zustellung, Token-Hash, Replay, Ablauf, CSRF/Origin und
   Sitzungswiderruf. Der E2E-Test löst dasselbe Reset-Token nun außerdem
   gleichzeitig zweimal ein und prüft genau einen Erfolg, eine Ablehnung und
@@ -61,8 +64,11 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Instanzen; ein Zwei-Instanzen-E2E bestätigt, dass die spätere zugestellte
   E-Mail zum gespeicherten Token gehört. Ein Mailworker verwirft veraltete
   Tokens. Das E2E weist außerdem die Ablehnung mit `expires_at = NOW()` nach.
-  Ein Gleichheitstest mit eingefrorener Uhr, SMTP-Ausfall und Mail-/Token-
-  Lebenszyklus bleiben unabhängig zu prüfen.
+  Ein Test mit eingefrorener Uhr prüft das produktive Token-Prädikat vor, exakt
+  bei und nach Ablauf; Gleichheit wird abgelehnt. SMTP-Ausfall und
+  Wiederaufnahme nach Neustart sind nun im E2E abgedeckt; Mail-/Token-
+  Lebenszyklus, Schlüsselrotation und breiteres Betriebs-/Threat-Review müssen
+  weiter geprüft werden.
 - Sitzungsadministration ist teilweise umgesetzt. Sitzungslisten zeigen eine
   begrenzte, HTML-escaped `User-Agent`-Angabe, wenn das Schema dauerhafter
   Sitzungen `device_label` deklariert; flüchtige Sitzungen erfassen dieselbe
