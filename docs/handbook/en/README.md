@@ -420,7 +420,7 @@ Important commands:
 | `zelyra db bootstrap app.zyl` | bootstrap MariaDB or SQLite schema |
 | `zelyra db inspect app.zyl` | inspect the live schema |
 | `zelyra db plan app.zyl` | display schema changes |
-| `zelyra db apply app.zyl` | apply an approved plan |
+| `zelyra db apply app.zyl [--plan-id <sha256:...>]` | apply an approved plan and optionally reject schema drift since review |
 | `zelyra audit inspect app.zyl` | inspect the latest audit events |
 | `zelyra audit export app.zyl --format json` | export audit events as JSON |
 | `zelyra audit verify app.zyl` | verify audit fields and optional hash chain |
@@ -552,13 +552,15 @@ Bootstrap, inspect, and plan:
 ~~~bash
 zelyra db bootstrap examples/machine_management_mariadb.zyl
 zelyra db inspect examples/machine_management_mariadb.zyl
-zelyra db plan examples/machine_management_mariadb.zyl
+zelyra db plan examples/machine_management_mariadb.zyl --format=json
 ~~~
 
-Apply an approved plan:
+Review its `plan_id`, then pass it when applying. `jq` can carry the value
+between commands. If the live schema has changed, Zelyra stops before SQL:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl
+plan_id=$(zelyra db plan examples/machine_management_mariadb.zyl --format=json | jq -r .plan_id)
+zelyra db apply examples/machine_management_mariadb.zyl --plan-id "$plan_id"
 ~~~
 
 Changes marked `REVIEW` or `DESTRUCTIVE` require explicit approval. Prefer

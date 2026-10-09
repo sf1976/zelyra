@@ -304,7 +304,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [🧪] `zelyra db plan --format=json` emits a versioned
   `zelyra.schema-plan/v1` plan with a stable ID, schema fingerprints, drift,
   SQL steps, preflights, and an explicit approval flag. A database migration
-  history and safe inverse SQL remain unimplemented; the plan reports
+  ID can now be supplied to `db apply`, which recomputes and rejects stale
+  reviewed plans before preflights or SQL. Applying without an ID remains
+  supported for existing workflows. A database migration history and safe
+  inverse SQL remain unimplemented; the plan reports
   `rollback.generated: false`. PostgreSQL and SQLite `db apply` now run DDL
   transactionally and tests verify rollback after a failing step; MariaDB DDL
   can still leave partial state. Before any plan SQL, read-only checks now

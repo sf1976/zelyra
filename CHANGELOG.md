@@ -8,9 +8,11 @@ releases follow Semantic Versioning independently of the language line.
 
 - `zelyra db plan --format=json` now emits a versioned schema plan with stable
   fingerprints, drift, preflights, and approval requirements; safe inverse SQL
-  remains unimplemented. / `zelyra db plan --format=json` gibt jetzt einen
+  remains unimplemented. `db apply --plan-id` can reject a stale reviewed plan
+  before preflights or SQL. / `zelyra db plan --format=json` gibt jetzt einen
   versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
-  Freigabebedarf aus; sicheres inverses SQL bleibt offen.
+  Freigabebedarf aus; sicheres inverses SQL bleibt offen. `db apply --plan-id`
+  lehnt einen nachträglich veralteten Plan vor Vorprüfungen und SQL ab.
 - Generated authentication pages now provide `/account/sessions` for
   self-service session listing and revocation, limited to the signed-in user.
   CSRF and same-origin checks apply; revoking the current session clears its

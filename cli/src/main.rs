@@ -148,7 +148,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 

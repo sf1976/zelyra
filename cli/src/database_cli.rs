@@ -354,6 +354,36 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
             ExitCode::SUCCESS
         }
         "apply" => {
+            let mut expected_plan_id = None;
+            let mut index = 0;
+            while index < remaining_args.len() {
+                match remaining_args[index].as_str() {
+                    "--allow-risky" | "--allow-destructive" => index += 1,
+                    "--plan-id" => {
+                        let Some(value) = remaining_args.get(index + 1) else {
+                            database_usage();
+                            return ExitCode::from(2);
+                        };
+                        if expected_plan_id.replace(value.as_str()).is_some() {
+                            database_usage();
+                            return ExitCode::from(2);
+                        }
+                        index += 2;
+                    }
+                    value if value.starts_with("--plan-id=") => {
+                        let value = &value["--plan-id=".len()..];
+                        if value.is_empty() || expected_plan_id.replace(value).is_some() {
+                            database_usage();
+                            return ExitCode::from(2);
+                        }
+                        index += 1;
+                    }
+                    _ => {
+                        database_usage();
+                        return ExitCode::from(2);
+                    }
+                }
+            }
             let Some(url) = database_url_from_schema(&schema) else {
                 eprintln!("error[E-DB-003]: DATABASE_URL is required for db apply");
                 return ExitCode::from(1);
@@ -367,6 +397,16 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
             };
             let plan = diff(&schema, &current);
             print_plan(&plan);
+            if let Some(expected_plan_id) = expected_plan_id {
+                let actual_plan_id = schema_plan_json(&schema, &current, &plan)["plan_id"]
+                    .as_str()
+                    .expect("schema plan JSON always contains a plan id")
+                    .to_owned();
+                if expected_plan_id != actual_plan_id {
+                    eprintln!("error[E-DB-007]: the database schema changed after this plan was reviewed; no SQL was applied. Run `zelyra db plan --format=json` again and review the new plan id");
+                    return ExitCode::from(1);
+                }
+            }
             if plan.has_unsupported() {
                 eprintln!(
                     "error[E-DB-006]: schema plan contains unsupported changes; no SQL was applied"
