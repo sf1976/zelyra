@@ -40,9 +40,11 @@ or human acceptance.
 - MariaDB TLS verifies the certificate chain and host names according to the
   documented mode. TLS still terminates at the database server; app HTTP is a
   separate connection. Windows TLS still needs its own matrix evidence.
-- Versioned reversible schema migrations, drift/rollback evidence, and recovery
-  after interruption are incomplete. Existing backups remain an operator
-  responsibility.
+- PostgreSQL and SQLite schema apply now use transactions; tests show a failed
+  DDL step rolls back earlier steps. MariaDB DDL can still leave partial state.
+  Persistent migration history, safe inverse SQL, actual process-interruption
+  recovery, and a full restore rehearsal remain open. Existing backups remain
+  an operator responsibility.
 
 ## Supply chain and remaining gates
 

@@ -1866,7 +1866,16 @@ fn parse_index_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseE
 
 pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     let mut child = Command::new("psql")
-        .args(["-X", "-v", "ON_ERROR_STOP=1", "-d", database_url, "-f", "-"])
+        .args([
+            "-X",
+            "-1",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-d",
+            database_url,
+            "-f",
+            "-",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())
@@ -2271,7 +2280,10 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
 
 pub fn apply_sqlite(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     let path = sqlite_path(database_url)?;
-    run_sqlite_sql(&path, &format!("PRAGMA foreign_keys = ON;\n{sql}"))
+    run_sqlite_sql(
+        &path,
+        &format!("PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n{sql}\nCOMMIT;\n"),
+    )
 }
 
 fn parse_mariadb_url(url: &str) -> Result<MariaConnection, DatabaseError> {
@@ -2785,7 +2797,7 @@ fn run_sqlite(path: &str, query: &str) -> Result<String, DatabaseError> {
 
 fn run_sqlite_sql(path: &str, sql: &str) -> Result<(), DatabaseError> {
     let mut child = Command::new("sqlite3")
-        .args(["-batch", path])
+        .args(["-batch", "-bail", path])
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())
@@ -3011,6 +3023,77 @@ mod tests {
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn sqlite_schema_apply_rolls_back_all_steps_and_can_be_retried() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "zelyra-sqlite-atomic-apply-{}-{unique}.db",
+            std::process::id()
+        ));
+        let path = path.to_string_lossy().into_owned();
+        let url = format!("sqlite://{path}");
+
+        apply_sqlite(
+            &url,
+            "CREATE TABLE existing_records (id INTEGER PRIMARY KEY, label TEXT NOT NULL);\
+             INSERT INTO existing_records VALUES (1, 'duplicate'), (2, 'duplicate');",
+        )
+        .unwrap();
+
+        let failing_plan = "CREATE TABLE added_records (id INTEGER PRIMARY KEY);\
+                            CREATE UNIQUE INDEX existing_label_unique ON existing_records(label);";
+        let error = apply_sqlite(&url, failing_plan).unwrap_err();
+        assert!(!error.message.is_empty());
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'added_records';",
+            )
+            .unwrap()
+            .trim(),
+            "0"
+        );
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM existing_records WHERE label = 'duplicate';"
+            )
+            .unwrap()
+            .trim(),
+            "2"
+        );
+
+        run_sqlite(
+            &path,
+            "UPDATE existing_records SET label = 'unique' WHERE id = 2;",
+        )
+        .unwrap();
+        apply_sqlite(&url, failing_plan).unwrap();
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'added_records';",
+            )
+            .unwrap()
+            .trim(),
+            "1"
+        );
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'existing_label_unique';",
+            )
+            .unwrap()
+            .trim(),
+            "1"
+        );
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

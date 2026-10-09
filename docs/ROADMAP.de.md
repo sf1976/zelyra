@@ -326,7 +326,10 @@ Feature eines bestimmten Anbieters.
   `zelyra.schema-plan/v1`-Plan mit stabiler ID, Schema-Fingerprints, Drift,
   SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. Ein Datenbank-
   Migrationsverlauf und sicheres inverses SQL fehlen weiterhin; der Plan weist
-  `rollback.generated: false` aus. Backups bleiben Betreiberverantwortung.
+  `rollback.generated: false` aus. `db apply` führt PostgreSQL- und SQLite-DDL
+  transaktional aus; Tests prüfen das Rollback bei einem Fehler. MariaDB-DDL
+  kann weiterhin Teilzustände hinterlassen. Backups bleiben
+  Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
   `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und

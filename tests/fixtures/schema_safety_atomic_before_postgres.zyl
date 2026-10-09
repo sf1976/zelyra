@@ -1,0 +1,8 @@
+database main {
+    engine: postgres
+}
+
+table atomic_existing_records {
+    id: Id primary auto
+    label: String(80) required
+}

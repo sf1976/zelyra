@@ -42,8 +42,11 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 - MariaDB-TLS prüft Zertifikatskette und Hostnamen gemäß dokumentiertem Modus.
   TLS endet weiterhin am jeweiligen Datenbankserver; App-HTTP bleibt separat.
   Windows-TLS braucht noch einen eigenen Matrixnachweis.
-- Versionierte, reversible Schema-Migrationen, Drift-/Rollback-Nachweise und
-  Wiederherstellung unter Abbruch sind nicht abgeschlossen. Vorhandene
+- PostgreSQL- und SQLite-Schemaanwendungen laufen jetzt transaktional; Tests
+  zeigen, dass ein fehlgeschlagener DDL-Schritt vorherige Änderungen
+  zurücksetzt. MariaDB-DDL kann weiterhin Teilzustände hinterlassen. Persistenter
+  Migrationsverlauf, sicheres inverses SQL, Wiederherstellung nach tatsächlichem
+  Prozessabbruch und eine vollständige Restore-Probe bleiben offen. Vorhandene
   Backups bleiben Betreiberverantwortung.
 
 ## Lieferkette und verbleibende Gates

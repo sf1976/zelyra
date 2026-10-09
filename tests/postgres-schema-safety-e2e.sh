@@ -56,8 +56,15 @@ defaults_database_created=false
 nullability_database="zelyra_schema_nullability_$$"
 nullability_url="${scheme}://${authority}/${nullability_database}"
 nullability_database_created=false
+atomic_database="zelyra_schema_atomic_$$"
+atomic_url="${scheme}://${authority}/${atomic_database}"
+atomic_database_created=false
 
 cleanup() {
+    if [[ "${atomic_database_created}" == true ]]; then
+        psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+            --command="DROP DATABASE IF EXISTS \"${atomic_database}\";" >/dev/null 2>&1 || true
+    fi
     if [[ "${nullability_database_created}" == true ]]; then
         psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
             --command="DROP DATABASE IF EXISTS \"${nullability_database}\";" >/dev/null 2>&1 || true
@@ -248,6 +255,38 @@ required_empty_state="$(psql -X -At --dbname="${nullability_url}" --command="
 ")"
 [[ "${required_empty_state}" == "NO:0" ]]
 echo "[PostgreSQL] nullability and required-column preflights refuse unsafe plans before any SQL"
+
+if ! psql -X -v ON_ERROR_STOP=1 --dbname="${base_url}" \
+    --command="CREATE DATABASE \"${atomic_database}\";" >/dev/null 2>&1; then
+    echo "error: could not create the isolated PostgreSQL atomic-apply database" >&2
+    exit 1
+fi
+atomic_database_created=true
+atomic_before="${fixture_dir}/schema_safety_atomic_before_postgres.zyl"
+atomic_after="${fixture_dir}/schema_safety_atomic_after_postgres.zyl"
+DATABASE_URL="${atomic_url}" "${zelyra_bin}" db apply "${atomic_before}" >/dev/null
+psql -X -v ON_ERROR_STOP=1 --dbname="${atomic_url}" --command="
+    INSERT INTO public.atomic_existing_records(label) VALUES ('duplicate'), ('duplicate');
+" >/dev/null
+atomic_plan="$(DATABASE_URL="${atomic_url}" "${zelyra_bin}" db plan "${atomic_after}")"
+grep -Fq "[SAFE] create table atomic_added_records" <<<"${atomic_plan}"
+grep -Fq "[REVIEW] add unique index" <<<"${atomic_plan}"
+if output="$(DATABASE_URL="${atomic_url}" "${zelyra_bin}" db apply "${atomic_after}" --allow-risky 2>&1)"; then
+    echo "error: PostgreSQL migration unexpectedly accepted duplicate unique-index values" >&2
+    exit 1
+fi
+atomic_state="$(psql -X -At --dbname="${atomic_url}" --command="
+    SELECT
+        (to_regclass('public.atomic_added_records') IS NOT NULL)::text || ':' ||
+        (SELECT count(*)::text FROM public.atomic_existing_records WHERE label = 'duplicate');
+")"
+[[ "${atomic_state}" == "false:2" ]]
+psql -X -v ON_ERROR_STOP=1 --dbname="${atomic_url}" \
+    --command="UPDATE public.atomic_existing_records SET label = 'second' WHERE id = 2;" >/dev/null
+DATABASE_URL="${atomic_url}" "${zelyra_bin}" db apply "${atomic_after}" --allow-risky >/dev/null
+atomic_plan="$(DATABASE_URL="${atomic_url}" "${zelyra_bin}" db plan "${atomic_after}")"
+grep -Fq "No schema changes." <<<"${atomic_plan}"
+echo "[PostgreSQL] failed DDL rolls back the whole plan; repaired data permits a clean retry"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="${test_url}" \
     --command="INSERT INTO public.pg_metadata_records(active, name) VALUES (false, 'retained');" >/dev/null

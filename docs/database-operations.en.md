@@ -113,8 +113,12 @@ verifying the target again.
   verified operator-managed backup.
 - `zelyra db plan` previews the detected schema difference; it does not back
   up data or reserve the database state.
-- `zelyra db apply` executes supported SQL steps. MariaDB DDL may implicitly
-  commit transactions, so a later error can leave earlier steps applied.
+- `zelyra db apply` executes supported SQL steps. PostgreSQL plans run in a
+  single transaction; SQLite plans use `BEGIN IMMEDIATE`, stop at the first SQL
+  error, and roll back when a step fails. Integration tests verify that a
+  failed step removes earlier DDL and that a corrected plan can be applied.
+  MariaDB DDL may implicitly commit transactions, so a later error can leave
+  earlier steps applied.
 - After an interruption, inspect the actual database state again. Do not
   assume reapplying an old plan safely repairs a partial state.
 - `--allow-risky` and `--allow-destructive` are not backup or rollback

@@ -305,7 +305,9 @@ architecture requirement for every phase, not a provider-specific feature.
   `zelyra.schema-plan/v1` plan with a stable ID, schema fingerprints, drift,
   SQL steps, preflights, and an explicit approval flag. A database migration
   history and safe inverse SQL remain unimplemented; the plan reports
-  `rollback.generated: false`. Backups remain the operator's responsibility.
+  `rollback.generated: false`. PostgreSQL and SQLite `db apply` now run DDL
+  transactionally and tests verify rollback after a failing step; MariaDB DDL
+  can still leave partial state. Backups remain the operator's responsibility.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
   auto-increment drift; SQLite default, primary-key, and explicit
   `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and

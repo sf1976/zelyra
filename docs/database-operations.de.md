@@ -114,9 +114,13 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   Wiederherstellung benötigt weiterhin ein geprüftes Betreiber-Backup.
 - `zelyra db plan` zeigt den erkannten Schemaunterschied; es sichert keine
   Daten und reserviert den Datenbankzustand nicht.
-- `zelyra db apply` führt unterstützte SQL-Schritte aus. MariaDB-DDL kann
-  implizit Transaktionen abschließen; ein späterer Fehler kann bereits
-  ausgeführte Schritte zurücklassen.
+- `zelyra db apply` führt unterstützte SQL-Schritte aus. PostgreSQL-Pläne
+  laufen in einer einzigen Transaktion. SQLite startet mit `BEGIN IMMEDIATE`,
+  bricht beim ersten SQL-Fehler ab und rollt ohne Commit alle Schritte zurück.
+  Integrationstests prüfen, dass ein Fehler
+  vorherige DDL-Schritte zurücksetzt und ein reparierter Plan erneut
+  ausgeführt werden kann. MariaDB-DDL kann implizit Transaktionen abschließen;
+  ein späterer Fehler kann bereits ausgeführte Schritte zurücklassen.
 - Prüfe nach einem Abbruch den tatsächlichen Datenbankzustand erneut. Verlasse
   dich nicht darauf, dass ein alter Plan einen Teilzustand sicher repariert.
 - `--allow-risky` und `--allow-destructive` sind keine Backup- oder
