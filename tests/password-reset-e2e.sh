@@ -19,6 +19,7 @@ server_pid=""
 smtp_pid=""
 server_b_pid=""
 smtp_b_pid=""
+server_c_pid=""
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -94,6 +95,10 @@ cleanup() {
         kill "${smtp_b_pid}" 2>/dev/null || true
         wait "${smtp_b_pid}" 2>/dev/null || true
     fi
+    if [[ -n "${server_c_pid}" ]]; then
+        kill "${server_c_pid}" 2>/dev/null || true
+        wait "${server_c_pid}" 2>/dev/null || true
+    fi
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM password_resets WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
@@ -113,10 +118,10 @@ for command in mariadb curl python3; do
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
 
-echo "[1/9] create password-reset schema"
+echo "[1/10] create password-reset schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/9] start loopback SMTP capture and protected application"
+echo "[2/10] start loopback SMTP capture and protected application"
 python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message.eml" "${temp_dir}/smtp.port" 1.5 "${temp_dir}/smtp.started" &
 smtp_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp.port" ]] && break; sleep 0.1; done
@@ -136,7 +141,7 @@ for _ in $(seq 1 40); do
 done
 curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"
 
-echo "[3/9] create account and establish a session"
+echo "[3/10] create account and establish a session"
 old_hash="$(printf '%s\n' "${old_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 client -e "INSERT INTO users (email, password_hash, active) VALUES ('${email}', '${old_hash}', true)"
 user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${email}'")"
@@ -149,7 +154,7 @@ curl --silent --show-error --output /dev/null --cookie-jar "${cookie}" \
     "${base_url}/login"
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = ${user_id}")" == "1" ]]
 
-echo "[4/9] compare known and unknown account responses"
+echo "[4/10] compare known and unknown account responses"
 known_result="$(curl --silent --show-error --output "${temp_dir}/known.html" --write-out '%{http_code} %{time_total}' \
     --cookie-jar "${temp_dir}/forgot.cookies" --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" "${base_url}/forgot-password")"
@@ -185,7 +190,7 @@ grep -Fq "${email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}"/message.eml.*
 
-echo "[5/9] verify reset ordering across two application instances"
+echo "[5/10] verify reset ordering across two application instances"
 python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-b.eml" "${temp_dir}/smtp-b.port" 0 "${temp_dir}/smtp-b.started" &
 smtp_b_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-b.port" ]] && break; sleep 0.1; done
@@ -250,7 +255,7 @@ PY
 [[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${cross_hash_b}" ]]
 [[ "${temp_dir}/message.eml.3" -ot "${temp_dir}/message-b.eml" ]]
 
-echo "[6/9] exchange email token for a clean URL and reset cookie"
+echo "[6/10] exchange email token for a clean URL and reset cookie"
 if [[ "$(captured_message_count)" -lt 3 ]]; then
     echo "error: local SMTP sink did not capture all reset messages" >&2
     exit 1
@@ -294,7 +299,7 @@ reset_csrf="$(curl --silent --show-error --cookie "${temp_dir}/reset.cookies" \
     "${base_url}/reset-password" -o "${temp_dir}/reset.html"; sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/reset.html")"
 [[ -n "${reset_csrf}" ]]
 
-echo "[7/9] reject cross-origin reset and race concurrent same-origin resets"
+echo "[7/10] reject cross-origin reset and race concurrent same-origin resets"
 cross_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --cookie "${temp_dir}/reset.cookies" --header 'Origin: https://attacker.example' \
     --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
@@ -330,7 +335,7 @@ fi
 old_session_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/account")"
 [[ "${old_session_status}" == "401" ]]
 
-echo "[8/9] reject replay, exact expiry boundary, and verify new password"
+echo "[8/10] reject replay and verify the new password"
 replay_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${token}")"
 [[ "${replay_status}" == 400 ]]
@@ -343,6 +348,9 @@ losing_login_status="$(curl --silent --show-error --output /dev/null --write-out
     --data-urlencode "email=${email}" --data-urlencode "password=${losing_password}" \
     "${base_url}/login")"
 [[ "${winning_login_status}" == 303 && "${losing_login_status}" == 401 ]]
+! grep -Fq "${token}" "${temp_dir}/server.log"
+
+echo "[9/10] reject a current-time token"
 rm -f "${temp_dir}"/message.eml*
 curl --silent --show-error --output /dev/null --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" \
@@ -372,11 +380,41 @@ client -e "UPDATE password_resets SET expires_at = NOW() WHERE user_id = ${user_
 expired_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${expired_token}")"
 [[ "${expired_status}" == "400" ]]
-new_login="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
-    --data-urlencode "email=${email}" --data-urlencode "password=${winning_password}" \
-    "${base_url}/login")"
-[[ "${new_login}" == 303 ]]
-! grep -Fq "${token}" "${temp_dir}/server.log"
 
-echo "[9/9] password-reset E2E passed"
+echo "[10/10] keep reset responses generic during SMTP outage"
+address_c="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+base_url_c="http://${address_c}"
+smtp_dead_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
+    ZELYRA_SMTP_PORT="${smtp_dead_port}" ZELYRA_SMTP_SECURITY=local_plaintext \
+    ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    "${zelyra_bin}" serve "${project_file}" "${address_c}" >"${temp_dir}/server-c.log" 2>&1 &
+server_c_pid=$!
+for _ in $(seq 1 40); do
+    if curl --silent --show-error "${base_url_c}/forgot-password" -o "${temp_dir}/forgot-c.html"; then break; fi
+    sleep 0.25
+done
+curl --silent --show-error --fail "${base_url_c}/forgot-password" -o "${temp_dir}/forgot-c.html"
+csrf_c="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/forgot-c.html")"
+[[ -n "${csrf_c}" ]]
+known_outage_status="$(curl --silent --show-error --output "${temp_dir}/outage-known.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url_c}" \
+    --data-urlencode "_zelyra_csrf=${csrf_c}" --data-urlencode "email=${email}" \
+    "${base_url_c}/forgot-password")"
+unknown_outage_status="$(curl --silent --show-error --output "${temp_dir}/outage-unknown.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url_c}" \
+    --data-urlencode "_zelyra_csrf=${csrf_c}" --data-urlencode "email=${unknown_email}" \
+    "${base_url_c}/forgot-password")"
+[[ "${known_outage_status}" == "202" && "${unknown_outage_status}" == "202" ]]
+cmp -s "${temp_dir}/outage-known.html" "${temp_dir}/outage-unknown.html"
+for _ in $(seq 1 60); do
+    if grep -Fq 'password reset message delivery failed' "${temp_dir}/server-c.log"; then break; fi
+    sleep 0.1
+done
+grep -Fq 'password reset message delivery failed: SMTP transport could not deliver the message' \
+    "${temp_dir}/server-c.log"
+! grep -Fq "${email}" "${temp_dir}/server-c.log"
+! grep -Fq "${unknown_email}" "${temp_dir}/server-c.log"
+! grep -Eq '[0-9a-f]{64}' "${temp_dir}/server-c.log"
+
+echo "password-reset E2E passed"
