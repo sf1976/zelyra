@@ -16,8 +16,11 @@ on:
       - 'scripts/test_release_readiness.py'
       - 'docs/release-plans/0.4.0.en.md'
       - 'docs/release-plans/0.4.0.de.md'
+      - 'docs/release-notes/0.4.0.en.md'
+      - 'docs/release-notes/0.4.0.de.md'
       - 'docs/release-readiness/0.4.0-human-acceptance.en.md'
       - 'docs/release-readiness/0.4.0-human-acceptance.de.md'
+      - 'docs/release-readiness/0.4.0-candidate-verification.md'
       - 'docs/release-plans/0.5.0.en.md'
       - 'docs/release-plans/0.5.0.de.md'
       - 'docs/release-readiness/0.5.0-human-acceptance.en.md'
@@ -41,6 +44,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Resolve and validate release tag
         id: tag
         shell: bash
@@ -79,10 +84,13 @@ jobs:
           fi
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
-          if [[ "${release_tag}" == "v${package_version}" ]]; then
+          if [[ "${release_tag}" == "v${package_version}" && "${EVENT_NAME}" != "pull_request" ]]; then
             if [[ "${package_version}" == "0.4.0" || "${package_version}" == "0.5.0" ]]; then
+              candidate_tag="$(python3 scripts/check_release_readiness.py \
+                --version "${package_version}" --print-candidate-tag)"
+              candidate_commit="$(git rev-parse "refs/tags/${candidate_tag}^{commit}")"
               python3 scripts/check_release_readiness.py \
-                --version "${package_version}" --candidate-commit "${GITHUB_SHA}"
+                --version "${package_version}" --candidate-commit "${candidate_commit}"
             else
               python3 scripts/check_release_readiness.py --version "${package_version}"
             fi

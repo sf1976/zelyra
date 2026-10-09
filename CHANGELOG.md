@@ -68,32 +68,34 @@ releases follow Semantic Versioning independently of the language line.
   self-service session listing and revocation, limited to the signed-in user.
   CSRF and same-origin checks apply; revoking the current session clears its
   cookie. Memory and MariaDB-backed sessions are covered by HTTP tests and the
-  protected-app MariaDB E2E. Device metadata remain open. Password recovery
-  is now partially implemented in the 0.4 development branch: MariaDB stores
-  only single-use token hashes; generic responses, audit, CSRF, throttling,
-  bounded asynchronous loopback/HTTPS SMTP delivery, expiry/replay checks,
-  and persistent/in-memory session revocation have a MariaDB/SMTP-sink E2E
-  that delays mail delivery to test response timing. The E2E now submits one
-  reset token twice concurrently and verifies only one password can be used.
-  Token replacement and FIFO mail enqueue are serialized within one process;
-  the E2E verifies that the last delivered email matches the active token.
-  Cross-instance ordering, SMTP outage, expiry-boundary review, persistent
-  rate limits, and independent security acceptance remain open.
+  protected-app MariaDB E2E. An optional, bounded `device_label` stores an
+  escaped, client-controlled User-Agent value; it is not verified device
+  identity. Password recovery is implemented for the experimental MariaDB
+  profile: single-use token hashes, generic responses, CSRF/origin checks,
+  an AES-256-GCM encrypted durable outbox, restart recovery, and due-time
+  backoff are covered by unit and two-instance MariaDB/SMTP E2E tests. Delivery
+  is at least once, so SMTP acknowledgement races can duplicate mail; losing
+  the configured key strands pending messages. Login, reset, and API quotas
+  intentionally remain process-local. The 0.4.0 human onboarding study was
+  not conducted and is explicitly deferred to the mandatory 0.5.0 gate. No
+  external security audit is claimed.
   / Generierte Auth-Seiten bieten jetzt `/account/sessions` zum Anzeigen und
   Beenden eigener Sitzungen. CSRF- und Same-Origin-Prüfungen gelten; beim
   Beenden der aktuellen Sitzung wird das Cookie gelöscht. HTTP-Tests und der
   MariaDB-Ende-zu-Ende-Test der geschützten Anwendung decken Speicher- und
-  Datenbanksitzungen ab. Gerätemetadaten bleiben offen. Die
-  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
-  MariaDB speichert nur einmalige Token-Hashes; generische Antworten, Audit,
-  CSRF, Ratenbegrenzung, begrenzter asynchroner Loopback-/HTTPS-SMTP-Versand,
-  Ablauf-/Replay-Prüfung
-  und Widerruf persistenter und flüchtiger Sitzungen haben einen
-  MariaDB-/SMTP-Senken-E2E-Test. SMTP-Ausfall, persistente Limits,
-  Mehrprozess-Reihenfolge, Ablaufgrenze und unabhängige Sicherheitsabnahme
-  bleiben offen. Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines
-  Prozesses serialisiert; der E2E-Test prüft parallele Einlösung und dass die
-  letzte E-Mail zum aktiven Token gehört.
+  Datenbanksitzungen ab. Ein optionales, begrenztes `device_label` speichert
+  einen escaped, clientkontrollierten User-Agent-Wert; er bestätigt keine
+  Geräteidentität. Die Passwortwiederherstellung ist für das experimentelle
+  MariaDB-Profil umgesetzt: Einweg-Token-Hashes, generische Antworten,
+  CSRF-/Origin-Prüfung, eine AES-256-GCM-verschlüsselte dauerhafte Outbox,
+  Wiederaufnahme nach Neustart und Fälligkeits-Backoff sind durch Unit- und
+  Zwei-Instanzen-MariaDB-/SMTP-E2E-Tests abgedeckt. Die Zustellung erfolgt
+  mindestens einmal; Rennen nach SMTP-Annahme können E-Mails duplizieren, und
+  Schlüsselverlust lässt wartende Nachrichten unlesbar zurück. Login-, Reset-
+  und API-Kontingente bleiben bewusst prozesslokal. Die menschliche
+  Onboarding-Studie wurde für 0.4.0 nicht durchgeführt und ausdrücklich auf
+  das verpflichtende 0.5.0-Gate verschoben. Ein externes Sicherheitsaudit
+  wird nicht behauptet.
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
   normalized email keys are hashed, configured lockout durations are honored
   independently of the failure window, and new keys fail closed at capacity. /
@@ -109,13 +111,17 @@ releases follow Semantic Versioning independently of the language line.
 - Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
   verification binds each SBOM to its binary SHA-256 and rejects a tag/version
   mismatch. Tagged release builds are configured to add GitHub Artifact Attestations for
-  both platform archives and their SBOMs. A published-candidate rehearsal and
-  dependency/license audit remain open. / Release-Builds hängen jetzt
+  both platform archives and their SBOMs. Pinned `cargo-deny` checks pass in
+  CI; a published-candidate attestation rehearsal and human review of the
+  remaining license and duplicate-version warnings remain open. / Release-
+  Builds hängen jetzt
   deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
   jedes SBOM an den SHA-256-Hash der Binärdatei. Getaggte Release-Builds sind
   so konfiguriert, dass sie beide Plattformarchive und ihre SBOMs zusätzlich
-  mit GitHub Artifact Attestations versehen. Die Probe mit einem veröffentlichten Kandidaten und
-  das Dependency-/Lizenzaudit sind noch offen.
+  mit GitHub Artifact Attestations versehen. Gepinntes `cargo-deny` besteht in
+  CI; die Attestierungsprobe mit einem veröffentlichten Kandidaten sowie die
+  menschliche Prüfung der verbleibenden Lizenz- und Versionswarnungen stehen
+  noch aus.
 - Login throttling can now be configured per auth definition with a bounded
   failure window and lockout duration; the limiter remains process-local. /
   Login-Limits lassen sich nun pro Auth-Definition mit begrenztem
@@ -131,9 +137,9 @@ releases follow Semantic Versioning independently of the language line.
   Metadaten.
 - Record the project-owner decision to defer the 0.3.0 human onboarding study
   without claiming it passed; independent human acceptance remains mandatory
-  for 0.4.0. / Die Entscheidung des Projektverantwortlichen dokumentiert, die
+  for 0.5.0. / Die Entscheidung des Projektverantwortlichen dokumentiert, die
   menschliche Einsteigerstudie für 0.3.0 zu vertagen, ohne sie als bestanden
-  darzustellen; eine unabhängige menschliche Abnahme bleibt für 0.4.0 Pflicht.
+  darzustellen; eine unabhängige menschliche Abnahme bleibt für 0.5.0 Pflicht.
 - The published-release smoke test now compares prerelease installs with the
   stable CLI version reported by the binary. / Der Published-Release-
   Smoke-Test vergleicht Prerelease-Installationen nun mit der stabilen,
@@ -275,12 +281,14 @@ Published experimental release for Linux and Windows x86_64. The tagged
 workflow validated metadata and artifacts, and the published Linux
 installation/update smoke test passed. The independent human onboarding study
 was explicitly deferred to the mandatory 0.4.0 acceptance gate; this is not
-usability evidence. / Veröffentlichtes experimentelles Release für Linux und
+usability evidence. The 0.4.0 study was also not conducted and is deferred to
+the mandatory 0.5.0 gate. / Veröffentlichtes experimentelles Release für Linux und
 Windows x86_64. Der getaggte Workflow prüfte Metadaten und Artefakte; der
 Smoke-Test für Installation und Update des veröffentlichten Linux-Artefakts
 war erfolgreich. Die unabhängige menschliche Einsteigerstudie wurde ausdrücklich
 auf das verpflichtende Abnahme-Gate für 0.4.0 verschoben; dies ist kein
-Nutzerfreundlichkeitsnachweis.
+Nutzerfreundlichkeitsnachweis. Die 0.4.0-Studie wurde ebenfalls nicht
+durchgeführt und auf das verpflichtende 0.5.0-Gate verschoben.
 
 ## 0.3.0-rc.2 — 2026-09-21
 

@@ -3,7 +3,7 @@ members = ["ast", "lexer", "parser", "hir", "database", "runtime", "web", "forms
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
@@ -19,11 +19,11 @@ lettre = { version = "0.11.23", default-features = false, features = ["builder",
 ring = "0.17.14"
 zeroize = "1.9.0"
 url = "2.5.8"
-zelyra-ast = { path = "ast", version = "0.3" }
-zelyra-lexer = { path = "lexer", version = "0.3" }
-zelyra-parser = { path = "parser", version = "0.3" }
-zelyra-hir = { path = "hir", version = "0.3" }
-zelyra-database = { path = "database", version = "0.3" }
-zelyra-runtime = { path = "runtime", version = "0.3" }
-zelyra-web = { path = "web", version = "0.3" }
-zelyra-forms = { path = "forms", version = "0.3" }
+zelyra-ast = { path = "ast", version = "0.4" }
+zelyra-lexer = { path = "lexer", version = "0.4" }
+zelyra-parser = { path = "parser", version = "0.4" }
+zelyra-hir = { path = "hir", version = "0.4" }
+zelyra-database = { path = "database", version = "0.4" }
+zelyra-runtime = { path = "runtime", version = "0.4" }
+zelyra-web = { path = "web", version = "0.4" }
+zelyra-forms = { path = "forms", version = "0.4" }

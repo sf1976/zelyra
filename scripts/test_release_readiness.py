@@ -7,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_release_readiness import REQUIRED_GATES_040, REQUIRED_GATES_050, unfinished_gates
+from check_release_readiness import (
+    REQUIRED_GATES_040,
+    REQUIRED_GATES_050,
+    candidate_tag,
+    unfinished_gates,
+)
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -31,11 +36,17 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("not conducted", (root / "docs/release-readiness/0.4.0-human-acceptance.en.md").read_text(encoding="utf-8"))
         self.assertIn("nicht durchgeführt", (root / "docs/release-readiness/0.4.0-human-acceptance.de.md").read_text(encoding="utf-8"))
 
-    def test_current_040_plan_blocks_release_on_open_gates(self) -> None:
+    def test_current_040_technical_gates_are_closed_before_published_candidate(self) -> None:
         root = Path(__file__).resolve().parents[1]
         failures = unfinished_gates(root, "0.4.0")
         self.assertFalse(any("human acceptance deferral" in item for item in failures))
-        self.assertTrue(any("P0 implementation and tests" in item for item in failures))
+        self.assertFalse(any("P0 implementation and tests" in item for item in failures))
+        self.assertFalse(any("module and migration recovery acceptance" in item for item in failures))
+        self.assertFalse(any("database compatibility claims" in item for item in failures))
+        self.assertFalse(any("security review and residual risks" in item for item in failures))
+        self.assertFalse(any("machine interface compatibility" in item for item in failures))
+        self.assertTrue(any("published candidate verification" in item for item in failures))
+        self.assertTrue(any("all mandatory release gates" in item for item in failures))
 
     def test_all_040_gates_require_bilingual_human_deferral_records(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -63,7 +74,28 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
 
+            candidate = root / "docs/release-readiness/0.4.0-candidate-verification.md"
+            candidate.write_text(
+                "Candidate tag: v0.4.0-rc.1\n"
+                "Candidate source commit: " + "a" * 40 + "\n"
+                "Linux archive SHA-256: " + "b" * 64 + "\n"
+                "Linux SBOM SHA-256: " + "c" * 64 + "\n"
+                "Windows archive SHA-256: " + "d" * 64 + "\n"
+                "Windows SBOM SHA-256: " + "e" * 64 + "\n"
+                "Linux attestation: verified\nWindows attestation: verified\n"
+                "Upgrade smoke: passed\nRollback smoke: passed\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(candidate_tag(root, "0.4.0"), "v0.4.0-rc.1")
             self.assertEqual(unfinished_gates(root, "0.4.0"), [])
+            self.assertEqual(unfinished_gates(root, "0.4.0", "a" * 40), [])
+            self.assertTrue(
+                any(
+                    "published candidate tag" in failure
+                    for failure in unfinished_gates(root, "0.4.0", "b" * 40)
+                )
+            )
 
             english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
             english.write_text(
@@ -83,12 +115,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text("\n".join(f"- [x] {marker}" for _, marker in gates), encoding="utf-8")
             records = {
                 "docs/release-readiness/0.5.0-human-acceptance.en.md": (
-                    "Candidate commit: abc123\nCompleted on: 2026-10-09\n"
+                    "Candidate tag: v0.5.0-rc.1\nCandidate commit: "
+                    + "a" * 40
+                    + "\nCompleted on: 2026-10-09\n"
                     "Observations: redacted\nBlockers: none\n"
                     "Decision: accepted\nDecision authority: project owner\n"
                 ),
                 "docs/release-readiness/0.5.0-human-acceptance.de.md": (
-                    "Kandidaten-Commit: abc123\nAbgeschlossen am: 2026-10-09\n"
+                    "Kandidaten-Tag: v0.5.0-rc.1\nKandidaten-Commit: "
+                    + "a" * 40
+                    + "\nAbgeschlossen am: 2026-10-09\n"
                     "Beobachtungen: redigiert\nBlockaden: keine\n"
                     "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
                 ),
@@ -97,8 +133,14 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path = root / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
-            self.assertEqual(unfinished_gates(root, "0.5.0", "abc123"), [])
-            self.assertTrue(any("different candidate commit" in failure for failure in unfinished_gates(root, "0.5.0", "def456")))
+            self.assertEqual(candidate_tag(root, "0.5.0"), "v0.5.0-rc.1")
+            self.assertEqual(unfinished_gates(root, "0.5.0", "a" * 40), [])
+            self.assertTrue(
+                any(
+                    "different candidate commit" in failure
+                    for failure in unfinished_gates(root, "0.5.0", "b" * 40)
+                )
+            )
             (root / "docs/release-readiness/0.5.0-human-acceptance.en.md").unlink()
             self.assertTrue(any("record missing" in failure for failure in unfinished_gates(root, "0.5.0")))
 
@@ -191,10 +233,15 @@ class ReleaseReadinessTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            'if [[ "${release_tag}" == "v${package_version}" ]]; then',
+            'if [[ "${release_tag}" == "v${package_version}" && "${EVENT_NAME}" != "pull_request" ]]; then',
             workflow,
         )
-        self.assertIn('--candidate-commit "${GITHUB_SHA}"', workflow)
+        self.assertIn('--candidate-commit "${candidate_commit}"', workflow)
+        self.assertIn("--print-candidate-tag", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn('"${EVENT_NAME}" != "pull_request"', workflow)
+        self.assertIn("docs/release-notes/0.4.0.en.md", workflow)
+        self.assertIn("docs/release-notes/0.4.0.de.md", workflow)
         self.assertIn(
             "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md",
             workflow,

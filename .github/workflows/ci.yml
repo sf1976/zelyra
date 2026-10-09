@@ -200,13 +200,14 @@ jobs:
           ZELYRA_GENERATED_E2E_ADDRESS: 127.0.0.1:38520
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-mariadb-e2e.sh
-      - name: Cache Docker Official Images through ECR Public
+      - name: Cache Docker Official Images through Google mirror
         run: |
-          docker pull public.ecr.aws/docker/library/rust:1-bookworm
-          docker tag public.ecr.aws/docker/library/rust:1-bookworm rust:1-bookworm
-          docker pull public.ecr.aws/docker/library/debian:bookworm-slim
-          docker tag public.ecr.aws/docker/library/debian:bookworm-slim debian:bookworm-slim
-          docker tag public.ecr.aws/docker/library/mariadb:11 mariadb:11
+          docker pull mirror.gcr.io/library/rust:1-bookworm
+          docker tag mirror.gcr.io/library/rust:1-bookworm rust:1-bookworm
+          docker pull mirror.gcr.io/library/debian:bookworm-slim
+          docker tag mirror.gcr.io/library/debian:bookworm-slim debian:bookworm-slim
+          docker pull mirror.gcr.io/library/mariadb:11
+          docker tag mirror.gcr.io/library/mariadb:11 mariadb:11
       - name: Run generated-project Docker end-to-end test
         env:
           ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
