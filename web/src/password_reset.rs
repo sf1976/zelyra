@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 10196)
+Total output lines: 995
+
 use super::*;
 use lettre::{
     message::{header::ContentType, Mailbox},
@@ -218,8 +221,9 @@ fn deliver_if_current_reset(
         |transaction| {
             let query = zelyra_database::Query {
                 sql: format!(
-                    "SELECT user_id FROM {} WHERE token_hash = :token_hash AND consumed_at IS NULL AND expires_at > NOW() LIMIT 1 FOR UPDATE",
-                    quote_identifier(&guard.reset_table)
+                    "SELECT user_id FROM {} WHERE token_hash = :token_hash AND {} LIMIT 1 FOR UPDATE",
+                    quote_identifier(&guard.reset_table),
+                    active_reset_token_predicate(None)
                 ),
                 params: vec![(
                     "token_hash".into(),
@@ -466,24 +470,7 @@ pub(super) fn dispatch_password_reset(
                 return reset_invalid_response(app.ui_language);
             }
             Response::redirect("/reset-password")
-                .with_header("Set-Cookie", format!("{RESET_COOKIE}={token}; Path={RESET_COOKIE_PATH}; HttpOnly; SameSite=Strict; Max-Age={};{}", RESET_TOKEN_TTL_MINUTES * 60, secure_cookie_attribute(request)))
-                .with_header("Cache-Control", "no-store")
-                .with_header("Referrer-Policy", "no-referrer")
-        }
-        ("/reset-password", "GET") => {
-            let token = cookie_value(request, RESET_COOKIE);
-            if !token.as_deref().is_some_and(valid_token)
-                || !reset_token_exists(
-                    database_url,
-                    reset_table,
-                    token.as_deref().unwrap_or_default(),
-                )
-            {
-                return reset_invalid_response(app.ui_language);
-            }
-            reset_form_response(auth, app.ui_language, true)
-                .with_header("Cache-Control", "no-store")
-                .with_header("Referrer-Policy", "no-referrer")
+                .with_header("Set-Cookie", format!("{RESET_COOKIE}={token}; Path={RESET_COOKIE_PATH}; HttpOnly; SameSite=Strict; Max-Age={};{}", RESET_TOKEN_TTL_MINUTES * 6…196 tokens truncated…r")
         }
         ("/reset-password", "POST") => {
             let input = match parse_urlencoded(&request.body) {
@@ -529,9 +516,10 @@ pub(super) fn dispatch_password_reset(
             let completed = zelyra_database::with_mariadb_transaction(database_url, |transaction| {
                 let token_query = zelyra_database::Query {
                     sql: format!(
-                        "SELECT r.user_id FROM {} AS r JOIN {} AS u ON u.id = r.user_id WHERE r.token_hash = :token_hash AND r.consumed_at IS NULL AND r.expires_at > NOW(){} LIMIT 1 FOR UPDATE",
+                        "SELECT r.user_id FROM {} AS r JOIN {} AS u ON u.id = r.user_id WHERE r.token_hash = :token_hash AND {}{} LIMIT 1 FOR UPDATE",
                         quote_identifier(reset_table),
                         quote_identifier(&auth.table),
+                        active_reset_token_predicate(Some("r")),
                         if active_filter { " AND u.active = true" } else { "" }
                     ),
                     params: vec![("token_hash".into(), QueryValue::String(token_hash.clone()))],
@@ -541,7 +529,7 @@ pub(super) fn dispatch_password_reset(
                     return Ok(None);
                 };
                 transaction.execute(&zelyra_database::Query {
-                    sql: format!("UPDATE {} SET consumed_at = NOW() WHERE token_hash = :token_hash AND consumed_at IS NULL AND expires_at > NOW()", quote_identifier(reset_table)),
+                    sql: format!("UPDATE {} SET consumed_at = NOW() WHERE token_hash = :token_hash AND {}", quote_identifier(reset_table), active_reset_token_predicate(None)),
                     params: vec![("token_hash".into(), QueryValue::String(token_hash))],
                 })?;
                 transaction.execute(&zelyra_database::Query {
@@ -678,10 +666,7 @@ fn reset_rate_limited(
 }
 
 fn reset_token_exists(database_url: &str, reset_table: &str, token: &str) -> bool {
-    let query = zelyra_database::Query {
-        sql: format!("SELECT user_id FROM {} WHERE token_hash = :token_hash AND consumed_at IS NULL AND expires_at > NOW() LIMIT 1", quote_identifier(reset_table)),
-        params: vec![("token_hash".into(), QueryValue::String(session_token_hash(token)))],
-    };
+    let query = active_reset_token_query(reset_table, &session_token_hash(token));
     zelyra_database::execute_mariadb_queries(database_url, &[query], false)
         .ok()
         .is_some_and(|results| {
@@ -689,6 +674,25 @@ fn reset_token_exists(database_url: &str, reset_table: &str, token: &str) -> boo
                 .first()
                 .is_some_and(|result| !result.rows.is_empty())
         })
+}
+
+fn active_reset_token_query(reset_table: &str, token_hash: &str) -> zelyra_database::Query {
+    zelyra_database::Query {
+        sql: format!(
+            "SELECT user_id FROM {} WHERE token_hash = :token_hash AND {} LIMIT 1",
+            quote_identifier(reset_table),
+            active_reset_token_predicate(None)
+        ),
+        params: vec![(
+            "token_hash".into(),
+            QueryValue::String(token_hash.to_owned()),
+        )],
+    }
+}
+
+fn active_reset_token_predicate(alias: Option<&str>) -> String {
+    let prefix = alias.map_or_else(String::new, |alias| format!("{alias}."));
+    format!("{prefix}consumed_at IS NULL AND {prefix}expires_at > NOW()")
 }
 
 fn valid_token(token: &str) -> bool {
@@ -713,6 +717,7 @@ fn clear_reset_cookie(request: &Request) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn reset_tokens_are_random_hex_and_only_hashes_are_stored() {
@@ -722,6 +727,103 @@ mod tests {
         assert_ne!(first, second);
         assert_ne!(session_token_hash(&first), first);
         assert_eq!(session_token_hash(&first).len(), 64);
+    }
+
+    #[test]
+    #[ignore = "requires the MariaDB password-reset E2E fixture"]
+    fn reset_token_expiry_is_exclusive_at_the_frozen_database_clock() {
+        let database_url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL is required for the password-reset clock test");
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after Unix epoch")
+            .as_nanos();
+        let token_hash = session_token_hash(&format!("clock-boundary-{unique}"));
+
+        let (
+            is_exact_expiry,
+            equality_rejected,
+            valid_before_expiry,
+            invalid_after_expiry,
+        ) = zelyra_database::with_mariadb_transaction(&database_url, |transaction| {
+            let fixture_user = transaction.execute(&zelyra_database::Query {
+                sql: "SELECT id FROM users WHERE email LIKE 'zelyra-reset-%@example.test' ORDER BY id DESC LIMIT 1".into(),
+                params: Vec::new(),
+            })?;
+            let user_id = fixture_user
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .and_then(|value| value.parse::<i64>().ok())
+                .ok_or_else(|| zelyra_database::DatabaseError {
+                    message: "password-reset E2E fixture user is missing".into(),
+                })?;
+            transaction.execute(&zelyra_database::Query {
+                sql: "SET timestamp = 1700000000".into(),
+                params: Vec::new(),
+            })?;
+            transaction.execute(&zelyra_database::Query {
+                sql: "INSERT INTO password_resets (user_id, token_hash, expires_at, consumed_at) VALUES (:user_id, :token_hash, NOW(), NULL)".into(),
+                params: vec![
+                    ("user_id".into(), QueryValue::Int(user_id)),
+                    ("token_hash".into(), QueryValue::String(token_hash.clone())),
+                ],
+            })?;
+
+            let exact_expiry = transaction.execute(&zelyra_database::Query {
+                sql: "SELECT expires_at = NOW() FROM password_resets WHERE token_hash = :token_hash".into(),
+                params: vec![("token_hash".into(), QueryValue::String(token_hash.clone()))],
+            })?;
+            let is_exact_expiry = exact_expiry
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .is_some_and(|value| value == "1");
+
+            let active_at_equality = transaction.execute(&active_reset_token_query("password_resets", &token_hash))?;
+            let equality_rejected = active_at_equality.rows.is_empty();
+
+            transaction.execute(&zelyra_database::Query {
+                sql: "SET timestamp = 1699999999".into(),
+                params: Vec::new(),
+            })?;
+            let active_before_expiry = transaction.execute(&active_reset_token_query("password_resets", &token_hash))?;
+            let valid_before_expiry = active_before_expiry.rows.len() == 1;
+
+            transaction.execute(&zelyra_database::Query {
+                sql: "SET timestamp = 1700000001".into(),
+                params: Vec::new(),
+            })?;
+            let active_after_expiry = transaction.execute(&active_reset_token_query("password_resets", &token_hash))?;
+            let invalid_after_expiry = active_after_expiry.rows.is_empty();
+
+            transaction.execute(&zelyra_database::Query {
+                sql: "DELETE FROM password_resets WHERE token_hash = :token_hash".into(),
+                params: vec![("token_hash".into(), QueryValue::String(token_hash))],
+            })?;
+            transaction.execute(&zelyra_database::Query {
+                sql: "SET timestamp = 0".into(),
+                params: Vec::new(),
+            })?;
+            Ok((is_exact_expiry, equality_rejected, valid_before_expiry, invalid_after_expiry))
+        })
+        .expect("the exact token-expiry boundary must be checked on one MariaDB connection");
+        assert!(
+            is_exact_expiry,
+            "the fixture expiry must equal the frozen database time"
+        );
+        assert!(
+            equality_rejected,
+            "a token expiring exactly now must be rejected"
+        );
+        assert!(
+            valid_before_expiry,
+            "a token must be valid immediately before expiry"
+        );
+        assert!(
+            invalid_after_expiry,
+            "a token must be invalid immediately after expiry"
+        );
     }
 
     #[test]

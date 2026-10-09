@@ -113,7 +113,7 @@ SQL
 }
 trap cleanup EXIT
 
-for command in mariadb curl python3; do
+for command in mariadb curl python3 cargo; do
     command -v "${command}" >/dev/null || { echo "error: ${command} is required" >&2; exit 1; }
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
@@ -145,6 +145,9 @@ echo "[3/10] create account and establish a session"
 old_hash="$(printf '%s\n' "${old_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 client -e "INSERT INTO users (email, password_hash, active) VALUES ('${email}', '${old_hash}', true)"
 user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${email}'")"
+echo "[3a/10] verify reset-token expiry before, at, and after a frozen MariaDB clock"
+cargo test --manifest-path "${repo_dir}/Cargo.toml" --locked -p zelyra-web --lib \
+    reset_token_expiry_is_exclusive_at_the_frozen_database_clock -- --ignored --nocapture
 csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/forgot.html")"
 [[ -n "${csrf}" ]]
 cookie="${temp_dir}/session.cookies"
