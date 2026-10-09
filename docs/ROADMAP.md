@@ -536,10 +536,12 @@ architecture requirement for every phase, not a provider-specific feature.
   deliberately delayed delivery. The E2E also races two same-token submissions
   and verifies one success, one rejection, and authentication with only the
   winning password. Token replacement and FIFO mail enqueue are serialized
-  within one process; the E2E confirms the last email matches the live token.
-  Process-local reset throttling, cross-instance issuance ordering, expiry
-  boundary, and independent security review remain open; the account lifecycle
-  is not complete.
+  within one process. MariaDB advisory locks also coordinate issuance and
+  delivery across instances; a two-instance E2E delays the first SMTP relay
+  while the second instance replaces the token and verifies that the later
+  email matches the stored token. Stale queued tokens are skipped. Process-local
+  reset throttling, expiry boundary, SMTP outage behavior, and independent
+  security review remain open; the account lifecycle is not complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.

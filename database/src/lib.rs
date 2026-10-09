@@ -2003,6 +2003,86 @@ pub fn with_mariadb_schema_lock<T>(
     result
 }
 
+/// Runs a MariaDB transaction while holding a named server-side advisory lock.
+/// The lock and transaction share one connection, so the closure also works
+/// when the configured connection pool contains only one connection.
+pub fn with_mariadb_advisory_transaction<T>(
+    database_url: &str,
+    lock_name: &str,
+    wait_seconds: u32,
+    operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    if lock_name.is_empty() || lock_name.len() > 64 || lock_name.chars().any(char::is_control) {
+        return Err(DatabaseError {
+            message: "MariaDB advisory lock name must contain 1 to 64 non-control bytes".into(),
+        });
+    }
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let acquired: Option<i64> = connection
+        .connection
+        .exec_first("SELECT GET_LOCK(?, ?)", (lock_name, wait_seconds))
+        .map_err(mariadb_driver_error)?;
+    if acquired != Some(1) {
+        return Err(DatabaseError {
+            message: "timed out waiting for the MariaDB advisory lock".into(),
+        });
+    }
+    let lock_guard = MariaDbSchemaLockGuard {
+        connection: &mut connection.connection,
+        lock_name: lock_name.to_owned(),
+    };
+    if let Err(error) = lock_guard.connection.query_drop("START TRANSACTION") {
+        drop(lock_guard);
+        connection.discard = true;
+        return Err(mariadb_driver_error(error));
+    }
+    let result = {
+        let mut transaction = MariaDbTransaction {
+            connection: lock_guard.connection,
+        };
+        operation(&mut transaction)
+    };
+    let (result, discard_connection) = match result {
+        Ok(value) => match lock_guard.connection.query_drop("COMMIT") {
+            Ok(()) => (Ok(value), false),
+            Err(error) => (Err(mariadb_driver_error(error)), true),
+        },
+        Err(error) => {
+            let _ = lock_guard.connection.query_drop("ROLLBACK");
+            (Err(error), true)
+        }
+    };
+    drop(lock_guard);
+    connection.discard |= discard_connection;
+    result
+}
+
+/// Produces a stable per-database lock name that coordinates connections
+/// through DNS/IP aliases without embedding the database URL or credentials.
+pub fn mariadb_advisory_lock_name(
+    database_url: &str,
+    scope: &str,
+) -> Result<String, DatabaseError> {
+    if scope.is_empty() || scope.chars().any(char::is_control) {
+        return Err(DatabaseError {
+            message:
+                "MariaDB advisory lock scope must be non-empty and contain no control characters"
+                    .into(),
+        });
+    }
+    let connection = parse_mariadb_url(database_url)?;
+    let database = connection.database.to_ascii_lowercase();
+    let mut input = database.into_bytes();
+    input.push(0);
+    input.extend_from_slice(scope.as_bytes());
+    let digest = Sha256::digest(input);
+    let digest = format!("{digest:x}");
+    Ok(format!("zelyra:app:{}", &digest[..52]))
+}
+
 /// Returns whether a Zelyra schema migration currently holds this database's
 /// advisory lock. A journal entry marked `running` without this lock is stale
 /// and can be reported as interrupted.
@@ -3398,6 +3478,38 @@ mod tests {
         assert_eq!(primary, alias);
         assert!(primary.len() <= 64);
         assert!(primary.starts_with("zelyra:mig:"));
+    }
+
+    #[test]
+    fn mariadb_advisory_lock_names_coordinate_aliases_and_isolate_scopes() {
+        let primary = mariadb_advisory_lock_name(
+            "mariadb://zelyra:secret@127.0.0.1:3306/ProjectData",
+            "password-reset:tokens:42",
+        )
+        .unwrap();
+        let alias = mariadb_advisory_lock_name(
+            "mariadb://another-user:other-secret@db.internal:4406/projectdata",
+            "password-reset:tokens:42",
+        )
+        .unwrap();
+        let other_scope = mariadb_advisory_lock_name(
+            "mariadb://zelyra:secret@127.0.0.1:3306/ProjectData",
+            "password-reset:tokens:43",
+        )
+        .unwrap();
+        assert_eq!(primary, alias);
+        assert_ne!(primary, other_scope);
+        assert!(primary.len() <= 64);
+        assert!(primary.starts_with("zelyra:app:"));
+        assert!(!primary.contains("secret"));
+    }
+
+    #[test]
+    fn mariadb_advisory_lock_name_rejects_empty_or_control_scope() {
+        assert!(mariadb_advisory_lock_name("mariadb://user:pass@localhost/db", "").is_err());
+        assert!(
+            mariadb_advisory_lock_name("mariadb://user:pass@localhost/db", "bad\nscope").is_err()
+        );
     }
 
     #[test]

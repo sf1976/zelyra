@@ -40,9 +40,12 @@ den tatsächlich implementierten Stand.
   gleichzeitige Einlösungen desselben Tokens und prüft genau einen Erfolg,
   eine Ablehnung und die Authentifizierung mit nur dem siegreichen Passwort.
   Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines Prozesses
-  serialisiert; der E2E-Test bestätigt, dass die letzte E-Mail zum gültigen
-  Token gehört. Prozesslokale Reset-Limits, Mehrprozess-Reihenfolge,
-  Ablaufgrenze und unabhängige Sicherheitsprüfung bleiben offen; der
+  serialisiert. MariaDB-Advisory-Locks koordinieren Ausstellung und Zustellung
+  auch über mehrere Instanzen; ein Zwei-Instanzen-E2E verzögert das erste
+  SMTP-Relay, während die zweite Instanz das Token ersetzt, und prüft, dass
+  die spätere E-Mail zum gespeicherten Token gehört. Veraltete Tokens in der
+  Mailqueue werden übersprungen. Prozesslokale Reset-Limits, Ablaufgrenze,
+  SMTP-Ausfallverhalten und unabhängige Sicherheitsprüfung bleiben offen; der
   Kontolebenszyklus ist nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.

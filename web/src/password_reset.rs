@@ -15,17 +15,27 @@ const RESET_TOKEN_TTL_MINUTES: u32 = 15;
 const RESET_COOKIE: &str = "zelyra_password_reset";
 const RESET_COOKIE_PATH: &str = "/reset-password";
 const RESET_MAIL_QUEUE_CAPACITY: usize = 64;
+const RESET_ADVISORY_LOCK_WAIT_SECONDS: u32 = 10;
 type ResetMailSender = dyn Fn(&str, &str, UiLanguage) -> Result<(), String> + Send + Sync;
 
 struct ResetMailJob {
     email: String,
     link: String,
     language: UiLanguage,
+    delivery_guard: Option<ResetMailDeliveryGuard>,
+}
+
+struct ResetMailDeliveryGuard {
+    database_url: String,
+    lock_name: String,
+    reset_table: String,
+    token_hash: String,
 }
 
 #[derive(Clone)]
 pub struct PasswordResetMailer {
     base_url: String,
+    #[cfg(test)]
     sender: Arc<ResetMailSender>,
     queue: Option<SyncSender<ResetMailJob>>,
 }
@@ -117,7 +127,12 @@ impl PasswordResetMailer {
             .name("zelyra-password-reset-mail".into())
             .spawn(move || {
                 while let Ok(job) = receiver.recv() {
-                    if let Err(error) = worker_sender(&job.email, &job.link, job.language) {
+                    let delivery = if let Some(guard) = job.delivery_guard.as_ref() {
+                        deliver_if_current_reset(&job, guard, &worker_sender)
+                    } else {
+                        worker_sender(&job.email, &job.link, job.language)
+                    };
+                    if let Err(error) = delivery {
                         eprintln!("zelyra web: password reset message delivery failed: {error}");
                     }
                 }
@@ -125,6 +140,7 @@ impl PasswordResetMailer {
             .map_err(|_| "password reset mail worker could not be started".to_owned())?;
         Ok(Self {
             base_url,
+            #[cfg(test)]
             sender,
             queue: Some(queue),
         })
@@ -142,6 +158,7 @@ impl PasswordResetMailer {
         }
     }
 
+    #[cfg(test)]
     fn send(&self, email: &str, token: &str, language: UiLanguage) -> Result<(), String> {
         let link = format!("{}/reset-password?token={token}", self.base_url);
         let Some(queue) = self.queue.as_ref() else {
@@ -152,6 +169,7 @@ impl PasswordResetMailer {
                 email: email.to_owned(),
                 link,
                 language,
+                delivery_guard: None,
             })
             .map_err(|error| match error {
                 TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
@@ -159,6 +177,66 @@ impl PasswordResetMailer {
                     "password reset mail worker is unavailable".to_owned()
                 }
             })
+    }
+
+    fn enqueue_reset(
+        &self,
+        delivery_guard: ResetMailDeliveryGuard,
+        email: &str,
+        token: &str,
+        language: UiLanguage,
+    ) -> Result<(), String> {
+        let Some(queue) = self.queue.as_ref() else {
+            return Err("password reset mail queue is unavailable".into());
+        };
+        let link = format!("{}/reset-password?token={token}", self.base_url);
+        queue
+            .try_send(ResetMailJob {
+                email: email.to_owned(),
+                link,
+                language,
+                delivery_guard: Some(delivery_guard),
+            })
+            .map_err(|error| match error {
+                TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
+                TrySendError::Disconnected(_) => {
+                    "password reset mail worker is unavailable".to_owned()
+                }
+            })
+    }
+}
+
+fn deliver_if_current_reset(
+    job: &ResetMailJob,
+    guard: &ResetMailDeliveryGuard,
+    sender: &Arc<ResetMailSender>,
+) -> Result<(), String> {
+    let result = zelyra_database::with_mariadb_advisory_transaction(
+        &guard.database_url,
+        &guard.lock_name,
+        RESET_ADVISORY_LOCK_WAIT_SECONDS,
+        |transaction| {
+            let query = zelyra_database::Query {
+                sql: format!(
+                    "SELECT user_id FROM {} WHERE token_hash = :token_hash AND consumed_at IS NULL AND expires_at > NOW() LIMIT 1 FOR UPDATE",
+                    quote_identifier(&guard.reset_table)
+                ),
+                params: vec![(
+                    "token_hash".into(),
+                    QueryValue::String(guard.token_hash.clone()),
+                )],
+            };
+            let current = !transaction.execute(&query)?.rows.is_empty();
+            if !current {
+                return Ok(None);
+            }
+            Ok(Some(sender(&job.email, &job.link, job.language)))
+        },
+    );
+    match result {
+        Ok(None) => Ok(()),
+        Ok(Some(delivery)) => delivery,
+        Err(_) => Err("could not verify the current password reset token".into()),
     }
 }
 
@@ -227,7 +305,7 @@ pub(super) fn dispatch_password_reset(
             if email.len() > 320 || email.is_empty() || email.contains(['\r', '\n', '\0']) {
                 return reset_generic_response(app.ui_language, 202);
             }
-            // Keep token replacement and FIFO mail enqueue in the same process order.
+            // Keep local issue order and coordinate issuance with delivery across instances.
             let _issue_guard = match app.password_reset_issue_lock.lock() {
                 Ok(guard) => guard,
                 Err(_) => return reset_generic_response(app.ui_language, 202),
@@ -273,7 +351,16 @@ pub(super) fn dispatch_password_reset(
                     new_token(),
                 ) {
                     let token_hash = session_token_hash(&token);
-                    let stored_token_hash = token_hash.clone();
+                    let lock_name = match zelyra_database::mariadb_advisory_lock_name(
+                        database_url,
+                        &format!("password-reset:{reset_table}:{user_id}"),
+                    ) {
+                        Ok(name) => name,
+                        Err(_) => {
+                            eprintln!("zelyra web: password reset lock could not be prepared");
+                            return reset_generic_response(app.ui_language, 202);
+                        }
+                    };
                     let queries = [
                         zelyra_database::Query {
                             sql: format!(
@@ -295,7 +382,7 @@ pub(super) fn dispatch_password_reset(
                         },
                         zelyra_database::Query {
                             sql: format!("INSERT INTO {} (user_id, token_hash, expires_at, consumed_at) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL {RESET_TOKEN_TTL_MINUTES} MINUTE), NULL)", quote_identifier(reset_table)),
-                            params: vec![("user_id".into(), QueryValue::Int(user_id)), ("token_hash".into(), QueryValue::String(token_hash))],
+                            params: vec![("user_id".into(), QueryValue::Int(user_id)), ("token_hash".into(), QueryValue::String(token_hash.clone()))],
                         },
                     ];
                     audit.extend(audit_insert_queries(
@@ -306,44 +393,55 @@ pub(super) fn dispatch_password_reset(
                         Some(user_id),
                         "",
                     ));
-                    if zelyra_database::execute_mariadb_queries(
+                    let result = zelyra_database::with_mariadb_advisory_transaction(
                         database_url,
-                        &audit.iter().cloned().chain(queries).collect::<Vec<_>>(),
-                        true,
-                    )
-                    .is_ok()
-                    {
-                        if let Err(error) = mailer.send(recipient, &token, app.ui_language) {
-                            eprintln!(
-                                "zelyra web: password reset message delivery failed: {error}"
-                            );
-                            let mut failure_queries = vec![zelyra_database::Query {
-                                sql: format!(
-                                    "DELETE FROM {} WHERE token_hash = :token_hash",
-                                    quote_identifier(reset_table)
-                                ),
-                                params: vec![(
-                                    "token_hash".into(),
-                                    QueryValue::String(stored_token_hash),
-                                )],
-                            }];
-                            if let Some(audit_table) = auth.audit_table.as_deref() {
-                                failure_queries.extend(audit_insert_queries(
-                                    audit_table,
-                                    auth.audit_chain,
-                                    None,
-                                    "auth.password_reset.delivery_unqueued",
-                                    Some(user_id),
-                                    "",
-                                ));
+                        &lock_name,
+                        RESET_ADVISORY_LOCK_WAIT_SECONDS,
+                        |transaction| {
+                            for query in audit.iter().chain(queries.iter()) {
+                                transaction.execute(query)?;
                             }
-                            let _ = zelyra_database::execute_mariadb_queries(
-                                database_url,
-                                &failure_queries,
-                                true,
-                            );
-                        }
-                    } else {
+                            if mailer
+                                .enqueue_reset(
+                                    ResetMailDeliveryGuard {
+                                        database_url: database_url.to_owned(),
+                                        lock_name: lock_name.clone(),
+                                        reset_table: reset_table.to_owned(),
+                                        token_hash: token_hash.clone(),
+                                    },
+                                    recipient,
+                                    &token,
+                                    app.ui_language,
+                                )
+                                .is_err()
+                            {
+                                transaction.execute(&zelyra_database::Query {
+                                    sql: format!(
+                                        "DELETE FROM {} WHERE token_hash = :token_hash",
+                                        quote_identifier(reset_table)
+                                    ),
+                                    params: vec![(
+                                        "token_hash".into(),
+                                        QueryValue::String(token_hash.clone()),
+                                    )],
+                                })?;
+                                if let Some(audit_table) = auth.audit_table.as_deref() {
+                                    for query in audit_insert_queries(
+                                        audit_table,
+                                        auth.audit_chain,
+                                        None,
+                                        "auth.password_reset.delivery_unqueued",
+                                        Some(user_id),
+                                        "",
+                                    ) {
+                                        transaction.execute(&query)?;
+                                    }
+                                }
+                            }
+                            Ok(())
+                        },
+                    );
+                    if result.is_err() {
                         eprintln!("zelyra web: password reset request could not be recorded");
                     }
                 }

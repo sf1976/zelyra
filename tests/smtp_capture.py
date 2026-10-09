@@ -11,6 +11,7 @@ import time
 message_path = pathlib.Path(sys.argv[1])
 port_path = pathlib.Path(sys.argv[2])
 reply_delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+started_path = pathlib.Path(sys.argv[4]) if len(sys.argv) > 4 else None
 capture_lock = threading.Lock()
 captured_messages = 0
 
@@ -40,9 +41,12 @@ class Handler(socketserver.StreamRequestHandler):
             command = line.rstrip(b"\r\n")
             if data_mode:
                 if command == b".":
-                    capture_message(message)
+                    if started_path is not None:
+                        with capture_lock:
+                            started_path.write_text(str(captured_messages), encoding="ascii")
                     if reply_delay:
                         time.sleep(reply_delay)
+                    capture_message(message)
                     self.reply(b"250 queued\r\n")
                     data_mode = False
                     message = []

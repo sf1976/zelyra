@@ -17,6 +17,8 @@ parallel_password="ZelyraReset-${suffix}-Parallel"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-password-reset-e2e.XXXXXX")"
 server_pid=""
 smtp_pid=""
+server_b_pid=""
+smtp_b_pid=""
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -84,6 +86,14 @@ cleanup() {
         kill "${smtp_pid}" 2>/dev/null || true
         wait "${smtp_pid}" 2>/dev/null || true
     fi
+    if [[ -n "${server_b_pid}" ]]; then
+        kill "${server_b_pid}" 2>/dev/null || true
+        wait "${server_b_pid}" 2>/dev/null || true
+    fi
+    if [[ -n "${smtp_b_pid}" ]]; then
+        kill "${smtp_b_pid}" 2>/dev/null || true
+        wait "${smtp_b_pid}" 2>/dev/null || true
+    fi
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM password_resets WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
@@ -103,11 +113,11 @@ for command in mariadb curl python3; do
 done
 [[ -x "${zelyra_bin}" ]] || { echo "error: Zelyra binary not found at ${zelyra_bin}" >&2; exit 1; }
 
-echo "[1/8] create password-reset schema"
+echo "[1/9] create password-reset schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 
-echo "[2/8] start loopback SMTP capture and protected application"
-python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message.eml" "${temp_dir}/smtp.port" 1.5 &
+echo "[2/9] start loopback SMTP capture and protected application"
+python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message.eml" "${temp_dir}/smtp.port" 1.5 "${temp_dir}/smtp.started" &
 smtp_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp.port" ]] && break; sleep 0.1; done
 [[ -s "${temp_dir}/smtp.port" ]]
@@ -126,7 +136,7 @@ for _ in $(seq 1 40); do
 done
 curl --silent --show-error --fail "${base_url}/forgot-password" -o "${temp_dir}/forgot.html"
 
-echo "[3/8] create account and establish a session"
+echo "[3/9] create account and establish a session"
 old_hash="$(printf '%s\n' "${old_password}" | "${zelyra_bin}" auth hash-password --stdin)"
 client -e "INSERT INTO users (email, password_hash, active) VALUES ('${email}', '${old_hash}', true)"
 user_id="$(client --batch --skip-column-names -e "SELECT id FROM users WHERE email = '${email}'")"
@@ -139,7 +149,7 @@ curl --silent --show-error --output /dev/null --cookie-jar "${cookie}" \
     "${base_url}/login"
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = ${user_id}")" == "1" ]]
 
-echo "[4/8] compare known and unknown account responses"
+echo "[4/9] compare known and unknown account responses"
 known_result="$(curl --silent --show-error --output "${temp_dir}/known.html" --write-out '%{http_code} %{time_total}' \
     --cookie-jar "${temp_dir}/forgot.cookies" --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" "${base_url}/forgot-password")"
@@ -175,17 +185,82 @@ grep -Fq "${email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}"/message.eml.*
 
-echo "[5/8] exchange email token for a clean URL and reset cookie"
+echo "[5/9] verify reset ordering across two application instances"
+python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-b.eml" "${temp_dir}/smtp-b.port" 0 "${temp_dir}/smtp-b.started" &
+smtp_b_pid=$!
+for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-b.port" ]] && break; sleep 0.1; done
+[[ -s "${temp_dir}/smtp-b.port" ]]
+address_b="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+base_url_b="http://${address_b}"
+env ZELYRA_PUBLIC_BASE_URL="${base_url_b}" ZELYRA_SMTP_HOST=127.0.0.1 \
+    ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-b.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
+    ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    "${zelyra_bin}" serve "${project_file}" "${address_b}" >"${temp_dir}/server-b.log" 2>&1 &
+server_b_pid=$!
+for _ in $(seq 1 40); do
+    if curl --silent --show-error "${base_url_b}/forgot-password" -o /dev/null; then break; fi
+    sleep 0.25
+done
+curl --silent --show-error --fail "${base_url_b}/forgot-password" -o "${temp_dir}/forgot-b.html"
+csrf_b="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/forgot-b.html")"
+[[ -n "${csrf_b}" ]]
+curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${email}" "${base_url}/forgot-password" >"${temp_dir}/cross-instance-a.status"
+[[ "$(cat "${temp_dir}/cross-instance-a.status")" == 202 ]]
+for _ in $(seq 1 40); do
+    if [[ -s "${temp_dir}/smtp.started" ]] && [[ "$(cat "${temp_dir}/smtp.started")" == 3 ]]; then break; fi
+    sleep 0.05
+done
+[[ -s "${temp_dir}/smtp.started" && "$(cat "${temp_dir}/smtp.started")" == 3 ]]
+curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url_b}" --data-urlencode "_zelyra_csrf=${csrf_b}" \
+    --data-urlencode "email=${email}" "${base_url_b}/forgot-password" >"${temp_dir}/cross-instance-b.status" &
+cross_b_pid=$!
+wait "${cross_b_pid}"
+[[ "$(cat "${temp_dir}/cross-instance-b.status")" == 202 ]]
+for _ in $(seq 1 40); do [[ -s "${temp_dir}/message-b.eml" ]] && break; sleep 0.1; done
+[[ -s "${temp_dir}/message-b.eml" ]]
+cross_token_a="$(python3 - "${temp_dir}/message.eml.3" <<'PY'
+from pathlib import Path
+import email, re, sys
+message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
+body = message.get_payload(decode=True).decode("utf-8", errors="replace")
+match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
+if not match: raise SystemExit("first cross-instance reset token missing")
+print(match.group(1))
+PY
+)"
+cross_token_b="$(python3 - "${temp_dir}/message-b.eml" <<'PY'
+from pathlib import Path
+import email, re, sys
+message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
+body = message.get_payload(decode=True).decode("utf-8", errors="replace")
+match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
+if not match: raise SystemExit("second cross-instance reset token missing")
+print(match.group(1))
+PY
+)"
+[[ "${cross_token_a}" != "${cross_token_b}" ]]
+cross_hash_b="$(python3 - "${cross_token_b}" <<'PY'
+import hashlib, sys
+print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
+PY
+)"
+[[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${cross_hash_b}" ]]
+[[ "${temp_dir}/message.eml.3" -ot "${temp_dir}/message-b.eml" ]]
+
+echo "[6/9] exchange email token for a clean URL and reset cookie"
 if [[ "$(captured_message_count)" -lt 3 ]]; then
     echo "error: local SMTP sink did not capture all reset messages" >&2
     exit 1
 fi
 mapfile -t issued_tokens < <(captured_reset_tokens)
-if [[ "${#issued_tokens[@]}" -ne 3 ]]; then
-    echo "error: expected three captured reset tokens, got ${#issued_tokens[@]}" >&2
+if [[ "${#issued_tokens[@]}" -ne 4 ]]; then
+    echo "error: expected four captured reset tokens, got ${#issued_tokens[@]}" >&2
     exit 1
 fi
-token="${issued_tokens[2]}"
+token="${cross_token_b}"
 latest_message="$(latest_captured_message)"
 python3 - "${latest_message}" <<'PY'
 import email, pathlib, re, sys
@@ -219,7 +294,7 @@ reset_csrf="$(curl --silent --show-error --cookie "${temp_dir}/reset.cookies" \
     "${base_url}/reset-password" -o "${temp_dir}/reset.html"; sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/reset.html")"
 [[ -n "${reset_csrf}" ]]
 
-echo "[6/8] reject cross-origin reset and race concurrent same-origin resets"
+echo "[7/9] reject cross-origin reset and race concurrent same-origin resets"
 cross_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --cookie "${temp_dir}/reset.cookies" --header 'Origin: https://attacker.example' \
     --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
@@ -255,7 +330,7 @@ fi
 old_session_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/account")"
 [[ "${old_session_status}" == "401" ]]
 
-echo "[7/8] reject replay and verify new password"
+echo "[8/9] reject replay and verify new password"
 replay_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${token}")"
 [[ "${replay_status}" == 400 ]]
@@ -304,4 +379,4 @@ new_login="$(curl --silent --show-error --output /dev/null --write-out '%{http_c
 [[ "${new_login}" == 303 ]]
 ! grep -Fq "${token}" "${temp_dir}/server.log"
 
-echo "[8/8] password-reset E2E passed"
+echo "[9/9] password-reset E2E passed"
