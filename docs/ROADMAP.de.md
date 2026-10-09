@@ -367,8 +367,11 @@ Feature eines bestimmten Anbieters.
   zeigt angewendete, fehlgeschlagene und unterbrochene Läufe. MariaDB speichert
   Prüfpunkte je DDL-Schritt und verwendet eine datenbankweite Advisory-Sperre;
   E2E-Tests prüfen die Wiederherstellung nach Abbruch zwischen Schritten und
-  während DDL auf eine Metadatensperre wartet. Ein Absturz während tatsächlicher
-  MariaDB-DDL kann das Ergebnis des Befehls weiterhin unklar lassen.
+  während DDL auf eine Metadatensperre wartet. Das MariaDB-E2E führt außerdem
+  einen geprüften Rückwärtsplan nur nach ausdrücklicher Freigabe aus und prüft,
+  dass neue Spalten verschwinden, Zeilen und IDs aber erhalten bleiben. Ein
+  Absturz während tatsächlicher MariaDB-DDL kann das Ergebnis des Befehls
+  weiterhin unklar lassen.
   PostgreSQL und SQLite wenden DDL transaktional an. Lesende Vorprüfungen
   kontrollieren NULL-Werte, Pflichtspalten, Dubletten neuer Unique-Indizes und
   verwaiste Fremdschlüssel, verhindern aber keine konkurrierenden Schreibzugriffe.

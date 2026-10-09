@@ -326,8 +326,10 @@ architecture requirement for every phase, not a provider-specific feature.
   `_zelyra_schema_history`; `db history` reports applied, failed, and
   interrupted attempts. MariaDB records per-step checkpoints and uses a
   database-scoped advisory lock; E2E tests recover after interruption between
-  steps and while DDL waits on a metadata lock. A crash during actual MariaDB
-  DDL execution can still leave that statement's result ambiguous. PostgreSQL
+  steps and while DDL waits on a metadata lock. The MariaDB E2E also applies a
+  reviewed reverse plan only after explicit approval and confirms that the
+  added columns are removed while rows and IDs remain. A crash during actual
+  MariaDB DDL execution can still leave that statement's result ambiguous. PostgreSQL
   and SQLite apply DDL transactionally. Read-only preflights check NULLs,
   required columns, duplicate unique-index values, and foreign-key orphans,
   but do not prevent concurrent-write races. Backups remain the operator's
