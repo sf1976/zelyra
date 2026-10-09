@@ -42,7 +42,7 @@ pub(super) fn spawn_connection(
     app: Arc<WebApp>,
     active_connections: Arc<AtomicUsize>,
 ) -> io::Result<Option<JoinHandle<()>>> {
-    let reserved = active_connections.fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+    let reserved = active_connections.try_update(Ordering::AcqRel, Ordering::Acquire, |active| {
         (active < MAX_CONCURRENT_CONNECTIONS).then_some(active + 1)
     });
     if reserved.is_err() {
