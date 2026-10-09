@@ -42,6 +42,39 @@ client() {
         --port="${db_port}" --user="${db_user}" "${db_name}" "$@"
 }
 
+captured_message_count() {
+    python3 - "${temp_dir}/message.eml" <<'PY'
+import pathlib, sys
+base = pathlib.Path(sys.argv[1])
+paths = ([base] if base.is_file() else []) + list(base.parent.glob(base.name + ".*"))
+print(len(paths))
+PY
+}
+
+latest_captured_message() {
+    python3 - "${temp_dir}/message.eml" <<'PY'
+import pathlib, sys
+base = pathlib.Path(sys.argv[1])
+paths = ([base] if base.is_file() else []) + list(base.parent.glob(base.name + ".*"))
+paths.sort(key=lambda path: 0 if path == base else int(path.name.rsplit(".", 1)[1]))
+print(paths[-1] if paths else "")
+PY
+}
+
+captured_reset_tokens() {
+    python3 - "${temp_dir}/message.eml" <<'PY'
+import email, pathlib, re, sys
+base = pathlib.Path(sys.argv[1])
+paths = ([base] if base.is_file() else []) + list(base.parent.glob(base.name + ".*"))
+paths.sort(key=lambda path: 0 if path == base else int(path.name.rsplit(".", 1)[1]))
+for path in paths:
+    message = email.message_from_bytes(path.read_bytes())
+    body = message.get_payload(decode=True).decode("utf-8", errors="replace")
+    for token in re.findall(r"/reset-password\?token=([0-9a-f]{64})", body):
+        print(token)
+PY
+}
+
 cleanup() {
     if [[ -n "${server_pid}" ]]; then
         kill "${server_pid}" 2>/dev/null || true
@@ -122,28 +155,45 @@ unknown_status="$(curl --silent --show-error --output "${temp_dir}/unknown.html"
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${unknown_email}" "${base_url}/forgot-password")"
 [[ "${known_status}" == 202 && "${unknown_status}" == 202 ]]
 cmp -s "${temp_dir}/known.html" "${temp_dir}/unknown.html"
-for _ in $(seq 1 40); do [[ -s "${temp_dir}/message.eml" ]] && break; sleep 0.25; done
+curl --silent --show-error --output "${temp_dir}/issue-race-a.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${email}" "${base_url}/forgot-password" >"${temp_dir}/issue-race-a.status" &
+issue_a_pid=$!
+curl --silent --show-error --output "${temp_dir}/issue-race-b.html" --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${email}" "${base_url}/forgot-password" >"${temp_dir}/issue-race-b.status" &
+issue_b_pid=$!
+wait "${issue_a_pid}"
+wait "${issue_b_pid}"
+[[ "$(cat "${temp_dir}/issue-race-a.status")" == 202 ]]
+[[ "$(cat "${temp_dir}/issue-race-b.status")" == 202 ]]
+cmp -s "${temp_dir}/known.html" "${temp_dir}/issue-race-a.html"
+cmp -s "${temp_dir}/known.html" "${temp_dir}/issue-race-b.html"
+for _ in $(seq 1 40); do [[ "$(captured_message_count)" -ge 3 ]] && break; sleep 0.25; done
+[[ "$(captured_message_count)" -ge 3 ]]
 grep -Fq "${email}" "${temp_dir}/message.eml"
 ! grep -Fq "${unknown_email}" "${temp_dir}/message.eml"
+! grep -Fq "${unknown_email}" "${temp_dir}"/message.eml.*
 
 echo "[5/8] exchange email token for a clean URL and reset cookie"
-if [[ ! -s "${temp_dir}/message.eml" ]]; then
-    echo "error: local SMTP sink did not capture a reset message" >&2
+if [[ "$(captured_message_count)" -lt 3 ]]; then
+    echo "error: local SMTP sink did not capture all reset messages" >&2
     exit 1
 fi
-token="$(python3 - "${temp_dir}/message.eml" <<'PY'
+mapfile -t issued_tokens < <(captured_reset_tokens)
+if [[ "${#issued_tokens[@]}" -ne 3 ]]; then
+    echo "error: expected three captured reset tokens, got ${#issued_tokens[@]}" >&2
+    exit 1
+fi
+token="${issued_tokens[2]}"
+latest_message="$(latest_captured_message)"
+python3 - "${latest_message}" <<'PY'
 import email, pathlib, re, sys
 message = email.message_from_bytes(pathlib.Path(sys.argv[1]).read_bytes())
 body = message.get_payload(decode=True).decode("utf-8", errors="replace")
 if "Verwende diesen Link innerhalb von 15 Minuten" not in body:
-    raise SystemExit("reset email did not use the configured German locale")
-match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
-if not match:
-    print(body, file=sys.stderr)
-    raise SystemExit("reset token missing from captured email")
-print(match.group(1))
+    raise SystemExit("latest reset email did not use the configured German locale")
 PY
-)"
 stored_token_hash="$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")"
 expected_token_hash="$(python3 - "${token}" <<'PY'
 import hashlib, sys
@@ -152,6 +202,11 @@ PY
 )"
 [[ "${stored_token_hash}" == "${expected_token_hash}" ]]
 [[ "${stored_token_hash}" != "${token}" ]]
+for stale_token in "${issued_tokens[0]}" "${issued_tokens[1]}"; do
+    stale_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        "${base_url}/reset-password?token=${stale_token}")"
+    [[ "${stale_status}" == 400 ]]
+done
 ! grep -Fq "${token}" "${temp_dir}/server.log"
 token_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --cookie-jar "${temp_dir}/reset.cookies" --dump-header "${temp_dir}/reset.headers" \
@@ -213,18 +268,17 @@ losing_login_status="$(curl --silent --show-error --output /dev/null --write-out
     --data-urlencode "email=${email}" --data-urlencode "password=${losing_password}" \
     "${base_url}/login")"
 [[ "${winning_login_status}" == 303 && "${losing_login_status}" == 401 ]]
-python3 - "${temp_dir}/message.eml" <<'PY'
-from pathlib import Path
-import sys
-Path(sys.argv[1]).unlink(missing_ok=True)
-PY
+rm -f "${temp_dir}"/message.eml*
 curl --silent --show-error --output /dev/null --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" \
     "${base_url}/forgot-password"
-for _ in $(seq 1 40); do [[ -s "${temp_dir}/message.eml" ]] && break; sleep 0.25; done
-expired_token="$(python3 - "${temp_dir}/message.eml" <<'PY'
+for _ in $(seq 1 40); do [[ "$(captured_message_count)" -ge 1 ]] && break; sleep 0.25; done
+[[ "$(captured_message_count)" -ge 1 ]]
+expired_message="$(latest_captured_message)"
+expired_token="$(python3 - "${expired_message}" <<'PY'
+from pathlib import Path
 import email, pathlib, re, sys
-message = email.message_from_bytes(pathlib.Path(sys.argv[1]).read_bytes())
+message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
 body = message.get_payload(decode=True).decode("utf-8", errors="replace")
 if "Verwende diesen Link innerhalb von 15 Minuten" not in body:
     raise SystemExit("second reset email did not use the configured German locale")

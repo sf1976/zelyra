@@ -227,6 +227,11 @@ pub(super) fn dispatch_password_reset(
             if email.len() > 320 || email.is_empty() || email.contains(['\r', '\n', '\0']) {
                 return reset_generic_response(app.ui_language, 202);
             }
+            // Keep token replacement and FIFO mail enqueue in the same process order.
+            let _issue_guard = match app.password_reset_issue_lock.lock() {
+                Ok(guard) => guard,
+                Err(_) => return reset_generic_response(app.ui_language, 202),
+            };
             let active_filter = auth
                 .schema
                 .tables

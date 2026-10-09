@@ -47,7 +47,9 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Sitzungswiderruf. Der E2E-Test löst dasselbe Reset-Token nun außerdem
   gleichzeitig zweimal ein und prüft genau einen Erfolg, eine Ablehnung und
   die Anmeldung nur mit dem siegreichen Passwort. Parallele Token-Ausstellung
-  und E-Mail-Reihenfolge, genaues Ablaufgrenzverhalten, SMTP-Ausfall und der
+  und FIFO-Maileinreihung sind innerhalb eines Prozesses serialisiert; der
+  E2E-Test bestätigt, dass die letzte E-Mail zum gültigen Token gehört.
+  Mehrprozess-Reihenfolge, genaues Ablaufgrenzverhalten, SMTP-Ausfall und der
   Mail-/Token-Lebenszyklus bleiben unabhängig zu prüfen.
 - Sitzungsadministration ist teilweise umgesetzt. Gerätemetadaten und die
   vollständige Selbstverwaltung bleiben offen; die Kontolebenszyklus-Abnahme

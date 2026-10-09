@@ -527,6 +527,7 @@ pub struct WebApp {
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
     reset_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    password_reset_issue_lock: Arc<Mutex<()>>,
     password_reset_mailer: Option<Arc<crate::password_reset::PasswordResetMailer>>,
     api_throttle: Arc<Mutex<HashMap<String, ApiThrottle>>>,
 }
@@ -553,6 +554,7 @@ impl WebApp {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
             reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_issue_lock: Arc::new(Mutex::new(())),
             password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
@@ -583,6 +585,7 @@ impl WebApp {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
             reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_issue_lock: Arc::new(Mutex::new(())),
             password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }

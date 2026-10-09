@@ -39,9 +39,11 @@ den tatsächlich implementierten Stand.
   mit verzögerter Zustellung geprüft. Der E2E-Test sendet außerdem zwei
   gleichzeitige Einlösungen desselben Tokens und prüft genau einen Erfolg,
   eine Ablehnung und die Authentifizierung mit nur dem siegreichen Passwort.
-  Prozesslokale Reset-Limits, Reihenfolge paralleler Token-Ausstellungen und
-  unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
-  nicht abgeschlossen.
+  Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines Prozesses
+  serialisiert; der E2E-Test bestätigt, dass die letzte E-Mail zum gültigen
+  Token gehört. Prozesslokale Reset-Limits, Mehrprozess-Reihenfolge,
+  Ablaufgrenze und unabhängige Sicherheitsprüfung bleiben offen; der
+  Kontolebenszyklus ist nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
 
@@ -586,8 +588,9 @@ Feature eines bestimmten Anbieters.
   und versteckte externe Erfassung sind ausgeschlossen.
 - [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
   teilweise umgesetzt. Gleichzeitige Einlösungen desselben Tokens sind im
-  MariaDB-E2E abgedeckt; Ablaufgrenze und parallele Token-Ausstellung,
-  persistente Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
+  MariaDB-E2E abgedeckt. Token-Ausstellung und E-Mail-Queue sind pro Prozess
+  serialisiert; Mehrprozessbetrieb und Ablaufgrenze bleiben offen. Persistente
+  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
   Login-Benachrichtigungen bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
   Berechtigungen.

@@ -527,8 +527,10 @@ architecture requirement for every phase, not a provider-specific feature.
   delivery, and session revocation are covered by a MariaDB/SMTP-sink E2E with
   deliberately delayed delivery. The E2E also races two same-token submissions
   and verifies one success, one rejection, and authentication with only the
-  winning password. Process-local reset throttling, parallel token-issuance
-  ordering, and independent security review remain open; the account lifecycle
+  winning password. Token replacement and FIFO mail enqueue are serialized
+  within one process; the E2E confirms the last email matches the live token.
+  Process-local reset throttling, cross-instance issuance ordering, expiry
+  boundary, and independent security review remain open; the account lifecycle
   is not complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.

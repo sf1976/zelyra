@@ -32,8 +32,10 @@ releases follow Semantic Versioning independently of the language line.
   and persistent/in-memory session revocation have a MariaDB/SMTP-sink E2E
   that delays mail delivery to test response timing. The E2E now submits one
   reset token twice concurrently and verifies only one password can be used.
-  SMTP outage review, parallel issuance ordering, expiry-boundary review,
-  persistent rate limits, and independent security acceptance remain open.
+  Token replacement and FIFO mail enqueue are serialized within one process;
+  the E2E verifies that the last delivered email matches the active token.
+  Cross-instance ordering, SMTP outage, expiry-boundary review, persistent
+  rate limits, and independent security acceptance remain open.
   / Generierte Auth-Seiten bieten jetzt `/account/sessions` zum Anzeigen und
   Beenden eigener Sitzungen. CSRF- und Same-Origin-Prüfungen gelten; beim
   Beenden der aktuellen Sitzung wird das Cookie gelöscht. HTTP-Tests und der
@@ -45,9 +47,10 @@ releases follow Semantic Versioning independently of the language line.
   Ablauf-/Replay-Prüfung
   und Widerruf persistenter und flüchtiger Sitzungen haben einen
   MariaDB-/SMTP-Senken-E2E-Test. SMTP-Ausfall, persistente Limits,
-  parallele Token-Ausstellung, Ablaufgrenze und unabhängige Sicherheitsabnahme
-  bleiben offen; gleichzeitige Einlösung desselben Tokens prüft jetzt, dass nur
-  ein Passwort funktioniert.
+  Mehrprozess-Reihenfolge, Ablaufgrenze und unabhängige Sicherheitsabnahme
+  bleiben offen. Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines
+  Prozesses serialisiert; der E2E-Test prüft parallele Einlösung und dass die
+  letzte E-Mail zum aktiven Token gehört.
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
   normalized email keys are hashed, configured lockout durations are honored
   independently of the failure window, and new keys fail closed at capacity. /

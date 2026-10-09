@@ -4,12 +4,27 @@
 import pathlib
 import socketserver
 import sys
+import threading
 import time
 
 
 message_path = pathlib.Path(sys.argv[1])
 port_path = pathlib.Path(sys.argv[2])
 reply_delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+capture_lock = threading.Lock()
+captured_messages = 0
+
+
+def capture_message(message):
+    global captured_messages
+    with capture_lock:
+        path = (
+            message_path
+            if captured_messages == 0
+            else message_path.with_name(f"{message_path.name}.{captured_messages}")
+        )
+        path.write_bytes(b"\n".join(message))
+        captured_messages += 1
 
 
 class Handler(socketserver.StreamRequestHandler):
@@ -25,7 +40,7 @@ class Handler(socketserver.StreamRequestHandler):
             command = line.rstrip(b"\r\n")
             if data_mode:
                 if command == b".":
-                    message_path.write_bytes(b"\n".join(message))
+                    capture_message(message)
                     if reply_delay:
                         time.sleep(reply_delay)
                     self.reply(b"250 queued\r\n")

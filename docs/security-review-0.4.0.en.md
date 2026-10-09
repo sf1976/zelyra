@@ -44,9 +44,10 @@ or human acceptance.
   token hashing, replay, expiry, CSRF/origin, and session revocation. The
   E2E now also submits the same reset token concurrently and verifies that one
   request succeeds, the other is rejected, and only the winning password can
-  authenticate. Concurrent token issuance and email ordering, exact expiry
-  boundary behavior, SMTP outage handling, and the mail/token lifecycle still
-  need independent review.
+  authenticate. Token replacement and FIFO mail enqueue are serialized within
+  one process, and the E2E verifies the last delivered message matches the
+  active token. Cross-instance ordering, exact expiry boundary behavior, SMTP
+  outage handling, and the mail/token lifecycle still need independent review.
 - Session administration is partially implemented. Device metadata and full
   self-service remain open; account-lifecycle acceptance has not passed.
 - MariaDB TLS verifies the certificate chain and host names according to the
