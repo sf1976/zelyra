@@ -17,10 +17,10 @@ use std::{
 };
 use zelyra_ast::Type;
 use zelyra_database::{
-    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_null_values,
-    create_mariadb_database, diff, inspect_mariadb, inspect_postgres, inspect_sqlite,
-    sql::check_program as check_sql_program, table_has_rows, Backend, Query, QueryResult,
-    QueryValue, Risk, Schema,
+    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_duplicate_value_groups,
+    count_foreign_key_orphans, count_null_values, create_mariadb_database, diff, inspect_mariadb,
+    inspect_postgres, inspect_sqlite, sql::check_program as check_sql_program, table_has_rows,
+    Backend, Query, QueryResult, QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -7894,6 +7894,19 @@ fn print_plan(plan: &zelyra_database::SchemaPlan) {
             check.table, check.column
         );
     }
+    for check in &plan.unique_index_preflights {
+        println!(
+            "[PREFLIGHT] verify `{}.{}` has no duplicate values before applying any SQL",
+            check.table,
+            check.columns.join(", ")
+        );
+    }
+    for check in &plan.foreign_key_preflights {
+        println!(
+            "[PREFLIGHT] verify `{}.{}` references existing `{}.{}` values before applying any SQL",
+            check.table, check.column, check.referenced_table, check.referenced_column
+        );
+    }
     for change in &plan.changes {
         let risk = match change.risk {
             Risk::Safe => "SAFE",
@@ -8023,6 +8036,23 @@ fn schema_plan_json(
                 "kind": "table_must_be_empty",
                 "table": check.table,
                 "column": check.column,
+            })
+        }))
+        .chain(plan.unique_index_preflights.iter().map(|check| {
+            json!({
+                "kind": "values_must_be_unique",
+                "table": check.table,
+                "columns": check.columns,
+            })
+        }))
+        .chain(plan.foreign_key_preflights.iter().map(|check| {
+            json!({
+                "kind": "foreign_key_values_must_exist",
+                "table": check.table,
+                "column": check.column,
+                "referenced_table": check.referenced_table,
+                "referenced_column": check.referenced_column,
+                "referenced_table_exists_before_apply": check.referenced_table_exists,
             })
         }))
         .collect::<Vec<_>>();
@@ -8246,6 +8276,54 @@ fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                         eprintln!(
                             "error[E-DB-005]: could not verify that table `{}` is empty before adding required column `{}.{}`; no schema SQL was applied",
                             check.table, check.table, check.column
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
+            }
+            for check in &plan.unique_index_preflights {
+                match count_duplicate_value_groups(
+                    &url,
+                    schema.backend(),
+                    &check.table,
+                    &check.columns,
+                ) {
+                    Ok(0) => {}
+                    Ok(count) => {
+                        eprintln!(
+                            "error[E-DB-005]: cannot add a unique index on `{}.{}` because {count} duplicate value group(s) exist; no schema SQL was applied",
+                            check.table,
+                            check.columns.join(", ")
+                        );
+                        return ExitCode::from(1);
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: could not verify uniqueness of `{}.{}`; no schema SQL was applied",
+                            check.table,
+                            check.columns.join(", ")
+                        );
+                        return ExitCode::from(1);
+                    }
+                }
+            }
+            for check in &plan.foreign_key_preflights {
+                match count_foreign_key_orphans(&url, schema.backend(), check) {
+                    Ok(0) => {}
+                    Ok(count) => {
+                        eprintln!(
+                            "error[E-DB-005]: cannot add foreign key `{}.{}` because {count} existing row(s) have no matching `{}.{}` value; no schema SQL was applied",
+                            check.table,
+                            check.column,
+                            check.referenced_table,
+                            check.referenced_column
+                        );
+                        return ExitCode::from(1);
+                    }
+                    Err(_) => {
+                        eprintln!(
+                            "error[E-DB-005]: could not verify foreign-key values in `{}.{}`; no schema SQL was applied",
+                            check.table, check.column
                         );
                         return ExitCode::from(1);
                     }
@@ -10807,7 +10885,20 @@ mod tests {
             migration_fixture_column("id", "BIGINT", false),
             migration_fixture_column("name", "VARCHAR(30)", false),
         ]);
-        let plan = diff(&desired, &current);
+        let mut plan = diff(&desired, &current);
+        plan.unique_index_preflights
+            .push(zelyra_database::UniqueIndexPreflight {
+                table: "customers".into(),
+                columns: vec!["email".into()],
+            });
+        plan.foreign_key_preflights
+            .push(zelyra_database::ForeignKeyPreflight {
+                table: "customers".into(),
+                column: "account_id".into(),
+                referenced_table: "accounts".into(),
+                referenced_column: "id".into(),
+                referenced_table_exists: true,
+            });
         let first = schema_plan_json(&desired, &current, &plan);
         let second = schema_plan_json(&desired, &current, &plan);
         assert_eq!(first, second);
@@ -10815,6 +10906,12 @@ mod tests {
         assert_eq!(first["drift"], "present");
         assert!(first["requires_operator_approval"].as_bool().unwrap());
         assert_eq!(first["preflights"][0]["kind"], "table_must_be_empty");
+        assert_eq!(first["preflights"][1]["kind"], "values_must_be_unique");
+        assert_eq!(first["preflights"][1]["columns"][0], "email");
+        assert_eq!(
+            first["preflights"][2]["kind"],
+            "foreign_key_values_must_exist"
+        );
         assert_eq!(first["rollback"]["generated"], false);
         assert_eq!(first["automatic_retries"], false);
         assert!(first["plan_id"].as_str().unwrap().starts_with("sha256:"));

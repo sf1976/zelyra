@@ -114,6 +114,14 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   Wiederherstellung benötigt weiterhin ein geprüftes Betreiber-Backup.
 - `zelyra db plan` zeigt den erkannten Schemaunterschied; es sichert keine
   Daten und reserviert den Datenbankzustand nicht.
+- Vor jeglichem Plan-SQL prüft `db apply` vorhandene Zeilen auf NULL-Werte vor
+  einer Verschärfung der Nullbarkeit, Tabellen auf Leerheit vor einer neuen
+  Pflichtspalte ohne Standardwert, Dublettengruppen aus Nicht-NULL-Werten vor
+  einem neuen Unique-Index und vorhandene Fremdschlüsselwerte auf fehlende
+  referenzierte Zeilen. Bei einem Fehler oder einer nicht möglichen Prüfung
+  wird der gesamte Plan blockiert. Diese lesenden Prüfungen sperren parallele
+  Schreibzugriffe nicht aus; Daten müssen korrigiert und der Plan erneut
+  geprüft werden. Schreibzugriffe während einer Migration sind abzustimmen.
 - `zelyra db apply` führt unterstützte SQL-Schritte aus. PostgreSQL-Pläne
   laufen in einer einzigen Transaktion. SQLite startet mit `BEGIN IMMEDIATE`,
   bricht beim ersten SQL-Fehler ab und rollt ohne Commit alle Schritte zurück.

@@ -7,3 +7,8 @@ table safety_records {
     id: Id primary auto
     label: String(80) required unique
 }
+
+table unique_preflight_sentinel {
+    id: Id primary auto
+    name: String(40) required
+}

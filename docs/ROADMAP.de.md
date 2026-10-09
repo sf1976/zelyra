@@ -346,7 +346,9 @@ Feature eines bestimmten Anbieters.
   Foreign-Key-Entfernungen werden blockiert. Vor dem Hinzufügen einer
   Pflichtspalte ohne Standardwert prüft ein lesender Preflight, ob die
   vorhandene Tabelle leer ist; andernfalls wird der gesamte Plan vor jeglichem
-  SQL blockiert. Nullbarkeitsänderungen bei
+  SQL blockiert. Neue Unique-Indizes und Foreign Keys erhalten vor jeglichem
+  Plan-SQL lesende Prüfungen auf Dubletten und verwaiste Werte. Diese Prüfungen
+  verhindern keine parallelen Schreibzugriffe. Nullbarkeitsänderungen bei
   MariaDB und PostgreSQL benötigen `REVIEW`; vor einer Verschärfung auf
   `NOT NULL` prüft ein lesender NULL-Zeilen-Preflight den gesamten Plan und
   blockiert ihn vor jeglichem SQL, wenn Daten korrigiert werden müssen.

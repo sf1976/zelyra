@@ -307,7 +307,11 @@ architecture requirement for every phase, not a provider-specific feature.
   history and safe inverse SQL remain unimplemented; the plan reports
   `rollback.generated: false`. PostgreSQL and SQLite `db apply` now run DDL
   transactionally and tests verify rollback after a failing step; MariaDB DDL
-  can still leave partial state. Backups remain the operator's responsibility.
+  can still leave partial state. Before any plan SQL, read-only checks now
+  reject duplicate values for new unique indexes and orphan values for new
+  foreign keys; the checks also cover required-column and nullability changes.
+  They do not prevent concurrent-write races. Backups remain the operator's
+  responsibility.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
   auto-increment drift; SQLite default, primary-key, and explicit
   `AUTOINCREMENT` drift; and PostgreSQL default, primary-key, and
@@ -323,6 +327,8 @@ architecture requirement for every phase, not a provider-specific feature.
   unknown external indexes are preserved and untracked FK removals fail closed.
   Adding a required no-default column to an existing table now runs a read-only
   empty-table preflight; a populated table blocks the entire plan before SQL.
+  New unique indexes and foreign keys also run read-only duplicate and orphan
+  checks before any SQL; concurrent writes can still race these checks.
   MariaDB and PostgreSQL nullability changes require `REVIEW`; tightening to
   `NOT NULL` performs a read-only NULL-row preflight before any plan SQL and
   fails closed if rows need repair. SQLite nullability and type/FK/unique-

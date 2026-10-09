@@ -44,10 +44,13 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Windows-TLS braucht noch einen eigenen Matrixnachweis.
 - PostgreSQL- und SQLite-Schemaanwendungen laufen jetzt transaktional; Tests
   zeigen, dass ein fehlgeschlagener DDL-Schritt vorherige Änderungen
-  zurücksetzt. MariaDB-DDL kann weiterhin Teilzustände hinterlassen. Persistenter
-  Migrationsverlauf, sicheres inverses SQL, Wiederherstellung nach tatsächlichem
-  Prozessabbruch und eine vollständige Restore-Probe bleiben offen. Vorhandene
-  Backups bleiben Betreiberverantwortung.
+  zurücksetzt. MariaDB-DDL kann weiterhin Teilzustände hinterlassen. Lesende
+  Vorprüfungen blockieren einen Plan vor SQL, wenn neue Unique-Indizes
+  Dubletten oder neue Foreign Keys verwaiste Werte finden. Parallele
+  Schreibzugriffe können diese Prüfungen überholen; sie bieten keine Isolation.
+  Persistenter Migrationsverlauf, sicheres inverses SQL, Wiederherstellung nach
+  tatsächlichem Prozessabbruch und eine vollständige Restore-Probe bleiben
+  offen. Vorhandene Backups bleiben Betreiberverantwortung.
 
 ## Lieferkette und verbleibende Gates
 

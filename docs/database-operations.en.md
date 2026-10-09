@@ -113,6 +113,13 @@ verifying the target again.
   verified operator-managed backup.
 - `zelyra db plan` previews the detected schema difference; it does not back
   up data or reserve the database state.
+- Before applying any plan SQL, `db apply` checks existing rows for NULLs
+  before tightening nullability, checks table emptiness before adding a
+  required column without a default, checks duplicate non-NULL value groups
+  before adding a unique index, and checks existing foreign-key values for
+  missing referenced rows. A failed or unavailable check blocks the whole
+  plan. These read-only checks do not lock out concurrent writers; repair data
+  and rerun the plan, and coordinate writes during a migration.
 - `zelyra db apply` executes supported SQL steps. PostgreSQL plans run in a
   single transaction; SQLite plans use `BEGIN IMMEDIATE`, stop at the first SQL
   error, and roll back when a step fails. Integration tests verify that a

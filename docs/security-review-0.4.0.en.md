@@ -42,6 +42,9 @@ or human acceptance.
   separate connection. Windows TLS still needs its own matrix evidence.
 - PostgreSQL and SQLite schema apply now use transactions; tests show a failed
   DDL step rolls back earlier steps. MariaDB DDL can still leave partial state.
+  Read-only preflights block a plan before SQL when new unique indexes have
+  duplicate values or new foreign keys have orphan values. Concurrent writes
+  can race these checks, so they are not an isolation guarantee.
   Persistent migration history, safe inverse SQL, actual process-interruption
   recovery, and a full restore rehearsal remain open. Existing backups remain
   an operator responsibility.

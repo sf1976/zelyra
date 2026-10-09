@@ -282,6 +282,7 @@ assert_mariadb_safety() {
     unique_after="${fixture_dir}/schema_safety_unique_after_mariadb.zyl"
     unique_plan="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db plan "${unique_after}")"
     grep -Fq "[REVIEW] add unique index" <<<"${unique_plan}"
+    grep -Fq "[PREFLIGHT] verify \`safety_records.label\` has no duplicate values before applying any SQL" <<<"${unique_plan}"
     if output="$(DATABASE_URL="${mariadb_url}" "${zelyra_bin}" db apply "${unique_after}" 2>&1)"; then
         echo "error: MariaDB db apply unexpectedly accepted a unique constraint without approval" >&2
         exit 1
@@ -303,12 +304,18 @@ assert_mariadb_safety() {
         exit 1
     fi
     grep -Fq "error[E-DB-005]" <<<"${output}"
+    grep -Fq "duplicate value group(s) exist; no schema SQL was applied" <<<"${output}"
     duplicate_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
         --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
         --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
         -e "SELECT COUNT(*) FROM safety_records WHERE label='duplicate';")"
-    [[ "${duplicate_count}" == "2" ]]
-    echo "[MariaDB] unique constraint requires review and preserves duplicate rows on failure"
+    local sentinel_tables
+    sentinel_tables="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${mariadb_database}' AND table_name='unique_preflight_sentinel';")"
+    [[ "${duplicate_count}" == "2" && "${sentinel_tables}" == "0" ]]
+    echo "[MariaDB] unique constraint requires review and duplicate preflight blocks all plan DDL"
 
     local required_after required_plan
     required_after="${fixture_dir}/schema_safety_required_after_mariadb.zyl"

@@ -633,11 +633,28 @@ pub struct RequiredColumnPreflight {
     pub column: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UniqueIndexPreflight {
+    pub table: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForeignKeyPreflight {
+    pub table: String,
+    pub column: String,
+    pub referenced_table: String,
+    pub referenced_column: String,
+    pub referenced_table_exists: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SchemaPlan {
     pub changes: Vec<SchemaChange>,
     pub nullability_preflights: Vec<NullabilityPreflight>,
     pub required_column_preflights: Vec<RequiredColumnPreflight>,
+    pub unique_index_preflights: Vec<UniqueIndexPreflight>,
+    pub foreign_key_preflights: Vec<ForeignKeyPreflight>,
 }
 
 impl SchemaPlan {
@@ -903,6 +920,12 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                         Risk::Safe
                     },
                 });
+                if index.unique {
+                    plan.unique_index_preflights.push(UniqueIndexPreflight {
+                        table: desired_table.name.clone(),
+                        columns: index.columns.clone(),
+                    });
+                }
             }
         }
         for index in &current_indexes {
@@ -938,6 +961,16 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 } else {
                     Risk::RequiresApproval
                 };
+                if backend != Backend::Sqlite {
+                    plan.foreign_key_preflights.push(ForeignKeyPreflight {
+                        table: desired_table.name.clone(),
+                        column: foreign_key.column.clone(),
+                        referenced_table: foreign_key.referenced_table.clone(),
+                        referenced_column: foreign_key.referenced_column.clone(),
+                        referenced_table_exists: current_tables
+                            .contains_key(foreign_key.referenced_table.as_str()),
+                    });
+                }
                 plan.changes.push(SchemaChange {
                     description: format!(
                         "add foreign key {}.{}; existing rows must satisfy it",
@@ -1009,6 +1042,18 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
         left.table
             .cmp(&right.table)
             .then_with(|| left.column.cmp(&right.column))
+    });
+    plan.unique_index_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.columns.cmp(&right.columns))
+    });
+    plan.foreign_key_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.column.cmp(&right.column))
+            .then_with(|| left.referenced_table.cmp(&right.referenced_table))
+            .then_with(|| left.referenced_column.cmp(&right.referenced_column))
     });
     plan
 }
@@ -1948,6 +1993,76 @@ pub fn count_null_values(
     output.trim().parse().map_err(|_| DatabaseError {
         message: "database returned an invalid NULL row count".into(),
     })
+}
+
+pub fn count_duplicate_value_groups(
+    database_url: &str,
+    backend: Backend,
+    table: &str,
+    columns: &[String],
+) -> Result<u64, DatabaseError> {
+    if columns.is_empty() {
+        return Err(DatabaseError {
+            message: "unique-index preflight requires at least one column".into(),
+        });
+    }
+    let query = duplicate_value_groups_sql(table, columns, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => run_sqlite(&sqlite_path(database_url)?, &query)?,
+    };
+    output.trim().parse().map_err(|_| DatabaseError {
+        message: "database returned an invalid duplicate group count".into(),
+    })
+}
+
+pub fn count_foreign_key_orphans(
+    database_url: &str,
+    backend: Backend,
+    preflight: &ForeignKeyPreflight,
+) -> Result<u64, DatabaseError> {
+    let query = foreign_key_orphans_sql(preflight, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => run_sqlite(&sqlite_path(database_url)?, &query)?,
+    };
+    output.trim().parse().map_err(|_| DatabaseError {
+        message: "database returned an invalid foreign-key orphan count".into(),
+    })
+}
+
+fn duplicate_value_groups_sql(table: &str, columns: &[String], backend: Backend) -> String {
+    let table = quote_identifier(table, backend);
+    let columns = columns
+        .iter()
+        .map(|column| quote_identifier(column, backend))
+        .collect::<Vec<_>>();
+    let non_null = columns
+        .iter()
+        .map(|column| format!("{column} IS NOT NULL"))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let grouped_columns = columns.join(", ");
+    format!(
+        "SELECT COUNT(*) FROM (SELECT {grouped_columns} FROM {table} WHERE {non_null} GROUP BY {grouped_columns} HAVING COUNT(*) > 1) AS zelyra_duplicate_groups"
+    )
+}
+
+fn foreign_key_orphans_sql(preflight: &ForeignKeyPreflight, backend: Backend) -> String {
+    let table = quote_identifier(&preflight.table, backend);
+    let child_column = quote_identifier(&preflight.column, backend);
+    if !preflight.referenced_table_exists {
+        return format!(
+            "SELECT COUNT(*) FROM {table} AS zelyra_child WHERE zelyra_child.{child_column} IS NOT NULL"
+        );
+    }
+    let referenced_table = quote_identifier(&preflight.referenced_table, backend);
+    let referenced_column = quote_identifier(&preflight.referenced_column, backend);
+    format!(
+        "SELECT COUNT(*) FROM {table} AS zelyra_child LEFT JOIN {referenced_table} AS zelyra_parent ON zelyra_child.{child_column} = zelyra_parent.{referenced_column} WHERE zelyra_child.{child_column} IS NOT NULL AND zelyra_parent.{referenced_column} IS NULL"
+    )
 }
 
 pub fn table_has_rows(
@@ -3828,6 +3943,82 @@ mod tests {
             nullability_count_sql("user\"data", "e\"mail", Backend::Postgres),
             "SELECT COUNT(*) FROM \"user\"\"data\" WHERE \"e\"\"mail\" IS NULL"
         );
+    }
+
+    #[test]
+    fn unique_and_foreign_key_preflight_queries_quote_backend_identifiers() {
+        assert_eq!(
+            duplicate_value_groups_sql(
+                "user`data",
+                &["first`name".into(), "last`name".into()],
+                Backend::MariaDb,
+            ),
+            "SELECT COUNT(*) FROM (SELECT `first``name`, `last``name` FROM `user``data` WHERE `first``name` IS NOT NULL AND `last``name` IS NOT NULL GROUP BY `first``name`, `last``name` HAVING COUNT(*) > 1) AS zelyra_duplicate_groups"
+        );
+        assert_eq!(
+            foreign_key_orphans_sql(
+                &ForeignKeyPreflight {
+                    table: "child\"data".into(),
+                    column: "parent\"id".into(),
+                    referenced_table: "parent\"data".into(),
+                    referenced_column: "id\"value".into(),
+                    referenced_table_exists: true,
+                },
+                Backend::Postgres,
+            ),
+            "SELECT COUNT(*) FROM \"child\"\"data\" AS zelyra_child LEFT JOIN \"parent\"\"data\" AS zelyra_parent ON zelyra_child.\"parent\"\"id\" = zelyra_parent.\"id\"\"value\" WHERE zelyra_child.\"parent\"\"id\" IS NOT NULL AND zelyra_parent.\"id\"\"value\" IS NULL"
+        );
+        assert_eq!(
+            foreign_key_orphans_sql(
+                &ForeignKeyPreflight {
+                    table: "machines".into(),
+                    column: "department_id".into(),
+                    referenced_table: "departments".into(),
+                    referenced_column: "id".into(),
+                    referenced_table_exists: false,
+                },
+                Backend::MariaDb,
+            ),
+            "SELECT COUNT(*) FROM `machines` AS zelyra_child WHERE zelyra_child.`department_id` IS NOT NULL"
+        );
+    }
+
+    #[test]
+    fn new_unique_indexes_and_foreign_keys_receive_data_preflights() {
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto email: Email required unique } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let current = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto email: Email required } table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let plan = diff(&desired, &current);
+        assert_eq!(
+            plan.unique_index_preflights,
+            [UniqueIndexPreflight {
+                table: "users".into(),
+                columns: vec!["email".into()],
+            }]
+        );
+        assert_eq!(
+            plan.foreign_key_preflights,
+            [ForeignKeyPreflight {
+                table: "machines".into(),
+                column: "department_id".into(),
+                referenced_table: "departments".into(),
+                referenced_column: "id".into(),
+                referenced_table_exists: true,
+            }]
+        );
+
+        let missing_parent = schema(
+            "database main { engine: mariadb } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let existing_child = schema(
+            "database main { engine: mariadb } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let plan = diff(&missing_parent, &existing_child);
+        assert_eq!(plan.foreign_key_preflights.len(), 1);
+        assert!(!plan.foreign_key_preflights[0].referenced_table_exists);
     }
 
     #[test]
