@@ -7,7 +7,8 @@ releases follow Semantic Versioning independently of the language line.
 ## Unreleased
 
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
-  normalized email keys are hashed, and new keys fail closed at capacity. /
+  normalized email keys are hashed, configured lockout durations are honored
+  independently of the failure window, and new keys fail closed at capacity. /
   Login-Limit-Zustand ist jetzt auf 4096 Schlüssel begrenzt, E-Mail-Schlüssel
   werden gehasht, abgelaufene Zeitfenster bereinigt und neue Schlüssel bei
   voller Tabelle abgelehnt.

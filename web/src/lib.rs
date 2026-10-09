@@ -2211,18 +2211,14 @@ fn login_is_blocked_with_policy(
     };
     let now = Instant::now();
     throttle.retain(|_, state| {
-        now.duration_since(state.window_started)
-            < Duration::from_secs(u64::from(state.window_seconds))
+        let window_expired = now.duration_since(state.window_started)
+            >= Duration::from_secs(u64::from(state.window_seconds));
+        let still_blocked = state.blocked_until.is_some_and(|until| now < until);
+        !window_expired || still_blocked
     });
     let Some(state) = throttle.get_mut(key) else {
         return throttle.len() >= LOGIN_THROTTLE_MAX_KEYS;
     };
-    if now.duration_since(state.window_started)
-        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
-    {
-        throttle.remove(key);
-        return false;
-    }
     if let Some(blocked_until) = state.blocked_until {
         if now < blocked_until {
             return true;
@@ -2230,6 +2226,13 @@ fn login_is_blocked_with_policy(
         state.failures = 0;
         state.blocked_until = None;
         state.window_started = now;
+        return false;
+    }
+    if now.duration_since(state.window_started)
+        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
+    {
+        throttle.remove(key);
+        return false;
     }
     false
 }
@@ -2255,8 +2258,10 @@ fn record_login_failure_with_policy(
     };
     let now = Instant::now();
     throttle.retain(|_, state| {
-        now.duration_since(state.window_started)
-            < Duration::from_secs(u64::from(state.window_seconds))
+        let window_expired = now.duration_since(state.window_started)
+            >= Duration::from_secs(u64::from(state.window_seconds));
+        let still_blocked = state.blocked_until.is_some_and(|until| now < until);
+        !window_expired || still_blocked
     });
     if !throttle.contains_key(&key) && throttle.len() >= LOGIN_THROTTLE_MAX_KEYS {
         return;
@@ -10002,6 +10007,33 @@ mod tests {
         }
         assert!(!login_is_blocked_with_policy(&app, fresh_key, policy));
         assert_eq!(app.login_throttle.lock().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn login_block_duration_is_not_truncated_by_failure_window() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let key = "long-block@example.test";
+        let policy = zelyra_ast::ApiRateLimit {
+            requests: 1,
+            window_seconds: 30,
+        };
+        record_login_failure_with_policy(&app, key.into(), policy, 60);
+        {
+            let mut throttle = app.login_throttle.lock().unwrap();
+            let state = throttle.get_mut(key).unwrap();
+            state.window_started = Instant::now() - Duration::from_secs(31);
+            state.blocked_until = Some(Instant::now() + Duration::from_secs(2));
+        }
+        assert!(login_is_blocked_with_policy(&app, key, policy));
+
+        app.login_throttle
+            .lock()
+            .unwrap()
+            .get_mut(key)
+            .unwrap()
+            .blocked_until = Some(Instant::now() - Duration::from_secs(1));
+        assert!(!login_is_blocked_with_policy(&app, key, policy));
+        assert!(app.login_throttle.lock().unwrap().is_empty());
     }
 
     #[test]
