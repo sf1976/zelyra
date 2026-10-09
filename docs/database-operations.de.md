@@ -109,9 +109,15 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   `zelyra.schema-plan/v1`-Plan mit SHA-256-Fingerprints des beobachteten und
   gewünschten Schemas, stabiler Plan-ID, Drift, SQL-Schritten, Vorprüfungen
   und Freigabebedarf aus. Die Datenbank-URL wird nicht ausgegeben.
-- Der JSON-Plan erzeugt noch keinen Datenbank-Migrationsverlauf und kein
-  sicheres inverses SQL. `rollback.generated` bleibt `false`; sichere
-  Wiederherstellung benötigt weiterhin ein geprüftes Betreiber-Backup.
+- `db apply` speichert MariaDB-Pläne und den Fortschritt jedes Schritts in der
+  reservierten Tabelle `_zelyra_schema_history`. `zelyra db history
+  <datei.zyl>` zeigt angewendete, fehlgeschlagene, aktive und unterbrochene
+  Läufe; JSON gibt es mit `--format=json`. Die interne Tabelle erscheint nicht
+  in der normalen Schemaansicht. SQLite und PostgreSQL haben noch keinen
+  persistenten Migrationsverlauf.
+- Der JSON-Plan erzeugt kein sicheres inverses SQL. `rollback.generated`
+  bleibt `false`; sichere Wiederherstellung benötigt weiterhin ein geprüftes
+  Betreiber-Backup.
 - `zelyra db plan` zeigt den erkannten Schemaunterschied; es sichert keine
   Daten und reserviert den Datenbankzustand nicht.
 - Vor jeglichem Plan-SQL prüft `db apply` vorhandene Zeilen auf NULL-Werte vor
@@ -129,8 +135,14 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   vorherige DDL-Schritte zurücksetzt und ein reparierter Plan erneut
   ausgeführt werden kann. MariaDB-DDL kann implizit Transaktionen abschließen;
   ein späterer Fehler kann bereits ausgeführte Schritte zurücklassen.
-- Prüfe nach einem Abbruch den tatsächlichen Datenbankzustand erneut. Verlasse
+- MariaDB-Migrationen nehmen eine datenbankweite Advisory-Sperre und speichern
+  Prüfpunkte für jeden DDL-Schritt. Nach einem Prozessabbruch zeigt `db
+  history` den letzten Prüffortschritt. Prüfe das Live-Schema mit `db inspect`,
+  erstelle und kontrolliere einen neuen Plan und wende diesen Plan an. Verlasse
   dich nicht darauf, dass ein alter Plan einen Teilzustand sicher repariert.
+  Ein Absturz innerhalb eines DDL-Befehls kann dessen Ergebnis weiterhin
+  unklar lassen; prüfe dann das Schema und stelle es bei Bedarf aus einem
+  Backup wieder her.
 - `--allow-risky` und `--allow-destructive` sind keine Backup- oder
   Rollback-Optionen. Nutze sie nur nach Planprüfung und mit einer unabhängig
   verifizierten Sicherung.

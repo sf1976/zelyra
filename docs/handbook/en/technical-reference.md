@@ -531,6 +531,20 @@ zelyra db apply src/main.zyl --allow-destructive
 That flag does not mean “probably fine.” It means “I read the plan, have a
 backup, and my pulse is normal.”
 
+MariaDB records each `db apply` plan and completed DDL step in
+`_zelyra_schema_history`. Inspect it after a deployment or interruption:
+
+~~~bash
+zelyra db history src/main.zyl
+zelyra db history src/main.zyl --format=json
+~~~
+
+If a process stopped between DDL steps, inspect the live schema, generate a
+fresh plan, review it, and apply it. The history shows the last checkpoint; it
+cannot determine whether a statement interrupted while running partially
+changed the schema. The reserved history table is omitted from normal schema
+inspection.
+
 For MariaDB, `db setup` and its `db bootstrap` alias first try to create the
 database and then apply the generated schema. `DATABASE_URL` therefore needs
 administrative privileges for that operation. An application user with limited

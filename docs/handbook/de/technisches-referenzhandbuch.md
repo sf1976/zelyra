@@ -587,6 +587,21 @@ zelyra db apply src/main.zyl --allow-destructive
 Dieses Flag bedeutet nicht „wird schon gutgehen“. Es bedeutet „ich habe den
 Plan gelesen, ein Backup und einen vernünftigen Puls“.
 
+MariaDB speichert jeden `db apply`-Plan und jeden abgeschlossenen DDL-Schritt
+in `_zelyra_schema_history`. Prüfe den Verlauf nach einem Deployment oder
+Abbruch:
+
+~~~bash
+zelyra db history src/main.zyl
+zelyra db history src/main.zyl --format=json
+~~~
+
+Wenn ein Prozess zwischen DDL-Schritten stoppt, prüfe das Live-Schema, erstelle
+einen neuen Plan, kontrolliere ihn und wende ihn an. Der Verlauf zeigt den
+letzten Prüfpunkt; bei einem Abbruch während eines SQL-Befehls kann er nicht
+feststellen, ob das Schema teilweise geändert wurde. Die reservierte
+Verlaufstabelle erscheint nicht in der normalen Schemaansicht.
+
 `db setup` und sein Alias `db bootstrap` versuchen bei MariaDB zuerst die
 Datenbank anzulegen und wenden anschließend das generierte Schema an. Dafür
 braucht `DATABASE_URL` administrative Rechte. Ein gewöhnlicher

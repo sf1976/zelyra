@@ -421,6 +421,7 @@ Important commands:
 | `zelyra db inspect app.zyl` | inspect the live schema |
 | `zelyra db plan app.zyl` | display schema changes |
 | `zelyra db apply app.zyl [--plan-id <sha256:...>]` | apply an approved plan and optionally reject schema drift since review |
+| `zelyra db history app.zyl [--format=json]` | inspect MariaDB migration progress and interruptions |
 | `zelyra audit inspect app.zyl` | inspect the latest audit events |
 | `zelyra audit export app.zyl --format json` | export audit events as JSON |
 | `zelyra audit verify app.zyl` | verify audit fields and optional hash chain |

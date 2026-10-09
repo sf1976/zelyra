@@ -166,6 +166,7 @@ page "/items" {
 | `zelyra db init <file.zyl>` | | Initialisiert Datenbank und Basistabellen |
 | `zelyra db setup <file.zyl>` | | Richtet die MariaDB-Datenbank initial ein |
 | `zelyra db apply <file.zyl>` | | Wendet Schema-Migrationen sicher an |
+| `zelyra db history <file.zyl> [--format=json]` | | Zeigt den MariaDB-Migrationsfortschritt |
 | `zelyra auth hash-password` | `[--stdin]` | Erzeugt sichere Argon2-Passworthashes |
 | `zelyra form validate <file> <Form>` | | Prüft Formulare mit Testwerten auf der Konsole |
 | `zelyra context <file.zyl>` | `[--format json]` | Gibt den semantischen Quellcode-Kontext für Tools aus |

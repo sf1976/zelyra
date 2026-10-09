@@ -470,6 +470,7 @@ Die wichtigsten Befehle:
 | `zelyra db inspect app.zyl` | Ist-Schema lesen |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
 | `zelyra db apply app.zyl [--plan-id <sha256:...>]` | geprüften Plan anwenden; Plan-ID schützt vor zwischenzeitlichem Schema-Drift |
+| `zelyra db history app.zyl [--format=json]` | MariaDB-Migrationsfortschritt und Unterbrechungen prüfen |
 | `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
 | `zelyra audit export app.zyl --format json` | Audit-Ereignisse als JSON exportieren |
 | `zelyra audit verify app.zyl` | Audit-Pflichtfelder und optionale Hashkette prüfen |

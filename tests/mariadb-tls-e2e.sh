@@ -105,10 +105,14 @@ cargo test -p zelyra-database \
     mariadb_pool_uses_verified_tls_when_enabled_for_the_test_database
 
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-if [[ -x "${zelyra_bin}" ]]; then
-    DATABASE_URL="${database_url}" "${zelyra_bin}" \
-        db inspect "${repo_dir}/examples/machine_management_mariadb.zyl" >/dev/null
-fi
+cargo build --locked -p zelyra-cli >/dev/null
+DATABASE_URL="${database_url}" "${zelyra_bin}" \
+    db inspect "${repo_dir}/examples/machine_management_mariadb.zyl" >/dev/null
+DATABASE_URL="${database_url}" "${zelyra_bin}" \
+    db apply "${repo_dir}/tests/fixtures/mariadb_tls_migration.zyl" >/dev/null
+tls_history="$(DATABASE_URL="${database_url}" "${zelyra_bin}" \
+    db history "${repo_dir}/tests/fixtures/mariadb_tls_migration.zyl" --format=json)"
+grep -Fq '"status": "applied"' <<<"${tls_history}"
 
 export ZELYRA_DB_TLS_CA_CERT_FILE="${temp_dir}/server-cert.pem"
 if cargo test -p zelyra-database \
@@ -127,4 +131,4 @@ if grep -Fq "${root_password}" "${temp_dir}/untrusted-ca.log"; then
     exit 1
 fi
 
-echo "Verified TLS success, untrusted-CA rejection, and secret-safe diagnostics."
+echo "Verified TLS handshake, schema inspect, migration apply/history, untrusted-CA rejection, and secret-safe diagnostics."

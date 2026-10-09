@@ -27,6 +27,20 @@ releases follow Semantic Versioning independently of the language line.
   versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
   Freigabebedarf aus; sicheres inverses SQL bleibt offen. `db apply --plan-id`
   lehnt einen nachträglich veralteten Plan vor Vorprüfungen und SQL ab.
+- MariaDB `db apply` now journals plan fingerprints and each DDL checkpoint in
+  `_zelyra_schema_history`; `db history` reports active, applied, failed, and
+  interrupted runs. A database-scoped advisory lock blocks concurrent Zelyra
+  migrations. An E2E test kills a migration between DDL statements and
+  verifies recovery with a newly reviewed plan; crashes during a statement and
+  inverse SQL remain open. DDL client connections also use configured verified
+  TLS and statement timeouts. / MariaDB `db apply` speichert Plan-Fingerprints
+  und Prüfpunkte jedes DDL-Schritts in `_zelyra_schema_history`; `db history`
+  zeigt aktive, angewendete, fehlgeschlagene und unterbrochene Läufe. Eine
+  datenbankweite Advisory-Sperre verhindert parallele Zelyra-Migrationen. Ein
+  E2E-Test beendet eine Migration zwischen DDL-Befehlen und prüft die
+  Wiederaufnahme mit einem neu geprüften Plan; Abstürze innerhalb eines
+  Befehls und inverses SQL bleiben offen. DDL-Clientverbindungen verwenden
+  ebenfalls konfiguriertes, verifiziertes TLS und Statement-Timeouts.
 - Generated authentication pages now provide `/account/sessions` for
   self-service session listing and revocation, limited to the signed-in user.
   CSRF and same-origin checks apply; revoking the current session clears its

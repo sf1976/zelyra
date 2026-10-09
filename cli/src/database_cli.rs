@@ -233,6 +233,233 @@ pub(super) fn schema_plan_json(
     })
 }
 
+const MARIADB_SCHEMA_HISTORY_TABLE: &str = "_zelyra_schema_history";
+
+fn mariadb_sql_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn ensure_mariadb_schema_history(database_url: &str) -> Result<(), DatabaseError> {
+    apply_mariadb(
+        database_url,
+        &format!(
+            "CREATE TABLE IF NOT EXISTS `{MARIADB_SCHEMA_HISTORY_TABLE}` (\
+                plan_id VARCHAR(71) NOT NULL PRIMARY KEY, \
+                before_schema_sha256 CHAR(64) NOT NULL, \
+                desired_schema_sha256 CHAR(64) NOT NULL, \
+                status VARCHAR(16) NOT NULL, \
+                attempt_count INT UNSIGNED NOT NULL DEFAULT 1, \
+                change_count INT UNSIGNED NOT NULL, \
+                completed_changes INT UNSIGNED NOT NULL DEFAULT 0, \
+                current_change_index INT UNSIGNED NULL, \
+                current_change_description TEXT NULL, \
+                started_at DATETIME(6) NOT NULL, \
+                updated_at DATETIME(6) NOT NULL, \
+                finished_at DATETIME(6) NULL\
+            ) ENGINE=InnoDB"
+        ),
+    )
+}
+
+fn start_mariadb_migration(
+    database_url: &str,
+    plan_id: &str,
+    before_fingerprint: &str,
+    desired_fingerprint: &str,
+    change_count: usize,
+) -> Result<(), DatabaseError> {
+    ensure_mariadb_schema_history(database_url)?;
+    apply_mariadb(
+        database_url,
+        &format!(
+            "INSERT INTO `{MARIADB_SCHEMA_HISTORY_TABLE}` \
+                (plan_id, before_schema_sha256, desired_schema_sha256, status, attempt_count, change_count, completed_changes, current_change_index, current_change_description, started_at, updated_at, finished_at) \
+             VALUES ({}, {}, {}, 'running', 1, {change_count}, 0, NULL, NULL, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), NULL) \
+             ON DUPLICATE KEY UPDATE before_schema_sha256=VALUES(before_schema_sha256), desired_schema_sha256=VALUES(desired_schema_sha256), status='running', attempt_count=attempt_count+1, change_count=VALUES(change_count), completed_changes=0, current_change_index=NULL, current_change_description=NULL, started_at=UTC_TIMESTAMP(6), updated_at=UTC_TIMESTAMP(6), finished_at=NULL",
+            mariadb_sql_literal(plan_id),
+            mariadb_sql_literal(before_fingerprint),
+            mariadb_sql_literal(desired_fingerprint),
+        ),
+    )
+}
+
+fn update_mariadb_migration(
+    database_url: &str,
+    plan_id: &str,
+    status: &str,
+    completed_changes: usize,
+    current_change: Option<(usize, &str)>,
+    finished: bool,
+) -> Result<(), DatabaseError> {
+    let (current_index, description) = current_change.map_or(
+        ("NULL".to_owned(), "NULL".to_owned()),
+        |(index, description)| (index.to_string(), mariadb_sql_literal(description)),
+    );
+    let finished_at = if finished { "UTC_TIMESTAMP(6)" } else { "NULL" };
+    apply_mariadb(
+        database_url,
+        &format!(
+            "UPDATE `{MARIADB_SCHEMA_HISTORY_TABLE}` SET status={}, completed_changes={completed_changes}, current_change_index={current_index}, current_change_description={description}, updated_at=UTC_TIMESTAMP(6), finished_at={finished_at} WHERE plan_id={}",
+            mariadb_sql_literal(status),
+            mariadb_sql_literal(plan_id),
+        ),
+    )
+}
+
+fn read_mariadb_migration_history(database_url: &str) -> Result<Value, DatabaseError> {
+    let table_exists = query_mariadb(
+        database_url,
+        &format!(
+            "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='{}'",
+            MARIADB_SCHEMA_HISTORY_TABLE
+        ),
+    )?;
+    match table_exists.trim() {
+        "0" => return Ok(json!([])),
+        "1" => {}
+        _ => {
+            return Err(DatabaseError {
+                message: "MariaDB returned an invalid migration history table status".into(),
+            });
+        }
+    }
+    let output = query_mariadb(
+        database_url,
+        &format!(
+            "SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT(\
+                'plan_id', plan_id, \
+                'before_schema_sha256', before_schema_sha256, \
+                'desired_schema_sha256', desired_schema_sha256, \
+                'status', status, \
+                'attempt_count', attempt_count, \
+                'change_count', change_count, \
+                'completed_changes', completed_changes, \
+                'current_change_index', current_change_index, \
+                'current_change_description', current_change_description, \
+                'started_at', DATE_FORMAT(started_at, '%Y-%m-%dT%H:%i:%s.%fZ'), \
+                'updated_at', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ'), \
+                'finished_at', IF(finished_at IS NULL, NULL, DATE_FORMAT(finished_at, '%Y-%m-%dT%H:%i:%s.%fZ'))\
+            ) ORDER BY started_at DESC, plan_id DESC), JSON_ARRAY()) FROM `{MARIADB_SCHEMA_HISTORY_TABLE}`"
+        ),
+    )?;
+    serde_json::from_str(output.trim()).map_err(|error| DatabaseError {
+        message: format!("MariaDB returned invalid migration history JSON: {error}"),
+    })
+}
+
+fn apply_mariadb_plan(
+    database_url: &str,
+    desired: &Schema,
+    planned: &zelyra_database::SchemaPlan,
+    expected_plan_id: &str,
+) -> Result<(), DatabaseError> {
+    with_mariadb_schema_lock(database_url, || {
+        let current = inspect_mariadb(database_url)?;
+        let fresh_plan = diff(desired, &current);
+        let fresh_json = schema_plan_json(desired, &current, &fresh_plan);
+        let fresh_plan_id = fresh_json["plan_id"].as_str().unwrap_or_default();
+        if fresh_plan_id != expected_plan_id {
+            return Err(DatabaseError {
+                message: "E-DB-007: the database schema changed before the migration lock was acquired; no SQL was applied. Run `zelyra db plan --format=json` again and review the new plan id".into(),
+            });
+        }
+        let before_fingerprint = fresh_json["current_schema_sha256"]
+            .as_str()
+            .expect("schema plan JSON contains current schema fingerprint");
+        let desired_fingerprint = fresh_json["desired_schema_sha256"]
+            .as_str()
+            .expect("schema plan JSON contains desired schema fingerprint");
+        start_mariadb_migration(
+            database_url,
+            expected_plan_id,
+            before_fingerprint,
+            desired_fingerprint,
+            planned.changes.len(),
+        )?;
+
+        let strict_mode = !planned.nullability_preflights.is_empty()
+            || !planned.required_column_preflights.is_empty();
+        for (index, change) in planned.changes.iter().enumerate() {
+            let step = index + 1;
+            update_mariadb_migration(
+                database_url,
+                expected_plan_id,
+                "running",
+                index,
+                Some((step, &change.description)),
+                false,
+            )?;
+            let sql = if strict_mode {
+                format!(
+                    "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{}",
+                    change.sql
+                )
+            } else {
+                change.sql.clone()
+            };
+            if let Err(error) = apply_mariadb(database_url, &sql) {
+                let _ = update_mariadb_migration(
+                    database_url,
+                    expected_plan_id,
+                    "failed",
+                    index,
+                    Some((step, &change.description)),
+                    true,
+                );
+                return Err(error);
+            }
+            update_mariadb_migration(database_url, expected_plan_id, "running", step, None, false)?;
+        }
+        update_mariadb_migration(
+            database_url,
+            expected_plan_id,
+            "applied",
+            planned.changes.len(),
+            None,
+            true,
+        )
+    })
+}
+
+fn print_mariadb_migration_history(
+    database_url: &str,
+    json_format: bool,
+) -> Result<(), DatabaseError> {
+    let mut history = read_mariadb_migration_history(database_url)?;
+    let lock_held = mariadb_schema_migration_lock_is_held(database_url)?;
+    if let Some(entries) = history.as_array_mut() {
+        for entry in entries {
+            if entry["status"] == "running" && !lock_held {
+                entry["status"] = Value::String("interrupted".into());
+            }
+        }
+    }
+    if json_format {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&history).expect("migration history JSON is serializable")
+        );
+    } else if let Some(entries) = history.as_array() {
+        if entries.is_empty() {
+            println!("No MariaDB schema migrations recorded.");
+        }
+        for entry in entries {
+            println!(
+                "{}  {}  {}/{} changes  {}",
+                entry["status"].as_str().unwrap_or("unknown"),
+                entry["plan_id"].as_str().unwrap_or("unknown plan"),
+                entry["completed_changes"].as_u64().unwrap_or_default(),
+                entry["change_count"].as_u64().unwrap_or_default(),
+                entry["started_at"].as_str().unwrap_or("unknown time"),
+            );
+            if let Some(description) = entry["current_change_description"].as_str() {
+                println!("  current change: {description}");
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(subcommand) = args.next() else {
         database_usage();
@@ -248,6 +475,18 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
         Ok(schema) => schema,
         Err(()) => return ExitCode::from(1),
     };
+    if schema.backend() == Backend::MariaDb
+        && schema.tables.iter().any(|table| {
+            table
+                .name
+                .eq_ignore_ascii_case(MARIADB_SCHEMA_HISTORY_TABLE)
+        })
+    {
+        eprintln!(
+            "error[E-DB-001]: `{MARIADB_SCHEMA_HISTORY_TABLE}` is reserved for Zelyra migration history"
+        );
+        return ExitCode::from(1);
+    }
     match subcommand.as_str() {
         "create" => {
             println!("{}", schema.create_sql());
@@ -309,6 +548,32 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                 ExitCode::from(1)
             }
         },
+        "history" => {
+            let json_format =
+                if remaining_args.is_empty() || remaining_args.as_slice() == ["--format=text"] {
+                    false
+                } else if remaining_args.as_slice() == ["--format=json"] {
+                    true
+                } else {
+                    database_usage();
+                    return ExitCode::from(2);
+                };
+            if schema.backend() != Backend::MariaDb {
+                eprintln!("error[E-DB-008]: db history currently supports MariaDB projects");
+                return ExitCode::from(1);
+            }
+            let Some(url) = database_url_from_schema(&schema) else {
+                eprintln!("error[E-DB-003]: DATABASE_URL is required for db history");
+                return ExitCode::from(1);
+            };
+            match print_mariadb_migration_history(&url, json_format) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("error[E-DB-005]: {error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         "plan" => {
             let json_format = match remaining_args.as_slice() {
                 [] => false,
@@ -511,6 +776,10 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                     }
                 }
             }
+            let actual_plan_id = schema_plan_json(&schema, &current, &plan)["plan_id"]
+                .as_str()
+                .expect("schema plan JSON always contains a plan id")
+                .to_owned();
             let mut sql = plan.sql();
             if schema.backend() == Backend::MariaDb
                 && (!plan.nullability_preflights.is_empty()
@@ -522,13 +791,17 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
             }
             let result = match schema.backend() {
                 Backend::Postgres => apply_postgres(&url, &sql),
-                Backend::MariaDb => apply_mariadb(&url, &sql),
+                Backend::MariaDb => apply_mariadb_plan(&url, &schema, &plan, &actual_plan_id),
                 Backend::Sqlite => apply_sqlite(&url, &sql),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
-                    eprintln!("error[E-DB-005]: {error}");
+                    if let Some(message) = error.message.strip_prefix("E-DB-007: ") {
+                        eprintln!("error[E-DB-007]: {message}");
+                    } else {
+                        eprintln!("error[E-DB-005]: {error}");
+                    }
                     ExitCode::from(1)
                 }
             }

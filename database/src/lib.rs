@@ -1951,19 +1951,19 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let output = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
     let indexes = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+        "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
         None,
     )?;
     parse_mariadb_indexes(&mut schema, &indexes)?;
     let foreign_keys = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
         None,
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
@@ -1972,6 +1972,83 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
 
 pub fn apply_mariadb(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     run_mariadb_sql(database_url, sql, None)
+}
+
+/// Runs an operation while holding a database-scoped MariaDB advisory lock.
+/// The server releases the lock if the process or connection is interrupted.
+pub fn with_mariadb_schema_lock<T>(
+    database_url: &str,
+    operation: impl FnOnce() -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let lock_name = mariadb_schema_lock_name(database_url)?;
+    let acquired: Option<i64> = connection
+        .connection
+        .exec_first("SELECT GET_LOCK(?, 0)", (lock_name.as_str(),))
+        .map_err(mariadb_driver_error)?;
+    if acquired != Some(1) {
+        return Err(DatabaseError {
+            message: "another Zelyra schema migration is active for this database".into(),
+        });
+    }
+    let guard = MariaDbSchemaLockGuard {
+        connection: &mut connection.connection,
+        lock_name,
+    };
+    let result = operation();
+    drop(guard);
+    result
+}
+
+/// Returns whether a Zelyra schema migration currently holds this database's
+/// advisory lock. A journal entry marked `running` without this lock is stale
+/// and can be reported as interrupted.
+pub fn mariadb_schema_migration_lock_is_held(database_url: &str) -> Result<bool, DatabaseError> {
+    let lock_name = mariadb_schema_lock_name(database_url)?;
+    let held = run_mariadb(
+        database_url,
+        &format!("SELECT IS_USED_LOCK('{}') IS NOT NULL", lock_name),
+        None,
+    )?;
+    match held.trim() {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        _ => Err(DatabaseError {
+            message: "MariaDB returned an invalid schema migration lock status".into(),
+        }),
+    }
+}
+
+/// Runs a read-only query through the configured MariaDB client connection.
+pub fn query_mariadb(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_mariadb(database_url, query, None)
+}
+
+struct MariaDbSchemaLockGuard<'a> {
+    connection: &'a mut Conn,
+    lock_name: String,
+}
+
+impl Drop for MariaDbSchemaLockGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self
+            .connection
+            .exec_first::<Option<i64>, _, _>("SELECT RELEASE_LOCK(?)", (self.lock_name.as_str(),));
+    }
+}
+
+fn mariadb_schema_lock_name(database_url: &str) -> Result<String, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    // Named locks are scoped to a MariaDB server, not a database. Key only on
+    // the database name so aliases such as a service DNS name and its IP still
+    // coordinate migrations. Same-name databases on different servers may
+    // contend unnecessarily, but migrations through host aliases cannot race.
+    let database = connection.database.to_ascii_lowercase();
+    let digest = format!("{:x}", Sha256::digest(database.as_bytes()));
+    Ok(format!("zelyra:mig:{}", &digest[..52]))
 }
 
 pub fn count_null_values(
@@ -2721,6 +2798,7 @@ fn run_mariadb_sql(
 ) -> Result<(), DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2736,6 +2814,8 @@ fn run_mariadb_sql(
             database,
         ])
         .args(timeouts.connect_args())
+        .args(timeouts.query_args())
+        .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password)
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
@@ -3305,6 +3385,19 @@ mod tests {
             timeouts.query_args(),
             ["--init-command=SET SESSION max_statement_time=30"]
         );
+    }
+
+    #[test]
+    fn mariadb_schema_lock_name_coordinates_connection_aliases() {
+        let primary =
+            mariadb_schema_lock_name("mariadb://zelyra:secret@127.0.0.1:3306/ProjectData").unwrap();
+        let alias = mariadb_schema_lock_name(
+            "mariadb://another-user:other-secret@db.internal:4406/projectdata",
+        )
+        .unwrap();
+        assert_eq!(primary, alias);
+        assert!(primary.len() <= 64);
+        assert!(primary.starts_with("zelyra:mig:"));
     }
 
     #[test]

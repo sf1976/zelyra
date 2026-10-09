@@ -108,9 +108,14 @@ verifying the target again.
   `zelyra.schema-plan/v1` document with SHA-256 fingerprints of the observed
   and desired schemas, a stable plan ID, drift, SQL steps, preflights, and
   approval requirements. It does not expose the database URL.
-- The JSON plan does not create a database migration history or safe inverse
-  SQL. `rollback.generated` remains `false`; safe recovery still requires a
-  verified operator-managed backup.
+- MariaDB `db apply` stores each plan and per-step progress in the reserved
+  `_zelyra_schema_history` table. `zelyra db history <file.zyl>` shows applied,
+  failed, active, and interrupted runs; JSON is available with
+  `--format=json`. The internal table is omitted from normal schema inspection.
+  SQLite and PostgreSQL do not yet have a persistent migration history.
+- The JSON plan does not generate safe inverse SQL. `rollback.generated`
+  remains `false`; safe recovery still requires a verified operator-managed
+  backup.
 - `zelyra db plan` previews the detected schema difference; it does not back
   up data or reserve the database state.
 - Before applying any plan SQL, `db apply` checks existing rows for NULLs
@@ -126,8 +131,13 @@ verifying the target again.
   failed step removes earlier DDL and that a corrected plan can be applied.
   MariaDB DDL may implicitly commit transactions, so a later error can leave
   earlier steps applied.
-- After an interruption, inspect the actual database state again. Do not
-  assume reapplying an old plan safely repairs a partial state.
+- MariaDB migrations take a database-scoped advisory lock and checkpoint each
+  DDL step. After a process interruption, `db history` reports the last
+  checkpoint. Inspect the live schema with `db inspect`, create and review a
+  fresh plan, then apply that plan. Do not assume reapplying an old plan safely
+  repairs a partial state. A crash during a DDL statement can still leave that
+  statement's result ambiguous; verify the schema and restore from backup when
+  needed.
 - `--allow-risky` and `--allow-destructive` are not backup or rollback
   options. Use them only after reviewing the plan and verifying an independent
   backup.

@@ -22,12 +22,26 @@ mariadb_database=""
 mariadb_url=""
 mariadb_nullability_database=""
 mariadb_nullability_url=""
+mariadb_migration_database=""
+mariadb_migration_url=""
+migration_lock_pid=""
+migration_apply_pid=""
 mariadb_user=""
 mariadb_password=""
 mariadb_host=""
 mariadb_port=""
 
 cleanup() {
+    if [[ -n "${migration_apply_pid}" ]] && kill -0 "-${migration_apply_pid}" 2>/dev/null; then
+        kill -KILL -- "-${migration_apply_pid}" 2>/dev/null || true
+        wait "${migration_apply_pid}" 2>/dev/null || true
+    fi
+    if [[ -n "${mariadb_migration_database}" ]]; then
+        MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "DROP DATABASE IF EXISTS \`${mariadb_migration_database}\`;" >/dev/null 2>&1 || true
+    fi
     if [[ -n "${mariadb_nullability_database}" ]]; then
         MYSQL_PWD="${mariadb_password}" mariadb \
             --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
@@ -565,6 +579,99 @@ assert_mariadb_safety() {
         -e "SELECT CONCAT((SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_nullability_database}' AND TABLE_NAME='nullability_records' AND COLUMN_NAME='value'), ':', (SELECT COUNT(*) FROM nullability_records WHERE value IS NULL), ':', (SELECT retained FROM nullability_records WHERE id=1));")"
     [[ "${nullability_state}" == "YES:1:preserved" ]]
     echo "[MariaDB] nullability changes require review, preflight blocks NULL rows before all SQL, and strict DDL succeeds after repair"
+
+    local migration_before migration_after migration_history migration_state
+    migration_before="${fixture_dir}/schema_migration_history_before_mariadb.zyl"
+    migration_after="${fixture_dir}/schema_migration_history_after_mariadb.zyl"
+    mariadb_migration_database="zelyra_migration_history_${$}"
+    mariadb_migration_url="mariadb://${mariadb_user}:${mariadb_password}@${mariadb_host}:${mariadb_port}/${mariadb_migration_database}"
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" --batch --skip-column-names \
+        -e "CREATE DATABASE \`${mariadb_migration_database}\`;"
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db bootstrap "${migration_before}" >/dev/null
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${migration_after}" --format=json)"
+    [[ "${migration_history}" == "[]" ]]
+    migration_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='_zelyra_schema_history';")"
+    [[ "${migration_state}" == "0" ]]
+    local mariadb_wrapper
+    mariadb_wrapper="${temp_dir}/mariadb-wrapper"
+    mkdir -p "${mariadb_wrapper}"
+    cat >"${mariadb_wrapper}/mariadb" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+for argument in "$@"; do
+    if [[ "${argument}" == "--execute" || "${argument}" == "-e" ]]; then
+        exec "${ZELYRA_TEST_REAL_MARIADB}" "$@"
+    fi
+done
+sql_file="$(mktemp "${ZELYRA_TEST_TEMP_DIR}/mariadb-sql.XXXXXX")"
+trap 'rm -f -- "${sql_file}"' EXIT
+cat >"${sql_file}"
+if [[ "${ZELYRA_TEST_BLOCK_MIGRATION_STEP:-}" == "1" ]] \
+    && grep -Fq 'ALTER TABLE `migration_second` ADD COLUMN `operator_review`' "${sql_file}"; then
+    : >"${ZELYRA_TEST_MARIADB_WRAPPER_READY}"
+    while [[ ! -e "${ZELYRA_TEST_MARIADB_WRAPPER_RELEASE}" ]]; do sleep 0.05; done
+fi
+set +e
+"${ZELYRA_TEST_REAL_MARIADB}" "$@" <"${sql_file}"
+status=$?
+exit "${status}"
+EOF
+    chmod +x "${mariadb_wrapper}/mariadb"
+    setsid env PATH="${mariadb_wrapper}:${PATH}" \
+        ZELYRA_TEST_REAL_MARIADB="$(command -v mariadb)" \
+        ZELYRA_TEST_BLOCK_MIGRATION_STEP=1 \
+        ZELYRA_TEST_MARIADB_WRAPPER_READY="${temp_dir}/migration-step-ready" \
+    ZELYRA_TEST_MARIADB_WRAPPER_RELEASE="${temp_dir}/migration-step-release" \
+    ZELYRA_TEST_TEMP_DIR="${temp_dir}" \
+        DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_after}" --allow-risky >"${temp_dir}/migration-history-apply.log" 2>&1 &
+    migration_apply_pid=$!
+    for attempt in $(seq 1 60); do
+        [[ -e "${temp_dir}/migration-step-ready" ]] && break
+        sleep 0.25
+    done
+    if [[ ! -e "${temp_dir}/migration-step-ready" ]]; then
+        cat "${temp_dir}/migration-history-apply.log" >&2
+        echo "error: migration did not stop at the fault-injected second DDL step" >&2
+        exit 1
+    fi
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${migration_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"running"' <<<"${migration_history}"
+    grep -Eq '"completed_changes"[[:space:]]*:[[:space:]]*1' <<<"${migration_history}"
+    grep -Eq '"current_change_index"[[:space:]]*:[[:space:]]*2' <<<"${migration_history}"
+    if output="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_after}" --allow-risky 2>&1)"; then
+        echo "error: a second Zelyra process acquired the active schema migration lock" >&2
+        exit 1
+    fi
+    grep -Fq "another Zelyra schema migration is active" <<<"${output}"
+    kill -KILL -- "-${migration_apply_pid}"
+    wait "${migration_apply_pid}" 2>/dev/null || true
+    migration_apply_pid=""
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${migration_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"interrupted"' <<<"${migration_history}"
+    grep -Eq '"completed_changes"[[:space:]]*:[[:space:]]*1' <<<"${migration_history}"
+    grep -Eq '"current_change_description"[[:space:]]*:[[:space:]]*"add required column migration_second.operator_review without a default; review existing rows"' <<<"${migration_history}"
+    migration_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_first' AND COLUMN_NAME='applied_marker'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='operator_review'));" )"
+    [[ "${migration_state}" == "1:0" ]]
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_after}" --allow-risky >/dev/null
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${migration_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"interrupted"' <<<"${migration_history}"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"applied"' <<<"${migration_history}"
+    migration_state="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db plan "${migration_after}")"
+    grep -Fq "No schema changes." <<<"${migration_state}"
+    migration_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_first' AND COLUMN_NAME='applied_marker'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='operator_review'));" )"
+    [[ "${migration_state}" == "1:1" ]]
+    echo "[MariaDB] process interruption between DDL steps is journaled; lock release and recovery with a freshly reviewed plan pass"
 }
 
 assert_sqlite_safety
