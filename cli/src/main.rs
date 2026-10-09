@@ -2505,12 +2505,18 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
                                             false
                                         };
                                         success = !apply_requested || applied;
+                                        let affected_effects = edit::affected_function_effects(
+                                            &program,
+                                            &result.operations,
+                                            &result.changes,
+                                        );
                                         preview = json!({
                                             "available": true,
                                             "apply_requested": apply_requested,
                                             "applied": applied,
                                             "entry": entry_display.clone(),
                                             "affected_files": [entry_display.clone()],
+                                            "affected_effects": affected_effects,
                                             "source_fingerprint": current_fingerprint,
                                             "operations": result.operations,
                                             "changes": result.changes,

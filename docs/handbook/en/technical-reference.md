@@ -2489,8 +2489,12 @@ The request is versioned and must point to an existing `.zyl` file inside the
 resolved Zelyra project root. Source code before and after the change must pass
 all compiler checks. The result reports exact token spans and a deterministic
 source fingerprint. It also reports `affected_files`; because this version
-edits one source file per request, that list contains the entry file. Effects,
-dependent tests, and schema references are not yet calculated by edit previews.
+edits one source file per request, that list contains the entry file. Dependent
+tests and schema references are not yet calculated by edit previews. For
+function renames, `affected_effects` lists the declared capabilities of the
+renamed function and capability-bearing callers found in that same source
+file. These declarations remain unchanged by the rename; cross-module effects
+are not included.
 
 When applying changes with `--apply`, the request must include the fingerprint
 from the preview to prevent overwriting concurrently modified files (stale-source

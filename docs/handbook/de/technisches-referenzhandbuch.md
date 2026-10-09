@@ -2672,8 +2672,12 @@ innerhalb der aufgelösten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
 der Änderung muss die Compilerprüfungen bestehen. Das Ergebnis meldet die
 genauen Token-Spans und einen deterministischen Quelltext-Fingerprint. Es
 meldet außerdem `affected_files`; da diese Version pro Anfrage eine Quelldatei
-ändert, enthält die Liste die Entry-Datei. Effekte, abhängige Tests und
-Schema-Referenzen berechnet die Edit-Vorschau noch nicht.
+ändert, enthält die Liste die Entry-Datei. Abhängige Tests und Schema-Referenzen
+berechnet die Edit-Vorschau noch nicht. Bei
+Funktionsumbenennungen listet `affected_effects` die deklarierten Capabilities
+der umbenannten Funktion und betroffener aufrufender Funktionen derselben
+Quelldatei. Die Umbenennung selbst ändert diese Deklarationen nicht;
+modulübergreifende Effekte sind nicht enthalten.
 
 Für `--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so
 wird eine zwischenzeitlich geänderte Datei nicht überschrieben (Stale-Source-

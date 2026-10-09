@@ -1722,6 +1722,48 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
 }
 
 #[test]
+fn edit_preview_reports_capability_effects_of_renamed_functions_and_callers() {
+    let source = "fn load_data() -> Int uses Database(read) { return sql<Int> { SELECT 1 } }\nfn page_data() -> Int uses Database(read) { return load_data() }\nfn main() {}\n";
+    let (project_directory, source_path) = temporary_project_source("edit-effects", source);
+    fs::write(
+        project_directory.join("zelyra.toml"),
+        "[project]\nname = \"edit-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase_read = true\ndatabase_write = false\n",
+    )
+    .expect("project config should grant read-only SQL");
+    let request_path = source_path.with_file_name("change.json");
+    fs::write(
+        &request_path,
+        format!(
+            "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"load_data\",\"to\":\"read_data\"}}]}}",
+            serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+        ),
+    )
+    .expect("edit request should be written");
+
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let effects = document["preview"]["affected_effects"].as_array().unwrap();
+    assert!(effects.iter().any(|effect| {
+        effect["function"] == "read_data"
+            && effect["relation"] == "renamed_function"
+            && effect["declared_capabilities"] == serde_json::json!(["Database(read)"])
+    }));
+    assert!(effects.iter().any(|effect| {
+        effect["function"] == "page_data"
+            && effect["relation"] == "caller_of_renamed_function"
+            && effect["declared_capabilities"] == serde_json::json!(["Database(read)"])
+    }));
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
 fn edit_requires_a_versioned_request_and_project_local_zelyra_source() {
     let (project_directory, source_path) =
         temporary_project_source("edit-boundary", "fn greet() {}\n");
