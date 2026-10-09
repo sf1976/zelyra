@@ -311,6 +311,7 @@ ZELYRA_DB_TLS_MODE=disabled
 # ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
 # ZELYRA_SMTP_USERNAME=
 # ZELYRA_SMTP_PASSWORD=
+# ZELYRA_RESET_DELIVERY_KEY=replace-with-64-hex-characters
 ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -725,6 +726,7 @@ console = false
       ZELYRA_SMTP_FROM: ${ZELYRA_SMTP_FROM:-}
       ZELYRA_SMTP_USERNAME: ${ZELYRA_SMTP_USERNAME:-}
       ZELYRA_SMTP_PASSWORD: ${ZELYRA_SMTP_PASSWORD:-}
+      ZELYRA_RESET_DELIVERY_KEY: ${ZELYRA_RESET_DELIVERY_KEY:-}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -5660,7 +5662,14 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 );
                 valid = false;
             }
-            for required_column in ["user_id", "token_hash", "expires_at", "consumed_at"] {
+            for required_column in [
+                "id",
+                "user_id",
+                "token_hash",
+                "expires_at",
+                "consumed_at",
+                "delivery_payload",
+            ] {
                 if !reset_table
                     .columns
                     .iter()
@@ -5678,6 +5687,26 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                     );
                     valid = false;
                 }
+            }
+            let delivery_payload_is_compatible = reset_table
+                .columns
+                .iter()
+                .find(|column| column.name == "delivery_payload")
+                .is_some_and(|column| {
+                    column.nullable && column.sql_type.eq_ignore_ascii_case("varchar(2048)")
+                });
+            if !delivery_payload_is_compatible {
+                diagnostic(
+                    path,
+                    "E-AUTH-037",
+                    &format!(
+                        "authentication password reset table {} requires nullable delivery_payload VARCHAR(2048)",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
             }
             let token_hash_is_unique = reset_table
                 .columns
@@ -6031,6 +6060,8 @@ fn project_optional_setting(path: &str, key: &str) -> Result<Option<String>, Str
 
 fn password_reset_mailer_from_environment(
     path: &str,
+    database_url: &str,
+    reset_table: &str,
 ) -> Result<zelyra_web::PasswordResetMailer, String> {
     let required = |name: &str| {
         project_optional_setting(path, name)?
@@ -6063,15 +6094,19 @@ fn password_reset_mailer_from_environment(
     let password = project_optional_setting(path, "ZELYRA_SMTP_PASSWORD")?;
     let from = required("ZELYRA_SMTP_FROM")?;
     let base_url = required("ZELYRA_PUBLIC_BASE_URL")?;
-    zelyra_web::PasswordResetMailer::smtp(
-        &host,
+    let delivery_key = required("ZELYRA_RESET_DELIVERY_KEY")?;
+    zelyra_web::PasswordResetMailer::smtp_with_outbox(zelyra_web::PasswordResetSmtpConfig {
+        host: &host,
         port,
-        &security,
-        username.as_deref(),
-        password.as_deref(),
-        &from,
-        &base_url,
-    )
+        security: &security,
+        username: username.as_deref(),
+        password: password.as_deref(),
+        from: &from,
+        base_url: &base_url,
+        database_url,
+        reset_table,
+        delivery_key: &delivery_key,
+    })
 }
 
 fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -6703,7 +6738,18 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         .as_ref()
         .is_some_and(|auth| auth.reset_tokens_table.is_some())
     {
-        match password_reset_mailer_from_environment(&path) {
+        let auth = auth_route.as_ref().expect("reset route was detected");
+        let database_url = database_url_from_program(&program);
+        let reset_table = auth
+            .reset_tokens_table
+            .as_deref()
+            .expect("reset table was detected");
+        match database_url
+            .as_deref()
+            .ok_or_else(|| "password reset requires a MariaDB database URL".to_owned())
+            .and_then(|database_url| {
+                password_reset_mailer_from_environment(&path, database_url, reset_table)
+            }) {
             Ok(mailer) => Some(mailer),
             Err(error) => {
                 eprintln!("error[E-AUTH-035]: {error}");

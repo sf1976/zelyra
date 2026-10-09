@@ -30,8 +30,13 @@ principles; the roadmap below tracks what is actually implemented.
   including in-memory sessions, with CSRF and same-origin checks. In-memory
   sessions expire after 24 hours. A bounded, escaped `User-Agent` label is
   optionally stored when the session table declares `device_label`; it is not a
-  verified device identity. Password recovery is still experimental; this does not complete the account lifecycle
-  milestone.
+  verified device identity. Password recovery remains experimental. An
+  AES-256-GCM-encrypted MariaDB outbox now retries after SMTP failure and
+  process restart; the E2E verifies recovery after restart with no older worker
+  active. Delivery is at least once, so the SMTP-acceptance/database-acknowledgement
+  crash window can duplicate mail; key loss strands pending messages. Persistent
+  throttling and independent security review remain open, so this does not
+  complete the account lifecycle milestone.
   Legacy session tables without an `id` column retain their previous behavior;
   administrative listing and revocation still require that column.
 
@@ -537,22 +542,15 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] Password login, persistent sessions, CSRF, account activation, and
   last-administrator protection.
 - [🧪] Auth definitions can tune process-local login and reset failure windows
-  and lockout duration. Password recovery is partially implemented in unreleased 0.4
-  development branch: MariaDB stores single-use token hashes, generic
-  responses, audit, loopback/HTTPS SMTP configuration, bounded asynchronous
-  delivery, and session revocation are covered by a MariaDB/SMTP-sink E2E with
-  deliberately delayed delivery. The E2E also races two same-token submissions
-  and verifies one success, one rejection, and authentication with only the
-  winning password. Token replacement and FIFO mail enqueue are serialized
-  within one process. MariaDB advisory locks also coordinate issuance and
-  delivery across instances; a two-instance E2E delays the first SMTP relay
-  while the second instance replaces the token and verifies that the later
-  email matches the stored token. Stale queued tokens are skipped. The MariaDB
-  E2E rejects a token with `expires_at = NOW()` and freezes the database clock
-  to verify the production lookup predicate before, at, and after expiry.
-  Equality is rejected. Process-local reset throttling, durable SMTP delivery
-  recovery, and independent security review remain open; the account lifecycle
-  is not complete.
+  and lockout duration. Password recovery is partially implemented in unreleased
+  0.4: MariaDB stores single-use token hashes and an AES-256-GCM-encrypted mail
+  outbox. MariaDB/SMTP-sink E2E covers delayed delivery, enumeration, token
+  replacement across two instances, concurrent token use, expiry, replay, CSRF,
+  SMTP refusal, encrypted-at-rest payloads, and recovery after a process restart
+  with no older worker active. Delivery is at least once; a crash after SMTP
+  acceptance but before database acknowledgement can duplicate mail, and key
+  loss strands pending messages. Persistent reset throttling and independent
+  security review remain open; the account lifecycle is not complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.
@@ -568,9 +566,11 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Explicit, user-controlled audit exports to destinations such as syslog,
   object storage, or SIEM, with delivery status and retry behavior; usage
   telemetry and hidden remote collection are out of scope.
-- [🧪] Password reset and session controls are partial in unreleased 0.4;
-  concurrency, persistent reset throttling, device
-  metadata, MFA/WebAuthn, and login notifications remain open.
+- [🧪] Password reset and session controls are partial in unreleased 0.4.
+  An encrypted database outbox retries after SMTP failure and process restart;
+  delivery is at least once and may duplicate after a crash before acknowledgement.
+  Persistent reset throttling, device metadata, MFA/WebAuthn, and login
+  notifications remain open.
 - [ ] Fine-grained policy expressions, policy testing, and permission explain
   output.
 - [ ] Security review, threat model, dependency audit, and penetration testing.

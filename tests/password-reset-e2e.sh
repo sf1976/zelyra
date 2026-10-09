@@ -20,6 +20,7 @@ smtp_pid=""
 server_b_pid=""
 smtp_b_pid=""
 server_c_pid=""
+smtp_c_pid=""
 
 if [[ "${database_url}" == mariadb://* ]]; then
     database_parts="${database_url#mariadb://}"
@@ -99,6 +100,10 @@ cleanup() {
         kill "${server_c_pid}" 2>/dev/null || true
         wait "${server_c_pid}" 2>/dev/null || true
     fi
+    if [[ -n "${smtp_c_pid}" ]]; then
+        kill "${smtp_c_pid}" 2>/dev/null || true
+        wait "${smtp_c_pid}" 2>/dev/null || true
+    fi
     client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
 DELETE FROM password_resets WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email = '${email}');
@@ -132,6 +137,7 @@ export ZELYRA_SMTP_HOST=127.0.0.1
 export ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp.port")"
 export ZELYRA_SMTP_SECURITY=local_plaintext
 export ZELYRA_SMTP_FROM=no-reply@example.test
+export ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 export ZELYRA_LANGUAGE=de
 "${zelyra_bin}" serve "${project_file}" "${address}" >"${temp_dir}/server.log" 2>&1 &
 server_pid=$!
@@ -203,6 +209,7 @@ base_url_b="http://${address_b}"
 env ZELYRA_PUBLIC_BASE_URL="${base_url_b}" ZELYRA_SMTP_HOST=127.0.0.1 \
     ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-b.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
     ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
     "${zelyra_bin}" serve "${project_file}" "${address_b}" >"${temp_dir}/server-b.log" 2>&1 &
 server_b_pid=$!
 for _ in $(seq 1 40); do
@@ -385,12 +392,20 @@ expired_status="$(curl --silent --show-error --output /dev/null --write-out '%{h
 [[ "${expired_status}" == "400" ]]
 
 echo "[10/10] keep reset responses generic during SMTP outage"
+# Stop earlier instances so the restart assertion identifies which worker
+# recovered the durable outbox item.
+kill "${server_pid}" "${server_b_pid}"
+wait "${server_pid}" 2>/dev/null || true
+wait "${server_b_pid}" 2>/dev/null || true
+server_pid=""
+server_b_pid=""
 address_c="127.0.0.1:$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 base_url_c="http://${address_c}"
 smtp_dead_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
     ZELYRA_SMTP_PORT="${smtp_dead_port}" ZELYRA_SMTP_SECURITY=local_plaintext \
     ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
     "${zelyra_bin}" serve "${project_file}" "${address_c}" >"${temp_dir}/server-c.log" 2>&1 &
 server_c_pid=$!
 for _ in $(seq 1 40); do
@@ -402,6 +417,7 @@ csrf_c="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}
 [[ -n "${csrf_c}" ]]
 known_outage_status="$(curl --silent --show-error --output "${temp_dir}/outage-known.html" \
     --write-out '%{http_code}' --header "Origin: ${base_url_c}" \
+    --cookie-jar "${temp_dir}/outage.cookies" \
     --data-urlencode "_zelyra_csrf=${csrf_c}" --data-urlencode "email=${email}" \
     "${base_url_c}/forgot-password")"
 unknown_outage_status="$(curl --silent --show-error --output "${temp_dir}/outage-unknown.html" \
@@ -419,5 +435,53 @@ grep -Fq 'password reset message delivery failed: SMTP transport could not deliv
 ! grep -Fq "${email}" "${temp_dir}/server-c.log"
 ! grep -Fq "${unknown_email}" "${temp_dir}/server-c.log"
 ! grep -Eq '[0-9a-f]{64}' "${temp_dir}/server-c.log"
+
+pending_payload="$(client --batch --skip-column-names -e "SELECT delivery_payload FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL LIMIT 1")"
+pending_active_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL AND consumed_at IS NULL AND expires_at > NOW()")"
+[[ "${pending_active_count}" == "1" ]]
+[[ -n "${pending_payload}" ]]
+! grep -Fq "${email}" <<<"${pending_payload}"
+! grep -Fq 'token=' <<<"${pending_payload}"
+echo "[10a/10] recover encrypted outbox delivery after an application restart"
+kill "${server_c_pid}"
+wait "${server_c_pid}" 2>/dev/null || true
+server_c_pid=""
+python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message-c.eml" "${temp_dir}/smtp-c.port" 0 "${temp_dir}/smtp-c.started" &
+smtp_c_pid=$!
+for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp-c.port" ]] && break; sleep 0.1; done
+[[ -s "${temp_dir}/smtp-c.port" ]]
+env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
+    ZELYRA_SMTP_PORT="$(cat "${temp_dir}/smtp-c.port")" ZELYRA_SMTP_SECURITY=local_plaintext \
+    ZELYRA_SMTP_FROM=no-reply@example.test ZELYRA_LANGUAGE=de \
+    ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    "${zelyra_bin}" serve "${project_file}" "${address_c}" >"${temp_dir}/server-c-restarted.log" 2>&1 &
+server_c_pid=$!
+for _ in $(seq 1 80); do [[ -s "${temp_dir}/message-c.eml" ]] && break; sleep 0.25; done
+if [[ ! -s "${temp_dir}/message-c.eml" ]]; then
+    pending_after_restart="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL")"
+    echo "error: restart did not recover the pending delivery (pending rows: ${pending_after_restart})" >&2
+    exit 1
+fi
+recovered_token="$(python3 - "${temp_dir}/message-c.eml" <<'PY'
+from pathlib import Path
+import email, re, sys
+message = email.message_from_bytes(Path(sys.argv[1]).read_bytes())
+body = message.get_payload(decode=True).decode("utf-8", errors="replace")
+if "zelyra-reset-" not in message.get("To", ""):
+    raise SystemExit("recovered reset email recipient is missing")
+match = re.search(r"/reset-password\?token=([0-9a-f]{64})", body)
+if not match:
+    raise SystemExit("recovered reset token missing")
+print(match.group(1))
+PY
+)"
+recovered_hash="$(python3 - "${recovered_token}" <<'PY'
+import hashlib, sys
+print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
+PY
+)"
+[[ "$(client --batch --skip-column-names -e "SELECT token_hash FROM password_resets WHERE user_id = ${user_id}")" == "${recovered_hash}" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL")" == "0" ]]
+! grep -Fq "${recovered_token}" "${temp_dir}/server-c-restarted.log"
 
 echo "password-reset E2E passed"

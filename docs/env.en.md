@@ -144,8 +144,9 @@ them.
 ## Password recovery in the 0.4 development branch
 
 An auth declaration can set `reset_tokens: password_resets`. The reset table
-needs `user_id`, a unique `token_hash`, `expires_at`, `consumed_at`, and a
-foreign key to `users.id`; an auth audit table is also required. This feature
+needs `user_id`, a unique `token_hash`, `expires_at`, `consumed_at`, a nullable
+`delivery_payload: String(2048)` column, and a foreign key to `users.id`; an
+auth audit table is also required. This feature
 currently runs only on MariaDB. Reset limits are process-local and keyed by
 the TCP peer IP; they reset on restart.
 
@@ -158,22 +159,31 @@ the TCP peer IP; they reset on restart.
 | `ZELYRA_SMTP_FROM` | none | Sender address for reset email. |
 | `ZELYRA_SMTP_USERNAME` | none | Optional SMTP user; must be set together with the password. Secret. |
 | `ZELYRA_SMTP_PASSWORD` | none | SMTP password. Secret; never print or commit it. |
+| `ZELYRA_RESET_DELIVERY_KEY` | none | 32-byte encryption key as 64 hexadecimal characters; required for persistent reset-mail recovery. Secret. |
 
 For `zelyra serve`, process environment takes precedence over the project
 `.env`. If the auth declaration includes `reset_tokens`, `serve` will not start
-without complete SMTP configuration. `ZELYRA_PUBLIC_BASE_URL` must be an HTTPS
-origin or a loopback HTTP origin without a path, query, or fragment. Reset
+without complete SMTP configuration and the delivery key. Generate a key with
+`python3 -c 'import secrets; print(secrets.token_hex(32))'` and keep it in the
+secret store used by every app instance. `ZELYRA_PUBLIC_BASE_URL` must be an HTTPS origin or a loopback HTTP origin
+without a path, query, or fragment. Reset
 links contain 256 bits of randomness, expire after 15 minutes, and are moved
 from the URL into an HttpOnly cookie after exchange. Only the token hash is
-stored in the database. A successful password change consumes the token and
+stored in the database; the email address and reset link are stored only in the
+encrypted outbox payload. A successful password change consumes the token and
 revokes the account's persistent and in-process sessions.
 
-Delivery uses one background worker with room for at most 64 queued emails.
-The HTTP request does not wait for SMTP responses. A full or stopped worker
-rejects new mail and the undelivered reset token is removed. SMTP failures
-after successful enqueue are logged without secrets; delivery retries are not
-implemented. The E2E deliberately delays the SMTP response and verifies that
-the generic HTTP response returns before delivery finishes.
+Delivery uses a database-backed outbox encrypted with
+`ZELYRA_RESET_DELIVERY_KEY`; only the token hash and encrypted mail payload are
+stored. A background worker retries pending messages after temporary SMTP
+failures and process restarts. Delivery is at least once: a crash after SMTP
+accepts a message but before the database acknowledges it can produce a
+duplicate email. Keep the key stable and backed up; losing it makes pending
+messages unreadable. The HTTP request does not wait for SMTP responses. The E2E
+deliberately delays the SMTP response and verifies that the generic response
+returns before delivery finishes. Affected commands are `zelyra serve` and the
+generated MariaDB Compose web service; tests cover key parsing/encryption and
+restart recovery in `tests/password-reset-e2e.sh`.
 
 This feature is experimental. SMTP availability, public TLS termination,
 rate-limit persistence across restarts, and independent security review remain

@@ -33,25 +33,26 @@ den tatsächlich implementierten Stand.
   und beenden. Speichersitzungen laufen nach 24 Stunden ab. Eine begrenzte,
   escaped `User-Agent`-Angabe wird optional gespeichert, wenn die Sitzungstabelle
   `device_label` deklariert; sie bestätigt keine Geräteidentität.
-  Passwortwiederherstellung ist im 0.4-Entwicklungszweig
-  teilweise umgesetzt:
-  MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
-  Loopback-/HTTPS-SMTP-Konfiguration, begrenzte asynchrone Zustellung und
-  Sitzungswiderruf sind vorhanden und werden durch ein MariaDB-/SMTP-Senken-E2E
-  mit verzögerter Zustellung geprüft. Der E2E-Test sendet außerdem zwei
+  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
+  MariaDB speichert Einweg-Token-Hashes und eine AES-256-GCM-verschlüsselte
+  Outbox, die nach SMTP-Ausfällen und Prozessneustarts erneut zustellt. Das E2E
+  prüft die Wiederaufnahme nach Neustart, wenn kein älterer Worker aktiv ist.
+  Zustellung ist mindestens einmalig; das Zeitfenster zwischen SMTP-Annahme und
+  Datenbankbestätigung kann Duplikate erzeugen, Schlüsselverlust lässt wartende
+  Nachrichten unlesbar zurück. Generische Antworten, Audit, CSRF, SMTP und
+  Sitzungswiderruf werden weiter im MariaDB-/SMTP-Senken-E2E geprüft. Der E2E-Test sendet außerdem zwei
   gleichzeitige Einlösungen desselben Tokens und prüft genau einen Erfolg,
   eine Ablehnung und die Authentifizierung mit nur dem siegreichen Passwort.
-  Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines Prozesses
-  serialisiert. MariaDB-Advisory-Locks koordinieren Ausstellung und Zustellung
-  auch über mehrere Instanzen; ein Zwei-Instanzen-E2E verzögert das erste
+  MariaDB-Advisory-Locks serialisieren Token-Ersetzung und Outbox-Einfügung;
+  der Worker liest wartende Zeilen in ID-Reihenfolge. Advisory-Locks koordinieren
+  Ausstellung und Zustellung auch über mehrere Instanzen; ein Zwei-Instanzen-E2E verzögert das erste
   SMTP-Relay, während die zweite Instanz das Token ersetzt, und prüft, dass
   die spätere E-Mail zum gespeicherten Token gehört. Veraltete Tokens in der
   Mailqueue werden übersprungen. Das MariaDB-E2E lehnt ein Token mit
   `expires_at = NOW()` ab und friert die Datenbankzeit ein, um das produktive
   Token-Prädikat vor, exakt bei und nach Ablauf zu prüfen. Gleichheit wird
-  abgelehnt. Prozesslokale Reset-Limits, dauerhafte SMTP-Zustellwiederherstellung
-  und unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
-  nicht abgeschlossen.
+  abgelehnt. Persistente Reset-Limits und unabhängige Sicherheitsprüfung
+  bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
 
@@ -616,11 +617,11 @@ Feature eines bestimmten Anbieters.
   Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
   und versteckte externe Erfassung sind ausgeschlossen.
 - [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
-  teilweise umgesetzt. Gleichzeitige Einlösungen desselben Tokens sind im
-  MariaDB-E2E abgedeckt. Token-Ausstellung und E-Mail-Queue sind pro Prozess
-  serialisiert; Mehrprozessbetrieb bleibt offen. Persistente
-  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
-  Login-Benachrichtigungen bleiben offen.
+  teilweise umgesetzt. Eine verschlüsselte Datenbank-Outbox versucht nach
+  SMTP-Ausfall und Prozessneustart erneut; die mindestens einmalige Zustellung
+  kann nach einem Absturz vor Bestätigung Duplikate erzeugen. Persistente
+  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und Login-Benachrichtigungen
+  bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
   Berechtigungen.
 - [ ] Security Review, Threat Model, Dependency Audit und Penetrationstests.

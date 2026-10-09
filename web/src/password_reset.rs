@@ -5,19 +5,42 @@ use lettre::{
     Message, SmtpTransport, Transport,
 };
 use rand_core::{OsRng, RngCore};
-use std::{
-    sync::mpsc::{sync_channel, SyncSender, TrySendError},
-    thread,
-    time::Duration,
-};
+use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use std::sync::mpsc::{SyncSender, TrySendError};
+#[cfg(not(test))]
+use std::{sync::mpsc::sync_channel, thread, time::Duration};
+use zeroize::Zeroize;
 
 const RESET_TOKEN_TTL_MINUTES: u32 = 15;
 const RESET_COOKIE: &str = "zelyra_password_reset";
 const RESET_COOKIE_PATH: &str = "/reset-password";
-const RESET_MAIL_QUEUE_CAPACITY: usize = 64;
 const RESET_ADVISORY_LOCK_WAIT_SECONDS: u32 = 10;
+#[cfg(not(test))]
+const RESET_OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(5);
 type ResetMailSender = dyn Fn(&str, &str, UiLanguage) -> Result<(), String> + Send + Sync;
 
+struct ResetDeliveryKey([u8; 32]);
+
+impl Drop for ResetDeliveryKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+pub struct PasswordResetSmtpConfig<'a> {
+    pub host: &'a str,
+    pub port: u16,
+    pub security: &'a str,
+    pub username: Option<&'a str>,
+    pub password: Option<&'a str>,
+    pub from: &'a str,
+    pub base_url: &'a str,
+    pub database_url: &'a str,
+    pub reset_table: &'a str,
+    pub delivery_key: &'a str,
+}
+
+#[cfg(not(test))]
 struct ResetMailJob {
     email: String,
     link: String,
@@ -26,7 +49,9 @@ struct ResetMailJob {
 }
 
 struct ResetMailDeliveryGuard {
+    #[cfg_attr(test, allow(dead_code))]
     database_url: String,
+    #[cfg_attr(test, allow(dead_code))]
     lock_name: String,
     reset_table: String,
     token_hash: String,
@@ -35,9 +60,10 @@ struct ResetMailDeliveryGuard {
 #[derive(Clone)]
 pub struct PasswordResetMailer {
     base_url: String,
+    delivery_key: Option<Arc<ResetDeliveryKey>>,
     #[cfg(test)]
     sender: Arc<ResetMailSender>,
-    queue: Option<SyncSender<ResetMailJob>>,
+    queue: Option<SyncSender<()>>,
 }
 
 impl fmt::Debug for PasswordResetMailer {
@@ -50,15 +76,21 @@ impl fmt::Debug for PasswordResetMailer {
 }
 
 impl PasswordResetMailer {
-    pub fn smtp(
-        host: &str,
-        port: u16,
-        security: &str,
-        username: Option<&str>,
-        password: Option<&str>,
-        from: &str,
-        base_url: &str,
-    ) -> Result<Self, String> {
+    pub fn smtp_with_outbox(config: PasswordResetSmtpConfig<'_>) -> Result<Self, String> {
+        let PasswordResetSmtpConfig {
+            host,
+            port,
+            security,
+            username,
+            password,
+            from,
+            base_url,
+            database_url,
+            reset_table,
+            delivery_key,
+        } = config;
+        #[cfg(test)]
+        let _ = (database_url, reset_table);
         validate_public_base_url(base_url)?;
         if host.is_empty() || host.contains(['/', '\\', '@', '?', '#', '\r', '\n']) {
             return Err("ZELYRA_SMTP_HOST must be a hostname without a URL or credentials".into());
@@ -66,6 +98,7 @@ impl PasswordResetMailer {
         if port == 0 {
             return Err("ZELYRA_SMTP_PORT must be between 1 and 65535".into());
         }
+        let delivery_key = Arc::new(ResetDeliveryKey(parse_delivery_key(delivery_key)?));
         if username.is_some() != password.is_some() {
             return Err(
                 "ZELYRA_SMTP_USERNAME and ZELYRA_SMTP_PASSWORD must be set together".into(),
@@ -121,28 +154,61 @@ impl PasswordResetMailer {
                 .map(|_| ())
                 .map_err(|_| "SMTP transport could not deliver the message".to_owned())
         });
-        let (queue, receiver) = sync_channel::<ResetMailJob>(RESET_MAIL_QUEUE_CAPACITY);
-        let worker_sender = sender.clone();
-        thread::Builder::new()
-            .name("zelyra-password-reset-mail".into())
-            .spawn(move || {
-                while let Ok(job) = receiver.recv() {
-                    let delivery = if let Some(guard) = job.delivery_guard.as_ref() {
-                        deliver_if_current_reset(&job, guard, &worker_sender)
-                    } else {
-                        worker_sender(&job.email, &job.link, job.language)
-                    };
-                    if let Err(error) = delivery {
-                        eprintln!("zelyra web: password reset message delivery failed: {error}");
+        #[cfg(not(test))]
+        let queue = {
+            let (queue, receiver) = sync_channel::<()>(1);
+            let worker_sender = sender.clone();
+            let worker_database_url = database_url.to_owned();
+            let worker_reset_table = reset_table.to_owned();
+            let worker_delivery_key = delivery_key.clone();
+            thread::Builder::new()
+                .name("zelyra-password-reset-mail".into())
+                .spawn(move || loop {
+                    let _ = receiver.recv_timeout(RESET_OUTBOX_POLL_INTERVAL);
+                    if let Err(error) = process_reset_outbox(
+                        &worker_database_url,
+                        &worker_reset_table,
+                        &worker_delivery_key,
+                        &worker_sender,
+                    ) {
+                        eprintln!("zelyra web: password reset outbox recovery failed: {error}");
                     }
-                }
-            })
-            .map_err(|_| "password reset mail worker could not be started".to_owned())?;
+                })
+                .map_err(|_| "password reset mail worker could not be started".to_owned())?;
+            Some(queue)
+        };
+        #[cfg(test)]
+        let queue = None;
         Ok(Self {
             base_url,
+            delivery_key: Some(delivery_key),
             #[cfg(test)]
             sender,
-            queue: Some(queue),
+            queue,
+        })
+    }
+
+    #[cfg(test)]
+    fn smtp(
+        host: &str,
+        port: u16,
+        security: &str,
+        username: Option<&str>,
+        password: Option<&str>,
+        from: &str,
+        base_url: &str,
+    ) -> Result<Self, String> {
+        Self::smtp_with_outbox(PasswordResetSmtpConfig {
+            host,
+            port,
+            security,
+            username,
+            password,
+            from,
+            base_url,
+            database_url: "mariadb://test:test@127.0.0.1/test",
+            reset_table: "password_resets",
+            delivery_key: &"00".repeat(32),
         })
     }
 
@@ -153,6 +219,7 @@ impl PasswordResetMailer {
     ) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
+            delivery_key: None,
             sender: Arc::new(move |email, link, _language| sender(email, link)),
             queue: None,
         }
@@ -164,23 +231,15 @@ impl PasswordResetMailer {
         let Some(queue) = self.queue.as_ref() else {
             return (self.sender)(email, &link, language);
         };
-        queue
-            .try_send(ResetMailJob {
-                email: email.to_owned(),
-                link,
-                language,
-                delivery_guard: None,
-            })
-            .map_err(|error| match error {
-                TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
-                TrySendError::Disconnected(_) => {
-                    "password reset mail worker is unavailable".to_owned()
-                }
-            })
+        queue.try_send(()).map_err(|error| match error {
+            TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
+            TrySendError::Disconnected(_) => "password reset mail worker is unavailable".to_owned(),
+        })
     }
 
     fn enqueue_reset(
         &self,
+        transaction: &mut zelyra_database::MariaDbTransaction<'_>,
         delivery_guard: ResetMailDeliveryGuard,
         email: &str,
         token: &str,
@@ -190,22 +249,45 @@ impl PasswordResetMailer {
             return Err("password reset mail queue is unavailable".into());
         };
         let link = format!("{}/reset-password?token={token}", self.base_url);
-        queue
-            .try_send(ResetMailJob {
-                email: email.to_owned(),
-                link,
-                language,
-                delivery_guard: Some(delivery_guard),
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "email": email,
+            "link": link,
+            "language": match language {
+                UiLanguage::English => "en",
+                UiLanguage::German => "de",
+            },
+        }))
+        .map_err(|_| "password reset delivery payload could not be encoded".to_owned())?;
+        let key = self
+            .delivery_key
+            .as_ref()
+            .ok_or_else(|| "password reset delivery encryption is unavailable".to_owned())?;
+        let encrypted_payload = encrypt_delivery_payload(&payload, &key.0)?;
+        transaction
+            .execute(&zelyra_database::Query {
+                sql: format!(
+                    "UPDATE {} SET delivery_payload = :payload WHERE token_hash = :token_hash",
+                    quote_identifier(&delivery_guard.reset_table)
+                ),
+                params: vec![
+                    ("payload".into(), QueryValue::String(encrypted_payload)),
+                    (
+                        "token_hash".into(),
+                        QueryValue::String(delivery_guard.token_hash),
+                    ),
+                ],
             })
-            .map_err(|error| match error {
-                TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
-                TrySendError::Disconnected(_) => {
-                    "password reset mail worker is unavailable".to_owned()
-                }
-            })
+            .map_err(|_| "password reset delivery could not be persisted".to_owned())?;
+        match queue.try_send(()) {
+            Ok(()) | Err(TrySendError::Full(())) => Ok(()),
+            Err(TrySendError::Disconnected(())) => {
+                Err("password reset mail worker is unavailable".to_owned())
+            }
+        }
     }
 }
 
+#[cfg(not(test))]
 fn deliver_if_current_reset(
     job: &ResetMailJob,
     guard: &ResetMailDeliveryGuard,
@@ -229,9 +311,32 @@ fn deliver_if_current_reset(
             };
             let current = !transaction.execute(&query)?.rows.is_empty();
             if !current {
+                transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "UPDATE {} SET delivery_payload = NULL WHERE token_hash = :token_hash",
+                        quote_identifier(&guard.reset_table)
+                    ),
+                    params: vec![(
+                        "token_hash".into(),
+                        QueryValue::String(guard.token_hash.clone()),
+                    )],
+                })?;
                 return Ok(None);
             }
-            Ok(Some(sender(&job.email, &job.link, job.language)))
+            let delivery = sender(&job.email, &job.link, job.language);
+            if delivery.is_ok() {
+                transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "UPDATE {} SET delivery_payload = NULL WHERE token_hash = :token_hash",
+                        quote_identifier(&guard.reset_table)
+                    ),
+                    params: vec![(
+                        "token_hash".into(),
+                        QueryValue::String(guard.token_hash.clone()),
+                    )],
+                })?;
+            }
+            Ok(Some(delivery))
         },
     );
     match result {
@@ -239,6 +344,135 @@ fn deliver_if_current_reset(
         Ok(Some(delivery)) => delivery,
         Err(_) => Err("could not verify the current password reset token".into()),
     }
+}
+
+#[cfg(not(test))]
+fn process_reset_outbox(
+    database_url: &str,
+    reset_table: &str,
+    delivery_key: &ResetDeliveryKey,
+    sender: &Arc<ResetMailSender>,
+) -> Result<(), String> {
+    let query = zelyra_database::Query {
+        sql: format!(
+            "SELECT user_id, token_hash, delivery_payload FROM {} WHERE delivery_payload IS NOT NULL ORDER BY id LIMIT 16",
+            quote_identifier(reset_table)
+        ),
+        params: Vec::new(),
+    };
+    let rows = zelyra_database::execute_mariadb_queries(database_url, &[query], false)
+        .map_err(|_| "could not read pending password reset deliveries".to_owned())?;
+    let Some(result) = rows.first() else {
+        return Ok(());
+    };
+    for row in &result.rows {
+        let (Some(user_id), Some(token_hash), Some(encrypted_payload)) = (
+            row.first().and_then(|value| value.parse::<i64>().ok()),
+            row.get(1),
+            row.get(2),
+        ) else {
+            continue;
+        };
+        let payload = match decrypt_delivery_payload(encrypted_payload, &delivery_key.0) {
+            Ok(payload) => payload,
+            Err(error) => {
+                eprintln!(
+                    "zelyra web: pending password reset delivery could not be decrypted: {error}"
+                );
+                continue;
+            }
+        };
+        let (Some(email), Some(link), Some(language)) = (
+            payload.get("email").and_then(serde_json::Value::as_str),
+            payload.get("link").and_then(serde_json::Value::as_str),
+            payload.get("language").and_then(serde_json::Value::as_str),
+        ) else {
+            eprintln!("zelyra web: pending password reset delivery payload is invalid");
+            continue;
+        };
+        let Some(language) = UiLanguage::parse(language) else {
+            eprintln!("zelyra web: pending password reset delivery language is invalid");
+            continue;
+        };
+        let lock_name = zelyra_database::mariadb_advisory_lock_name(
+            database_url,
+            &format!("password-reset:{reset_table}:{user_id}"),
+        )
+        .map_err(|_| "could not prepare password reset delivery lock".to_owned())?;
+        let job = ResetMailJob {
+            email: email.to_owned(),
+            link: link.to_owned(),
+            language,
+            delivery_guard: Some(ResetMailDeliveryGuard {
+                database_url: database_url.to_owned(),
+                lock_name,
+                reset_table: reset_table.to_owned(),
+                token_hash: token_hash.to_owned(),
+            }),
+        };
+        let guard = job
+            .delivery_guard
+            .as_ref()
+            .expect("outbox guard is present");
+        if let Err(error) = deliver_if_current_reset(&job, guard, sender) {
+            eprintln!("zelyra web: password reset message delivery failed: {error}");
+        }
+    }
+    Ok(())
+}
+
+fn parse_delivery_key(value: &str) -> Result<[u8; 32], String> {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(
+            "ZELYRA_RESET_DELIVERY_KEY must contain exactly 64 hexadecimal characters".into(),
+        );
+    }
+    let mut key = [0u8; 32];
+    for (index, byte) in key.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| "ZELYRA_RESET_DELIVERY_KEY is invalid".to_owned())?;
+    }
+    Ok(key)
+}
+
+fn encrypt_delivery_payload(payload: &[u8], key: &[u8; 32]) -> Result<String, String> {
+    let unbound = UnboundKey::new(&AES_256_GCM, key)
+        .map_err(|_| "password reset delivery encryption is unavailable".to_owned())?;
+    let key = LessSafeKey::new(unbound);
+    let mut nonce_bytes = [0u8; 12];
+    OsRng
+        .try_fill_bytes(&mut nonce_bytes)
+        .map_err(|_| "secure password reset delivery nonce generation failed".to_owned())?;
+    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
+    let mut ciphertext = payload.to_vec();
+    key.seal_in_place_append_tag(nonce, Aad::from(b"zelyra-reset-mail-v1"), &mut ciphertext)
+        .map_err(|_| "password reset delivery encryption failed".to_owned())?;
+    let mut packed = nonce_bytes.to_vec();
+    packed.extend(ciphertext);
+    Ok(packed.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn decrypt_delivery_payload(encrypted: &str, key: &[u8; 32]) -> Result<serde_json::Value, String> {
+    if encrypted.len() < 56 || !encrypted.len().is_multiple_of(2) {
+        return Err("encrypted payload is malformed".into());
+    }
+    let packed = (0..encrypted.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&encrypted[index..index + 2], 16))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "encrypted payload is malformed".to_owned())?;
+    let nonce_bytes: [u8; 12] = packed[..12]
+        .try_into()
+        .map_err(|_| "encrypted payload is malformed".to_owned())?;
+    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
+    let unbound = UnboundKey::new(&AES_256_GCM, key)
+        .map_err(|_| "password reset delivery decryption is unavailable".to_owned())?;
+    let key = LessSafeKey::new(unbound);
+    let mut ciphertext = packed[12..].to_vec();
+    let plaintext = key
+        .open_in_place(nonce, Aad::from(b"zelyra-reset-mail-v1"), &mut ciphertext)
+        .map_err(|_| "encrypted payload authentication failed".to_owned())?;
+    serde_json::from_slice(plaintext).map_err(|_| "decrypted payload is malformed".to_owned())
 }
 
 fn validate_public_base_url(value: &str) -> Result<(), String> {
@@ -404,6 +638,7 @@ pub(super) fn dispatch_password_reset(
                             }
                             if mailer
                                 .enqueue_reset(
+                                    transaction,
                                     ResetMailDeliveryGuard {
                                         database_url: database_url.to_owned(),
                                         lock_name: lock_name.clone(),
@@ -744,6 +979,30 @@ mod tests {
     }
 
     #[test]
+    fn reset_delivery_payload_is_authenticated_and_encrypted() {
+        let key = [42u8; 32];
+        let message = br#"{"email":"person@example.test","link":"https://example.test/reset-password?token=secret","language":"en"}"#;
+        let encrypted = encrypt_delivery_payload(message, &key).unwrap();
+        assert!(!encrypted.contains("person@example.test"));
+        assert!(!encrypted.contains("secret"));
+        let decrypted = decrypt_delivery_payload(&encrypted, &key).unwrap();
+        assert_eq!(decrypted["email"], "person@example.test");
+        assert_eq!(decrypted["language"], "en");
+
+        let mut tampered = encrypted.into_bytes();
+        tampered[30] = if tampered[30] == b'0' { b'1' } else { b'0' };
+        let tampered = String::from_utf8(tampered).unwrap();
+        assert!(decrypt_delivery_payload(&tampered, &key).is_err());
+    }
+
+    #[test]
+    fn reset_delivery_key_requires_32_bytes_of_hex() {
+        assert_eq!(parse_delivery_key(&"ab".repeat(32)).unwrap(), [0xabu8; 32]);
+        assert!(parse_delivery_key("too-short").is_err());
+        assert!(parse_delivery_key(&"gg".repeat(32)).is_err());
+    }
+
+    #[test]
     #[ignore = "requires the MariaDB password-reset E2E fixture"]
     fn reset_token_expiry_is_exclusive_at_the_frozen_database_clock() {
         let database_url = std::env::var("DATABASE_URL")
@@ -969,27 +1228,6 @@ mod tests {
                 )
                 .as_str()
             )
-        );
-    }
-
-    #[test]
-    fn reset_mail_queue_is_bounded_and_fails_closed_when_full() {
-        let (queue, _receiver) = sync_channel(RESET_MAIL_QUEUE_CAPACITY);
-        let mailer = PasswordResetMailer {
-            base_url: "https://app.example.test".into(),
-            sender: Arc::new(|_, _, _| Ok(())),
-            queue: Some(queue),
-        };
-        for _ in 0..RESET_MAIL_QUEUE_CAPACITY {
-            mailer
-                .send("user@example.test", &"a".repeat(64), UiLanguage::English)
-                .unwrap();
-        }
-        assert_eq!(
-            mailer
-                .send("user@example.test", &"b".repeat(64), UiLanguage::English)
-                .unwrap_err(),
-            "password reset mail queue is full"
         );
     }
 }

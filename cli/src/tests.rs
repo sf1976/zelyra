@@ -1908,6 +1908,7 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
             token_hash: String(64) required unique
             expires_at: Timestamp required
             consumed_at: Timestamp?
+            delivery_payload: String(2048)
         }
 
         table auth_audit_log {
@@ -1920,8 +1921,30 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
         }
     "#;
     let program = parse(&lex(source).unwrap()).unwrap();
-    let schema = build_schema(&program).unwrap();
+    let mut schema = build_schema(&program).unwrap();
     assert!(validate_auth("test.zyl", &program, &schema));
+    {
+        let column = schema
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "password_resets")
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|column| column.name == "delivery_payload")
+            .unwrap();
+        column.nullable = false;
+        column.sql_type = "varchar(1024)".into();
+    }
+    assert!(!validate_auth("test.zyl", &program, &schema));
+    schema
+        .tables
+        .iter_mut()
+        .find(|table| table.name == "password_resets")
+        .unwrap()
+        .columns
+        .retain(|column| column.name != "delivery_payload");
+    assert!(!validate_auth("test.zyl", &program, &schema));
 }
 
 #[test]

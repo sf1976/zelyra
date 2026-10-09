@@ -31,7 +31,7 @@ use i18n::{
     field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
     LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
-pub use password_reset::PasswordResetMailer;
+pub use password_reset::{PasswordResetMailer, PasswordResetSmtpConfig};
 pub use server::serve_app;
 #[cfg(test)]
 pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
