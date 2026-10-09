@@ -4388,8 +4388,35 @@ page "/dashboard" {
 ### 5. Typische Fehler und deren Ursachen
 - **Fehler:** Passwörter im Klartext in der Tabelle ablegen.
   *Ursache:* Zelyra verlangt ein Spaltenfeld `password_hash` und stellt mit `zelyra auth hash-password` ein Hashing-Tool bereit.
-- **Fehler:** Die Sitzungstabelle `auth_sessions` vergessen.
-  *Ursache:* Zelyra benötigt eine dedizierte Tabelle zur sicheren Token-Verwaltung.
+- **Fehler:** Ohne Sitzungstabelle einen Neustart überdauernde Sitzungen erwarten.
+  *Ursache:* Ohne `sessions: auth_sessions` liegen Sitzungen im Prozessspeicher.
+  Für dauerhafte Speicherung und administrative Sitzungssperren die Tabelle deklarieren.
+
+#### Sitzungsverwaltung im 0.4-Entwicklungszweig
+
+Sind dauerhafte Sitzungen und die Rollenverwaltung konfiguriert, sehen
+berechtigte Administratoren bis zu 100 noch nicht abgelaufene Sitzungen,
+nach Ablauf sortiert. Jede Zeile zeigt die Datenbank-ID, die E-Mail-Adresse
+und den Ablaufzeitpunkt in Datenbankzeit. Weder Browser-Token noch dessen
+Hash werden angezeigt. Gerätenamen und IP-Verläufe werden nicht erfasst
+oder aus anderen Daten abgeleitet.
+
+Mit **Sitzung sperren** beendest du eine einzelne Sitzung. Der POST benötigt
+das konfigurierte Verwaltungsrecht, ein gültiges CSRF-Token und einen
+Herkunftsnachweis derselben Origin. Sitzungs-ID und Benutzer-ID müssen
+zusammenpassen. Wiederholte Anfragen für bereits entfernte Sitzungen sind
+unschädlich. Bei konfiguriertem Audit protokolliert die Transaktion
+`auth.session_revoke_requested` einschließlich numerischer Sitzungs-ID.
+Das Ereignis belegt die Anfrage, nicht das vorherige Vorhandensein einer Zeile.
+
+Sperrst du die eigene Sitzung, scheitern folgende geschützte Anfragen mit
+401. Melde dich erneut an: Das Konto und die Rolle des letzten Administrators
+bleiben erhalten. Dauerhafte Sitzungen laufen nach einem Tag ab. Im
+Entwicklungszweig sind auch Speichersitzungen auf 24 Stunden begrenzt; sie
+verschwinden beim Neustart und erscheinen nicht in dieser Verwaltung
+dauerhafter Sitzungen. Der Ablauf wird beim Zugriff geprüft. Eine Sperre
+bricht bereits laufende Anfragen nicht ab. Passwortwiederherstellung und
+Geräteerkennung sind damit nicht implementiert.
 
 ### 6. Merksätze
 1. `auth` deklariert Benutzer, Sitzungen und Berechtigungen an einer zentralen Stelle.

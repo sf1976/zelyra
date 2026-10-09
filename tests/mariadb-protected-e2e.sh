@@ -494,5 +494,73 @@ remaining_created="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM
 crud_delete_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'crud.delete' AND target_user_id = '${created_customer_id}' AND details = 'table=customers;operation=crud.delete;record_id=${created_customer_id}'")"
 [[ "${crud_delete_audit_count}" == "1" ]]
 
-echo "[10/10] protected-resource E2E cleanup completed"
+echo "[10/10] checking session listing, revocation, and authorization boundaries"
+viewer_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth_sessions WHERE user_id = '${viewer_user_id}' ORDER BY id DESC LIMIT 1")"
+primary_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth_sessions WHERE user_id = '${primary_user_id}' ORDER BY id DESC LIMIT 1")"
+[[ -n "${viewer_session_id}" && -n "${primary_session_id}" ]]
+curl --silent --show-error --fail --cookie "${primary_cookie}" \
+    "${base_url}/admin/access" -o "${temp_dir}/sessions.html"
+grep -Fq 'Active sessions' "${temp_dir}/sessions.html"
+grep -Fq "name=\"session_id\" value=\"${viewer_session_id}\"" "${temp_dir}/sessions.html"
+! grep -Fq 'token_hash' "${temp_dir}/sessions.html"
+while IFS= read -r token_hash; do
+    [[ -z "${token_hash}" ]] || ! grep -Fq "${token_hash}" "${temp_dir}/sessions.html"
+done < <(client --batch --skip-column-names -e "SELECT token_hash FROM auth_sessions")
+status="$(request_status "${temp_dir}/invalid-session-id.html" \
+    --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode operation=revoke_session --data-urlencode session_id=-1 \
+    --data-urlencode "user_id=${viewer_user_id}" "${base_url}/admin/access")"
+[[ "${status}" == 422 ]]
+for cookie in "${primary_cookie}" "${viewer_cookie}"; do
+    # Administrator with bad CSRF, then an unauthorized viewer with valid CSRF.
+    supplied_csrf="${admin_csrf}"
+    [[ "${cookie}" != "${primary_cookie}" ]] || supplied_csrf=invalid
+    status="$(request_status "${temp_dir}/denied-session-revoke.html" \
+        --cookie "${cookie}" --data-urlencode "_zelyra_csrf=${supplied_csrf}" \
+        --data-urlencode operation=revoke_session \
+        --data-urlencode "session_id=${viewer_session_id}" \
+        --data-urlencode "user_id=${viewer_user_id}" "${base_url}/admin/access")"
+    [[ "${status}" == 403 ]]
+done
+status="$(curl --silent --show-error --output "${temp_dir}/cross-origin-revoke.html" \
+    --write-out '%{http_code}' --header 'Origin: https://untrusted.example' \
+    --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode operation=revoke_session --data-urlencode "session_id=${viewer_session_id}" \
+    --data-urlencode "user_id=${viewer_user_id}" "${base_url}/admin/access")"
+[[ "${status}" == 403 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE id = '${viewer_session_id}'")" == 1 ]]
+# A mismatched user/session pair cannot revoke a different user's session.
+status="$(request_status "${temp_dir}/mismatched-session-revoke.html" \
+    --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode operation=revoke_session --data-urlencode "session_id=${viewer_session_id}" \
+    --data-urlencode "user_id=${primary_user_id}" "${base_url}/admin/access")"
+[[ "${status}" == 303 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE id = '${viewer_session_id}'")" == 1 ]]
+for attempt in 1 2; do
+    status="$(request_status "${temp_dir}/session-revoke.html" \
+        --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+        --data-urlencode operation=revoke_session --data-urlencode "session_id=${viewer_session_id}" \
+        --data-urlencode "user_id=${viewer_user_id}" "${base_url}/admin/access")"
+    [[ "${status}" == 303 ]]
+done
+status="$(request_status "${temp_dir}/revoked-viewer.html" --cookie "${viewer_cookie}" "${base_url}/customers")"
+[[ "${status}" == 401 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'auth.session_revoke_requested' AND target_user_id = '${viewer_user_id}' AND actor_user_id = '${primary_user_id}'")" == 2 ]]
+# Revoking the current session does not remove the last administrator's account.
+status="$(request_status "${temp_dir}/self-session-revoke.html" \
+    --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \
+    --data-urlencode operation=revoke_session --data-urlencode "session_id=${primary_session_id}" \
+    --data-urlencode "user_id=${primary_user_id}" "${base_url}/admin/access")"
+[[ "${status}" == 303 ]]
+status="$(request_status "${temp_dir}/revoked-primary.html" --cookie "${primary_cookie}" "${base_url}/admin/access")"
+[[ "${status}" == 401 ]]
+status="$(request_status "${temp_dir}/primary-relogin.html" --cookie-jar "${primary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${primary_email}" \
+    --data-urlencode "password=${test_password}" "${base_url}/login")"
+[[ "${status}" == 303 ]]
+status="$(request_status "${temp_dir}/primary-after-relogin.html" --cookie "${primary_cookie}" "${base_url}/admin/access")"
+[[ "${status}" == 200 ]]
+client -e "UPDATE auth_sessions SET expires_at = DATE_SUB(NOW(), INTERVAL 1 SECOND) WHERE user_id = '${primary_user_id}'"
+status="$(request_status "${temp_dir}/expired-primary.html" --cookie "${primary_cookie}" "${base_url}/admin/access")"
+[[ "${status}" == 401 ]]
 echo "MariaDB protected CRUD/API E2E passed"

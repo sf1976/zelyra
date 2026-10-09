@@ -24,6 +24,11 @@ principles; the roadmap below tracks what is actually implemented.
 
 ## Current milestones
 
+- [~] The 0.4 development branch adds administrative listing/revocation of
+  persistent sessions, CSRF/permission checks and an audit request event.
+  In-memory sessions also expire after 24 hours. Device tracking and password
+  recovery remain open; this does not complete the account lifecycle milestone.
+
 - [~] The [Docker module acceptance](module-docker-acceptance.en.md) checks
   the combined application, separate invoice/inventory exports, missing `.env`,
   excluded routes and denied MariaDB access. Fixture accounts are read-only;

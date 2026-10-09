@@ -26,6 +26,11 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
+  Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
+  Speichersitzungen laufen ebenfalls nach 24 Stunden ab. Geräteerkennung und
+  Passwortwiederherstellung bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
+
 - [~] Die [Docker-Modulabnahme](module-docker-acceptance.de.md) prüft die
   Gesamtanwendung, getrennte Rechnungs-/Inventarexporte, fehlende `.env`,
   ausgeschlossene Routen und verweigerte MariaDB-Zugriffe. Die Testkonten

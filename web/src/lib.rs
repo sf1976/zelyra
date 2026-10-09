@@ -812,6 +812,7 @@ pub struct AuthRoute {
 struct Session {
     user_id: Option<i64>,
     permissions: Vec<String>,
+    expires_at: Instant,
 }
 
 #[derive(Clone, Debug)]
@@ -824,6 +825,7 @@ struct LoginThrottle {
 const LOGIN_FAILURE_LIMIT: u32 = 5;
 const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
 const LOGIN_BLOCK_DURATION: Duration = Duration::from_secs(60);
+const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone, Debug)]
 pub struct WebApp {
@@ -1994,6 +1996,7 @@ fn dispatch_login(
                     Session {
                         user_id: Some(user_id),
                         permissions,
+                        expires_at: Instant::now() + SESSION_LIFETIME,
                     },
                 );
                 if auth.audit_table.is_some() {
@@ -2222,6 +2225,7 @@ fn dispatch_auth_admin(
                     &data.assignments,
                     &data.permissions,
                     &data.audit,
+                    &data.sessions,
                     app.ui_language,
                 ),
             ),
@@ -2246,6 +2250,7 @@ struct AuthAdminData {
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
     audit: Vec<Vec<String>>,
+    sessions: Vec<Vec<String>>,
 }
 
 fn execute_auth_admin_mutation(
@@ -2478,11 +2483,27 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     } else {
         Vec::new()
     };
+    let sessions = if let Some(session_table) = auth.session_table.as_deref() {
+        zelyra_database::execute_mariadb_query(
+            database_url,
+            &format!(
+                "SELECT s.id, s.user_id, u.email, s.expires_at FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.expires_at > CURRENT_TIMESTAMP ORDER BY s.expires_at, s.id LIMIT 100",
+                quote_identifier(session_table),
+                quote_identifier(&auth.table),
+            ),
+            Vec::new(),
+        )
+        .map_err(|error| error.to_string())?
+        .rows
+    } else {
+        Vec::new()
+    };
     Ok(AuthAdminData {
         users,
         assignments,
         permissions,
         audit,
+        sessions,
     })
 }
 
@@ -2527,6 +2548,51 @@ fn dispatch_auth_admin_post(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let result = match operation {
+        "revoke_session" => {
+            let Some(session_table) = auth.session_table.as_deref() else {
+                return Response::html(
+                    409,
+                    "<h1>409 Conflict</h1><p>Persistent sessions are required.</p>",
+                );
+            };
+            let Some(session_id) = input
+                .get("session_id")
+                .and_then(|value| value.parse::<i64>().ok())
+                .filter(|id| *id > 0)
+            else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid session ID is required.</p>",
+                );
+            };
+            let Some(user_id) = user_id.filter(|id| *id > 0) else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            execute_auth_admin_mutation(
+                auth,
+                database_url,
+                vec![zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE id = :session_id AND user_id = :user_id",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![
+                        (
+                            "session_id".into(),
+                            zelyra_database::QueryValue::Int(session_id),
+                        ),
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                    ],
+                }],
+                actor_user_id,
+                "auth.session_revoke_requested",
+                Some(user_id),
+                &format!("session_id={session_id}"),
+            )
+        }
         "create_user" => {
             let email = input
                 .get("email")
@@ -2953,6 +3019,7 @@ fn render_auth_admin(
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
     audit: &[Vec<String>],
+    sessions: &[Vec<String>],
     language: UiLanguage,
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
@@ -3001,7 +3068,11 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table><h2>");
+    html.push_str("</table>");
+    if auth.session_table.is_some() {
+        html.push_str(&render_auth_sessions(auth, sessions, language));
+    }
+    html.push_str("<h2>");
     html.push_str(&tr(language, "auth.assign_role"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
@@ -3167,6 +3238,38 @@ fn load_user_permissions(
     Ok(permissions)
 }
 
+fn render_auth_sessions(
+    auth: &AuthRoute,
+    sessions: &[Vec<String>],
+    language: UiLanguage,
+) -> String {
+    let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th></tr>",
+        tr(language, "auth.sessions"),
+        tr(language, "auth.sessions_help"),
+        tr(language, "auth.email"),
+        tr(language, "auth.session_expires"),
+        tr(language, "auth.actions")
+    );
+    for row in sessions {
+        if let [id, user_id, email, expires, ..] = row.as_slice() {
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                html_escape(id), html_escape(email), html_escape(expires), html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
+        }
+    }
+    html.push_str("</table>");
+    html
+}
+
+fn memory_session(app: &WebApp, session_id: &str) -> Option<Session> {
+    let mut sessions = app.sessions.lock().ok()?;
+    let now = Instant::now();
+    sessions.retain(|_, session| session.expires_at > now);
+    sessions.get(session_id).cloned()
+}
+
 fn session_from_request(
     app: &WebApp,
     request: &Request,
@@ -3174,10 +3277,10 @@ fn session_from_request(
 ) -> Option<Session> {
     let session_id = cookie_value(request, "zelyra_session")?;
     let Some(auth) = &app.auth_route else {
-        return app.sessions.lock().ok()?.get(&session_id).cloned();
+        return memory_session(app, &session_id);
     };
     let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) else {
-        return app.sessions.lock().ok()?.get(&session_id).cloned();
+        return memory_session(app, &session_id);
     };
     if app.database_capability_granted == Some(false) {
         return None;
@@ -3230,6 +3333,7 @@ fn session_from_request(
     Some(Session {
         user_id: Some(user_id),
         permissions,
+        expires_at: Instant::now() + SESSION_LIFETIME,
     })
 }
 
@@ -9350,6 +9454,7 @@ mod tests {
             Session {
                 user_id: None,
                 permissions: Vec::new(),
+                expires_at: Instant::now() + SESSION_LIFETIME,
             },
         );
         let auth = AuthRoute {
@@ -9375,6 +9480,27 @@ mod tests {
         .unwrap();
         rotate_existing_session(&app, &auth, &request, None).unwrap();
         assert!(!app.sessions.lock().unwrap().contains_key(old_token));
+    }
+
+    #[test]
+    fn expired_memory_session_is_rejected_and_removed() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        for (token, expires_at) in [
+            ("expired", Instant::now() - Duration::from_secs(1)),
+            ("valid", Instant::now() + SESSION_LIFETIME),
+        ] {
+            app.sessions.lock().unwrap().insert(
+                token.into(),
+                Session {
+                    user_id: Some(7),
+                    permissions: vec!["auth.manage".into()],
+                    expires_at,
+                },
+            );
+        }
+        assert!(memory_session(&app, "expired").is_none());
+        assert!(!app.sessions.lock().unwrap().contains_key("expired"));
+        assert_eq!(memory_session(&app, "valid").unwrap().user_id, Some(7));
     }
 
     #[test]
