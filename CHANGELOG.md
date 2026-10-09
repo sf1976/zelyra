@@ -6,6 +6,14 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- The HTTP listener now handles up to 64 connections concurrently and drops
+  excess connections instead of building an unbounded queue. Socket tests cover
+  a slow request alongside a fast request and the worker cap; synchronous
+  handlers remain uncancellable. / Der HTTP-Listener verarbeitet jetzt bis zu
+  64 Verbindungen parallel und verwirft weitere, statt eine unbegrenzte
+  Warteschlange aufzubauen. Socket-Tests prüfen eine langsame neben einer
+  schnellen Anfrage und die Worker-Grenze; synchrone Handler bleiben
+  unabbrechbar.
 - `zelyra db plan --format=json` now emits a versioned schema plan with stable
   fingerprints, drift, preflights, and approval requirements; safe inverse SQL
   remains unimplemented. `db apply --plan-id` can reject a stale reviewed plan

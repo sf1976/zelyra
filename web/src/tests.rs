@@ -1,4 +1,6 @@
 use super::*;
+use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
 fn chained_audit_insert_uses_previous_hash_and_sha256() {
@@ -1644,6 +1646,88 @@ fn incomplete_http_request_is_closed_at_absolute_deadline() {
     assert!(started.elapsed() < Duration::from_secs(2));
     let mut response = String::new();
     client.read_to_string(&mut response).unwrap();
+    assert!(response.is_empty());
+}
+
+#[test]
+fn a_slow_connection_does_not_block_another_http_connection() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = Arc::new(WebApp::new(
+        vec![Route {
+            path: "/ready".into(),
+            html: "ready".into(),
+            query: Vec::new(),
+            page_size: None,
+            sort_columns: Vec::new(),
+            search_columns: Vec::new(),
+            filters: Vec::new(),
+            data: Vec::new(),
+            requires_auth: false,
+            permissions: Vec::new(),
+        }],
+        Vec::new(),
+    ));
+    let active_connections = Arc::new(AtomicUsize::new(0));
+
+    let mut slow_client = TcpStream::connect(address).unwrap();
+    slow_client
+        .write_all(b"GET /ready HTTP/1.1\r\nHost: localhost\r\n")
+        .unwrap();
+    let (slow_stream, _) = listener.accept().unwrap();
+    let slow_worker = spawn_connection(
+        slow_stream,
+        Arc::clone(&app),
+        Arc::clone(&active_connections),
+    )
+    .unwrap()
+    .unwrap();
+
+    let mut fast_client = TcpStream::connect(address).unwrap();
+    fast_client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let (fast_stream, _) = listener.accept().unwrap();
+    let fast_worker = spawn_connection(fast_stream, app, Arc::clone(&active_connections))
+        .unwrap()
+        .unwrap();
+    fast_client
+        .write_all(b"GET /ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+        .unwrap();
+    let mut response = String::new();
+    fast_client.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+    assert!(response.ends_with("ready"), "{response}");
+
+    drop(slow_client);
+    slow_worker.join().unwrap();
+    fast_worker.join().unwrap();
+    assert_eq!(active_connections.load(Ordering::Acquire), 0);
+}
+
+#[test]
+fn server_drops_connections_after_reaching_its_worker_limit() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let (stream, _) = listener.accept().unwrap();
+    let active_connections = Arc::new(AtomicUsize::new(MAX_CONCURRENT_CONNECTIONS));
+    let result = spawn_connection(
+        stream,
+        Arc::new(WebApp::new(Vec::new(), Vec::new())),
+        Arc::clone(&active_connections),
+    )
+    .unwrap();
+    assert!(result.is_none());
+    assert_eq!(
+        active_connections.load(Ordering::Acquire),
+        MAX_CONCURRENT_CONNECTIONS
+    );
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
     assert!(response.is_empty());
 }
 

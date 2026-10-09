@@ -48,9 +48,11 @@ principles; the roadmap below tracks what is actually implemented.
   open. Tagged release builds attest both platform archives and their SBOMs;
   see the [verification guide](release-readiness/artifact-verification.en.md).
 
-- [~] The HTTP server limits connection reads and writes to 30 seconds and
-  drops late responses. Synchronous handlers cannot be cancelled and can still
-  block the single server process.
+- [~] The HTTP server handles up to 64 connections concurrently and drops
+  excess connections instead of creating an unbounded worker queue. Connection
+  reads and writes are limited to 30 seconds and late responses are dropped.
+  Synchronous handlers cannot be cancelled and can still occupy a worker slot;
+  endpoint-specific health categories and retry rules remain open.
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,

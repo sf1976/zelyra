@@ -5,7 +5,7 @@ use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
@@ -19,6 +19,7 @@ mod forms;
 mod http;
 mod i18n;
 mod password_reset;
+mod server;
 mod ui;
 use forms::*;
 pub use forms::{localized_identifier, render_form};
@@ -31,6 +32,9 @@ use i18n::{
     LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
 pub use password_reset::PasswordResetMailer;
+pub use server::serve_app;
+#[cfg(test)]
+pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
 use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
@@ -7739,21 +7743,6 @@ pub fn serve(routes: Vec<Route>, address: &str) -> io::Result<()> {
 
 pub fn route_pattern_matches_path(pattern: &str, path: &str) -> bool {
     match_path(pattern, path).is_some()
-}
-
-pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
-    let listener = TcpListener::bind(address)?;
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                if let Err(error) = handle_connection(&mut stream, &app) {
-                    eprintln!("zelyra web: request failed: {error}");
-                }
-            }
-            Err(error) => eprintln!("zelyra web: connection failed: {error}"),
-        }
-    }
-    Ok(())
 }
 
 fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {

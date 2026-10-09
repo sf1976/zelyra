@@ -57,9 +57,12 @@ den tatsächlich implementierten Stand.
   offen. Getaggte Builds attestieren beide Plattformarchive samt SBOM; siehe
   die [Anleitung zur Artefaktprüfung](release-readiness/artefaktverifikation.de.md).
 
-- [~] Der HTTP-Server begrenzt Lesen und Schreiben je Verbindung auf 30
-  Sekunden und verwirft danach verspätete Antworten. Synchrone Handler sind
-  nicht abbrechbar und können den einzelnen Serverprozess weiter blockieren.
+- [~] Der HTTP-Server verarbeitet bis zu 64 Verbindungen parallel und verwirft
+  weitere Verbindungen, statt eine unbegrenzte Worker-Warteschlange anzulegen.
+  Lesen und Schreiben je Verbindung sind auf 30 Sekunden begrenzt; verspätete
+  Antworten entfallen. Synchrone Handler lassen sich nicht abbrechen und können
+  weiterhin einen Worker belegen. Endpoint-spezifische Health-Kategorien und
+  Retry-Regeln bleiben offen.
 
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
