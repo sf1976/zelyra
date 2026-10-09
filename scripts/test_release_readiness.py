@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_release_readiness import REQUIRED_GATES_040, unfinished_gates
+from check_release_readiness import REQUIRED_GATES_040, REQUIRED_GATES_050, unfinished_gates
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -22,20 +22,22 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("not conducted for 0.3.0", decision)
         self.assertIn("mandatory release gate for 0.4.0", decision)
 
-    def test_040_plan_keeps_human_acceptance_mandatory(self) -> None:
+    def test_040_plan_records_owner_approved_deferral_without_faking_acceptance(self) -> None:
         root = Path(__file__).resolve().parents[1]
         english = (root / "docs/release-plans/0.4.0.en.md").read_text(encoding="utf-8")
         german = (root / "docs/release-plans/0.4.0.de.md").read_text(encoding="utf-8")
-        self.assertIn("- [ ] Run a real human acceptance test", english)
-        self.assertIn("- [ ] Einen echten menschlichen Abnahmetest", german)
+        self.assertIn("- [x] Defer independent human acceptance to 0.5.0", english)
+        self.assertIn("- [x] Die unabhängige menschliche Abnahme", german)
+        self.assertIn("not conducted", (root / "docs/release-readiness/0.4.0-human-acceptance.en.md").read_text(encoding="utf-8"))
+        self.assertIn("nicht durchgeführt", (root / "docs/release-readiness/0.4.0-human-acceptance.de.md").read_text(encoding="utf-8"))
 
     def test_current_040_plan_blocks_release_on_open_gates(self) -> None:
         root = Path(__file__).resolve().parents[1]
         failures = unfinished_gates(root, "0.4.0")
-        self.assertTrue(any("independent human acceptance" in item for item in failures))
+        self.assertFalse(any("human acceptance deferral" in item for item in failures))
         self.assertTrue(any("P0 implementation and tests" in item for item in failures))
 
-    def test_all_040_gates_require_bilingual_human_acceptance_evidence(self) -> None:
+    def test_all_040_gates_require_bilingual_human_deferral_records(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for relative_path, gates in REQUIRED_GATES_040.items():
@@ -48,12 +50,12 @@ class ReleaseReadinessTests(unittest.TestCase):
 
             records = {
                 "docs/release-readiness/0.4.0-human-acceptance.en.md": (
-                    "Candidate commit: abc123\nCompleted on: 2026-10-09\n"
-                    "Decision: accepted\nDecision authority: project owner\n"
+                    "Decision: deferred to 0.5.0\nNot conducted; not a test result.\n"
+                    "Decision authority: project owner\n"
                 ),
                 "docs/release-readiness/0.4.0-human-acceptance.de.md": (
-                    "Kandidaten-Commit: abc123\nAbgeschlossen am: 2026-10-09\n"
-                    "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
+                    "Entscheidung: auf 0.5.0 verschoben\nNicht durchgeführt; kein Testergebnis.\n"
+                    "Entscheidungsträger: Projektverantwortlicher\n"
                 ),
             }
             for relative_path, content in records.items():
@@ -62,18 +64,43 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text(content, encoding="utf-8")
 
             self.assertEqual(unfinished_gates(root, "0.4.0"), [])
-            self.assertEqual(unfinished_gates(root, "0.4.0", "abc123"), [])
-            wrong_candidate = unfinished_gates(root, "0.4.0", "def456")
-            self.assertTrue(any("different candidate commit" in item for item in wrong_candidate))
 
             english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
             english.write_text(
-                "Candidate commit: PENDING\nCompleted on: 2026-10-09\n"
-                "Decision: accepted\nDecision authority: project owner\n",
+                "Decision: deferred to 0.5.0\nNot conducted; not a test result.\n"
+                "Decision authority: project owner\nPENDING",
                 encoding="utf-8",
             )
             failures = unfinished_gates(root, "0.4.0")
             self.assertTrue(any("contains placeholders" in item for item in failures))
+
+    def test_050_human_acceptance_requires_a_real_candidate_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative_path, gates in REQUIRED_GATES_050.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("\n".join(f"- [x] {marker}" for _, marker in gates), encoding="utf-8")
+            records = {
+                "docs/release-readiness/0.5.0-human-acceptance.en.md": (
+                    "Candidate commit: abc123\nCompleted on: 2026-10-09\n"
+                    "Observations: redacted\nBlockers: none\n"
+                    "Decision: accepted\nDecision authority: project owner\n"
+                ),
+                "docs/release-readiness/0.5.0-human-acceptance.de.md": (
+                    "Kandidaten-Commit: abc123\nAbgeschlossen am: 2026-10-09\n"
+                    "Beobachtungen: redigiert\nBlockaden: keine\n"
+                    "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
+                ),
+            }
+            for relative_path, content in records.items():
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            self.assertEqual(unfinished_gates(root, "0.5.0", "abc123"), [])
+            self.assertTrue(any("different candidate commit" in failure for failure in unfinished_gates(root, "0.5.0", "def456")))
+            (root / "docs/release-readiness/0.5.0-human-acceptance.en.md").unlink()
+            self.assertTrue(any("record missing" in failure for failure in unfinished_gates(root, "0.5.0")))
 
     def test_all_required_gates_can_be_checked(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -174,6 +201,18 @@ class ReleaseReadinessTests(unittest.TestCase):
         )
         self.assertIn(
             "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.de.md",
+            workflow,
+        )
+        self.assertIn("No independent human acceptance study was conducted for 0.4.0", workflow)
+        self.assertIn("mandatory 0.5.0", workflow)
+        self.assertIn('"${package_version}" == "0.5.0"', workflow)
+        self.assertIn("docs/release-readiness/0.5.0-human-acceptance.en.md", workflow)
+        self.assertIn(
+            "blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.en.md",
+            workflow,
+        )
+        self.assertIn(
+            "blob/v0.5.0/docs/release-readiness/0.5.0-human-acceptance.de.md",
             workflow,
         )
 

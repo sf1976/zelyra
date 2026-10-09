@@ -352,30 +352,27 @@ Feature eines bestimmten Anbieters.
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
 - [🧪] `zelyra db plan --format=json` erzeugt einen versionierten
-  `zelyra.schema-plan/v1`-Plan mit stabiler ID, Schema-Fingerprints, Drift,
-  SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. `db apply` kann die
-  Plan-ID entgegennehmen und lehnt einen veralteten Plan vor Vorprüfungen oder
-  SQL ab; ein SQLite-CLI-Integrationstest prüft Ablehnung und Anwendung mit
-  einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. `db apply` speichert
-  Alle drei Backends speichern Schema-Fingerprints und Migrationsergebnisse in
-  `_zelyra_schema_history`; `db history` unterstützt MariaDB, SQLite und
-  PostgreSQL und zeigt angewendete, fehlgeschlagene und unterbrochene Läufe.
-  Aktive Migrationen zeigt `db history` zusätzlich bei MariaDB an. SQLite- und
-  PostgreSQL-Abfragen warten auf die transaktionale Migrationssperre und
-  markieren danach verbliebene `running`-Einträge als unterbrochen. MariaDB
-  verwendet eine datenbankweite Advisory-Sperre. SQLite und PostgreSQL wenden
-  DDL und den Status `applied` in derselben Transaktion an.
-  SQLite- und PostgreSQL-E2E-Tests prüfen den gespeicherten Verlauf.
-  MariaDB-E2E-Tests unterbrechen zwischen
-  DDL-Schritten und während ein gesendetes `ALTER TABLE` auf eine gehaltene
-  Metadatensperre wartet und prüfen anschließend die Wiederherstellung mit
-  einem neuen Plan. Ein Absturz während der eigentlichen MariaDB-DDL-Ausführung
-  kann deren Ergebnis weiterhin unklar lassen. Sicheres inverses SQL wird nicht
-  erzeugt und der JSON-Plan weist `rollback.generated: false` aus. `db apply`
-  führt PostgreSQL- und SQLite-DDL transaktional aus; Tests prüfen das Rollback
-  bei einem Fehler.
-  MariaDB-DDL kann Teilzustände hinterlassen. Backups bleiben
-  Betreiberverantwortung.
+  `zelyra.schema-plan/v1`-Plan mit stabiler Vorwärts-ID, Schema-Fingerprints,
+  Drift, geordneten SQL-Schritten, Datenvorprüfungen und ausdrücklichem
+  Freigabeflag. Wenn alle Rückwärtsoperationen unterstützt werden, enthält er
+  auch einen inversen Schema-Diff mit eigener ID, erwarteten Fingerprints,
+  Vorprüfungen und Freigabebedarf. Nicht unterstützte Umkehrungen bleiben
+  fail-closed. Rückwärts-DDL wird nie automatisch ausgeführt und kann spätere
+  Daten löschen; jede Schemaänderung benötigt weiterhin ein unabhängig
+  geprüftes Backup. `db apply` akzeptiert die geprüfte Plan-ID und lehnt
+  veraltete Pläne vor Vorprüfungen oder SQL ab; Integrationstests prüfen
+  Ablehnung, Vorwärtsanwendung und ausdrückliche Rückwärtsanwendung nach
+  Wiederherstellung der vorherigen Quelle. Alle drei Backends protokollieren
+  Schema-Fingerprints und Ergebnisse in `_zelyra_schema_history`; `db history`
+  zeigt angewendete, fehlgeschlagene und unterbrochene Läufe. MariaDB speichert
+  Prüfpunkte je DDL-Schritt und verwendet eine datenbankweite Advisory-Sperre;
+  E2E-Tests prüfen die Wiederherstellung nach Abbruch zwischen Schritten und
+  während DDL auf eine Metadatensperre wartet. Ein Absturz während tatsächlicher
+  MariaDB-DDL kann das Ergebnis des Befehls weiterhin unklar lassen.
+  PostgreSQL und SQLite wenden DDL transaktional an. Lesende Vorprüfungen
+  kontrollieren NULL-Werte, Pflichtspalten, Dubletten neuer Unique-Indizes und
+  verwaiste Fremdschlüssel, verhindern aber keine konkurrierenden Schreibzugriffe.
+  Backups bleiben Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
   `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und
