@@ -10,8 +10,9 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 - Healthcheck-Kategorien, die 30-Sekunden-Verbindungsfrist und sichere
   Wiederholungsgrenzen stehen in der
   [HTTP-Betriebsanleitung](http-operations.de.md). Die TCP-Probe prüft die
-  Listener-Erreichbarkeit; Readiness gehört zur Anwendung. Zelyra bietet keinen
-  eingebauten Health-Endpunkt und wiederholt keine Requests oder Transaktionen.
+  Listener-Erreichbarkeit; Readiness gehört zur Anwendung. Eine reservierte,
+  datenbankfreie Liveness-Route bestätigt die Anfrageverarbeitung. Zelyra
+  wiederholt keine Requests oder Transaktionen.
 - Zelyras eingebauter HTTP-Server terminiert kein TLS. Für öffentliche oder
   LAN-erreichbare Dienste ist ein vertrauenswürdiger TLS-Proxy erforderlich;
   der Anwendungsport muss vor direktem Zugriff geschützt sein.
@@ -33,8 +34,11 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 - Rate Limits erschöpfen mit `429` und `Retry-After`. Sie sind keine
   DDoS-Abwehr und ersetzen weder Edge-Limits noch persistente Kontrollen.
 - HTTP-Verbindungen haben eine feste 30-Sekunden-Frist. Sie schließt Lese- und
-  Schreibvorgänge ein, bricht synchrone Handler aber nicht ab; ein blockierter
-  Handler kann weiter den einzelnen Serverprozess belegen.
+  Schreibvorgänge ein. MariaDB-Poolwartezeiten und Abfragen nutzen die
+  verbleibende Request-Frist; abgelaufene Abfragen werden serverseitig
+  abgebrochen. CPU-intensive und andere blockierende Handler-Arbeit bleibt
+  synchron und kann weiter den einzelnen Serverprozess belegen; eine
+  Client-Trennung wird erst beim Schreiben der Antwort erkannt.
 
 ## Konten und Datenbankbetrieb
 

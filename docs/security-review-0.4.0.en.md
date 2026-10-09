@@ -9,9 +9,9 @@ or human acceptance.
 
 - Health-check categories, the 30-second connection deadline, and safe retry
   boundaries are documented in the [HTTP operations guide](http-operations.en.md).
-  Listener reachability is a TCP check; readiness is application-owned.
-  Zelyra has no built-in health endpoint and does not retry requests or
-  transactions.
+  Listener reachability is a TCP check; readiness is application-owned. A
+  reserved, database-free liveness route confirms request dispatch. Zelyra does
+  not retry requests or transactions.
 - Zelyra's built-in HTTP server does not terminate TLS. Public or LAN-facing
   deployments need a trusted TLS proxy, and the application port must be
   protected from direct access.
@@ -32,8 +32,10 @@ or human acceptance.
 - Exhausted rate limits return `429` and `Retry-After`. They are not DDoS
   protection and do not replace edge limits or persistent controls.
 - HTTP connections have a fixed 30-second deadline. It covers reads and writes
-  but does not cancel synchronous handlers; a blocked handler can still occupy
-  the single server process.
+  MariaDB pool waits and statements use the remaining request deadline, and
+  timed-out statements are aborted server-side. CPU-bound and other blocking
+  handler work remains synchronous and can still occupy the single server
+  process; client disconnect is only detected when writing the response.
 
 ## Accounts and database operations
 
