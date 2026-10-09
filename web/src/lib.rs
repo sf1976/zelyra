@@ -1283,7 +1283,7 @@ impl WebApp {
                 if api_request_requires_origin_check(request)
                     && !self.api_request_origin_is_allowed(request)
                 {
-                    return self.apply_api_metadata(&api, self.apply_api_cors(
+                    return self.apply_api_metadata(api, self.apply_api_cors(
                         request,
                         Response::json(
                             403,
@@ -1291,9 +1291,9 @@ impl WebApp {
                         ),
                     ));
                 }
-                if let Some(retry_after) = self.api_rate_limit_retry_after(&api, request) {
+                if let Some(retry_after) = self.api_rate_limit_retry_after(api, request) {
                     return self.apply_api_metadata(
-                        &api,
+                        api,
                         self.apply_api_cors(
                             request,
                             Response::json(
@@ -1311,10 +1311,10 @@ impl WebApp {
                     self,
                     self.database_url.as_deref(),
                 ) {
-                    return self.apply_api_metadata(&api, self.apply_api_cors(request, response));
+                    return self.apply_api_metadata(api, self.apply_api_cors(request, response));
                 }
                 return self.apply_api_metadata(
-                    &api,
+                    api,
                     self.apply_api_cors(request, (api.handler)(request, &path_params)),
                 );
             }
