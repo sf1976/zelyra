@@ -48,6 +48,11 @@ def generate_sbom(
     if len(cli) != 1:
         raise ValueError("Cargo metadata must contain exactly one zelyra-cli package")
     root = cli[0]
+    release_version = tag[1:].split("-", 1)[0]
+    if root["version"] != release_version:
+        raise ValueError(
+            f"release tag version {release_version} does not match zelyra-cli {root['version']}"
+        )
     nodes = {node["id"]: node for node in (metadata.get("resolve") or {}).get("nodes", [])}
     if root["id"] not in nodes:
         raise ValueError("Cargo metadata resolve graph is missing zelyra-cli")
@@ -129,7 +134,7 @@ def generate_sbom(
         "packages": packages + [{
             "name": "Zelyra CLI binary",
             "SPDXID": "SPDXRef-Zelyra-Binary",
-            "versionInfo": tag.lstrip("v").split("-", 1)[0],
+            "versionInfo": release_version,
             "downloadLocation": "NOASSERTION",
             "filesAnalyzed": False,
             "licenseConcluded": "NOASSERTION",

@@ -13,7 +13,8 @@ releases follow Semantic Versioning independently of the language line.
   entfallen und Zeitüberschreitungen beenden den Listener nicht mehr.
   Synchrone Handler lassen sich weiterhin nicht abbrechen.
 - Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
-  verification binds each SBOM to its binary SHA-256. Dependency/license audit
+  verification binds each SBOM to its binary SHA-256 and rejects a tag/version
+  mismatch. Dependency/license audit
   and provenance remain incomplete. / Release-Builds hängen jetzt
   deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
   jedes SBOM an den SHA-256-Hash der Binärdatei. Dependency-/Lizenzaudit und

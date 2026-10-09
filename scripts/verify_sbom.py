@@ -12,11 +12,14 @@ from typing import Any
 
 
 def verify_sbom(*, sbom_path: Path, binary_path: Path, tag: str, target: str) -> dict[str, Any]:
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", tag):
+        raise ValueError("invalid release tag")
     document = json.loads(sbom_path.read_text(encoding="utf-8"))
     if document.get("spdxVersion") != "SPDX-2.3":
         raise ValueError("SBOM must use SPDX-2.3")
     if document.get("name") != f"Zelyra {tag} ({target})":
         raise ValueError("SBOM release identity does not match tag and target")
+    release_version = tag[1:].split("-", 1)[0]
     if not re.fullmatch(r"https://zelyra\.dev/spdx/[0-9a-f]{64}", document.get("documentNamespace", "")):
         raise ValueError("SBOM document namespace is invalid")
     packages = document.get("packages")
@@ -25,6 +28,8 @@ def verify_sbom(*, sbom_path: Path, binary_path: Path, tag: str, target: str) ->
     binaries = [package for package in packages if package.get("SPDXID") == "SPDXRef-Zelyra-Binary"]
     if len(binaries) != 1:
         raise ValueError("SBOM must describe exactly one Zelyra binary")
+    if binaries[0].get("versionInfo") != release_version:
+        raise ValueError("SBOM binary version does not match release tag")
     checksums = binaries[0].get("checksums", [])
     digest = hashlib.sha256(binary_path.read_bytes()).hexdigest()
     if {item.get("checksumValue") for item in checksums if item.get("algorithm") == "SHA256"} != {digest}:

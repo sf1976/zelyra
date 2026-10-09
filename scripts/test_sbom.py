@@ -67,6 +67,13 @@ checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         with self.assertRaisesRegex(ValueError, "SHA-256"):
             verify_sbom(sbom_path=path, binary_path=self.binary, tag="v0.4.0", target="x86_64-unknown-linux-gnu")
 
+    def test_generator_rejects_release_tag_version_mismatch(self) -> None:
+        with self.assertRaisesRegex(ValueError, "does not match zelyra-cli"):
+            generate_sbom(metadata_path=self.metadata, lock_path=self.lock,
+                binary_path=self.binary, output_path=self.root / "bad.json",
+                tag="v0.5.0", target="x86_64-unknown-linux-gnu",
+                source_date_epoch=1_800_000_000)
+
 
 if __name__ == "__main__":
     unittest.main()
