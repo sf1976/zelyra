@@ -1062,6 +1062,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1090,6 +1091,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1128,6 +1130,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1157,6 +1160,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -1195,16 +1199,19 @@ und ohne `id`-Spalte. Flüchtige Speichersitzungen werden nur während der
 Laufzeit des Prozesses angezeigt. Die Seite zeigt weder Bearer-Tokens noch
 Bearer-Tokens werden nie ausgegeben. Bei älteren Sitzungstabellen ohne
 `id`-Spalte dient der gespeicherte Token-Hash als verborgenes Kennzeichen zum
-Beenden der Sitzung. Gerätenamen, IP-Adressen oder Browserverläufe werden
-nicht erfasst oder angezeigt. Der Pfad `/account/sessions` ist bei
-konfigurierter Authentifizierung reserviert.
+Beenden der Sitzung. Eine optionale Spalte `device_label: String(255)` speichert
+eine begrenzte Browser-Angabe für neue Sitzungen; der Wert stammt vom Client,
+kann irreführend sein und wird HTML-escaped. IP-Adressen und Browserverläufe
+werden nicht gespeichert. Ohne diese Spalte erscheinen keine Geräteangaben.
+Der Pfad `/account/sessions` ist bei konfigurierter Authentifizierung reserviert.
 
 Sind dauerhafte Sitzungen mit einer `id`-Spalte und die Rollenverwaltung konfiguriert, sehen
 berechtigte Administratoren bis zu 100 noch nicht abgelaufene Sitzungen,
 nach Ablauf sortiert. Jede Zeile zeigt die Datenbank-ID, die E-Mail-Adresse
 und den Ablaufzeitpunkt in Datenbankzeit. Weder Browser-Token noch dessen
-Hash werden angezeigt. Gerätenamen und IP-Verläufe werden nicht erfasst
-oder aus anderen Daten abgeleitet.
+Hash werden angezeigt. Die optionale Browser-Angabe wird nur gezeigt, wenn die
+Sitzungstabelle die entsprechende Spalte deklariert. Sie ist keine bestätigte
+Geräteidentität; IP-Verläufe werden nicht gespeichert.
 
 Mit **Sitzung sperren** beendest du eine einzelne Sitzung. Der POST benötigt
 das konfigurierte Verwaltungsrecht, ein gültiges CSRF-Token und einen
@@ -1254,6 +1261,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {
@@ -2493,6 +2501,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
+    device_label: String(255)
 }
 
 table user_permissions {

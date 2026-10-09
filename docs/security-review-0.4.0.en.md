@@ -56,8 +56,11 @@ or human acceptance.
   active token. An E2E sets `expires_at = NOW()` and verifies rejection; an
   equality test with a frozen clock, SMTP outage handling, and the mail/token
   lifecycle still need independent review.
-- Session administration is partially implemented. Device metadata and full
-  self-service remain open; account-lifecycle acceptance has not passed.
+- Session administration is partially implemented. Session lists can show a
+  bounded, HTML-escaped `User-Agent` label when the persistent session schema
+  declares `device_label`; in-memory sessions capture the same label. The value
+  is client-controlled and is not a verified device identity. IP addresses
+  are not captured. Account-lifecycle acceptance has not passed.
 - MariaDB TLS verifies the certificate chain and host names according to the
   documented mode. TLS still terminates at the database server; app HTTP is a
   separate connection. Windows TLS still needs its own matrix evidence.

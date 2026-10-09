@@ -470,11 +470,17 @@ echo "[7/10] showing only permitted CRUD actions to a view-only user"
 viewer_cookie="${temp_dir}/viewer.cookies"
 viewer_login_status="$(request_status "${temp_dir}/viewer-login.html" \
     --cookie-jar "${viewer_cookie}" \
+    --user-agent "Zelyra Protected E2E" \
     --data-urlencode "_zelyra_csrf=${csrf}" \
     --data-urlencode "email=${viewer_email}" \
     --data-urlencode "password=${test_password}" \
     "${base_url}/login")"
 [[ "${viewer_login_status}" == "303" ]]
+viewer_device_label="$(client --batch --skip-column-names -e "SELECT device_label FROM auth_sessions WHERE user_id = '${viewer_user_id}' ORDER BY id DESC LIMIT 1")"
+if [[ "${viewer_device_label}" != "Zelyra Protected E2E" ]]; then
+    echo "error: login did not persist the expected device label (stored value: '${viewer_device_label}')" >&2
+    exit 1
+fi
 viewer_admin_status="$(request_status "${temp_dir}/viewer-admin.html" \
     --cookie "${viewer_cookie}" \
     "${base_url}/admin/access")"
@@ -546,6 +552,7 @@ primary_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth
 curl --silent --show-error --fail --cookie "${primary_cookie}" \
     "${base_url}/admin/access" -o "${temp_dir}/sessions.html"
 grep -Fq 'Active sessions' "${temp_dir}/sessions.html"
+grep -Fq 'Zelyra Protected E2E' "${temp_dir}/sessions.html"
 grep -Fq "name=\"session_id\" value=\"${viewer_session_id}\"" "${temp_dir}/sessions.html"
 ! grep -Fq 'token_hash' "${temp_dir}/sessions.html"
 while IFS= read -r token_hash; do
@@ -594,6 +601,7 @@ status="$(request_status "${temp_dir}/revoked-viewer.html" --cookie "${viewer_co
 
 viewer_refresh_login_status="$(request_status "${temp_dir}/viewer-refresh-login.html" \
     --cookie-jar "${viewer_cookie}" \
+    --user-agent "Zelyra Protected E2E" \
     --data-urlencode "_zelyra_csrf=${csrf}" \
     --data-urlencode "email=${viewer_email}" \
     --data-urlencode "password=${test_password}" \
@@ -611,6 +619,7 @@ viewer_sessions_status="$(request_status "${temp_dir}/viewer-sessions.html" \
     --cookie "${viewer_cookie}" "${base_url}/account/sessions")"
 [[ "${viewer_sessions_status}" == "200" ]]
 grep -Fq 'Your sessions' "${temp_dir}/viewer-sessions.html"
+grep -Fq 'Zelyra Protected E2E' "${temp_dir}/viewer-sessions.html"
 ! grep -Fq 'token_hash' "${temp_dir}/viewer-sessions.html"
 while IFS= read -r token_hash; do
     [[ -z "${token_hash}" ]] || ! grep -Fq "${token_hash}" "${temp_dir}/viewer-sessions.html"

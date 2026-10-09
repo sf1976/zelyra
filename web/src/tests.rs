@@ -1981,6 +1981,7 @@ fn rotating_memory_session_invalidates_previous_token() {
             user_id: None,
             permissions: Vec::new(),
             expires_at: Instant::now() + SESSION_LIFETIME,
+            device: None,
         },
     );
     let auth = AuthRoute {
@@ -2026,12 +2027,48 @@ fn expired_memory_session_is_rejected_and_removed() {
                 user_id: Some(7),
                 permissions: vec!["auth.manage".into()],
                 expires_at,
+                device: None,
             },
         );
     }
     assert!(memory_session(&app, "expired").is_none());
     assert!(!app.sessions.lock().unwrap().contains_key("expired"));
     assert_eq!(memory_session(&app, "valid").unwrap().user_id, Some(7));
+}
+
+#[test]
+fn session_device_metadata_is_bounded_and_escaped_in_self_service_view() {
+    let request =
+        parse_request("GET / HTTP/1.1\r\nUser-Agent: Browser <script>\u{0001}\r\n\r\n").unwrap();
+    assert_eq!(
+        request_device_metadata(&request).as_deref(),
+        Some("Browser <script>")
+    );
+    let no_user_agent = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    assert_eq!(request_device_metadata(&no_user_agent), None);
+
+    let long_request = parse_request(&format!(
+        "GET / HTTP/1.1\r\nUser-Agent: {}\r\n\r\n",
+        "a".repeat(300)
+    ))
+    .unwrap();
+    assert_eq!(request_device_metadata(&long_request).unwrap().len(), 255);
+
+    let rows = [AccountSessionRow {
+        key: "id:7".into(),
+        number: Some("7".into()),
+        expires: "tomorrow".into(),
+        expires_relative: false,
+        current: true,
+        device: Some("<script>".into()),
+    }];
+    let html = localize_html(
+        &render_account_sessions(&account_sessions_test_auth(), &rows, UiLanguage::English),
+        UiLanguage::English,
+    );
+    assert!(html.contains("&lt;script&gt;"));
+    assert!(!html.contains("<script>"));
+    assert!(html.contains("Browser or device"));
 }
 
 #[test]

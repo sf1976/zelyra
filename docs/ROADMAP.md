@@ -28,8 +28,9 @@ principles; the roadmap below tracks what is actually implemented.
   persistent sessions, CSRF/permission checks and an audit request event.
   `/account/sessions` also lists and revokes the signed-in user's sessions,
   including in-memory sessions, with CSRF and same-origin checks. In-memory
-  sessions expire after 24 hours. Device metadata remain open, and password
-  recovery is still experimental; this does not complete the account lifecycle
+  sessions expire after 24 hours. A bounded, escaped `User-Agent` label is
+  optionally stored when the session table declares `device_label`; it is not a
+  verified device identity. Password recovery is still experimental; this does not complete the account lifecycle
   milestone.
   Legacy session tables without an `id` column retain their previous behavior;
   administrative listing and revocation still require that column.
