@@ -234,6 +234,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("--print-candidate-tag", workflow)
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn('"${EVENT_NAME}" != "pull_request"', workflow)
+        self.assertIn("docs/release-notes/0.4.0.en.md", workflow)
+        self.assertIn("docs/release-notes/0.4.0.de.md", workflow)
         self.assertIn(
             "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md",
             workflow,
