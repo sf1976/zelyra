@@ -650,7 +650,10 @@ Feature eines bestimmten Anbieters.
 ## 9. Qualität, Betrieb und Governance
 
 - [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
-- [ ] Fuzzing für Lexer, Parser, SQL-Binder, Template-Renderer und HTTP-Parser.
+- [~] Begrenzte deterministische Mutationsregressionen prüfen Lexer/Parser,
+  SQL-Binder, Template-Renderer und HTTP-Parser im normalen CI-Lauf (2.048
+  Eingaben je Pfad). Coverage-guided-Fuzzing und ein minimiertes Fehlerkorpus
+  bleiben offen.
 - [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen teilweise
   in CI; ein vollständiger menschlicher Audit und weitere Security-Regressionen
   bleiben offen.

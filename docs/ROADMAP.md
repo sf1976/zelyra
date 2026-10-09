@@ -605,7 +605,10 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [ ] Full integration matrix for supported OS, database, browser, and runtime
   versions.
-- [ ] Fuzzing for lexer, parser, SQL binder, template renderer, and HTTP parser.
+- [~] Deterministic bounded mutation regressions exercise the lexer/parser, SQL
+  binder, template renderer, and HTTP parser in normal CI (2,048 inputs per
+  path). Coverage-guided fuzzing and minimized crash-corpus retention remain
+  open.
 - [~] Security regression coverage and dependency/license scanning run in CI;
   a complete human audit and the remaining security regressions are still open.
 - [ ] Regression guard against unsolicited network or telemetry activity;

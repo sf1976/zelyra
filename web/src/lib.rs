@@ -7828,4 +7828,6 @@ fn handle_connection_until(
 }
 
 #[cfg(test)]
+mod fuzz_regressions;
+#[cfg(test)]
 mod tests;

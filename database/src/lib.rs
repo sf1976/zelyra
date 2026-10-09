@@ -3356,6 +3356,36 @@ fn percent_decode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn mariadb_sql_binder_handles_reproducible_mutated_queries() {
+        let seeds = [
+            "SELECT ':literal', value FROM items WHERE id = :id",
+            "UPDATE customers SET name = :name WHERE id = :id",
+            "SELECT `a:b`, \"c:d\" FROM t -- :ignored\nWHERE x=:x",
+            "INSERT INTO events (payload) VALUES ('{\"url\":\"https://x:y\"}')",
+            "SELECT \"Grüße\", city FROM customers WHERE city = :city",
+            "SELECT value /* :comment */ FROM items WHERE id=:id OR parent=:id",
+        ];
+        let parameters = (0..32)
+            .map(|index| (format!("p{index}"), QueryValue::String("safe-value".into())))
+            .collect::<Vec<_>>();
+        for sql in corpus(&seeds, 1024, 12) {
+            let query = Query {
+                sql,
+                params: parameters.clone(),
+            };
+            let first = prepare_mariadb_query(&query);
+            let second = prepare_mariadb_query(&query);
+            match (first, second) {
+                (Ok(first), Ok(second)) => assert_eq!(first, second),
+                (Err(first), Err(second)) => assert_eq!(first.message, second.message),
+                _ => panic!("SQL binder result changed between identical inputs"),
+            }
+        }
+    }
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
 
