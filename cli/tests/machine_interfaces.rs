@@ -908,7 +908,14 @@ fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
     assert_eq!(document["backend"], "sqlite");
     assert_eq!(document["drift"], "present");
     assert!(document["requires_operator_approval"].as_bool().unwrap());
-    assert_eq!(document["rollback"]["generated"], false);
+    assert_eq!(document["rollback"]["generated"], true);
+    assert!(document["rollback"]["plan_id"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
+    assert_eq!(document["rollback"]["requires_verified_backup"], true);
+    assert_eq!(document["rollback"]["safe_to_apply_automatically"], false);
+    assert_eq!(document["rollback"]["changes"][0]["risk"], "destructive");
     assert_eq!(document["automatic_retries"], false);
     assert!(document["plan_id"].as_str().unwrap().starts_with("sha256:"));
     assert_eq!(
@@ -921,6 +928,95 @@ fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
     );
     fs::remove_file(&source).unwrap();
     fs::remove_dir_all(source.parent().unwrap()).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn db_plan_reverse_id_applies_only_after_restoring_source_and_reviewing_it() {
+    let directory = temporary_directory("reviewed-reverse-plan");
+    fs::create_dir_all(&directory).unwrap();
+    let database_path = directory.join("current.sqlite");
+    let database_url = format!("sqlite://{}", database_path.display());
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT);",
+    )
+    .unwrap();
+    let old_source = temporary_source(
+        "reviewed-reverse-old",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto }\n",
+    );
+    let new_source = temporary_source(
+        "reviewed-reverse-new",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto name: String(30) required }\n",
+    );
+    let run_plan = |source: &std::path::Path| {
+        Command::new(binary())
+            .args(["db", "plan"])
+            .arg(source)
+            .args(["--format=json"])
+            .env("DATABASE_URL", &database_url)
+            .env_remove("ZELYRA_DATABASE_MAIN_URL")
+            .output()
+            .unwrap()
+    };
+    let forward_plan = run_plan(&new_source);
+    assert!(forward_plan.status.success());
+    let forward_json: serde_json::Value = serde_json::from_slice(&forward_plan.stdout).unwrap();
+    let forward_id = forward_json["plan_id"].as_str().unwrap();
+    let reverse_id = forward_json["rollback"]["plan_id"].as_str().unwrap();
+
+    let apply_forward = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&new_source)
+        .args(["--allow-risky", "--plan-id", forward_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        apply_forward.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&apply_forward.stdout),
+        String::from_utf8_lossy(&apply_forward.stderr)
+    );
+    assert!(zelyra_database::inspect_sqlite(&database_url)
+        .unwrap()
+        .tables[0]
+        .columns
+        .iter()
+        .any(|column| column.name == "name"));
+
+    let reviewed_reverse = run_plan(&old_source);
+    assert!(reviewed_reverse.status.success());
+    let reverse_json: serde_json::Value = serde_json::from_slice(&reviewed_reverse.stdout).unwrap();
+    assert_eq!(reverse_json["plan_id"], reverse_id);
+    let apply_reverse = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&old_source)
+        .args(["--allow-risky", "--plan-id", reverse_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        apply_reverse.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&apply_reverse.stdout),
+        String::from_utf8_lossy(&apply_reverse.stderr)
+    );
+    let restored = zelyra_database::inspect_sqlite(&database_url).unwrap();
+    let customers = restored
+        .tables
+        .iter()
+        .find(|table| table.name == "customers")
+        .unwrap();
+    assert!(!customers.columns.iter().any(|column| column.name == "name"));
+
+    fs::remove_file(&old_source).unwrap();
+    fs::remove_dir_all(old_source.parent().unwrap()).unwrap();
+    fs::remove_file(&new_source).unwrap();
+    fs::remove_dir_all(new_source.parent().unwrap()).unwrap();
     fs::remove_dir_all(directory).unwrap();
 }
 

@@ -31,27 +31,39 @@ releases follow Semantic Versioning independently of the language line.
   Warteschlange aufzubauen. Socket-Tests prüfen eine langsame neben einer
   schnellen Anfrage und die Worker-Grenze; synchrone Handler bleiben
   unabbrechbar.
-- `zelyra db plan --format=json` now emits a versioned schema plan with stable
-  fingerprints, drift, preflights, and approval requirements; safe inverse SQL
-  remains unimplemented. `db apply --plan-id` can reject a stale reviewed plan
-  before preflights or SQL. / `zelyra db plan --format=json` gibt jetzt einen
+- `zelyra db plan --format=json` emits a versioned schema plan with stable
+  fingerprints, drift, preflights, and approval requirements. It includes a
+  fingerprint-bound reverse plan ID and SQL steps when all reverse operations
+  are supported; reverse DDL always remains manual and requires a verified
+  backup. CLI integration tests apply a forward plan, restore the prior schema
+  source, review the reverse plan ID, and apply it explicitly. Unsupported
+  reversals fail closed. / `zelyra db plan --format=json` gibt einen
   versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
-  Freigabebedarf aus; sicheres inverses SQL bleibt offen. `db apply --plan-id`
-  lehnt einen nachträglich veralteten Plan vor Vorprüfungen und SQL ab.
+  Freigabebedarf aus. Wenn alle Rückwärtsoperationen unterstützt werden,
+  enthält er eine an Fingerprints gebundene Rückwärts-Plan-ID und SQL-Schritte;
+  Rückwärts-DDL bleibt stets manuell und benötigt ein geprüftes Backup.
+  CLI-Integrationstests wenden einen Vorwärtsplan an, stellen die frühere
+  Schemaquelle wieder her, prüfen die Rückwärts-Plan-ID und wenden sie
+  ausdrücklich an. Nicht unterstützte Umkehrungen werden fail-closed
+  ausgewiesen.
 - MariaDB `db apply` now journals plan fingerprints and each DDL checkpoint in
   `_zelyra_schema_history`; `db history` reports active, applied, failed, and
   interrupted runs. A database-scoped advisory lock blocks concurrent Zelyra
   migrations. An E2E test kills a migration between DDL statements and
-  verifies recovery with a newly reviewed plan; crashes during a statement and
-  inverse SQL remain open. DDL client connections also use configured verified
-  TLS and statement timeouts. / MariaDB `db apply` speichert Plan-Fingerprints
+  verifies recovery with a newly reviewed plan; ambiguity after a crash during
+  active DDL remains open. Supported reverse plans are now emitted for manual
+  review, but reverse DDL can discard later data and does not replace backups.
+  DDL client connections also use configured verified TLS and statement
+  timeouts. / MariaDB `db apply` speichert Plan-Fingerprints
   und Prüfpunkte jedes DDL-Schritts in `_zelyra_schema_history`; `db history`
   zeigt aktive, angewendete, fehlgeschlagene und unterbrochene Läufe. Eine
   datenbankweite Advisory-Sperre verhindert parallele Zelyra-Migrationen. Ein
   E2E-Test beendet eine Migration zwischen DDL-Befehlen und prüft die
-  Wiederaufnahme mit einem neu geprüften Plan; Abstürze innerhalb eines
-  Befehls und inverses SQL bleiben offen. DDL-Clientverbindungen verwenden
-  ebenfalls konfiguriertes, verifiziertes TLS und Statement-Timeouts.
+  Wiederherstellung mit einem neu geprüften Plan; Mehrdeutigkeit nach einem
+  Absturz während aktiver DDL bleibt offen. Unterstützte Rückwärtspläne werden
+  nun manuell geprüft; Rückwärts-DDL kann spätere Daten löschen und ersetzt
+  keine Backups. DDL-Clientverbindungen verwenden ebenfalls konfiguriertes,
+  verifiziertes TLS und Statement-Timeouts.
 - Generated authentication pages now provide `/account/sessions` for
   self-service session listing and revocation, limited to the signed-in user.
   CSRF and same-origin checks apply; revoking the current session clears its

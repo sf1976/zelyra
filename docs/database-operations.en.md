@@ -115,9 +115,15 @@ verifying the target again.
   SQLite and PostgreSQL commit DDL and the applied status in one transaction;
   history reads wait for their migration lock and mark leftover `running` rows
   interrupted. The internal table is omitted from normal schema inspection.
-- The JSON plan does not generate safe inverse SQL. `rollback.generated`
-  remains `false`; safe recovery still requires a verified operator-managed
-  backup.
+- The JSON plan includes a reviewed reverse schema diff when every reverse
+  operation is supported. `rollback.generated` indicates that a complete plan
+  exists; its `plan_id` is bound to the expected post-migration fingerprint,
+  and it lists reverse SQL steps, preflights, and approval requirements. It is
+  never applied automatically. Restore the prior schema source, verify an
+  independent backup, generate and review a fresh plan against the actual
+  schema, then apply that plan with its reviewed ID and any required explicit
+  approval. Reverse DDL can discard data written after the forward migration;
+  `rollback.generated` does not mean data-safe or backup-free.
 - `zelyra db plan` previews the detected schema difference; it does not back
   up data or reserve the database state.
 - Before applying any plan SQL, `db apply` checks existing rows for NULLs
