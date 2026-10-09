@@ -38,6 +38,10 @@ den tatsächlich implementierten Stand.
   ausgeschlossene Routen und verweigerte MariaDB-Zugriffe. Die Testkonten
   erlauben nur Lesen; vollständige schreibende CRUD-Abnahme bleibt offen.
 
+- [~] Der 0.4-Release-Workflow erstellt deterministische SPDX-2.3-SBOMs für
+  Linux und Windows und prüft den Binary-Hash. Dependency-/Lizenzaudit,
+  Provenance und Prüfung der nativen Artefakte bleiben offen.
+
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
   Maps, Records, Option, Result und Pattern Matching.

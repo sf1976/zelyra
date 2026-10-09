@@ -10,6 +10,8 @@ on:
       - 'Cargo.lock'
       - '**/Cargo.toml'
       - '**/src/**'
+      - 'scripts/generate_sbom.py'
+      - 'scripts/verify_sbom.py'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -176,6 +178,23 @@ jobs:
             --tag "${RELEASE_TAG}" \
             --target "${TARGET}" \
             --run-binary
+      - name: Generate and verify Linux SBOM
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          source_date_epoch="$(git log -1 --format=%ct)"
+          cargo metadata --locked --format-version 1 > "${RUNNER_TEMP}/zelyra-cargo-metadata.json"
+          sbom="release-out/zelyra-${RELEASE_TAG}-${TARGET}.spdx.json"
+          python3 scripts/generate_sbom.py \
+            --metadata "${RUNNER_TEMP}/zelyra-cargo-metadata.json" \
+            --binary "target/${TARGET}/release/zelyra" \
+            --output "${sbom}" --tag "${RELEASE_TAG}" --target "${TARGET}" \
+            --source-date-epoch "${source_date_epoch}"
+          python3 scripts/verify_sbom.py --sbom "${sbom}" \
+            --binary "target/${TARGET}/release/zelyra" --tag "${RELEASE_TAG}" --target "${TARGET}"
       - name: Package Windows release
         if: runner.os == 'Windows'
         shell: pwsh
@@ -205,6 +224,24 @@ jobs:
             --tag $env:RELEASE_TAG `
             --target $env:TARGET `
             --run-binary
+      - name: Generate and verify Windows SBOM
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          $sourceDateEpoch = [long](git log -1 --format=%ct)
+          cargo metadata --locked --format-version 1 | Set-Content -Path "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" -Encoding utf8NoBOM
+          $sbom = "release-out/zelyra-$env:RELEASE_TAG-$env:TARGET.spdx.json"
+          python scripts/generate_sbom.py `
+            --metadata "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" `
+            --binary "target/$env:TARGET/release/zelyra.exe" `
+            --output $sbom --tag $env:RELEASE_TAG --target $env:TARGET `
+            --source-date-epoch $sourceDateEpoch
+          python scripts/verify_sbom.py --sbom $sbom `
+            --binary "target/$env:TARGET/release/zelyra.exe" `
+            --tag $env:RELEASE_TAG --target $env:TARGET
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:

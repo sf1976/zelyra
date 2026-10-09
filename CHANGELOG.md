@@ -6,6 +6,12 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
+  verification binds each SBOM to its binary SHA-256. Dependency/license audit
+  and provenance remain incomplete. / Release-Builds hängen jetzt
+  deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
+  jedes SBOM an den SHA-256-Hash der Binärdatei. Dependency-/Lizenzaudit und
+  Provenance sind noch offen.
 - Login throttling can now be configured per auth definition with a bounded
   failure window and lockout duration; the limiter remains process-local. /
   Login-Limits lassen sich nun pro Auth-Definition mit begrenztem

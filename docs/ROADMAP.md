@@ -36,6 +36,10 @@ principles; the roadmap below tracks what is actually implemented.
   excluded routes and denied MariaDB access. Fixture accounts are read-only;
   full writable CRUD acceptance remains open.
 
+- [~] The 0.4 release workflow creates deterministic SPDX-2.3 SBOMs for Linux
+  and Windows and verifies each binary hash. Dependency/license auditing,
+  provenance, and native artifact review remain open.
+
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
   Option, Result, and pattern matching.

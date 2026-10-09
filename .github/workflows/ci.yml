@@ -94,6 +94,7 @@ jobs:
           python3 scripts/check_release_metadata.py
           python3 scripts/test_package_release.py
           python3 scripts/test_release_readiness.py
+          python3 scripts/test_sbom.py
       - name: Run workspace tests
         env:
           ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
