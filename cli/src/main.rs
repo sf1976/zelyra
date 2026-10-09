@@ -62,7 +62,7 @@ use database_cli::{database_command, inspect_for_backend};
 use database_cli::{schema_fingerprint, schema_plan_json};
 use formatter::format_source;
 use holes::collect_typed_holes;
-use impact::{build_impact_with_sources, focus_impact};
+use impact::{build_impact_with_modules, build_impact_with_sources, focus_impact};
 #[cfg(test)]
 use module_cli::publish_directory_no_replace;
 use module_cli::{
@@ -2297,8 +2297,12 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
                 .sources
                 .first()
                 .map_or(source.as_str(), |source| source.text.as_str());
-            let full_impact =
-                build_impact_with_sources(&project.program, &project.sources, fallback_source);
+            let full_impact = build_impact_with_modules(
+                &project.program,
+                &project.sources,
+                &project.modules,
+                fallback_source,
+            );
             match focus.as_deref() {
                 Some(query) => match focus_impact(&full_impact, query) {
                     Ok(focused) => focused,
@@ -2337,7 +2341,12 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
         .sources
         .first()
         .map_or(source.as_str(), |source| source.text.as_str());
-    let impact = build_impact_with_sources(&project.program, &project.sources, fallback_source);
+    let impact = build_impact_with_modules(
+        &project.program,
+        &project.sources,
+        &project.modules,
+        fallback_source,
+    );
     let impact = match focus.as_deref() {
         Some(query) => match focus_impact(&impact, query) {
             Ok(focused) => focused,

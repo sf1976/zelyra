@@ -1,12 +1,21 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::project::ProjectSource;
+use crate::project::{ProjectModule, ProjectSource};
 use serde_json::{json, Value};
 use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt, Type};
 
 pub fn build_impact_with_sources(
     program: &Program,
     project_sources: &[ProjectSource],
+    fallback_source: &str,
+) -> Value {
+    build_impact_with_modules(program, project_sources, &[], fallback_source)
+}
+
+pub fn build_impact_with_modules(
+    program: &Program,
+    project_sources: &[ProjectSource],
+    modules: &[ProjectModule],
     fallback_source: &str,
 ) -> Value {
     let sources = ImpactSources {
@@ -20,7 +29,19 @@ pub fn build_impact_with_sources(
         .collect::<Vec<_>>();
     let sql = sql_entries(program, &table_names, &sources);
     let table_consumers = table_consumers(program, &table_names, &sql);
-    let references = semantic_references(program, &table_names, &sql, &sources);
+    let mut references = semantic_references(program, &table_names, &sql, &sources);
+    for module in modules {
+        for import in &module.imports {
+            add_reference(
+                &mut references,
+                format!("module:{}", module.path),
+                format!("module:{}", import.path),
+                "module_import",
+                Value::Null,
+            );
+        }
+    }
+    references.sort_by_key(reference_sort_key);
     let permissions = permissions(program);
 
     json!({
@@ -71,6 +92,18 @@ pub fn build_impact_with_sources(
             "span": span_value(api.span, &sources),
         })).collect::<Vec<_>>(),
         "permissions": permissions,
+        "modules": modules.iter().map(|module| json!({
+            "path": module.path,
+            "imports": module.imports.iter().map(|import| json!({
+                "alias": import.alias,
+                "path": import.path,
+            })).collect::<Vec<_>>(),
+            "exports": module.exports.iter().map(|export| json!({
+                "kind": export.kind,
+                "name": export.name,
+            })).collect::<Vec<_>>(),
+            "declarations": module.declarations,
+        })).collect::<Vec<_>>(),
         "contracts": program.functions.iter()
             .filter(|function| !function.requires.is_empty() || !function.ensures.is_empty())
             .map(|function| json!({
@@ -212,6 +245,16 @@ fn known_impact_nodes(impact: &Value, references: &[Value]) -> HashSet<String> {
             api.get("path").and_then(Value::as_str),
         ) {
             nodes.insert(format!("api:{method} {path}"));
+        }
+    }
+    for module in impact
+        .get("modules")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(path) = module.get("path").and_then(Value::as_str) {
+            nodes.insert(format!("module:{path}"));
         }
     }
     for reference in references {

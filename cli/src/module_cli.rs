@@ -461,7 +461,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
             });
         if let Some(selected_module) = selected_module {
             let project_sources = PROJECT_SOURCES.with(|sources| sources.borrow().clone());
-            let impact = build_impact_with_sources(&program, &project_sources, &source);
+            let impact = build_impact_with_modules(&program, &project_sources, &modules, &source);
             let references = impact
                 .get("references")
                 .and_then(Value::as_array)

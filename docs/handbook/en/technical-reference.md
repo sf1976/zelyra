@@ -2452,14 +2452,17 @@ zelyra impact examples/auth_crud_api.zyl --symbol table:customers --format=json
 
 The impact response reports source-based tables, SQL, forms, CRUD resources,
 views, APIs, permissions, contracts, and a deterministic `references` edge
-list for known relationships. Each known edge includes source, target, kind,
+list for known relationships. For loaded projects it also lists each module's
+path, imports, exports, and declarations, with `module_import` edges in the
+reference list. Module edges come from the validated project graph and have no
+source span in this version. Other source edges include source, target, kind,
 and source span. Email, job, test, and live schema impacts remain explicitly
 empty or unavailable; the command never connects to MariaDB.
 
 Using `--symbol <kind:name>` focuses the output on a known node such as
-`table:customers`. The focused response contains only directly connected
-references and related node IDs. Unknown nodes return `E-IMPACT-001` and a
-non-zero exit code.
+`table:customers` or `module:src/storage.zyl`. The focused response contains
+only directly connected references and related node IDs. Unknown nodes return
+`E-IMPACT-001` and a non-zero exit code.
 
 #### Atomic semantic edits
 
