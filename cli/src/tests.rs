@@ -30,7 +30,7 @@ fn migration_fixture_column(name: &str, sql_type: &str, nullable: bool) -> zelyr
 }
 
 #[test]
-fn schema_plan_json_is_versioned_deterministic_and_fails_closed_on_rollback() {
+fn schema_plan_json_is_versioned_deterministic_and_emits_reviewed_reverse_plan() {
     let current = migration_fixture_schema(vec![migration_fixture_column("id", "BIGINT", false)]);
     let desired = migration_fixture_schema(vec![
         migration_fixture_column("id", "BIGINT", false),
@@ -63,11 +63,45 @@ fn schema_plan_json_is_versioned_deterministic_and_fails_closed_on_rollback() {
         first["preflights"][2]["kind"],
         "foreign_key_values_must_exist"
     );
-    assert_eq!(first["rollback"]["generated"], false);
+    assert_eq!(first["rollback"]["generated"], true);
+    assert_eq!(
+        first["rollback"]["changes"][0]["description"],
+        "drop column customers.name"
+    );
+    assert_eq!(first["rollback"]["requires_operator_approval"], true);
+    assert_eq!(first["rollback"]["requires_verified_backup"], true);
+    assert_eq!(first["rollback"]["safe_to_apply_automatically"], false);
+    let reverse = diff(&current, &desired);
+    let reverse_json = schema_plan_json(&current, &desired, &reverse);
+    assert_eq!(first["rollback"]["plan_id"], reverse_json["plan_id"]);
+    assert_eq!(
+        first["rollback"]["from_schema_sha256"],
+        first["desired_schema_sha256"]
+    );
+    assert_eq!(
+        first["rollback"]["to_schema_sha256"],
+        first["current_schema_sha256"]
+    );
     assert_eq!(first["automatic_retries"], false);
     assert!(first["plan_id"].as_str().unwrap().starts_with("sha256:"));
     assert_eq!(first["current_schema_sha256"].as_str().unwrap().len(), 64);
     assert_eq!(first["desired_schema_sha256"].as_str().unwrap().len(), 64);
+}
+
+#[test]
+fn schema_plan_omits_reverse_plan_when_reverse_diff_is_unsupported() {
+    let mut current =
+        migration_fixture_schema(vec![migration_fixture_column("id", "BIGINT", true)]);
+    current.database.as_mut().unwrap().engine = "sqlite".into();
+    let mut desired = current.clone();
+    desired.tables[0].columns[0].nullable = false;
+    let plan = diff(&desired, &current);
+    let json = schema_plan_json(&desired, &current, &plan);
+
+    assert_eq!(json["rollback"]["generated"], false);
+    assert_eq!(json["rollback"]["plan_id"], Value::Null);
+    assert_eq!(json["rollback"]["changes"][0]["risk"], "unsupported");
+    assert_eq!(json["rollback"]["requires_verified_backup"], true);
 }
 
 #[test]

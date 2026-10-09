@@ -47,9 +47,9 @@ REQUIRED_GATES_040 = {
         ("database compatibility claims", "MariaDB compatibility claims match the tested matrix; unsupported"),
         ("security review and residual risks", "Security review, threat model, dependency audit, and residual risks"),
         ("machine interface compatibility", "CLI JSON, diagnostics, project files, migration plans, and release"),
-        ("independent human acceptance", "Run a real human acceptance test with a person who does not develop"),
+        ("human acceptance deferral", "Defer independent human acceptance to 0.5.0 by explicit project-owner"),
         ("published candidate verification", "Release artifacts, checksums, SBOM/provenance, upgrade/rollback smoke,"),
-        ("all mandatory release gates", "Publish `v0.4.0` only after every mandatory gate passes."),
+        ("all mandatory release gates", "Publish `v0.4.0` only after every technical, artifact, security, and"),
     ),
     "docs/release-plans/0.4.0.de.md": (
         ("P0-Implementierung und Tests", "Alle P0-Punkte sind implementiert, geprüft und durch positive sowie"),
@@ -57,22 +57,52 @@ REQUIRED_GATES_040 = {
         ("Datenbank-Kompatibilitätsaussagen", "MariaDB-Aussagen entsprechen der getesteten Matrix; nicht unterstütztes"),
         ("Sicherheitsreview und Restgefahren", "Sicherheitsreview, Threat Model, Dependency Audit und Restgefahren sind"),
         ("Kompatibilität der Maschinenschnittstellen", "CLI-JSON, Diagnosen, Projektdateien, Migrationspläne und Releaseartefakte"),
-        ("Unabhängige menschliche Abnahme", "Einen echten menschlichen Abnahmetest mit einer Person durchführen, die"),
+        ("Vertagung der menschlichen Abnahme", "Die unabhängige menschliche Abnahme auf ausdrückliche Entscheidung des"),
         ("Prüfung des veröffentlichten Kandidaten", "Releaseartefakte, Prüfsummen, SBOM/Provenance sowie Upgrade-/Rollback-"),
-        ("Alle verpflichtenden Release-Gates", "`v0.4.0` erst veröffentlichen, wenn jedes verpflichtende Gate erfüllt"),
+        ("Alle verpflichtenden Release-Gates", "`v0.4.0` erst veröffentlichen, wenn alle technischen, Artefakt-"),
     ),
 }
 
-REQUIRED_HUMAN_ACCEPTANCE_RECORDS_040 = {
+REQUIRED_GATES_050 = {
+    "docs/release-plans/0.5.0.en.md": (
+        ("independent human acceptance", "Independent human acceptance by a non-developer"),
+        ("published candidate verification", "Release artifacts, checksums, update, and rollback verification"),
+    ),
+    "docs/release-plans/0.5.0.de.md": (
+        ("unabhängige menschliche Abnahme", "Unabhängige menschliche Abnahme durch eine Person ohne Entwicklerrolle"),
+        ("Prüfung des veröffentlichten Kandidaten", "Releaseartefakte, Prüfsummen, Update- und Rollbackprüfung"),
+    ),
+}
+
+REQUIRED_HUMAN_DECISION_RECORDS_040 = {
     "docs/release-readiness/0.4.0-human-acceptance.en.md": (
-        "candidate commit:",
-        "completed on:",
-        "decision: accepted",
+        "decision: deferred to 0.5.0",
+        "not conducted",
+        "not a test result",
         "decision authority: project owner",
     ),
     "docs/release-readiness/0.4.0-human-acceptance.de.md": (
+        "entscheidung: auf 0.5.0 verschoben",
+        "nicht durchgeführt",
+        "kein testergebnis",
+        "entscheidungsträger: projektverantwortlicher",
+    ),
+}
+
+REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050 = {
+    "docs/release-readiness/0.5.0-human-acceptance.en.md": (
+        "candidate commit:",
+        "completed on:",
+        "observations:",
+        "blockers:",
+        "decision: accepted",
+        "decision authority: project owner",
+    ),
+    "docs/release-readiness/0.5.0-human-acceptance.de.md": (
         "kandidaten-commit:",
         "abgeschlossen am:",
+        "beobachtungen:",
+        "blockaden:",
         "entscheidung: akzeptiert",
         "entscheidungsträger: projektverantwortlicher",
     ),
@@ -89,11 +119,15 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
 def unfinished_gates(
     root: Path, version: str, candidate_commit: str | None = None
 ) -> list[str]:
-    if version not in {"0.3.0", "0.4.0"}:
+    if version not in {"0.3.0", "0.4.0", "0.5.0"}:
         return []
 
     failures: list[str] = []
-    required_gates = REQUIRED_GATES if version == "0.3.0" else REQUIRED_GATES_040
+    required_gates = {
+        "0.3.0": REQUIRED_GATES,
+        "0.4.0": REQUIRED_GATES_040,
+        "0.5.0": REQUIRED_GATES_050,
+    }[version]
     for relative_path, gates in required_gates.items():
         path = root / relative_path
         text = path.read_text(encoding="utf-8")
@@ -103,15 +137,10 @@ def unfinished_gates(
 
     if version == "0.3.0":
         required_records = REQUIRED_DECISION_RECORDS
+    elif version == "0.4.0":
+        required_records = REQUIRED_HUMAN_DECISION_RECORDS_040
     else:
-        required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_040
-        english_plan = root / "docs/release-plans/0.4.0.en.md"
-        try:
-            english_text = english_plan.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as error:
-            return failures + [f"could not read 0.4.0 human acceptance gate: {error}"]
-        if not _checkbox_is_checked(english_text, "Run a real human acceptance test"):
-            required_records = {}
+        required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050
 
     for relative_path, markers in required_records.items():
         path = root / relative_path
@@ -128,12 +157,12 @@ def unfinished_gates(
                 failures.append(f"human onboarding decision record incomplete ({relative_path})")
                 break
         else:
-            if version == "0.4.0" and any(
+            if version in {"0.4.0", "0.5.0"} and any(
                 placeholder in text
                 for placeholder in ("pending", "ausstehend", "[todo]", "tbd")
             ):
-                failures.append(f"human acceptance record contains placeholders ({relative_path})")
-            if version == "0.4.0" and candidate_commit is not None:
+                failures.append(f"human decision record contains placeholders ({relative_path})")
+            if version == "0.5.0" and candidate_commit is not None:
                 commit_label = (
                     "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
                 )
@@ -158,7 +187,7 @@ def main() -> int:
     parser.add_argument("--version", required=True, help="workspace version being tagged")
     parser.add_argument(
         "--candidate-commit",
-        help="exact commit the 0.4.0 human acceptance must cover",
+        help="exact candidate commit the human decision record must cover",
     )
     args = parser.parse_args()
 

@@ -3,9 +3,10 @@
 🧪 Development behavior for 0.4.0, not a general export guarantee.
 [Deutsch](module-docker-acceptance.de.md)
 
-✅ This bounded rehearsal passed locally on 2026-10-04, including all negative
-checks listed below. Both export images used compiler commit
-`999eb978b7e8dcd23303437f80e210cd3caf5ce1`.
+✅ This bounded rehearsal passed locally on 2026-10-09, including writable
+CRUD in both exports and the negative checks listed below. The main generated
+application and both export images used compiler commit
+`917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 The reference test generates a combined application with two business modules
 and a shared database module. It then exports both business modules and starts
@@ -38,8 +39,8 @@ From the repository root:
 
 ```bash
 cargo build --locked -p zelyra-cli
-ZELYRA_DOCKER_E2E_REF=feature/0.4-project-modules \
-ZELYRA_DOCKER_E2E_MODULE_COMMIT=999eb978b7e8dcd23303437f80e210cd3caf5ce1 \
+ZELYRA_DOCKER_E2E_REF=feature/0.4-reversible-migrations \
+ZELYRA_DOCKER_E2E_MODULE_COMMIT=917e8c707e49332b323e51e4dcbd39a4f37ced96 \
 bash tests/generated-project-docker-e2e.sh
 ```
 
@@ -64,22 +65,22 @@ successful result.
    value.
 4. Both packages build and start with separate credentials and separate schemas
    on the same test MariaDB server. Each list displays its expected record
-   while the original web server is stopped.
+   while the original web server is stopped. The test creates, updates, and
+   deletes a record through each generated HTTP CRUD form, including CSRF and
+   same-origin checks.
 5. The other business module's route returns HTTP 404. The image contains no
    `/app/.env`; Compose injects configuration only at runtime.
-6. MariaDB denies each account both reading the other table and executing
-   `DELETE ... WHERE 1=0` against its own table. The second attempt changes no
-   data even with an incorrect grant, but exercises write permission. Only an
-   actual permission diagnostic passes the negative test, not an arbitrary
-   connection error.
+6. Each test account has `SELECT`, `INSERT`, `UPDATE`, and `DELETE` only on its
+   own table. MariaDB denies reading and deleting from the other module's
+   table. Only an actual permission diagnostic passes the negative test, not
+   an arbitrary connection error.
 
 ## Limits and troubleshooting
 
-The fixture accounts deliberately have only `SELECT`. They demonstrate read
-isolation, not full writable CRUD acceptance. Compiler contracts and MariaDB
-grants are separate security boundaries. The rehearsal does not test role
-management, schema upgrades between versions, or complete extraction of
-arbitrary projects. `complete_deployment` remains `false`.
+The fixture proves writable CRUD for these two bounded exports; it does not
+prove role management, schema upgrades between versions, or complete
+extraction of arbitrary projects. Compiler contracts and MariaDB grants are
+separate security boundaries. `complete_deployment` remains `false`.
 
 For occupied ports, inspect your test processes first; do not stop unrelated
 services. `docker compose ps` in the respective project shows its containers.

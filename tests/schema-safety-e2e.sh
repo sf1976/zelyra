@@ -676,7 +676,6 @@ EOF
         --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
         -e "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_first' AND COLUMN_NAME='applied_marker'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='operator_review'));" )"
     [[ "${migration_state}" == "1:1" ]]
-    echo "[MariaDB] process interruption between DDL steps is journaled; lock release and recovery with a freshly reviewed plan pass"
 
     local running_after running_migration_pid running_query_count
     running_after="${fixture_dir}/schema_migration_running_after_mariadb.zyl"
@@ -745,6 +744,32 @@ EOF
     migration_state="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db plan "${running_after}")"
     grep -Fq "No schema changes." <<<"${migration_state}"
     echo "[MariaDB] killing Zelyra while DDL waits on a metadata lock records an interrupted attempt; fresh-plan recovery succeeds"
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db bootstrap "${migration_before}" >/dev/null
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_after}" --allow-risky >/dev/null
+    MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "INSERT INTO migration_first(id, applied_marker) VALUES (41, 'removed-by-reverse-ddl'); INSERT INTO migration_second(id, operator_review) VALUES (42, 'removed-by-reverse-ddl');"
+    local reverse_plan reverse_plan_id reverse_schema_state
+    reverse_plan="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db plan "${migration_before}" --format=json)"
+    [[ "$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["rollback"]["generated"]).lower())' <<<"${reverse_plan}")" == "true" ]]
+    reverse_plan_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["plan_id"])' <<<"${reverse_plan}")"
+    if output="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_before}" --plan-id "${reverse_plan_id}" 2>&1)"; then
+        echo "error: MariaDB applied a destructive reverse plan without explicit approval" >&2
+        exit 1
+    fi
+    grep -Fq "error[E-DB-004]" <<<"${output}"
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${migration_before}" \
+        --allow-risky --plan-id "${reverse_plan_id}" >/dev/null
+    reverse_schema_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_first' AND COLUMN_NAME='applied_marker'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='operator_review'), ':', (SELECT COUNT(*) FROM migration_first), ':', (SELECT COUNT(*) FROM migration_second), ':', (SELECT id FROM migration_first), ':', (SELECT id FROM migration_second));")"
+    [[ "${reverse_schema_state}" == "0:0:1:1:41:42" ]]
+    reverse_plan="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db plan "${migration_before}")"
+    grep -Fq "No schema changes." <<<"${reverse_plan}"
+    echo "[MariaDB] process interruption between DDL steps is journaled; lock release and recovery with a freshly reviewed plan pass"
+    echo "[MariaDB] reviewed reverse plan requires explicit approval, drops only selected columns, and preserves unrelated row data"
 }
 
 assert_sqlite_safety

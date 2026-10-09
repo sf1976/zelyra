@@ -146,8 +146,82 @@ pub(super) fn schema_plan_json(
 ) -> Value {
     let current_fingerprint = schema_fingerprint(current);
     let desired_fingerprint = schema_fingerprint(desired);
-    let changes = plan
-        .changes
+    let changes = schema_plan_changes_json(plan);
+    let preflights = schema_plan_preflights_json(plan);
+    let plan_id = schema_plan_identifier(
+        desired.backend(),
+        &current_fingerprint,
+        &desired_fingerprint,
+        &changes,
+        &preflights,
+    );
+
+    // A reverse plan is derived from the same schema diff engine as a forward
+    // plan. It is bound to the expected post-migration schema fingerprint and
+    // remains an explicit operator action because reverse DDL can discard data
+    // written after the migration, even when the old schema can be restored.
+    let rollback_plan = zelyra_database::diff(current, desired);
+    let rollback_changes = schema_plan_changes_json(&rollback_plan);
+    let rollback_preflights = schema_plan_preflights_json(&rollback_plan);
+    let rollback_id = schema_plan_identifier(
+        current.backend(),
+        &desired_fingerprint,
+        &current_fingerprint,
+        &rollback_changes,
+        &rollback_preflights,
+    );
+    let rollback_generated =
+        !plan.changes.is_empty() && !plan.has_unsupported() && !rollback_plan.has_unsupported();
+    let identity = json!({
+        "format": "zelyra.schema-plan/v1",
+        "backend": desired.backend().name(),
+        "current_schema_sha256": current_fingerprint,
+        "desired_schema_sha256": desired_fingerprint,
+        "changes": changes,
+        "preflights": preflights,
+    });
+    debug_assert_eq!(
+        plan_id,
+        format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(&identity).expect("plan identity serializes"))
+        )
+    );
+    json!({
+        "format": "zelyra.schema-plan/v1",
+        "plan_id": plan_id,
+        "backend": desired.backend().name(),
+        "current_schema_sha256": current_fingerprint,
+        "desired_schema_sha256": desired_fingerprint,
+        "drift": if plan.changes.is_empty() { "none" } else { "present" },
+        "changes": changes,
+        "preflights": preflights,
+        "requires_operator_approval": plan.requires_approval(),
+        "has_unsupported_changes": plan.has_unsupported(),
+        "rollback": {
+            "generated": rollback_generated,
+            "plan_id": if rollback_generated { json!(rollback_id) } else { Value::Null },
+            "from_schema_sha256": desired_fingerprint,
+            "to_schema_sha256": current_fingerprint,
+            "changes": rollback_changes,
+            "preflights": rollback_preflights,
+            "requires_operator_approval": rollback_plan.requires_approval(),
+            "requires_verified_backup": !plan.changes.is_empty(),
+            "safe_to_apply_automatically": false,
+            "hint": if plan.changes.is_empty() {
+                "No schema changes; rollback is not applicable."
+            } else if !rollback_generated {
+                "A complete reverse plan is unavailable for unsupported changes. Restore from a verified operator-managed backup."
+            } else {
+                "Restore the pre-migration schema source, verify a backup, generate and review a fresh plan against the current schema, then apply it with its reviewed plan id and explicit approval when required. Reverse DDL can discard post-migration data."
+            },
+        },
+        "automatic_retries": false,
+    })
+}
+
+fn schema_plan_changes_json(plan: &zelyra_database::SchemaPlan) -> Vec<Value> {
+    plan.changes
         .iter()
         .map(|change| {
             let risk = match change.risk {
@@ -162,9 +236,11 @@ pub(super) fn schema_plan_json(
                 "risk": risk,
             })
         })
-        .collect::<Vec<_>>();
-    let preflights = plan
-        .nullability_preflights
+        .collect()
+}
+
+fn schema_plan_preflights_json(plan: &zelyra_database::SchemaPlan) -> Vec<Value> {
+    plan.nullability_preflights
         .iter()
         .map(|check| {
             json!({
@@ -197,40 +273,26 @@ pub(super) fn schema_plan_json(
                 "referenced_table_exists_before_apply": check.referenced_table_exists,
             })
         }))
-        .collect::<Vec<_>>();
+        .collect()
+}
+
+fn schema_plan_identifier(
+    backend: Backend,
+    current_fingerprint: &str,
+    desired_fingerprint: &str,
+    changes: &[Value],
+    preflights: &[Value],
+) -> String {
     let identity = json!({
         "format": "zelyra.schema-plan/v1",
-        "backend": desired.backend().name(),
+        "backend": backend.name(),
         "current_schema_sha256": current_fingerprint,
         "desired_schema_sha256": desired_fingerprint,
         "changes": changes,
         "preflights": preflights,
     });
-    let identity_bytes =
-        serde_json::to_vec(&identity).expect("schema plan identity is serializable");
-    let plan_id = format!("sha256:{:x}", Sha256::digest(identity_bytes));
-    json!({
-        "format": "zelyra.schema-plan/v1",
-        "plan_id": plan_id,
-        "backend": desired.backend().name(),
-        "current_schema_sha256": current_fingerprint,
-        "desired_schema_sha256": desired_fingerprint,
-        "drift": if plan.changes.is_empty() { "none" } else { "present" },
-        "changes": changes,
-        "preflights": preflights,
-        "requires_operator_approval": plan.requires_approval(),
-        "has_unsupported_changes": plan.has_unsupported(),
-        "rollback": {
-            "generated": false,
-            "safe_to_apply_automatically": false,
-            "hint": if plan.changes.is_empty() {
-                "No schema changes; rollback is not applicable."
-            } else {
-                "No data-safe reverse plan is available. Take and verify an operator-managed backup before applying changes."
-            },
-        },
-        "automatic_retries": false,
-    })
+    let bytes = serde_json::to_vec(&identity).expect("schema plan identity is serializable");
+    format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
 const MARIADB_SCHEMA_HISTORY_TABLE: &str = "_zelyra_schema_history";

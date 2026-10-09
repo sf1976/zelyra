@@ -313,30 +313,26 @@ architecture requirement for every phase, not a provider-specific feature.
   compatibility matrix](database-compatibility.de.md).
 - [ ] SQL Server backend evaluation and implementation if demand justifies it.
 - [🧪] `zelyra db plan --format=json` emits a versioned
-  `zelyra.schema-plan/v1` plan with a stable ID, schema fingerprints, drift,
-  SQL steps, preflights, and an explicit approval flag. A database migration
-  ID can now be supplied to `db apply`, which recomputes and rejects stale
-  reviewed plans before preflights or SQL; a SQLite CLI integration test checks
-  stale rejection and applying a freshly reviewed ID. Applying without an ID
-  remains supported for existing workflows. All three backends journal schema
-  fingerprints and migration outcomes in `_zelyra_schema_history`; `db history`
-  supports MariaDB, SQLite, and PostgreSQL and reports applied, failed, and
-  interrupted attempts. MariaDB can also report an active migration; SQLite
-  and PostgreSQL history reads wait for the transactional migration lock, then
-  mark leftover `running` rows as interrupted. MariaDB uses a database-scoped
-  advisory lock. SQLite and PostgreSQL apply DDL and the `applied` journal
-  update in one transaction; E2E coverage checks persisted history. MariaDB
-  E2E tests interrupt between DDL steps and while a submitted `ALTER TABLE`
-  waits on a held metadata lock, then verify fresh-plan recovery. A crash during
-  actual MariaDB DDL execution can still leave that statement's result
-  ambiguous. Safe inverse SQL is not generated; the JSON plan reports
-  `rollback.generated: false`.
-  PostgreSQL and SQLite `db apply` run transactionally and tests verify rollback
-  after a failing step; MariaDB DDL can still leave partial state. Before any
-  plan SQL, read-only checks now
-  reject duplicate values for new unique indexes and orphan values for new
-  foreign keys; the checks also cover required-column and nullability changes.
-  They do not prevent concurrent-write races. Backups remain the operator's
+  `zelyra.schema-plan/v1` plan with a stable forward ID, schema fingerprints,
+  drift, ordered SQL steps, data preflights, and an explicit approval flag.
+  When every reverse operation is supported, it also emits a reverse schema
+  diff with its own ID, expected fingerprints, preflights, and approval needs.
+  Unsupported reversals fail closed. Reverse DDL is never automatic and may
+  discard later data; every schema change still requires an independently
+  verified backup. `db apply` accepts the reviewed plan ID and rejects stale
+  plans before preflights or SQL; integration tests cover stale rejection,
+  forward application, and explicit reverse application after restoring the
+  prior source. All three backends journal schema fingerprints and outcomes in
+  `_zelyra_schema_history`; `db history` reports applied, failed, and
+  interrupted attempts. MariaDB records per-step checkpoints and uses a
+  database-scoped advisory lock; E2E tests recover after interruption between
+  steps and while DDL waits on a metadata lock. The MariaDB E2E also applies a
+  reviewed reverse plan only after explicit approval and confirms that the
+  added columns are removed while rows and IDs remain. A crash during actual
+  MariaDB DDL execution can still leave that statement's result ambiguous. PostgreSQL
+  and SQLite apply DDL transactionally. Read-only preflights check NULLs,
+  required columns, duplicate unique-index values, and foreign-key orphans,
+  but do not prevent concurrent-write races. Backups remain the operator's
   responsibility.
 - [~] Live schema inspection detects MariaDB default, primary-key, and
   auto-increment drift; SQLite default, primary-key, and explicit
@@ -625,8 +621,12 @@ architecture requirement for every phase, not a provider-specific feature.
   now has a 32-frame recursion limit, focused regressions, and a retained crash
   seed. Four post-fix 60-second local runs passed; the 15-second CI rerun for
   the fixed revision remains open.
-- [~] Security regression coverage and dependency/license scanning run in CI;
-  a complete human audit and the remaining security regressions are still open.
+- [~] Security regression coverage and dependency/license scanning run in CI.
+  Coverage includes credential redaction, network capability enforcement,
+  CSRF/origin/host boundaries, release-archive traversal and duplicate-member
+  rejection, checksum validation, and atomic updater replacement. A separate
+  unsolicited-network/telemetry regression guard and independent security
+  review remain open.
 - [ ] Regression guard against unsolicited network or telemetry activity;
   explicit application network capabilities and user-initiated update or
   installation commands must remain separately visible.

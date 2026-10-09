@@ -118,9 +118,16 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   Migrationssperre und markieren verbliebene `running`-Einträge als
   unterbrochen. Die interne Tabelle erscheint nicht in der normalen
   Schemaansicht.
-- Der JSON-Plan erzeugt kein sicheres inverses SQL. `rollback.generated`
-  bleibt `false`; sichere Wiederherstellung benötigt weiterhin ein geprüftes
-  Betreiber-Backup.
+- Der JSON-Plan enthält einen geprüften inversen Schema-Diff, wenn alle
+  Rückwärtsoperationen unterstützt werden. `rollback.generated` zeigt einen
+  vollständigen Plan an; seine `plan_id` ist an den erwarteten Fingerprint
+  nach der Migration gebunden und listet SQL-Schritte, Vorprüfungen und
+  Freigabebedarf auf. Er wird nie automatisch ausgeführt. Stelle zuerst die
+  frühere Schemaquelle wieder her, prüfe ein unabhängiges Backup, erzeuge und
+  prüfe einen neuen Plan anhand des tatsächlichen Schemas und wende ihn dann
+  mit seiner geprüften ID sowie gegebenenfalls ausdrücklicher Freigabe an.
+  Rückwärts-DDL kann nach der Vorwärtsmigration geschriebene Daten löschen;
+  `rollback.generated` bedeutet weder Datensicherheit noch Backupfreiheit.
 - `zelyra db plan` zeigt den erkannten Schemaunterschied; es sichert keine
   Daten und reserviert den Datenbankzustand nicht.
 - Vor jeglichem Plan-SQL prüft `db apply` vorhandene Zeilen auf NULL-Werte vor

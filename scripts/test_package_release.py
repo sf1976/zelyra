@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import re
 import subprocess
@@ -12,11 +13,16 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
 from package_release import RELEASE_FILES, package_release
-from verify_release_artifacts import _stable_version_from_tag, verify_release_artifacts
+from verify_release_artifacts import (
+    _stable_version_from_tag,
+    _verify_archive,
+    verify_release_artifacts,
+)
 
 
 class ReleasePackageTests(unittest.TestCase):
@@ -110,6 +116,75 @@ class ReleasePackageTests(unittest.TestCase):
             )
             for member in zipped.infolist():
                 self.assertEqual(member.date_time, expected_time.timetuple()[:6])
+
+    def test_archive_verifier_rejects_traversal_and_windows_absolute_paths(self) -> None:
+        package = f"zelyra-{self.tag}-x86_64-pc-windows-msvc"
+        for index, unsafe_path in enumerate(("../outside", "C:\\outside", "folder\\..\\outside")):
+            archive_path = self.root / f"unsafe-{index}.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(unsafe_path, b"must not escape the package")
+            with self.subTest(unsafe_path=unsafe_path), self.assertRaisesRegex(
+                ValueError, "unsafe ZIP path"
+            ):
+                _verify_archive(archive_path, "windows", package)
+
+        package = f"zelyra-{self.tag}-x86_64-unknown-linux-gnu"
+        archive_path = self.root / "unsafe.tar.gz"
+        content = b"must not escape the package"
+        with tarfile.open(archive_path, "w:gz") as archive:
+            member = tarfile.TarInfo("../outside")
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
+        with self.assertRaisesRegex(ValueError, "unsafe TAR path"):
+            _verify_archive(archive_path, "linux", package)
+
+    def test_archive_verifier_rejects_duplicate_zip_members(self) -> None:
+        package = f"zelyra-{self.tag}-x86_64-pc-windows-msvc"
+        archive_path = self.root / "duplicate.zip"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(f"{package}/zelyra.exe", b"first")
+                archive.writestr(f"{package}/zelyra.exe", b"second")
+        with self.assertRaisesRegex(ValueError, "unexpected ZIP entries"):
+            _verify_archive(archive_path, "windows", package)
+
+    def test_archive_verifier_rejects_non_regular_members(self) -> None:
+        package = f"zelyra-{self.tag}-x86_64-pc-windows-msvc"
+        archive_path = self.root / "symlink.zip"
+        expected = [
+            f"{package}/zelyra.exe",
+            *(f"{package}/{name}" for name in RELEASE_FILES),
+        ]
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            for name in expected:
+                info = zipfile.ZipInfo(name)
+                info.create_system = 3
+                mode = 0o120777 if name.endswith("zelyra.exe") else 0o100644
+                info.external_attr = mode << 16
+                archive.writestr(info, b"link" if name.endswith("zelyra.exe") else b"file")
+        with self.assertRaisesRegex(ValueError, "non-regular ZIP entry"):
+            _verify_archive(archive_path, "windows", package)
+
+        package = f"zelyra-{self.tag}-x86_64-unknown-linux-gnu"
+        archive_path = self.root / "symlink.tar.gz"
+        expected = [
+            f"{package}/zelyra",
+            *(f"{package}/{name}" for name in RELEASE_FILES),
+        ]
+        with tarfile.open(archive_path, "w:gz") as archive:
+            for name in expected:
+                member = tarfile.TarInfo(name)
+                if name.endswith("/zelyra"):
+                    member.type = tarfile.SYMTYPE
+                    member.linkname = "../outside"
+                    archive.addfile(member)
+                else:
+                    content = b"file"
+                    member.size = len(content)
+                    archive.addfile(member, io.BytesIO(content))
+        with self.assertRaisesRegex(ValueError, "non-regular TAR entry"):
+            _verify_archive(archive_path, "linux", package)
 
     def test_sidecar_checksum_matches_standalone_binary(self) -> None:
         outputs, _ = self.package_twice("linux")
