@@ -33,8 +33,8 @@ fi
 db_password="${ZELYRA_E2E_DB_PASSWORD:-${db_password_from_url}}"
 base_database_name="${db_name}"
 if [[ "${db_host}" != "127.0.0.1" && "${db_host}" != "localhost" ]] || \
-    [[ "${base_database_name}" != "zelyra_ci" && "${base_database_name}" != "zelyra_test" ]]; then
-    echo "error: MariaDB E2E is restricted to local zelyra_ci or zelyra_test databases" >&2
+    [[ ! "${base_database_name}" =~ ^zelyra_[A-Za-z0-9_]+$ ]]; then
+    echo "error: MariaDB E2E is restricted to local zelyra_* test databases" >&2
     exit 1
 fi
 db_name="${base_database_name}_e2e_$$"
