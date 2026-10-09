@@ -378,6 +378,8 @@ impl<'a> Parser<'a> {
         let mut admin_path = None;
         let mut admin_permission = None;
         let mut admin_role = None;
+        let mut login_rate_limit = None;
+        let mut login_block_seconds = None;
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let field = match self.current().kind.clone() {
                 TokenKind::Table => "table",
@@ -390,6 +392,8 @@ impl<'a> Parser<'a> {
                 TokenKind::AdminPath => "admin_path",
                 TokenKind::AdminPermission => "admin_permission",
                 TokenKind::AdminRole => "admin_role",
+                TokenKind::LoginRateLimit => "login_rate_limit",
+                TokenKind::LoginBlockSeconds => "login_block_seconds",
                 _ => return self.error("expected authentication option"),
             };
             self.advance();
@@ -405,6 +409,52 @@ impl<'a> Parser<'a> {
                         false
                     }
                     _ => return self.error("expected `true` or `false` for audit_chain"),
+                };
+                self.skip_newlines();
+                continue;
+            }
+            if field == "login_rate_limit" {
+                if login_rate_limit.is_some() {
+                    return self.error("login_rate_limit may only be declared once");
+                }
+                let requests = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=1_000).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => return self.error("login_rate_limit attempts must be between 1 and 1000"),
+                };
+                let (per, _) = self.ident("`per` in login_rate_limit")?;
+                if per != "per" {
+                    return self.error("expected `per` before login rate limit window");
+                }
+                let window_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self
+                            .error("login rate limit window must be between 1 and 86400 seconds")
+                    }
+                };
+                login_rate_limit = Some(zelyra_ast::ApiRateLimit {
+                    requests,
+                    window_seconds,
+                });
+                self.skip_newlines();
+                continue;
+            }
+            if field == "login_block_seconds" {
+                if login_block_seconds.is_some() {
+                    return self.error("login_block_seconds may only be declared once");
+                }
+                login_block_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        Some(value as u32)
+                    }
+                    _ => return self.error("login_block_seconds must be between 1 and 86400"),
                 };
                 self.skip_newlines();
                 continue;
@@ -447,6 +497,8 @@ impl<'a> Parser<'a> {
             admin_path,
             admin_permission,
             admin_role,
+            login_rate_limit,
+            login_block_seconds,
             span: start.join(end),
         })
     }
@@ -3268,6 +3320,40 @@ mod tests {
                 window_seconds: 60,
             })
         );
+    }
+
+    #[test]
+    fn parses_configurable_login_rate_limit_and_block_duration() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                    login_rate_limit: 3 per 120
+                    login_block_seconds: 45
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.auth[0].login_rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 3,
+                window_seconds: 120,
+            })
+        );
+        assert_eq!(program.auth[0].login_block_seconds, Some(45));
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_or_duplicate_login_rate_settings() {
+        for source in [
+            r#"auth users { table: users login_rate_limit: 0 per 60 } fn main() { }"#,
+            r#"auth users { table: users login_rate_limit: 5 per 0 } fn main() { }"#,
+            r#"auth users { table: users login_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users login_rate_limit: 5 per 60 login_rate_limit: 3 per 30 } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
     }
 
     #[test]

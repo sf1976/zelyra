@@ -6,6 +6,11 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Login throttling can now be configured per auth definition with a bounded
+  failure window and lockout duration; the limiter remains process-local. /
+  Login-Limits lassen sich nun pro Auth-Definition mit begrenztem
+  Fehlerzeitfenster und Sperrdauer konfigurieren; der Limiter bleibt
+  prozesslokal.
 - HTTP responses now include a validated `X-Request-ID` that API handlers can
   read from their request context. API declarations can add version,
   deprecation, and bounded process-local per-client rate-limit metadata, which

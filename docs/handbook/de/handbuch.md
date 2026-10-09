@@ -7111,6 +7111,14 @@ Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
 Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
 rotiert das vorherige Session-Token dieses Browsers und entwertet es.
 
+Der Login-Grenzwert und die Sperrdauer lassen sich in `auth` konfigurieren:
+`login_rate_limit: 5 per 900` setzt fünf Fehler je 900 Sekunden,
+`login_block_seconds: 60` eine Sperre von 60 Sekunden. Das sind die Defaults.
+Zeitfenster und Sperrdauer dürfen jeweils 1 bis 86400 Sekunden betragen; die
+Versuchsanzahl darf 1 bis 1000 sein. Die Begrenzung liegt im Prozessspeicher,
+wird beim Neustart zurückgesetzt und ersetzt keinen verteilten
+Betriebs-Limiter.
+
 Jedes schreibende Browserformular benötigt sein CSRF-Token sowie einen
 gleichursprünglichen `Origin`- oder `Referer`-Header, der zu `Host` und dem
 effektiven Schema der Anfrage passt. Fehlende, fehlerhafte oder fremde Angaben

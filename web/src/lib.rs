@@ -835,6 +835,8 @@ pub struct AuthRoute {
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
+    pub login_rate_limit: zelyra_ast::ApiRateLimit,
+    pub login_block_seconds: u32,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -853,9 +855,13 @@ struct LoginThrottle {
     blocked_until: Option<Instant>,
 }
 
-const LOGIN_FAILURE_LIMIT: u32 = 5;
-const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
-const LOGIN_BLOCK_DURATION: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const DEFAULT_LOGIN_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLimit {
+    requests: 5,
+    window_seconds: 15 * 60,
+};
+#[cfg(test)]
+const DEFAULT_LOGIN_BLOCK_SECONDS: u32 = 60;
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 static REQUEST_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -2021,9 +2027,9 @@ fn dispatch_login(
                 );
             }
             let throttle_key = login_throttle_key(&email);
-            if login_is_blocked(app, &throttle_key) {
+            if login_is_blocked_with_policy(app, &throttle_key, auth.login_rate_limit) {
                 return Response::html(429, "<h1>429 Too Many Requests</h1><p>Too many failed login attempts. Try again later.</p>")
-                    .with_header("Retry-After", LOGIN_BLOCK_DURATION.as_secs().to_string());
+                    .with_header("Retry-After", auth.login_block_seconds.to_string());
             }
             let Some(table) = auth
                 .schema
@@ -2082,7 +2088,12 @@ fn dispatch_login(
                         eprintln!("zelyra web: failed-login audit write failed: {error}");
                     }
                 }
-                record_login_failure(app, throttle_key);
+                record_login_failure_with_policy(
+                    app,
+                    throttle_key,
+                    auth.login_rate_limit,
+                    auth.login_block_seconds,
+                );
                 return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
             }
             clear_login_failures(app, &throttle_key);
@@ -2177,7 +2188,16 @@ fn login_throttle_key(email: &str) -> String {
     email.trim().to_ascii_lowercase()
 }
 
+#[cfg(test)]
 fn login_is_blocked(app: &WebApp, key: &str) -> bool {
+    login_is_blocked_with_policy(app, key, DEFAULT_LOGIN_RATE_LIMIT)
+}
+
+fn login_is_blocked_with_policy(
+    app: &WebApp,
+    key: &str,
+    rate_limit: zelyra_ast::ApiRateLimit,
+) -> bool {
     let Ok(mut throttle) = app.login_throttle.lock() else {
         return false;
     };
@@ -2185,7 +2205,9 @@ fn login_is_blocked(app: &WebApp, key: &str) -> bool {
         return false;
     };
     let now = Instant::now();
-    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
+    if now.duration_since(state.window_started)
+        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
+    {
         throttle.remove(key);
         return false;
     }
@@ -2200,7 +2222,22 @@ fn login_is_blocked(app: &WebApp, key: &str) -> bool {
     false
 }
 
+#[cfg(test)]
 fn record_login_failure(app: &WebApp, key: String) {
+    record_login_failure_with_policy(
+        app,
+        key,
+        DEFAULT_LOGIN_RATE_LIMIT,
+        DEFAULT_LOGIN_BLOCK_SECONDS,
+    );
+}
+
+fn record_login_failure_with_policy(
+    app: &WebApp,
+    key: String,
+    rate_limit: zelyra_ast::ApiRateLimit,
+    block_seconds: u32,
+) {
     let Ok(mut throttle) = app.login_throttle.lock() else {
         return;
     };
@@ -2210,14 +2247,16 @@ fn record_login_failure(app: &WebApp, key: String) {
         failures: 0,
         blocked_until: None,
     });
-    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
+    if now.duration_since(state.window_started)
+        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
+    {
         state.window_started = now;
         state.failures = 0;
         state.blocked_until = None;
     }
     state.failures = state.failures.saturating_add(1);
-    if state.failures >= LOGIN_FAILURE_LIMIT {
-        state.blocked_until = Some(now + LOGIN_BLOCK_DURATION);
+    if state.failures >= rate_limit.requests {
+        state.blocked_until = Some(now + Duration::from_secs(u64::from(block_seconds)));
     }
 }
 
@@ -8367,6 +8406,8 @@ mod tests {
             admin_path: Some("/admin".into()),
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -8707,6 +8748,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -8785,6 +8828,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -9326,6 +9371,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -9757,6 +9804,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -9787,6 +9836,29 @@ mod tests {
     }
 
     #[test]
+    fn login_throttle_uses_configured_attempt_window_and_block_time() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let key = login_throttle_key("custom@example.test");
+        let policy = zelyra_ast::ApiRateLimit {
+            requests: 2,
+            window_seconds: 30,
+        };
+        record_login_failure_with_policy(&app, key.clone(), policy, 7);
+        assert!(!login_is_blocked_with_policy(&app, &key, policy));
+        record_login_failure_with_policy(&app, key.clone(), policy, 7);
+        assert!(login_is_blocked_with_policy(&app, &key, policy));
+        let state = app
+            .login_throttle
+            .lock()
+            .unwrap()
+            .get(&key)
+            .unwrap()
+            .clone();
+        assert!(state.blocked_until.unwrap() <= Instant::now() + Duration::from_secs(7));
+        assert!(state.blocked_until.unwrap() > Instant::now());
+    }
+
+    #[test]
     fn rotating_memory_session_invalidates_previous_token() {
         let old_token = "old-session-token";
         let app = WebApp::new(Vec::new(), Vec::new());
@@ -9809,6 +9881,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),
@@ -9857,6 +9931,8 @@ mod tests {
             admin_path: Some("/admin/access".into()),
             admin_permission: Some("auth.manage".into()),
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: vec![zelyra_database::Table {
@@ -10583,6 +10659,8 @@ mod tests {
             admin_path: None,
             admin_permission: None,
             admin_role: None,
+            login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+            login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
             schema: Schema {
                 database: None,
                 tables: Vec::new(),

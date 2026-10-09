@@ -41,6 +41,21 @@ users. Failed login attempts are tracked per normalized e-mail address. After
 five failures within 15 minutes, further attempts are rejected with HTTP 429
 for 60 seconds and include a `Retry-After: 60` header.
 
+The threshold and window can be configured per auth definition:
+
+~~~zelyra
+auth users {
+    table: users
+    login_rate_limit: 5 per 900
+    login_block_seconds: 60
+}
+~~~
+
+These values are the defaults when the options are omitted. The accepted range
+is 1 to 1,000 failures per window and 1 to 86,400 seconds for the window and
+lockout. The limiter is kept in process memory and resets on restart; it is not
+a distributed production limiter.
+
 Successful login creates an HttpOnly, SameSite session cookie and rotates any
 previous session token from that browser. When the
 optional sessions table is configured, only a Blake2s-256 hash of the session

@@ -420,6 +420,8 @@ fn token_text<'a>(token: &'a Token, source: &'a str) -> &'a str {
         TokenKind::Version => "version",
         TokenKind::Deprecated => "deprecated",
         TokenKind::RateLimit => "rate_limit",
+        TokenKind::LoginRateLimit => "login_rate_limit",
+        TokenKind::LoginBlockSeconds => "login_block_seconds",
         TokenKind::Handler => "handler",
         TokenKind::Requires => "requires",
         TokenKind::Permits => "permits",

@@ -384,6 +384,8 @@ pub struct AuthDef {
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
+    pub login_rate_limit: Option<ApiRateLimit>,
+    pub login_block_seconds: Option<u32>,
     pub span: Span,
 }
 

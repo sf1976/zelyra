@@ -485,6 +485,8 @@ architecture requirement for every phase, not a provider-specific feature.
 
 - [x] Password login, persistent sessions, CSRF, account activation, and
   last-administrator protection.
+- [🧪] Auth definitions can tune process-local login failure windows and lockout
+  duration; reset-token and configurable reset throttling remain open.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.

@@ -523,6 +523,9 @@ Feature eines bestimmten Anbieters.
 
 - [x] Passwort-Login, persistente Sessions, CSRF, Account-Aktivierung und
   Schutz des letzten Administrators.
+- [🧪] Auth-Definitionen können das prozesslokale Login-Fehlerfenster und die
+  Sperrdauer konfigurieren; Reset-Tokens und konfigurierbare Reset-Limits sind
+  offen.
 - [x] Direkte und rollenbasierte Berechtigungen.
 - [x] Browserverwaltung und CLI-Rollenverwaltung.
 - [x] Audit-Anzeige, begrenzter Export, strukturelle Prüfung und sicheres

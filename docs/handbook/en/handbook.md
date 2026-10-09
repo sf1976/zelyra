@@ -7091,6 +7091,12 @@ same normalized e-mail address within 15 minutes trigger a 60-second HTTP 429
 lockout. A successful login rotates and invalidates the previous browser
 session token.
 
+Login throttling can be tuned on the `auth` definition with
+`login_rate_limit: attempts per seconds` and `login_block_seconds: seconds`.
+The defaults are `5 per 900` and `60`. The in-memory limiter is process-local
+and resets on restart; it does not replace a deployment-level distributed
+rate limiter.
+
 Every state-changing browser form requires its CSRF token and a same-origin
 `Origin` or `Referer` matching the request `Host` and effective scheme.
 Malformed, missing, or cross-origin evidence is rejected, so copying a token

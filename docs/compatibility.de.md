@@ -33,6 +33,7 @@ die Version eines Formats sind verschiedene Angaben.
 | `db plan` | Textausgabe mit Vorprüfungen, Risiko, Beschreibung und SQL | Es gibt hier derzeit kein versioniertes, gespeichertes Maschinenformat für Schema-Pläne. Ausgabe nicht mit einem stabilen Parser auswerten. |
 | Modul-Bundle-Manifest | `format_version: 1` im unveröffentlichten Modul-Entwicklungszweig | Experimentelles Manifest; kein Teil von 0.3.0 und keine Kompatibilitätszusage zwischen Entwicklungsständen. |
 | API-Routenmetadaten | Experimentelle Quellfelder `version`, `deprecated` und `rate_limit` im unveröffentlichten 0.4-Zweig | Antworten geben API-Metadaten aus; OpenAPI enthält dieselben Angaben. Kontingente gelten prozesslokal, je Route und TCP-Peer-IP, sind auf 4096 Client-Buckets begrenzt und werden beim Neustart zurückgesetzt. Reverse-Proxy-Weiterleitungsheader werden nicht vertraut. |
+| Auth-Limit-Konfiguration | Experimentelle Quellfelder `login_rate_limit` und `login_block_seconds` im unveröffentlichten 0.4-Zweig | Defaults bleiben fünf Fehlversuche je 900 Sekunden und 60 Sekunden Sperre. Der Limiter ist prozesslokal und wird beim Neustart zurückgesetzt; Reset-Flows werden dadurch nicht implementiert. |
 
 Die Versionsfelder sind anhand der Implementierung in `cli/src/main.rs`,
 `cli/src/edit.rs` und der vorhandenen CLI-Tests verifiziert. Die Modul-Bundle-

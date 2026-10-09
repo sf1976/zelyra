@@ -8864,6 +8864,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             admin_path: auth.admin_path.clone(),
             admin_permission: auth.admin_permission.clone(),
             admin_role: auth.admin_role.clone(),
+            login_rate_limit: auth.login_rate_limit.unwrap_or(zelyra_ast::ApiRateLimit {
+                requests: 5,
+                window_seconds: 15 * 60,
+            }),
+            login_block_seconds: auth.login_block_seconds.unwrap_or(60),
             schema: schema.clone(),
             csrf,
         })
