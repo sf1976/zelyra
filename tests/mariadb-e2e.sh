@@ -31,6 +31,15 @@ else
     db_port="3306"
 fi
 db_password="${ZELYRA_E2E_DB_PASSWORD:-${db_password_from_url}}"
+base_database_name="${db_name}"
+if [[ "${db_host}" != "127.0.0.1" && "${db_host}" != "localhost" ]] || \
+    [[ "${base_database_name}" != "zelyra_ci" && "${base_database_name}" != "zelyra_test" ]]; then
+    echo "error: MariaDB E2E is restricted to local zelyra_ci or zelyra_test databases" >&2
+    exit 1
+fi
+db_name="${base_database_name}_e2e_$$"
+database_url="${database_url%/*}/${db_name}"
+export DATABASE_URL="${database_url}"
 suffix="$(date +%s)"
 department_name="Zelyra E2E Department-${suffix}"
 secondary_department_name="Zelyra E2E Department Secondary-${suffix}"
@@ -61,6 +70,10 @@ cleanup() {
 DELETE FROM machines WHERE number IN ('${machine_number}', '${machine_two_number}', '${machine_three_number}');
 DELETE FROM departments WHERE name IN ('${department_name}', '${secondary_department_name}');
 SQL
+        MYSQL_PWD="${db_password}" mariadb \
+            --protocol=tcp --host="${db_host}" --port="${db_port}" --user="${db_user}" \
+            "${base_database_name}" --batch --skip-column-names \
+            -e "DROP DATABASE IF EXISTS \`${db_name}\`;" >/dev/null 2>&1 || true
     fi
     rm -rf "${temp_dir}"
 }
