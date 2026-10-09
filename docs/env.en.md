@@ -168,6 +168,13 @@ from the URL into an HttpOnly cookie after exchange. Only the token hash is
 stored in the database. A successful password change consumes the token and
 revokes the account's persistent and in-process sessions.
 
+Delivery uses one background worker with room for at most 64 queued emails.
+The HTTP request does not wait for SMTP responses. A full or stopped worker
+rejects new mail and the undelivered reset token is removed. SMTP failures
+after successful enqueue are logged without secrets; delivery retries are not
+implemented. The E2E deliberately delays the SMTP response and verifies that
+the generic HTTP response returns before delivery finishes.
+
 This feature is experimental. SMTP availability, public TLS termination,
 rate-limit persistence across restarts, and independent security review remain
 operational or release gates. `tests/password-reset-e2e.sh` uses a local

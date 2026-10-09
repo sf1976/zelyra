@@ -33,8 +33,9 @@ den tatsächlich implementierten Stand.
   und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten und
   Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
   MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
-  Loopback-/HTTPS-SMTP-Konfiguration und Sitzungswiderruf sind vorhanden und
-  werden durch ein MariaDB-/SMTP-Senken-E2E geprüft. Prozesslokale Reset-Limits
+  Loopback-/HTTPS-SMTP-Konfiguration, begrenzte asynchrone Zustellung und
+  Sitzungswiderruf sind vorhanden und werden durch ein MariaDB-/SMTP-Senken-E2E
+  mit verzögerter Zustellung geprüft. Prozesslokale Reset-Limits
   und unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
   nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;

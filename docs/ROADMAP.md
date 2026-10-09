@@ -516,8 +516,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [🧪] Auth definitions can tune process-local login failure windows and lockout
   duration. Password recovery is partially implemented in the unreleased 0.4
   development branch: MariaDB stores single-use token hashes, generic
-  responses, audit, loopback/HTTPS SMTP configuration, and session revocation
-  are covered by a MariaDB/SMTP-sink E2E. Process-local reset throttling and
+  responses, audit, loopback/HTTPS SMTP configuration, bounded asynchronous
+  delivery, and session revocation are covered by a MariaDB/SMTP-sink E2E with
+  deliberately delayed delivery. Process-local reset throttling and
   independent security review remain open; the account lifecycle is not
   complete.
 - [x] Direct permissions and role-derived permissions.

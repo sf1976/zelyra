@@ -73,7 +73,7 @@ echo "[1/8] create password-reset schema"
 DATABASE_URL="${database_url}" "${zelyra_bin}" db setup "${project_file}"
 
 echo "[2/8] start loopback SMTP capture and protected application"
-python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message.eml" "${temp_dir}/smtp.port" &
+python3 "${script_dir}/smtp_capture.py" "${temp_dir}/message.eml" "${temp_dir}/smtp.port" 1.5 &
 smtp_pid=$!
 for _ in $(seq 1 50); do [[ -s "${temp_dir}/smtp.port" ]] && break; sleep 0.1; done
 [[ -s "${temp_dir}/smtp.port" ]]
@@ -106,9 +106,16 @@ curl --silent --show-error --output /dev/null --cookie-jar "${cookie}" \
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = ${user_id}")" == "1" ]]
 
 echo "[4/8] compare known and unknown account responses"
-known_status="$(curl --silent --show-error --output "${temp_dir}/known.html" --write-out '%{http_code}' \
+known_result="$(curl --silent --show-error --output "${temp_dir}/known.html" --write-out '%{http_code} %{time_total}' \
     --cookie-jar "${temp_dir}/forgot.cookies" --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" "${base_url}/forgot-password")"
+known_status="${known_result%% *}"
+known_elapsed="${known_result#* }"
+python3 - "${known_elapsed}" <<'PY'
+import sys
+if float(sys.argv[1]) >= 1.0:
+    raise SystemExit("password recovery waited for the SMTP server response")
+PY
 unknown_status="$(curl --silent --show-error --output "${temp_dir}/unknown.html" --write-out '%{http_code}' \
     --cookie-jar "${temp_dir}/unknown.cookies" --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${unknown_email}" "${base_url}/forgot-password")"
@@ -177,9 +184,15 @@ echo "[7/8] reject replay and verify new password"
 replay_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${token}")"
 [[ "${replay_status}" == 400 ]]
+python3 - "${temp_dir}/message.eml" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[1]).unlink(missing_ok=True)
+PY
 curl --silent --show-error --output /dev/null --header "Origin: ${base_url}" \
     --data-urlencode "_zelyra_csrf=${csrf}" --data-urlencode "email=${email}" \
     "${base_url}/forgot-password"
+for _ in $(seq 1 40); do [[ -s "${temp_dir}/message.eml" ]] && break; sleep 0.25; done
 expired_token="$(python3 - "${temp_dir}/message.eml" <<'PY'
 import email, pathlib, re, sys
 message = email.message_from_bytes(pathlib.Path(sys.argv[1]).read_bytes())

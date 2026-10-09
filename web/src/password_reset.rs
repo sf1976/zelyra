@@ -5,17 +5,29 @@ use lettre::{
     Message, SmtpTransport, Transport,
 };
 use rand_core::{OsRng, RngCore};
-use std::time::Duration;
+use std::{
+    sync::mpsc::{sync_channel, SyncSender, TrySendError},
+    thread,
+    time::Duration,
+};
 
 const RESET_TOKEN_TTL_MINUTES: u32 = 15;
 const RESET_COOKIE: &str = "zelyra_password_reset";
 const RESET_COOKIE_PATH: &str = "/reset-password";
+const RESET_MAIL_QUEUE_CAPACITY: usize = 64;
 type ResetMailSender = dyn Fn(&str, &str, UiLanguage) -> Result<(), String> + Send + Sync;
+
+struct ResetMailJob {
+    email: String,
+    link: String,
+    language: UiLanguage,
+}
 
 #[derive(Clone)]
 pub struct PasswordResetMailer {
     base_url: String,
     sender: Arc<ResetMailSender>,
+    queue: Option<SyncSender<ResetMailJob>>,
 }
 
 impl fmt::Debug for PasswordResetMailer {
@@ -79,28 +91,42 @@ impl PasswordResetMailer {
             .parse::<Mailbox>()
             .map_err(|_| "ZELYRA_SMTP_FROM must be a valid email address".to_owned())?;
         let base_url = base_url.trim_end_matches('/').to_owned();
+        let sender: Arc<ResetMailSender> = Arc::new(move |recipient, link, language| {
+            let to = recipient
+                .parse::<Mailbox>()
+                .map_err(|_| "password reset recipient is invalid".to_owned())?;
+            let subject = i18n::text(language, "auth.reset_email_subject").to_owned();
+            let body = i18n::text(language, "auth.reset_email_body")
+                .replace("{minutes}", &RESET_TOKEN_TTL_MINUTES.to_string())
+                .replace("{link}", link);
+            let message = Message::builder()
+                .from(from.clone())
+                .to(to)
+                .subject(subject)
+                .header(ContentType::TEXT_PLAIN)
+                .body(body)
+                .map_err(|_| "password reset message could not be built".to_owned())?;
+            transport
+                .send(&message)
+                .map(|_| ())
+                .map_err(|_| "SMTP transport could not deliver the message".to_owned())
+        });
+        let (queue, receiver) = sync_channel::<ResetMailJob>(RESET_MAIL_QUEUE_CAPACITY);
+        let worker_sender = sender.clone();
+        thread::Builder::new()
+            .name("zelyra-password-reset-mail".into())
+            .spawn(move || {
+                while let Ok(job) = receiver.recv() {
+                    if let Err(error) = worker_sender(&job.email, &job.link, job.language) {
+                        eprintln!("zelyra web: password reset message delivery failed: {error}");
+                    }
+                }
+            })
+            .map_err(|_| "password reset mail worker could not be started".to_owned())?;
         Ok(Self {
             base_url,
-            sender: Arc::new(move |recipient, link, language| {
-                let to = recipient
-                    .parse::<Mailbox>()
-                    .map_err(|_| "password reset recipient is invalid".to_owned())?;
-                let subject = i18n::text(language, "auth.reset_email_subject").to_owned();
-                let body = i18n::text(language, "auth.reset_email_body")
-                    .replace("{minutes}", &RESET_TOKEN_TTL_MINUTES.to_string())
-                    .replace("{link}", link);
-                let message = Message::builder()
-                    .from(from.clone())
-                    .to(to)
-                    .subject(subject)
-                    .header(ContentType::TEXT_PLAIN)
-                    .body(body)
-                    .map_err(|_| "password reset message could not be built".to_owned())?;
-                transport
-                    .send(&message)
-                    .map(|_| ())
-                    .map_err(|_| "SMTP transport could not deliver the message".to_owned())
-            }),
+            sender,
+            queue: Some(queue),
         })
     }
 
@@ -112,12 +138,27 @@ impl PasswordResetMailer {
         Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
             sender: Arc::new(move |email, link, _language| sender(email, link)),
+            queue: None,
         }
     }
 
     fn send(&self, email: &str, token: &str, language: UiLanguage) -> Result<(), String> {
         let link = format!("{}/reset-password?token={token}", self.base_url);
-        (self.sender)(email, &link, language)
+        let Some(queue) = self.queue.as_ref() else {
+            return (self.sender)(email, &link, language);
+        };
+        queue
+            .try_send(ResetMailJob {
+                email: email.to_owned(),
+                link,
+                language,
+            })
+            .map_err(|error| match error {
+                TrySendError::Full(_) => "password reset mail queue is full".to_owned(),
+                TrySendError::Disconnected(_) => {
+                    "password reset mail worker is unavailable".to_owned()
+                }
+            })
     }
 }
 
@@ -227,6 +268,7 @@ pub(super) fn dispatch_password_reset(
                     new_token(),
                 ) {
                     let token_hash = session_token_hash(&token);
+                    let stored_token_hash = token_hash.clone();
                     let queries = [
                         zelyra_database::Query {
                             sql: format!(
@@ -269,6 +311,31 @@ pub(super) fn dispatch_password_reset(
                         if let Err(error) = mailer.send(recipient, &token, app.ui_language) {
                             eprintln!(
                                 "zelyra web: password reset message delivery failed: {error}"
+                            );
+                            let mut failure_queries = vec![zelyra_database::Query {
+                                sql: format!(
+                                    "DELETE FROM {} WHERE token_hash = :token_hash",
+                                    quote_identifier(reset_table)
+                                ),
+                                params: vec![(
+                                    "token_hash".into(),
+                                    QueryValue::String(stored_token_hash),
+                                )],
+                            }];
+                            if let Some(audit_table) = auth.audit_table.as_deref() {
+                                failure_queries.extend(audit_insert_queries(
+                                    audit_table,
+                                    auth.audit_chain,
+                                    None,
+                                    "auth.password_reset.delivery_unqueued",
+                                    Some(user_id),
+                                    "",
+                                ));
+                            }
+                            let _ = zelyra_database::execute_mariadb_queries(
+                                database_url,
+                                &failure_queries,
+                                true,
                             );
                         }
                     } else {
@@ -683,6 +750,27 @@ mod tests {
                 )
                 .as_str()
             )
+        );
+    }
+
+    #[test]
+    fn reset_mail_queue_is_bounded_and_fails_closed_when_full() {
+        let (queue, _receiver) = sync_channel(RESET_MAIL_QUEUE_CAPACITY);
+        let mailer = PasswordResetMailer {
+            base_url: "https://app.example.test".into(),
+            sender: Arc::new(|_, _, _| Ok(())),
+            queue: Some(queue),
+        };
+        for _ in 0..RESET_MAIL_QUEUE_CAPACITY {
+            mailer
+                .send("user@example.test", &"a".repeat(64), UiLanguage::English)
+                .unwrap();
+        }
+        assert_eq!(
+            mailer
+                .send("user@example.test", &"b".repeat(64), UiLanguage::English)
+                .unwrap_err(),
+            "password reset mail queue is full"
         );
     }
 }

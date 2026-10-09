@@ -33,8 +33,16 @@ or human acceptance.
 ## Accounts and database operations
 
 - Login failure limits are configurable per auth definition and process-local.
-  Password recovery, reset tokens, and reset limits are not implemented; there
-  is no secure email or token delivery path for them yet.
+  Password recovery is partially implemented in the 0.4 branch: MariaDB stores
+  Blake2s hashes of random single-use tokens with a 15-minute expiry; generic
+  responses, CSRF/origin checks, audit, and persistent/in-memory session
+  revocation are present. A bounded single-worker queue holds up to 64 emails
+  and keeps SMTP delivery outside the HTTP request; a token is removed if the
+  queue is full. SMTP failures after enqueue are logged but not retried. Limits
+  are process-local and not shared between instances; database access timing
+  can still vary. A MariaDB/SMTP-sink E2E checks enumeration, delayed delivery,
+  token hashing, replay, expiry, CSRF/origin, and session revocation. The
+  mail/token lifecycle is experimental and needs independent review.
 - Session administration is partially implemented. Device metadata and full
   self-service remain open; account-lifecycle acceptance has not passed.
 - MariaDB TLS verifies the certificate chain and host names according to the

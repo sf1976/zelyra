@@ -180,6 +180,14 @@ aus der URL in ein HttpOnly-Cookie übernommen. In der Datenbank wird nur der
 Token-Hash abgelegt. Eine erfolgreiche Änderung verbraucht den Token und
 widerruft persistente und prozesslokale Sitzungen des Kontos.
 
+Die Zustellung läuft über einen einzelnen Hintergrund-Worker mit maximal 64
+wartenden E-Mails. Der HTTP-Request wartet nicht auf SMTP-Antworten; ein
+übervoller oder beendeter Worker nimmt keine weitere E-Mail an und entfernt
+den nicht zugestellten Reset-Token wieder. SMTP-Ausfälle nach erfolgreicher
+Einreihung werden geheimnisfrei protokolliert; Zustellwiederholung ist nicht
+implementiert. Das E2E verzögert die SMTP-Antwort absichtlich und prüft, dass
+die generische HTTP-Antwort trotzdem vor der Zustellung zurückkommt.
+
 Diese Funktion ist experimentell. SMTP-Verfügbarkeit, öffentliche TLS-
 Terminierung, dauerhafte Ratenbegrenzung über Neustarts und unabhängige
 Sicherheitsprüfung bleiben Betriebs- beziehungsweise Release-Gates. Der

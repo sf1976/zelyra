@@ -34,8 +34,18 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 ## Konten und Datenbankbetrieb
 
 - Login-Fehlversuche sind pro Auth-Definition konfigurierbar und prozesslokal.
-  Passwortzurücksetzung, Reset-Tokens und Reset-Limits sind nicht implementiert;
-  es gibt dafür noch keine sichere E-Mail- oder Tokenzustellung.
+  Passwortzurücksetzung ist im 0.4-Zweig teilweise implementiert: MariaDB
+  speichert Blake2s-Hashes zufälliger Einweg-Tokens mit 15 Minuten Ablaufzeit;
+  generische Antworten, CSRF/Origin-Prüfung, Audit und Widerruf persistenter
+  sowie flüchtiger Sitzungen sind vorhanden. Eine begrenzte Ein-Worker-Queue
+  mit bis zu 64 E-Mails hält den SMTP-Versand aus dem HTTP-Request heraus; bei
+  vollem Queue wird der nicht zugestellte Token entfernt. SMTP-Ausfälle nach
+  Einreihung werden protokolliert, aber nicht erneut zugestellt. Die Limits
+  sind prozesslokal und nicht zwischen Instanzen geteilt; DB-Zugriffszeiten
+  können weiterhin variieren. Ein MariaDB-/SMTP-Senken-E2E prüft Enumeration,
+  verzögerte Zustellung, Token-Hash, Replay, Ablauf, CSRF/Origin und
+  Sitzungswiderruf. Der Mail-/Token-Lebenszyklus ist experimentell und braucht
+  unabhängige Prüfung.
 - Sitzungsadministration ist teilweise umgesetzt. Gerätemetadaten und die
   vollständige Selbstverwaltung bleiben offen; die Kontolebenszyklus-Abnahme
   ist nicht bestanden.
