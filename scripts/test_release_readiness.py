@@ -76,7 +76,10 @@ class ReleaseReadinessTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            self.assertEqual(candidate_tag(root, "0.4.0"), "v0.4.0-rc.1")
             self.assertEqual(unfinished_gates(root, "0.4.0"), [])
+            self.assertEqual(unfinished_gates(root, "0.4.0", "a" * 40), [])
+            self.assertTrue(any("published candidate tag" in failure for failure in unfinished_gates(root, "0.4.0", "b" * 40)))
 
             english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
             english.write_text(
