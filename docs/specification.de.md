@@ -173,6 +173,14 @@ erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben.
 Collection-Schleifen für Arrays von Records sind verfügbar. Option-aware
 Feld-Ausdrücke und reichere lokale View-Daten bleiben geplant.
 
+Funktions-SQL kann für klassifizierte `SELECT`-Anweisungen `uses
+Database(read)` oder für klassifizierte `INSERT`-, `UPDATE`- und `DELETE`-
+Anweisungen `uses Database(write)` deklarieren. Nicht klassifizierbare
+Anweisungen benötigen `uses Database`. Die breite Form bleibt mit bestehenden
+Programmen kompatibel. Projekte können die engeren Effekte über
+`database_read` und `database_write` in `zelyra.toml` einzeln freigeben. Diese
+Freigaben ändern keine MariaDB-Kontorechte.
+
 ### Wiederverwendbare View-Layouts
 
 Benannte Views sind deterministische Seitenlayouts. Jeder View muss genau einen

@@ -5181,11 +5181,15 @@ fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, Stri
             ));
         };
         let key = raw_key.trim().to_ascii_lowercase();
-        let capability = KNOWN_CAPABILITIES
-            .iter()
-            .copied()
-            .find(|capability| capability.to_ascii_lowercase() == key)
-            .ok_or_else(|| format!("unknown capability setting `{key}`"))?;
+        let capability = match key.as_str() {
+            "database_read" => "Database(read)",
+            "database_write" => "Database(write)",
+            _ => KNOWN_CAPABILITIES
+                .iter()
+                .copied()
+                .find(|capability| capability.to_ascii_lowercase() == key)
+                .ok_or_else(|| format!("unknown capability setting `{key}`"))?,
+        };
         if !seen.insert(capability) {
             return Err(format!("capability `{key}` is configured more than once"));
         }

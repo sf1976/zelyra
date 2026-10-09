@@ -1473,8 +1473,32 @@ fn load_machines() -> Machine[]
 Bekannte Capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random Console
+Database Database(read) Database(write) Network FileSystem Environment Process Clock Random Console
 ~~~
+
+Für Funktions-SQL erlaubt `Database(read)` geprüfte `SELECT`-Anweisungen;
+`Database(write)` erlaubt geprüfte `INSERT`-, `UPDATE`- und `DELETE`-
+Anweisungen. Nicht klassifizierbares SQL benötigt die breite Capability
+`Database`. Die breite Form bleibt für bestehende Projekte verfügbar und
+erfüllt beide engeren Effekte. Projekte können die Effekte einzeln freigeben:
+
+~~~zelyra
+fn maschinen_liste() -> Machine[] uses Database(read) {
+    return sql<Machine[]> {
+        SELECT id, number, name FROM machines
+    }
+}
+~~~
+
+~~~toml
+[capabilities]
+database_read = true
+database_write = false
+~~~
+
+Das sind Quellfreigaben des Compilers und der Runtime, keine Rechte eines
+MariaDB-Kontos. Framework-CRUD, Formulare, Authentifizierung und Page-Daten
+benötigen weiterhin `Database`.
 
 Aufrufende Funktionen müssen benötigte Capabilities weiterführen. Projekte
 können sie in `zelyra.toml` freigeben:

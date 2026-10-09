@@ -479,6 +479,16 @@ Diese Bereiche sind keine bequeme Umgehung von Sicherheit: Capabilities,
 Allowlisten, SQL-Prüfungen, CSRF und destruktive Datenbankfreigaben bleiben
 explizit und werden nicht durch `.env` abgeschaltet.
 
+Funktions-SQL kann die engeren Deklarationen `uses Database(read)` für
+`SELECT` und `uses Database(write)` für `INSERT`, `UPDATE` oder `DELETE`
+verwenden. Unter `[capabilities]` werden sie mit `database_read = true` und
+`database_write = true` freigegeben. `uses Database` und `database = true`
+bleiben als rückwärtskompatible breite Freigaben verfügbar. SQL-Anweisungen,
+die der Prüfer nicht einordnen kann, benötigen die breite Capability; diese
+Quellfreigaben erstellen oder beschränken keine MariaDB-Benutzer.
+Framework-CRUD, Formulare, Authentifizierung und Page-Daten benötigen weiterhin
+die breite Datenbankfreigabe.
+
 `console = false` ist die standardmäßige Projektfreigabe für interaktive
 Terminaleingabe. Programme, die `read_console(prompt)` verwenden, müssen
 außerdem in der aufrufenden Funktion `uses Console` deklarieren. Setze die

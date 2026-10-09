@@ -247,13 +247,65 @@ fn accepts_declared_database_capability_for_sql() {
 }
 
 #[test]
+fn scopes_sql_to_read_or_write_database_effects() {
+    let read = parse(
+        &lex("fn report() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    check_capabilities(&read).unwrap();
+
+    let denied_read = parse(
+        &lex("fn report() uses Database(read) { rows = sql<Int> { UPDATE customers SET id = 1 } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_capabilities(&denied_read).unwrap_err();
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("does not declare capability `Database(write)`")));
+
+    let denied_write = parse(
+        &lex("fn report() uses Database(write) { rows = sql<Int> { SELECT 1 } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let errors = check_capabilities(&denied_write).unwrap_err();
+    assert!(
+        errors.iter().any(|error| error
+            .message
+            .contains("does not declare capability `Database(read)`")),
+        "{errors:#?}"
+    );
+}
+
+#[test]
+fn scoped_database_effects_require_matching_project_grants() {
+    let program = parse(
+        &lex("fn report() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn main() { }")
+            .unwrap(),
+    )
+    .unwrap();
+    let grants = HashSet::from([String::from("Database(write)")]);
+    let errors = check_capabilities_with_grants(&program, Some(&grants)).unwrap_err();
+    assert!(errors.iter().any(|error| {
+        error
+            .message
+            .contains("set `database_read` to true in zelyra.toml")
+    }));
+
+    let legacy_grants = HashSet::from([String::from("Database")]);
+    check_capabilities_with_grants(&program, Some(&legacy_grants)).unwrap();
+}
+
+#[test]
 fn rejects_sql_without_database_capability() {
     let program = parse(&lex("fn main() { rows = sql<Int> { SELECT 1 } }").unwrap()).unwrap();
     let errors = check_capabilities(&program).unwrap_err();
     assert!(errors.iter().any(|error| {
         error
             .message
-            .contains("does not declare capability `Database`")
+            .contains("does not declare capability `Database(read)`")
     }));
 }
 
@@ -313,7 +365,24 @@ fn enforces_runtime_database_capability_before_connecting() {
     .unwrap_err();
     assert!(error
         .message
-        .contains("SQL access requires `Database` in the current function"));
+        .contains("SQL access requires `Database(read)` in the current function"));
+}
+
+#[test]
+fn enforces_scoped_database_grants_before_connecting() {
+    let program =
+        parse(&lex("fn main() uses Database(read) { rows = sql<Int> { SELECT 1 } }").unwrap())
+            .unwrap();
+    let grants = HashSet::from([String::from("Database(write)")]);
+    let error = execute_with_database_and_capabilities(
+        &program,
+        "mariadb://invalid:invalid@127.0.0.1:1/invalid",
+        Some(&grants),
+    )
+    .unwrap_err();
+    assert!(error
+        .message
+        .contains("function `main` requires `Database(read)`"));
 }
 
 #[test]

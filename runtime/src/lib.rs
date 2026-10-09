@@ -46,6 +46,8 @@ impl fmt::Display for CapabilityError {
 
 pub const KNOWN_CAPABILITIES: &[&str] = &[
     "Database",
+    "Database(read)",
+    "Database(write)",
     "Network",
     "FileSystem",
     "Environment",
@@ -3048,11 +3050,11 @@ pub fn check_capabilities_with_grants(
                     message: format!("capability `{capability}` is declared more than once"),
                     span: function.span,
                 });
-            } else if grants.is_some_and(|grants| !grants.contains(capability)) {
+            } else if grants.is_some_and(|grants| !project_grants_capability(grants, capability)) {
                 errors.push(CapabilityError {
                     message: format!(
                         "capability `{capability}` is not enabled by the project; set `{}` to true in zelyra.toml",
-                        capability.to_ascii_lowercase()
+                        capability_config_key(capability)
                     ),
                     span: function.span,
                 });
@@ -3149,14 +3151,17 @@ fn check_capability_expr(
     errors: &mut Vec<CapabilityError>,
 ) {
     match &expression.kind {
-        ExprKind::Sql { .. } => require_capability(
-            "Database",
-            "SQL access",
-            expression.span,
-            function,
-            declared,
-            errors,
-        ),
+        ExprKind::Sql { query, .. } => {
+            let capability = sql_required_capability(query);
+            require_capability(
+                capability,
+                "SQL access",
+                expression.span,
+                function,
+                declared,
+                errors,
+            );
+        }
         ExprKind::Call { name, args, .. } => {
             if name == "read_console" {
                 require_capability(
@@ -3255,7 +3260,7 @@ fn check_capability_expr(
             if let Some(callee) = functions.get(name.as_str()) {
                 for capability in &callee.capabilities {
                     if KNOWN_CAPABILITIES.contains(&capability.as_str())
-                        && !declared.contains(capability.as_str())
+                        && !function_declares_capability(declared, capability)
                     {
                         errors.push(CapabilityError {
                             message: format!(
@@ -3322,7 +3327,7 @@ fn require_capability(
     declared: &HashSet<&str>,
     errors: &mut Vec<CapabilityError>,
 ) {
-    if !declared.contains(capability) {
+    if !function_declares_capability(declared, capability) {
         errors.push(CapabilityError {
             message: format!(
                 "function `{}` uses {operation} but does not declare capability `{capability}`; add `uses {capability}`",
@@ -3330,6 +3335,49 @@ fn require_capability(
             ),
             span,
         });
+    }
+}
+
+fn function_declares_capability(declared: &HashSet<&str>, capability: &str) -> bool {
+    declared.contains(capability)
+        || (capability.starts_with("Database(") && declared.contains("Database"))
+}
+
+fn project_grants_capability(grants: &HashSet<String>, capability: &str) -> bool {
+    if grants.contains(capability)
+        || (capability.starts_with("Database(") && grants.contains("Database"))
+    {
+        return true;
+    }
+    capability == "Database"
+        && grants.contains("Database(read)")
+        && grants.contains("Database(write)")
+}
+
+fn capability_config_key(capability: &str) -> String {
+    match capability {
+        "Database(read)" => "database_read".into(),
+        "Database(write)" => "database_write".into(),
+        _ => capability.to_ascii_lowercase(),
+    }
+}
+
+fn sql_required_capability(query: &str) -> &'static str {
+    let command = zelyra_database::sql::analyze_table_access(query, &[]).0;
+    match command {
+        Some("SELECT") => {
+            let upper = query.to_ascii_uppercase();
+            if upper.contains("FOR UPDATE")
+                || upper.contains("INTO OUTFILE")
+                || upper.contains("INTO DUMPFILE")
+            {
+                "Database(write)"
+            } else {
+                "Database(read)"
+            }
+        }
+        Some("INSERT" | "UPDATE" | "DELETE") => "Database(write)",
+        _ => "Database",
     }
 }
 
@@ -5149,10 +5197,10 @@ impl Interpreter {
         operation: &str,
         span: Span,
     ) -> Result<(), RuntimeError> {
-        let declared = self
-            .active_capabilities
-            .last()
-            .is_some_and(|capabilities| capabilities.contains(capability));
+        let declared = self.active_capabilities.last().is_some_and(|capabilities| {
+            capabilities.contains(capability)
+                || (capability.starts_with("Database(") && capabilities.contains("Database"))
+        });
         if !declared {
             return Err(self.runtime_error(
                 span,
@@ -5164,7 +5212,7 @@ impl Interpreter {
         if self
             .granted_capabilities
             .as_ref()
-            .is_some_and(|grants| !grants.contains(capability))
+            .is_some_and(|grants| !project_grants_capability(grants, capability))
         {
             return Err(self.runtime_error(
                 span,
@@ -5917,7 +5965,7 @@ impl Interpreter {
             if let Some(capability) = function
                 .capabilities
                 .iter()
-                .find(|capability| !grants.contains(*capability))
+                .find(|capability| !project_grants_capability(grants, capability))
             {
                 return Err(self.runtime_error(
                     function.span,
@@ -7061,7 +7109,8 @@ impl Interpreter {
                 let ExprKind::Sql { query, .. } = &expr.kind else {
                     unreachable!();
                 };
-                self.require_runtime_capability("Database", "SQL access", expr.span)?;
+                let capability = sql_required_capability(query);
+                self.require_runtime_capability(capability, "SQL access", expr.span)?;
                 let Some(database_url) = self.database_url.clone() else {
                     return Err(
                         self.runtime_error(expr.span, "SQL execution requires a database runtime")

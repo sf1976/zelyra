@@ -421,6 +421,15 @@ sections include `[capabilities]`, `[filesystem]`, `[network]`, `[process]`,
 security: capabilities, allowlists, SQL checks, CSRF, and destructive database
 approval cannot be disabled through `.env`.
 
+Function-level SQL can use the narrower declarations `uses Database(read)` for
+`SELECT` and `uses Database(write)` for `INSERT`, `UPDATE`, or `DELETE`. Grant
+them with `database_read = true` and `database_write = true` under
+`[capabilities]`. The legacy `uses Database` and `database = true` remain
+backward-compatible broad grants. SQL statements the checker cannot classify
+require the broad capability; these source grants do not create or restrict
+MariaDB users. Framework-managed CRUD, forms, authentication, and page data
+still require the broad database grant.
+
 `console = false` is the default project grant for interactive terminal input.
 Programs that call `read_console(prompt)` must also declare `uses Console` on
 the enclosing function. Set the grant to `true` only for CLI programs; it does

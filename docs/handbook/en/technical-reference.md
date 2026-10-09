@@ -1354,8 +1354,32 @@ fn load_machines() -> Machine[]
 Known capabilities:
 
 ~~~text
-Database Network FileSystem Environment Process Clock Random Console
+Database Database(read) Database(write) Network FileSystem Environment Process Clock Random Console
 ~~~
+
+For function-level SQL, `Database(read)` allows checked `SELECT` statements;
+`Database(write)` allows checked `INSERT`, `UPDATE`, and `DELETE` statements.
+Unclassified SQL requires the broad `Database` capability. The broad form
+remains supported for existing projects and satisfies either scoped effect.
+Project settings can grant the scoped effects independently:
+
+~~~zelyra
+fn list_machines() -> Machine[] uses Database(read) {
+    return sql<Machine[]> {
+        SELECT id, number, name FROM machines
+    }
+}
+~~~
+
+~~~toml
+[capabilities]
+database_read = true
+database_write = false
+~~~
+
+These are compiler/runtime source grants, not MariaDB account permissions.
+Framework-managed CRUD, forms, authentication, and page data still require
+`Database`.
 
 Calling functions must propagate required capabilities. Projects grant them
 through `zelyra.toml`:

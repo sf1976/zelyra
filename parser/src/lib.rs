@@ -1897,7 +1897,14 @@ impl<'a> Parser<'a> {
         if self.at(&TokenKind::Uses) {
             self.advance();
             loop {
-                capabilities.push(self.ident("capability name")?.0);
+                let (mut capability, _) = self.ident("capability name")?;
+                if capability == "Database" && self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let (access, _) = self.ident("database access effect")?;
+                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
+                    capability = format!("Database({access})");
+                }
+                capabilities.push(capability);
                 self.skip_newlines();
                 if !self.at(&TokenKind::Comma) {
                     break;
@@ -3561,6 +3568,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(program.functions[0].capabilities, ["Network", "FileSystem"]);
+    }
+
+    #[test]
+    fn parses_scoped_database_capabilities() {
+        let program = parse(
+            &lex("fn report() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].capabilities, ["Database(read)"]);
     }
 
     #[test]

@@ -189,6 +189,13 @@ database failures produce generic HTTP boundaries without exposing database
 details. Collection loops are supported for arrays of records. Optional-aware
 field expressions and richer view-local data remain planned.
 
+Function-level SQL may declare `uses Database(read)` for classified `SELECT`
+statements or `uses Database(write)` for classified `INSERT`, `UPDATE`, and
+`DELETE` statements. Unclassified statements require `uses Database`. The
+broad form remains compatible with existing programs. Projects may grant the
+scoped effects independently through `database_read` and `database_write` in
+`zelyra.toml`; these grants do not change MariaDB account permissions.
+
 ### Reusable view layouts
 
 Named views are deterministic page layouts. Each view must declare exactly one

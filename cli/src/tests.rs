@@ -1332,6 +1332,55 @@ fn dispatches_json_api_input_to_a_typed_handler() {
 }
 
 #[test]
+fn enforces_scoped_database_effects_in_generated_api_handlers() {
+    let program = parse(
+        &lex(
+            "fn readiness() -> Int uses Database(read) { return sql<Int> { SELECT 1 } } api GET \"/ready\" { handler readiness output Int } fn main() { }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(check_apis(&program).is_ok());
+    let request =
+        zelyra_web::parse_request("GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+    let api = &program.apis[0];
+    let database_url = "mariadb://invalid:invalid@127.0.0.1:1/invalid";
+
+    let no_grants = HashSet::new();
+    let denied = dispatch_api_with_capabilities(
+        &program,
+        api,
+        "readiness",
+        &request,
+        &HashMap::new(),
+        ApiRuntimeContext {
+            database_url: Some(database_url),
+            capability_grants: Some(&no_grants),
+            runtime_policy: None,
+        },
+    );
+    assert_eq!(denied.status, 500);
+    assert!(denied.body.contains("Database(read)"));
+    assert!(denied.body.contains("requires `Database(read)`"));
+
+    let read_grant = HashSet::from([String::from("Database(read)")]);
+    let allowed = dispatch_api_with_capabilities(
+        &program,
+        api,
+        "readiness",
+        &request,
+        &HashMap::new(),
+        ApiRuntimeContext {
+            database_url: Some(database_url),
+            capability_grants: Some(&read_grant),
+            runtime_policy: None,
+        },
+    );
+    assert_eq!(allowed.status, 500);
+    assert!(!allowed.body.contains("not granted"));
+}
+
+#[test]
 fn dispatches_string_keyed_map_api_input_and_output() {
     let program = parse(
         &lex(
@@ -1903,6 +1952,32 @@ fn reads_project_capability_grants() {
     assert!(grants.contains("Database"));
     assert!(grants.contains("Network"));
     assert!(grants.contains("Console"));
+}
+
+#[test]
+fn reads_scoped_database_capability_grants() {
+    let directory = env::temp_dir().join(format!(
+        "zelyra-scoped-capability-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[capabilities]\ndatabase_read = true\n",
+    )
+    .unwrap();
+    fs::write(directory.join("main.zyl"), "fn main() { }").unwrap();
+
+    let grants = project_capability_grants(directory.join("main.zyl").to_str().unwrap())
+        .unwrap()
+        .unwrap();
+    assert!(grants.contains("Database(read)"));
+    assert!(!grants.contains("Database(write)"));
+    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
