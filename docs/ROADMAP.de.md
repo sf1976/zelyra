@@ -72,8 +72,10 @@ den tatsächlich implementierten Stand.
 - [~] Der HTTP-Server verarbeitet bis zu 64 Verbindungen parallel und verwirft
   weitere Verbindungen, statt eine unbegrenzte Worker-Warteschlange anzulegen.
   Lesen und Schreiben je Verbindung sind auf 30 Sekunden begrenzt; verspätete
-  Antworten entfallen. Synchrone Handler lassen sich nicht abbrechen und können
-  weiterhin einen Worker belegen. Die
+  Antworten entfallen. MariaDB-Poolwartezeiten und Abfragen sind jetzt durch
+  die verbleibende Dialogfrist begrenzt; abgelaufene Abfragen werden serverseitig
+  abgebrochen. CPU-intensive oder andere blockierende Handler-Arbeit bleibt
+  synchron und kann weiterhin einen Worker belegen. Die
   [HTTP-Betriebsanleitung](http-operations.de.md) definiert TCP-Listener-
   Erreichbarkeit, die eingebaute Prozess-Liveness-Route, anwendungseigene
   Readiness und begrenzte Retries für sichere oder idempotente Anfragen.

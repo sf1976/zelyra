@@ -52,7 +52,9 @@ principles; the roadmap below tracks what is actually implemented.
 - [~] The HTTP server handles up to 64 connections concurrently and drops
   excess connections instead of creating an unbounded worker queue. Connection
   reads and writes are limited to 30 seconds and late responses are dropped.
-  Synchronous handlers cannot be cancelled and can still occupy a worker slot;
+  MariaDB pool waits and statements are now bounded by the remaining exchange
+  deadline, and timed-out statements are aborted server-side. CPU-bound or other
+  blocking handler work remains synchronous and can still occupy a worker slot;
   the [HTTP operations guide](http-operations.en.md) defines TCP listener reachability,
   the built-in process liveness route, application-owned readiness, and bounded
   retries only for safe/idempotent requests. The generated MariaDB business

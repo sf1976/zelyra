@@ -2,6 +2,7 @@ use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder, SslOpts, Value};
 use r2d2::{ManageConnection, Pool};
 use sha2::{Digest, Sha256};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fmt;
@@ -9,7 +10,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
 pub mod sql;
@@ -1445,6 +1446,46 @@ pub struct DatabaseError {
     pub message: String,
 }
 
+thread_local! {
+    static QUERY_DEADLINE: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// Temporarily bounds database work on the current thread by an absolute
+/// request deadline. Dropping the guard restores the prior deadline.
+pub struct QueryDeadlineGuard {
+    previous: Option<Instant>,
+}
+
+impl Drop for QueryDeadlineGuard {
+    fn drop(&mut self) {
+        QUERY_DEADLINE.with(|deadline| deadline.set(self.previous));
+    }
+}
+
+pub fn set_query_deadline(deadline: Instant) -> QueryDeadlineGuard {
+    let previous = QUERY_DEADLINE.with(|active| {
+        let previous = active.get();
+        active.set(Some(previous.map_or(deadline, |value| value.min(deadline))));
+        previous
+    });
+    QueryDeadlineGuard { previous }
+}
+
+fn remaining_query_budget() -> Result<Option<Duration>, DatabaseError> {
+    QUERY_DEADLINE.with(|deadline| {
+        deadline.get().map_or(Ok(None), |deadline| {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining < Duration::from_millis(1) {
+                Err(DatabaseError {
+                    message: "request deadline exceeded before database operation".into(),
+                })
+            } else {
+                Ok(Some(remaining))
+            }
+        })
+    })
+}
+
 const MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS: u32 = 10;
 const MARIADB_MAX_CONNECT_TIMEOUT_SECS: u32 = 300;
 const MARIADB_DEFAULT_QUERY_TIMEOUT_SECS: u32 = 30;
@@ -2382,6 +2423,40 @@ fn execute_mariadb_queries_on_pool(
 
     let mut results = Vec::with_capacity(prepared.len());
     for (sql, parameters) in prepared {
+        let budget = match remaining_query_budget() {
+            Ok(budget) => budget,
+            Err(error) => {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(error);
+            }
+        };
+        if let Some(remaining) = budget {
+            let seconds = remaining
+                .as_secs_f64()
+                .min(f64::from(settings.query_seconds));
+            if seconds < 0.001 {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(DatabaseError {
+                    message: "request deadline exceeded before database statement".into(),
+                });
+            }
+            if let Err(error) = connection
+                .connection
+                .query_drop(format!("SET SESSION max_statement_time={seconds:.6}"))
+            {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(mariadb_driver_error(error));
+            }
+        }
         match execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters) {
             Ok(result) => results.push(result),
             Err(error) => {
@@ -2391,6 +2466,19 @@ fn execute_mariadb_queries_on_pool(
                 connection.discard = true;
                 return Err(error);
             }
+        }
+    }
+
+    if QUERY_DEADLINE.with(Cell::get).is_some() {
+        if let Err(error) = connection.connection.query_drop(format!(
+            "SET SESSION max_statement_time={}",
+            settings.query_seconds
+        )) {
+            if transaction {
+                let _ = connection.connection.query_drop("ROLLBACK");
+            }
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
         }
     }
 
@@ -2829,10 +2917,12 @@ fn acquire_mariadb_connection(
     pool: &MariaDbPool,
     settings: MariaDbTimeouts,
 ) -> Result<r2d2::PooledConnection<MariaDbConnectionManager>, DatabaseError> {
-    pool.get_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
-        .map_err(|error| DatabaseError {
-            message: mariadb_pool_acquisition_message(&error.to_string()).into(),
-        })
+    let configured_wait = Duration::from_secs(u64::from(settings.pool_wait_seconds));
+    let wait = remaining_query_budget()?
+        .map_or(configured_wait, |remaining| configured_wait.min(remaining));
+    pool.get_timeout(wait).map_err(|error| DatabaseError {
+        message: mariadb_pool_acquisition_message(&error.to_string()).into(),
+    })
 }
 
 fn mariadb_pool_acquisition_message(detail: &str) -> &'static str {
@@ -3748,6 +3838,52 @@ mod tests {
             .rows[0][0]
             .clone();
         assert_ne!(first_connection, replacement_connection);
+    }
+
+    #[test]
+    fn mariadb_request_deadline_aborts_a_statement_before_the_default_timeout() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB request-deadline integration: test URL is not configured");
+            return;
+        };
+        let settings = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("2")).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, settings, &tls).unwrap();
+        let _deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+        let started = Instant::now();
+        let error = execute_mariadb_queries_on_pool(
+            &pool,
+            settings,
+            &[Query {
+                sql: "SELECT SLEEP(5)".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .expect_err("the request deadline should bound the server-side statement");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "request deadline did not interrupt the MariaDB statement"
+        );
+        assert!(!error.message.contains(&database_url));
+    }
+
+    #[test]
+    fn query_deadline_scopes_restore_nested_deadlines() {
+        assert!(remaining_query_budget().unwrap().is_none());
+        let outer_deadline = Instant::now() + Duration::from_secs(2);
+        let outer = set_query_deadline(outer_deadline);
+        assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        {
+            let _inner = set_query_deadline(Instant::now() + Duration::from_secs(4));
+            assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        }
+        assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        drop(outer);
+        assert!(remaining_query_budget().unwrap().is_none());
+
+        let _expired = set_query_deadline(Instant::now() - Duration::from_millis(1));
+        assert!(remaining_query_budget().is_err());
     }
 
     #[test]

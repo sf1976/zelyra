@@ -1,8 +1,8 @@
 # HTTP health checks, deadlines, and retries
 
 This guide defines how to monitor Zelyra's built-in HTTP server and how
-clients should handle transient failures. It describes current behavior; it
-does not promise that a request handler can be cancelled.
+clients should handle transient failures. It describes the current socket and
+database deadline behavior; arbitrary application code is not cancellable.
 
 ## Health-check categories
 
@@ -41,12 +41,16 @@ including request reading and response writing. A timeout while reading can
 close the connection without an HTTP response; a response that finishes after
 the deadline is dropped.
 
-Request handlers are synchronous and cannot currently be interrupted. A
-handler that exceeds the socket deadline can continue occupying one of the 64
-worker slots until its operation returns. Database connect, pool-wait, and
-statement timeouts provide additional bounds for configured MariaDB
-operations, but they do not cancel arbitrary application code. A client
-timeout therefore does not prove that a write was rolled back.
+Handlers run synchronously. While dispatching a request, each MariaDB pool
+checkout and statement is bounded by the smaller of its configured timeout and
+the remaining exchange deadline. A statement that reaches the deadline is
+aborted by MariaDB; transactional batches roll back and discard the connection
+after an error. The handler then unwinds normally. CPU work and other blocking
+application code cannot be interrupted, and the server does not detect a
+client disconnect until it attempts to write the response. These operations
+can continue occupying one of the 64 worker slots until they return. A client
+timeout also does not prove that a write did not finish before its response
+was lost.
 
 ## Retry rules
 
@@ -74,5 +78,5 @@ control.
 
 The built-in liveness route does not provide application or dependency
 readiness. Readiness routes remain application-owned and need acceptance tests
-in the generated business application. Handler cancellation and distributed
-rate limits are also not provided.
+in the generated business application. General cancellation for CPU-bound or
+non-database handler work and distributed rate limits are not provided.

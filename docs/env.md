@@ -215,11 +215,15 @@ die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
 Jede angenommene HTTP-Verbindung hat im 0.4-Entwicklungszweig eine feste
 30-Sekunden-Frist für das vollständige Lesen der Anfrage und das Schreiben der
 Antwort. Ein Timeout schließt die Verbindung; es gibt keinen konfigurierbaren
-Retry. Synchrone Handler werden nicht mitten in ihrer Ausführung abgebrochen:
-läuft ein Handler über die Frist, wird seine verspätete Antwort verworfen und
-der Server kann bis zu seiner Rückkehr keine weitere Verbindung bedienen.
-Externe TLS-Proxys sollten zusätzlich eigene Fristen und Verbindungsgrenzen
-setzen.
+Retry. Während der Anfrageverarbeitung verwenden MariaDB-Poolabruf und jedes
+Statement den kleineren Wert aus konfigurierter Frist und verbleibender
+Request-Frist. MariaDB bricht ein Statement bei Fristablauf ab;
+transaktionale Abfragen werden zurückgerollt und die Verbindung nach einem
+Fehler verworfen. Danach läuft der synchrone Handler regulär aus. CPU-lastiger
+oder anderer blockierender Anwendungscode wird nicht unterbrochen; eine
+verspätete Antwort wird verworfen und der Handler kann bis zu seiner Rückkehr
+einen Worker belegen. Externe TLS-Proxys sollten zusätzlich eigene Fristen und
+Verbindungsgrenzen setzen.
 
 ## Nur für den Integrationstest
 

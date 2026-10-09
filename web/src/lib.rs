@@ -7772,6 +7772,7 @@ fn handle_connection_until(
         Ok(raw) => match parse_request(&raw) {
             Ok(mut request) => {
                 request.remote_addr = stream.peer_addr().ok();
+                let _query_deadline = zelyra_database::set_query_deadline(deadline);
                 app.dispatch(&request)
             }
             Err(error) if error.message.contains("request body exceeds") => Response::json(

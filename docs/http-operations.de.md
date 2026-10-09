@@ -2,7 +2,8 @@
 
 Diese Anleitung beschreibt die Überwachung des eingebauten HTTP-Servers von
 Zelyra und den Umgang von Clients mit vorübergehenden Fehlern. Sie beschreibt
-das aktuelle Verhalten und verspricht keinen Abbruch eines Request-Handlers.
+die aktuellen Socket- und Datenbankfristen; beliebiger Anwendungscode ist
+nicht abbrechbar.
 
 ## Kategorien für Healthchecks
 
@@ -45,13 +46,16 @@ einschließlich Request-Lesen und Response-Schreiben. Bei einem Timeout während
 des Lesens kann die Verbindung ohne HTTP-Antwort geschlossen werden; eine erst
 nach Ablauf fertige Antwort wird verworfen.
 
-Request-Handler sind synchron und können derzeit nicht abgebrochen werden.
-Ein Handler, der die Socket-Frist überschreitet, kann weiterhin einen der 64
-Worker belegen, bis seine Operation zurückkehrt. Datenbank-Fristen für
-Verbindungsaufbau, Pool-Wartezeit und Statements begrenzen zusätzliche
-MariaDB-Operationen, brechen aber keinen beliebigen Anwendungscode ab. Ein
-Client-Timeout beweist daher nicht, dass ein Schreibzugriff zurückgerollt
-wurde.
+Handler laufen synchron. Während der Anfrageverarbeitung werden jeder
+MariaDB-Poolabruf und jedes Statement durch den kleineren Wert aus konfigurierter
+Frist und verbleibender Verbindungsfrist begrenzt. MariaDB bricht ein Statement
+bei Fristablauf ab; transaktionale Abfragen werden zurückgerollt und die
+Verbindung nach einem Fehler verworfen. Danach läuft der Handler regulär aus.
+CPU-Arbeit und anderer blockierender Anwendungscode können nicht unterbrochen
+werden. Einen Client-Abbruch erkennt der Server erst beim Schreiben der
+Antwort. Solche Operationen können bis zu ihrer Rückkehr weiter einen der 64
+Worker belegen. Ein Client-Timeout beweist außerdem nicht, dass ein
+Schreibzugriff nicht schon vor dem Verlust der Antwort abgeschlossen war.
 
 ## Wiederholungsregeln
 
@@ -81,5 +85,6 @@ gegen Missbrauch.
 
 Die eingebaute Liveness-Route stellt keine Anwendungs- oder Abhängigkeits-
 Readiness bereit. Readiness-Routen bleiben Aufgabe der Anwendung und
-benötigen Abnahmetests in der erzeugten Businessanwendung. Handler-Abbruch und
-verteilte Ratenlimits werden ebenfalls nicht bereitgestellt.
+benötigen Abnahmetests in der erzeugten Businessanwendung. Allgemeiner Abbruch
+von CPU-lastiger oder nicht datenbankgebundener Handler-Arbeit und verteilte
+Ratenlimits werden nicht bereitgestellt.

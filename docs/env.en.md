@@ -199,11 +199,14 @@ CSRF or origin checks.
 
 In the 0.4 development branch, each accepted HTTP connection has a fixed
 30-second deadline for reading the complete request and writing the response.
-A timeout closes the connection; there is no configurable retry. Synchronous
-handlers are not interrupted while running: if a handler exceeds the deadline,
-its late response is discarded, and the server cannot accept another
-connection until the handler returns. External TLS proxies should also set
-their own deadlines and connection limits.
+A timeout closes the connection; there is no configurable retry. During
+request dispatch, MariaDB pool checkout and each statement use the smaller of
+their configured timeout and the remaining request deadline. MariaDB aborts a
+statement that reaches that limit; transactional batches roll back and discard
+the connection after an error. The synchronous handler then unwinds. CPU-bound
+or other blocking application code is not interrupted; a late response is
+discarded, and that handler can occupy a worker until it returns. External TLS
+proxies should also set their own deadlines and connection limits.
 
 ## Integration-test only
 
