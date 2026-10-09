@@ -3859,6 +3859,40 @@ fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
         })
 }
 
+fn project_uses_reserved_health_route(program: &zelyra_ast::Program) -> bool {
+    let reserved_path = zelyra_web::HEALTH_LIVENESS_PATH;
+    program
+        .pages
+        .iter()
+        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+        || program
+            .apis
+            .iter()
+            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+        || program.auth.iter().any(|auth| {
+            auth.admin_path
+                .as_deref()
+                .is_some_and(|path| zelyra_web::route_pattern_matches_path(path, reserved_path))
+        })
+        || program.cruds.iter().any(|crud| {
+            let base = format!("/{}", crud.table);
+            [
+                base.clone(),
+                format!("{base}/new"),
+                format!("{base}/{{id}}"),
+                format!("{base}/{{id}}/edit"),
+                format!("{base}/{{id}}/delete"),
+                format!("{base}/{{id}}/restore"),
+            ]
+            .iter()
+            .any(|pattern| zelyra_web::route_pattern_matches_path(pattern, reserved_path))
+                || crud.actions.iter().any(|action| {
+                    let pattern = format!("{base}/{{id}}/{}", action.name);
+                    zelyra_web::route_pattern_matches_path(&pattern, reserved_path)
+                })
+        })
+}
+
 fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -> bool {
     !program.auth.is_empty()
         && (program.pages.iter().any(|page| {
@@ -5035,6 +5069,19 @@ fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
 }
 
 fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    if project_uses_reserved_health_route(program) {
+        diagnostic(
+            path,
+            "E-WEB-005",
+            &format!(
+                "route `{}` is reserved for Zelyra liveness checks",
+                zelyra_web::HEALTH_LIVENESS_PATH
+            ),
+            1,
+            1,
+        );
+        return Err(());
+    }
     let features = match project_features(path) {
         Ok(features) => features,
         Err(error) => {

@@ -7,9 +7,14 @@ does not promise that a request handler can be cancelled.
 ## Health-check categories
 
 - **Listener reachability:** check whether the configured TCP endpoint can be
-  reached. Zelyra does not expose a built-in liveness URL. A successful TCP
-  handshake does not prove that Zelyra processed the connection, and says
-  nothing about database availability or application routes.
+  reached. A successful TCP handshake does not prove that Zelyra processed
+  the connection.
+- **Process liveness:** request `GET /__zelyra/health/live` (or `HEAD` for a
+  body-free check). A `200` confirms that Zelyra read and dispatched the
+  request. The response is not cached and does not inspect databases or other
+  application dependencies. The path is reserved; project routes that shadow
+  it fail validation with `E-WEB-005`. Normal allowed-host checks still apply,
+  so send a configured host value when host restrictions are enabled.
 - **Application readiness:** provide an application-owned, read-only `GET`
   API route for the dependencies required to serve normal traffic. Zelyra
   does not reserve or generate a readiness route. Keep its response generic
@@ -63,7 +68,7 @@ control.
 
 ## Current boundary
 
-The documented probe categories and retry rules do not add built-in HTTP
-health routes, handler cancellation, or distributed rate limits. Readiness
-routes remain application-owned and need acceptance tests in the generated
-business application.
+The built-in liveness route does not provide application or dependency
+readiness. Readiness routes remain application-owned and need acceptance tests
+in the generated business application. Handler cancellation and distributed
+rate limits are also not provided.

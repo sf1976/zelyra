@@ -505,6 +505,23 @@ fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
 }
 
 #[test]
+fn project_routes_cannot_shadow_the_builtin_liveness_endpoint() {
+    let direct = parse(
+        &lex(r#"page "/__zelyra/health/live" { html { <main>Project page</main> } }"#).unwrap(),
+    )
+    .unwrap();
+    let wildcard =
+        parse(&lex(r#"api GET "/__zelyra/{resource}/{action}" { output String }"#).unwrap())
+            .unwrap();
+    let unrelated =
+        parse(&lex(r#"page "/health" { html { <main>Health</main> } }"#).unwrap()).unwrap();
+
+    assert!(project_uses_reserved_health_route(&direct));
+    assert!(project_uses_reserved_health_route(&wildcard));
+    assert!(!project_uses_reserved_health_route(&unrelated));
+}
+
+#[test]
 fn account_session_route_is_reserved_for_authenticated_projects() {
     let auth_page = parse(
         &lex(r#"auth users { table: users }

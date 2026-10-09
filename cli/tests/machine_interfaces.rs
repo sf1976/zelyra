@@ -784,6 +784,26 @@ fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
 }
 
 #[test]
+fn check_rejects_routes_that_shadow_the_builtin_liveness_endpoint() {
+    let source = temporary_source(
+        "health-route-conflict",
+        r#"page "/__zelyra/health/live" {
+    html { <main>Conflicting route</main> }
+}
+"#,
+    );
+
+    let output = run(&["check", source.to_str().unwrap()]);
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_dir(source.parent().unwrap());
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-WEB-005"), "unexpected stderr: {stderr}");
+    assert!(stderr.contains("/__zelyra/health/live"));
+}
+
+#[test]
 fn serve_reports_invalid_project_locale_catalog_without_echoing_contents() {
     let directory = temporary_directory("serve-invalid-locale");
     fs::create_dir_all(directory.join("locales")).unwrap();

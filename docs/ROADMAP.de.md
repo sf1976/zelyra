@@ -72,10 +72,11 @@ den tatsächlich implementierten Stand.
   Lesen und Schreiben je Verbindung sind auf 30 Sekunden begrenzt; verspätete
   Antworten entfallen. Synchrone Handler lassen sich nicht abbrechen und können
   weiterhin einen Worker belegen. Die
-  [HTTP-Betriebsanleitung](http-operations.de.md) definiert TCP-Listener-Erreichbarkeit,
-  anwendungseigene Readiness und begrenzte Retries für sichere oder idempotente
-  Anfragen. Eingebaute Health-Endpunkte und Readiness-Abnahme der erzeugten
-  Anwendung bleiben offen; der Server wiederholt nicht automatisch.
+  [HTTP-Betriebsanleitung](http-operations.de.md) definiert TCP-Listener-
+  Erreichbarkeit, die eingebaute Prozess-Liveness-Route, anwendungseigene
+  Readiness und begrenzte Retries für sichere oder idempotente Anfragen.
+  Abhängigkeits-Readiness und ihre Abnahme in der erzeugten Anwendung bleiben
+  offen; der Server wiederholt nicht automatisch.
 
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten

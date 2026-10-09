@@ -35,6 +35,39 @@ fn router() -> Router {
 }
 
 #[test]
+fn built_in_liveness_endpoint_is_database_free_and_method_bounded() {
+    let app = WebApp::new(Vec::new(), Vec::new());
+    let request = |method: &str| Request {
+        method: method.into(),
+        target: HEALTH_LIVENESS_PATH.into(),
+        path: HEALTH_LIVENESS_PATH.into(),
+        headers: HashMap::new(),
+        body: String::new(),
+        remote_addr: None,
+    };
+
+    let get = app.dispatch(&request("GET"));
+    assert_eq!(get.status, 200);
+    assert_eq!(get.content_type, "application/json; charset=utf-8");
+    assert_eq!(get.body, r#"{"status":"ok"}"#);
+    assert!(get
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Cache-Control" && value == "no-store"));
+
+    let head = app.dispatch(&request("HEAD"));
+    assert_eq!(head.status, 200);
+    assert!(head.body.is_empty());
+
+    let post = app.dispatch(&request("POST"));
+    assert_eq!(post.status, 405);
+    assert!(post
+        .headers
+        .iter()
+        .any(|(name, value)| name == "Allow" && value == "GET, HEAD"));
+}
+
+#[test]
 fn applies_crud_layout_only_to_html_responses() {
     let response = apply_generated_layout(
         Response::html(200, "<main>CRUD content</main>"),
@@ -1647,6 +1680,30 @@ fn incomplete_http_request_is_closed_at_absolute_deadline() {
     let mut response = String::new();
     client.read_to_string(&mut response).unwrap();
     assert!(response.is_empty());
+}
+
+#[test]
+fn built_in_liveness_endpoint_is_available_over_http() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        handle_connection(&mut stream, &WebApp::new(Vec::new(), Vec::new())).unwrap();
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .write_all(b"GET /__zelyra/health/live HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    let mut response = String::new();
+    client.read_to_string(&mut response).unwrap();
+    server.join().unwrap();
+
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(response.contains("Cache-Control: no-store\r\n"));
+    assert!(response.ends_with(r#"{"status":"ok"}"#));
 }
 
 #[test]

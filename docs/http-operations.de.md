@@ -7,10 +7,15 @@ das aktuelle Verhalten und verspricht keinen Abbruch eines Request-Handlers.
 ## Kategorien für Healthchecks
 
 - **Listener-Erreichbarkeit:** Prüfe, ob der konfigurierte TCP-Endpunkt
-  erreichbar ist. Zelyra stellt keine eingebaute Liveness-URL bereit. Ein
-  erfolgreicher TCP-Handshake beweist nicht, dass Zelyra die Verbindung
-  verarbeitet hat, und sagt nichts über Datenbankverfügbarkeit oder
-  Anwendungsrouten aus.
+  erreichbar ist. Ein erfolgreicher TCP-Handshake beweist nicht, dass Zelyra
+  die Verbindung verarbeitet hat.
+- **Prozess-Liveness:** Rufe `GET /__zelyra/health/live` auf (oder `HEAD` für
+  eine Antwort ohne Inhalt). `200` bestätigt, dass Zelyra die Anfrage gelesen
+  und an den Router übergeben hat. Die Antwort wird nicht zwischengespeichert
+  und prüft weder Datenbanken noch andere Anwendungsabhängigkeiten. Der Pfad
+  ist reserviert; kollidierende Projektrouten scheitern bei der Prüfung mit
+  `E-WEB-005`. Die normale Host-Prüfung gilt weiterhin; bei aktivierter
+  Host-Begrenzung muss die Anfrage einen erlaubten Host verwenden.
 - **Anwendungs-Readiness:** Stelle in der Anwendung eine eigene lesende
   `GET`-API-Route für die zum normalen Betrieb erforderlichen Abhängigkeiten
   bereit. Zelyra reserviert oder erzeugt keine Readiness-Route. Die Antwort
@@ -70,7 +75,7 @@ gegen Missbrauch.
 
 ## Aktuelle Grenze
 
-Die dokumentierten Probe-Kategorien und Wiederholungsregeln ergänzen keine
-eingebauten HTTP-Health-Routen, keinen Handler-Abbruch und keine verteilten
-Ratenlimits. Readiness-Routen bleiben Aufgabe der Anwendung und benötigen
-Abnahmetests in der erzeugten Businessanwendung.
+Die eingebaute Liveness-Route stellt keine Anwendungs- oder Abhängigkeits-
+Readiness bereit. Readiness-Routen bleiben Aufgabe der Anwendung und
+benötigen Abnahmetests in der erzeugten Businessanwendung. Handler-Abbruch und
+verteilte Ratenlimits werden ebenfalls nicht bereitgestellt.

@@ -39,6 +39,7 @@ use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
+pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
 pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
@@ -880,6 +881,16 @@ impl WebApp {
     }
 
     fn dispatch_inner(&self, request: &Request) -> Response {
+        if request.path == HEALTH_LIVENESS_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::json(200, r#"{"status":"ok"}"#)
+                    .with_header("Cache-Control", "no-store"),
+                "HEAD" => Response::json(200, "").with_header("Cache-Control", "no-store"),
+                _ => Response::empty(405)
+                    .with_header("Allow", "GET, HEAD")
+                    .with_header("Cache-Control", "no-store"),
+            };
+        }
         if request.path == PROJECT_THEME_CSS_PATH {
             return match (&self.project_theme_css, request.method.as_str()) {
                 (Some(css), "GET") => {

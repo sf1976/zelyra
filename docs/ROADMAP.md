@@ -54,9 +54,9 @@ principles; the roadmap below tracks what is actually implemented.
   reads and writes are limited to 30 seconds and late responses are dropped.
   Synchronous handlers cannot be cancelled and can still occupy a worker slot;
   the [HTTP operations guide](http-operations.en.md) defines TCP listener reachability,
-  application-owned readiness, and bounded retries only for safe/idempotent
-  requests. Built-in health endpoints and generated-app readiness acceptance
-  remain open; the server does not retry automatically.
+  the built-in process liveness route, application-owned readiness, and bounded
+  retries only for safe/idempotent requests. Dependency readiness and its
+  generated-app acceptance remain open; the server does not retry automatically.
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,
