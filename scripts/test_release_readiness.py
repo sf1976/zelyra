@@ -36,11 +36,17 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("not conducted", (root / "docs/release-readiness/0.4.0-human-acceptance.en.md").read_text(encoding="utf-8"))
         self.assertIn("nicht durchgeführt", (root / "docs/release-readiness/0.4.0-human-acceptance.de.md").read_text(encoding="utf-8"))
 
-    def test_current_040_plan_blocks_release_on_open_gates(self) -> None:
+    def test_current_040_technical_gates_are_closed_before_published_candidate(self) -> None:
         root = Path(__file__).resolve().parents[1]
         failures = unfinished_gates(root, "0.4.0")
         self.assertFalse(any("human acceptance deferral" in item for item in failures))
-        self.assertTrue(any("P0 implementation and tests" in item for item in failures))
+        self.assertFalse(any("P0 implementation and tests" in item for item in failures))
+        self.assertFalse(any("module and migration recovery acceptance" in item for item in failures))
+        self.assertFalse(any("database compatibility claims" in item for item in failures))
+        self.assertFalse(any("security review and residual risks" in item for item in failures))
+        self.assertFalse(any("machine interface compatibility" in item for item in failures))
+        self.assertTrue(any("published candidate verification" in item for item in failures))
+        self.assertTrue(any("all mandatory release gates" in item for item in failures))
 
     def test_all_040_gates_require_bilingual_human_deferral_records(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
