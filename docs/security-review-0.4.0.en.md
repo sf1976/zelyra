@@ -47,7 +47,13 @@ or human acceptance.
   authenticated and encrypted with AES-256-GCM under the required
   `ZELYRA_RESET_DELIVERY_KEY`. The worker retries 30 seconds after SMTP failure and after process
   restart; the MariaDB E2E confirms encrypted-at-rest storage and recovery after
-  restarting the sole active instance. Delivery is at least once, so a crash
+  restarting the sole active instance. Under the per-user advisory lock the
+  worker rechecks that the outbox payload remains pending and due before sending;
+  malformed or undecryptable rows are deferred for 30 seconds to avoid
+  repeatedly occupying the first bounded poll batch. A focused unit regression
+  and a two-instance MariaDB/SMTP E2E cover pending and due checks; the E2E
+  delays SMTP beyond its timeout to exercise a competing worker's stale
+  selection. Delivery is at least once, so a crash
   after SMTP acceptance but before database acknowledgement can duplicate an
   email. Losing the key prevents pending messages from being decrypted. Limits
   are process-local and not shared between instances; database access timing

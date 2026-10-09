@@ -51,6 +51,13 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   dem erforderlichen `ZELYRA_RESET_DELIVERY_KEY`. Der Worker versucht 30 Sekunden
   nach SMTP-Ausfall und nach Prozessneustart erneut; das MariaDB-E2E prüft Verschlüsselung
   im Ruhezustand und Wiederaufnahme nach Neustart der einzigen aktiven Instanz.
+  Unter dem Advisory-Lock je Nutzer prüft der Worker vor dem Versand erneut, ob
+  die Outbox-Nachricht offen und fällig ist. Fehlerhafte oder nicht entschlüsselbare
+  Zeilen werden um 30 Sekunden verschoben, damit sie nicht wiederholt den ersten
+  begrenzten Poll-Batch belegen. Ein gezielter Unit-Test und ein MariaDB-/SMTP-
+  E2E mit zwei Instanzen decken offene und fällige Einträge ab. Das E2E verzögert
+  SMTP über dessen Timeout hinaus und prüft die veraltete Auswahl des zweiten
+  Workers.
   Zustellung ist mindestens einmalig; ein Absturz nach SMTP-Annahme, aber vor
   Bestätigung kann doppelte E-Mails erzeugen. Ohne Schlüssel sind wartende
   Nachrichten nicht entschlüsselbar. Die Limits sind prozesslokal und nicht
