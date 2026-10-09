@@ -6337,6 +6337,23 @@ fn format_openapi(program: &zelyra_ast::Program) -> String {
             } else {
                 String::new()
             };
+            let metadata = format!(
+                "{}{}{}",
+                api.version
+                    .as_ref()
+                    .map(|version| format!(
+                        ",\"x-zelyra-api-version\":\"{}\"",
+                        json_escape(version)
+                    ))
+                    .unwrap_or_default(),
+                if api.deprecated { ",\"deprecated\":true" } else { "" },
+                api.rate_limit
+                    .map(|limit| format!(
+                        ",\"x-zelyra-rate-limit\":{{\"requests\":{},\"window_seconds\":{}}}",
+                        limit.requests, limit.window_seconds
+                    ))
+                    .unwrap_or_default()
+            );
             let responses = std::iter::once(format!(
                 "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
                 openapi_schema(&api.output)
@@ -6364,13 +6381,14 @@ fn format_openapi(program: &zelyra_ast::Program) -> String {
                     .replace('/', "_")
             );
             format!(
-                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}{}}}}}",
+                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}{}{}}}}}",
                 json_escape(&api.path),
                 method,
                 json_escape(&operation_id),
                 parameters.join(","),
                 request_body,
                 responses,
+                metadata,
                 security
             )
         })
@@ -9291,6 +9309,9 @@ fn generated_api_routes(
             let runtime_policy = runtime_policy.cloned();
             let requires_auth = api.requires_auth;
             let permissions = api.permissions.clone();
+            let api_version = api.version.clone();
+            let api_deprecated = api.deprecated;
+            let api_rate_limit = api.rate_limit;
             Some(
                 ApiRoute::new(
                     api.method.clone(),
@@ -9310,7 +9331,8 @@ fn generated_api_routes(
                         )
                     },
                 )
-                .with_auth(requires_auth, permissions),
+                .with_auth(requires_auth, permissions)
+                .with_metadata(api_version, api_deprecated, api_rate_limit),
             )
         })
         .collect()
@@ -12228,7 +12250,7 @@ mod tests {
     fn formats_api_declarations_as_openapi() {
         let program = parse(
             &lex(
-                "type CustomerId = Id table customers { id: CustomerId primary auto name: String(100) required } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }",
+                "type CustomerId = Id table customers { id: CustomerId primary auto name: String(100) required } api GET \"/customers/{id}\" { version \"v1\" deprecated rate_limit 30 per 60 input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }",
             )
             .unwrap(),
         )
@@ -12238,6 +12260,11 @@ mod tests {
         assert!(document.contains("\"/customers/{id}\""));
         assert!(document.contains("\"404\":{\"description\":\"NotFound\"}"));
         assert!(document.contains("#/components/schemas/Customer"));
+        assert!(document.contains("\"x-zelyra-api-version\":\"v1\""));
+        assert!(document.contains("\"deprecated\":true"));
+        assert!(
+            document.contains("\"x-zelyra-rate-limit\":{\"requests\":30,\"window_seconds\":60}")
+        );
     }
 
     #[test]
@@ -13184,6 +13211,7 @@ mod tests {
             path: "/".into(),
             headers: HashMap::new(),
             body: String::new(),
+            remote_addr: None,
         };
 
         let forbidden = setup_web_response(&state, &request("/?token=wrong"));

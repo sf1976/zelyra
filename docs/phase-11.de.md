@@ -47,6 +47,29 @@ Zuordnung von Clientfehlern zu Logs oder Betreiberdiagnosen, ohne beliebige
 Headerwerte in Antworten zu spiegeln. Die ID ist keine Authentifizierung und
 belegt keine verteilte Request-Verfolgung.
 
+API-Deklarationen können außerdem eine Version, einen Deprecation-Hinweis und
+ein begrenztes Anfragekontingent festlegen:
+
+~~~zelyra
+api GET "/api/v1/customers" {
+    version "v1"
+    deprecated
+    rate_limit 100 per 60
+    output Customer[]
+}
+~~~
+
+Version und Deprecation erscheinen in den Antwortheadern
+`X-Zelyra-API-Version` und `X-Zelyra-API-Deprecated` sowie als OpenAPI-Metadaten.
+Das Kontingent gilt je API-Route und Client-IP innerhalb des Serverprozesses;
+eine Überschreitung liefert HTTP 429 und `Retry-After`. Die Fensterlänge muss
+1 bis 86400 Sekunden, die Obergrenze 1 bis 1000000 Anfragen betragen. Der
+Server vertraut `X-Forwarded-For` nicht. Hinter einem Reverse-Proxy teilen
+Clients daher das Kontingent der Proxy-IP; ein persistenter oder verteilter
+Limiter ist nicht enthalten. Die Tabelle ist auf 4096 Client-/Routenpaare
+begrenzt; solange sie voll ist, erhalten neue Paare HTTP 429, bis ein Fenster
+abläuft.
+
 Diese Phase fügt CORS-Header nur bei deklarierten API-Routen hinzu, nicht bei
 Seiten, Formularen oder CRUD-Antworten. CORS umgeht weder Authentifizierung
 noch Berechtigungsprüfungen.

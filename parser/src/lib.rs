@@ -218,6 +218,10 @@ impl<'a> Parser<'a> {
         let mut input = Vec::new();
         let mut output = None;
         let mut errors = Vec::new();
+        let mut version = None;
+        let mut deprecated = false;
+        let mut saw_deprecated = false;
+        let mut rate_limit = None;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Handler) {
@@ -230,6 +234,62 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("API permission")?);
+            } else if self.at(&TokenKind::Version) {
+                self.advance();
+                if version.is_some() {
+                    return self.error("API version may only be declared once");
+                }
+                let value = self.string_value("API version")?;
+                if value.is_empty()
+                    || value.len() > 64
+                    || !value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                {
+                    return self.error(
+                        "API version must contain 1 to 64 ASCII letters, digits, dots, underscores, or hyphens",
+                    );
+                }
+                version = Some(value);
+            } else if self.at(&TokenKind::Deprecated) {
+                self.advance();
+                if saw_deprecated {
+                    return self.error("API deprecation may only be declared once");
+                }
+                saw_deprecated = true;
+                deprecated = true;
+            } else if self.at(&TokenKind::RateLimit) {
+                self.advance();
+                if rate_limit.is_some() {
+                    return self.error("API rate limit may only be declared once");
+                }
+                let requests = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=1_000_000).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self.error("API rate limit requests must be between 1 and 1000000")
+                    }
+                };
+                let (per, _) = self.ident("`per` in API rate limit")?;
+                if per != "per" {
+                    return self.error("expected `per` before API rate limit window");
+                }
+                let window_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self
+                            .error("API rate limit window must be between 1 and 86400 seconds")
+                    }
+                };
+                rate_limit = Some(zelyra_ast::ApiRateLimit {
+                    requests,
+                    window_seconds,
+                });
             } else if self.at(&TokenKind::Input) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `input`")?;
@@ -279,7 +339,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
                 return self
-                    .error("expected `handler`, `requires auth`, `permits`, `input`, `output`, or `errors` in API definition");
+                    .error("expected `handler`, `requires auth`, `permits`, `version`, `deprecated`, `rate_limit`, `input`, `output`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -296,6 +356,9 @@ impl<'a> Parser<'a> {
             input,
             output,
             errors,
+            version,
+            deprecated,
+            rate_limit,
             span: start.join(end),
         })
     }
@@ -3180,6 +3243,42 @@ mod tests {
         .unwrap();
         assert!(program.apis[0].requires_auth);
         assert_eq!(program.apis[0].permissions, ["customers.view"]);
+    }
+
+    #[test]
+    fn parses_api_version_deprecation_and_bounded_rate_limit() {
+        let program = parse(
+            &lex(r#"api GET "/v1/customers" {
+                    version "v1"
+                    deprecated
+                    rate_limit 30 per 60
+                    output String
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        assert_eq!(api.version.as_deref(), Some("v1"));
+        assert!(api.deprecated);
+        assert_eq!(
+            api.rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 30,
+                window_seconds: 60,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_api_rate_limits_and_invalid_versions() {
+        for source in [
+            r#"api GET "/limited" { rate_limit 0 per 60 output String } fn main() { }"#,
+            r#"api GET "/limited" { rate_limit 10 per 86401 output String } fn main() { }"#,
+            r#"api GET "/versioned" { version "v1\nInjected" output String } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
     }
 
     #[test]

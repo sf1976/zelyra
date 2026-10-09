@@ -7321,6 +7321,29 @@ mehrere Netzwerk-Reads ein und begrenzt Request-Bodies auf 1 MiB. Header sind
 auf 64 KiB begrenzt. Ein zu großer Body wird vor dem Handler mit HTTP 413
 abgelehnt.
 
+Eine API kann Versions- und Deprecation-Metadaten sowie ein begrenztes
+Kontingent je Client deklarieren:
+
+~~~zelyra
+api GET "/api/v1/customers" {
+    version "v1"
+    deprecated
+    rate_limit 100 per 60
+    output Customer[]
+}
+~~~
+
+Antworten geben Version und Deprecation über `X-Zelyra-API-Version` und
+`X-Zelyra-API-Deprecated` aus; `zelyra doc --openapi` nimmt dieselben Angaben
+auf. Das Kontingent gilt je Route und TCP-Client-IP im aktuellen Prozess. Bei
+Überschreitung liefert Zelyra HTTP 429 und `Retry-After`. Zulässig sind 1 bis
+1000000 Anfragen pro 1 bis 86400 Sekunden. Der Server vertraut
+`X-Forwarded-For` nicht; Clients hinter einem Reverse-Proxy teilen daher dessen
+Kontingent. Die Kontingente liegen im Speicher und werden beim Neustart
+zurückgesetzt.
+Die Tabelle ist auf 4096 Client-/Routenpaare begrenzt; solange sie voll ist,
+erhalten neue Paare HTTP 429, bis ein Kontingentfenster abläuft.
+
 Alle HTML-, JSON-, Redirect-, Fehler- und Preflight-Antworten erhalten diese
 sicheren Standard-Header:
 

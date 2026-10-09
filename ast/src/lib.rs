@@ -397,7 +397,16 @@ pub struct ApiDef {
     pub input: Vec<ApiField>,
     pub output: Type,
     pub errors: Vec<ApiError>,
+    pub version: Option<String>,
+    pub deprecated: bool,
+    pub rate_limit: Option<ApiRateLimit>,
     pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApiRateLimit {
+    pub requests: u32,
+    pub window_seconds: u32,
 }
 
 #[derive(Clone, Debug)]

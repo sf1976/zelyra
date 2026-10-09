@@ -44,6 +44,28 @@ a new ID. API handlers receive the same sanitized value as
 operator logs or diagnostics without reflecting arbitrary header values. The
 ID is not authentication and does not claim distributed request tracing.
 
+API declarations can also set a version, a deprecation marker, and a bounded
+request quota:
+
+~~~zelyra
+api GET "/api/v1/customers" {
+    version "v1"
+    deprecated
+    rate_limit 100 per 60
+    output Customer[]
+}
+~~~
+
+The version and deprecation marker appear in the
+`X-Zelyra-API-Version` and `X-Zelyra-API-Deprecated` response headers and in
+OpenAPI metadata. The quota applies per API route and client IP within the
+server process; exceeding it returns HTTP 429 with `Retry-After`. The window
+must be 1 to 86400 seconds and the limit 1 to 1,000,000 requests. The server
+does not trust `X-Forwarded-For`. Behind a reverse proxy, clients therefore
+share the proxy IP's quota; persistent and distributed limiters are not
+included. The table is bounded to 4,096 client/route pairs; while it is full,
+new pairs receive HTTP 429 until a window expires.
+
 No CORS headers are added to pages, forms, or CRUD responses by this phase.
 The policy is only applied to declared API routes, and adding an origin does
 not bypass authentication or permission checks.

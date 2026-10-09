@@ -655,6 +655,105 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
 }
 
 #[test]
+fn generated_api_metadata_and_rate_limit_reach_http_clients() {
+    let directory = temporary_directory("api-metadata-rate-limit");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"
+            api GET "/health" {
+                version "v1"
+                deprecated
+                rate_limit 2 per 60
+                handler health
+                output String
+            }
+
+            fn health() -> String { "ok" }
+            fn main() { }
+        "#,
+    )
+    .unwrap();
+
+    let port = free_test_port();
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(binary())
+        .args(["serve", source.to_str().unwrap(), &address])
+        .env("ZELYRA_LEVEL", "work")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Zelyra API server should start");
+
+    let responses = (|| {
+        let socket_address: SocketAddr = address
+            .parse()
+            .map_err(|error| format!("invalid test server address: {error}"))?;
+        let mut responses = Vec::new();
+        for index in 1..=3 {
+            let mut result = None;
+            for _ in 0..50 {
+                if let Ok(mut stream) =
+                    TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .map_err(|error| error.to_string())?;
+                    stream
+                        .write_all(
+                            format!(
+                                "GET /health HTTP/1.1\r\nHost: localhost\r\nX-Request-ID: test-{index}\r\n\r\n"
+                            )
+                            .as_bytes(),
+                        )
+                        .map_err(|error| error.to_string())?;
+                    let mut response = String::new();
+                    stream
+                        .read_to_string(&mut response)
+                        .map_err(|error| error.to_string())?;
+                    if !response.is_empty() {
+                        result = Some(response);
+                        break;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            responses.push(result.ok_or_else(|| {
+                "Zelyra API server did not answer before the test timeout".to_owned()
+            })?);
+        }
+        Ok::<_, String>(responses)
+    })();
+    let _ = server.kill();
+    let _ = server.wait();
+    fs::remove_dir_all(&directory).unwrap();
+
+    let responses = responses.unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        responses[0].starts_with("HTTP/1.1 200 OK"),
+        "{}",
+        responses[0]
+    );
+    assert!(
+        responses[1].starts_with("HTTP/1.1 200 OK"),
+        "{}",
+        responses[1]
+    );
+    assert!(
+        responses[2].starts_with("HTTP/1.1 429 Too Many Requests"),
+        "{}",
+        responses[2]
+    );
+    for (index, response) in responses.iter().enumerate() {
+        assert!(response.contains("X-Zelyra-API-Version: v1\r\n"));
+        assert!(response.contains("X-Zelyra-API-Deprecated: true\r\n"));
+        assert!(response.contains(&format!("X-Request-ID: test-{}\r\n", index + 1)));
+    }
+    assert!(responses[2].contains("Retry-After: "));
+}
+
+#[test]
 fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
     let directory = temporary_directory("serve-theme-route-conflict");
     fs::create_dir_all(&directory).unwrap();

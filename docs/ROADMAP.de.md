@@ -550,8 +550,12 @@ Feature eines bestimmten Anbieters.
   Clientgenerierung.
 - [x] Typisierte Maps mit String-Schlüsseln werden an der API-Grenze geprüft
   und konsistent in JSON, OpenAPI und erzeugten TypeScript-Clients dargestellt.
-- [ ] API-Versionierung, Deprecation-Metadaten, Rate Limits, Quotas und
-  Request-Correlation-IDs.
+- [🧪] API-Request-IDs sowie Versions-, Deprecation- und prozesslokale
+  Kontingentmetadaten je Route sind im unveröffentlichten 0.4-Entwicklungsstand
+  umgesetzt. Kontingente nutzen die TCP-Peer-IP, eine begrenzte
+  In-Memory-Clienttabelle und keine vertrauten Forwarded-IP-Header; sie werden
+  beim Neustart zurückgesetzt. Persistente/verteilte Kontingente, konfigurierbare
+  Login-/Reset-Limits und Kompatibilitätsnachweise bleiben offen.
 - [ ] API Keys, OAuth2/OIDC und Service Accounts.
 - [ ] Webhooks, signierte Callbacks, Idempotency Keys und retry-sichere Handler.
 - [ ] GraphQL oder eine andere Query-API nur bei Erhalt der Zelyra-Typ- und

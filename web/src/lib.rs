@@ -5,7 +5,7 @@ use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
@@ -63,6 +63,7 @@ pub struct Request {
     pub path: String,
     pub headers: HashMap<String, String>,
     pub body: String,
+    pub remote_addr: Option<SocketAddr>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,8 +110,20 @@ pub struct ApiRoute {
     pub path: String,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub version: Option<String>,
+    pub deprecated: bool,
+    pub rate_limit: Option<zelyra_ast::ApiRateLimit>,
     handler: Arc<ApiHandler>,
 }
+
+#[derive(Clone, Debug)]
+struct ApiThrottle {
+    window_started: Instant,
+    requests: u32,
+    window_seconds: u32,
+}
+
+const API_THROTTLE_MAX_CLIENTS: usize = 4096;
 
 impl fmt::Debug for ApiRoute {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -120,6 +133,9 @@ impl fmt::Debug for ApiRoute {
             .field("path", &self.path)
             .field("requires_auth", &self.requires_auth)
             .field("permissions", &self.permissions)
+            .field("version", &self.version)
+            .field("deprecated", &self.deprecated)
+            .field("rate_limit", &self.rate_limit)
             .finish_non_exhaustive()
     }
 }
@@ -135,6 +151,9 @@ impl ApiRoute {
             path: path.into(),
             requires_auth: false,
             permissions: Vec::new(),
+            version: None,
+            deprecated: false,
+            rate_limit: None,
             handler: Arc::new(handler),
         }
     }
@@ -142,6 +161,18 @@ impl ApiRoute {
     pub fn with_auth(mut self, requires_auth: bool, permissions: Vec<String>) -> Self {
         self.requires_auth = requires_auth;
         self.permissions = permissions;
+        self
+    }
+
+    pub fn with_metadata(
+        mut self,
+        version: Option<String>,
+        deprecated: bool,
+        rate_limit: Option<zelyra_ast::ApiRateLimit>,
+    ) -> Self {
+        self.version = version;
+        self.deprecated = deprecated;
+        self.rate_limit = rate_limit;
         self
     }
 }
@@ -843,6 +874,10 @@ fn request_id(request: &Request) -> String {
         }
     }
 
+    new_request_id()
+}
+
+fn new_request_id() -> String {
     let mut random = [0_u8; 16];
     if OsRng.try_fill_bytes(&mut random).is_ok() {
         return hex_encode(&random);
@@ -872,6 +907,7 @@ pub struct WebApp {
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    api_throttle: Arc<Mutex<HashMap<String, ApiThrottle>>>,
 }
 
 impl WebApp {
@@ -895,6 +931,7 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -922,6 +959,7 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -1237,11 +1275,24 @@ impl WebApp {
                 if api_request_requires_origin_check(request)
                     && !self.api_request_origin_is_allowed(request)
                 {
-                    return self.apply_api_cors(
+                    return self.apply_api_metadata(&api, self.apply_api_cors(
                         request,
                         Response::json(
                             403,
                             "{\"error\":{\"code\":\"Forbidden\",\"message\":\"request origin is not allowed\"}}",
+                        ),
+                    ));
+                }
+                if let Some(retry_after) = self.api_rate_limit_retry_after(&api, request) {
+                    return self.apply_api_metadata(
+                        &api,
+                        self.apply_api_cors(
+                            request,
+                            Response::json(
+                                429,
+                                "{\"error\":{\"code\":\"RateLimitExceeded\",\"message\":\"API request limit exceeded\"}}",
+                            )
+                            .with_header("Retry-After", retry_after.to_string()),
                         ),
                     );
                 }
@@ -1252,9 +1303,12 @@ impl WebApp {
                     self,
                     self.database_url.as_deref(),
                 ) {
-                    return self.apply_api_cors(request, response);
+                    return self.apply_api_metadata(&api, self.apply_api_cors(request, response));
                 }
-                return self.apply_api_cors(request, (api.handler)(request, &path_params));
+                return self.apply_api_metadata(
+                    &api,
+                    self.apply_api_cors(request, (api.handler)(request, &path_params)),
+                );
             }
         }
         if api_path_matched {
@@ -1499,6 +1553,63 @@ impl WebApp {
         methods.sort();
         methods.dedup();
         methods.join(", ")
+    }
+
+    fn apply_api_metadata(&self, api: &ApiRoute, mut response: Response) -> Response {
+        if let Some(version) = &api.version {
+            response = response.with_header("X-Zelyra-API-Version", version.clone());
+        }
+        if api.deprecated {
+            response = response.with_header("X-Zelyra-API-Deprecated", "true");
+        }
+        response
+    }
+
+    fn api_rate_limit_retry_after(&self, api: &ApiRoute, request: &Request) -> Option<u64> {
+        let limit = api.rate_limit?;
+        let window = Duration::from_secs(u64::from(limit.window_seconds));
+        let now = Instant::now();
+        let client = request
+            .remote_addr
+            .map(|address| address.ip().to_string())
+            .unwrap_or_else(|| "in-process".into());
+        let key = format!("{} {} {client}", api.method, api.path);
+        let Ok(mut clients) = self.api_throttle.lock() else {
+            return Some(u64::from(limit.window_seconds));
+        };
+
+        clients.retain(|_, throttle| {
+            now.duration_since(throttle.window_started)
+                < Duration::from_secs(u64::from(throttle.window_seconds))
+        });
+
+        if let Some(throttle) = clients.get_mut(&key) {
+            if now.duration_since(throttle.window_started) >= window {
+                throttle.window_started = now;
+                throttle.requests = 1;
+                throttle.window_seconds = limit.window_seconds;
+                return None;
+            }
+            if throttle.requests >= limit.requests {
+                let remaining = window.saturating_sub(now.duration_since(throttle.window_started));
+                return Some(remaining.as_secs().max(1));
+            }
+            throttle.requests += 1;
+            return None;
+        }
+
+        if clients.len() >= API_THROTTLE_MAX_CLIENTS {
+            return Some(u64::from(limit.window_seconds));
+        }
+        clients.insert(
+            key,
+            ApiThrottle {
+                window_started: now,
+                requests: 1,
+                window_seconds: limit.window_seconds,
+            },
+        );
+        None
     }
 
     fn api_preflight(&self, path: &str, request: &Request) -> Response {
@@ -3589,6 +3700,7 @@ pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
         path: path.into(),
         headers,
         body: body.into(),
+        remote_addr: None,
     })
 }
 
@@ -7944,7 +8056,10 @@ pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
 fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
     let response = match read_http_request(stream) {
         Ok(raw) => match parse_request(&raw) {
-            Ok(request) => app.dispatch(&request),
+            Ok(mut request) => {
+                request.remote_addr = stream.peer_addr().ok();
+                app.dispatch(&request)
+            }
             Err(error) if error.message.contains("request body exceeds") => Response::json(
                 413,
                 "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
@@ -7961,6 +8076,16 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
         }
         Err(RequestReadError::Io(error)) => return Err(error),
     };
+    let mut response = response;
+    if !response
+        .headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("x-request-id"))
+    {
+        response
+            .headers
+            .push(("X-Request-ID".into(), new_request_id()));
+    }
     stream.write_all(response.to_http().as_bytes())
 }
 
@@ -8805,6 +8930,119 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn api_metadata_and_per_client_rate_limits_are_applied() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
+            "GET",
+            "/limited",
+            |_request, _| Response::json(200, "{}"),
+        )
+        .with_metadata(
+            Some("v1".into()),
+            true,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 2,
+                window_seconds: 60,
+            }),
+        )]);
+        let mut request =
+            parse_request("GET /limited HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        request.remote_addr = Some(SocketAddr::from(([127, 0, 0, 1], 3001)));
+
+        let first = app.dispatch(&request);
+        let second = app.dispatch(&request);
+        let limited = app.dispatch(&request);
+        assert_eq!(first.status, 200);
+        assert_eq!(second.status, 200);
+        assert_eq!(limited.status, 429);
+        assert!(limited.headers.iter().any(|(name, value)| {
+            name == "Retry-After" && value.parse::<u64>().is_ok_and(|seconds| seconds > 0)
+        }));
+        for response in [first, second, limited] {
+            assert!(response
+                .headers
+                .iter()
+                .any(|(name, value)| name == "X-Zelyra-API-Version" && value == "v1"));
+            assert!(response
+                .headers
+                .iter()
+                .any(|(name, value)| name == "X-Zelyra-API-Deprecated" && value == "true"));
+        }
+
+        request.remote_addr = Some(SocketAddr::from(([127, 0, 0, 2], 3001)));
+        assert_eq!(app.dispatch(&request).status, 200);
+    }
+
+    #[test]
+    fn api_rate_limiter_caps_client_state_and_fails_closed_for_new_clients() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
+            "GET",
+            "/limited",
+            |_request, _| Response::json(200, "{}"),
+        )
+        .with_metadata(
+            None,
+            false,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 5,
+                window_seconds: 60,
+            }),
+        )]);
+        let now = Instant::now();
+        {
+            let mut clients = app.api_throttle.lock().unwrap();
+            for index in 0..API_THROTTLE_MAX_CLIENTS {
+                clients.insert(
+                    format!("seed-{index}"),
+                    ApiThrottle {
+                        window_started: now,
+                        requests: 1,
+                        window_seconds: 60,
+                    },
+                );
+            }
+        }
+
+        let mut request =
+            parse_request("GET /limited HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        request.remote_addr = Some(SocketAddr::from(([127, 0, 0, 9], 3001)));
+        assert_eq!(app.dispatch(&request).status, 429);
+        assert_eq!(
+            app.api_throttle.lock().unwrap().len(),
+            API_THROTTLE_MAX_CLIENTS
+        );
+    }
+
+    #[test]
+    fn api_rate_limiter_discards_expired_client_windows() {
+        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
+            "GET",
+            "/limited",
+            |_request, _| Response::json(200, "{}"),
+        )
+        .with_metadata(
+            None,
+            false,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 5,
+                window_seconds: 1,
+            }),
+        )]);
+        app.api_throttle.lock().unwrap().insert(
+            "expired".into(),
+            ApiThrottle {
+                window_started: Instant::now() - Duration::from_secs(2),
+                requests: 5,
+                window_seconds: 1,
+            },
+        );
+        let mut request =
+            parse_request("GET /limited HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        request.remote_addr = Some(SocketAddr::from(([127, 0, 0, 10], 3001)));
+        assert_eq!(app.dispatch(&request).status, 200);
+        assert_eq!(app.api_throttle.lock().unwrap().len(), 1);
     }
 
     #[test]

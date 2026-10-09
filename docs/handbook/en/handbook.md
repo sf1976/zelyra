@@ -7282,6 +7282,28 @@ The HTTP parser checks `Content-Length`, reads complete bodies across multiple
 network reads, and limits request bodies to 1 MiB. Headers are limited to 64
 KiB. An oversized body is rejected with HTTP 413 before the handler runs.
 
+An API can declare version and deprecation metadata and a bounded per-client
+quota:
+
+~~~zelyra
+api GET "/api/v1/customers" {
+    version "v1"
+    deprecated
+    rate_limit 100 per 60
+    output Customer[]
+}
+~~~
+
+Responses expose the version and deprecation marker through
+`X-Zelyra-API-Version` and `X-Zelyra-API-Deprecated`; `zelyra doc --openapi`
+includes the same metadata. The quota is tracked per route and TCP client IP
+in the current process. An exhausted quota returns HTTP 429 and `Retry-After`.
+Limits allow 1 to 1,000,000 requests per 1 to 86,400 seconds. The server does
+not trust `X-Forwarded-For`, so clients behind one reverse proxy share its
+quota. Quotas are memory-only and reset when the server restarts.
+The table is capped at 4,096 client/route pairs; while full, new pairs receive
+HTTP 429 until a window expires.
+
 All HTML, JSON, redirect, error, and preflight responses receive these secure
 default headers:
 
