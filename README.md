@@ -50,7 +50,7 @@ and the installation guide.
 For an interactive CLI example, run `zelyra run examples/console_input.zyl`.
 It uses the explicit `Console` capability; the example's project grant is
 enabled in the repository's `zelyra.toml`. See the [I/O chapter in the
-handbook](docs/handbook/en/handbook.md#chapter-8-input-and-output) for new
+handbook](docs/handbook/en/textbook-foundations.md#chapter-8-input-and-output) for new
 projects.
 
 ### Start a MariaDB CRUD application

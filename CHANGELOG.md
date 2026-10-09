@@ -6,6 +6,7 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Split the English and German master handbooks into linked textbook, technical-reference, and appendix files; the snippet validator covers all chapters. / Die englischen und deutschen Master-Handbücher sind in verlinkte Lehrbuch-, Referenz- und Anhangdateien aufgeteilt; der Snippet-Validator prüft alle Kapitel.
 - Schema-build failures in imported modules now retain the originating file
   and source span in `db create` diagnostics; an integration regression covers
   an imported duplicate-column error. / Schemafehler in importierten Modulen
