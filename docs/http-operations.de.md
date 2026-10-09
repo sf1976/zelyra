@@ -20,7 +20,11 @@ das aktuelle Verhalten und verspricht keinen Abbruch eines Request-Handlers.
   `GET`-API-Route für die zum normalen Betrieb erforderlichen Abhängigkeiten
   bereit. Zelyra reserviert oder erzeugt keine Readiness-Route. Die Antwort
   bleibt allgemein und enthält weder Datenbankdiagnosen noch Zugangsdaten oder
-  interne Hostnamen.
+  interne Hostnamen. Das erzeugte Projekt `mariadb-business` enthält
+  `GET /health/ready`; die begrenzte Leseabfrage prüft den Zugriff auf die
+  erzeugte Tabelle `users`. Der E2E-Test des erzeugten Projekts prüft sowohl
+  den verbundenen als auch den nicht erreichbaren Datenbankfall. Andere
+  Vorlagen sollten Readiness für ihre eigenen Abhängigkeiten definieren.
 - **Abhängigkeits-Readiness:** Benötigt die Anwendung MariaDB, kann ihr eigener
   Readiness-Handler eine begrenzte, ausschließlich lesende Abfrage ausführen.
   Schema-Inspektion, Migrationen und Schreibzugriffe gehören nicht in einen

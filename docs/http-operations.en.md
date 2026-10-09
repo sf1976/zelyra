@@ -19,6 +19,10 @@ does not promise that a request handler can be cancelled.
   API route for the dependencies required to serve normal traffic. Zelyra
   does not reserve or generate a readiness route. Keep its response generic
   and do not return database diagnostics, credentials, or internal hostnames.
+  The generated `mariadb-business` project includes `GET /health/ready`; its
+  bounded read-only query checks access to the generated `users` table, and
+  the generated-project E2E checks both the connected and unreachable database
+  cases. Other templates should define readiness for their own dependencies.
 - **Dependency readiness:** if an application depends on MariaDB, its own
   readiness handler may perform one bounded read-only query. Do not run schema
   inspection, migrations, or writes from a probe. `zelyra doctor --json` is a

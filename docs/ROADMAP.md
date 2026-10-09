@@ -55,8 +55,10 @@ principles; the roadmap below tracks what is actually implemented.
   Synchronous handlers cannot be cancelled and can still occupy a worker slot;
   the [HTTP operations guide](http-operations.en.md) defines TCP listener reachability,
   the built-in process liveness route, application-owned readiness, and bounded
-  retries only for safe/idempotent requests. Dependency readiness and its
-  generated-app acceptance remain open; the server does not retry automatically.
+  retries only for safe/idempotent requests. The generated MariaDB business
+  project now includes an application-owned readiness query; its E2E covers
+  reachable and unreachable MariaDB. Other dependencies remain application-
+  owned; the server does not retry automatically.
 
 - [x] Language core: lexer, parser, AST, functions, expressions, control flow,
   immutable-by-default bindings, arrays, deterministic typed maps, records,

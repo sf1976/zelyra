@@ -111,6 +111,7 @@ DATABASE_URL="${database_url}" \
     ZELYRA_PROTECTED_E2E_DB_PASSWORD="${root_password}" \
     ZELYRA_BIN="${zelyra_bin}" \
     ZELYRA_PROTECTED_E2E_PROJECT="${project_dir}/main.zyl" \
+    ZELYRA_PROTECTED_E2E_READINESS_PATH="/health/ready" \
     ZELYRA_PROTECTED_E2E_ADDRESS="${address}" \
     "${script_dir}/mariadb-protected-e2e.sh"
 echo "[4/4] generated business project E2E passed"
