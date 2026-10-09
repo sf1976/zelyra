@@ -330,7 +330,7 @@ fi
 old_session_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cookie "${cookie}" "${base_url}/account")"
 [[ "${old_session_status}" == "401" ]]
 
-echo "[8/9] reject replay and verify new password"
+echo "[8/9] reject replay, exact expiry boundary, and verify new password"
 replay_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${token}")"
 [[ "${replay_status}" == 400 ]]
@@ -368,7 +368,7 @@ import hashlib, sys
 print(hashlib.blake2s(sys.argv[1].encode()).hexdigest())
 PY
 )"
-client -e "UPDATE password_resets SET expires_at = DATE_SUB(NOW(), INTERVAL 1 SECOND) WHERE user_id = ${user_id} AND token_hash = '${expired_hash}'"
+client -e "UPDATE password_resets SET expires_at = NOW() WHERE user_id = ${user_id} AND token_hash = '${expired_hash}'"
 expired_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${expired_token}")"
 [[ "${expired_status}" == "400" ]]

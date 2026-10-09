@@ -46,11 +46,14 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   verzögerte Zustellung, Token-Hash, Replay, Ablauf, CSRF/Origin und
   Sitzungswiderruf. Der E2E-Test löst dasselbe Reset-Token nun außerdem
   gleichzeitig zweimal ein und prüft genau einen Erfolg, eine Ablehnung und
-  die Anmeldung nur mit dem siegreichen Passwort. Parallele Token-Ausstellung
-  und FIFO-Maileinreihung sind innerhalb eines Prozesses serialisiert; der
-  E2E-Test bestätigt, dass die letzte E-Mail zum gültigen Token gehört.
-  Mehrprozess-Reihenfolge, genaues Ablaufgrenzverhalten, SMTP-Ausfall und der
-  Mail-/Token-Lebenszyklus bleiben unabhängig zu prüfen.
+  die Anmeldung nur mit dem siegreichen Passwort. Token-Ersetzung und
+  FIFO-Maileinreihung sind innerhalb eines Prozesses serialisiert.
+  MariaDB-Advisory-Locks koordinieren Ausstellung und Zustellung zwischen
+  Instanzen; ein Zwei-Instanzen-E2E bestätigt, dass die spätere zugestellte
+  E-Mail zum gespeicherten Token gehört. Ein Mailworker verwirft veraltete
+  Tokens. Das E2E weist außerdem die Ablehnung mit `expires_at = NOW()` nach.
+  Ein Gleichheitstest mit eingefrorener Uhr, SMTP-Ausfall und Mail-/Token-
+  Lebenszyklus bleiben unabhängig zu prüfen.
 - Sitzungsadministration ist teilweise umgesetzt. Gerätemetadaten und die
   vollständige Selbstverwaltung bleiben offen; die Kontolebenszyklus-Abnahme
   ist nicht bestanden.

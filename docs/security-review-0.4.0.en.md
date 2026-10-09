@@ -46,8 +46,9 @@ or human acceptance.
   request succeeds, the other is rejected, and only the winning password can
   authenticate. Token replacement and FIFO mail enqueue are serialized within
   one process, and the E2E verifies the last delivered message matches the
-  active token. Cross-instance ordering, exact expiry boundary behavior, SMTP
-  outage handling, and the mail/token lifecycle still need independent review.
+  active token. An E2E sets `expires_at = NOW()` and verifies rejection; an
+  equality test with a frozen clock, SMTP outage handling, and the mail/token
+  lifecycle still need independent review.
 - Session administration is partially implemented. Device metadata and full
   self-service remain open; account-lifecycle acceptance has not passed.
 - MariaDB TLS verifies the certificate chain and host names according to the

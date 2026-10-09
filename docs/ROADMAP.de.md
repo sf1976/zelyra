@@ -44,8 +44,9 @@ den tatsächlich implementierten Stand.
   auch über mehrere Instanzen; ein Zwei-Instanzen-E2E verzögert das erste
   SMTP-Relay, während die zweite Instanz das Token ersetzt, und prüft, dass
   die spätere E-Mail zum gespeicherten Token gehört. Veraltete Tokens in der
-  Mailqueue werden übersprungen. Prozesslokale Reset-Limits, Ablaufgrenze,
-  SMTP-Ausfallverhalten und unabhängige Sicherheitsprüfung bleiben offen; der
+  Mailqueue werden übersprungen. Das MariaDB-E2E lehnt ein Token mit
+  `expires_at = NOW()` ab. Prozesslokale Reset-Limits, SMTP-Ausfallverhalten
+  und unabhängige Sicherheitsprüfung bleiben offen; der
   Kontolebenszyklus ist nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
@@ -601,7 +602,7 @@ Feature eines bestimmten Anbieters.
 - [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
   teilweise umgesetzt. Gleichzeitige Einlösungen desselben Tokens sind im
   MariaDB-E2E abgedeckt. Token-Ausstellung und E-Mail-Queue sind pro Prozess
-  serialisiert; Mehrprozessbetrieb und Ablaufgrenze bleiben offen. Persistente
+  serialisiert; Mehrprozessbetrieb bleibt offen. Persistente
   Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
   Login-Benachrichtigungen bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver

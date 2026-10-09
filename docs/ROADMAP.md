@@ -539,8 +539,9 @@ architecture requirement for every phase, not a provider-specific feature.
   within one process. MariaDB advisory locks also coordinate issuance and
   delivery across instances; a two-instance E2E delays the first SMTP relay
   while the second instance replaces the token and verifies that the later
-  email matches the stored token. Stale queued tokens are skipped. Process-local
-  reset throttling, expiry boundary, SMTP outage behavior, and independent
+  email matches the stored token. Stale queued tokens are skipped. The MariaDB
+  E2E rejects a token with `expires_at = NOW()`. Process-local reset throttling,
+  SMTP outage behavior, and independent
   security review remain open; the account lifecycle is not complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
@@ -558,7 +559,7 @@ architecture requirement for every phase, not a provider-specific feature.
   object storage, or SIEM, with delivery status and retry behavior; usage
   telemetry and hidden remote collection are out of scope.
 - [🧪] Password reset and session controls are partial in unreleased 0.4;
-  expiry-boundary/concurrency behavior, persistent reset throttling, device
+  concurrency, persistent reset throttling, device
   metadata, MFA/WebAuthn, and login notifications remain open.
 - [ ] Fine-grained policy expressions, policy testing, and permission explain
   output.
