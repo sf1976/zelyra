@@ -3,9 +3,10 @@
 🧪 Entwicklungsstand für 0.4.0, keine allgemeine Exportgarantie.
 [English](module-docker-acceptance.en.md)
 
-✅ Diese begrenzte Probe bestand lokal am 04.10.2026 einschließlich aller
-unten genannten Negativtests. Beide Exportimages nutzten Compiler-Commit
-`999eb978b7e8dcd23303437f80e210cd3caf5ce1`.
+✅ Diese begrenzte Probe bestand lokal am 09.10.2026 einschließlich schreibendem
+CRUD in beiden Exporten und aller unten genannten Negativtests. Die
+Gesamtanwendung und beide Exportimages nutzten Compiler-Commit
+`917e8c707e49332b323e51e4dcbd39a4f37ced96`.
 
 Die Referenzprüfung erzeugt eine Gesamtanwendung mit zwei Fachmodulen und
 einem gemeinsamen Datenbankmodul. Anschließend exportiert sie beide Fachmodule
@@ -39,8 +40,8 @@ Im Repository-Stamm:
 
 ```bash
 cargo build --locked -p zelyra-cli
-ZELYRA_DOCKER_E2E_REF=feature/0.4-project-modules \
-ZELYRA_DOCKER_E2E_MODULE_COMMIT=999eb978b7e8dcd23303437f80e210cd3caf5ce1 \
+ZELYRA_DOCKER_E2E_REF=feature/0.4-reversible-migrations \
+ZELYRA_DOCKER_E2E_MODULE_COMMIT=917e8c707e49332b323e51e4dcbd39a4f37ced96 \
 bash tests/generated-project-docker-e2e.sh
 ```
 
@@ -65,22 +66,23 @@ Ein abgebrochener Test ist kein erfolgreiches Ergebnis.
    ungültigen oder leeren Verbindungswert.
 4. Beide Pakete bauen und starten mit getrennten Zugangsdaten und getrennten
    Schemas auf demselben Test-MariaDB-Server. Ihre Listen zeigen den jeweils
-   erwarteten Datensatz, während der ursprüngliche Webserver gestoppt ist.
+   erwarteten Datensatz, während der ursprüngliche Webserver gestoppt ist. Der
+   Test legt über jedes generierte HTTP-CRUD-Formular Datensätze an, ändert und
+   löscht sie und prüft CSRF- sowie Same-Origin-Schutz.
 5. Die Route des anderen Fachmoduls liefert HTTP 404. Im Image liegt keine
    `/app/.env`; Compose injiziert die Konfiguration erst zur Laufzeit.
-6. MariaDB verweigert dem jeweiligen Konto sowohl das Lesen der fremden Tabelle
-   als auch ein `DELETE ... WHERE 1=0` auf der eigenen Tabelle. Der zweite
-   Versuch ändert auch bei einem fehlerhaften Grant keine Daten, prüft aber
-   die Schreibberechtigung. Nur eine echte Berechtigungsdiagnose zählt als
+6. Jedes Testkonto besitzt `SELECT`, `INSERT`, `UPDATE` und `DELETE` nur für
+   seine eigene Tabelle. MariaDB verweigert das Lesen und Löschen in der Tabelle
+   des anderen Moduls. Nur eine echte Berechtigungsdiagnose zählt als
    erfolgreicher Negativtest, kein beliebiger Verbindungsfehler.
 
 ## Grenzen und Fehlerbehebung
 
-Die Konten dieser Probe besitzen absichtlich nur `SELECT`. Sie belegen die
-Leseisolation, keine vollständige schreibende CRUD-Abnahme. Compilerverträge
-und MariaDB-Grants sind zwei getrennte Sicherheitsgrenzen. Die Probe prüft
-keine Rollenoberfläche, Schemaupdates zwischen Versionen oder vollständige
-Extraktion beliebiger Projekte. `complete_deployment` bleibt `false`.
+Die Probe belegt schreibendes CRUD für diese beiden begrenzten Exporte; sie
+belegt keine Rollenoberfläche, Schemaupdates zwischen Versionen oder
+vollständige Extraktion beliebiger Projekte. Compilerverträge und
+MariaDB-Grants sind zwei getrennte Sicherheitsgrenzen.
+`complete_deployment` bleibt `false`.
 
 Bei einem belegten Port zuerst den eigenen Testprozess prüfen; keine fremden
 Dienste stoppen. `docker compose ps` im jeweiligen Projekt zeigt dessen

@@ -236,12 +236,12 @@ CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE zelyra_invoice.invoices LIKE zelyra_app.invoices;
 INSERT INTO zelyra_invoice.invoices (number) VALUES ('INV-MODULE-ONLY');
 CREATE USER 'invoice_module'@'%' IDENTIFIED BY 'invoice-module-test-only';
-GRANT SELECT ON zelyra_invoice.invoices TO 'invoice_module'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON zelyra_invoice.invoices TO 'invoice_module'@'%';
 CREATE DATABASE zelyra_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE zelyra_inventory.inventory LIKE zelyra_app.inventory;
 INSERT INTO zelyra_inventory.inventory (sku) VALUES ('SKU-MODULE-ONLY');
 CREATE USER 'inventory_module'@'%' IDENTIFIED BY 'inventory-module-test-only';
-GRANT SELECT ON zelyra_inventory.inventory TO 'inventory_module'@'%';"
+GRANT SELECT, INSERT, UPDATE, DELETE ON zelyra_inventory.inventory TO 'inventory_module'@'%';"
 docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" \
@@ -276,19 +276,126 @@ assert_bundle_isolation() {
         exec -T app test ! -e /app/.env
     # These are disposable fixture credentials, never production credentials.
     # Check actual database denial, not just the presence of GRANT statements.
-    for query in "SELECT * FROM ${other_table}" "DELETE FROM ${own_table} WHERE 1=0"; do
+    for query in "SELECT * FROM ${other_table}" "DELETE FROM ${other_table} WHERE 1=0"; do
         if docker compose --project-name "${project}" -f "${directory}/docker-compose.yml" \
             exec -T -e MYSQL_PWD="${password}" app mariadb --protocol=tcp \
             --host=mariadb --user="${username}" --execute="${query}" \
             >"${project_root}/permission-check.log" 2>&1; then
-            echo "error: read-only module account exceeded its database permissions" >&2
+            echo "error: module account exceeded its own-table-only database permissions" >&2
             return 1
         fi
         if ! grep -Eq 'ERROR (1044|1142)' "${project_root}/permission-check.log"; then
-            echo "error: database denial was not a permission error" >&2
+            echo "error: cross-module database denial was not a permission error" >&2
             return 1
         fi
     done
+}
+
+extract_csrf_token() {
+    python3 - "$1" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+class CsrfParser(HTMLParser):
+    token = None
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input" and attributes.get("name") == "_zelyra_csrf":
+            self.token = attributes.get("value")
+
+parser = CsrfParser()
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+if not parser.token:
+    raise SystemExit("CSRF token missing from generated form")
+print(parser.token)
+PY
+}
+
+assert_bundle_crud() {
+    local port="$1" resource="$2" field="$3" created="$4" updated="$5"
+    local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
+    local token status list_file="${project_root}/write-list.html" record_id
+
+    curl --silent --show-error --fail "${origin}/${resource}/new" -o "${form_file}"
+    token="$(extract_csrf_token "${form_file}")"
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "${field}=${created}" "${origin}/${resource}/new")"
+    if [[ "${status}" != 303 ]]; then
+        echo "error: generated CRUD create returned ${status}, expected 303" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    assert_file_contains "${list_file}" "${created}" "new row from generated CRUD create"
+    record_id="$(python3 - "${list_file}" "${resource}" "${created}" <<'PY'
+from html.parser import HTMLParser
+import sys
+
+class RowParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_row = False
+        self.row_text = []
+        self.row_hrefs = []
+        self.record_id = None
+    def handle_starttag(self, tag, attrs):
+        if tag == "tr":
+            self.in_row, self.row_text, self.row_hrefs = True, [], []
+        if self.in_row and tag == "a":
+            href = dict(attrs).get("href", "")
+            if href:
+                self.row_hrefs.append(href)
+    def handle_data(self, data):
+        if self.in_row:
+            self.row_text.append(data)
+    def handle_endtag(self, tag):
+        if tag == "tr" and self.in_row:
+            if value in " ".join(self.row_text):
+                for href in self.row_hrefs:
+                    prefix = f"/{resource}/"
+                    suffix = href[len(prefix):] if href.startswith(prefix) else ""
+                    record_id = suffix.split("/", 1)[0]
+                    if record_id.isdigit():
+                        self.record_id = record_id
+                        return
+            self.in_row = False
+
+resource, value = sys.argv[2:]
+parser = RowParser()
+parser.feed(open(sys.argv[1], encoding="utf-8").read())
+if parser.record_id is None:
+    raise SystemExit("created CRUD row has no detail link")
+print(parser.record_id)
+PY
+)"
+
+    curl --silent --show-error --fail "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
+    token="$(extract_csrf_token "${form_file}")"
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        --data-urlencode "${field}=${updated}" \
+        "${origin}/${resource}/${record_id}/edit")"
+    if [[ "${status}" != 303 ]]; then
+        echo "error: generated CRUD update returned ${status}, expected 303" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    assert_file_contains "${list_file}" "${updated}" "updated row from generated CRUD update"
+
+    curl --silent --show-error --fail "${origin}/${resource}/${record_id}" -o "${form_file}"
+    token="$(extract_csrf_token "${form_file}")"
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${origin}/${resource}/${record_id}/delete")"
+    if [[ "${status}" != 303 ]]; then
+        echo "error: generated CRUD delete returned ${status}, expected 303" >&2
+        return 1
+    fi
+    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    if grep -Fq -- "${updated}" "${list_file}"; then
+        echo "error: generated CRUD delete left the removed row visible" >&2
+        return 1
+    fi
 }
 
 write_bundle_environment() {
@@ -381,6 +488,8 @@ assert_file_contains "${project_root}/bundled-module.html" 'INV-MODULE-ONLY' \
     "invoice CRUD data read with the invoice-only database user"
 assert_bundle_isolation "${bundle_dir}" "${bundle_compose_project}" "${bundle_host_port}" \
     inventory invoice_module invoice-module-test-only zelyra_invoice.invoices zelyra_inventory.inventory
+assert_bundle_crud "${bundle_host_port}" invoices number \
+    INV-MODULE-WRITE-001 INV-MODULE-UPDATED-001
 if ! grep -Fq '"complete_deployment": false' "${bundle_dir}/zelyra.bundle.json"; then
     echo "error: experimental selected-module package overstated deployment completeness" >&2
     exit 1
@@ -453,6 +562,8 @@ assert_file_contains "${project_root}/bundled-inventory.html" \
     "inventory CRUD data read with the inventory-only database user"
 assert_bundle_isolation "${second_bundle_dir}" "${second_bundle_compose_project}" "${second_bundle_host_port}" \
     invoices inventory_module inventory-module-test-only zelyra_inventory.inventory zelyra_invoice.invoices
+assert_bundle_crud "${second_bundle_host_port}" inventory sku \
+    SKU-MODULE-WRITE-001 SKU-MODULE-UPDATED-001
 if ! grep -Fq '"complete_deployment": false' "${second_bundle_dir}/zelyra.bundle.json"; then
     echo "error: second experimental module package overstated deployment completeness" >&2
     exit 1
