@@ -91,6 +91,7 @@ REQUIRED_HUMAN_DECISION_RECORDS_040 = {
 
 REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050 = {
     "docs/release-readiness/0.5.0-human-acceptance.en.md": (
+        "candidate tag:",
         "candidate commit:",
         "completed on:",
         "observations:",
@@ -99,6 +100,7 @@ REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050 = {
         "decision authority: project owner",
     ),
     "docs/release-readiness/0.5.0-human-acceptance.de.md": (
+        "kandidaten-tag:",
         "kandidaten-commit:",
         "abgeschlossen am:",
         "beobachtungen:",
@@ -107,6 +109,19 @@ REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050 = {
         "entscheidungsträger: projektverantwortlicher",
     ),
 }
+
+REQUIRED_CANDIDATE_RECORD_040 = (
+    "candidate tag:",
+    "candidate source commit:",
+    "linux archive sha-256:",
+    "linux sbom sha-256:",
+    "windows archive sha-256:",
+    "windows sbom sha-256:",
+    "linux attestation:",
+    "windows attestation:",
+    "upgrade smoke:",
+    "rollback smoke:",
+)
 
 
 def _checkbox_is_checked(text: str, marker: str) -> bool:
@@ -135,10 +150,26 @@ def unfinished_gates(
             if not _checkbox_is_checked(text, marker):
                 failures.append(f"{name} ({relative_path})")
 
+    if version == "0.4.0":
+        candidate_path = root / "docs/release-readiness/0.4.0-candidate-verification.md"
+        try:
+            candidate_text = candidate_path.read_text(encoding="utf-8")
+            flattened = re.sub(r"[*_`]", "", " ".join(candidate_text.casefold().split()))
+            missing = [marker for marker in REQUIRED_CANDIDATE_RECORD_040 if marker not in flattened]
+            if missing:
+                failures.append("candidate verification record incomplete (docs/release-readiness/0.4.0-candidate-verification.md)")
+            if any(placeholder in flattened for placeholder in ("pending", "ausstehend", "[todo]", "tbd", "not run")):
+                failures.append("candidate verification record contains placeholders (docs/release-readiness/0.4.0-candidate-verification.md)")
+        except (OSError, UnicodeError):
+            failures.append("candidate verification record missing (docs/release-readiness/0.4.0-candidate-verification.md)")
+
     if version == "0.3.0":
         required_records = REQUIRED_DECISION_RECORDS
     elif version == "0.4.0":
-        required_records = REQUIRED_HUMAN_DECISION_RECORDS_040
+        required_records = {
+            **REQUIRED_HUMAN_DECISION_RECORDS_040,
+            "docs/release-readiness/0.4.0-candidate-verification.md": REQUIRED_CANDIDATE_RECORD_040,
+        }
     else:
         required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050
 
@@ -161,11 +192,35 @@ def unfinished_gates(
                 placeholder in text
                 for placeholder in ("pending", "ausstehend", "[todo]", "tbd")
             ):
-                failures.append(f"human decision record contains placeholders ({relative_path})")
+                failures.append(f"release readiness record contains placeholders ({relative_path})")
+            if version == "0.4.0" and relative_path.endswith("candidate-verification.md"):
+                recorded_commit = _record_value(raw_text, "candidate source commit:")
+                recorded_tag = _record_value(raw_text, "candidate tag:")
+                if not re.fullmatch(r"[0-9a-f]{40}", recorded_commit.casefold()):
+                    failures.append(f"candidate source commit is invalid ({relative_path})")
+                if not re.fullmatch(r"v0\.4\.0-rc\.[0-9]+", recorded_tag.casefold()):
+                    failures.append(f"candidate tag is invalid ({relative_path})")
+                for label in (
+                    "linux archive sha-256:",
+                    "linux sbom sha-256:",
+                    "windows archive sha-256:",
+                    "windows sbom sha-256:",
+                ):
+                    if not re.fullmatch(r"[0-9a-f]{64}", _record_value(raw_text, label).casefold()):
+                        failures.append(f"candidate artifact digest is invalid ({relative_path})")
+                for label in ("linux attestation:", "windows attestation:"):
+                    if not _record_value(raw_text, label).casefold().startswith("verified"):
+                        failures.append(f"candidate attestation is not verified ({relative_path})")
+                for label in ("upgrade smoke:", "rollback smoke:"):
+                    if not _record_value(raw_text, label).casefold().startswith("passed"):
+                        failures.append(f"candidate {label[:-1]} is not passed ({relative_path})")
+                if candidate_commit is not None and recorded_commit.casefold() != candidate_commit.casefold():
+                    failures.append(f"candidate record does not match published candidate tag ({relative_path})")
             if version == "0.5.0" and candidate_commit is not None:
                 commit_label = (
                     "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
                 )
+                tag_label = "kandidaten-tag:" if relative_path.endswith(".de.md") else "candidate tag:"
                 recorded_commit = next(
                     (
                         line.strip().split(":", 1)[1].strip().strip("`")
@@ -174,11 +229,45 @@ def unfinished_gates(
                     ),
                     "",
                 )
+                recorded_tag = _record_value(raw_text, tag_label)
+                if not re.fullmatch(r"[0-9a-f]{40}", recorded_commit.casefold()):
+                    failures.append(f"human acceptance candidate commit is invalid ({relative_path})")
+                if not re.fullmatch(r"v0\.5\.0-rc\.[0-9]+", recorded_tag.casefold()):
+                    failures.append(f"human acceptance candidate tag is invalid ({relative_path})")
                 if recorded_commit.casefold() != candidate_commit.casefold():
                     failures.append(
                         f"human acceptance record is for a different candidate commit ({relative_path})"
                     )
     return failures
+
+
+def _record_value(raw_text: str, label: str) -> str:
+    normalized_label = label.casefold()
+    for line in raw_text.splitlines():
+        if line.strip().casefold().startswith(normalized_label):
+            return line.split(":", 1)[1].strip().strip("` ")
+    return ""
+
+
+def candidate_tag(root: Path, version: str) -> str:
+    paths = (
+        [root / "docs/release-readiness/0.4.0-candidate-verification.md"]
+        if version == "0.4.0"
+        else [
+            root / "docs/release-readiness/0.5.0-human-acceptance.en.md",
+            root / "docs/release-readiness/0.5.0-human-acceptance.de.md",
+        ]
+    )
+    values = [
+        _record_value(
+            path.read_text(encoding="utf-8"),
+            "kandidaten-tag:" if path.name.endswith(".de.md") else "candidate tag:",
+        )
+        for path in paths
+    ]
+    if not values or not values[0] or any(value.casefold() != values[0].casefold() for value in values):
+        raise ValueError(f"candidate tag missing or inconsistent for {version}")
+    return values[0]
 
 
 def main() -> int:
@@ -187,9 +276,18 @@ def main() -> int:
     parser.add_argument("--version", required=True, help="workspace version being tagged")
     parser.add_argument(
         "--candidate-commit",
-        help="exact candidate commit the human decision record must cover",
+        help="exact candidate tag commit the release or human decision record must cover",
     )
+    parser.add_argument("--print-candidate-tag", action="store_true")
     args = parser.parse_args()
+
+    if args.print_candidate_tag:
+        try:
+            print(candidate_tag(args.root, args.version))
+        except (OSError, UnicodeError, ValueError) as error:
+            print(f"release readiness check failed: {error}", file=sys.stderr)
+            return 1
+        return 0
 
     try:
         failures = unfinished_gates(args.root, args.version, args.candidate_commit)
