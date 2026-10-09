@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+fuzzing = []
+
 [dependencies]
 mysql.workspace = true
 r2d2.workspace = true

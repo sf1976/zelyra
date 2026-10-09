@@ -10,6 +10,35 @@ on:
   workflow_dispatch:
 
 jobs:
+  coverage-guided-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install --yes clang
+      - name: Install nightly Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly-2026-10-09
+        with:
+          components: rust-src
+      - name: Install pinned cargo-fuzz
+        run: cargo install --locked --version 0.13.2 cargo-fuzz
+      - name: Run bounded coverage-guided fuzz targets
+        env:
+          CC: clang
+        run: |
+          for target in lexer_parser sql_binder template_renderer http_request; do
+            cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
+              -max_total_time=15 -max_len=16384 -timeout=5
+          done
+      - name: Preserve fuzz failure inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zelyra-fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:

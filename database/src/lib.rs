@@ -2548,6 +2548,13 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
     Ok((bound, parameters))
 }
 
+/// Exposes the named-parameter scanner only to the dedicated fuzz target.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), String> {
+    bind_named_parameters(sql).map_err(|error| error.to_string())
+}
+
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
     let database = &connection.database;

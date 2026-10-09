@@ -15,7 +15,24 @@ impl fmt::Display for ParseError {
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
-    Parser { tokens, pos: 0 }.program()
+    let mut complete_tokens = tokens.to_vec();
+    if !matches!(
+        complete_tokens.last().map(|token| &token.kind),
+        Some(TokenKind::Eof)
+    ) {
+        let span = complete_tokens
+            .last()
+            .map_or_else(Span::default, |token| token.span);
+        complete_tokens.push(Token {
+            kind: TokenKind::Eof,
+            span,
+        });
+    }
+    Parser {
+        tokens: &complete_tokens,
+        pos: 0,
+    }
+    .program()
 }
 
 struct Parser<'a> {
@@ -31,8 +48,10 @@ impl<'a> Parser<'a> {
         &self.current().kind == kind
     }
     fn advance(&mut self) -> &'a Token {
-        let token = &self.tokens[self.pos];
-        self.pos += 1;
+        let token = self.current();
+        if !matches!(&token.kind, TokenKind::Eof) {
+            self.pos += 1;
+        }
         token
     }
     fn skip_newlines(&mut self) {
@@ -2592,6 +2611,21 @@ mod tests {
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
     }
+    #[test]
+    fn incomplete_expression_at_end_of_input_returns_a_parse_error() {
+        let tokens = lex("fn e(){n*").unwrap();
+        let error = parse(&tokens).unwrap_err();
+        assert!(error.message.contains("expected expression"));
+    }
+
+    #[test]
+    fn parse_adds_an_eof_token_when_callers_omit_it() {
+        let tokens = lex("fn main() {}").unwrap();
+        let without_eof = &tokens[..tokens.len() - 1];
+        let program = parse(without_eof).unwrap();
+        assert_eq!(program.functions[0].name, "main");
+    }
+
     #[test]
     fn parses_multiline_return() {
         let source = "fn f(n: Int) -> Int { return n +\n 1 }";

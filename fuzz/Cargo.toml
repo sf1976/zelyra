@@ -1,0 +1,49 @@
+[package]
+name = "zelyra-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+zelyra-ast = { path = "../ast" }
+zelyra-database = { path = "../database", features = ["fuzzing"] }
+zelyra-forms = { path = "../forms" }
+zelyra-lexer = { path = "../lexer" }
+zelyra-parser = { path = "../parser" }
+zelyra-runtime = { path = "../runtime" }
+zelyra-web = { path = "../web" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "lexer_parser"
+path = "fuzz_targets/lexer_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sql_binder"
+path = "fuzz_targets/sql_binder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "template_renderer"
+path = "fuzz_targets/template_renderer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_request"
+path = "fuzz_targets/http_request.rs"
+test = false
+doc = false
+bench = false
