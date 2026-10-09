@@ -25,6 +25,7 @@ use i18n::{
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
+pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
 pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1096,6 +1097,12 @@ impl WebApp {
                 current_label: "@i18n:auth.login_title".into(),
                 navigation: Vec::new(),
             }
+        } else if request.path == ACCOUNT_SESSIONS_PATH && self.auth_route.is_some() {
+            DefaultUiContext {
+                current_path: request.path.clone(),
+                current_label: "@i18n:auth.self_sessions_title".into(),
+                navigation: Vec::new(),
+            }
         } else {
             let admin_path = self
                 .auth_route
@@ -1145,6 +1152,11 @@ impl WebApp {
                 add_navigation_link(&mut context.navigation, form.path.clone(), label);
             }
             if let Some(auth) = &self.auth_route {
+                add_navigation_link(
+                    &mut context.navigation,
+                    ACCOUNT_SESSIONS_PATH,
+                    "@i18n:auth.self_sessions_title",
+                );
                 if let Some(path) = &auth.admin_path {
                     add_navigation_link(
                         &mut context.navigation,
@@ -1256,6 +1268,9 @@ impl WebApp {
             }
             if request.path == "/logout" {
                 return dispatch_logout(self, request, self.database_url.as_deref());
+            }
+            if request.path == ACCOUNT_SESSIONS_PATH {
+                return dispatch_account_sessions(self, request, self.database_url.as_deref());
             }
             if auth_route
                 .admin_path
@@ -2386,6 +2401,374 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     )
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AccountSessionRow {
+    key: String,
+    number: Option<String>,
+    expires: String,
+    expires_relative: bool,
+    current: bool,
+}
+
+fn dispatch_account_sessions(
+    app: &WebApp,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    let Some(auth) = app.auth_route.as_ref() else {
+        return Response::empty(404);
+    };
+    if app.database_capability_granted == Some(false) && auth.session_table.is_some() {
+        return database_capability_denied();
+    }
+    let Some(session) = session_from_request(app, request, database_url) else {
+        return Response::redirect("/login");
+    };
+    let Some(user_id) = session.user_id.filter(|id| *id > 0) else {
+        return Response::redirect("/login");
+    };
+    match request.method.as_str() {
+        "GET" => {
+            let rows = match account_sessions_for_user(
+                app,
+                auth,
+                database_url,
+                user_id,
+                cookie_value(request, "zelyra_session").as_deref(),
+            ) {
+                Ok(rows) => rows,
+                Err(error) => {
+                    eprintln!("zelyra web: account session lookup failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            };
+            Response::html(200, render_account_sessions(auth, &rows, app.ui_language))
+        }
+        "POST" => {
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(error) => {
+                    return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+                }
+            };
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
+                return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+            }
+            let Some(key) = input.get("session_key").map(String::as_str) else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                );
+            };
+            let current_token_hash = cookie_value(request, "zelyra_session")
+                .as_deref()
+                .map(session_token_hash);
+            let target_token_hash = if let (Some(table), Some(database_url)) =
+                (auth.session_table.as_deref(), database_url)
+            {
+                let has_id = session_table_has_id(auth);
+                let target_hash = match lookup_account_session_token_hash(
+                    table,
+                    database_url,
+                    user_id,
+                    key,
+                    has_id,
+                ) {
+                    Ok(Some(token_hash)) => token_hash,
+                    Ok(None) => return Response::redirect(ACCOUNT_SESSIONS_PATH),
+                    Err(error) => {
+                        eprintln!("zelyra web: account session lookup failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
+                };
+                let (predicate, parameter, audit_details) = if has_id {
+                    let Some(id) = key
+                        .strip_prefix("id:")
+                        .and_then(|id| id.parse::<i64>().ok())
+                        .filter(|id| *id > 0)
+                    else {
+                        return Response::html(
+                            422,
+                            "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                        );
+                    };
+                    (
+                        "id = :session_id",
+                        ("session_id", zelyra_database::QueryValue::Int(id)),
+                        format!("session_id={id}"),
+                    )
+                } else {
+                    let Some(hash) = key
+                        .strip_prefix("hash:")
+                        .filter(|hash| is_session_hash(hash))
+                    else {
+                        return Response::html(
+                            422,
+                            "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                        );
+                    };
+                    (
+                        "token_hash = :token_hash",
+                        (
+                            "token_hash",
+                            zelyra_database::QueryValue::String(hash.into()),
+                        ),
+                        "session_id=redacted".into(),
+                    )
+                };
+                let query = zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE user_id = :user_id AND {predicate}",
+                        quote_identifier(table)
+                    ),
+                    params: vec![
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                        (parameter.0.into(), parameter.1),
+                    ],
+                };
+                if let Err(error) = execute_auth_admin_mutation(
+                    auth,
+                    database_url,
+                    vec![query],
+                    Some(user_id),
+                    "auth.session_self_revoke",
+                    Some(user_id),
+                    &audit_details,
+                ) {
+                    eprintln!("zelyra web: account session revocation failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+                target_hash
+            } else {
+                let Some(hash) = key
+                    .strip_prefix("hash:")
+                    .filter(|hash| is_session_hash(hash))
+                else {
+                    return Response::html(
+                        422,
+                        "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                    );
+                };
+                let Ok(mut sessions) = app.sessions.lock() else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                let target = sessions
+                    .iter()
+                    .find(|(token, candidate)| {
+                        candidate.user_id == Some(user_id) && session_token_hash(token) == hash
+                    })
+                    .map(|(token, _)| token.clone());
+                if let Some(token) = target {
+                    sessions.remove(&token);
+                }
+                hash.to_owned()
+            };
+            if current_token_hash.as_deref() == Some(target_token_hash.as_str()) {
+                return Response::redirect("/login").with_header(
+                    "Set-Cookie",
+                    format!(
+                        "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+                        secure_cookie_attribute(request)
+                    ),
+                );
+            }
+            Response::redirect(ACCOUNT_SESSIONS_PATH)
+        }
+        _ => Response::empty(405).with_header("Allow", "GET, POST"),
+    }
+}
+
+fn session_table_has_id(auth: &AuthRoute) -> bool {
+    auth.session_table.as_deref().is_some_and(|name| {
+        auth.schema
+            .tables
+            .iter()
+            .find(|table| table.name == name)
+            .is_some_and(|table| table.columns.iter().any(|column| column.name == "id"))
+    })
+}
+
+fn is_session_hash(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn lookup_account_session_token_hash(
+    table: &str,
+    database_url: &str,
+    user_id: i64,
+    key: &str,
+    has_id: bool,
+) -> Result<Option<String>, String> {
+    let (selector, value) = if has_id {
+        let Some(id) = key
+            .strip_prefix("id:")
+            .and_then(|id| id.parse::<i64>().ok())
+            .filter(|id| *id > 0)
+        else {
+            return Ok(None);
+        };
+        (
+            "id = :session_id",
+            ("session_id", zelyra_database::QueryValue::Int(id)),
+        )
+    } else {
+        let Some(hash) = key
+            .strip_prefix("hash:")
+            .filter(|hash| is_session_hash(hash))
+        else {
+            return Ok(None);
+        };
+        (
+            "token_hash = :token_hash",
+            (
+                "token_hash",
+                zelyra_database::QueryValue::String(hash.into()),
+            ),
+        )
+    };
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT token_hash FROM {} WHERE user_id = :user_id AND {selector} AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
+            quote_identifier(table)
+        ),
+        vec![
+            ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+            (value.0.into(), value.1),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(result.rows.first().and_then(|row| row.first()).cloned())
+}
+
+fn account_sessions_for_user(
+    app: &WebApp,
+    auth: &AuthRoute,
+    database_url: Option<&str>,
+    user_id: i64,
+    current_token: Option<&str>,
+) -> Result<Vec<AccountSessionRow>, String> {
+    let current_hash = current_token.map(session_token_hash);
+    if let (Some(table), Some(database_url)) = (auth.session_table.as_deref(), database_url) {
+        let has_id = session_table_has_id(auth);
+        let first_column = if has_id { "id" } else { "token_hash" };
+        let result = zelyra_database::execute_mariadb_query(
+            database_url,
+            &format!(
+                "SELECT {first_column}, token_hash, expires_at FROM {} WHERE user_id = :user_id AND expires_at > CURRENT_TIMESTAMP ORDER BY expires_at DESC LIMIT 100",
+                quote_identifier(table)
+            ),
+            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(result
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let key = row.first()?;
+                let token_hash = row.get(1)?;
+                let expires = row.get(2)?;
+                Some(AccountSessionRow {
+                    key: if has_id {
+                        format!("id:{key}")
+                    } else {
+                        format!("hash:{key}")
+                    },
+                    number: has_id.then(|| key.clone()),
+                    expires: expires.clone(),
+                    expires_relative: false,
+                    current: current_hash.as_deref() == Some(token_hash.as_str()),
+                })
+            })
+            .collect());
+    }
+    let mut sessions = app
+        .sessions
+        .lock()
+        .map_err(|_| "session state is unavailable".to_owned())?;
+    let now = Instant::now();
+    sessions.retain(|_, session| session.expires_at > now);
+    let mut rows = sessions
+        .iter()
+        .filter(|(_, session)| session.user_id == Some(user_id))
+        .map(|(token, session)| {
+            let hash = session_token_hash(token);
+            AccountSessionRow {
+                key: format!("hash:{hash}"),
+                number: None,
+                expires: session
+                    .expires_at
+                    .saturating_duration_since(now)
+                    .as_secs()
+                    .to_string(),
+                expires_relative: true,
+                current: current_hash.as_deref() == Some(hash.as_str()),
+            }
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| std::cmp::Reverse(row.current));
+    rows.truncate(100);
+    Ok(rows)
+}
+
+fn render_account_sessions(
+    auth: &AuthRoute,
+    sessions: &[AccountSessionRow],
+    language: UiLanguage,
+) -> String {
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+        tr(language, "auth.self_sessions_title"),
+        tr(language, "auth.self_sessions_help"),
+        tr(language, "auth.session_label"),
+        tr(language, "auth.session_expiry"),
+        tr(language, "auth.actions"),
+    );
+    for session in sessions {
+        let label = session
+            .number
+            .as_ref()
+            .map(|number| {
+                format!(
+                    "{} {}",
+                    tr(language, "auth.session_label"),
+                    html_escape(number)
+                )
+            })
+            .unwrap_or_else(|| tr(language, "auth.session_label"));
+        let label = if session.current {
+            format!("{} ({})", label, tr(language, "auth.current_session"))
+        } else {
+            label
+        };
+        let expires = if session.expires_relative {
+            format!(
+                "{} {}",
+                html_escape(&session.expires),
+                tr(language, "auth.seconds_remaining")
+            )
+        } else {
+            html_escape(&session.expires)
+        };
+        html.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            label,
+            expires,
+            ACCOUNT_SESSIONS_PATH,
+            csrf,
+            html_escape(&session.key),
+            tr(language, "auth.revoke_session"),
+        ));
+    }
+    html.push_str("</tbody></table></main>");
+    html
+}
+
 fn render_login(auth: &AuthRoute, language: UiLanguage) -> String {
     format!(
         "<main><h1>{}</h1><form method=\"post\" action=\"/login\">\
@@ -3483,6 +3866,164 @@ fn render_auth_sessions(
     }
     html.push_str("</table>");
     html
+}
+
+#[cfg(test)]
+fn account_sessions_test_auth() -> AuthRoute {
+    AuthRoute {
+        table: "users".into(),
+        session_table: None,
+        permissions_table: None,
+        roles_table: None,
+        role_permissions_table: None,
+        audit_table: None,
+        audit_chain: false,
+        admin_path: None,
+        admin_permission: None,
+        admin_role: None,
+        login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+        login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
+        schema: Schema {
+            database: None,
+            tables: Vec::new(),
+        },
+        csrf: CsrfProtection::new("sessions-csrf"),
+    }
+}
+
+#[test]
+fn account_sessions_are_scoped_to_the_signed_in_user_and_hide_bearer_tokens() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    {
+        let mut sessions = app.sessions.lock().unwrap();
+        for (token, user_id) in [
+            ("current-bearer", 7),
+            ("other-bearer", 7),
+            ("foreign-bearer", 8),
+        ] {
+            sessions.insert(
+                token.into(),
+                Session {
+                    user_id: Some(user_id),
+                    permissions: Vec::new(),
+                    expires_at: Instant::now() + Duration::from_secs(3600),
+                },
+            );
+        }
+    }
+    let request = parse_request(
+        "GET /account/sessions HTTP/1.1\r\nHost: localhost\r\nCookie: zelyra_session=current-bearer\r\n\r\n",
+    )
+    .unwrap();
+    let response = app.dispatch(&request);
+    assert_eq!(response.status, 200);
+    assert!(response.body.contains("Your sessions"));
+    assert!(response.body.contains("Session (current)"));
+    assert!(response
+        .body
+        .contains(&format!("hash:{}", session_token_hash("other-bearer"))));
+    assert!(!response.body.contains("current-bearer"));
+    assert!(!response.body.contains("other-bearer"));
+    assert!(!response
+        .body
+        .contains(&session_token_hash("foreign-bearer")));
+    let german_app = app.with_ui_settings(UiLanguage::German, UiLevel::Work);
+    let german_response = german_app.dispatch(&request);
+    assert!(german_response.body.contains("Deine Sitzungen"));
+    assert!(german_response.body.contains("Sekunden verbleibend"));
+    assert!(german_response.body.contains("(aktuell)"));
+}
+
+#[test]
+fn account_sessions_revoke_only_owned_sessions_and_sign_out_if_current_is_revoked() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    {
+        let mut sessions = app.sessions.lock().unwrap();
+        for (token, user_id) in [
+            ("current-bearer", 7),
+            ("other-bearer", 7),
+            ("foreign-bearer", 8),
+        ] {
+            sessions.insert(
+                token.into(),
+                Session {
+                    user_id: Some(user_id),
+                    permissions: Vec::new(),
+                    expires_at: Instant::now() + Duration::from_secs(3600),
+                },
+            );
+        }
+    }
+    let other_key = format!("hash:{}", session_token_hash("other-bearer"));
+    let other_body = format!("_zelyra_csrf=sessions-csrf&session_key={other_key}");
+    let other_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        other_body.len(), other_body
+    ))
+    .unwrap();
+    let response = app.dispatch(&other_request);
+    assert_eq!(response.status, 303);
+    assert_eq!(response.location.as_deref(), Some(ACCOUNT_SESSIONS_PATH));
+    let sessions = app.sessions.lock().unwrap();
+    assert!(sessions.contains_key("current-bearer"));
+    assert!(!sessions.contains_key("other-bearer"));
+    assert!(sessions.contains_key("foreign-bearer"));
+    drop(sessions);
+
+    let foreign_key = format!("hash:{}", session_token_hash("foreign-bearer"));
+    let foreign_body = format!("_zelyra_csrf=sessions-csrf&session_key={foreign_key}");
+    let foreign_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        foreign_body.len(), foreign_body
+    ))
+    .unwrap();
+    app.dispatch(&foreign_request);
+    assert!(app.sessions.lock().unwrap().contains_key("foreign-bearer"));
+
+    let current_key = format!("hash:{}", session_token_hash("current-bearer"));
+    let current_body = format!("_zelyra_csrf=sessions-csrf&session_key={current_key}");
+    let current_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        current_body.len(), current_body
+    ))
+    .unwrap();
+    let response = app.dispatch(&current_request);
+    assert_eq!(response.location.as_deref(), Some("/login"));
+    assert!(response.headers.iter().any(
+        |(name, value)| name.eq_ignore_ascii_case("set-cookie") && value.contains("Max-Age=0")
+    ));
+    assert!(!app.sessions.lock().unwrap().contains_key("current-bearer"));
+}
+
+#[test]
+fn account_session_revocation_requires_valid_csrf() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    app.sessions.lock().unwrap().insert(
+        "current-bearer".into(),
+        Session {
+            user_id: Some(7),
+            permissions: Vec::new(),
+            expires_at: Instant::now() + Duration::from_secs(3600),
+        },
+    );
+    let key = format!("hash:{}", session_token_hash("current-bearer"));
+    let body = format!("_zelyra_csrf=wrong&session_key={key}");
+    let request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    ))
+    .unwrap();
+    assert_eq!(app.dispatch(&request).status, 403);
+    assert!(app.sessions.lock().unwrap().contains_key("current-bearer"));
+
+    let body = format!("_zelyra_csrf=sessions-csrf&session_key={key}");
+    let cross_origin = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: https://attacker.test\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    ))
+    .unwrap();
+    assert_eq!(app.dispatch(&cross_origin).status, 403);
+    assert!(app.sessions.lock().unwrap().contains_key("current-bearer"));
 }
 
 fn memory_session(app: &WebApp, session_id: &str) -> Option<Session> {

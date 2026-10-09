@@ -4394,6 +4394,20 @@ page "/dashboard" {
 
 #### Sitzungsverwaltung im 0.4-Entwicklungszweig
 
+Angemeldete Nutzer können unter `/account/sessions` ihre eigenen aktiven
+Sitzungen anzeigen und beenden. Seiten mit generierter Navigation verlinken
+auf diese Seite. Für Änderungen sind eine gültige Sitzung,
+ein CSRF-Token und ein Herkunftsnachweis derselben Origin erforderlich. Beim
+Beenden der aktuellen Sitzung wird das Cookie gelöscht und zur Anmeldung
+weitergeleitet. Bei dauerhaften Sitzungen funktionieren Sitzungstabellen mit
+und ohne `id`-Spalte. Flüchtige Speichersitzungen werden nur während der
+Laufzeit des Prozesses angezeigt. Die Seite zeigt weder Bearer-Tokens noch
+Bearer-Tokens werden nie ausgegeben. Bei älteren Sitzungstabellen ohne
+`id`-Spalte dient der gespeicherte Token-Hash als verborgenes Kennzeichen zum
+Beenden der Sitzung. Gerätenamen, IP-Adressen oder Browserverläufe werden
+nicht erfasst oder angezeigt. Der Pfad `/account/sessions` ist bei
+konfigurierter Authentifizierung reserviert.
+
 Sind dauerhafte Sitzungen mit einer `id`-Spalte und die Rollenverwaltung konfiguriert, sehen
 berechtigte Administratoren bis zu 100 noch nicht abgelaufene Sitzungen,
 nach Ablauf sortiert. Jede Zeile zeigt die Datenbank-ID, die E-Mail-Adresse

@@ -28,10 +28,12 @@ den tatsächlich implementierten Stand.
 
 - [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
-  Speichersitzungen laufen ebenfalls nach 24 Stunden ab. Geräteerkennung und
+  Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
+  dauerhafte und flüchtige Sitzungen mit CSRF- und Same-Origin-Prüfung anzeigen
+  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten und
   Passwortwiederherstellung bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
-  die neuen Verwaltungsfunktionen setzen diese Spalte voraus.
+  Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
 
 - [~] Die [Docker-Modulabnahme](module-docker-acceptance.de.md) prüft die
   Gesamtanwendung, getrennte Rechnungs-/Inventarexporte, fehlende `.env`,

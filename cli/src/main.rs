@@ -5476,6 +5476,36 @@ fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
         })
 }
 
+fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -> bool {
+    !program.auth.is_empty()
+        && (program.pages.iter().any(|page| {
+            zelyra_web::route_pattern_matches_path(&page.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+        }) || program.apis.iter().any(|api| {
+            zelyra_web::route_pattern_matches_path(&api.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+        }) || program.cruds.iter().any(|crud| {
+            let base = format!("/{}", crud.table);
+            [
+                base.clone(),
+                format!("{base}/new"),
+                format!("{base}/{{id}}"),
+                format!("{base}/{{id}}/edit"),
+                format!("{base}/{{id}}/delete"),
+                format!("{base}/{{id}}/restore"),
+            ]
+            .iter()
+            .any(|pattern| {
+                zelyra_web::route_pattern_matches_path(pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            }) || crud.actions.iter().any(|action| {
+                let pattern = format!("{base}/{{id}}/{}", action.name);
+                zelyra_web::route_pattern_matches_path(&pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            })
+        }) || program.auth.iter().any(|auth| {
+            auth.admin_path.as_deref().is_some_and(|path| {
+                zelyra_web::route_pattern_matches_path(path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            })
+        }))
+}
+
 fn docker_compose_check() -> DoctorCheck {
     if let Some(command) = detect_docker_compose() {
         return DoctorCheck {
@@ -8896,6 +8926,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         );
         return ExitCode::from(1);
     }
+    if !program.auth.is_empty() && project_uses_reserved_account_sessions_route(&program) {
+        diagnostic(
+            &path,
+            "E-AUTH-029",
+            &format!(
+                "route `{}` is reserved for account session management",
+                zelyra_web::ACCOUNT_SESSIONS_PATH
+            ),
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
     let source = fs::read_to_string(&path).unwrap_or_default();
     if !reject_typed_holes(&source, &path, &program) {
         return ExitCode::from(1);
@@ -11792,6 +11835,40 @@ mod tests {
         assert!(project_uses_reserved_theme_route(&themed_program));
         assert!(project_uses_reserved_theme_route(&parameter_program));
         assert!(!project_uses_reserved_theme_route(&ordinary_program));
+    }
+
+    #[test]
+    fn account_session_route_is_reserved_for_authenticated_projects() {
+        let auth_page = parse(
+            &lex(r#"auth users { table: users }
+                   page "/account/sessions" { html { <main>Project page</main> } }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let auth_api = parse(
+            &lex(r#"auth users { table: users }
+                   api GET "/account/{area}" { output String }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let auth_crud = parse(
+            &lex(r#"auth users { table: users }
+                   table account { id: Id primary auto }
+                   crud Account -> account { list { id } }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let ordinary_page = parse(
+            &lex(r#"page "/account/sessions" { html { <main>Project page</main> } }"#).unwrap(),
+        )
+        .unwrap();
+
+        assert!(project_uses_reserved_account_sessions_route(&auth_page));
+        assert!(project_uses_reserved_account_sessions_route(&auth_api));
+        assert!(project_uses_reserved_account_sessions_route(&auth_crud));
+        assert!(!project_uses_reserved_account_sessions_route(
+            &ordinary_page
+        ));
     }
 
     #[test]

@@ -494,7 +494,7 @@ remaining_created="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM
 crud_delete_audit_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE actor_user_id = '${primary_user_id}' AND event = 'crud.delete' AND target_user_id = '${created_customer_id}' AND details = 'table=customers;operation=crud.delete;record_id=${created_customer_id}'")"
 [[ "${crud_delete_audit_count}" == "1" ]]
 
-echo "[10/10] checking session listing, revocation, and authorization boundaries"
+echo "[10/10] checking administrative and self-service session controls"
 viewer_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth_sessions WHERE user_id = '${viewer_user_id}' ORDER BY id DESC LIMIT 1")"
 primary_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth_sessions WHERE user_id = '${primary_user_id}' ORDER BY id DESC LIMIT 1")"
 [[ -n "${viewer_session_id}" && -n "${primary_session_id}" ]]
@@ -546,6 +546,68 @@ done
 status="$(request_status "${temp_dir}/revoked-viewer.html" --cookie "${viewer_cookie}" "${base_url}/customers")"
 [[ "${status}" == 401 ]]
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'auth.session_revoke_requested' AND target_user_id = '${viewer_user_id}' AND actor_user_id = '${primary_user_id}'")" == 2 ]]
+
+viewer_refresh_login_status="$(request_status "${temp_dir}/viewer-refresh-login.html" \
+    --cookie-jar "${viewer_cookie}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${viewer_email}" \
+    --data-urlencode "password=${test_password}" \
+    "${base_url}/login")"
+[[ "${viewer_refresh_login_status}" == "303" ]]
+viewer_secondary_cookie="${temp_dir}/viewer-secondary.cookies"
+viewer_secondary_login_status="$(request_status "${temp_dir}/viewer-secondary-login.html" \
+    --cookie-jar "${viewer_secondary_cookie}" \
+    --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${viewer_email}" \
+    --data-urlencode "password=${test_password}" \
+    "${base_url}/login")"
+[[ "${viewer_secondary_login_status}" == "303" ]]
+viewer_sessions_status="$(request_status "${temp_dir}/viewer-sessions.html" \
+    --cookie "${viewer_cookie}" "${base_url}/account/sessions")"
+[[ "${viewer_sessions_status}" == "200" ]]
+grep -Fq 'Your sessions' "${temp_dir}/viewer-sessions.html"
+! grep -Fq 'token_hash' "${temp_dir}/viewer-sessions.html"
+while IFS= read -r token_hash; do
+    [[ -z "${token_hash}" ]] || ! grep -Fq "${token_hash}" "${temp_dir}/viewer-sessions.html"
+done < <(client --batch --skip-column-names -e "SELECT token_hash FROM auth_sessions")
+viewer_current_session_id="$(grep -oE '<td>Session [0-9]+ \(current\)</td>' "${temp_dir}/viewer-sessions.html" | sed -E 's/<td>Session ([0-9]+) \(current\)<\/td>/\1/')"
+[[ -n "${viewer_current_session_id}" ]]
+viewer_other_session_id="$(client --batch --skip-column-names -e "SELECT id FROM auth_sessions WHERE user_id = '${viewer_user_id}' AND id <> '${viewer_current_session_id}' ORDER BY id DESC LIMIT 1")"
+[[ -n "${viewer_other_session_id}" ]]
+viewer_sessions_csrf="$(extract_csrf "${temp_dir}/viewer-sessions.html")"
+[[ -n "${viewer_sessions_csrf}" ]]
+status="$(request_status "${temp_dir}/foreign-self-session-revoke.html" \
+    --cookie "${viewer_cookie}" \
+    --data-urlencode "_zelyra_csrf=${viewer_sessions_csrf}" \
+    --data-urlencode "session_key=id:${primary_session_id}" \
+    "${base_url}/account/sessions")"
+[[ "${status}" == "303" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE id = '${primary_session_id}' AND user_id = '${primary_user_id}'")" == 1 ]]
+status="$(request_status "${temp_dir}/other-self-session-revoke.html" \
+    --cookie "${viewer_cookie}" \
+    --data-urlencode "_zelyra_csrf=${viewer_sessions_csrf}" \
+    --data-urlencode "session_key=id:${viewer_other_session_id}" \
+    "${base_url}/account/sessions")"
+[[ "${status}" == "303" ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE id = '${viewer_other_session_id}' AND user_id = '${viewer_user_id}'")" == 0 ]]
+status="$(request_status "${temp_dir}/self-revoked-viewer.html" --cookie "${viewer_secondary_cookie}" "${base_url}/customers")"
+[[ "${status}" == "401" ]]
+status="$(request_status "${temp_dir}/viewer-current-session.html" --cookie "${viewer_cookie}" "${base_url}/account/sessions")"
+[[ "${status}" == "200" ]]
+status="$(curl --silent --show-error --output "${temp_dir}/current-self-session-revoke.html" \
+    --write-out '%{http_code}' --dump-header "${temp_dir}/current-self-session-revoke.headers" \
+    --header "Origin: ${base_url}" --cookie "${viewer_cookie}" \
+    --data-urlencode "_zelyra_csrf=${viewer_sessions_csrf}" \
+    --data-urlencode "session_key=id:${viewer_current_session_id}" \
+    "${base_url}/account/sessions")"
+[[ "${status}" == "303" ]]
+grep -Fiq 'Location: /login' "${temp_dir}/current-self-session-revoke.headers"
+grep -Fiq 'Set-Cookie: zelyra_session=; Path=/; Max-Age=0' "${temp_dir}/current-self-session-revoke.headers"
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = '${viewer_user_id}'")" == 0 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_audit_log WHERE event = 'auth.session_self_revoke' AND target_user_id = '${viewer_user_id}' AND actor_user_id = '${viewer_user_id}'")" == 2 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM users WHERE id = '${viewer_user_id}'")" == 1 ]]
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM user_roles WHERE user_id = '${viewer_user_id}' AND role = '${viewer_role}'")" == 1 ]]
+
 # Revoking the current session does not remove the last administrator's account.
 status="$(request_status "${temp_dir}/self-session-revoke.html" \
     --cookie "${primary_cookie}" --data-urlencode "_zelyra_csrf=${admin_csrf}" \

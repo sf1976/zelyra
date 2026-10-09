@@ -4409,6 +4409,17 @@ page "/dashboard" {
 
 #### Session administration in the 0.4 development branch
 
+Signed-in users can open `/account/sessions` to review and revoke their own
+active sessions. Pages using the generated navigation link to it.
+It requires a valid session, CSRF token and same-origin evidence for changes.
+Revoking the current session clears its cookie and redirects to sign-in. For
+persistent sessions, the page supports both session tables with and without an
+`id` column. In-memory sessions are listed only while the process is running.
+Bearer tokens are never emitted. For legacy session tables without an `id`
+column, the stored token hash is used as a hidden revocation selector. The page
+does not record or show device names, IP addresses or browser history. The
+`/account/sessions` path is reserved when authentication is configured.
+
 When persistent sessions with an `id` column and the role administration page are configured,
 authorized administrators see up to 100 unexpired sessions, ordered by expiry.
 Each row contains its database ID, user email and expiry in database time.

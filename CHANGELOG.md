@@ -11,6 +11,16 @@ releases follow Semantic Versioning independently of the language line.
   remains unimplemented. / `zelyra db plan --format=json` gibt jetzt einen
   versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
   Freigabebedarf aus; sicheres inverses SQL bleibt offen.
+- Generated authentication pages now provide `/account/sessions` for
+  self-service session listing and revocation, limited to the signed-in user.
+  CSRF and same-origin checks apply; revoking the current session clears its
+  cookie. Memory and MariaDB-backed sessions are covered by HTTP tests and the
+  protected-app MariaDB E2E. Device metadata and password recovery remain open.
+  / Generierte Auth-Seiten bieten jetzt `/account/sessions` zum Anzeigen und
+  Beenden eigener Sitzungen. CSRF- und Same-Origin-Prüfungen gelten; beim
+  Beenden der aktuellen Sitzung wird das Cookie gelöscht. HTTP-Tests und der
+  MariaDB-Ende-zu-Ende-Test der geschützten Anwendung decken Speicher- und
+  Datenbanksitzungen ab. Gerätemetadaten und Passwortwiederherstellung bleiben offen.
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
   normalized email keys are hashed, configured lockout durations are honored
   independently of the failure window, and new keys fail closed at capacity. /
@@ -30,8 +40,8 @@ releases follow Semantic Versioning independently of the language line.
   dependency/license audit remain open. / Release-Builds hängen jetzt
   deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
   jedes SBOM an den SHA-256-Hash der Binärdatei. Getaggte Release-Builds sind
-  so konfiguriert, dass sie beide Plattformarchive und ihre SBOMs zusätzlich mit GitHub
-  Artifact Attestations. Die Probe mit einem veröffentlichten Kandidaten und
+  so konfiguriert, dass sie beide Plattformarchive und ihre SBOMs zusätzlich
+  mit GitHub Artifact Attestations versehen. Die Probe mit einem veröffentlichten Kandidaten und
   das Dependency-/Lizenzaudit sind noch offen.
 - Login throttling can now be configured per auth definition with a bounded
   failure window and lockout duration; the limiter remains process-local. /
