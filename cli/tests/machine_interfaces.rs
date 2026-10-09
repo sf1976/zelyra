@@ -881,6 +881,107 @@ fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
 }
 
 #[test]
+fn db_apply_rejects_a_stale_reviewed_plan_before_applying_sql() {
+    let directory = temporary_directory("stale-migration-plan");
+    fs::create_dir_all(&directory).unwrap();
+    let database_path = directory.join("current.sqlite");
+    let database_url = format!("sqlite://{}", database_path.display());
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT);",
+    )
+    .unwrap();
+    let source = temporary_source(
+        "stale-migration-plan",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto name: String(30) required }\n",
+    );
+    let plan = Command::new(binary())
+        .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        plan.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout).unwrap();
+    let old_plan_id = plan_json["plan_id"].as_str().unwrap();
+
+    // An unrelated table changes the reviewed schema fingerprint without
+    // changing the pending customers-column migration.
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE unrelated (id INTEGER PRIMARY KEY);",
+    )
+    .unwrap();
+    let stale_apply = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&source)
+        .args(["--allow-risky", "--plan-id", old_plan_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert_eq!(stale_apply.status.code(), Some(1));
+    let stale_stderr = String::from_utf8_lossy(&stale_apply.stderr);
+    assert!(stale_stderr.contains("E-DB-007"), "{stale_stderr}");
+    assert!(
+        stale_stderr.contains("no SQL was applied"),
+        "{stale_stderr}"
+    );
+    let after_stale_apply = zelyra_database::inspect_sqlite(&database_url).unwrap();
+    let customers = after_stale_apply
+        .tables
+        .iter()
+        .find(|table| table.name == "customers")
+        .unwrap();
+    assert!(!customers.columns.iter().any(|column| column.name == "name"));
+    assert!(after_stale_apply
+        .tables
+        .iter()
+        .any(|table| table.name == "unrelated"));
+
+    let fresh_plan = Command::new(binary())
+        .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(fresh_plan.status.success());
+    let fresh_plan_json: serde_json::Value = serde_json::from_slice(&fresh_plan.stdout).unwrap();
+    let fresh_plan_id = fresh_plan_json["plan_id"].as_str().unwrap();
+    assert_ne!(old_plan_id, fresh_plan_id);
+    let apply = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&source)
+        .args(["--allow-risky", "--plan-id", fresh_plan_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        apply.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&apply.stdout),
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    let after_apply = zelyra_database::inspect_sqlite(&database_url).unwrap();
+    let customers = after_apply
+        .tables
+        .iter()
+        .find(|table| table.name == "customers")
+        .unwrap();
+    assert!(customers.columns.iter().any(|column| column.name == "name"));
+
+    fs::remove_file(&source).unwrap();
+    fs::remove_dir_all(source.parent().unwrap()).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
     let database_host_port = free_test_port();

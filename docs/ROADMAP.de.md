@@ -332,8 +332,10 @@ Feature eines bestimmten Anbieters.
   `zelyra.schema-plan/v1`-Plan mit stabiler ID, Schema-Fingerprints, Drift,
   SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. `db apply` kann die
   Plan-ID entgegennehmen und lehnt einen veralteten Plan vor Vorprüfungen oder
-  SQL ab; Aufrufe ohne ID bleiben möglich. Ein Datenbank-Migrationsverlauf
-  und sicheres inverses SQL fehlen weiterhin; der Plan weist
+  SQL ab; ein SQLite-CLI-Integrationstest prüft Ablehnung und Anwendung mit
+  einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. Ein
+  Datenbank-Migrationsverlauf und sicheres inverses SQL fehlen weiterhin; der
+  Plan weist
   `rollback.generated: false` aus. `db apply` führt PostgreSQL- und SQLite-DDL
   transaktional aus; Tests prüfen das Rollback bei einem Fehler. MariaDB-DDL
   kann weiterhin Teilzustände hinterlassen. Backups bleiben
