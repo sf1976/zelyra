@@ -49,8 +49,16 @@ or human acceptance.
 - Linux and Windows release builds generate SPDX-2.3 SBOMs from the resolved
   Cargo graph and verify the binary SHA-256. Cargo license fields that cannot
   be represented as SPDX are reported as `NOASSERTION` with the original value.
-- The SBOM is not a license audit. A complete dependency/license audit, signed
-  provenance, and review of every native artifact remain open.
+- CI runs pinned `cargo-deny` against Linux and Windows dependency graphs for
+  RustSec advisories, SPDX licenses, duplicate versions, wildcard requirements,
+  and registry/git sources. The policy clarifies `webpki` as ISC based on a
+  hash-verified license file, and records a reasoned exception for the
+  currently resolved, unmaintained `rustls-pemfile` compatibility wrapper
+  required by `mysql` 28.0.3. Duplicate `base64` and `getrandom` versions
+  still warn.
+- The SBOM and automated checks are not a human license audit. A review of
+  dependency purpose, license obligations, the remaining warnings, signed
+  provenance, and every native artifact remains open.
 - Granular effects, complete HTTP response deadlines, independent security
   review, and human acceptance remain open.
 

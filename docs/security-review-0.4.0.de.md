@@ -51,8 +51,16 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 - Linux- und Windows-Release-Builds erzeugen SPDX-2.3-SBOMs aus dem
   aufgelösten Cargo-Graph und prüfen den Binary-SHA-256. Nicht als SPDX
   ausdrückbare Cargo-Lizenzfelder stehen als `NOASSERTION` samt Originalwert.
-- Das SBOM ist kein Lizenzgutachten. Ein vollständiger Dependency-/Lizenzaudit,
-  signierte Provenance und Prüfung jedes nativen Artefakts fehlen weiterhin.
+- CI führt `cargo-deny` mit fester Version für Linux- und Windows-
+  Abhängigkeitsgraphen aus. Geprüft werden RustSec-Advisories, SPDX-Lizenzen,
+  doppelte Versionen, Wildcard-Anforderungen und Registry-/Git-Quellen. Die
+  Policy klärt `webpki` anhand einer gehashten Lizenzdatei als ISC und enthält
+  eine begründete Ausnahme für die aktuell aufgelöste, nicht mehr gepflegte
+  Kompatibilitätsbibliothek `rustls-pemfile`, die `mysql` 28.0.3 benötigt.
+  Doppelte Versionen von `base64` und `getrandom` warnen weiterhin.
+- SBOM und automatische Prüfungen sind kein menschliches Lizenzgutachten.
+  Prüfung von Abhängigkeitszweck, Lizenzpflichten, übrigen Warnungen, signierter
+  Provenance und jedem nativen Artefakt bleiben offen.
 - Granulare Effekte, vollständige HTTP-Response-Deadlines, unabhängiger
   Sicherheitsreview und menschliche Abnahme sind offen.
 

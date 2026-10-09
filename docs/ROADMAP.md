@@ -39,10 +39,14 @@ principles; the roadmap below tracks what is actually implemented.
   full writable CRUD acceptance remains open.
 
 - [~] The 0.4 release workflow creates deterministic SPDX-2.3 SBOMs for Linux
-  and Windows and verifies each binary hash. Dependency/license auditing,
-  a published-candidate attestation rehearsal, and native artifact review
-  remain open. Tagged release builds are configured to attest both platform archives and
-  their SBOMs; see the [verification guide](release-readiness/artifact-verification.en.md).
+  and Windows and verifies each binary hash. CI runs pinned `cargo-deny` over
+  Linux and Windows dependency graphs. Its policy checks advisories, licenses,
+  sources, wildcard requirements, and duplicate versions; duplicate `base64`
+  and `getrandom` versions warn, and `rustls-pemfile` has a documented
+  unmaintained advisory exception. Human dependency/license review, a
+  published-candidate attestation rehearsal, and native artifact review remain
+  open. Tagged release builds attest both platform archives and their SBOMs;
+  see the [verification guide](release-readiness/artifact-verification.en.md).
 
 - [~] The HTTP server limits connection reads and writes to 30 seconds and
   drops late responses. Synchronous handlers cannot be cancelled and can still
@@ -566,7 +570,8 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Full integration matrix for supported OS, database, browser, and runtime
   versions.
 - [ ] Fuzzing for lexer, parser, SQL binder, template renderer, and HTTP parser.
-- [ ] Security regression suite and dependency/license scanning in CI.
+- [~] Security regression coverage and dependency/license scanning run in CI;
+  a complete human audit and the remaining security regressions are still open.
 - [ ] Regression guard against unsolicited network or telemetry activity;
   explicit application network capabilities and user-initiated update or
   installation commands must remain separately visible.

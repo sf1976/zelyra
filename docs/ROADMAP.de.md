@@ -41,11 +41,15 @@ den tatsächlich implementierten Stand.
   erlauben nur Lesen; vollständige schreibende CRUD-Abnahme bleibt offen.
 
 - [~] Der 0.4-Release-Workflow erstellt deterministische SPDX-2.3-SBOMs für
-  Linux und Windows und prüft den Binary-Hash. Dependency-/Lizenzaudit,
-  eine Attestierungsprobe mit einem veröffentlichten Kandidaten und die
-  Prüfung der nativen Artefakte bleiben offen. Getaggte Release-Builds sind
-  so konfiguriert, dass sie beide Plattformarchive samt SBOM attestieren; siehe die
-  [Anleitung zur Artefaktprüfung](release-readiness/artefaktverifikation.de.md).
+  Linux und Windows und prüft den Binary-Hash. CI führt `cargo-deny` mit fester
+  Version für Linux- und Windows-Abhängigkeitsgraphen aus. Die Policy prüft
+  Advisories, Lizenzen, Quellen, Wildcard-Anforderungen und doppelte Versionen;
+  doppelte Versionen von `base64` und `getrandom` warnen, und für
+  `rustls-pemfile` besteht eine dokumentierte Ausnahme zum Unmaintained-Advisory.
+  Menschlicher Dependency-/Lizenzaudit, eine Attestierungsprobe mit einem
+  veröffentlichten Kandidaten und die Prüfung der nativen Artefakte bleiben
+  offen. Getaggte Builds attestieren beide Plattformarchive samt SBOM; siehe
+  die [Anleitung zur Artefaktprüfung](release-readiness/artefaktverifikation.de.md).
 
 - [~] Der HTTP-Server begrenzt Lesen und Schreiben je Verbindung auf 30
   Sekunden und verwirft danach verspätete Antworten. Synchrone Handler sind
@@ -607,7 +611,9 @@ Feature eines bestimmten Anbieters.
 
 - [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
 - [ ] Fuzzing für Lexer, Parser, SQL-Binder, Template-Renderer und HTTP-Parser.
-- [ ] Security-Regression-Suite und Dependency-/Lizenzprüfung in CI.
+- [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen teilweise
+  in CI; ein vollständiger menschlicher Audit und weitere Security-Regressionen
+  bleiben offen.
 - [ ] Regressionstest gegen ungefragte Netzwerk- oder Telemetrieaktivität;
   explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
   Update- oder Installationsbefehle müssen klar getrennt bleiben.

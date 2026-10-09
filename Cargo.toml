@@ -15,11 +15,11 @@ sha2 = "0.10"
 mysql = { version = "28.0.3", default-features = false, features = ["minimal-rust", "rustls-tls-ring"] }
 r2d2 = "0.8.10"
 ureq = { version = "3.4.2", default-features = true }
-zelyra-ast = { path = "ast" }
-zelyra-lexer = { path = "lexer" }
-zelyra-parser = { path = "parser" }
-zelyra-hir = { path = "hir" }
-zelyra-database = { path = "database" }
-zelyra-runtime = { path = "runtime" }
-zelyra-web = { path = "web" }
-zelyra-forms = { path = "forms" }
+zelyra-ast = { path = "ast", version = "0.3" }
+zelyra-lexer = { path = "lexer", version = "0.3" }
+zelyra-parser = { path = "parser", version = "0.3" }
+zelyra-hir = { path = "hir", version = "0.3" }
+zelyra-database = { path = "database", version = "0.3" }
+zelyra-runtime = { path = "runtime", version = "0.3" }
+zelyra-web = { path = "web", version = "0.3" }
+zelyra-forms = { path = "forms", version = "0.3" }
