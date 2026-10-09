@@ -8209,6 +8209,7 @@ fn handle_connection_until(
             Ok(written) => {
                 written_total += written;
             }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error)
                 if matches!(
                     error.kind(),
