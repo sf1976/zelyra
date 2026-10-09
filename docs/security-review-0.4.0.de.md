@@ -16,6 +16,12 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
 - API- und Login-Limiter liegen im Prozessspeicher. Ein Neustart setzt den
   Zustand zurück; getrennte Instanzen koordinieren sich nicht. API-Buckets sind
   auf 4096 begrenzt und bei vollem Speicher für neue Schlüssel fail-closed.
+- Login-Buckets sind ebenfalls auf 4096 Schlüssel begrenzt, bereinigen
+  abgelaufene Zeitfenster und lehnen bei voller Tabelle neue Schlüssel
+  fail-closed ab. Ein Angreifer kann so bis zur Bereinigung legitime neue
+  Anmeldeschlüssel aussperren; ein verteilter Schutz entsteht dadurch nicht.
+  Die normalisierte E-Mail-Adresse wird als Blake2s-Schlüssel gespeichert,
+  nicht im Limiterzustand im Klartext gehalten.
 - Request-IDs werden auf höchstens 128 ASCII-Zeichen aus Buchstaben, Ziffern,
   Punkt, Unterstrich und Bindestrich beschränkt. Ungültige Werte werden ersetzt.
   Die ID ist Korrelationsmetadatum, keine Authentifizierung und kein Geheimnis.

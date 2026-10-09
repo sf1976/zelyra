@@ -7095,7 +7095,8 @@ Login throttling can be tuned on the `auth` definition with
 `login_rate_limit: attempts per seconds` and `login_block_seconds: seconds`.
 The defaults are `5 per 900` and `60`. The in-memory limiter is process-local
 and resets on restart; it does not replace a deployment-level distributed
-rate limiter.
+rate limiter. Its table is capped at 4,096 keys; new keys are rejected while
+the table is full, until expired windows are cleaned up.
 
 Every state-changing browser form requires its CSRF token and a same-origin
 `Origin` or `Referer` matching the request `Host` and effective scheme.

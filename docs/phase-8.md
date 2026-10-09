@@ -54,7 +54,8 @@ auth users {
 These values are the defaults when the options are omitted. The accepted range
 is 1 to 1,000 failures per window and 1 to 86,400 seconds for the window and
 lockout. The limiter is kept in process memory and resets on restart; it is not
-a distributed production limiter.
+a distributed production limiter. It keeps at most 4,096 keys and fails closed
+for new keys when that table is full.
 
 Successful login creates an HttpOnly, SameSite session cookie and rotates any
 previous session token from that browser. When the

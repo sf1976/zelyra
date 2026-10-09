@@ -57,7 +57,8 @@ auth users {
 Ohne diese Optionen gelten die gezeigten Defaults. Zulässig sind 1 bis 1000
 Fehler je Zeitfenster und 1 bis 86400 Sekunden für Zeitfenster und Sperre. Der
 Limiter arbeitet im Prozessspeicher und wird beim Neustart zurückgesetzt; er
-ist kein verteilter Produktions-Limiter.
+ist kein verteilter Produktions-Limiter. Höchstens 4096 Schlüssel werden
+gehalten; ab voller Tabelle werden neue Schlüssel fail-closed abgelehnt.
 
 Ein erfolgreicher Login erzeugt ein HttpOnly-SameSite-Session-Cookie und rotiert
 ein vorhandenes Session-Token dieses Browsers. Wenn die

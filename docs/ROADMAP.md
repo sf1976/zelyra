@@ -525,8 +525,10 @@ architecture requirement for every phase, not a provider-specific feature.
 - [🧪] API request IDs and per-route version, deprecation, and process-local
   quotas are implemented in unreleased 0.4 development. Quotas use TCP peer IP,
   a bounded in-memory client table, and no trusted forwarded-IP header; they
-  reset on restart. Persistent/distributed quotas, configurable login/reset
-  limits, and compatibility evidence remain open.
+  reset on restart. Persistent/distributed quotas, reset limits, and
+  compatibility evidence remain open. Login limits are configurable per auth
+  definition; their in-memory table is capped at 4,096 keys and rejects new
+  keys when full.
 - [ ] Authentication schemes for API keys, OAuth2/OIDC, and service accounts.
 - [ ] Webhooks, signed callbacks, idempotency keys, and retry-safe handlers.
 - [ ] GraphQL or another query API only if it can preserve Zelyra's type and

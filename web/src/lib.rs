@@ -851,6 +851,7 @@ struct Session {
 #[derive(Clone, Debug)]
 struct LoginThrottle {
     window_started: Instant,
+    window_seconds: u32,
     failures: u32,
     blocked_until: Option<Instant>,
 }
@@ -863,6 +864,7 @@ const DEFAULT_LOGIN_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLi
 #[cfg(test)]
 const DEFAULT_LOGIN_BLOCK_SECONDS: u32 = 60;
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
+const LOGIN_THROTTLE_MAX_KEYS: usize = 4096;
 static REQUEST_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn valid_request_id(value: &str) -> bool {
@@ -2185,7 +2187,13 @@ fn dispatch_login(
 }
 
 fn login_throttle_key(email: &str) -> String {
-    email.trim().to_ascii_lowercase()
+    let normalized = email.trim().to_ascii_lowercase();
+    let digest = Blake2s256::digest(normalized.as_bytes());
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("email:{encoded}")
 }
 
 #[cfg(test)]
@@ -2199,12 +2207,16 @@ fn login_is_blocked_with_policy(
     rate_limit: zelyra_ast::ApiRateLimit,
 ) -> bool {
     let Ok(mut throttle) = app.login_throttle.lock() else {
-        return false;
-    };
-    let Some(state) = throttle.get_mut(key) else {
-        return false;
+        return true;
     };
     let now = Instant::now();
+    throttle.retain(|_, state| {
+        now.duration_since(state.window_started)
+            < Duration::from_secs(u64::from(state.window_seconds))
+    });
+    let Some(state) = throttle.get_mut(key) else {
+        return throttle.len() >= LOGIN_THROTTLE_MAX_KEYS;
+    };
     if now.duration_since(state.window_started)
         >= Duration::from_secs(u64::from(rate_limit.window_seconds))
     {
@@ -2242,8 +2254,16 @@ fn record_login_failure_with_policy(
         return;
     };
     let now = Instant::now();
+    throttle.retain(|_, state| {
+        now.duration_since(state.window_started)
+            < Duration::from_secs(u64::from(state.window_seconds))
+    });
+    if !throttle.contains_key(&key) && throttle.len() >= LOGIN_THROTTLE_MAX_KEYS {
+        return;
+    }
     let state = throttle.entry(key).or_insert(LoginThrottle {
         window_started: now,
+        window_seconds: rate_limit.window_seconds,
         failures: 0,
         blocked_until: None,
     });
@@ -2251,6 +2271,7 @@ fn record_login_failure_with_policy(
         >= Duration::from_secs(u64::from(rate_limit.window_seconds))
     {
         state.window_started = now;
+        state.window_seconds = rate_limit.window_seconds;
         state.failures = 0;
         state.blocked_until = None;
     }
@@ -9916,7 +9937,8 @@ mod tests {
     fn throttles_after_five_failed_login_attempts() {
         let app = WebApp::new(Vec::new(), Vec::new());
         let key = login_throttle_key(" User@Example.test ");
-        assert_eq!(key, "user@example.test");
+        assert_eq!(key, login_throttle_key("user@example.test"));
+        assert!(!key.contains("example.test"));
         for attempt in 1..=4 {
             record_login_failure(&app, key.clone());
             assert!(
@@ -9951,6 +9973,35 @@ mod tests {
             .clone();
         assert!(state.blocked_until.unwrap() <= Instant::now() + Duration::from_secs(7));
         assert!(state.blocked_until.unwrap() > Instant::now());
+    }
+
+    #[test]
+    fn login_throttle_bounds_keys_and_cleans_expired_windows() {
+        let app = WebApp::new(Vec::new(), Vec::new());
+        let policy = zelyra_ast::ApiRateLimit {
+            requests: 5,
+            window_seconds: 30,
+        };
+        for index in 0..LOGIN_THROTTLE_MAX_KEYS {
+            record_login_failure_with_policy(
+                &app,
+                format!("user-{index}@example.test"),
+                policy,
+                10,
+            );
+        }
+        let fresh_key = "fresh@example.test";
+        assert!(login_is_blocked_with_policy(&app, fresh_key, policy));
+        assert_eq!(
+            app.login_throttle.lock().unwrap().len(),
+            LOGIN_THROTTLE_MAX_KEYS
+        );
+
+        for state in app.login_throttle.lock().unwrap().values_mut() {
+            state.window_started = Instant::now() - Duration::from_secs(31);
+        }
+        assert!(!login_is_blocked_with_policy(&app, fresh_key, policy));
+        assert_eq!(app.login_throttle.lock().unwrap().len(), 0);
     }
 
     #[test]

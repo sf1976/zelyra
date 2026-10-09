@@ -16,6 +16,11 @@ or human acceptance.
 - API and login limiters live in process memory. A restart clears their state;
   separate instances do not coordinate. API buckets are capped at 4096 and
   fail closed for new keys when full.
+- Login buckets are also capped at 4096 keys, clean expired windows, and fail
+  closed for new keys when full. An attacker can therefore temporarily block
+  legitimate new login keys until cleanup; this does not provide distributed
+  protection. The normalized email is stored as a Blake2s key rather than in
+  clear text in limiter state.
 - Request IDs are limited to 128 ASCII letters, digits, periods, underscores,
   and hyphens. Invalid values are replaced. An ID is correlation metadata, not
   authentication and not a secret.

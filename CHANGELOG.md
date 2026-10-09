@@ -6,6 +6,11 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
+  normalized email keys are hashed, and new keys fail closed at capacity. /
+  Login-Limit-Zustand ist jetzt auf 4096 Schlüssel begrenzt, E-Mail-Schlüssel
+  werden gehasht, abgelaufene Zeitfenster bereinigt und neue Schlüssel bei
+  voller Tabelle abgelehnt.
 - HTTP connections now have a fixed 30-second read/write deadline; late
   responses are dropped and timed-out clients no longer stop the listener.
   Synchronous handlers still cannot be interrupted. / HTTP-Verbindungen haben

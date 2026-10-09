@@ -31,7 +31,7 @@ and a format version are distinct pieces of information.
 | `db plan` | Text output with preflights, risk, description, and SQL | There is currently no versioned, persisted machine format for schema plans. Do not parse this output as a stable API. |
 | Module bundle manifest | `format_version: 1` on the unpublished module development branch | Experimental manifest; not part of 0.3.0 and not a compatibility promise across development builds. |
 | API route metadata | Experimental source fields `version`, `deprecated`, and `rate_limit` in the unreleased 0.4 branch | Responses expose API metadata; OpenAPI includes the same fields. Quotas are process-local, keyed by route and TCP peer IP, bounded to 4096 client buckets, and reset on restart. Reverse-proxy forwarding headers are not trusted. |
-| Auth throttle settings | Experimental `login_rate_limit` and `login_block_seconds` source fields in the unreleased 0.4 branch | Defaults remain 5 failures per 900 seconds and a 60-second block. The limiter is process-local and resets on restart; reset flows are not implemented by these settings. |
+| Auth throttle settings | Experimental `login_rate_limit` and `login_block_seconds` source fields in the unreleased 0.4 branch | Defaults remain 5 failures per 900 seconds and a 60-second block. The process-local limiter is capped at 4,096 keys, rejects new keys when full, and resets on restart; reset flows are not implemented by these settings. |
 
 These version fields were verified in the implementation in
 `cli/src/main.rs`, `cli/src/edit.rs`, and the CLI tests. The module bundle

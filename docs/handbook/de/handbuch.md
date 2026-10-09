@@ -7117,7 +7117,9 @@ Der Login-Grenzwert und die Sperrdauer lassen sich in `auth` konfigurieren:
 Zeitfenster und Sperrdauer dürfen jeweils 1 bis 86400 Sekunden betragen; die
 Versuchsanzahl darf 1 bis 1000 sein. Die Begrenzung liegt im Prozessspeicher,
 wird beim Neustart zurückgesetzt und ersetzt keinen verteilten
-Betriebs-Limiter.
+Betriebs-Limiter. Die Tabelle ist auf 4096 Schlüssel begrenzt; bei voller
+Tabelle werden neue Schlüssel abgelehnt, bis abgelaufene Zeitfenster bereinigt
+wurden.
 
 Jedes schreibende Browserformular benötigt sein CSRF-Token sowie einen
 gleichursprünglichen `Origin`- oder `Referer`-Header, der zu `Host` und dem
