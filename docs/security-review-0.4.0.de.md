@@ -61,8 +61,10 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   Instanzen; ein Zwei-Instanzen-E2E bestätigt, dass die spätere zugestellte
   E-Mail zum gespeicherten Token gehört. Ein Mailworker verwirft veraltete
   Tokens. Das E2E weist außerdem die Ablehnung mit `expires_at = NOW()` nach.
-  Ein Gleichheitstest mit eingefrorener Uhr, SMTP-Ausfall und Mail-/Token-
-  Lebenszyklus bleiben unabhängig zu prüfen.
+  Ein Test mit eingefrorener Uhr prüft das produktive Token-Prädikat vor, exakt
+  bei und nach Ablauf; Gleichheit wird abgelehnt. SMTP-Ausfall, dauerhafte
+  Zustellwiederherstellung und Mail-/Token-Lebenszyklus müssen weiter geprüft
+  werden.
 - Sitzungsadministration ist teilweise umgesetzt. Sitzungslisten zeigen eine
   begrenzte, HTML-escaped `User-Agent`-Angabe, wenn das Schema dauerhafter
   Sitzungen `device_label` deklariert; flüchtige Sitzungen erfassen dieselbe

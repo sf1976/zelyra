@@ -53,9 +53,10 @@ or human acceptance.
   request succeeds, the other is rejected, and only the winning password can
   authenticate. Token replacement and FIFO mail enqueue are serialized within
   one process, and the E2E verifies the last delivered message matches the
-  active token. An E2E sets `expires_at = NOW()` and verifies rejection; an
-  equality test with a frozen clock, SMTP outage handling, and the mail/token
-  lifecycle still need independent review.
+  active token. An E2E sets `expires_at = NOW()` and verifies rejection. A
+  frozen-clock test exercises the production lookup predicate before, exactly at,
+  and after expiry; equality is rejected. SMTP outage handling, durable delivery
+  recovery, and the mail/token lifecycle still need further review.
 - Session administration is partially implemented. Session lists can show a
   bounded, HTML-escaped `User-Agent` label when the persistent session schema
   declares `device_label`; in-memory sessions capture the same label. The value
