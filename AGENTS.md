@@ -131,6 +131,10 @@ deferral). Keep the English and German roadmaps semantically synchronized.
 
 - Create a commit after each completed and tested subfeature.
 - Push after each verified milestone or at the latest before a longer pause.
+- Open a draft pull request for a feature branch when its first verified
+  milestone is pushed. Full CI runs on pull requests, pushes to `main`, release
+  tags, and manual dispatch; feature pushes alone do not duplicate the PR run.
+  Use manual dispatch when a branch needs CI before a pull request exists.
 - Create releases less frequently, only for stable public versions.
 - Avoid both oversized aggregate commits and commits for every trivial change.
 - Keep commits small, focused, and understandable; do not push unverified
