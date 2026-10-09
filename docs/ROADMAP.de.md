@@ -40,7 +40,10 @@ den tatsächlich implementierten Stand.
 
 - [~] Der 0.4-Release-Workflow erstellt deterministische SPDX-2.3-SBOMs für
   Linux und Windows und prüft den Binary-Hash. Dependency-/Lizenzaudit,
-  Provenance und Prüfung der nativen Artefakte bleiben offen.
+  eine Attestierungsprobe mit einem veröffentlichten Kandidaten und die
+  Prüfung der nativen Artefakte bleiben offen. Getaggte Release-Builds sind
+  so konfiguriert, dass sie beide Plattformarchive samt SBOM attestieren; siehe die
+  [Anleitung zur Artefaktprüfung](release-readiness/artefaktverifikation.de.md).
 
 - [~] Der HTTP-Server begrenzt Lesen und Schreiben je Verbindung auf 30
   Sekunden und verwirft danach verspätete Antworten. Synchrone Handler sind

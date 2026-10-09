@@ -38,7 +38,9 @@ principles; the roadmap below tracks what is actually implemented.
 
 - [~] The 0.4 release workflow creates deterministic SPDX-2.3 SBOMs for Linux
   and Windows and verifies each binary hash. Dependency/license auditing,
-  provenance, and native artifact review remain open.
+  a published-candidate attestation rehearsal, and native artifact review
+  remain open. Tagged release builds are configured to attest both platform archives and
+  their SBOMs; see the [verification guide](release-readiness/artifact-verification.en.md).
 
 - [~] The HTTP server limits connection reads and writes to 30 seconds and
   drops late responses. Synchronous handlers cannot be cancelled and can still

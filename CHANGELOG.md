@@ -25,11 +25,14 @@ releases follow Semantic Versioning independently of the language line.
   Synchrone Handler lassen sich weiterhin nicht abbrechen.
 - Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
   verification binds each SBOM to its binary SHA-256 and rejects a tag/version
-  mismatch. Dependency/license audit
-  and provenance remain incomplete. / Release-Builds hängen jetzt
+  mismatch. Tagged release builds are configured to add GitHub Artifact Attestations for
+  both platform archives and their SBOMs. A published-candidate rehearsal and
+  dependency/license audit remain open. / Release-Builds hängen jetzt
   deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
-  jedes SBOM an den SHA-256-Hash der Binärdatei. Dependency-/Lizenzaudit und
-  Provenance sind noch offen.
+  jedes SBOM an den SHA-256-Hash der Binärdatei. Getaggte Release-Builds sind
+  so konfiguriert, dass sie beide Plattformarchive und ihre SBOMs zusätzlich mit GitHub
+  Artifact Attestations. Die Probe mit einem veröffentlichten Kandidaten und
+  das Dependency-/Lizenzaudit sind noch offen.
 - Login throttling can now be configured per auth definition with a bounded
   failure window and lockout duration; the limiter remains process-local. /
   Login-Limits lassen sich nun pro Auth-Definition mit begrenztem
