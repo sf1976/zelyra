@@ -9612,6 +9612,20 @@ mod tests {
                 .count(),
             1
         );
+
+        let missing = parse_request("GET /correlated HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+        let missing_response = app.dispatch(&missing);
+        assert!(valid_request_id(&missing_response.body));
+        assert_ne!(missing_response.body, "");
+        assert_eq!(
+            missing_response
+                .headers
+                .iter()
+                .filter(|(name, _)| name.eq_ignore_ascii_case("x-request-id"))
+                .map(|(_, value)| value.as_str())
+                .collect::<Vec<_>>(),
+            [missing_response.body.as_str()]
+        );
     }
 
     #[test]
