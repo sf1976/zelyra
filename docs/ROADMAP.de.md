@@ -282,7 +282,7 @@ Feature eines bestimmten Anbieters.
   Anwendung integriert und durch `serve` gerendert. Ihre Kontextspannen
   enthalten den projektrelativen Dateipfad. Importierte Seiten werden in die
   Anwendungsrouten integriert; überlappende Seitenpfade werden abgelehnt.
-  Bei einigen Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
+  Bei Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
   vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
   pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
   globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
@@ -292,8 +292,10 @@ Feature eines bestimmten Anbieters.
   aufgelöst; Authentifizierungstabellen werden gegen das gemeinsame Schema
   geprüft. MariaDB-gestützte `tableview`s werden nun
   zusammengesetzt und bereitgestellt.
-  Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema.
-  Ihre Diagnosen brauchen noch eine vollständige Modul-Quellzuordnung.
+  Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema;
+  Schemafehler behalten Quelldatei und Span importierter Module.
+  Template- und Verifikationsdiagnosen brauchen noch eine vollständige
+  Modul-Quellzuordnung.
   `impact` analysiert den Graphen mit dateibezogenen Spannen; `fmt` und `edit`
   bleiben dateilokal.
   Das Feature ist

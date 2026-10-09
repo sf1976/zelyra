@@ -12,13 +12,7 @@ pub(super) fn load_schema(path: &str) -> Result<Schema, ()> {
                         .get(error.span.source_id as usize)
                         .map_or_else(|| path.to_owned(), |source| source.path.clone())
                 });
-                diagnostic(
-                    &source_path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(&source_path, "E-DB-001", &error.message, error.span);
             }
             Err(())
         }

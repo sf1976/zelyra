@@ -259,8 +259,9 @@ architecture requirement for every phase, not a provider-specific feature.
   from imported files; auth tables are checked against the shared schema.
   Imported pages join the route set, with overlapping patterns rejected;
   MariaDB-backed tableviews are composed and served. Database commands load
-  the linked graph when building the shared schema. Their diagnostics still need
-  complete module-level source attribution. `impact` analyzes the linked graph
+  the linked graph when building the shared schema, and schema-building errors
+  retain imported source paths and spans. Template and verification diagnostics
+  still need complete module-level source attribution. `impact` analyzes the linked graph
   with file-aware spans; `fmt` and `edit` remain file-local. This
   is not part of the published 0.3.0 binary.
 - [ ] Generics, interfaces/traits, enums, tagged unions, and pattern matching

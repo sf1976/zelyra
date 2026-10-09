@@ -827,6 +827,30 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 }
 
 #[test]
+fn db_schema_errors_keep_the_imported_source_file_and_span() {
+    let (directory, entry) = temporary_project_source(
+        "schema-error-source",
+        "import \"src/schema.zyl\" as schema\nfn main() {}\n",
+    );
+    fs::create_dir_all(directory.join("src")).unwrap();
+    fs::write(
+        directory.join("src/schema.zyl"),
+        "table broken {\n    id: Id primary auto\n    id: Id primary auto\n}\n",
+    )
+    .unwrap();
+
+    let output = run(&["db", "create", entry.to_str().unwrap()]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-DB-001"), "{stderr}");
+    assert!(stderr.contains("src/schema.zyl"), "{stderr}");
+    assert!(stderr.contains(":3:"), "{stderr}");
+    assert!(!stderr.contains("main.zyl"), "{stderr}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
     let directory = temporary_directory("migration-plan-json");
     fs::create_dir_all(&directory).unwrap();
