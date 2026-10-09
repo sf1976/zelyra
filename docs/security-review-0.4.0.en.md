@@ -42,7 +42,11 @@ or human acceptance.
   are process-local and not shared between instances; database access timing
   can still vary. A MariaDB/SMTP-sink E2E checks enumeration, delayed delivery,
   token hashing, replay, expiry, CSRF/origin, and session revocation. The
-  mail/token lifecycle is experimental and needs independent review.
+  E2E now also submits the same reset token concurrently and verifies that one
+  request succeeds, the other is rejected, and only the winning password can
+  authenticate. Concurrent token issuance and email ordering, exact expiry
+  boundary behavior, SMTP outage handling, and the mail/token lifecycle still
+  need independent review.
 - Session administration is partially implemented. Device metadata and full
   self-service remain open; account-lifecycle acceptance has not passed.
 - MariaDB TLS verifies the certificate chain and host names according to the

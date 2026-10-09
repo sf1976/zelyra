@@ -28,8 +28,9 @@ principles; the roadmap below tracks what is actually implemented.
   persistent sessions, CSRF/permission checks and an audit request event.
   `/account/sessions` also lists and revokes the signed-in user's sessions,
   including in-memory sessions, with CSRF and same-origin checks. In-memory
-  sessions expire after 24 hours. Device metadata and password recovery remain
-  open; this does not complete the account lifecycle milestone.
+  sessions expire after 24 hours. Device metadata remain open, and password
+  recovery is still experimental; this does not complete the account lifecycle
+  milestone.
   Legacy session tables without an `id` column retain their previous behavior;
   administrative listing and revocation still require that column.
 
@@ -524,9 +525,11 @@ architecture requirement for every phase, not a provider-specific feature.
   development branch: MariaDB stores single-use token hashes, generic
   responses, audit, loopback/HTTPS SMTP configuration, bounded asynchronous
   delivery, and session revocation are covered by a MariaDB/SMTP-sink E2E with
-  deliberately delayed delivery. Process-local reset throttling and
-  independent security review remain open; the account lifecycle is not
-  complete.
+  deliberately delayed delivery. The E2E also races two same-token submissions
+  and verifies one success, one rejection, and authentication with only the
+  winning password. Process-local reset throttling, parallel token-issuance
+  ordering, and independent security review remain open; the account lifecycle
+  is not complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.

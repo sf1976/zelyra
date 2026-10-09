@@ -30,13 +30,17 @@ den tatsächlich implementierten Stand.
   Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
   Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
   dauerhafte und flüchtige Sitzungen mit CSRF- und Same-Origin-Prüfung anzeigen
-  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten und
-  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
+  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten
+  bleiben offen. Passwortwiederherstellung ist im 0.4-Entwicklungszweig
+  teilweise umgesetzt:
   MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
   Loopback-/HTTPS-SMTP-Konfiguration, begrenzte asynchrone Zustellung und
   Sitzungswiderruf sind vorhanden und werden durch ein MariaDB-/SMTP-Senken-E2E
-  mit verzögerter Zustellung geprüft. Prozesslokale Reset-Limits
-  und unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
+  mit verzögerter Zustellung geprüft. Der E2E-Test sendet außerdem zwei
+  gleichzeitige Einlösungen desselben Tokens und prüft genau einen Erfolg,
+  eine Ablehnung und die Authentifizierung mit nur dem siegreichen Passwort.
+  Prozesslokale Reset-Limits, Reihenfolge paralleler Token-Ausstellungen und
+  unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
   nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
@@ -581,9 +585,10 @@ Feature eines bestimmten Anbieters.
   Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
   und versteckte externe Erfassung sind ausgeschlossen.
 - [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
-  teilweise umgesetzt; Ablaufgrenze/parallele Requests, persistente
-  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und Login-Benachrichtigungen
-  bleiben offen.
+  teilweise umgesetzt. Gleichzeitige Einlösungen desselben Tokens sind im
+  MariaDB-E2E abgedeckt; Ablaufgrenze und parallele Token-Ausstellung,
+  persistente Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
+  Login-Benachrichtigungen bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
   Berechtigungen.
 - [ ] Security Review, Threat Model, Dependency Audit und Penetrationstests.

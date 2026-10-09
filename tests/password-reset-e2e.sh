@@ -13,6 +13,7 @@ email="zelyra-reset-${suffix}@example.test"
 unknown_email="absent-reset-${suffix}@example.test"
 old_password="ZelyraReset-${suffix}-Old"
 new_password="ZelyraReset-${suffix}-New"
+parallel_password="ZelyraReset-${suffix}-Parallel"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-password-reset-e2e.XXXXXX")"
 server_pid=""
 smtp_pid=""
@@ -163,17 +164,36 @@ reset_csrf="$(curl --silent --show-error --cookie "${temp_dir}/reset.cookies" \
     "${base_url}/reset-password" -o "${temp_dir}/reset.html"; sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/reset.html")"
 [[ -n "${reset_csrf}" ]]
 
-echo "[6/8] reject cross-origin reset and accept same-origin reset"
+echo "[6/8] reject cross-origin reset and race concurrent same-origin resets"
 cross_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --cookie "${temp_dir}/reset.cookies" --header 'Origin: https://attacker.example' \
     --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
     "${base_url}/reset-password")"
 [[ "${cross_status}" == 400 ]]
-reset_status="$(curl --silent --show-error --output "${temp_dir}/reset-result.html" --write-out '%{http_code}' \
-    --cookie "${temp_dir}/reset.cookies" --cookie-jar "${temp_dir}/reset.cookies" \
-    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${reset_csrf}" \
-    --data-urlencode "password=${new_password}" "${base_url}/reset-password")"
-[[ "${reset_status}" == 303 ]]
+curl --silent --show-error --output "${temp_dir}/reset-race-a.html" --write-out '%{http_code}' \
+    --cookie "${temp_dir}/reset.cookies" --header "Origin: ${base_url}" \
+    --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${new_password}" \
+    "${base_url}/reset-password" >"${temp_dir}/reset-race-a.status" &
+race_a_pid=$!
+curl --silent --show-error --output "${temp_dir}/reset-race-b.html" --write-out '%{http_code}' \
+    --cookie "${temp_dir}/reset.cookies" --header "Origin: ${base_url}" \
+    --data-urlencode "_zelyra_csrf=${reset_csrf}" --data-urlencode "password=${parallel_password}" \
+    "${base_url}/reset-password" >"${temp_dir}/reset-race-b.status" &
+race_b_pid=$!
+wait "${race_a_pid}"
+wait "${race_b_pid}"
+race_a_status="$(cat "${temp_dir}/reset-race-a.status")"
+race_b_status="$(cat "${temp_dir}/reset-race-b.status")"
+if [[ "${race_a_status}" == 303 && "${race_b_status}" == 400 ]]; then
+    winning_password="${new_password}"
+    losing_password="${parallel_password}"
+elif [[ "${race_a_status}" == 400 && "${race_b_status}" == 303 ]]; then
+    winning_password="${parallel_password}"
+    losing_password="${new_password}"
+else
+    echo "error: concurrent reset results were ${race_a_status} and ${race_b_status}; expected one success and one rejection" >&2
+    exit 1
+fi
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM auth_sessions WHERE user_id = ${user_id}")" == "0" ]]
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND consumed_at IS NOT NULL")" == "1" ]]
 
@@ -184,6 +204,15 @@ echo "[7/8] reject replay and verify new password"
 replay_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     "${base_url}/reset-password?token=${token}")"
 [[ "${replay_status}" == 400 ]]
+winning_login_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${email}" --data-urlencode "password=${winning_password}" \
+    "${base_url}/login")"
+losing_login_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
+    --data-urlencode "email=${email}" --data-urlencode "password=${losing_password}" \
+    "${base_url}/login")"
+[[ "${winning_login_status}" == 303 && "${losing_login_status}" == 401 ]]
 python3 - "${temp_dir}/message.eml" <<'PY'
 from pathlib import Path
 import sys
@@ -216,7 +245,7 @@ expired_status="$(curl --silent --show-error --output /dev/null --write-out '%{h
 [[ "${expired_status}" == "400" ]]
 new_login="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --header "Origin: ${base_url}" --data-urlencode "_zelyra_csrf=${csrf}" \
-    --data-urlencode "email=${email}" --data-urlencode "password=${new_password}" \
+    --data-urlencode "email=${email}" --data-urlencode "password=${winning_password}" \
     "${base_url}/login")"
 [[ "${new_login}" == 303 ]]
 ! grep -Fq "${token}" "${temp_dir}/server.log"

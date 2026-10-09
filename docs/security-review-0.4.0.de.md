@@ -44,8 +44,11 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   sind prozesslokal und nicht zwischen Instanzen geteilt; DB-Zugriffszeiten
   können weiterhin variieren. Ein MariaDB-/SMTP-Senken-E2E prüft Enumeration,
   verzögerte Zustellung, Token-Hash, Replay, Ablauf, CSRF/Origin und
-  Sitzungswiderruf. Der Mail-/Token-Lebenszyklus ist experimentell und braucht
-  unabhängige Prüfung.
+  Sitzungswiderruf. Der E2E-Test löst dasselbe Reset-Token nun außerdem
+  gleichzeitig zweimal ein und prüft genau einen Erfolg, eine Ablehnung und
+  die Anmeldung nur mit dem siegreichen Passwort. Parallele Token-Ausstellung
+  und E-Mail-Reihenfolge, genaues Ablaufgrenzverhalten, SMTP-Ausfall und der
+  Mail-/Token-Lebenszyklus bleiben unabhängig zu prüfen.
 - Sitzungsadministration ist teilweise umgesetzt. Gerätemetadaten und die
   vollständige Selbstverwaltung bleiben offen; die Kontolebenszyklus-Abnahme
   ist nicht bestanden.
