@@ -45,7 +45,7 @@ or human acceptance.
   responses, CSRF/origin checks, audit, and persistent/in-memory session
   revocation are present. A database-backed outbox stores the email/link payload
   authenticated and encrypted with AES-256-GCM under the required
-  `ZELYRA_RESET_DELIVERY_KEY`. The worker retries after SMTP failure and process
+  `ZELYRA_RESET_DELIVERY_KEY`. The worker retries 30 seconds after SMTP failure and after process
   restart; the MariaDB E2E confirms encrypted-at-rest storage and recovery after
   restarting the sole active instance. Delivery is at least once, so a crash
   after SMTP acceptance but before database acknowledgement can duplicate an

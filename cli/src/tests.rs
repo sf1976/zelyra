@@ -1909,6 +1909,7 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
             expires_at: Timestamp required
             consumed_at: Timestamp?
             delivery_payload: String(2048)
+            delivery_retry_at: Timestamp?
         }
 
         table auth_audit_log {
@@ -1923,6 +1924,33 @@ fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
     let program = parse(&lex(source).unwrap()).unwrap();
     let mut schema = build_schema(&program).unwrap();
     assert!(validate_auth("test.zyl", &program, &schema));
+    {
+        let column = schema
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "password_resets")
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|column| column.name == "delivery_retry_at")
+            .unwrap();
+        column.nullable = false;
+        column.sql_type = "bigint".into();
+    }
+    assert!(!validate_auth("test.zyl", &program, &schema));
+    {
+        let column = schema
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "password_resets")
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|column| column.name == "delivery_retry_at")
+            .unwrap();
+        column.nullable = true;
+        column.sql_type = "timestamp".into();
+    }
     {
         let column = schema
             .tables

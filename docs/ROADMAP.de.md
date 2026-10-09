@@ -35,7 +35,8 @@ den tatsächlich implementierten Stand.
   `device_label` deklariert; sie bestätigt keine Geräteidentität.
   Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
   MariaDB speichert Einweg-Token-Hashes und eine AES-256-GCM-verschlüsselte
-  Outbox, die nach SMTP-Ausfällen und Prozessneustarts erneut zustellt. Das E2E
+  Outbox, die nach SMTP-Ausfällen (mit 30 Sekunden Wartezeit) und
+  Prozessneustarts erneut zustellt. Das E2E
   prüft die Wiederaufnahme nach Neustart, wenn kein älterer Worker aktiv ist.
   Zustellung ist mindestens einmalig; das Zeitfenster zwischen SMTP-Annahme und
   Datenbankbestätigung kann Duplikate erzeugen, Schlüsselverlust lässt wartende

@@ -544,7 +544,7 @@ architecture requirement for every phase, not a provider-specific feature.
 - [🧪] Auth definitions can tune process-local login and reset failure windows
   and lockout duration. Password recovery is partially implemented in unreleased
   0.4: MariaDB stores single-use token hashes and an AES-256-GCM-encrypted mail
-  outbox. MariaDB/SMTP-sink E2E covers delayed delivery, enumeration, token
+  outbox with a 30-second retry delay after SMTP failures. MariaDB/SMTP-sink E2E covers delayed delivery, enumeration, token
   replacement across two instances, concurrent token use, expiry, replay, CSRF,
   SMTP refusal, encrypted-at-rest payloads, and recovery after a process restart
   with no older worker active. Delivery is at least once; a crash after SMTP

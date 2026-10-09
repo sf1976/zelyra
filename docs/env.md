@@ -156,8 +156,8 @@ werden nicht anhand der UI-Einstellung verändert.
 
 Eine Auth-Deklaration kann `reset_tokens: password_resets` konfigurieren.
 Die Reset-Tabelle braucht `user_id`, einen eindeutigen `token_hash`,
-`expires_at`, `consumed_at`, eine nullable Spalte `delivery_payload: String(2048)`
-und einen Fremdschlüssel auf `users.id`; außerdem muss eine Auth-Audit-Tabelle
+`expires_at`, `consumed_at`, `delivery_payload: String(2048)`, die nullable
+Spalte `delivery_retry_at: Timestamp` und einen Fremdschlüssel auf `users.id`; außerdem muss eine Auth-Audit-Tabelle
 konfiguriert sein. Das Feature läuft derzeit nur
 mit MariaDB. Reset-Limits sind pro Prozess und TCP-Peer-IP begrenzt; sie werden
 beim Neustart zurückgesetzt.
@@ -189,7 +189,8 @@ widerruft persistente und prozesslokale Sitzungen des Kontos.
 Die Zustellung nutzt eine mit `ZELYRA_RESET_DELIVERY_KEY` verschlüsselte
 Datenbank-Outbox; gespeichert werden nur Token-Hash und verschlüsselte
 Maildaten. Ein Hintergrund-Worker versucht ausstehende Nachrichten nach
-vorübergehenden SMTP-Ausfällen und Prozessneustarts erneut. Die Zustellung ist
+vorübergehenden SMTP-Ausfällen und Prozessneustarts erneut; nach einem
+fehlgeschlagenen Versuch wartet er 30 Sekunden. Die Zustellung ist
 mindestens einmalig: Ein Absturz nach SMTP-Annahme, aber vor Datenbankbestätigung
 kann eine doppelte E-Mail verursachen. Schlüsselverlust macht ausstehende
 Nachrichten unlesbar; Schlüssel sicher und stabil aufbewahren. Der HTTP-Request

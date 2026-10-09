@@ -145,7 +145,8 @@ them.
 
 An auth declaration can set `reset_tokens: password_resets`. The reset table
 needs `user_id`, a unique `token_hash`, `expires_at`, `consumed_at`, a nullable
-`delivery_payload: String(2048)` column, and a foreign key to `users.id`; an
+`delivery_payload: String(2048)`, nullable `delivery_retry_at: Timestamp`, and a
+foreign key to `users.id`; an
 auth audit table is also required. This feature
 currently runs only on MariaDB. Reset limits are process-local and keyed by
 the TCP peer IP; they reset on restart.
@@ -176,7 +177,8 @@ revokes the account's persistent and in-process sessions.
 Delivery uses a database-backed outbox encrypted with
 `ZELYRA_RESET_DELIVERY_KEY`; only the token hash and encrypted mail payload are
 stored. A background worker retries pending messages after temporary SMTP
-failures and process restarts. Delivery is at least once: a crash after SMTP
+failures and process restarts, with a 30-second retry delay after a failed
+attempt. Delivery is at least once: a crash after SMTP
 accepts a message but before the database acknowledges it can produce a
 duplicate email. Keep the key stable and backed up; losing it makes pending
 messages unreadable. The HTTP request does not wait for SMTP responses. The E2E

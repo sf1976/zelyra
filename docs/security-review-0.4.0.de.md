@@ -48,8 +48,8 @@ es ersetzt weder Penetrationstest noch menschliche Abnahme.
   generische Antworten, CSRF/Origin-Prüfung, Audit und Widerruf persistenter
   sowie flüchtiger Sitzungen sind vorhanden. Eine datenbankgestützte Outbox
   speichert E-Mail und Link authentifiziert und AES-256-GCM-verschlüsselt unter
-  dem erforderlichen `ZELYRA_RESET_DELIVERY_KEY`. Der Worker versucht nach
-  SMTP-Ausfall und Prozessneustart erneut; das MariaDB-E2E prüft Verschlüsselung
+  dem erforderlichen `ZELYRA_RESET_DELIVERY_KEY`. Der Worker versucht 30 Sekunden
+  nach SMTP-Ausfall und nach Prozessneustart erneut; das MariaDB-E2E prüft Verschlüsselung
   im Ruhezustand und Wiederaufnahme nach Neustart der einzigen aktiven Instanz.
   Zustellung ist mindestens einmalig; ein Absturz nach SMTP-Annahme, aber vor
   Bestätigung kann doppelte E-Mails erzeugen. Ohne Schlüssel sind wartende

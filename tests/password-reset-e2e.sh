@@ -438,7 +438,9 @@ grep -Fq 'password reset message delivery failed: SMTP transport could not deliv
 
 pending_payload="$(client --batch --skip-column-names -e "SELECT delivery_payload FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL LIMIT 1")"
 pending_active_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL AND consumed_at IS NULL AND expires_at > NOW()")"
+pending_retry_count="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL AND delivery_retry_at > NOW()")"
 [[ "${pending_active_count}" == "1" ]]
+[[ "${pending_retry_count}" == "1" ]]
 [[ -n "${pending_payload}" ]]
 ! grep -Fq "${email}" <<<"${pending_payload}"
 ! grep -Fq 'token=' <<<"${pending_payload}"
@@ -456,7 +458,7 @@ env ZELYRA_PUBLIC_BASE_URL="${base_url_c}" ZELYRA_SMTP_HOST=127.0.0.1 \
     ZELYRA_RESET_DELIVERY_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
     "${zelyra_bin}" serve "${project_file}" "${address_c}" >"${temp_dir}/server-c-restarted.log" 2>&1 &
 server_c_pid=$!
-for _ in $(seq 1 80); do [[ -s "${temp_dir}/message-c.eml" ]] && break; sleep 0.25; done
+for _ in $(seq 1 160); do [[ -s "${temp_dir}/message-c.eml" ]] && break; sleep 0.25; done
 if [[ ! -s "${temp_dir}/message-c.eml" ]]; then
     pending_after_restart="$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM password_resets WHERE user_id = ${user_id} AND delivery_payload IS NOT NULL")"
     echo "error: restart did not recover the pending delivery (pending rows: ${pending_after_restart})" >&2

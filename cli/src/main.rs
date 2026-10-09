@@ -5669,6 +5669,7 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 "expires_at",
                 "consumed_at",
                 "delivery_payload",
+                "delivery_retry_at",
             ] {
                 if !reset_table
                     .columns
@@ -5701,6 +5702,26 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                     "E-AUTH-037",
                     &format!(
                         "authentication password reset table {} requires nullable delivery_payload VARCHAR(2048)",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            let delivery_retry_at_is_compatible = reset_table
+                .columns
+                .iter()
+                .find(|column| column.name == "delivery_retry_at")
+                .is_some_and(|column| {
+                    column.nullable && column.sql_type.eq_ignore_ascii_case("timestamp")
+                });
+            if !delivery_retry_at_is_compatible {
+                diagnostic(
+                    path,
+                    "E-AUTH-038",
+                    &format!(
+                        "authentication password reset table {} requires nullable delivery_retry_at TIMESTAMP",
                         reset_table_name
                     ),
                     auth.span.line,

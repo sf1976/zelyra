@@ -16,6 +16,8 @@ const RESET_COOKIE: &str = "zelyra_password_reset";
 const RESET_COOKIE_PATH: &str = "/reset-password";
 const RESET_ADVISORY_LOCK_WAIT_SECONDS: u32 = 10;
 #[cfg(not(test))]
+const RESET_OUTBOX_RETRY_DELAY_SECONDS: u32 = 30;
+#[cfg(not(test))]
 const RESET_OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(5);
 type ResetMailSender = dyn Fn(&str, &str, UiLanguage) -> Result<(), String> + Send + Sync;
 
@@ -266,7 +268,7 @@ impl PasswordResetMailer {
         transaction
             .execute(&zelyra_database::Query {
                 sql: format!(
-                    "UPDATE {} SET delivery_payload = :payload WHERE token_hash = :token_hash",
+                    "UPDATE {} SET delivery_payload = :payload, delivery_retry_at = NULL WHERE token_hash = :token_hash",
                     quote_identifier(&delivery_guard.reset_table)
                 ),
                 params: vec![
@@ -313,7 +315,7 @@ fn deliver_if_current_reset(
             if !current {
                 transaction.execute(&zelyra_database::Query {
                     sql: format!(
-                        "UPDATE {} SET delivery_payload = NULL WHERE token_hash = :token_hash",
+                        "UPDATE {} SET delivery_payload = NULL, delivery_retry_at = NULL WHERE token_hash = :token_hash",
                         quote_identifier(&guard.reset_table)
                     ),
                     params: vec![(
@@ -327,7 +329,18 @@ fn deliver_if_current_reset(
             if delivery.is_ok() {
                 transaction.execute(&zelyra_database::Query {
                     sql: format!(
-                        "UPDATE {} SET delivery_payload = NULL WHERE token_hash = :token_hash",
+                        "UPDATE {} SET delivery_payload = NULL, delivery_retry_at = NULL WHERE token_hash = :token_hash",
+                        quote_identifier(&guard.reset_table)
+                    ),
+                    params: vec![(
+                        "token_hash".into(),
+                        QueryValue::String(guard.token_hash.clone()),
+                    )],
+                })?;
+            } else {
+                transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "UPDATE {} SET delivery_retry_at = DATE_ADD(NOW(), INTERVAL {RESET_OUTBOX_RETRY_DELAY_SECONDS} SECOND) WHERE token_hash = :token_hash",
                         quote_identifier(&guard.reset_table)
                     ),
                     params: vec![(
@@ -355,7 +368,7 @@ fn process_reset_outbox(
 ) -> Result<(), String> {
     let query = zelyra_database::Query {
         sql: format!(
-            "SELECT user_id, token_hash, delivery_payload FROM {} WHERE delivery_payload IS NOT NULL ORDER BY id LIMIT 16",
+            "SELECT user_id, token_hash, delivery_payload FROM {} WHERE delivery_payload IS NOT NULL AND (delivery_retry_at IS NULL OR delivery_retry_at <= NOW()) ORDER BY id LIMIT 16",
             quote_identifier(reset_table)
         ),
         params: Vec::new(),
