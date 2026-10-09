@@ -95,4 +95,5 @@ Für Abnahmetests zusätzlich die in Produktion eingesetzte Datenbankversion
 verwenden. Vor einem MariaDB-Upgrade oder einer Änderung an Zelyras Schema- und
 Laufzeitverhalten ein verifiziertes Backup erstellen und den resultierenden
 Plan mit einer wegwerfbaren Kopie des echten Schemas und repräsentativen Daten
-prüfen.
+prüfen. Ein ausführlicher Betreiberablauf steht in
+[MariaDB-Backup und Wiederherstellung](database-operations.de.md).

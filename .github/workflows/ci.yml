@@ -2,12 +2,56 @@ name: Zelyra CI
 
 on:
   push:
-    branches: [main, 'feature/**']
+    # Feature branches are checked through pull_request (including drafts).
+    # Avoid running the same full database/Docker matrix twice per push.
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
 
 jobs:
+  coverage-guided-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install --yes clang
+      - name: Install nightly Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-10-09
+          components: rust-src
+      - name: Install pinned cargo-fuzz
+        run: cargo install --locked --version 0.13.2 cargo-fuzz
+      - name: Run bounded coverage-guided fuzz targets
+        env:
+          CC: clang
+        run: |
+          for target in lexer_parser sql_binder template_renderer http_request; do
+            cargo +nightly fuzz run "$target" "fuzz/corpus/$target" -- \
+              -max_total_time=15 -max_len=16384 -timeout=5
+          done
+      - name: Preserve fuzz failure inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zelyra-fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned cargo-deny
+        run: cargo install --locked --version 0.20.2 cargo-deny
+      - name: Audit advisories, licenses, dependency versions, and sources
+        run: cargo deny check
+
   windows-updater:
     runs-on: windows-latest
     steps:
@@ -92,7 +136,10 @@ jobs:
           python3 scripts/check_release_metadata.py
           python3 scripts/test_package_release.py
           python3 scripts/test_release_readiness.py
+          python3 scripts/test_sbom.py
       - name: Run workspace tests
+        env:
+          ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
         run: cargo test --workspace
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -100,6 +147,10 @@ jobs:
         run: |
           cargo build -p zelyra-cli
           python3 scripts/check_release_metadata.py --binary target/debug/zelyra
+      - name: Test imported tableviews through composed project schema
+        env:
+          ZELYRA_MODULE_IMPORTS_DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test -p zelyra-cli --test module_imports imported_tableviews_are_type_checked_and_served_from_the_composed_schema -- --nocapture
       - name: Run Linux release artifact smoke test
         env:
           ZELYRA_RELEASE_BINARY: target/release/zelyra
@@ -154,8 +205,11 @@ jobs:
           ZELYRA_DOCKER_E2E_DB_HOST_PORT: 3309
           ZELYRA_DOCKER_E2E_HOST_PORT: 18082
           ZELYRA_DOCKER_E2E_WEB_PORT: 8081
+          ZELYRA_DOCKER_E2E_BUNDLE_HOST_PORT: 18083
+          ZELYRA_DOCKER_E2E_SECOND_BUNDLE_HOST_PORT: 18084
           ZELYRA_DOCKER_E2E_ADDRESS: 127.0.0.1:18082
           ZELYRA_DOCKER_E2E_REF: ${{ github.head_ref || github.ref_name }}
+          ZELYRA_DOCKER_E2E_MODULE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-docker-e2e.sh
       - name: Run generated authentication project end-to-end test
@@ -166,6 +220,12 @@ jobs:
           ZELYRA_GENERATED_AUTH_ADDRESS: 127.0.0.1:38525
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/generated-project-auth-e2e.sh
+      - name: Run password-reset MariaDB and SMTP end-to-end test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_PASSWORD_RESET_ADDRESS: 127.0.0.1:38540
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/password-reset-e2e.sh
       - name: Run generated machine authorization end-to-end test
         env:
           ZELYRA_MACHINE_AUTH_GENERATED_ROOT_PASSWORD: root
@@ -198,6 +258,10 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Run MariaDB backup and restore rehearsal
+        env:
+          ZELYRA_BACKUP_RESTORE_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Run PostgreSQL schema safety integration test
         env:
           DATABASE_URL: postgres://zelyra_ci:zelyra_ci@127.0.0.1:5432/zelyra_ci
@@ -282,6 +346,14 @@ jobs:
           esac
           echo "Testing MariaDB ${server_version}"
           docker image inspect "mariadb:${expected_version}" --format '{{json .RepoDigests}}'
+      - name: Verify MariaDB database tests, pool limits, and statement timeouts
+        env:
+          ZELYRA_DB_TIMEOUT_TEST_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: cargo test -p zelyra-database
+      - name: Verify MariaDB TLS handshake and certificate rejection
+        env:
+          MARIADB_TLS_TEST_IMAGE: mariadb:${{ matrix.version }}
+        run: bash ./tests/mariadb-tls-e2e.sh
       - name: Run MariaDB database and CRUD HTTP integration
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
@@ -294,5 +366,9 @@ jobs:
           ZELYRA_SCHEMA_SAFETY_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: bash ./tests/schema-safety-e2e.sh
+      - name: Run MariaDB backup and restore rehearsal
+        env:
+          ZELYRA_BACKUP_RESTORE_MARIADB_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+        run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py

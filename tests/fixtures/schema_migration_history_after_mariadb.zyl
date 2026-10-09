@@ -1,0 +1,14 @@
+database main {
+    engine: mariadb
+    database: "schema_migration_history"
+}
+
+table migration_first {
+    id: Id primary auto
+    applied_marker: String(32)
+}
+
+table migration_second {
+    id: Id primary auto
+    operator_review: String(32) required
+}

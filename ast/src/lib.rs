@@ -6,6 +6,7 @@ pub struct Span {
     pub end: usize,
     pub line: usize,
     pub column: usize,
+    pub source_id: u32,
 }
 
 impl Span {
@@ -15,7 +16,13 @@ impl Span {
             end,
             line,
             column,
+            source_id: 0,
         }
+    }
+
+    pub const fn with_source_id(mut self, source_id: u32) -> Self {
+        self.source_id = source_id;
+        self
     }
 
     pub fn join(self, other: Span) -> Self {
@@ -24,6 +31,7 @@ impl Span {
             end: other.end,
             line: self.line,
             column: self.column,
+            source_id: self.source_id,
         }
     }
 }
@@ -82,6 +90,7 @@ impl fmt::Display for Type {
 
 #[derive(Clone, Debug)]
 pub struct Program {
+    pub imports: Vec<ImportDef>,
     pub databases: Vec<DatabaseDef>,
     pub tables: Vec<TableDef>,
     pub types: Vec<TypeDef>,
@@ -95,6 +104,15 @@ pub struct Program {
     pub auth: Vec<AuthDef>,
     pub apis: Vec<ApiDef>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportDef {
+    /// Project-root-relative path to another `.zyl` source file.
+    pub path: String,
+    /// The local namespace used to qualify public declarations.
+    pub alias: String,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -131,6 +149,7 @@ pub struct PageDataDef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ViewDef {
     pub name: String,
+    pub is_public: bool,
     pub html: String,
     pub span: Span,
 }
@@ -138,6 +157,7 @@ pub struct ViewDef {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComponentDef {
     pub name: String,
+    pub is_public: bool,
     pub props: Vec<ComponentProp>,
     pub html: String,
     pub span: Span,
@@ -364,6 +384,11 @@ pub struct AuthDef {
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
+    pub login_rate_limit: Option<ApiRateLimit>,
+    pub login_block_seconds: Option<u32>,
+    pub reset_tokens_table: Option<String>,
+    pub reset_rate_limit: Option<ApiRateLimit>,
+    pub reset_block_seconds: Option<u32>,
     pub span: Span,
 }
 
@@ -377,7 +402,16 @@ pub struct ApiDef {
     pub input: Vec<ApiField>,
     pub output: Type,
     pub errors: Vec<ApiError>,
+    pub version: Option<String>,
+    pub deprecated: bool,
+    pub rate_limit: Option<ApiRateLimit>,
     pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ApiRateLimit {
+    pub requests: u32,
+    pub window_seconds: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -409,7 +443,16 @@ pub struct TableDef {
     pub columns: Vec<ColumnDef>,
     pub indexes: Vec<IndexDef>,
     pub uniques: Vec<IndexDef>,
+    pub access: TableAccessDef,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TableAccessDef {
+    pub read: Vec<String>,
+    pub write: Vec<String>,
+    pub read_write: Vec<String>,
+    pub span: Option<Span>,
 }
 
 #[derive(Clone, Debug)]
@@ -442,6 +485,7 @@ pub struct IndexDef {
 #[derive(Clone, Debug)]
 pub struct TypeDef {
     pub name: String,
+    pub is_public: bool,
     pub target: Type,
     pub span: Span,
 }
@@ -449,6 +493,7 @@ pub struct TypeDef {
 #[derive(Clone, Debug)]
 pub struct RecordDef {
     pub name: String,
+    pub is_public: bool,
     pub fields: Vec<RecordField>,
     pub span: Span,
 }
@@ -463,6 +508,7 @@ pub struct RecordField {
 #[derive(Clone, Debug)]
 pub struct Function {
     pub name: String,
+    pub is_public: bool,
     pub params: Vec<Param>,
     pub return_type: Option<Type>,
     pub capabilities: Vec<String>,

@@ -1,0 +1,10 @@
+import "src/ui.zyl" as ui
+
+page "/invoices" {
+    view: AppShell
+    html {
+        <h1>Invoices</h1>
+        <p>Review invoice headers in the imported overview.</p>
+        <p><a href="/views/invoiceoverview">Open invoice overview</a></p>
+    }
+}

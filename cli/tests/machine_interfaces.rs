@@ -64,6 +64,26 @@ fn temporary_directory(name: &str) -> PathBuf {
     ))
 }
 
+fn assert_generated_database_module(directory: &Path) {
+    let entry = directory.join("main.zyl");
+    let source = fs::read_to_string(&entry).unwrap();
+    assert!(source.starts_with("import \"src/database.zyl\" as storage\n"));
+    assert!(!source.contains("database main"));
+    assert_eq!(
+        fs::read_to_string(directory.join("src/database.zyl"))
+            .unwrap()
+            .trim(),
+        "database main {\n    engine: mariadb\n}"
+    );
+    let check = run(&["check", entry.to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+}
+
 fn free_test_port() -> String {
     TcpListener::bind(("127.0.0.1", 0))
         .expect("a test port should be available")
@@ -257,6 +277,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let env_example = fs::read_to_string(directory.join(".env.example")).unwrap();
     let env_file = fs::read_to_string(directory.join(".env")).unwrap();
     let compose = fs::read_to_string(directory.join("docker-compose.mariadb.yml")).unwrap();
@@ -270,7 +291,7 @@ fn new_mariadb_project_propagates_the_selected_web_port() {
     assert!(compose.contains("${ZELYRA_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}"));
     assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={web_host_port}")));
     assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
-    assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(env_file.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
     assert!(env_file.contains("ZELYRA_LANGUAGE=de"));
     assert!(env_file.contains("ZELYRA_LEVEL=learn"));
     assert!(env_file.contains("ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"));
@@ -634,6 +655,105 @@ fn generated_mariadb_business_starter_localizes_and_protects_crud_without_databa
 }
 
 #[test]
+fn generated_api_metadata_and_rate_limit_reach_http_clients() {
+    let directory = temporary_directory("api-metadata-rate-limit");
+    fs::create_dir_all(&directory).unwrap();
+    let source = directory.join("main.zyl");
+    fs::write(
+        &source,
+        r#"
+            api GET "/health" {
+                version "v1"
+                deprecated
+                rate_limit 2 per 60
+                handler health
+                output String
+            }
+
+            fn health() -> String { "ok" }
+            fn main() { }
+        "#,
+    )
+    .unwrap();
+
+    let port = free_test_port();
+    let address = format!("127.0.0.1:{port}");
+    let mut server = Command::new(binary())
+        .args(["serve", source.to_str().unwrap(), &address])
+        .env("ZELYRA_LEVEL", "work")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Zelyra API server should start");
+
+    let responses = (|| {
+        let socket_address: SocketAddr = address
+            .parse()
+            .map_err(|error| format!("invalid test server address: {error}"))?;
+        let mut responses = Vec::new();
+        for index in 1..=3 {
+            let mut result = None;
+            for _ in 0..50 {
+                if let Ok(mut stream) =
+                    TcpStream::connect_timeout(&socket_address, Duration::from_millis(100))
+                {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .map_err(|error| error.to_string())?;
+                    stream
+                        .write_all(
+                            format!(
+                                "GET /health HTTP/1.1\r\nHost: localhost\r\nX-Request-ID: test-{index}\r\n\r\n"
+                            )
+                            .as_bytes(),
+                        )
+                        .map_err(|error| error.to_string())?;
+                    let mut response = String::new();
+                    stream
+                        .read_to_string(&mut response)
+                        .map_err(|error| error.to_string())?;
+                    if !response.is_empty() {
+                        result = Some(response);
+                        break;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            responses.push(result.ok_or_else(|| {
+                "Zelyra API server did not answer before the test timeout".to_owned()
+            })?);
+        }
+        Ok::<_, String>(responses)
+    })();
+    let _ = server.kill();
+    let _ = server.wait();
+    fs::remove_dir_all(&directory).unwrap();
+
+    let responses = responses.unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        responses[0].starts_with("HTTP/1.1 200 OK"),
+        "{}",
+        responses[0]
+    );
+    assert!(
+        responses[1].starts_with("HTTP/1.1 200 OK"),
+        "{}",
+        responses[1]
+    );
+    assert!(
+        responses[2].starts_with("HTTP/1.1 429 Too Many Requests"),
+        "{}",
+        responses[2]
+    );
+    for (index, response) in responses.iter().enumerate() {
+        assert!(response.contains("X-Zelyra-API-Version: v1\r\n"));
+        assert!(response.contains("X-Zelyra-API-Deprecated: true\r\n"));
+        assert!(response.contains(&format!("X-Request-ID: test-{}\r\n", index + 1)));
+    }
+    assert!(responses[2].contains("Retry-After: "));
+}
+
+#[test]
 fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
     let directory = temporary_directory("serve-theme-route-conflict");
     fs::create_dir_all(&directory).unwrap();
@@ -661,6 +781,26 @@ fn serve_rejects_routes_that_conflict_with_the_project_theme_asset() {
         "unexpected stderr: {stderr}"
     );
     assert!(stderr.contains("/__zelyra/theme.css"));
+}
+
+#[test]
+fn check_rejects_routes_that_shadow_the_builtin_liveness_endpoint() {
+    let source = temporary_source(
+        "health-route-conflict",
+        r#"page "/__zelyra/health/live" {
+    html { <main>Conflicting route</main> }
+}
+"#,
+    );
+
+    let output = run(&["check", source.to_str().unwrap()]);
+    let _ = fs::remove_file(&source);
+    let _ = fs::remove_dir(source.parent().unwrap());
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-WEB-005"), "unexpected stderr: {stderr}");
+    assert!(stderr.contains("/__zelyra/health/live"));
 }
 
 #[test]
@@ -707,6 +847,250 @@ fn db_create_emits_checked_schema_ddl_without_connecting_to_a_database() {
 }
 
 #[test]
+fn db_schema_errors_keep_the_imported_source_file_and_span() {
+    let (directory, entry) = temporary_project_source(
+        "schema-error-source",
+        "import \"src/schema.zyl\" as schema\nfn main() {}\n",
+    );
+    fs::create_dir_all(directory.join("src")).unwrap();
+    fs::write(
+        directory.join("src/schema.zyl"),
+        "table broken {\n    id: Id primary auto\n    id: Id primary auto\n}\n",
+    )
+    .unwrap();
+
+    let output = run(&["db", "create", entry.to_str().unwrap()]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-DB-001"), "{stderr}");
+    assert!(stderr.contains("src/schema.zyl"), "{stderr}");
+    assert!(stderr.contains(":3:"), "{stderr}");
+    assert!(!stderr.contains("main.zyl"), "{stderr}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn db_plan_json_emits_a_stable_versioned_fingerprint_and_approval_gate() {
+    let directory = temporary_directory("migration-plan-json");
+    fs::create_dir_all(&directory).unwrap();
+    let database_path = directory.join("current.sqlite");
+    let database_url = format!("sqlite://{}", database_path.display());
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT);",
+    )
+    .unwrap();
+    let source = temporary_source(
+        "migration-plan-json",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto name: String(30) required }\n",
+    );
+    let run_plan = || {
+        Command::new(binary())
+            .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+            .env("DATABASE_URL", &database_url)
+            .env_remove("ZELYRA_DATABASE_MAIN_URL")
+            .output()
+            .unwrap()
+    };
+    let first = run_plan();
+    let second = run_plan();
+    assert!(
+        first.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert_eq!(first.stdout, second.stdout);
+    assert!(!String::from_utf8_lossy(&first.stdout).contains(database_path.to_str().unwrap()));
+    let document: serde_json::Value = serde_json::from_slice(&first.stdout).unwrap();
+    assert_eq!(document["format"], "zelyra.schema-plan/v1");
+    assert_eq!(document["backend"], "sqlite");
+    assert_eq!(document["drift"], "present");
+    assert!(document["requires_operator_approval"].as_bool().unwrap());
+    assert_eq!(document["rollback"]["generated"], false);
+    assert_eq!(document["automatic_retries"], false);
+    assert!(document["plan_id"].as_str().unwrap().starts_with("sha256:"));
+    assert_eq!(
+        document["current_schema_sha256"].as_str().unwrap().len(),
+        64
+    );
+    assert_eq!(
+        document["desired_schema_sha256"].as_str().unwrap().len(),
+        64
+    );
+    fs::remove_file(&source).unwrap();
+    fs::remove_dir_all(source.parent().unwrap()).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn db_apply_rejects_a_stale_reviewed_plan_before_applying_sql() {
+    let directory = temporary_directory("stale-migration-plan");
+    fs::create_dir_all(&directory).unwrap();
+    let database_path = directory.join("current.sqlite");
+    let database_url = format!("sqlite://{}", database_path.display());
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT);",
+    )
+    .unwrap();
+    let source = temporary_source(
+        "stale-migration-plan",
+        "database main { engine: sqlite database: \"zelyra_test\" }\ntable customers { id: Id primary auto name: String(30) required }\n",
+    );
+    let plan = Command::new(binary())
+        .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        plan.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout).unwrap();
+    let old_plan_id = plan_json["plan_id"].as_str().unwrap();
+
+    // An unrelated table changes the reviewed schema fingerprint without
+    // changing the pending customers-column migration.
+    zelyra_database::apply_sqlite(
+        &database_url,
+        "CREATE TABLE unrelated (id INTEGER PRIMARY KEY);",
+    )
+    .unwrap();
+    let stale_apply = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&source)
+        .args(["--allow-risky", "--plan-id", old_plan_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert_eq!(stale_apply.status.code(), Some(1));
+    let stale_stderr = String::from_utf8_lossy(&stale_apply.stderr);
+    assert!(stale_stderr.contains("E-DB-007"), "{stale_stderr}");
+    assert!(
+        stale_stderr.contains("no SQL was applied"),
+        "{stale_stderr}"
+    );
+    let empty_history = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(empty_history.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&empty_history.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    assert_eq!(
+        zelyra_database::query_sqlite(
+            &database_url,
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_zelyra_schema_history'"
+        )
+        .unwrap()
+        .trim(),
+        "0"
+    );
+    let after_stale_apply = zelyra_database::inspect_sqlite(&database_url).unwrap();
+    let customers = after_stale_apply
+        .tables
+        .iter()
+        .find(|table| table.name == "customers")
+        .unwrap();
+    assert!(!customers.columns.iter().any(|column| column.name == "name"));
+    assert!(after_stale_apply
+        .tables
+        .iter()
+        .any(|table| table.name == "unrelated"));
+
+    let fresh_plan = Command::new(binary())
+        .args(["db", "plan", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(fresh_plan.status.success());
+    let fresh_plan_json: serde_json::Value = serde_json::from_slice(&fresh_plan.stdout).unwrap();
+    let fresh_plan_id = fresh_plan_json["plan_id"].as_str().unwrap();
+    assert_ne!(old_plan_id, fresh_plan_id);
+    let apply = Command::new(binary())
+        .args(["db", "apply"])
+        .arg(&source)
+        .args(["--allow-risky", "--plan-id", fresh_plan_id])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        apply.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&apply.stdout),
+        String::from_utf8_lossy(&apply.stderr)
+    );
+    let after_apply = zelyra_database::inspect_sqlite(&database_url).unwrap();
+    let customers = after_apply
+        .tables
+        .iter()
+        .find(|table| table.name == "customers")
+        .unwrap();
+    assert!(customers.columns.iter().any(|column| column.name == "name"));
+    assert!(!after_apply
+        .tables
+        .iter()
+        .any(|table| table.name == "_zelyra_schema_history"));
+
+    let history = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(
+        history.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&history.stdout),
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let history_json: serde_json::Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history_json.as_array().unwrap().len(), 1);
+    assert_eq!(history_json[0]["status"], "applied");
+    assert_eq!(history_json[0]["plan_id"], fresh_plan_id);
+    assert_eq!(
+        history_json[0]["completed_changes"],
+        history_json[0]["change_count"]
+    );
+    zelyra_database::query_sqlite(
+        &database_url,
+        "UPDATE _zelyra_schema_history SET status='running'",
+    )
+    .unwrap();
+    let interrupted = Command::new(binary())
+        .args(["db", "history", source.to_str().unwrap(), "--format=json"])
+        .env("DATABASE_URL", &database_url)
+        .env_remove("ZELYRA_DATABASE_MAIN_URL")
+        .output()
+        .unwrap();
+    assert!(interrupted.status.success());
+    let interrupted_json: serde_json::Value = serde_json::from_slice(&interrupted.stdout).unwrap();
+    assert_eq!(interrupted_json[0]["status"], "interrupted");
+    assert_eq!(
+        zelyra_database::query_sqlite(&database_url, "SELECT status FROM _zelyra_schema_history",)
+            .unwrap()
+            .trim(),
+        "interrupted"
+    );
+
+    fs::remove_file(&source).unwrap();
+    fs::remove_dir_all(source.parent().unwrap()).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn init_creates_a_ready_commented_mariadb_env() {
     let directory = temporary_directory("init-env-defaults");
     let database_host_port = free_test_port();
@@ -741,7 +1125,9 @@ fn init_creates_a_ready_commented_mariadb_env() {
         env_file
             .find(&format!("ZELYRA_DB_HOST_PORT={database_host_port}"))
             .unwrap()
-            < env_file.find("DATABASE_URL=mariadb://").unwrap()
+            < env_file
+                .find("ZELYRA_DATABASE_MAIN_URL=mariadb://")
+                .unwrap()
     );
     assert!(!env_file
         .lines()
@@ -750,6 +1136,39 @@ fn init_creates_a_ready_commented_mariadb_env() {
     assert!(directory.join(".env.example").is_file());
     assert!(directory.join("locales/de.json").is_file());
     assert!(directory.join("locales/en.json").is_file());
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn init_with_mariadb_preserves_an_existing_main_without_adding_an_unused_database_module() {
+    let directory = temporary_directory("init-existing-main-mariadb");
+    fs::create_dir_all(&directory).unwrap();
+    let main_source = "fn main() {\n    print(\"existing application\")\n}\n";
+    fs::write(directory.join("main.zyl"), main_source).unwrap();
+
+    let web_host_port = free_test_port();
+    let database_host_port = free_test_port();
+    let output = run(&[
+        "init",
+        directory.to_str().unwrap(),
+        "--mariadb",
+        "--host-port",
+        &web_host_port,
+        "--db-host-port",
+        &database_host_port,
+    ]);
+
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(directory.join("main.zyl")).unwrap(),
+        main_source
+    );
+    assert!(!directory.join("src/database.zyl").exists());
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -770,6 +1189,7 @@ fn default_mariadb_web_starter_is_catalog_localized_and_checkable() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     assert!(source.contains("class=\"zelyra-app\""));
     assert!(source.contains("data-zelyra-language"));
@@ -809,6 +1229,7 @@ fn new_mariadb_crud_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("table departments"));
@@ -842,6 +1263,7 @@ fn new_mariadb_auth_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("auth users"));
@@ -876,6 +1298,7 @@ fn new_mariadb_business_template_is_self_contained() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert_generated_database_module(&directory);
     let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
     let config = fs::read_to_string(directory.join("zelyra.toml")).unwrap();
     assert!(source.contains("auth users"));
@@ -962,7 +1385,11 @@ fn setup_creates_a_local_env_without_printing_or_overwriting_secrets() {
             .unwrap()
     ));
     assert!(!contents.contains("change-me"));
-    assert!(contents.contains("DATABASE_URL=mariadb://zelyra:"));
+    assert!(contents.contains("ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:"));
+    assert!(contents.contains("ZELYRA_DB_CONNECT_TIMEOUT_SECS=10"));
+    assert!(contents.contains("ZELYRA_DB_QUERY_TIMEOUT_SECS=30"));
+    assert!(contents.contains("ZELYRA_DB_POOL_MAX_SIZE=8"));
+    assert!(contents.contains("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10"));
     assert!(contents.contains("MARIADB_PASSWORD="));
     assert!(contents.contains("MARIADB_ROOT_PASSWORD="));
 
@@ -1041,6 +1468,7 @@ fn doctor_reports_unreachable_database_without_exposing_credentials() {
         .find(|check| check["name"] == "database")
         .expect("doctor should report a database check");
     assert_eq!(database_check["status"], "fail");
+    assert_eq!(database_check["category"], "connectivity");
     assert!(database_check["message"]
         .as_str()
         .unwrap()
@@ -1070,7 +1498,7 @@ fn setup_selects_free_ports_for_a_new_local_environment() {
     fs::write(
         directory.join(".env.example"),
         format!(
-            "ZELYRA_DB_HOST_PORT={requested_database_port}\nDATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n# ZELYRA_HOST_PORT={requested_web_port}\n"
+            "ZELYRA_DB_HOST_PORT={requested_database_port}\nZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app\nMARIADB_DATABASE=zelyra_app\nMARIADB_USER=zelyra\nMARIADB_PASSWORD=change-me\nMARIADB_ROOT_PASSWORD=change-me-root\n# ZELYRA_HOST_PORT={requested_web_port}\n"
         ),
     )
     .unwrap();
@@ -1318,6 +1746,10 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(document["command"], "edit");
     assert_eq!(document["success"], true);
     assert_eq!(document["preview"]["applied"], false);
+    assert_eq!(
+        document["preview"]["affected_files"],
+        serde_json::json!(["main.zyl"])
+    );
     assert_eq!(document["preview"]["changed_tokens"], 2);
 
     fs::write(&source_path, "fn changed() {}\nfn main() {}\n").expect("source should change");
@@ -1351,6 +1783,48 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
         fs::read_to_string(&source_path).unwrap(),
         "fn welcome() { welcome() }\nfn main() {}\n"
     );
+    fs::remove_dir_all(project_directory).expect("temporary project should be removed");
+}
+
+#[test]
+fn edit_preview_reports_capability_effects_of_renamed_functions_and_callers() {
+    let source = "fn load_data() -> Int uses Database(read) { return sql<Int> { SELECT 1 } }\nfn page_data() -> Int uses Database(read) { return load_data() }\nfn main() {}\n";
+    let (project_directory, source_path) = temporary_project_source("edit-effects", source);
+    fs::write(
+        project_directory.join("zelyra.toml"),
+        "[project]\nname = \"edit-test\"\nversion = \"0.1.39\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase_read = true\ndatabase_write = false\n",
+    )
+    .expect("project config should grant read-only SQL");
+    let request_path = source_path.with_file_name("change.json");
+    fs::write(
+        &request_path,
+        format!(
+            "{{\"schema_version\":\"1\",\"entry\":{},\"operations\":[{{\"kind\":\"rename\",\"symbol\":\"function\",\"from\":\"load_data\",\"to\":\"read_data\"}}]}}",
+            serde_json::to_string(source_path.to_str().unwrap()).unwrap()
+        ),
+    )
+    .expect("edit request should be written");
+
+    let output = run(&["edit", "--format=json", request_path.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let effects = document["preview"]["affected_effects"].as_array().unwrap();
+    assert!(effects.iter().any(|effect| {
+        effect["function"] == "read_data"
+            && effect["relation"] == "renamed_function"
+            && effect["declared_capabilities"] == serde_json::json!(["Database(read)"])
+    }));
+    assert!(effects.iter().any(|effect| {
+        effect["function"] == "page_data"
+            && effect["relation"] == "caller_of_renamed_function"
+            && effect["declared_capabilities"] == serde_json::json!(["Database(read)"])
+    }));
+    assert_eq!(fs::read_to_string(&source_path).unwrap(), source);
     fs::remove_dir_all(project_directory).expect("temporary project should be removed");
 }
 
@@ -1584,7 +2058,16 @@ fn context_exposes_safe_structural_project_information() {
         .unwrap()
         .iter()
         .any(|crud| crud["table"] == "customers"));
-    assert!(!String::from_utf8_lossy(&output.stdout).contains("DATABASE_URL"));
+    assert_eq!(
+        document["database"]["connection_model"],
+        "single-project-wide-connection"
+    );
+    assert_eq!(
+        document["database"]["consumers"][0]["connection_environment"],
+        "DATABASE_URL"
+    );
+    assert_eq!(document["database"]["credentials_included"], false);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("mariadb://"));
 }
 
 #[test]

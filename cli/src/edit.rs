@@ -1,4 +1,9 @@
-use std::{collections::HashSet, fs, io::Write, path::Path};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fs,
+    io::Write,
+    path::Path,
+};
 
 use serde_json::{json, Value};
 use zelyra_ast::{Program, Span};
@@ -253,6 +258,69 @@ pub fn preview(
         changes: Value::Array(changes),
         changed_tokens: replacements.len(),
     })
+}
+
+pub fn affected_function_effects(program: &Program, operations: &Value, changes: &Value) -> Value {
+    let mut affected = BTreeMap::<String, (String, Vec<String>)>::new();
+    let operations = operations.as_array().map(Vec::as_slice).unwrap_or_default();
+    let changes = changes.as_array().map(Vec::as_slice).unwrap_or_default();
+
+    for operation in operations {
+        if operation.get("symbol").and_then(Value::as_str) != Some("function") {
+            continue;
+        }
+        let Some(from) = operation.get("from").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(to) = operation.get("to").and_then(Value::as_str) else {
+            continue;
+        };
+        let changed_offsets = changes
+            .iter()
+            .filter(|change| change.get("from").and_then(Value::as_str) == Some(from))
+            .filter_map(|change| {
+                change
+                    .get("span")
+                    .and_then(|span| span.get("start"))
+                    .and_then(|start| start.get("offset"))
+                    .and_then(Value::as_u64)
+                    .map(|offset| offset as usize)
+            })
+            .collect::<Vec<_>>();
+
+        for function in &program.functions {
+            let renamed = function.name == from;
+            let contains_changed_reference = changed_offsets
+                .iter()
+                .any(|offset| function.span.start <= *offset && *offset < function.span.end);
+            if !(renamed || contains_changed_reference) || function.capabilities.is_empty() {
+                continue;
+            }
+            let name = if renamed { to } else { &function.name };
+            let relation = if renamed {
+                "renamed_function"
+            } else {
+                "caller_of_renamed_function"
+            };
+            affected.insert(
+                name.to_owned(),
+                (relation.to_owned(), function.capabilities.clone()),
+            );
+        }
+    }
+
+    Value::Array(
+        affected
+            .into_iter()
+            .map(|(function, (relation, capabilities))| {
+                json!({
+                    "function": function,
+                    "relation": relation,
+                    "declared_capabilities": capabilities,
+                })
+            })
+            .collect(),
+    )
 }
 
 fn function_rename_spans(

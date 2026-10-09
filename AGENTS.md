@@ -88,17 +88,58 @@ Every new environment variable or project configuration switch must be added
 to `docs/env.md` and `docs/env.en.md` before commit, including its default,
 precedence, security classification, affected commands, and tests.
 
-After every completed and tested development step, review both
+After every completed and tested work package, review both
 `docs/ROADMAP.md` and `docs/ROADMAP.de.md`. Update affected statuses and text
 in the same change. The roadmap legend maps the existing machine-searchable
 markers to `✅` (complete and tested), `🧪` (partial or experimental), `🗺️`
 (planned), `◻️` (optional), and `⛔` (documented blocker or deliberate
 deferral). Keep the English and German roadmaps semantically synchronized.
 
+### Focused delivery and efficient verification
+
+- Define one bounded work package with a concrete user outcome and observable
+  acceptance criteria before implementation. Finish and make existing tested
+  work reviewable before opening another development topic.
+- Use a runnable end-to-end example to guide the module roadmap: an application
+  with multiple cooperating modules, configurable database access through a
+  dedicated database module, and an individual module exported as a standalone
+  Docker application. Treat this as an acceptance target until demonstrated.
+- Implement the missing functionality needed for the current acceptance
+  criteria. Record unrelated improvements and new ideas in the backlog instead
+  of expanding the active package. Resolve prerequisites and regressions that
+  prevent the agreed outcome within the package.
+- Bundle related implementation changes into coherent, reviewable subfeatures.
+  Run targeted positive and negative tests during development. At completion,
+  run the required full Rust checks and the documentation and Docker checks
+  applicable to the package. Do not repeat an unchanged successful suite unless
+  subsequent changes, failures, or unresolved evidence justify it. Record which
+  revision or working-tree state was tested; never reuse stale test evidence.
+- Preserve all safety and release gates. Faster delivery must not weaken
+  diagnostics, security checks, tests, or acceptance criteria. For instructions
+  or prose-only changes, use appropriate diff, consistency, and documentation
+  checks rather than rebuilding unaffected compiler or Docker artifacts.
+- Update the German and English documentation and roadmap together when the
+  package's behavior is settled, before committing the completed package.
+  Align affected website content at the milestone, using the established
+  publication process and accurately distinguishing released and unreleased
+  functionality. Avoid rewriting documentation after every intermediate edit.
+- For each completed package, report what now works, what was verified, and
+  what remains for the next release. State blockers and limitations explicitly.
+  Estimate remaining effort from identified gaps; do not invent speedup claims.
+
+Keep implementation files organized around cohesive responsibilities. When a
+file grows beyond roughly 8,000 lines, look for bounded feature or layer
+extractions that improve navigation and review. Do not split at arbitrary
+line counts; keep each resulting module self-contained and discoverable.
+
 ## Git workflow
 
 - Create a commit after each completed and tested subfeature.
 - Push after each verified milestone or at the latest before a longer pause.
+- Open a draft pull request for a feature branch when its first verified
+  milestone is pushed. Full CI runs on pull requests, pushes to `main`, release
+  tags, and manual dispatch; feature pushes alone do not duplicate the PR run.
+  Use manual dispatch when a branch needs CI before a pull request exists.
 - Create releases less frequently, only for stable public versions.
 - Avoid both oversized aggregate commits and commits for every trivial change.
 - Keep commits small, focused, and understandable; do not push unverified

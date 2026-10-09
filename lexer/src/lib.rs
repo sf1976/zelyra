@@ -2,6 +2,8 @@ use zelyra_ast::Span;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
+    Import,
+    Pub,
     Fn,
     Type,
     Struct,
@@ -41,6 +43,14 @@ pub enum TokenKind {
     Input,
     Output,
     Errors,
+    Version,
+    Deprecated,
+    RateLimit,
+    LoginRateLimit,
+    LoginBlockSeconds,
+    ResetTokens,
+    ResetRateLimit,
+    ResetBlockSeconds,
     Handler,
     Requires,
     Permits,
@@ -113,6 +123,7 @@ pub enum TokenKind {
     Dot,
     DotDot,
     Colon,
+    DoubleColon,
     Comma,
     LParen,
     RParen,
@@ -197,6 +208,8 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 html_pending = false;
             }
             let kind = match word {
+                "import" => TokenKind::Import,
+                "pub" => TokenKind::Pub,
                 "fn" => TokenKind::Fn,
                 "type" => TokenKind::Type,
                 "struct" => TokenKind::Struct,
@@ -217,6 +230,14 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 "input" => TokenKind::Input,
                 "output" => TokenKind::Output,
                 "errors" => TokenKind::Errors,
+                "version" => TokenKind::Version,
+                "deprecated" => TokenKind::Deprecated,
+                "rate_limit" => TokenKind::RateLimit,
+                "login_rate_limit" => TokenKind::LoginRateLimit,
+                "login_block_seconds" => TokenKind::LoginBlockSeconds,
+                "reset_tokens" => TokenKind::ResetTokens,
+                "reset_rate_limit" => TokenKind::ResetRateLimit,
+                "reset_block_seconds" => TokenKind::ResetBlockSeconds,
                 "handler" => TokenKind::Handler,
                 "requires" => TokenKind::Requires,
                 "permits" => TokenKind::Permits,
@@ -466,6 +487,7 @@ pub fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             ('&', Some('&')) => (TokenKind::AndAnd, 2),
             ('|', Some('|')) => (TokenKind::OrOr, 2),
             ('.', Some('.')) => (TokenKind::DotDot, 2),
+            (':', Some(':')) => (TokenKind::DoubleColon, 2),
             ('.', _) => (TokenKind::Dot, 1),
             ('+', _) => (TokenKind::Plus, 1),
             ('-', _) => (TokenKind::Minus, 1),
@@ -679,6 +701,18 @@ mod tests {
         assert!(tokens
             .iter()
             .any(|token| matches!(token.kind, TokenKind::Props)));
+    }
+
+    #[test]
+    fn lexes_module_import_visibility_and_qualified_paths() {
+        let tokens = lex("import \"src/math.zyl\" as math\npub fn add() {} math::add()").unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Import);
+        assert_eq!(tokens[1].kind, TokenKind::String("src/math.zyl".into()));
+        assert_eq!(tokens[5].kind, TokenKind::Pub);
+        assert_eq!(tokens[6].kind, TokenKind::Fn);
+        assert!(tokens
+            .iter()
+            .any(|token| token.kind == TokenKind::DoubleColon));
     }
 
     #[test]

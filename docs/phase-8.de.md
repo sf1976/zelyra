@@ -43,6 +43,23 @@ Loginversuche werden pro normalisierter E-Mail-Adresse gezählt. Nach fünf
 Fehlern innerhalb von 15 Minuten werden weitere Versuche 60 Sekunden lang mit
 HTTP 429 und dem Header `Retry-After: 60` abgelehnt.
 
+Der Grenzwert und das Zeitfenster lassen sich pro Authentifizierungsdefinition
+konfigurieren:
+
+~~~zelyra
+auth users {
+    table: users
+    login_rate_limit: 5 per 900
+    login_block_seconds: 60
+}
+~~~
+
+Ohne diese Optionen gelten die gezeigten Defaults. Zulässig sind 1 bis 1000
+Fehler je Zeitfenster und 1 bis 86400 Sekunden für Zeitfenster und Sperre. Der
+Limiter arbeitet im Prozessspeicher und wird beim Neustart zurückgesetzt; er
+ist kein verteilter Produktions-Limiter. Höchstens 4096 Schlüssel werden
+gehalten; ab voller Tabelle werden neue Schlüssel fail-closed abgelehnt.
+
 Ein erfolgreicher Login erzeugt ein HttpOnly-SameSite-Session-Cookie und rotiert
 ein vorhandenes Session-Token dieses Browsers. Wenn die
 optionale Session-Tabelle konfiguriert ist, wird nur ein Blake2s-256-Hash des

@@ -1,0 +1,17 @@
+pub component ModuleBanner {
+    props {
+        title: String
+    }
+    html {
+        <header><strong>{title}</strong></header>
+    }
+}
+
+pub view AppShell {
+    html {
+        <html lang="en">
+            <head><meta charset="utf-8" /><title>Modular Zelyra</title></head>
+            <body><ModuleBanner title="Imported UI module" /><main><slot /></main></body>
+        </html>
+    }
+}

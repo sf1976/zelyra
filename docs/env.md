@@ -74,7 +74,7 @@ Nachholbefehl für bestehende MariaDB-Projekte verfügbar.
 
 Die erzeugte `.env` aktiviert nur die für Compose und lokale
 Datenbankbefehle notwendigen Werte. Der gewählte MariaDB-Host-Port bleibt
-aktiv, damit `DATABASE_URL` und Compose denselben Port verwenden.
+aktiv, damit `ZELYRA_DATABASE_MAIN_URL` und Compose denselben Port verwenden.
 Web-Portüberschreibungen, Feature-Schalter,
 Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
 `.env.example` enthält dieselbe Struktur, aber die Platzhalter
@@ -85,7 +85,8 @@ Auth- und sonstige Optionen stehen ausführlich auskommentiert in der Datei.
 | `ZELYRA_WEB_PORT` | `3000` | Port des internen Webservers im Container |
 | `ZELYRA_HOST_PORT` | `3000` | lokal veröffentlichter Webport |
 | `ZELYRA_DB_HOST_PORT` | `3306` | lokal veröffentlichter MariaDB-Port |
-| `DATABASE_URL` | projektabhängig | Datenbankverbindung für CLI/RUNTIME; Secret enthalten möglich |
+| `ZELYRA_DATABASE_MAIN_URL` | projektabhängig | bevorzugte Datenbankverbindung der Deklaration `database main`; Secret enthalten möglich |
+| `DATABASE_URL` | projektabhängig | rückwärtskompatibler Fallback für die Datenbankverbindung; Secret enthalten möglich |
 | `MARIADB_DATABASE` | `zelyra_app` | Compose: Datenbankname |
 | `MARIADB_USER` | `zelyra` | Compose: Anwendungsbenutzer |
 | `MARIADB_PASSWORD` | zufällig durch `zelyra new`/`init` oder `setup` | Compose: Passwort des Anwendungsbenutzers |
@@ -151,6 +152,48 @@ aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
 
+## Passwortwiederherstellung im 0.4-Entwicklungszweig
+
+Eine Auth-Deklaration kann `reset_tokens: password_resets` konfigurieren.
+Die Reset-Tabelle braucht `user_id`, einen eindeutigen `token_hash`,
+`expires_at`, `consumed_at` und einen Fremdschlüssel auf `users.id`; außerdem
+muss eine Auth-Audit-Tabelle konfiguriert sein. Das Feature läuft derzeit nur
+mit MariaDB. Reset-Limits sind pro Prozess und TCP-Peer-IP begrenzt; sie werden
+beim Neustart zurückgesetzt.
+
+| Variable | Standard | Verwendung und Sicherheitsklasse |
+|---|---:|---|
+| `ZELYRA_PUBLIC_BASE_URL` | keiner | Öffentliche HTTPS-Origin für E-Mail-Links; HTTP ist nur für Loopback erlaubt. Kein Secret. |
+| `ZELYRA_SMTP_HOST` | keiner | SMTP-Relay-Hostname; erforderlich, wenn `reset_tokens` aktiv ist. |
+| `ZELYRA_SMTP_PORT` | `465` / `587` / `25` | Port für `implicit_tls` / `starttls` / `local_plaintext`; der letzte Modus ist nur ungeschützt auf Loopback ohne Anmeldung erlaubt. |
+| `ZELYRA_SMTP_SECURITY` | `implicit_tls` | `implicit_tls`, `starttls` oder `local_plaintext`; TLS-Fehler führen nicht zu einem unverschlüsselten Fallback. |
+| `ZELYRA_SMTP_FROM` | keiner | Absenderadresse für Reset-E-Mails. |
+| `ZELYRA_SMTP_USERNAME` | keiner | Optionaler SMTP-Benutzer; muss zusammen mit dem Passwort gesetzt werden. Secret. |
+| `ZELYRA_SMTP_PASSWORD` | keiner | SMTP-Passwort. Secret; nie ausgeben oder committen. |
+
+Für `zelyra serve` gilt Prozessumgebung vor Projekt-`.env`. Ohne vollständige
+SMTP-Konfiguration startet `serve` nicht, wenn die Auth-Deklaration
+`reset_tokens` enthält. `ZELYRA_PUBLIC_BASE_URL` muss eine HTTPS-Origin oder
+eine Loopback-HTTP-Origin ohne Pfad, Query oder Fragment sein. Reset-Links
+enthalten 256 Bit Zufall, werden nach 15 Minuten ungültig und nach Austausch
+aus der URL in ein HttpOnly-Cookie übernommen. In der Datenbank wird nur der
+Token-Hash abgelegt. Eine erfolgreiche Änderung verbraucht den Token und
+widerruft persistente und prozesslokale Sitzungen des Kontos.
+
+Die Zustellung läuft über einen einzelnen Hintergrund-Worker mit maximal 64
+wartenden E-Mails. Der HTTP-Request wartet nicht auf SMTP-Antworten; ein
+übervoller oder beendeter Worker nimmt keine weitere E-Mail an und entfernt
+den nicht zugestellten Reset-Token wieder. SMTP-Ausfälle nach erfolgreicher
+Einreihung werden geheimnisfrei protokolliert; Zustellwiederholung ist nicht
+implementiert. Das E2E verzögert die SMTP-Antwort absichtlich und prüft, dass
+die generische HTTP-Antwort trotzdem vor der Zustellung zurückkommt.
+
+Diese Funktion ist experimentell. SMTP-Verfügbarkeit, öffentliche TLS-
+Terminierung, dauerhafte Ratenbegrenzung über Neustarts und unabhängige
+Sicherheitsprüfung bleiben Betriebs- beziehungsweise Release-Gates. Der
+Ende-zu-Ende-Test `tests/password-reset-e2e.sh` verwendet eine lokale
+Loopback-SMTP-Senke und MariaDB; er sendet keine externe E-Mail.
+
 ## Host-Allowlist des Webservers
 
 | Variable | Werte | Standard in neuer MariaDB-`.env` / Fallback | Vorrang | Sicherheitsklasse und Wirkung | Betroffene Befehle und Tests |
@@ -168,6 +211,19 @@ erreichbar sein soll, diesen Host ausdrücklich konfigurieren. Der Proxy muss
 den öffentlichen `Host` erhalten, `X-Forwarded-Proto` überschreiben und den
 direkten Zugriff auf den App-Port verhindern. Die Einstellung erweitert nur
 die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
+
+Jede angenommene HTTP-Verbindung hat im 0.4-Entwicklungszweig eine feste
+30-Sekunden-Frist für das vollständige Lesen der Anfrage und das Schreiben der
+Antwort. Ein Timeout schließt die Verbindung; es gibt keinen konfigurierbaren
+Retry. Während der Anfrageverarbeitung verwenden MariaDB-Poolabruf und jedes
+Statement den kleineren Wert aus konfigurierter Frist und verbleibender
+Request-Frist. MariaDB bricht ein Statement bei Fristablauf ab;
+transaktionale Abfragen werden zurückgerollt und die Verbindung nach einem
+Fehler verworfen. Danach läuft der synchrone Handler regulär aus. CPU-lastiger
+oder anderer blockierender Anwendungscode wird nicht unterbrochen; eine
+verspätete Antwort wird verworfen und der Handler kann bis zu seiner Rückkehr
+einen Worker belegen. Externe TLS-Proxys sollten zusätzlich eigene Fristen und
+Verbindungsgrenzen setzen.
 
 ## Nur für den Integrationstest
 
@@ -269,11 +325,76 @@ Danach:
 docker compose --env-file .env -f docker-compose.mariadb.yml up -d --build
 ```
 
-`DATABASE_URL` wird vom normalen `run`, `serve` und den `db`-/`auth`-/`audit`-
-Befehlen aus der Prozessumgebung gelesen. Die CLI lädt `.env` dafür nicht
-allgemein automatisch; entweder Compose injiziert die Variable oder sie wird
-vor dem Aufruf exportiert. `zelyra doctor --env-file <datei>` liest für seine
-read-only Prüfung gezielt `DATABASE_URL` aus der angegebenen Datei.
+Im unveröffentlichten 0.4-Entwicklungszweig verwendet eine Deklaration
+`database <name> { ... }` bevorzugt `ZELYRA_DATABASE_<NAME>_URL`; der Name wird
+für die Variable in Großbuchstaben umgewandelt und Nicht-Buchstaben/Ziffern
+werden zu `_`. Für `database main` lautet der Schlüssel also
+`ZELYRA_DATABASE_MAIN_URL`. Ist dieser Schlüssel nicht gesetzt, bleibt
+`DATABASE_URL` der rückwärtskompatible Fallback. Wenn beide gesetzt sind, hat
+der namensgebundene Schlüssel Vorrang. Eine gesetzte, leere Variable zählt als
+gesetzt und löst keinen Fallback aus.
+
+Normale `run`-, `serve`-, `db`-, `auth`- und `audit`-Befehle lesen diese Werte
+aus der Prozessumgebung. Die CLI lädt `.env` dafür nicht allgemein
+automatisch; Compose injiziert die Werte oder sie werden vor dem Aufruf
+exportiert. `zelyra doctor --env-file <datei>` sucht in dieser Reihenfolge in
+der angegebenen Datei: namensgebundener Schlüssel, dann `DATABASE_URL`.
+Zelyra-Server müssen mit den aktualisierten Prozesswerten neu gestartet
+werden. Die stabile Version 0.3.0 kennt die namensgebundenen Variablen noch
+nicht.
+
+## MariaDB-Zeitlimits, Connection-Pool und TLS im 0.4-Entwicklungszweig
+
+Diese Einstellungen sind im unveröffentlichten 0.4-Entwicklungszweig vorhanden;
+das stabile 0.3.0-Binary unterstützt sie nicht. Sie werden ausschließlich aus
+der Prozessumgebung gelesen. Zelyra lädt dafür keine `.env`-Datei und kennt
+keinen entsprechenden `zelyra.toml`-Schalter. Ein Docker-Compose-Dienst kann
+die Werte aus der Compose-`.env` übernehmen; bei einem laufenden Server ist ein
+Neustart nötig, damit er neue Prozesswerte erhält.
+
+| Variable | Standard | Zulässig | Vorrang / Quelle | Secret | Betroffene Pfade und Tests |
+|---|---:|---:|---|---|---|
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Verbindungsaufbau bei Datenbank- und Runtime-Aufrufen; Grenzen in `database/src/lib.rs` |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Runtime-Statements und Leseabfragen; nicht `db apply`/DDL; Unit- und MariaDB-Matrixtest |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale Poolgröße pro Zelyra-Prozess; Unit- und MariaDB-Pooltest |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie Poolverbindung; Unit- und MariaDB-Pooltest |
+| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled` oder `required` | Prozessumgebung; sonst `auto` | nein, aber sicherheitskritisch | TLS-Richtlinie für Runtime-Pool und MariaDB-CLI; Neustart zum Wechseln |
+| `ZELYRA_DB_TLS_CA_CERT_FILE` | nicht gesetzt | absoluter Pfad zu lesbarer PEM-/DER-CA-Datei | Prozessumgebung; optional; mit `disabled` unzulässig | nein; Zertifikat ist öffentlich, Vertrauensanker aber sicherheitskritisch | Zusätzliche vertrauenswürdige CA für Runtime-Pool und MariaDB-CLI |
+
+Ungültige Werte führen zu einer geheimnisfreien Konfigurationsdiagnose; der
+übergebene Wert wird nicht ausgegeben. Im Modus `auto` verlangt Zelyra für
+nicht lokale Hosts TLS und prüft Zertifikatskette sowie Hostnamen; `localhost`,
+Namen unter `.localhost` und Loopback-IP-Adressen bleiben für lokale Entwicklung
+ohne TLS. `required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
+schaltet TLS ausdrücklich ab und ist nur für isolierte lokale Netze gedacht;
+bei TLS-Fehlern gibt es keinen unsicheren Rückfall. Ohne eigene CA verwendet der
+Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine optionale
+CA-Datei muss als absoluter, im Prozess lesbarer PEM-/DER-Pfad angegeben sein.
+Für Schema-Inspektion und DDL erhält der MariaDB-Client dieselben TLS-Vorgaben
+mit `--ssl` und `--ssl-verify-server-cert` sowie optional `--ssl-ca`.
+In Docker muss eine private CA in den Container eingebunden und dort unter dem
+konfigurierten Pfad lesbar sein.
+Die vollständige MariaDB-Projektvorlage setzt `disabled` für ihr eigens
+erzeugtes, internes Compose-Netz explizit. Ein exportiertes Docker-Modul
+verbindet sich dagegen mit einer externen Datenbank und startet deshalb mit
+`auto`; nur ein bewusst isolierter lokaler Datenbankverbund sollte in dessen
+`.env` auf `disabled` umgestellt werden.
+
+Der MariaDB-Client erhält außerdem `--skip-reconnect`, damit ein
+Verbindungsverlust nicht unbemerkt zu einem Wiederverbinden oder automatischen
+Wiederholen führt. Der Runtime-SQL-Pfad verwendet im 0.4-Entwicklungszweig einen
+prozessweiten, begrenzten Pool. Beim Checkout wird die Verbindung geprüft; nach
+Statementfehlern wird sie verworfen, und innerhalb einer Transaktion wird ein
+Rollback versucht. Es gibt keine automatischen Retries. Ein Prozess kann nur
+eine Datenbank-URL und eine Poolkonfiguration verwenden; Änderungen erfordern
+einen Neustart. Der Pool gilt nicht für Schema-Inspektion oder DDL, die weiterhin
+den MariaDB-Clientprozess verwenden. Das Statement-Limit wird serverseitig
+durchgesetzt und begrenzt weder die Übertragung großer Ergebnismengen noch den
+gesamten Antwort-/Prozesslebenszyklus. DDL bleibt vom Statement-Limit
+ausgenommen, da ein Abbruch einen Teilzustand hinterlassen kann. Der positive
+TLS-Handshake und die Ablehnung einer nicht vertrauenswürdigen CA werden in der
+MariaDB-Kompatibilitätsmatrix automatisiert geprüft; Windows-TLS ist noch nicht
+separat geprüft.
 
 ## Laufzeit und Authentifizierung
 
@@ -292,6 +413,7 @@ gehören nicht in Zelyra-Quellcode, JSON-Diagnosen, Kontextausgaben oder Logs.
 | Variable | Status | Verwendung |
 |---|---|---|
 | `ZELYRA_INSTALL_ROOT` | implementiert | benutzerbezogenes Ziel der Installationsskripte |
+| `ZELYRA_DB_TIMEOUT_TEST_URL` | CI-/Testvariable | MariaDB-URL für Timeout- und Pool-Integrationstests; ausschließlich lokale/isolierte Testdatenbank |
 | `ZELYRA_MARIADB_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Passwort für lokale MariaDB-Testläufe |
 | `ZELYRA_MARIADB_PASSWORD` | Test-/Entwicklungswerkzeug | Benutzerpasswort für lokale MariaDB-Testläufe |
 | `ZELYRA_GENERATED_E2E_ROOT_PASSWORD` | Test-/Entwicklungswerkzeug | Root-Passwort des generierten Docker-E2E-Tests |
@@ -360,6 +482,16 @@ allow_credentials = false
 Diese Bereiche sind keine bequeme Umgehung von Sicherheit: Capabilities,
 Allowlisten, SQL-Prüfungen, CSRF und destruktive Datenbankfreigaben bleiben
 explizit und werden nicht durch `.env` abgeschaltet.
+
+Funktions-SQL kann die engeren Deklarationen `uses Database(read)` für
+`SELECT` und `uses Database(write)` für `INSERT`, `UPDATE` oder `DELETE`
+verwenden. Unter `[capabilities]` werden sie mit `database_read = true` und
+`database_write = true` freigegeben. `uses Database` und `database = true`
+bleiben als rückwärtskompatible breite Freigaben verfügbar. SQL-Anweisungen,
+die der Prüfer nicht einordnen kann, benötigen die breite Capability; diese
+Quellfreigaben erstellen oder beschränken keine MariaDB-Benutzer.
+Framework-CRUD, Formulare, Authentifizierung und Page-Daten benötigen weiterhin
+die breite Datenbankfreigabe.
 
 `console = false` ist die standardmäßige Projektfreigabe für interaktive
 Terminaleingabe. Programme, die `read_console(prompt)` verwenden, müssen

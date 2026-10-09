@@ -112,8 +112,10 @@ For usage details see the [web and database quickstart](getting-started.md),
 - ✅ `zelyra setup` supports console actions and a loopback-only browser
   assistant, starts generated local MariaDB/web stacks, applies the initial
   schema, handles selectable ports, and reports the application URL.
-- ✅ `zelyra doctor` provides read-only project/database/Compose readiness
-  checks for its documented scope. `zelyra update` checks release checksums
+- ✅ `zelyra doctor --json` provides read-only readiness checks with stable
+  configuration, project, connectivity, authentication, timeout, schema, and tooling
+  categories; database diagnostics are normalized without credentials.
+  `zelyra update` checks release checksums
   before replacing supported Linux/Windows x86_64 binaries.
 - ✅ User-local installation is available from source. Published Linux and
   Windows x86_64 release archives include SHA-256 checksums; repeat builds

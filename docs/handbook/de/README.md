@@ -469,7 +469,8 @@ Die wichtigsten Befehle:
 | `zelyra db bootstrap app.zyl` | MariaDB- oder SQLite-Schema anlegen |
 | `zelyra db inspect app.zyl` | Ist-Schema lesen |
 | `zelyra db plan app.zyl` | Schemaänderungen anzeigen |
-| `zelyra db apply app.zyl` | geprüften Plan anwenden |
+| `zelyra db apply app.zyl [--plan-id <sha256:...>]` | geprüften Plan anwenden; Plan-ID schützt vor zwischenzeitlichem Schema-Drift |
+| `zelyra db history app.zyl [--format=json]` | MariaDB-Migrationsfortschritt und Unterbrechungen prüfen |
 | `zelyra audit inspect app.zyl` | letzte Audit-Ereignisse anzeigen |
 | `zelyra audit export app.zyl --format json` | Audit-Ereignisse als JSON exportieren |
 | `zelyra audit verify app.zyl` | Audit-Pflichtfelder und optionale Hashkette prüfen |
@@ -611,16 +612,18 @@ Bestehendes Schema inspizieren:
 zelyra db inspect examples/machine_management_mariadb.zyl
 ~~~
 
-Änderungen zunächst nur planen:
+Änderungen zunächst als JSON planen und die ausgegebene `plan_id` prüfen. Mit
+`jq` lässt sie sich für den anschließenden Aufruf übernehmen:
 
 ~~~bash
-zelyra db plan examples/machine_management_mariadb.zyl
+plan_id=$(zelyra db plan examples/machine_management_mariadb.zyl --format=json | jq -r .plan_id)
 ~~~
 
-Danach anwenden:
+Die ID beim Anwenden mitgeben. Weicht der aktuelle Plan ab, bricht Zelyra vor
+jeglichem SQL ab:
 
 ~~~bash
-zelyra db apply examples/machine_management_mariadb.zyl
+zelyra db apply examples/machine_management_mariadb.zyl --plan-id "$plan_id"
 ~~~
 
 Änderungen mit `REVIEW` oder `DESTRUCTIVE` werden ohne ausdrückliche Freigabe

@@ -29,6 +29,185 @@ enum SqlToken {
     Operator,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SqlAccessMode {
+    Read,
+    Write,
+    ReadWrite,
+    Unknown,
+}
+
+impl SqlAccessMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+            Self::ReadWrite => "read_write",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SqlTableAccess {
+    pub table: String,
+    pub mode: SqlAccessMode,
+}
+
+/// Reports conservative table access modes for the SQL statement forms
+/// accepted by the current checker. Complex joined UPDATE/DELETE statements
+/// are marked unknown because their write targets are dialect-sensitive.
+pub fn analyze_table_access(
+    query: &str,
+    known_tables: &[String],
+) -> (Option<&'static str>, Vec<SqlTableAccess>) {
+    let tokens = tokenize(query);
+    let Some(SqlToken::Word(command)) = tokens.first() else {
+        return (None, Vec::new());
+    };
+    let command = command.to_ascii_uppercase();
+    if !matches!(command.as_str(), "SELECT" | "INSERT" | "UPDATE" | "DELETE") {
+        return (None, Vec::new());
+    }
+
+    let known = known_tables
+        .iter()
+        .map(|name| (name.to_ascii_lowercase(), name.as_str()))
+        .collect::<HashMap<_, _>>();
+    let mut modes = HashMap::<String, SqlAccessMode>::new();
+    let has_join = tokens
+        .iter()
+        .any(|token| matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("JOIN")));
+    let add_at = |index: usize, mode: SqlAccessMode, modes: &mut HashMap<String, SqlAccessMode>| {
+        let Some(SqlToken::Word(name)) = tokens.get(index + 1) else {
+            return;
+        };
+        let normalized = name.to_ascii_lowercase();
+        let Some(canonical) = known.get(&normalized) else {
+            return;
+        };
+        modes
+            .entry((*canonical).to_owned())
+            .and_modify(|existing| *existing = merge_access(*existing, mode))
+            .or_insert(mode);
+    };
+
+    match command.as_str() {
+        "SELECT" => {
+            for (index, token) in tokens
+                .iter()
+                .enumerate()
+                .take(tokens.len().saturating_sub(1))
+            {
+                if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
+                {
+                    add_at(index, SqlAccessMode::Read, &mut modes);
+                }
+            }
+        }
+        "INSERT" => {
+            for (index, token) in tokens
+                .iter()
+                .enumerate()
+                .take(tokens.len().saturating_sub(1))
+            {
+                if let SqlToken::Word(word) = token {
+                    if word.eq_ignore_ascii_case("INTO") {
+                        add_at(index, SqlAccessMode::Write, &mut modes);
+                    } else if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN")
+                    {
+                        add_at(index, SqlAccessMode::Read, &mut modes);
+                    }
+                }
+            }
+        }
+        "UPDATE" => {
+            add_at(
+                0,
+                if has_join {
+                    SqlAccessMode::Unknown
+                } else {
+                    SqlAccessMode::Write
+                },
+                &mut modes,
+            );
+            for (index, token) in tokens
+                .iter()
+                .enumerate()
+                .take(tokens.len().saturating_sub(1))
+                .skip(1)
+            {
+                if matches!(token, SqlToken::Word(word) if word.eq_ignore_ascii_case("FROM") || word.eq_ignore_ascii_case("JOIN"))
+                {
+                    add_at(
+                        index,
+                        if has_join {
+                            SqlAccessMode::Unknown
+                        } else {
+                            SqlAccessMode::Read
+                        },
+                        &mut modes,
+                    );
+                }
+            }
+        }
+        "DELETE" => {
+            let mut first_from = true;
+            for (index, token) in tokens
+                .iter()
+                .enumerate()
+                .take(tokens.len().saturating_sub(1))
+                .skip(1)
+            {
+                let SqlToken::Word(word) = token else {
+                    continue;
+                };
+                if word.eq_ignore_ascii_case("FROM") {
+                    let mode = if has_join {
+                        SqlAccessMode::Unknown
+                    } else if first_from {
+                        SqlAccessMode::Write
+                    } else {
+                        SqlAccessMode::Read
+                    };
+                    add_at(index, mode, &mut modes);
+                    first_from = false;
+                } else if word.eq_ignore_ascii_case("JOIN") {
+                    add_at(index, SqlAccessMode::Unknown, &mut modes);
+                }
+            }
+        }
+        _ => unreachable!("SQL command was checked above"),
+    }
+
+    let mut accesses = modes
+        .into_iter()
+        .map(|(table, mode)| SqlTableAccess { table, mode })
+        .collect::<Vec<_>>();
+    accesses.sort_by(|left, right| left.table.cmp(&right.table));
+    (
+        Some(match command.as_str() {
+            "SELECT" => "SELECT",
+            "INSERT" => "INSERT",
+            "UPDATE" => "UPDATE",
+            "DELETE" => "DELETE",
+            _ => unreachable!(),
+        }),
+        accesses,
+    )
+}
+
+fn merge_access(existing: SqlAccessMode, incoming: SqlAccessMode) -> SqlAccessMode {
+    match (existing, incoming) {
+        (SqlAccessMode::Unknown, _) | (_, SqlAccessMode::Unknown) => SqlAccessMode::Unknown,
+        (SqlAccessMode::Read, SqlAccessMode::Write)
+        | (SqlAccessMode::Write, SqlAccessMode::Read)
+        | (SqlAccessMode::ReadWrite, _)
+        | (_, SqlAccessMode::ReadWrite) => SqlAccessMode::ReadWrite,
+        (mode, _) => mode,
+    }
+}
+
 pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(), Vec<SqlError>> {
     let mut errors = Vec::new();
     for function in &program.functions {
@@ -1042,6 +1221,94 @@ mod tests {
         .unwrap())
         .unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn analyzes_sql_table_reads_and_writes_conservatively() {
+        let tables = ["customers", "orders", "audit_events"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let (operation, accesses) = analyze_table_access(
+            "-- UPDATE orders SET status = 'x'\nSELECT id FROM customers WHERE email = 'UPDATE orders'",
+            &tables,
+        );
+        assert_eq!(operation, Some("SELECT"));
+        assert_eq!(
+            accesses,
+            vec![SqlTableAccess {
+                table: "customers".into(),
+                mode: SqlAccessMode::Read
+            }]
+        );
+
+        let (operation, accesses) = analyze_table_access(
+            "INSERT INTO audit_events (id) SELECT id FROM customers",
+            &tables,
+        );
+        assert_eq!(operation, Some("INSERT"));
+        assert_eq!(
+            accesses,
+            vec![
+                SqlTableAccess {
+                    table: "audit_events".into(),
+                    mode: SqlAccessMode::Write
+                },
+                SqlTableAccess {
+                    table: "customers".into(),
+                    mode: SqlAccessMode::Read
+                }
+            ]
+        );
+
+        let (operation, accesses) = analyze_table_access(
+            "UPDATE customers SET email = 'x' WHERE id IN (SELECT id FROM orders)",
+            &tables,
+        );
+        assert_eq!(operation, Some("UPDATE"));
+        assert_eq!(accesses[0].mode, SqlAccessMode::Write);
+        assert_eq!(accesses[1].mode, SqlAccessMode::Read);
+
+        let (operation, accesses) = analyze_table_access(
+            "DELETE FROM customers WHERE id IN (SELECT id FROM orders)",
+            &tables,
+        );
+        assert_eq!(operation, Some("DELETE"));
+        assert_eq!(
+            accesses,
+            vec![
+                SqlTableAccess {
+                    table: "customers".into(),
+                    mode: SqlAccessMode::Write
+                },
+                SqlTableAccess {
+                    table: "orders".into(),
+                    mode: SqlAccessMode::Read
+                }
+            ]
+        );
+
+        let (_, accesses) = analyze_table_access(
+            "UPDATE customers SET email = (SELECT email FROM customers)",
+            &tables,
+        );
+        assert_eq!(accesses[0].mode, SqlAccessMode::ReadWrite);
+
+        let (_, accesses) = analyze_table_access(
+            "UPDATE customers JOIN orders ON customers.id = orders.id SET customers.email = 'x'",
+            &tables,
+        );
+        assert!(accesses
+            .iter()
+            .all(|access| access.mode == SqlAccessMode::Unknown));
+
+        let (_, accesses) = analyze_table_access(
+            "DELETE customers FROM customers JOIN orders ON customers.id = orders.id",
+            &tables,
+        );
+        assert!(accesses
+            .iter()
+            .all(|access| access.mode == SqlAccessMode::Unknown));
     }
 
     #[test]

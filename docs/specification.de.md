@@ -173,6 +173,14 @@ erzeugen generische HTTP-Grenzen, ohne Datenbankdetails preiszugeben.
 Collection-Schleifen für Arrays von Records sind verfügbar. Option-aware
 Feld-Ausdrücke und reichere lokale View-Daten bleiben geplant.
 
+Funktions-SQL kann für klassifizierte `SELECT`-Anweisungen `uses
+Database(read)` oder für klassifizierte `INSERT`-, `UPDATE`- und `DELETE`-
+Anweisungen `uses Database(write)` deklarieren. Nicht klassifizierbare
+Anweisungen benötigen `uses Database`. Die breite Form bleibt mit bestehenden
+Programmen kompatibel. Projekte können die engeren Effekte über
+`database_read` und `database_write` in `zelyra.toml` einzeln freigeben. Diese
+Freigaben ändern keine MariaDB-Kontorechte.
+
 ### Wiederverwendbare View-Layouts
 
 Benannte Views sind deterministische Seitenlayouts. Jeder View muss genau einen
@@ -308,6 +316,98 @@ gegen die Deklaration geprüft. Beispiele sind
 `/customers?filter_name__contains=Acme` und
 `/customers?filter_quantity__gte=10`. Nicht unterstützte Operatoren und nicht
 deklarierte Felder erzeugen eine kontrollierte HTTP-400-Antwort.
+
+## Experimentelle Modul-Imports in Projekten
+
+Der aktuelle Entwicklungszweig enthält einen experimentellen ersten Schritt
+für Datei-Imports. Er ist nicht Teil des veröffentlichten 0.3.0-Releases und
+noch keine stabile Zusage zur Sprachkompatibilität.
+
+Importpfade sind relativ zum Verzeichnis der ausdrücklich gewählten
+Einstiegsquelldatei. Ein Alias ist Pflicht; Imports müssen vor allen
+Deklarationen stehen:
+
+~~~zelyra
+import "src/math.zyl" as math
+
+pub fn add(left: Int, right: Int) -> Int {
+    return left + right
+}
+
+fn main() {
+    print(math::add(2, 3))
+}
+~~~
+
+Eine importierte Quelldatei darf derzeit Funktionen, Typ-Aliase, Records,
+Tabellen, benannte Views, typisierte Komponenten und eine projektweite
+Datenbankverbindungsdefinition enthalten. Die
+Datenbankkonfiguration wird in die Anwendung übernommen und nicht über den
+Importalias angesprochen; im gesamten Projektgraphen ist höchstens eine
+Datenbank zulässig. Tabellen aus importierten Dateien werden in das gemeinsame
+physische Schema der Anwendung aufgenommen. Tabellennamen sind globale
+SQL-Bezeichner statt modulqualifizierter Namen; doppelte Tabellennamen werden
+abgelehnt. Importierte Views und Komponenten werden unter ihren deklarierten,
+nicht qualifizierten Namen in die Anwendung aufgenommen. Sie sind wie andere
+Modulressourcen standardmäßig privat und werden mit `pub view` beziehungsweise
+`pub component` exportiert. Modulübergreifende Page- und CRUD-Layout-Verweise
+sowie erkannte Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML
+benötigen außerdem einen direkten oder transitiven Importpfad zum Besitzer.
+Private UI-Verweise melden `E-MOD-007`, fehlende Importkanten `E-MOD-020`.
+Komponenten-Tags werden aktuell durch Abgleich bekannter Namen im HTML-Text
+erkannt; das ist keine vollständige HTML- oder Namespace-Analyse. Doppelte
+View- und Komponentennamen werden abgelehnt.
+Importierte Pages, Formulare, CRUD-, API- und Authentifizierungsdefinitionen
+werden im aktuellen Entwicklungszweig unterstützt; die veröffentlichte
+Version 0.3.0 enthält das Modulmodell nicht.
+Funktions-, Typ- und Record-Deklarationen sind standardmäßig privat;
+Deklarationen überschreiten eine Modulgrenze nur mit `pub` und einem
+ausdrücklichen Importalias, zum Beispiel als `pub fn`, `pub type`,
+`pub struct`, `pub view` oder `pub component`. Ein qualifizierter Typ wie
+`money::Amount` wird über den Import `money` der aktuellen Datei aufgelöst.
+Private Hilfsfunktionen und Typen bleiben innerhalb ihrer Datei verfügbar.
+Öffentliche Signaturen dürfen keine privaten Typen offenlegen. Der Compiler
+lehnt fehlende Dateien, doppelte Aliasse, Importzyklen, Pfad-Traversal,
+Symlinks außerhalb des Projektstamms sowie Aufrufe und Typreferenzen auf
+private oder unbekannte Deklarationen ab. Beim Laden der Module findet kein
+Netzwerkzugriff statt.
+
+Zum Beispiel kann `src/money.zyl` einen Record exportieren, den
+`src/invoice.zyl` in einer Funktionssignatur verwendet:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
+
+`check`, `build`, `run`, `serve`, `context` und `verify` prüfen derzeit diesen
+Projektgraphen. Das maschinenlesbare Kontextdokument enthält jedes erreichbare
+Modul und seine sortierten Importkanten. Importierte Datenbankdefinitionen und
+Tabellen werden in das gemeinsame Projektschema übernommen; ihre
+Kontextspannen nennen unter `span.file` den projektrelativen Quelldateipfad.
+Das Kontextinventar enthält außerdem importierte Views und Komponenten mit
+ihren Quellspannen. `serve` verknüpft importierte Views/Komponenten mit den
+Seiten und startet die zusammengesetzte Anwendung. Bei einigen
+Template-Diagnosen fehlt noch eine vollständige Zuordnung zum jeweiligen
+Modul. `verify` prüft verknüpfte Funktionen, bewahrt in
+Verifikationsergebnissen aber noch keine Quellzuordnung pro Modul. Seiten,
+APIs und andere routengebundene Anwendungsressourcen bleiben in importierten
+Dateien unzulässig. `fmt`,
+`edit` und Datenbankbefehle arbeiten weiterhin nur mit der angegebenen
+Quelldatei. `impact` wertet den verknüpften Modulgraphen aus und weist seine
+Spannen der jeweiligen Quelldatei zu. Diese Grenzen machen die
+Implementierung experimentell und noch nicht zu einem vollständigen
+Mehrdatei-Projektmodell. Die vollständigen Anforderungen stehen im
+[Releaseplan 0.4.0](release-plans/0.4.0.de.md).
 
 Wenn eine Page-Collection Suche, Filter, Sortierung oder Pagination
 deklariert, erzeugt Zelyra automatisch vor dem Seiteninhalt ein semantisches

@@ -26,6 +26,62 @@ den tatsächlich implementierten Stand.
 
 ## Aktuelle Meilensteine
 
+- [~] Der 0.4-Entwicklungszweig ergänzt Anzeige und Sperrung dauerhafter
+  Sitzungen mit Verwaltungsrecht, CSRF-Prüfung und Audit-Anfrageereignis.
+  Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
+  dauerhafte und flüchtige Sitzungen mit CSRF- und Same-Origin-Prüfung anzeigen
+  und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten
+  bleiben offen. Passwortwiederherstellung ist im 0.4-Entwicklungszweig
+  teilweise umgesetzt:
+  MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
+  Loopback-/HTTPS-SMTP-Konfiguration, begrenzte asynchrone Zustellung und
+  Sitzungswiderruf sind vorhanden und werden durch ein MariaDB-/SMTP-Senken-E2E
+  mit verzögerter Zustellung geprüft. Der E2E-Test sendet außerdem zwei
+  gleichzeitige Einlösungen desselben Tokens und prüft genau einen Erfolg,
+  eine Ablehnung und die Authentifizierung mit nur dem siegreichen Passwort.
+  Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines Prozesses
+  serialisiert. MariaDB-Advisory-Locks koordinieren Ausstellung und Zustellung
+  auch über mehrere Instanzen; ein Zwei-Instanzen-E2E verzögert das erste
+  SMTP-Relay, während die zweite Instanz das Token ersetzt, und prüft, dass
+  die spätere E-Mail zum gespeicherten Token gehört. Veraltete Tokens in der
+  Mailqueue werden übersprungen. Das MariaDB-E2E lehnt ein Token mit
+  `expires_at = NOW()` ab und friert die Datenbankzeit ein, um das produktive
+  Token-Prädikat vor, exakt bei und nach Ablauf zu prüfen. Gleichheit wird
+  abgelehnt. Prozesslokale Reset-Limits, dauerhafte SMTP-Zustellwiederherstellung
+  und unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
+  nicht abgeschlossen.
+  Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
+  Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
+
+- [~] Die [Docker-Modulabnahme](module-docker-acceptance.de.md) prüft die
+  Gesamtanwendung, getrennte Rechnungs-/Inventarexporte, fehlende `.env`,
+  ausgeschlossene Routen und verweigerte MariaDB-Zugriffe. Die Testkonten
+  erlauben nur Lesen; vollständige schreibende CRUD-Abnahme bleibt offen.
+
+- [~] Der 0.4-Release-Workflow erstellt deterministische SPDX-2.3-SBOMs für
+  Linux und Windows und prüft den Binary-Hash. CI führt `cargo-deny` mit fester
+  Version für Linux- und Windows-Abhängigkeitsgraphen aus. Die Policy prüft
+  Advisories, Lizenzen, Quellen, Wildcard-Anforderungen und doppelte Versionen;
+  doppelte Versionen von `base64` und `getrandom` warnen, und für
+  `rustls-pemfile` besteht eine dokumentierte Ausnahme zum Unmaintained-Advisory.
+  Menschlicher Dependency-/Lizenzaudit, eine Attestierungsprobe mit einem
+  veröffentlichten Kandidaten und die Prüfung der nativen Artefakte bleiben
+  offen. Getaggte Builds attestieren beide Plattformarchive samt SBOM; siehe
+  die [Anleitung zur Artefaktprüfung](release-readiness/artefaktverifikation.de.md).
+
+- [~] Der HTTP-Server verarbeitet bis zu 64 Verbindungen parallel und verwirft
+  weitere Verbindungen, statt eine unbegrenzte Worker-Warteschlange anzulegen.
+  Lesen und Schreiben je Verbindung sind auf 30 Sekunden begrenzt; verspätete
+  Antworten entfallen. MariaDB-Poolwartezeiten und Abfragen sind jetzt durch
+  die verbleibende Dialogfrist begrenzt; abgelaufene Abfragen werden serverseitig
+  abgebrochen. CPU-intensive oder andere blockierende Handler-Arbeit bleibt
+  synchron und kann weiterhin einen Worker belegen. Die
+  [HTTP-Betriebsanleitung](http-operations.de.md) definiert TCP-Listener-
+  Erreichbarkeit, die eingebaute Prozess-Liveness-Route, anwendungseigene
+  Readiness und begrenzte Retries für sichere oder idempotente Anfragen.
+  Abhängigkeits-Readiness und ihre Abnahme in der erzeugten Anwendung bleiben
+  offen; der Server wiederholt nicht automatisch.
+
 - [x] Sprachkern mit Lexer, Parser, AST, Funktionen, Ausdrücken, Kontrollfluss,
   unveränderlichen Bindings als Standard, Arrays, deterministischen typisierten
   Maps, Records, Option, Result und Pattern Matching.
@@ -83,7 +139,42 @@ Feature eines bestimmten Anbieters.
   Ausgabe, eine schreibgeschützte Projektübersicht mit
   `context --format=json` und Format-Tests sind implementiert. Projektdateien
   verwenden projektrelative portable Pfade; weitere Befehle und eine
-  vollständige Secret-Redaction bleiben offen.
+  vollständige Secret-Redaction bleiben offen. Im unveröffentlichten
+  0.4-Entwicklungszweig enthält der deterministische Modulkontext außerdem
+  Importkanten und die derzeit unterstützten öffentlichen Funktionen, Typen
+  und Records je Quelldatei (`modules[].exports`). `zelyra module plan` zeigt
+  zusätzlich schreibgeschützt den Abschluss expliziter Importe und statisch
+  erkannter Verweise aus dem Wirkungsgraphen – wahlweise ab einer Quelldatei
+  oder einer unterstützten Seiten-/API-/CRUD-/Formular-/Tableview-Ressource.
+  `modules[].declarations` macht alle erkannten Deklarationen der einbezogenen
+  Quelldateien sichtbar. `declaration_closure` trennt davon den ausgewählten
+  Startpunkt und statisch erreichbare Deklarationen von zusätzlichen
+  Deklarationen in den einbezogenen Dateien; `configuration_edges` weist die
+  Datenbankkonfiguration separat aus. `database.configurations` nennt Backend,
+  logischen Datenbanknamen, Quelldatei und die bevorzugte Laufzeitvariable
+  `ZELYRA_DATABASE_<NAME>_URL` (`DATABASE_URL` bleibt Fallback). Die Laufzeit
+  hat weiterhin genau eine projektweite Verbindung; die Namenszuordnung ist
+  noch keine benannte, wiederverwendbare
+  Datenbankschnittstelle. Die Analyse bleibt unvollständig.
+  Enthalten sind bekannte Kanten
+  von Seiten zu Views/Komponenten, Page-SQL und Formular-/CRUD-Aktions-SQL zu
+  Tabellen, API-Handlern zu Funktionen, geschützten Ressourcen zur
+  Authentifizierung, Authentifizierung zu Tabellen sowie Typreferenzen aus
+  APIs, Funktionssignaturen und Funktionskörpern (einschließlich expliziter
+  lokaler Typen, Record-Literalen und SQL-Ergebnistypen), Records und Type
+  Aliases (einschließlich Verweisen aus Tabellenspalten und typisierten
+  Ressourcenfeldern), Tabellenrelationen und
+  Datenbankkonfiguration; nicht auflösbare Verweise werden ausgegeben.
+  SQL-Tabellenkanten zeigen außerdem den konservativ erkannten Modus
+  `read`, `write`, `read_write` oder `unknown`; komplexe verbundene
+  `UPDATE`-/`DELETE`-Formen bleiben `unknown`. `schema_ownership` meldet den
+  Tabellenbesitzer nur als aus der Quelldatei abgeleitete Vermutung und setzt
+  `enforced: false`. Diese Analyse ist Beobachtung, keine Berechtigungs- oder
+  Eigentumsdurchsetzung; nicht erkannte SQL-Formen können fehlen.
+  Dynamische oder nicht modellierte Abhängigkeiten, Assets,
+  Laufzeitkonfiguration, externe Dienstverträge und Docker-Paketierung bleiben
+  außerhalb dieser Vorschau. `complete_deployment` bleibt `false`; der Plan ist
+  weder ein vollständiges Exportmanifest noch Teil des veröffentlichten 0.3.0.
 - [x] **Stufe B — kanonischer Quellcode:** Das deterministische `zelyra fmt`
   formatiert parsebaren Quellcode, unterstützt `--check` für CI, bewahrt
   Kommentare sowie rohe SQL-/HTML-Blöcke und besitzt Idempotenz- und
@@ -176,8 +267,10 @@ Feature eines bestimmten Anbieters.
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
   Compose, eine optionale `.env` ohne Zugangsdaten auszugeben, und die
-  Host-Port-Bereitschaft; TLS, Dateirechte und umfassendere Werkzeug-Hinweise
-  bleiben offen.
+  Host-Port-Bereitschaft. JSON-Checks enthalten nun stabile Kategorien für
+  Konfiguration, Projekt, Verbindung, Authentifizierung, Timeout, Schema und Werkzeuge;
+  Datenbankfehler werden geheimnisfrei normalisiert. TLS, Dateirechte und
+  umfassendere Werkzeug-Hinweise bleiben offen.
 - [~] Projektvorlagen: minimales Skript sowie MariaDB-CRUD-,
   MariaDB-Authentifizierungs- und MariaDB-Business-Starter sind vorhanden;
   API- und Produktionsdeployment-Vorlagen folgen.
@@ -188,7 +281,37 @@ Feature eines bestimmten Anbieters.
 ## 2. Sprache und Compiler
 
 - [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [ ] Module, Imports, Sichtbarkeit, Namespaces und Multi-File-Projekte.
+- [~] Experimentelle Funktions-/Typ-/Record-/Tabellen-/View-/Komponenten-Imports und projektweite
+  Datenbankkonfiguration im aktuellen
+  Entwicklungszweig unterstützen projektrelative Imports, `pub`-Deklarationen,
+  qualifizierte Aufrufe und Typreferenzen, Zyklenerkennung,
+  Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
+  Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
+  `check`, `build`, `run`, `serve`, `context` und `verify` prüfen diesen Graphen; der
+  maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
+  Modul-/Import-Überblick. Importierte Datenbankdefinitionen und Tabellen
+  fließen in das gemeinsame Schema ein; Views und Komponenten werden in die
+  Anwendung integriert und durch `serve` gerendert. Ihre Kontextspannen
+  enthalten den projektrelativen Dateipfad. Importierte Seiten werden in die
+  Anwendungsrouten integriert; überlappende Seitenpfade werden abgelehnt.
+  Bei Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
+  vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
+  pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
+  globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
+  werden abgelehnt. Formulare, CRUD-Deklarationen, API-Routen und
+  Authentifizierungskonfiguration werden ebenfalls aus importierten Dateien
+  zusammengesetzt. API-Handler und Typen werden im jeweiligen Modulkontext
+  aufgelöst; Authentifizierungstabellen werden gegen das gemeinsame Schema
+  geprüft. MariaDB-gestützte `tableview`s werden nun
+  zusammengesetzt und bereitgestellt.
+  Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema;
+  Schemafehler behalten Quelldatei und Span importierter Module.
+  Template- und Verifikationsdiagnosen brauchen noch eine vollständige
+  Modul-Quellzuordnung.
+  `impact` analysiert den Graphen mit dateibezogenen Spannen; `fmt` und `edit`
+  bleiben dateilokal.
+  Das Feature ist
+  nicht im veröffentlichten 0.3.0-Binary enthalten.
 - [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
   für alle Fachdaten-Typen.
 - [ ] Bessere Typinferenz mit präzisen Quellpositionen und Fix-Vorschlägen.
@@ -228,7 +351,31 @@ Feature eines bestimmten Anbieters.
   Siehe die [deutsche Kompatibilitätsmatrix](database-compatibility.de.md) und
   die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
 - [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
-- [ ] Reversible Migrationspläne, Rollback-Hinweise, Backups und Driftberichte.
+- [🧪] `zelyra db plan --format=json` erzeugt einen versionierten
+  `zelyra.schema-plan/v1`-Plan mit stabiler ID, Schema-Fingerprints, Drift,
+  SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. `db apply` kann die
+  Plan-ID entgegennehmen und lehnt einen veralteten Plan vor Vorprüfungen oder
+  SQL ab; ein SQLite-CLI-Integrationstest prüft Ablehnung und Anwendung mit
+  einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. `db apply` speichert
+  Alle drei Backends speichern Schema-Fingerprints und Migrationsergebnisse in
+  `_zelyra_schema_history`; `db history` unterstützt MariaDB, SQLite und
+  PostgreSQL und zeigt angewendete, fehlgeschlagene und unterbrochene Läufe.
+  Aktive Migrationen zeigt `db history` zusätzlich bei MariaDB an. SQLite- und
+  PostgreSQL-Abfragen warten auf die transaktionale Migrationssperre und
+  markieren danach verbliebene `running`-Einträge als unterbrochen. MariaDB
+  verwendet eine datenbankweite Advisory-Sperre. SQLite und PostgreSQL wenden
+  DDL und den Status `applied` in derselben Transaktion an.
+  SQLite- und PostgreSQL-E2E-Tests prüfen den gespeicherten Verlauf.
+  MariaDB-E2E-Tests unterbrechen zwischen
+  DDL-Schritten und während ein gesendetes `ALTER TABLE` auf eine gehaltene
+  Metadatensperre wartet und prüfen anschließend die Wiederherstellung mit
+  einem neuen Plan. Ein Absturz während der eigentlichen MariaDB-DDL-Ausführung
+  kann deren Ergebnis weiterhin unklar lassen. Sicheres inverses SQL wird nicht
+  erzeugt und der JSON-Plan weist `rollback.generated: false` aus. `db apply`
+  führt PostgreSQL- und SQLite-DDL transaktional aus; Tests prüfen das Rollback
+  bei einem Fehler.
+  MariaDB-DDL kann Teilzustände hinterlassen. Backups bleiben
+  Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
   `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und
@@ -245,14 +392,38 @@ Feature eines bestimmten Anbieters.
   Foreign-Key-Entfernungen werden blockiert. Vor dem Hinzufügen einer
   Pflichtspalte ohne Standardwert prüft ein lesender Preflight, ob die
   vorhandene Tabelle leer ist; andernfalls wird der gesamte Plan vor jeglichem
-  SQL blockiert. Nullbarkeitsänderungen bei
+  SQL blockiert. Neue Unique-Indizes und Foreign Keys erhalten vor jeglichem
+  Plan-SQL lesende Prüfungen auf Dubletten und verwaiste Werte. Diese Prüfungen
+  verhindern keine parallelen Schreibzugriffe. Nullbarkeitsänderungen bei
   MariaDB und PostgreSQL benötigen `REVIEW`; vor einer Verschärfung auf
   `NOT NULL` prüft ein lesender NULL-Zeilen-Preflight den gesamten Plan und
   blockiert ihn vor jeglichem SQL, wenn Daten korrigiert werden müssen.
   SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
   Änderungen bleiben nicht unterstützt. Allgemeine Zeilenschätzungen,
   Lock-Warnungen, Daten-Backfill-Pläne und Wartungsfenster bleiben geplant.
-- [ ] Connection Pooling, Retries, Timeouts, Abbruch und Health Checks.
+- [~] Der Entwicklungszweig begrenzt den MariaDB-Verbindungsaufbau (Standard
+  10 s; zulässig 1–300) und Runtime-/Lese-Statements serverseitig (Standard
+  30 s; zulässig 1–3600), lehnt ungültige Werte ohne Ausgabe des Eingabewerts
+  ab und deaktiviert transparentes Client-Reconnect. Der Runtime-SQL-Pfad hat
+  jetzt einen prozessweiten Pool mit harter Obergrenze (Standard 8; zulässig
+  1–64), Checkout-Healthchecks, begrenzter Wartezeit (Standard 10 s; zulässig
+  1–300) und verwirft Verbindungen nach Statementfehlern. Timeout- und
+  Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 sowie im
+  [PR-CI-Lauf 37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
+  gegen MariaDB 10.11.19, 11.4.13, 11.8.9 und 12.3.3 geprüft.
+  Runtime- und CLI-Verbindungen unterstützen jetzt verifiziertes TLS: `auto`
+  verlangt geprüfte Zertifikatskette und Hostnamen für externe Hosts,
+  `required` erzwingt TLS und `disabled` schaltet es ausdrücklich ab. Eine
+  eigene CA-Datei ist unterstützt. Erfolgreicher Handshake, CLI-Inspektion und
+  Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4
+  und im PR-CI-Lauf 37161345832 gegen alle vier MariaDB-Matrixversionen.
+  Exportierte Docker-Module verwenden standardmäßig `auto`; nur die vollständige
+  lokale
+  Compose-Vorlage schaltet TLS für ihr isoliertes internes Datenbanknetz ab.
+  Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
+  Ergebnisübertragung ist nicht global begrenzt und automatische Retries gibt
+  es nicht. Windows-TLS wurde noch nicht separat geprüft. Nicht Teil von 0.3.0.
+  Antwortfristen und Health-Diagnostik bleiben offen.
 - [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
 - [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
   einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.
@@ -424,6 +595,9 @@ Feature eines bestimmten Anbieters.
 
 - [x] Passwort-Login, persistente Sessions, CSRF, Account-Aktivierung und
   Schutz des letzten Administrators.
+- [🧪] Auth-Definitionen können prozesslokale Fehlerfenster und Sperrdauern für
+  Login und Passwort-Reset konfigurieren. Dauerhafte oder verteilte
+  Ratenbegrenzungen bleiben offen.
 - [x] Direkte und rollenbasierte Berechtigungen.
 - [x] Browserverwaltung und CLI-Rollenverwaltung.
 - [x] Audit-Anzeige, begrenzter Export, strukturelle Prüfung und sicheres
@@ -439,8 +613,12 @@ Feature eines bestimmten Anbieters.
 - [ ] Ausdrückliche, anwenderkontrollierte Audit-Exporte an Ziele wie Syslog,
   Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
   und versteckte externe Erfassung sind ausgeschlossen.
-- [ ] MFA/WebAuthn, Passwort-Reset-Flows, Geräte-/Sessionverwaltung und
-  Login-Benachrichtigungen.
+- [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
+  teilweise umgesetzt. Gleichzeitige Einlösungen desselben Tokens sind im
+  MariaDB-E2E abgedeckt. Token-Ausstellung und E-Mail-Queue sind pro Prozess
+  serialisiert; Mehrprozessbetrieb bleibt offen. Persistente
+  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und
+  Login-Benachrichtigungen bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
   Berechtigungen.
 - [ ] Security Review, Threat Model, Dependency Audit und Penetrationstests.
@@ -451,8 +629,14 @@ Feature eines bestimmten Anbieters.
   Clientgenerierung.
 - [x] Typisierte Maps mit String-Schlüsseln werden an der API-Grenze geprüft
   und konsistent in JSON, OpenAPI und erzeugten TypeScript-Clients dargestellt.
-- [ ] API-Versionierung, Deprecation-Metadaten, Rate Limits, Quotas und
-  Request-Correlation-IDs.
+- [🧪] API-Request-IDs sowie Versions-, Deprecation- und prozesslokale
+  Kontingentmetadaten je Route sind im unveröffentlichten 0.4-Entwicklungsstand
+  umgesetzt. Kontingente nutzen die TCP-Peer-IP, eine begrenzte
+  In-Memory-Clienttabelle und keine vertrauten Forwarded-IP-Header; sie werden
+  beim Neustart zurückgesetzt. Persistente/verteilte Kontingente, Reset-Limits
+  und Kompatibilitätsnachweise bleiben offen. Login-Limits sind pro
+  Auth-Definition konfigurierbar; ihre In-Memory-Tabelle ist auf 4096 Schlüssel
+  begrenzt und lehnt neue Schlüssel bei voller Tabelle ab.
 - [ ] API Keys, OAuth2/OIDC und Service Accounts.
 - [ ] Webhooks, signierte Callbacks, Idempotency Keys und retry-sichere Handler.
 - [ ] GraphQL oder eine andere Query-API nur bei Erhalt der Zelyra-Typ- und
@@ -481,8 +665,15 @@ Feature eines bestimmten Anbieters.
 ## 9. Qualität, Betrieb und Governance
 
 - [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
-- [ ] Fuzzing für Lexer, Parser, SQL-Binder, Template-Renderer und HTTP-Parser.
-- [ ] Security-Regression-Suite und Dependency-/Lizenzprüfung in CI.
+- [~] Begrenzte deterministische Mutationsregressionen prüfen Lexer/Parser,
+  SQL-Binder, Template-Renderer und HTTP-Parser im normalen CI-Lauf (2.048
+  Eingaben je Pfad). Coverage-guided-Fuzzing fand einen Parser-Stack-Overflow;
+  rekursive Parser-Aufrufe haben nun eine 32-Frame-Grenze mit Diagnose,
+  gezielte Regressionen und einen aufbewahrten Crash-Seed. Vier lokale 60-Sekunden-Läufe bestanden
+  danach; der 15-Sekunden-CI-Lauf auf dem korrigierten Stand steht noch aus.
+- [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen teilweise
+  in CI; ein vollständiger menschlicher Audit und weitere Security-Regressionen
+  bleiben offen.
 - [ ] Regressionstest gegen ungefragte Netzwerk- oder Telemetrieaktivität;
   explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
   Update- oder Installationsbefehle müssen klar getrennt bleiben.
@@ -638,6 +829,65 @@ Schemaeigentum, reproduzierbare Extraktion und unabhängiger Ende-zu-Ende-Start
 sind P0-Abnahmeanforderungen. Nicht umgesetzte Funktionen bleiben als geplant
 gekennzeichnet; PostgreSQL-Runtime-Parität oder Produktionsreife werden nicht
 unterstellt.
+
+- [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
+  Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
+  geheimnisfreies `.env.example`; `--dry-run` liefert außerdem eine
+  deterministische JSON-Dateiliste der geplanten Ausgaben, ohne das angeforderte
+  Ziel anzulegen; das temporäre Testpaket wird geprüft und entfernt. Locale-
+  JSON-Dateien werden im Manifest sortiert; ein Wiederholungstest bestätigt
+  byte-identische Dateien zweier Exporte desselben Bundles. Ein eigenständiger
+  Container-Smoke-Test für eine importierte Route ist grün. Die
+  exportierte Anwendung erhält ihre
+  `DATABASE_URL` separat, MariaDB bleibt ein externer Dienst. Der Compiler
+  lehnt erkannte modulübergreifende Tabellenverweise ohne erreichbaren
+  Importabhängigkeitspfad mit `E-MOD-019` ab, auch für Tabellen im Einstieg;
+  gemeinsam genutzte Tabellen müssen in einem importierbaren Schema-Modul
+  liegen. Tabellen unterstützen außerdem explizite `access`-Listen für
+  `read`, `write` und `read_write`; erkannte modulübergreifende Zugriffe ohne
+  passenden Grant scheitern mit `E-MOD-021`. CRUD/Formular/Auth sowie unbekannte
+  SQL-Zugriffe verlangen `read_write`. Das sind Compiler-Verträge, keine
+  MariaDB-Grants; Schemaänderungsrechte und unbekannte SQL-Formen bleiben
+  ungeprüft. Datenbanknutzende Module müssen den Provider außerdem direkt oder
+  transitiv importieren (`E-MOD-022`); ein Import nur im Einstieg wird nicht
+  vererbt. Eine Einstiegskonfiguration muss dafür in ein importierbares Modul
+  verschoben werden. `context --format=json` weist Provider, DB-Verbraucher,
+  direkte/transitive Bindung und Verbindungsvariable samt tatsächlichem
+  `DATABASE_URL`-Fallback ohne Zugangsdaten aus. Die Laufzeit nutzt weiterhin
+  eine Verbindung pro Prozess; das ist Auskunft, kein Routing. Der
+  MariaDB-Projektgenerator legt die Datenbankdeklaration jetzt
+  in `src/database.zyl` ab und importiert sie aus `main.zyl`; das trennt nur
+  die Quelle, nicht mehrere unabhängig konfigurierbare Verbindungen. Mehrere
+  Datenbankdefinitionen im Graphen scheitern mit `E-DB-001`, bevor ein Bundle
+  Dateien schreibt. Das Manifest
+  weist weiterhin `source_closure_complete: false` und
+  `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
+  modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
+  CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
+  ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
+  Kantenmenge, beweist aber keine vollständige Abhängigkeitsanalyse.
+  Tabellenspalten verweisen jetzt außerdem auf verwendete benannte Type Aliases;
+  dadurch nimmt die bekannte Deklarationsschließung beim Schema-Modul auch die
+  Aliasdeklaration auf. Ein Mehrmodul-Regressionstest prüft Ressourcen-Kante
+  und Schließung. Typisierte Felder von Formularen, Formularaktionen und CRUD-
+  Aktionen verweisen jetzt ebenfalls auf ihre benannten Type Aliases; ein
+  Integrationstest prüft Formular- und CRUD-Ressourcenpläne. Auch dies bleibt
+  eine statisch erkannte Teilmenge. Typannotationen in Funktionskörpern,
+  Record-Konstruktoren und SQL-Ergebnistypen liefern jetzt ebenfalls Typkanten.
+  Die MariaDB-Ergebnistypprüfung akzeptiert qualifizierte Record-Namen, indem
+  sie vor der Zuordnung zur Tabelle den Modulpräfix entfernt; gezielte
+  Tests prüfen den Resolver und den zusammengesetzten Projektpfad.
+  Die Veröffentlichung des fertigen Staging-Verzeichnisses erfolgt auf Linux,
+  macOS und Windows atomar ohne Ersetzen eines inzwischen angelegten
+  Zielverzeichnisses; ein Regressionstest prüft sowohl den Konfliktfall als auch
+  die Veröffentlichung bei freiem Ziel.
+  Unabhängig davon unterstützt derselbe unveröffentlichte Zweig nun `pub view` und
+  `pub component`; importierte Page-/CRUD-Layout-Verweise und erkannte
+  Komponenten-Tags in Page-, View-, Komponenten- und CRUD-Slot-HTML verlangen
+  eine öffentliche Deklaration und einen ausdrücklichen Importpfad
+  (`E-MOD-007` / `E-MOD-020`). Dies ist ein getesteter Sichtbarkeitsschritt,
+  kein vollständiges HTML-Namespace- oder Modulvertragssystem.
 
 ## Akzeptanzanwendungen aus der Praxis
 

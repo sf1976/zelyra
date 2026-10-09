@@ -6,6 +6,117 @@ releases follow Semantic Versioning independently of the language line.
 
 ## Unreleased
 
+- Coverage-guided fuzzing found a parser stack overflow after deeply nested
+  array/index input. Recursive parser calls now stop at 32 frames with a
+  diagnostic; the failing input is retained in the fuzz corpus and tests cover
+  arrays, unary operators, blocks, types, and match patterns. Four 60-second
+  local fuzz runs passed after the fix; CI must still rerun on this revision. /
+  Coverage-guided-Fuzzing fand einen Parser-Stack-Overflow bei tief
+  verschachtelten Array-/Indexeingaben. Rekursive Parser-Aufrufe werden nun
+  nach 32 Frames mit einer Diagnose abgewiesen; die Fehler-Eingabe bleibt im
+  Fuzz-Korpus, und Tests prüfen Arrays, Unary-Operatoren, Blöcke, Typen und
+  Match-Patterns. Vier lokale Fuzz-Läufe mit je 60 Sekunden bestanden nach dem
+  Fix; CI muss den korrigierten Stand noch prüfen.
+- Split the English and German master handbooks into linked textbook, technical-reference, and appendix files; the snippet validator covers all chapters. / Die englischen und deutschen Master-Handbücher sind in verlinkte Lehrbuch-, Referenz- und Anhangdateien aufgeteilt; der Snippet-Validator prüft alle Kapitel.
+- Schema-build failures in imported modules now retain the originating file
+  and source span in `db create` diagnostics; an integration regression covers
+  an imported duplicate-column error. / Schemafehler in importierten Modulen
+  behalten in `db create` jetzt Quelldatei und Span; ein CLI-Regressionstest
+  prüft eine doppelte Spalte im importierten Modul.
+- The HTTP listener now handles up to 64 connections concurrently and drops
+  excess connections instead of building an unbounded queue. Socket tests cover
+  a slow request alongside a fast request and the worker cap; synchronous
+  handlers remain uncancellable. / Der HTTP-Listener verarbeitet jetzt bis zu
+  64 Verbindungen parallel und verwirft weitere, statt eine unbegrenzte
+  Warteschlange aufzubauen. Socket-Tests prüfen eine langsame neben einer
+  schnellen Anfrage und die Worker-Grenze; synchrone Handler bleiben
+  unabbrechbar.
+- `zelyra db plan --format=json` now emits a versioned schema plan with stable
+  fingerprints, drift, preflights, and approval requirements; safe inverse SQL
+  remains unimplemented. `db apply --plan-id` can reject a stale reviewed plan
+  before preflights or SQL. / `zelyra db plan --format=json` gibt jetzt einen
+  versionierten Schema-Plan mit stabilen Fingerprints, Drift, Vorprüfungen und
+  Freigabebedarf aus; sicheres inverses SQL bleibt offen. `db apply --plan-id`
+  lehnt einen nachträglich veralteten Plan vor Vorprüfungen und SQL ab.
+- MariaDB `db apply` now journals plan fingerprints and each DDL checkpoint in
+  `_zelyra_schema_history`; `db history` reports active, applied, failed, and
+  interrupted runs. A database-scoped advisory lock blocks concurrent Zelyra
+  migrations. An E2E test kills a migration between DDL statements and
+  verifies recovery with a newly reviewed plan; crashes during a statement and
+  inverse SQL remain open. DDL client connections also use configured verified
+  TLS and statement timeouts. / MariaDB `db apply` speichert Plan-Fingerprints
+  und Prüfpunkte jedes DDL-Schritts in `_zelyra_schema_history`; `db history`
+  zeigt aktive, angewendete, fehlgeschlagene und unterbrochene Läufe. Eine
+  datenbankweite Advisory-Sperre verhindert parallele Zelyra-Migrationen. Ein
+  E2E-Test beendet eine Migration zwischen DDL-Befehlen und prüft die
+  Wiederaufnahme mit einem neu geprüften Plan; Abstürze innerhalb eines
+  Befehls und inverses SQL bleiben offen. DDL-Clientverbindungen verwenden
+  ebenfalls konfiguriertes, verifiziertes TLS und Statement-Timeouts.
+- Generated authentication pages now provide `/account/sessions` for
+  self-service session listing and revocation, limited to the signed-in user.
+  CSRF and same-origin checks apply; revoking the current session clears its
+  cookie. Memory and MariaDB-backed sessions are covered by HTTP tests and the
+  protected-app MariaDB E2E. Device metadata remain open. Password recovery
+  is now partially implemented in the 0.4 development branch: MariaDB stores
+  only single-use token hashes; generic responses, audit, CSRF, throttling,
+  bounded asynchronous loopback/HTTPS SMTP delivery, expiry/replay checks,
+  and persistent/in-memory session revocation have a MariaDB/SMTP-sink E2E
+  that delays mail delivery to test response timing. The E2E now submits one
+  reset token twice concurrently and verifies only one password can be used.
+  Token replacement and FIFO mail enqueue are serialized within one process;
+  the E2E verifies that the last delivered email matches the active token.
+  Cross-instance ordering, SMTP outage, expiry-boundary review, persistent
+  rate limits, and independent security acceptance remain open.
+  / Generierte Auth-Seiten bieten jetzt `/account/sessions` zum Anzeigen und
+  Beenden eigener Sitzungen. CSRF- und Same-Origin-Prüfungen gelten; beim
+  Beenden der aktuellen Sitzung wird das Cookie gelöscht. HTTP-Tests und der
+  MariaDB-Ende-zu-Ende-Test der geschützten Anwendung decken Speicher- und
+  Datenbanksitzungen ab. Gerätemetadaten bleiben offen. Die
+  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
+  MariaDB speichert nur einmalige Token-Hashes; generische Antworten, Audit,
+  CSRF, Ratenbegrenzung, begrenzter asynchroner Loopback-/HTTPS-SMTP-Versand,
+  Ablauf-/Replay-Prüfung
+  und Widerruf persistenter und flüchtiger Sitzungen haben einen
+  MariaDB-/SMTP-Senken-E2E-Test. SMTP-Ausfall, persistente Limits,
+  Mehrprozess-Reihenfolge, Ablaufgrenze und unabhängige Sicherheitsabnahme
+  bleiben offen. Token-Ersetzung und FIFO-Mailqueue sind innerhalb eines
+  Prozesses serialisiert; der E2E-Test prüft parallele Einlösung und dass die
+  letzte E-Mail zum aktiven Token gehört.
+- Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
+  normalized email keys are hashed, configured lockout durations are honored
+  independently of the failure window, and new keys fail closed at capacity. /
+  Login-Limit-Zustand ist jetzt auf 4096 Schlüssel begrenzt, E-Mail-Schlüssel
+  werden gehasht, abgelaufene Zeitfenster bereinigt und neue Schlüssel bei
+  voller Tabelle abgelehnt.
+- HTTP connections now have a fixed 30-second read/write deadline; late
+  responses are dropped and timed-out clients no longer stop the listener.
+  Synchronous handlers still cannot be interrupted. / HTTP-Verbindungen haben
+  jetzt eine feste Lese-/Schreibfrist von 30 Sekunden; verspätete Antworten
+  entfallen und Zeitüberschreitungen beenden den Listener nicht mehr.
+  Synchrone Handler lassen sich weiterhin nicht abbrechen.
+- Release builds now attach deterministic SPDX-2.3 SBOMs for Linux and Windows;
+  verification binds each SBOM to its binary SHA-256 and rejects a tag/version
+  mismatch. Tagged release builds are configured to add GitHub Artifact Attestations for
+  both platform archives and their SBOMs. A published-candidate rehearsal and
+  dependency/license audit remain open. / Release-Builds hängen jetzt
+  deterministische SPDX-2.3-SBOMs für Linux und Windows an; die Prüfung bindet
+  jedes SBOM an den SHA-256-Hash der Binärdatei. Getaggte Release-Builds sind
+  so konfiguriert, dass sie beide Plattformarchive und ihre SBOMs zusätzlich
+  mit GitHub Artifact Attestations versehen. Die Probe mit einem veröffentlichten Kandidaten und
+  das Dependency-/Lizenzaudit sind noch offen.
+- Login throttling can now be configured per auth definition with a bounded
+  failure window and lockout duration; the limiter remains process-local. /
+  Login-Limits lassen sich nun pro Auth-Definition mit begrenztem
+  Fehlerzeitfenster und Sperrdauer konfigurieren; der Limiter bleibt
+  prozesslokal.
+- HTTP responses now include a validated `X-Request-ID` that API handlers can
+  read from their request context. API declarations can add version,
+  deprecation, and bounded process-local per-client rate-limit metadata, which
+  is also included in OpenAPI output. / HTTP-Antworten enthalten jetzt eine
+  geprüfte `X-Request-ID`, die API-Handler aus ihrem Request-Kontext lesen
+  können. API-Deklarationen können Version, Deprecation und begrenzte
+  prozesslokale Kontingente je Client festlegen; OpenAPI enthält dieselben
+  Metadaten.
 - Record the project-owner decision to defer the 0.3.0 human onboarding study
   without claiming it passed; independent human acceptance remains mandatory
   for 0.4.0. / Die Entscheidung des Projektverantwortlichen dokumentiert, die

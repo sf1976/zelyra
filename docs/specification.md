@@ -189,6 +189,13 @@ database failures produce generic HTTP boundaries without exposing database
 details. Collection loops are supported for arrays of records. Optional-aware
 field expressions and richer view-local data remain planned.
 
+Function-level SQL may declare `uses Database(read)` for classified `SELECT`
+statements or `uses Database(write)` for classified `INSERT`, `UPDATE`, and
+`DELETE` statements. Unclassified statements require `uses Database`. The
+broad form remains compatible with existing programs. Projects may grant the
+scoped effects independently through `database_read` and `database_write` in
+`zelyra.toml`; these grants do not change MariaDB account permissions.
+
 ### Reusable view layouts
 
 Named views are deterministic page layouts. Each view must declare exactly one
@@ -356,6 +363,112 @@ operators are validated against the declaration. URL examples are
 `/customers?filter_name__contains=Acme` and
 `/customers?filter_quantity__gte=10`. Unsupported operators and undeclared
 fields produce a controlled HTTP 400 response.
+
+## Experimental project module imports
+
+The current development branch has an experimental file-import slice. It is
+not included in the published 0.3.0 release and is not yet a stable language
+compatibility promise.
+
+Imports use a path relative to the directory of the explicitly selected entry
+source file. An alias is required, and imports must precede declarations:
+
+~~~zelyra
+import "src/math.zyl" as math
+
+pub fn add(left: Int, right: Int) -> Int {
+    return left + right
+}
+
+fn main() {
+    print(math::add(2, 3))
+}
+~~~
+
+An imported source currently may declare functions, type aliases, records,
+tables, tableviews, named views, typed components, and one project-wide database
+connection definition. Database configuration is
+composed into the application and is not accessed through the import alias;
+the composed project may define at most one database. Tables in imported files
+are composed into the application's shared physical schema; table names are
+global SQL identifiers rather than module-qualified names, and duplicate table
+names are rejected. Imported tableviews, views, and components join the
+composed application under their declared, unqualified names. Like other
+module resources, they are private by default and exported with `pub view` or
+`pub component`. Cross-module page and CRUD layout references, plus recognized
+component tags in page, view, component, and CRUD slot HTML, require a direct
+or transitive import path to the owner. Private UI references report
+`E-MOD-007`; missing import edges report `E-MOD-020`. Component tags are
+currently discovered by matching known names in HTML text; this is not a
+complete HTML or namespace analysis. Duplicate resource names are rejected.
+MariaDB-backed imported tableviews can be served as application routes; the
+current tableview query runtime does not yet execute against SQLite. Imported
+pages are composed into the application's route set; overlapping page route
+patterns are rejected with the imported source location. Forms, CRUD
+declarations, APIs, and authentication resources also compose from imported
+files. Function, type, and record declarations are private by default;
+declarations cross a module boundary only with a `pub` modifier and an explicit
+import alias. For example, use `pub fn`, `pub type`, `pub struct`, `pub view`,
+or `pub component`. A qualified type reference such as
+`money::Amount` resolves through the current file's `money` import. Private
+helpers and types remain available within their own file. Public signatures
+may not expose private types. The compiler rejects missing files, duplicate
+aliases, import cycles, path traversal, symlinks that resolve outside the
+project root, and calls or type references to private or unknown declarations.
+Module loading performs no network lookup.
+
+The database declaration is project-wide configuration, not a module-qualified
+resource. The alias is still required to include the file, but application
+code does not refer to `storage::main`:
+
+~~~zelyra
+import "src/database.zyl" as storage
+
+fn main() {}
+~~~
+
+~~~zelyra
+database main {
+    engine: mariadb
+    database: "invoices"
+}
+~~~
+
+For example, `src/money.zyl` may export a record and `src/invoice.zyl` may use
+that public type in a function signature:
+
+~~~zelyra
+pub struct Money {
+    cents: Int
+}
+~~~
+
+~~~zelyra
+import "src/money.zyl" as money
+
+pub fn total() -> money::Money {
+    return money::Money { cents: 2500 }
+}
+~~~
+
+`check`, `build`, `run`, `serve`, `context`, and `verify` currently validate this
+project graph. The machine-readable context document includes every reachable
+module and its sorted import edges. Imported database definitions and tables
+join the composed project schema; their context spans identify the
+project-relative source path in `span.file`. Context also includes imported
+views and components with their source spans. `serve` composes imported
+views/components into pages and starts the application from the linked graph.
+Some template-validation diagnostics still need more complete per-module source
+attribution. `verify` checks linked functions, but verification results do not
+yet preserve per-module source provenance. Pages, APIs, and other route-bound
+application resources remain unsupported in imported files.
+`fmt` and `edit` remain source-file-local. Database commands now load the
+linked project graph when building the composed schema; their output and some
+schema diagnostics still have incomplete module-level source attribution.
+`impact` analyzes the linked module graph and attributes its spans to their
+source files. These limits make the implementation experimental rather than a
+complete multi-file project model. The full requirements are tracked in the
+[0.4.0 release plan](release-plans/0.4.0.en.md).
 
 When a page collection declares search, filters, sorting, or pagination,
 Zelyra automatically renders a semantic query-control form before the page

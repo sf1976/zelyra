@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Zelyra Handbook Code Snippet Validator
-Validates all code blocks in docs/handbook/de/handbuch.md and docs/handbook/en/handbook.md
+Validates Zelyra code blocks across the split German and English handbook chapters
 """
 
 import sys
@@ -119,8 +119,20 @@ def check_file(path):
 def main():
     root = Path(__file__).resolve().parent.parent
     files = {
-        "German Master Handbook": root / "docs/handbook/de/handbuch.md",
-        "English Master Handbook": root / "docs/handbook/en/handbook.md",
+        "German Handbook": [
+            root / "docs/handbook/de/handbuch.md",
+            root / "docs/handbook/de/lehrbuch-grundlagen.md",
+            root / "docs/handbook/de/lehrbuch-anwendungen.md",
+            root / "docs/handbook/de/technisches-referenzhandbuch.md",
+            root / "docs/handbook/de/anhaenge.md",
+        ],
+        "English Handbook": [
+            root / "docs/handbook/en/handbook.md",
+            root / "docs/handbook/en/textbook-foundations.md",
+            root / "docs/handbook/en/textbook-applications.md",
+            root / "docs/handbook/en/technical-reference.md",
+            root / "docs/handbook/en/appendices.md",
+        ],
     }
     
     total = 0
@@ -129,14 +141,19 @@ def main():
     print(" ZELYRA HANDBOOK CODE SNIPPET VALIDATION")
     print("=" * 60)
     
-    for name, fpath in files.items():
-        count, errors = check_file(fpath)
+    for name, paths in files.items():
+        count = 0
+        errors = []
+        for fpath in paths:
+            file_count, file_errors = check_file(fpath)
+            count += file_count
+            errors.extend(f"{fpath.relative_to(root)} -> {error}" for error in file_errors)
         total += count
         status = "✓ OK" if not errors else f"✕ {len(errors)} errors"
-        print(f"[{status}] {name}: {count} snippets checked")
-        for e in errors:
-            all_errors.append(f"{name} -> {e}")
-            print(f"       ERROR: {e}")
+        print(f"[{status}] {name}: {count} snippets checked across {len(paths)} files")
+        for error in errors:
+            all_errors.append(error)
+            print(f"       ERROR: {error}")
             
     print("-" * 60)
     if all_errors:

@@ -1,0 +1,3 @@
+pub struct Money {
+    cents: Int
+}

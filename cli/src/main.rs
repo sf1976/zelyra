@@ -1,8 +1,9 @@
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     env,
     fmt::Write as _,
     fs,
@@ -16,10 +17,11 @@ use std::{
 };
 use zelyra_ast::Type;
 use zelyra_database::{
-    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_null_values,
-    create_mariadb_database, diff, inspect_mariadb, inspect_postgres, inspect_sqlite,
-    sql::check_program as check_sql_program, table_has_rows, Backend, Query, QueryResult,
-    QueryValue, Risk, Schema,
+    apply_mariadb, apply_postgres, apply_sqlite, build_schema, count_duplicate_value_groups,
+    count_foreign_key_orphans, count_null_values, create_mariadb_database, diff, inspect_mariadb,
+    inspect_postgres, inspect_sqlite, mariadb_schema_migration_lock_is_held, query_mariadb,
+    sql::check_program as check_sql_program, table_has_rows, with_mariadb_schema_lock, Backend,
+    DatabaseError, Query, QueryResult, QueryValue, Risk, Schema,
 };
 use zelyra_forms::{check_program as check_form_program, validate as validate_form};
 use zelyra_hir::lower;
@@ -39,14 +41,34 @@ use zelyra_web::{
     UiLevel, WebApp, PROJECT_THEME_CSS_PATH,
 };
 
+mod account_cli;
+mod command_dispatch;
+mod database_cli;
+mod docs;
 mod edit;
 mod formatter;
 mod holes;
 mod impact;
+mod module_cli;
+mod project;
+#[cfg(test)]
+mod tests;
 mod updater;
+use account_cli::{audit_command, auth_command};
+#[cfg(test)]
+use account_cli::{audit_rows_csv, audit_rows_json};
+use database_cli::{database_command, inspect_for_backend};
+#[cfg(test)]
+use database_cli::{schema_fingerprint, schema_plan_json};
 use formatter::format_source;
 use holes::collect_typed_holes;
-use impact::{build_impact, focus_impact};
+use impact::{build_impact_with_modules, build_impact_with_sources, focus_impact};
+#[cfg(test)]
+use module_cli::publish_directory_no_replace;
+use module_cli::{
+    context_command, context_entry, module_command, module_declaration_owners,
+    module_uses_database, project_name,
+};
 
 const MARIADB_CRUD_TEMPLATE: &str = include_str!("../../examples/machine_form.zyl");
 const MACHINE_MANAGEMENT_DEMO_DATA: &str =
@@ -54,6 +76,8 @@ const MACHINE_MANAGEMENT_DEMO_DATA: &str =
 const MARIADB_MINIMAL_TEMPLATE: &str = include_str!("../../examples/mariadb_starter.zyl");
 const MARIADB_AUTH_TEMPLATE: &str = include_str!("../../examples/auth.zyl");
 const MARIADB_BUSINESS_TEMPLATE: &str = include_str!("../../examples/auth_crud_api.zyl");
+const MARIADB_DATABASE_DECLARATION: &str = "database main {\n    engine: mariadb\n}\n\n";
+const MARIADB_DATABASE_MODULE: &str = "database main {\n    engine: mariadb\n}\n";
 const PROJECT_THEME_TEMPLATE: &str = r#"/*
 Optional project-local overrides for the built-in Zelyra web design.
 Uncomment a token below and change its value. This file is sent to browsers;
@@ -96,9 +120,12 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 
 fn usage() {
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
+    eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
+    eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
+    eprintln!("  module bundle --dry-run emits a machine-readable file plan without publishing the bundle");
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -116,11 +143,13 @@ struct JsonDiagnosticCollector {
 
 thread_local! {
     static JSON_DIAGNOSTICS: RefCell<Option<JsonDiagnosticCollector>> = const { RefCell::new(None) };
+    static PROJECT_SOURCES: RefCell<Vec<project::ProjectSource>> = const { RefCell::new(Vec::new()) };
+    static PROJECT_MODULES: RefCell<Vec<project::ProjectModule>> = const { RefCell::new(Vec::new()) };
 }
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl>\n  zelyra db apply <file.zyl> [--allow-risky]\n\n--allow-destructive remains available for DESTRUCTIVE plans only.\nDATABASE_URL is used by setup, bootstrap, inspect, plan, and apply."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -264,7 +293,25 @@ ZELYRA_DB_HOST_PORT={database_host_port}
 ZELYRA_LANGUAGE=de
 ZELYRA_LEVEL=learn
 ZELYRA_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]
-DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
+ZELYRA_DB_CONNECT_TIMEOUT_SECS=10
+ZELYRA_DB_QUERY_TIMEOUT_SECS=30
+ZELYRA_DB_POOL_MAX_SIZE=8
+ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
+# Local Docker MariaDB uses an isolated bridge network. For a remote database,
+# use `required` and configure a trusted CA if it is not in the built-in roots.
+ZELYRA_DB_TLS_MODE=disabled
+# Optional absolute CA path, readable inside the Zelyra container/process.
+# ZELYRA_DB_TLS_CA_CERT_FILE=
+# Optional password recovery mail delivery. Configure these values only when
+# auth declares a reset_tokens table; credentials remain local secrets.
+# ZELYRA_PUBLIC_BASE_URL=https://app.example.test
+# ZELYRA_SMTP_HOST=mail.example.test
+# ZELYRA_SMTP_PORT=465
+# ZELYRA_SMTP_SECURITY=implicit_tls
+# ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
+# ZELYRA_SMTP_USERNAME=
+# ZELYRA_SMTP_PASSWORD=
+ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
 MARIADB_PASSWORD=change-me
@@ -370,7 +417,7 @@ fn prepared_local_env_template(
         && !template.contains("${ZELYRA_DB_HOST_PORT")
     {
         return Err(
-            "cannot safely select a MariaDB port because DATABASE_URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
+            "cannot safely select a MariaDB port because the database URL does not use ${ZELYRA_DB_HOST_PORT:-...}; update the template explicitly or choose a matching free port"
                 .into(),
         );
     }
@@ -389,6 +436,12 @@ fn render_local_env(template: &str) -> Result<String, String> {
     let database_password = generate_local_secret()?;
     let root_password = generate_local_secret()?;
     Ok(template
+        .replace(
+            "ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/zelyra_app",
+            &format!(
+                "ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:{database_password}@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app"
+            ),
+        )
         .replace(
             "DATABASE_URL=mariadb://zelyra:change-me@127.0.0.1:${ZELYRA_DB_HOST_PORT:-3306}/zelyra_app",
             &format!(
@@ -569,7 +622,7 @@ console = false
         version = env!("CARGO_PKG_VERSION"),
         database_section = database_section
     );
-    let main_source = if options.business_template {
+    let main_template = if options.business_template {
         MARIADB_BUSINESS_TEMPLATE
     } else if options.crud_template {
         MARIADB_CRUD_TEMPLATE
@@ -583,13 +636,29 @@ console = false
 }
 "#
     };
+    let preserve_existing_main =
+        options.allow_current_directory && directory.join("main.zyl").is_file();
+    let main_source = if options.with_mariadb {
+        let source = main_template
+            .strip_prefix(MARIADB_DATABASE_DECLARATION)
+            .unwrap_or(main_template);
+        format!("import \"src/database.zyl\" as storage\n\n{source}")
+    } else {
+        main_template.to_owned()
+    };
     let mut files = vec![
         ("zelyra.toml", project_config.to_owned()),
-        ("main.zyl", main_source.to_owned()),
+        ("main.zyl", main_source),
+        // Keep the conventional module source directory present so the
+        // generated Dockerfile can copy it even for a fresh single-file app.
+        ("src/.keep", String::new()),
         (PROJECT_THEME_CSS_FILE, PROJECT_THEME_TEMPLATE.to_owned()),
         ("locales/de.json", "{}\n".to_owned()),
         ("locales/en.json", "{}\n".to_owned()),
     ];
+    if options.with_mariadb && !preserve_existing_main {
+        files.push(("src/database.zyl", MARIADB_DATABASE_MODULE.to_owned()));
+    }
     if options.crud_template {
         files.push((
             "machine-management-demo.sql",
@@ -638,10 +707,24 @@ console = false
     build: .
     command: ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
     environment:
+      ZELYRA_DATABASE_MAIN_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       DATABASE_URL: mariadb://__MARIADB_USER__:__MARIADB_PASSWORD__@mariadb:3306/__MARIADB_DATABASE__
       ZELYRA_LANGUAGE: __ZELYRA_LANGUAGE__
       ZELYRA_LEVEL: __ZELYRA_LEVEL__
       ZELYRA_ALLOWED_HOSTS: "__ZELYRA_ALLOWED_HOSTS__"
+      ZELYRA_DB_CONNECT_TIMEOUT_SECS: ${ZELYRA_DB_CONNECT_TIMEOUT_SECS:-10}
+      ZELYRA_DB_QUERY_TIMEOUT_SECS: ${ZELYRA_DB_QUERY_TIMEOUT_SECS:-30}
+      ZELYRA_DB_POOL_MAX_SIZE: ${ZELYRA_DB_POOL_MAX_SIZE:-8}
+      ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}
+      ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}
+      ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}
+      ZELYRA_PUBLIC_BASE_URL: ${ZELYRA_PUBLIC_BASE_URL:-}
+      ZELYRA_SMTP_HOST: ${ZELYRA_SMTP_HOST:-}
+      ZELYRA_SMTP_PORT: ${ZELYRA_SMTP_PORT:-}
+      ZELYRA_SMTP_SECURITY: ${ZELYRA_SMTP_SECURITY:-implicit_tls}
+      ZELYRA_SMTP_FROM: ${ZELYRA_SMTP_FROM:-}
+      ZELYRA_SMTP_USERNAME: ${ZELYRA_SMTP_USERNAME:-}
+      ZELYRA_SMTP_PASSWORD: ${ZELYRA_SMTP_PASSWORD:-}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -679,7 +762,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
-RUN cargo install --path /zelyra/cli --root /out
+RUN cargo install --locked --path /zelyra/cli --root /out
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -687,6 +770,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/bin/zelyra /usr/local/bin/zelyra
 COPY main.zyl zelyra.toml zelyra.theme.css ./
+COPY src ./src
 COPY locales ./locales
 EXPOSE __WEB_PORT__
 CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
@@ -698,7 +782,10 @@ CMD ["zelyra", "serve", "main.zyl", "0.0.0.0:__WEB_PORT__"]
                 )
                 .replace("__WEB_PORT__", &options.web_port.to_string()),
             ),
-            (".dockerignore", ".git\ntarget\n.env\n*.sqlite3\n".to_owned()),
+            (
+                ".dockerignore",
+                ".git\ntarget\n.env\n.env.*\n*.sqlite3\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n".to_owned(),
+            ),
             (".gitignore", ".env\ntarget/\n".to_owned()),
         ]);
     }
@@ -826,29 +913,38 @@ fn span_value(source: &str, span: zelyra_ast::Span) -> Value {
 }
 
 fn diagnostic_with_span(path: &str, code: &str, message: &str, span: zelyra_ast::Span) {
+    let source =
+        PROJECT_SOURCES.with(|sources| sources.borrow().get(span.source_id as usize).cloned());
     let captured = JSON_DIAGNOSTICS.with(|collector| {
         let mut collector = collector.borrow_mut();
         let Some(collector) = collector.as_mut() else {
             return false;
         };
-        let file = if collector.path.is_empty() {
-            path.to_owned()
-        } else {
+        let file = if span.source_id == 0 && !collector.path.is_empty() {
             collector.path.clone()
+        } else {
+            source
+                .as_ref()
+                .map_or_else(|| path.to_owned(), |source| source.path.clone())
         };
+        let source_text = source
+            .as_ref()
+            .map_or(collector.source.as_str(), |source| source.text.as_str());
         collector.diagnostics.push(json!({
             "code": code,
             "severity": "error",
             "message": message,
             "file": file,
-            "span": span_value(&collector.source, span)
+            "span": span_value(source_text, span)
         }));
         true
     });
     if !captured {
         eprintln!(
-            "error[{code}]: {message}\n\n --> {path}:{}:{}",
-            span.line, span.column
+            "error[{code}]: {message}\n\n --> {}:{}:{}",
+            source.as_ref().map_or(path, |source| source.path.as_str()),
+            span.line,
+            span.column
         );
     }
 }
@@ -929,22 +1025,332 @@ fn parse_source(path: &str, source: &str) -> Result<zelyra_ast::Program, ()> {
     }
 }
 
-fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
-    let source = match fs::read_to_string(path) {
-        Ok(source) => source,
+fn load_project(path: &str) -> Result<project::LoadedProject, ()> {
+    PROJECT_SOURCES.with(|sources| sources.borrow_mut().clear());
+    PROJECT_MODULES.with(|modules| modules.borrow_mut().clear());
+    let loaded = match project::load(path) {
+        Ok(loaded) => loaded,
         Err(error) => {
-            diagnostic(
-                path,
-                "E-IO-001",
-                &format!("cannot read `{path}`: {error}"),
-                1,
-                1,
-            );
+            PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = error.sources.to_vec());
+            diagnostic_with_span(&error.path, error.code, &error.message, error.span);
             return Err(());
         }
     };
-    let program = parse_source(path, &source)?;
-    validate_program(path, &source, program)
+    PROJECT_SOURCES.with(|sources| *sources.borrow_mut() = loaded.sources.clone());
+    PROJECT_MODULES.with(|modules| *modules.borrow_mut() = loaded.modules.clone());
+    Ok(loaded)
+}
+
+fn validate(path: &str) -> Result<zelyra_ast::Program, ()> {
+    let loaded = load_project(path)?;
+    let table_dependencies_valid = validate_module_table_dependencies(path, &loaded);
+    let database_dependencies_valid = validate_module_database_dependencies(path, &loaded);
+    if !table_dependencies_valid || !database_dependencies_valid {
+        return Err(());
+    }
+    let source = loaded
+        .sources
+        .first()
+        .map_or_else(String::new, |source| source.text.clone());
+    validate_program(path, &source, loaded.program)
+}
+
+fn validate_module_table_dependencies(path: &str, loaded: &project::LoadedProject) -> bool {
+    let module_imports = loaded
+        .modules
+        .iter()
+        .map(|module| {
+            (
+                module.path.as_str(),
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let source_paths = loaded
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(id, source)| (source.path.as_str(), id as u32))
+        .collect::<HashMap<_, _>>();
+
+    let mut table_owners = HashMap::new();
+    let mut table_definitions = HashMap::new();
+    let mut duplicate_tables = HashSet::new();
+    for table in &loaded.program.tables {
+        let Some(owner) = loaded
+            .sources
+            .get(table.span.source_id as usize)
+            .map(|source| source.path.as_str())
+        else {
+            continue;
+        };
+        if table_owners.insert(table.name.as_str(), owner).is_some() {
+            duplicate_tables.insert(table.name.as_str());
+        }
+        table_definitions.insert(table.name.as_str(), table);
+    }
+
+    let impact = build_impact_with_sources(&loaded.program, &loaded.sources, "");
+    let mut violations = BTreeMap::<(String, String), (zelyra_ast::Span, BTreeSet<String>)>::new();
+    let mut access_violations =
+        BTreeMap::<(String, String), (zelyra_ast::Span, BTreeSet<String>)>::new();
+    for reference in impact
+        .get("references")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(table_name) = reference
+            .get("to")
+            .and_then(Value::as_str)
+            .and_then(|target| target.strip_prefix("table:"))
+        else {
+            continue;
+        };
+        if duplicate_tables.contains(table_name) {
+            continue;
+        }
+        let Some(span_value) = reference.get("span") else {
+            continue;
+        };
+        let Some(source_path) = span_value.get("file").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(owner_path) = table_owners.get(table_name).copied() else {
+            continue;
+        };
+        let kind = reference
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let from = reference
+            .get("from")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let access_mode = match kind {
+            "sql_table" | "page_data_sql" => Some(
+                reference
+                    .get("access")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+            ),
+            "auth_table" => Some("read_write"),
+            "table" if from.starts_with("crud:") || from.starts_with("form:") => Some("read_write"),
+            "table" if from.starts_with("tableview:") => Some(
+                reference
+                    .get("access")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+            ),
+            _ => None,
+        };
+        if source_path == owner_path {
+            continue;
+        }
+        let mut pending = vec![source_path];
+        let mut visited = HashSet::new();
+        let mut reaches_owner = false;
+        while let Some(module_path) = pending.pop() {
+            if !visited.insert(module_path) {
+                continue;
+            }
+            if module_path == owner_path {
+                reaches_owner = true;
+                break;
+            }
+            pending.extend(
+                module_imports
+                    .get(module_path)
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            );
+        }
+        let Some(source_id) = source_paths.get(source_path).copied() else {
+            continue;
+        };
+        let start = span_value
+            .pointer("/start/offset")
+            .and_then(Value::as_u64)
+            .unwrap_or_default() as usize;
+        let end = span_value
+            .pointer("/end/offset")
+            .and_then(Value::as_u64)
+            .unwrap_or(start as u64) as usize;
+        let line = span_value
+            .pointer("/start/line")
+            .and_then(Value::as_u64)
+            .unwrap_or(1) as usize;
+        let column = span_value
+            .pointer("/start/column")
+            .and_then(Value::as_u64)
+            .unwrap_or(1) as usize;
+        let span = zelyra_ast::Span::new(start, end, line, column).with_source_id(source_id);
+        if reaches_owner {
+            if let Some(mode) = access_mode {
+                let granted = table_definitions
+                    .get(table_name)
+                    .is_some_and(|table| table_access_granted(table, source_path, mode));
+                if !granted {
+                    let key = (source_path.to_owned(), table_name.to_owned());
+                    let entry = access_violations
+                        .entry(key)
+                        .or_insert_with(|| (span, BTreeSet::new()));
+                    entry.1.insert(mode.to_owned());
+                }
+            }
+            continue;
+        }
+
+        let key = (source_path.to_owned(), table_name.to_owned());
+        let entry = violations
+            .entry(key)
+            .or_insert_with(|| (span, BTreeSet::new()));
+        if let Some(access) = reference.get("access").and_then(Value::as_str) {
+            entry.1.insert(access.to_owned());
+        }
+    }
+
+    for ((source_path, table_name), (span, accesses)) in &violations {
+        let owner_path = table_owners[table_name.as_str()];
+        let access = if accesses.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " ({})",
+                accesses.iter().cloned().collect::<Vec<_>>().join(", ")
+            )
+        };
+        diagnostic_with_span(
+            path,
+            "E-MOD-019",
+            &format!(
+                "module `{source_path}` references table `{table_name}`{access}, owned by `{owner_path}`, but that module is not in its import dependency graph; import the table-owning module explicitly"
+            ),
+            *span,
+        );
+    }
+    for ((source_path, table_name), (span, accesses)) in &access_violations {
+        let owner_path = table_owners[table_name.as_str()];
+        let access = accesses.iter().cloned().collect::<Vec<_>>().join(", ");
+        diagnostic_with_span(
+            path,
+            "E-MOD-021",
+            &format!(
+                "module `{source_path}` attempts {access} access to table `{table_name}`, owned by `{owner_path}`, without a matching table access grant; add the module path to the appropriate `access` list or expose a public operation from the owning module"
+            ),
+            *span,
+        );
+    }
+    violations.is_empty() && access_violations.is_empty()
+}
+
+fn validate_module_database_dependencies(path: &str, loaded: &project::LoadedProject) -> bool {
+    if loaded.program.databases.len() != 1 {
+        return true;
+    }
+    let database = &loaded.program.databases[0];
+    let owners = module_declaration_owners(&loaded.program);
+    let database_node = format!("database:{}", database.name);
+    let Some(database_module) = owners.get(&database_node) else {
+        return true;
+    };
+    let import_graph = loaded
+        .modules
+        .iter()
+        .map(|module| {
+            (
+                module.path.as_str(),
+                module
+                    .imports
+                    .iter()
+                    .map(|import| import.path.as_str())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let source_ids = loaded
+        .sources
+        .iter()
+        .enumerate()
+        .map(|(id, source)| (source.path.as_str(), id as u32))
+        .collect::<HashMap<_, _>>();
+    let mut valid = true;
+
+    for module in &loaded.modules {
+        if module.path == *database_module
+            || !module_uses_database(&loaded.program, &module.path, &owners)
+        {
+            continue;
+        }
+
+        let mut pending = vec![module.path.as_str()];
+        let mut visited = HashSet::new();
+        let imports_database = loop {
+            let Some(current) = pending.pop() else {
+                break false;
+            };
+            if !visited.insert(current) {
+                continue;
+            }
+            if current == database_module {
+                break true;
+            }
+            pending.extend(import_graph.get(current).into_iter().flatten().copied());
+        };
+        if imports_database {
+            continue;
+        }
+
+        valid = false;
+        let span = source_ids
+            .get(module.path.as_str())
+            .copied()
+            .map(|source_id| zelyra_ast::Span::new(0, 0, 1, 1).with_source_id(source_id))
+            .unwrap_or_default();
+        let entry_is_database_module = loaded
+            .sources
+            .first()
+            .is_some_and(|entry| entry.path == *database_module);
+        let hint = if entry_is_database_module {
+            format!(
+                "move `database {}` from the entry module into an importable source module",
+                database.name
+            )
+        } else {
+            format!("import `{database_module}` directly or through another module")
+        };
+        diagnostic_with_span(
+            path,
+            "E-MOD-022",
+            &format!(
+                "module `{}` uses the project database but its import graph does not include the database provider module `{database_module}`; {hint}",
+                module.path
+            ),
+            span,
+        );
+    }
+
+    valid
+}
+
+fn table_access_granted(table: &zelyra_ast::TableDef, module: &str, mode: &str) -> bool {
+    let read = table.access.read.iter().any(|grant| grant == module);
+    let write = table.access.write.iter().any(|grant| grant == module);
+    let read_write = table.access.read_write.iter().any(|grant| grant == module);
+    match mode {
+        "read" => read || read_write,
+        "write" => write || read_write,
+        "read_write" => read_write || (read && write),
+        // An unknown SQL access mode must never inherit separate read or write
+        // grants; only the explicit combined grant is broad enough.
+        "unknown" => read_write,
+        _ => false,
+    }
 }
 
 fn validate_program(
@@ -958,26 +1364,14 @@ fn validate_program(
     validate_project_features(path, &program)?;
     if let Err(errors) = lower(&program) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-NAME-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-NAME-001", &error.message, error.span);
         }
         return Err(());
     }
     if !program.functions.is_empty() {
         if let Err(errors) = check(&program) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-TYPE-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-TYPE-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1003,13 +1397,7 @@ fn validate_program(
     }
     if let Err(errors) = check_apis(&program) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-API-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-API-001", &error.message, error.span);
         }
         return Err(());
     }
@@ -1029,13 +1417,7 @@ fn validate_program(
         Ok(schema) => schema,
         Err(errors) => {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-DB-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1052,25 +1434,13 @@ fn validate_program(
         }
         if let Err(errors) = check_sql_program(&program, &schema) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-SQL-004",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-SQL-004", &error.message, error.span);
             }
             return Err(());
         }
         if let Err(errors) = check_form_program(&program, &schema) {
             for error in errors {
-                diagnostic(
-                    path,
-                    "E-FORM-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
+                diagnostic_with_span(path, "E-FORM-001", &error.message, error.span);
             }
             return Err(());
         }
@@ -1105,7 +1475,11 @@ fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -
         } else {
             hole.contract_spans
                 .iter()
-                .filter_map(|span| source.get(span.start..span.end))
+                .filter_map(|span| {
+                    source_text_for_span(source, *span)
+                        .get(span.start..span.end)
+                        .map(str::to_owned)
+                })
                 .map(|contract| contract.replace(['\n', '\r'], " "))
                 .collect::<Vec<_>>()
                 .join("; ")
@@ -1118,29 +1492,36 @@ fn reject_typed_holes(source: &str, path: &str, program: &zelyra_ast::Program) -
     holes.is_empty()
 }
 
+fn source_text_for_span(fallback: &str, span: zelyra_ast::Span) -> String {
+    PROJECT_SOURCES.with(|sources| {
+        sources
+            .borrow()
+            .get(span.source_id as usize)
+            .map_or_else(|| fallback.to_owned(), |source| source.text.clone())
+    })
+}
+
 fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
     let mut valid = true;
     let mut names = HashSet::new();
     for view in &program.views {
         if !names.insert(view.name.as_str()) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-001",
                 &format!("duplicate view definition `{}`", view.name),
-                view.span.line,
-                view.span.column,
+                view.span,
             );
             valid = false;
         }
         let slots = match slot_invocations(&view.html) {
             Ok(slots) => slots,
             Err(message) => {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-028",
                     &format!("view `{}` has invalid slots: {message}", view.name),
-                    view.span.line,
-                    view.span.column,
+                    view.span,
                 );
                 valid = false;
                 Vec::new()
@@ -1148,30 +1529,28 @@ fn validate_views(path: &str, program: &zelyra_ast::Program) -> bool {
         };
         let default_slots = slots.iter().filter(|slot| slot.name.is_none()).count();
         if default_slots != 1 {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-002",
                 &format!(
                     "view `{}` must contain exactly one default `<slot />` content slot (found {default_slots})",
                     view.name,
                 ),
-                view.span.line,
-                view.span.column,
+                view.span,
             );
             valid = false;
         }
         let mut named_slots = HashSet::new();
         for slot in slots.iter().filter_map(|slot| slot.name.as_deref()) {
             if !named_slots.insert(slot) {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-028",
                     &format!(
                         "view `{}` declares named slot `{slot}` more than once",
                         view.name
                     ),
-                    view.span.line,
-                    view.span.column,
+                    view.span,
                 );
                 valid = false;
             }
@@ -1911,10 +2290,19 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
     if format == OutputFormat::Json {
         let source = fs::read_to_string(&path).unwrap_or_default();
         begin_json_diagnostics(&path, &source);
-        let program = load(&path);
-        let mut success = program.is_ok();
-        let impact = if let Ok(program) = program.as_ref() {
-            let full_impact = build_impact(program, &source);
+        let project = load_project(&path);
+        let mut success = project.is_ok();
+        let impact = if let Ok(project) = project.as_ref() {
+            let fallback_source = project
+                .sources
+                .first()
+                .map_or(source.as_str(), |source| source.text.as_str());
+            let full_impact = build_impact_with_modules(
+                &project.program,
+                &project.sources,
+                &project.modules,
+                fallback_source,
+            );
             match focus.as_deref() {
                 Some(query) => match focus_impact(&full_impact, query) {
                     Ok(focused) => focused,
@@ -1944,12 +2332,21 @@ fn impact_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
             ExitCode::from(1)
         };
     }
-    let program = match load(&path) {
-        Ok(program) => program,
+    let project = match load_project(&path) {
+        Ok(project) => project,
         Err(()) => return ExitCode::from(1),
     };
     let source = fs::read_to_string(&path).unwrap_or_default();
-    let impact = build_impact(&program, &source);
+    let fallback_source = project
+        .sources
+        .first()
+        .map_or(source.as_str(), |source| source.text.as_str());
+    let impact = build_impact_with_modules(
+        &project.program,
+        &project.sources,
+        &project.modules,
+        fallback_source,
+    );
     let impact = match focus.as_deref() {
         Some(query) => match focus_impact(&impact, query) {
             Ok(focused) => focused,
@@ -2108,11 +2505,18 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
                                             false
                                         };
                                         success = !apply_requested || applied;
+                                        let affected_effects = edit::affected_function_effects(
+                                            &program,
+                                            &result.operations,
+                                            &result.changes,
+                                        );
                                         preview = json!({
                                             "available": true,
                                             "apply_requested": apply_requested,
                                             "applied": applied,
                                             "entry": entry_display.clone(),
+                                            "affected_files": [entry_display.clone()],
+                                            "affected_effects": affected_effects,
                                             "source_fingerprint": current_fingerprint,
                                             "operations": result.operations,
                                             "changes": result.changes,
@@ -2163,323 +2567,6 @@ fn edit_error_document(path: &str, code: &str, message: &str) -> ExitCode {
         [("request".into(), Value::String(path.into()))],
     ));
     ExitCode::from(1)
-}
-
-fn context_span(source: &str, span: zelyra_ast::Span) -> Value {
-    let (end_line, end_column) = source_position(source, span.end);
-    json!({
-        "start": { "offset": span.start, "line": span.line, "column": span.column },
-        "end": { "offset": span.end, "line": end_line, "column": end_column }
-    })
-}
-
-fn default_value_json(value: &zelyra_ast::DefaultValue) -> Value {
-    match value {
-        zelyra_ast::DefaultValue::Int(value) => json!(value),
-        zelyra_ast::DefaultValue::Bool(value) => json!(value),
-        zelyra_ast::DefaultValue::String(value) => json!(value),
-        zelyra_ast::DefaultValue::Ident(value) => json!(value),
-    }
-}
-
-fn project_name(path: &str) -> Option<String> {
-    let config_path = project_config_path(path).ok().flatten()?;
-    let contents = fs::read_to_string(config_path).ok()?;
-    let mut in_project = false;
-    for raw_line in contents.lines() {
-        let line = raw_line.split('#').next()?.trim();
-        if line.starts_with('[') && line.ends_with(']') {
-            in_project = line == "[project]";
-            continue;
-        }
-        if in_project {
-            let (key, value) = line.split_once('=')?;
-            if key.trim() == "name" {
-                return value
-                    .trim()
-                    .strip_prefix('"')
-                    .and_then(|value| value.strip_suffix('"'))
-                    .map(str::to_owned);
-            }
-        }
-    }
-    None
-}
-
-fn context_entry(path: &str) -> String {
-    let source_path = fs::canonicalize(path).ok();
-    let root = project_config_path(path)
-        .ok()
-        .flatten()
-        .and_then(|path| path.parent().map(PathBuf::from));
-    if let (Some(source_path), Some(root)) = (source_path, root) {
-        if let Ok(relative) = source_path.strip_prefix(root) {
-            return relative.to_string_lossy().replace('\\', "/");
-        }
-    }
-    path.replace('\\', "/")
-}
-
-fn context_view_slots(html: &str) -> Vec<Value> {
-    slot_invocations(html)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|slot| {
-            json!({
-                "name": slot.name.unwrap_or_else(|| "default".into()),
-                "fallback": slot.body.is_some()
-            })
-        })
-        .collect()
-}
-
-fn context_declarations(program: &zelyra_ast::Program, source: &str) -> Value {
-    let databases = program
-        .databases
-        .iter()
-        .map(|database| {
-            json!({
-                "name": database.name,
-                "engine": database.engine,
-                "database": database.database,
-                "span": context_span(source, database.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let tables = program
-        .tables
-        .iter()
-        .map(|table| {
-            let fields = table
-                .columns
-                .iter()
-                .map(|column| {
-                    json!({
-                        "name": column.name,
-                        "type": column.ty.to_string(),
-                        "optional": !column.required,
-                        "primary_key": column.primary_key,
-                        "auto_increment": column.auto,
-                        "unique": column.unique,
-                        "default": column.default.as_ref().map(default_value_json),
-                        "span": context_span(source, column.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            json!({
-                "name": table.name,
-                "fields": fields,
-                "span": context_span(source, table.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let cruds = program
-        .cruds
-        .iter()
-        .map(|crud| {
-            json!({
-                "name": crud.name,
-                "table": crud.table,
-                "layout": crud.layout,
-                "layout_slots": crud.layout_slots.iter().map(|slot| json!({
-                    "name": slot.name,
-                    "span": context_span(source, slot.span)
-                })).collect::<Vec<_>>(),
-                "view_fields": crud.view.fields,
-                "span": context_span(source, crud.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let views = program
-        .views
-        .iter()
-        .map(|view| {
-            json!({
-                "name": view.name,
-                "input_type": Value::Null,
-                "used_fields": Vec::<String>::new(),
-                "slots": context_view_slots(&view.html),
-                "span": context_span(source, view.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let pages = program
-        .pages
-        .iter()
-        .map(|page| {
-            let data = page
-                .data
-                .iter()
-                .map(|binding| {
-                    json!({
-                        "name": binding.name,
-                        "type": binding.result_type.to_string(),
-                        "fields": page_data_fields(program, &binding.result_type),
-                        "span": context_span(source, binding.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            let inputs = page
-                .inputs
-                .iter()
-                .map(|input| {
-                    json!({
-                        "name": input.name,
-                        "type": input.ty.to_string(),
-                        "span": context_span(source, input.span)
-                    })
-                })
-                .collect::<Vec<_>>();
-            json!({
-                "path": page.path,
-                "view": page.view,
-                "inputs": inputs,
-                "page_size": page.page_size,
-                "sort": page.sort,
-                "search": page.search,
-                "filters": page.filters,
-                "data": data,
-                "span": context_span(source, page.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let tableviews = program
-        .tableviews
-        .iter()
-        .map(|view| {
-            json!({
-                "name": view.name,
-                "result_type": view.result_type.to_string(),
-                "fields": view.columns,
-                "span": context_span(source, view.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let forms = program
-        .forms
-        .iter()
-        .map(|form| {
-            json!({
-                "name": form.name,
-                "table": form.table,
-                "fields": form.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
-                "span": context_span(source, form.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let apis = program
-        .apis
-        .iter()
-        .map(|api| {
-            json!({
-                "method": api.method,
-                "path": api.path,
-                "input": api.input.iter().map(|field| json!({ "name": field.name, "type": field.ty.to_string() })).collect::<Vec<_>>(),
-                "output": api.output.to_string(),
-                "span": context_span(source, api.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    let auth = program
-        .auth
-        .iter()
-        .map(|auth| {
-            json!({
-                "name": auth.name,
-                "table": auth.table,
-                "audit_table": auth.audit_table,
-                "audit_chain": auth.audit_chain,
-                "span": context_span(source, auth.span)
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "databases": databases,
-        "tables": tables,
-        "cruds": cruds,
-        "pages": pages,
-        "views": views,
-        "tableviews": tableviews,
-        "forms": forms,
-        "apis": apis,
-        "auth": auth
-    })
-}
-
-fn empty_context_declarations() -> Value {
-    json!({
-        "databases": [],
-        "tables": [],
-        "cruds": [],
-        "pages": [],
-        "views": [],
-        "tableviews": [],
-        "forms": [],
-        "apis": [],
-        "auth": []
-    })
-}
-
-fn context_command(mut arguments: impl Iterator<Item = String>) -> ExitCode {
-    let Some(path) = arguments.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    let mut format = OutputFormat::Human;
-    while let Some(argument) = arguments.next() {
-        if argument == "--format=json" {
-            format = OutputFormat::Json;
-        } else if argument == "--format=human" {
-            format = OutputFormat::Human;
-        } else if argument.starts_with("--format=") {
-            eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-            return ExitCode::from(2);
-        } else if argument == "--format" {
-            format = match arguments.next().as_deref().and_then(parse_output_format) {
-                Some(format) => format,
-                None => {
-                    eprintln!("error[E-CLI-001]: format must be `human` or `json`");
-                    return ExitCode::from(2);
-                }
-            };
-        } else {
-            eprintln!("error[E-CLI-001]: unknown context option `{argument}`");
-            return ExitCode::from(2);
-        }
-    }
-    if format == OutputFormat::Human {
-        return if validate(&path).is_ok() {
-            println!("context: {}", context_entry(&path));
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::from(1)
-        };
-    }
-    let source = fs::read_to_string(&path).unwrap_or_default();
-    begin_json_diagnostics(&path, &source);
-    let program = validate(&path);
-    let diagnostics = finish_json_diagnostics();
-    let success = program.is_ok();
-    let declarations = program.as_ref().map_or_else(
-        |_| empty_context_declarations(),
-        |program| context_declarations(program, &source),
-    );
-    let fields = [
-        (
-            "project".into(),
-            json!({
-                "name": project_name(&path),
-                "entry": context_entry(&path)
-            }),
-        ),
-        ("declarations".into(), declarations),
-    ];
-    print_machine_document(&machine_document("context", success, diagnostics, fields));
-    if success {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    }
 }
 
 fn feature_settings_json(features: &ProjectFeatures) -> Value {
@@ -3367,50 +3454,46 @@ fn validate_components(path: &str, program: &zelyra_ast::Program) -> bool {
             .next()
             .is_some_and(|character| character.is_ascii_uppercase())
         {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-004",
                 &format!(
                     "view component `{}` must start with an uppercase letter",
                     component.name
                 ),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         if !names.insert(component.name.as_str()) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-005",
                 &format!("duplicate view component `{}`", component.name),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         if let Err(message) = declared_component_slots(component) {
-            diagnostic(
+            diagnostic_with_span(
                 path,
                 "E-VIEW-011",
                 &format!("component `{}`: {message}", component.name),
-                component.span.line,
-                component.span.column,
+                component.span,
             );
             valid = false;
         }
         let mut props = HashSet::new();
         for prop in &component.props {
             if !props.insert(prop.name.as_str()) {
-                diagnostic(
+                diagnostic_with_span(
                     path,
                     "E-VIEW-005",
                     &format!(
                         "duplicate property `{}` in component `{}`",
                         prop.name, component.name
                     ),
-                    prop.span.line,
-                    prop.span.column,
+                    prop.span,
                 );
                 valid = false;
             }
@@ -3562,6 +3645,7 @@ fn verify_command(path: &str, json: bool) -> ExitCode {
 
 struct DoctorCheck {
     name: &'static str,
+    category: &'static str,
     status: &'static str,
     message: String,
 }
@@ -3585,6 +3669,58 @@ fn read_env_value(path: &str, key: &str) -> Result<Option<String>, String> {
         }
     }
     Ok(None)
+}
+
+fn database_url_environment_name(database_name: &str) -> String {
+    let normalized = database_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("ZELYRA_DATABASE_{normalized}_URL")
+}
+
+fn database_url_from_environment(database_name: Option<&str>) -> Option<String> {
+    database_name
+        .map(database_url_environment_name)
+        .and_then(|name| env::var(name).ok())
+        .or_else(|| env::var("DATABASE_URL").ok())
+}
+
+fn database_url_from_program(program: &zelyra_ast::Program) -> Option<String> {
+    database_url_from_environment(
+        program
+            .databases
+            .first()
+            .map(|database| database.name.as_str()),
+    )
+}
+
+fn database_url_from_schema(schema: &Schema) -> Option<String> {
+    database_url_from_environment(
+        schema
+            .database
+            .as_ref()
+            .map(|database| database.name.as_str()),
+    )
+}
+
+fn database_url_from_env_file(
+    path: &str,
+    database_name: Option<&str>,
+) -> Result<Option<(String, String)>, String> {
+    if let Some(database_name) = database_name {
+        let environment_name = database_url_environment_name(database_name);
+        if let Some(url) = read_env_value(path, &environment_name)? {
+            return Ok(Some((url, environment_name)));
+        }
+    }
+    Ok(read_env_value(path, "DATABASE_URL")?.map(|url| (url, "DATABASE_URL".to_owned())))
 }
 
 fn project_ui_setting(path: &str, key: &str, default: &str) -> Result<String, String> {
@@ -3739,16 +3875,82 @@ fn project_uses_reserved_theme_route(program: &zelyra_ast::Program) -> bool {
         })
 }
 
+fn project_uses_reserved_health_route(program: &zelyra_ast::Program) -> bool {
+    let reserved_path = zelyra_web::HEALTH_LIVENESS_PATH;
+    program
+        .pages
+        .iter()
+        .any(|page| zelyra_web::route_pattern_matches_path(&page.path, reserved_path))
+        || program
+            .apis
+            .iter()
+            .any(|api| zelyra_web::route_pattern_matches_path(&api.path, reserved_path))
+        || program.auth.iter().any(|auth| {
+            auth.admin_path
+                .as_deref()
+                .is_some_and(|path| zelyra_web::route_pattern_matches_path(path, reserved_path))
+        })
+        || program.cruds.iter().any(|crud| {
+            let base = format!("/{}", crud.table);
+            [
+                base.clone(),
+                format!("{base}/new"),
+                format!("{base}/{{id}}"),
+                format!("{base}/{{id}}/edit"),
+                format!("{base}/{{id}}/delete"),
+                format!("{base}/{{id}}/restore"),
+            ]
+            .iter()
+            .any(|pattern| zelyra_web::route_pattern_matches_path(pattern, reserved_path))
+                || crud.actions.iter().any(|action| {
+                    let pattern = format!("{base}/{{id}}/{}", action.name);
+                    zelyra_web::route_pattern_matches_path(&pattern, reserved_path)
+                })
+        })
+}
+
+fn project_uses_reserved_account_sessions_route(program: &zelyra_ast::Program) -> bool {
+    !program.auth.is_empty()
+        && (program.pages.iter().any(|page| {
+            zelyra_web::route_pattern_matches_path(&page.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+        }) || program.apis.iter().any(|api| {
+            zelyra_web::route_pattern_matches_path(&api.path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+        }) || program.cruds.iter().any(|crud| {
+            let base = format!("/{}", crud.table);
+            [
+                base.clone(),
+                format!("{base}/new"),
+                format!("{base}/{{id}}"),
+                format!("{base}/{{id}}/edit"),
+                format!("{base}/{{id}}/delete"),
+                format!("{base}/{{id}}/restore"),
+            ]
+            .iter()
+            .any(|pattern| {
+                zelyra_web::route_pattern_matches_path(pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            }) || crud.actions.iter().any(|action| {
+                let pattern = format!("{base}/{{id}}/{}", action.name);
+                zelyra_web::route_pattern_matches_path(&pattern, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            })
+        }) || program.auth.iter().any(|auth| {
+            auth.admin_path.as_deref().is_some_and(|path| {
+                zelyra_web::route_pattern_matches_path(path, zelyra_web::ACCOUNT_SESSIONS_PATH)
+            })
+        }))
+}
+
 fn docker_compose_check() -> DoctorCheck {
     if let Some(command) = detect_docker_compose() {
         return DoctorCheck {
             name: "docker_compose",
+            category: "tooling",
             status: "pass",
             message: format!("{} is available", command.label()),
         };
     }
     DoctorCheck {
         name: "docker_compose",
+        category: "tooling",
         status: "warn",
         message: format!(
             "{} The generated MariaDB stack cannot be started until Docker Compose is available.",
@@ -3896,8 +4098,23 @@ fn start_mariadb_compose(directory: &std::path::Path) -> Result<String, String> 
 
 fn expanded_database_url(directory: &std::path::Path) -> Result<String, String> {
     let env_path = directory.join(".env");
-    let url = read_env_value(env_path.to_str().unwrap_or(".env"), "DATABASE_URL")?
-        .ok_or_else(|| "`.env` does not define DATABASE_URL".to_owned())?;
+    let database_name = directory
+        .join("main.zyl")
+        .to_str()
+        .and_then(|path| load_project(path).ok())
+        .and_then(|project| {
+            project
+                .program
+                .databases
+                .first()
+                .map(|database| database.name.clone())
+        });
+    let url = database_url_from_env_file(
+        env_path.to_str().unwrap_or(".env"),
+        database_name.as_deref(),
+    )?
+    .map(|(url, _)| url)
+    .ok_or_else(|| "`.env` does not define the project database URL or DATABASE_URL".to_owned())?;
     let port = read_env_value(env_path.to_str().unwrap_or(".env"), "ZELYRA_DB_HOST_PORT")?
         .unwrap_or_else(|| DEFAULT_DATABASE_HOST_PORT.to_string());
     Ok(url.replace("${ZELYRA_DB_HOST_PORT:-3306}", &port))
@@ -4168,6 +4385,7 @@ fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
         .map(|check| {
             serde_json::json!({
                 "name": check.name,
+                "category": check.category,
                 "status": check.status,
                 "message": check.message,
             })
@@ -4181,6 +4399,66 @@ fn format_doctor_json(path: &str, checks: &[DoctorCheck]) -> String {
         "checks": checks,
     })
     .to_string()
+}
+
+fn doctor_database_category(message: &str) -> &'static str {
+    let message = message.to_ascii_lowercase();
+    if message.contains("access denied")
+        || message.contains("authentication failed")
+        || message.contains("rejected authentication")
+        || message.contains("password authentication failed")
+        || message.contains("no pg_hba.conf entry")
+    {
+        "authentication"
+    } else if message.contains("timed out")
+        || message.contains("timeout")
+        || message.contains("time out")
+        || message.contains("query execution was interrupted")
+        || message.contains("max_statement_time")
+    {
+        "timeout"
+    } else if message.contains("database_url is not set")
+        || message.contains("must use mariadb://")
+        || message.contains("must include a database name")
+        || message.contains("must include user and host")
+        || message.contains("contains an empty user")
+        || message.contains("unknown database")
+        || (message.contains("database ") && message.contains(" does not exist"))
+        || message.contains("configuration is invalid")
+    {
+        "configuration"
+    } else if message.contains("could not start mariadb")
+        || message.contains("could not start psql")
+        || message.contains("could not start sqlite")
+        || message.contains("no such file or directory")
+        || message.contains("client is unavailable")
+    {
+        "tooling"
+    } else if message.contains("could not connect")
+        || message.contains("can't connect")
+        || message.contains("cannot connect")
+        || message.contains("connection refused")
+        || message.contains("connection reset")
+        || message.contains("server has gone away")
+        || message.contains("certificate")
+        || message.contains("tls")
+        || message.contains("ssl")
+    {
+        "connectivity"
+    } else {
+        "schema"
+    }
+}
+
+fn doctor_database_failure_message(category: &str) -> &'static str {
+    match category {
+        "authentication" => "database rejected authentication; check the configured user and grants",
+        "timeout" => "database check timed out; check server responsiveness and configured timeouts",
+        "configuration" => "database configuration is invalid or the configured database is unavailable",
+        "tooling" => "database client is unavailable; install the client required by this backend",
+        "connectivity" => "could not connect securely to the database; check host, port, TLS, and server status",
+        _ => "could not inspect the database schema; check schema compatibility and metadata permissions",
+    }
 }
 
 fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
@@ -4220,41 +4498,10 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 
     let mut checks = Vec::new();
-    let file_database_url = if let Some(env_file) = env_file.as_deref() {
-        match read_env_value(env_file, "DATABASE_URL") {
-            Ok(Some(url)) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "pass",
-                    message: format!(
-                        "loaded DATABASE_URL from {env_file} without exposing credentials"
-                    ),
-                });
-                Some(url)
-            }
-            Ok(None) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "warn",
-                    message: format!("{env_file} does not define DATABASE_URL"),
-                });
-                None
-            }
-            Err(error) => {
-                checks.push(DoctorCheck {
-                    name: "env_file",
-                    status: "fail",
-                    message: error,
-                });
-                None
-            }
-        }
-    } else {
-        None
-    };
     let program = if fs::metadata(&path).is_ok() {
         checks.push(DoctorCheck {
             name: "project_file",
+            category: "configuration",
             status: "pass",
             message: format!("{path} exists"),
         });
@@ -4262,6 +4509,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Ok(program) => {
                 checks.push(DoctorCheck {
                     name: "static_checks",
+                    category: "project",
                     status: "pass",
                     message: "source, types, APIs, SQL, and forms are valid".into(),
                 });
@@ -4270,6 +4518,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             Err(()) => {
                 checks.push(DoctorCheck {
                     name: "static_checks",
+                    category: "project",
                     status: "fail",
                     message: "see diagnostics above".into(),
                 });
@@ -4279,20 +4528,64 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         checks.push(DoctorCheck {
             name: "project_file",
+            category: "configuration",
             status: "fail",
             message: format!("`{path}` does not exist"),
         });
         None
     };
 
+    let file_database_url = if let Some(env_file) = env_file.as_deref() {
+        let database_name = program
+            .as_ref()
+            .and_then(|program| program.databases.first())
+            .map(|database| database.name.as_str());
+        match database_url_from_env_file(env_file, database_name) {
+            Ok(Some((url, key))) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "pass",
+                    message: format!("loaded {key} from {env_file} without exposing credentials"),
+                });
+                Some(url)
+            }
+            Ok(None) => {
+                let expected_key = database_name
+                    .map(database_url_environment_name)
+                    .unwrap_or_else(|| "DATABASE_URL".to_owned());
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "warn",
+                    message: format!("{env_file} does not define {expected_key} or DATABASE_URL"),
+                });
+                None
+            }
+            Err(error) => {
+                checks.push(DoctorCheck {
+                    name: "env_file",
+                    category: "configuration",
+                    status: "fail",
+                    message: error,
+                });
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     match Command::new("cargo").arg("--version").output() {
         Ok(output) if output.status.success() => checks.push(DoctorCheck {
             name: "rust_toolchain",
+            category: "tooling",
             status: "pass",
             message: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
         }),
         _ => checks.push(DoctorCheck {
             name: "rust_toolchain",
+            category: "tooling",
             status: "warn",
             message: "cargo is unavailable".into(),
         }),
@@ -4302,10 +4595,11 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         match build_schema(program) {
             Ok(schema) => {
                 let backend = schema.backend();
-                match file_database_url.or_else(|| env::var("DATABASE_URL").ok()) {
+                match file_database_url.or_else(|| database_url_from_program(program)) {
                     Some(url) => match inspect_for_backend(backend, &url) {
                         Ok(current) => checks.push(DoctorCheck {
                             name: "database",
+                            category: "schema",
                             status: "pass",
                             message: format!(
                                 "{}: {}",
@@ -4313,14 +4607,23 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                                 current.summary().replace('\n', ", ")
                             ),
                         }),
-                        Err(error) => checks.push(DoctorCheck {
-                            name: "database",
-                            status: "fail",
-                            message: format!("{}: {error}", backend.name()),
-                        }),
+                        Err(error) => {
+                            let category = doctor_database_category(&error.message);
+                            checks.push(DoctorCheck {
+                                name: "database",
+                                category,
+                                status: "fail",
+                                message: format!(
+                                    "{}: {}",
+                                    backend.name(),
+                                    doctor_database_failure_message(category)
+                                ),
+                            });
+                        }
                     },
                     None => checks.push(DoctorCheck {
                         name: "database",
+                        category: "configuration",
                         status: "warn",
                         message: format!("{}: DATABASE_URL is not set", backend.name()),
                     }),
@@ -4328,6 +4631,7 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             }
             Err(errors) => checks.push(DoctorCheck {
                 name: "schema",
+                category: "schema",
                 status: "fail",
                 message: errors
                     .iter()
@@ -4345,12 +4649,14 @@ fn doctor_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             let actual_port = listener.local_addr().map_or(port, |address| address.port());
             checks.push(DoctorCheck {
                 name: "web_port",
+                category: "connectivity",
                 status: "pass",
                 message: format!("127.0.0.1:{actual_port} is available"),
             });
         }
         Err(error) => checks.push(DoctorCheck {
             name: "web_port",
+            category: "connectivity",
             status: "fail",
             message: format!("127.0.0.1:{port} is unavailable ({error})"),
         }),
@@ -4400,532 +4706,16 @@ fn doc_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         usage();
         return ExitCode::from(2);
     }
-    let program = match validate(&path) {
-        Ok(program) => program,
+    let program = match load_project(&path) {
+        Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
     if format == "typescript" {
-        println!("{}", format_typescript_client(&program));
+        println!("{}", docs::format_typescript_client(&program));
     } else {
-        println!("{}", format_openapi(&program));
+        println!("{}", docs::format_openapi(&program));
     }
     ExitCode::SUCCESS
-}
-
-fn format_openapi(program: &zelyra_ast::Program) -> String {
-    let paths = program
-        .apis
-        .iter()
-        .map(|api| {
-            let method = api.method.to_ascii_lowercase();
-            let path_parameters = api
-                .input
-                .iter()
-                .filter(|field| api.path.contains(&format!("{{{}}}", field.name)))
-                .map(|field| {
-                    format!(
-                        "{{\"name\":\"{}\",\"in\":\"path\",\"required\":true,\"schema\":{}}}",
-                        json_escape(&field.name),
-                        openapi_schema(&field.ty)
-                    )
-                })
-                .collect::<Vec<_>>();
-            let query_parameters = if matches!(api.method.as_str(), "GET" | "DELETE") {
-                api.input
-                    .iter()
-                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-                    .map(|field| {
-                        format!(
-                            "{{\"name\":\"{}\",\"in\":\"query\",\"required\":{},\"schema\":{}}}",
-                            json_escape(&field.name),
-                            !matches!(field.ty, Type::Option(_)),
-                            openapi_schema(&field.ty)
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            let request_body = if matches!(api.method.as_str(), "GET" | "DELETE") {
-                String::new()
-            } else {
-                let properties = api
-                    .input
-                    .iter()
-                    .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-                    .map(|field| {
-                        format!(
-                            "\"{}\":{}",
-                            json_escape(&field.name),
-                            openapi_schema(&field.ty)
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let required = api
-                    .input
-                    .iter()
-                    .filter(|field| {
-                        !api.path.contains(&format!("{{{}}}", field.name))
-                            && !matches!(field.ty, Type::Option(_))
-                    })
-                    .map(|field| format!("\"{}\"", json_escape(&field.name)))
-                    .collect::<Vec<_>>();
-                if properties.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "\"requestBody\":{{\"required\":true,\"content\":{{\"application/json\":{{\"schema\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}}}}}}},",
-                        properties.join(","),
-                        required.join(",")
-                    )
-                }
-            };
-            let mut parameters = path_parameters;
-            parameters.extend(query_parameters);
-            let security = if api.requires_auth || !api.permissions.is_empty() {
-                format!(
-                    ",\"x-zelyra-requires-auth\":{},\"x-zelyra-permissions\":[{}]",
-                    api.requires_auth,
-                    api.permissions
-                        .iter()
-                        .map(|permission| format!("\"{}\"", json_escape(permission)))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            } else {
-                String::new()
-            };
-            let responses = std::iter::once(format!(
-                "\"200\":{{\"description\":\"Successful response\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
-                openapi_schema(&api.output)
-            ))
-            .chain(api.errors.iter().map(|error| {
-                let response = if let Some(payload) = &error.payload {
-                    format!(
-                        "{{\"description\":\"{}\",\"content\":{{\"application/json\":{{\"schema\":{}}}}}}}",
-                        json_escape(&error.name),
-                        openapi_error_schema(payload)
-                    )
-                } else {
-                    format!("{{\"description\":\"{}\"}}", json_escape(&error.name))
-                };
-                format!("\"{}\":{}", error.status, response)
-            }))
-            .collect::<Vec<_>>()
-            .join(",");
-            let operation_id = format!(
-                "{}_{}",
-                method,
-                api.path
-                    .trim_matches('/')
-                    .replace(['{', '}'], "")
-                    .replace('/', "_")
-            );
-            format!(
-                "\"{}\":{{\"{}\":{{\"operationId\":\"{}\",\"parameters\":[{}],{}\"responses\":{{{}}}{}}}}}",
-                json_escape(&api.path),
-                method,
-                json_escape(&operation_id),
-                parameters.join(","),
-                request_body,
-                responses,
-                security
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let components = format_openapi_components(program);
-    let compiler_version = env!("CARGO_PKG_VERSION");
-    format!(
-        "{{\"openapi\":\"3.0.3\",\"info\":{{\"title\":\"Zelyra API\",\"version\":\"{compiler_version}\"}},\"paths\":{{{paths}}},\"components\":{{\"schemas\":{{{components}}}}}}}"
-    )
-}
-
-fn format_openapi_components(program: &zelyra_ast::Program) -> String {
-    let mut components = Vec::new();
-    for definition in &program.types {
-        components.push(format!(
-            "\"{}\":{}",
-            json_escape(&definition.name),
-            openapi_schema(&definition.target)
-        ));
-    }
-    for record in &program.records {
-        let properties = record
-            .fields
-            .iter()
-            .map(|field| {
-                format!(
-                    "\"{}\":{}",
-                    json_escape(&field.name),
-                    openapi_schema(&field.ty)
-                )
-            })
-            .collect::<Vec<_>>();
-        let required = record
-            .fields
-            .iter()
-            .filter(|field| !matches!(field.ty, Type::Option(_)))
-            .map(|field| format!("\"{}\"", json_escape(&field.name)))
-            .collect::<Vec<_>>();
-        components.push(format!(
-            "\"{}\":{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
-            json_escape(&record.name),
-            properties.join(","),
-            required.join(",")
-        ));
-    }
-    for table in &program.tables {
-        let properties = table
-            .columns
-            .iter()
-            .map(|column| {
-                format!(
-                    "\"{}\":{}",
-                    json_escape(&column.name),
-                    openapi_schema(&column.ty)
-                )
-            })
-            .collect::<Vec<_>>();
-        let required = table
-            .columns
-            .iter()
-            .filter(|column| column.required && !matches!(column.ty, Type::Option(_)))
-            .map(|column| format!("\"{}\"", json_escape(&column.name)))
-            .collect::<Vec<_>>();
-        let schema = format!(
-            "{{\"type\":\"object\",\"properties\":{{{}}},\"required\":[{}]}}",
-            properties.join(","),
-            required.join(",")
-        );
-        components.push(format!(
-            "\"{}\":{}",
-            json_escape(&table.name),
-            schema.clone()
-        ));
-        if let Some(singular) = singular_type_name(&table.name) {
-            components.push(format!("\"{}\":{}", json_escape(&singular), schema));
-        }
-    }
-    components.join(",")
-}
-
-fn format_typescript_client(program: &zelyra_ast::Program) -> String {
-    let mut output = String::new();
-    output.push_str("// Generated by Zelyra. Do not edit by hand.\n\n");
-    output.push_str("export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };\n\n");
-
-    let mut error_codes = program
-        .apis
-        .iter()
-        .flat_map(|api| api.errors.iter().map(|error| error.name.clone()))
-        .collect::<Vec<_>>();
-    error_codes.sort();
-    error_codes.dedup();
-    if error_codes.is_empty() {
-        output.push_str("export type ZelyraApiErrorCode = string;\n\n");
-    } else {
-        let codes = error_codes
-            .iter()
-            .map(|code| format!("\"{}\"", json_escape(code)))
-            .collect::<Vec<_>>()
-            .join(" | ");
-        writeln!(
-            output,
-            "export type ZelyraApiErrorCode = {} | (string & {{}});\n",
-            codes
-        )
-        .expect("writing to a String cannot fail");
-    }
-
-    let mut emitted = HashSet::new();
-    for definition in &program.types {
-        if emitted.insert(definition.name.clone()) {
-            writeln!(
-                output,
-                "export type {} = {};",
-                definition.name,
-                typescript_type(&definition.target)
-            )
-            .expect("writing to a String cannot fail");
-        }
-    }
-    for record in &program.records {
-        if emitted.insert(record.name.clone()) {
-            writeln!(output, "export interface {} {{", record.name)
-                .expect("writing to a String cannot fail");
-            for field in &record.fields {
-                let optional = matches!(field.ty, Type::Option(_));
-                writeln!(
-                    output,
-                    "  {}{}: {};",
-                    field.name,
-                    if optional { "?" } else { "" },
-                    typescript_type(&field.ty)
-                )
-                .expect("writing to a String cannot fail");
-            }
-            output.push_str("}\n\n");
-        }
-    }
-    for table in &program.tables {
-        let names = std::iter::once(table.name.clone()).chain(
-            singular_type_name(&table.name)
-                .into_iter()
-                .filter(|name| name != &table.name),
-        );
-        for name in names {
-            if emitted.insert(name.clone()) {
-                writeln!(output, "export interface {} {{", name)
-                    .expect("writing to a String cannot fail");
-                for column in &table.columns {
-                    let optional = !column.required || matches!(column.ty, Type::Option(_));
-                    writeln!(
-                        output,
-                        "  {}{}: {};",
-                        column.name,
-                        if optional { "?" } else { "" },
-                        typescript_type(&column.ty)
-                    )
-                    .expect("writing to a String cannot fail");
-                }
-                output.push_str("}\n\n");
-            }
-        }
-    }
-
-    let payload_types = program
-        .apis
-        .iter()
-        .flat_map(|api| {
-            api.errors.iter().filter_map(|error| {
-                error
-                    .payload
-                    .as_ref()
-                    .map(|payload| (error.name.clone(), typescript_type(payload)))
-            })
-        })
-        .collect::<HashMap<_, _>>();
-    if payload_types.is_empty() {
-        output.push_str("export type ZelyraApiErrorPayload = JsonValue;\n\n");
-    } else {
-        output.push_str("export interface ZelyraApiErrorPayloads {\n");
-        let mut payload_types = payload_types.into_iter().collect::<Vec<_>>();
-        payload_types.sort_by(|left, right| left.0.cmp(&right.0));
-        for (name, ty) in payload_types {
-            writeln!(output, "  \"{name}\": {ty};").expect("writing to a String cannot fail");
-        }
-        output.push_str("}\n\nexport type ZelyraApiErrorPayload = ZelyraApiErrorPayloads[keyof ZelyraApiErrorPayloads];\n\n");
-    }
-
-    output.push_str(
-        "export interface ZelyraClientOptions {\n  baseUrl: string;\n  fetch?: typeof fetch;\n  token?: string;\n}\n\n",
-    );
-    output.push_str(
-        "export class ZelyraApiError extends Error {\n  constructor(\n    public readonly status: number,\n    public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,\n    message: string,\n  ) {\n    super(message);\n  }\n\n  static async fromResponse(response: Response): Promise<ZelyraApiError> {\n    const body = await response.text();\n    let code: ZelyraApiErrorCode | undefined;\n    let message = `Zelyra API request failed (${response.status})`;\n    try {\n      const payload = JSON.parse(body) as { error?: { code?: unknown; message?: unknown } };\n      if (payload.error && typeof payload.error === \"object\") {\n        if (typeof payload.error.code === \"string\") code = payload.error.code;\n        if (typeof payload.error.message === \"string\") message = payload.error.message;\n      }\n    } catch {\n      // Keep the original response body when the server did not return JSON.
-    }\n    return new ZelyraApiError(response.status, code, body, message);\n  }\n}\n\n",
-    );
-    output.push_str(
-        "export class ZelyraClient {\n  private readonly baseUrl: string;\n  private readonly fetchImpl: typeof fetch;\n  private readonly token?: string;\n\n  constructor(options: ZelyraClientOptions) {\n    this.baseUrl = options.baseUrl.replace(/\\/$/, \"\");\n    this.fetchImpl = options.fetch ?? fetch;\n    this.token = options.token;\n  }\n\n",
-    );
-
-    for api in &program.apis {
-        format_typescript_operation(&mut output, api);
-    }
-    output = output
-        .replace(
-            "export class ZelyraApiError extends Error {",
-            "export class ZelyraApiError<Details = ZelyraApiErrorPayload> extends Error {",
-        )
-        .replace(
-            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly body: string,",
-            "public readonly code: ZelyraApiErrorCode | undefined,\n    public readonly details: Details | undefined,\n    public readonly body: string,",
-        )
-        .replace(
-            "static async fromResponse(response: Response): Promise<ZelyraApiError> {",
-            "static async fromResponse<Details = ZelyraApiErrorPayload>(response: Response): Promise<ZelyraApiError<Details>> {",
-        )
-        .replace(
-            "let code: ZelyraApiErrorCode | undefined;\n    let message",
-            "let code: ZelyraApiErrorCode | undefined;\n    let details: Details | undefined;\n    let message",
-        )
-        .replace(
-            "{ error?: { code?: unknown; message?: unknown } }",
-            "{ error?: { code?: unknown; message?: unknown; details?: unknown } }",
-        )
-        .replace(
-            "if (typeof payload.error.message === \"string\") message = payload.error.message;",
-            "if (typeof payload.error.message === \"string\") message = payload.error.message;\n        details = payload.error.details as Details | undefined;",
-        )
-        .replace(
-            "new ZelyraApiError(response.status, code, body, message)",
-            "new ZelyraApiError(response.status, code, details, body, message)",
-        );
-    output.push_str("}\n");
-    output
-}
-
-fn format_typescript_operation(output: &mut String, api: &zelyra_ast::ApiDef) {
-    let method = api.method.to_ascii_uppercase();
-    let operation = typescript_operation_name(api);
-    let query_fields = if matches!(method.as_str(), "GET" | "DELETE") {
-        api.input
-            .iter()
-            .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-    let body_fields = if matches!(method.as_str(), "GET" | "DELETE") {
-        Vec::new()
-    } else {
-        api.input
-            .iter()
-            .filter(|field| !api.path.contains(&format!("{{{}}}", field.name)))
-            .collect::<Vec<_>>()
-    };
-    let has_params = !api.input.is_empty();
-    write!(output, "  async {}(", operation).expect("writing to a String cannot fail");
-    if has_params {
-        write!(output, "params: {{ ").expect("writing to a String cannot fail");
-        for (index, field) in api.input.iter().enumerate() {
-            if index > 0 {
-                output.push(' ');
-            }
-            let optional = matches!(field.ty, Type::Option(_));
-            write!(
-                output,
-                "{}{}: {};",
-                field.name,
-                if optional { "?" } else { "" },
-                typescript_type(&field.ty)
-            )
-            .expect("writing to a String cannot fail");
-        }
-        output.push_str(" }");
-    }
-    writeln!(output, "): Promise<{}> {{", typescript_type(&api.output))
-        .expect("writing to a String cannot fail");
-    let path = typescript_path_template(&api.path);
-    writeln!(output, "    let url = this.baseUrl + `{}`;", path)
-        .expect("writing to a String cannot fail");
-    if !query_fields.is_empty() {
-        output.push_str("    const query = new URLSearchParams();\n");
-        for field in query_fields {
-            writeln!(
-                output,
-                "    if (params.{} !== undefined && params.{} !== null) query.set(\"{}\", String(params.{}));",
-                field.name, field.name, field.name, field.name
-            )
-            .expect("writing to a String cannot fail");
-        }
-        output.push_str("    const queryString = query.toString();\n    if (queryString) url += `?${queryString}`;\n");
-    }
-    output.push_str("    const headers: Record<string, string> = {};\n    if (this.token) headers.Authorization = `Bearer ${this.token}`;\n");
-    if !body_fields.is_empty() {
-        output.push_str("    headers[\"Content-Type\"] = \"application/json\";\n");
-    }
-    writeln!(
-        output,
-        "    const response = await this.fetchImpl(url, {{ method: \"{}\", headers{} }});",
-        method,
-        if body_fields.is_empty() {
-            String::new()
-        } else {
-            format!(
-                ", body: JSON.stringify({{{}}})",
-                body_fields
-                    .iter()
-                    .map(|field| format!("{}: params.{}", field.name, field.name))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        }
-    )
-    .expect("writing to a String cannot fail");
-    output.push_str("    if (!response.ok) throw await ZelyraApiError.fromResponse(response);\n");
-    output.push_str("    return await response.json() as ");
-    output.push_str(&typescript_type(&api.output));
-    output.push_str(";\n  }\n\n");
-}
-
-fn typescript_type(ty: &Type) -> String {
-    match ty {
-        Type::Int | Type::UInt | Type::Float | Type::Decimal => "number".into(),
-        Type::Bool => "boolean".into(),
-        Type::String
-        | Type::Char
-        | Type::Bytes
-        | Type::Timestamp
-        | Type::Date
-        | Type::Time
-        | Type::Duration => "string".into(),
-        Type::Unit => "void".into(),
-        Type::Option(inner) => format!("{} | null", typescript_type(inner)),
-        Type::Result(ok, _) => typescript_type(ok),
-        Type::Array(inner) => format!("Array<{}>", typescript_type(inner)),
-        Type::Map(_, value) => format!("Record<string, {}>", typescript_type(value)),
-        Type::HttpResult(inner) => format!("HttpResult<{}>", typescript_type(inner)),
-        Type::Named(name) => match name.as_str() {
-            "Id" => "number".into(),
-            "Email" | "Url" | "Uuid" | "Money" => "string".into(),
-            "Unit" => "void".into(),
-            _ => name.clone(),
-        },
-        Type::Unknown => "unknown".into(),
-    }
-}
-
-fn typescript_operation_name(api: &zelyra_ast::ApiDef) -> String {
-    let mut name = format!(
-        "{}_{}",
-        api.method.to_ascii_lowercase(),
-        api.path.trim_matches('/').replace(['{', '}'], "")
-    );
-    name = name
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '_' {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if name.ends_with('_') {
-        name.pop();
-    }
-    if name == api.method.to_ascii_lowercase() {
-        name.push_str("_root");
-    }
-    name
-}
-
-fn typescript_path_template(path: &str) -> String {
-    let mut result = String::new();
-    let mut rest = path;
-    while let Some(start) = rest.find('{') {
-        let (literal, after_start) = rest.split_at(start);
-        result.push_str(&escape_typescript_template(literal));
-        let Some(end) = after_start.find('}') else {
-            result.push_str(&escape_typescript_template(after_start));
-            return result;
-        };
-        let name = &after_start[1..end];
-        result.push_str("${encodeURIComponent(String(params.");
-        result.push_str(name);
-        result.push_str("))}");
-        rest = &after_start[end + 1..];
-    }
-    result.push_str(&escape_typescript_template(rest));
-    result
-}
-
-fn escape_typescript_template(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace("${", "\\${")
 }
 
 fn singular_type_name(table: &str) -> Option<String> {
@@ -4939,54 +4729,6 @@ fn singular_type_name(table: &str) -> Option<String> {
     let mut chars = singular.chars();
     let first = chars.next()?.to_ascii_uppercase();
     Some(std::iter::once(first).chain(chars).collect())
-}
-
-fn openapi_schema(ty: &Type) -> String {
-    match ty {
-        Type::Int | Type::UInt => "{\"type\":\"integer\"}".into(),
-        Type::Float | Type::Decimal => "{\"type\":\"number\"}".into(),
-        Type::Bool => "{\"type\":\"boolean\"}".into(),
-        Type::Array(inner) => format!("{{\"type\":\"array\",\"items\":{}}}", openapi_schema(inner)),
-        Type::Map(_, value) => format!(
-            "{{\"type\":\"object\",\"additionalProperties\":{}}}",
-            openapi_schema(value)
-        ),
-        Type::Option(inner) => openapi_schema(inner),
-        Type::Result(ok, _) => openapi_schema(ok),
-        Type::HttpResult(_) => "{\"type\":\"object\"}".into(),
-        Type::Named(name) => match name.as_str() {
-            "Id" => "{\"type\":\"integer\",\"format\":\"int64\"}".into(),
-            "Email" => "{\"type\":\"string\",\"format\":\"email\"}".into(),
-            "Url" => "{\"type\":\"string\",\"format\":\"uri\"}".into(),
-            "Uuid" => "{\"type\":\"string\",\"format\":\"uuid\"}".into(),
-            _ => format!(
-                "{{\"$ref\":\"#/components/schemas/{}\"}}",
-                json_escape(name)
-            ),
-        },
-        _ => "{\"type\":\"string\"}".into(),
-    }
-}
-
-fn openapi_error_schema(payload: &Type) -> String {
-    let details = serde_json::from_str(&openapi_schema(payload))
-        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
-    serde_json::json!({
-        "type": "object",
-        "required": ["error"],
-        "properties": {
-            "error": {
-                "type": "object",
-                "required": ["code", "message", "details"],
-                "properties": {
-                    "code": {"type": "string"},
-                    "message": {"type": "string"},
-                    "details": details,
-                }
-            }
-        }
-    })
-    .to_string()
 }
 
 fn format_verification_result(path: &str, source: &str, result: &VerificationResult) -> String {
@@ -5135,13 +4877,7 @@ fn validate_capabilities(path: &str, program: &zelyra_ast::Program) -> Result<()
     };
     if let Err(errors) = check_capabilities_with_grants(program, grants.as_ref()) {
         for error in errors {
-            diagnostic(
-                path,
-                "E-CAP-001",
-                &error.message,
-                error.span.line,
-                error.span.column,
-            );
+            diagnostic_with_span(path, "E-CAP-001", &error.message, error.span);
         }
         return Err(());
     }
@@ -5349,6 +5085,19 @@ fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
 }
 
 fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    if project_uses_reserved_health_route(program) {
+        diagnostic(
+            path,
+            "E-WEB-005",
+            &format!(
+                "route `{}` is reserved for Zelyra liveness checks",
+                zelyra_web::HEALTH_LIVENESS_PATH
+            ),
+            1,
+            1,
+        );
+        return Err(());
+    }
     let features = match project_features(path) {
         Ok(features) => features,
         Err(error) => {
@@ -5448,11 +5197,15 @@ fn project_capability_grants(path: &str) -> Result<Option<HashSet<String>>, Stri
             ));
         };
         let key = raw_key.trim().to_ascii_lowercase();
-        let capability = KNOWN_CAPABILITIES
-            .iter()
-            .copied()
-            .find(|capability| capability.to_ascii_lowercase() == key)
-            .ok_or_else(|| format!("unknown capability setting `{key}`"))?;
+        let capability = match key.as_str() {
+            "database_read" => "Database(read)",
+            "database_write" => "Database(write)",
+            _ => KNOWN_CAPABILITIES
+                .iter()
+                .copied()
+                .find(|capability| capability.to_ascii_lowercase() == key)
+                .ok_or_else(|| format!("unknown capability setting `{key}`"))?,
+        };
         if !seen.insert(capability) {
             return Err(format!("capability `{key}` is configured more than once"));
         }
@@ -5858,6 +5611,114 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        if let Some(reset_table_name) = &auth.reset_tokens_table {
+            if schema.backend() != Backend::MariaDb {
+                diagnostic(
+                    path,
+                    "E-AUTH-034",
+                    "password reset currently requires the MariaDB runtime",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            if auth.audit_table.is_none() {
+                diagnostic(
+                    path,
+                    "E-AUTH-033",
+                    "password reset requires an authentication audit table",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            let Some(reset_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *reset_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-030",
+                    &format!(
+                        "authentication refers to unknown password reset table {}",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            if reset_table_name == &auth.table {
+                diagnostic(
+                    path,
+                    "E-AUTH-030",
+                    "password reset tokens must use a separate table from user accounts",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            for required_column in ["user_id", "token_hash", "expires_at", "consumed_at"] {
+                if !reset_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-031",
+                        &format!(
+                            "authentication password reset table {} requires column {}",
+                            reset_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+            let token_hash_is_unique = reset_table
+                .columns
+                .iter()
+                .any(|column| column.name == "token_hash" && column.unique)
+                || reset_table
+                    .indexes
+                    .iter()
+                    .chain(reset_table.uniques.iter())
+                    .any(|index| index.unique && index.columns == ["token_hash"]);
+            if !token_hash_is_unique {
+                diagnostic(
+                    path,
+                    "E-AUTH-032",
+                    &format!(
+                        "authentication password reset table {} requires a unique token_hash",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            if !reset_table.foreign_keys.iter().any(|foreign_key| {
+                foreign_key.column == "user_id"
+                    && foreign_key.referenced_table == auth.table
+                    && foreign_key.referenced_column == "id"
+            }) {
+                diagnostic(
+                    path,
+                    "E-AUTH-036",
+                    &format!(
+                        "authentication password reset table {} requires user_id to reference {}.id",
+                        reset_table_name, auth.table
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+        }
         if let Some(permissions_table_name) = &auth.permissions_table {
             let Some(permissions_table) = schema
                 .tables
@@ -6149,6 +6010,68 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
         valid = false;
     }
     valid
+}
+
+fn project_optional_setting(path: &str, key: &str) -> Result<Option<String>, String> {
+    if let Ok(value) = env::var(key) {
+        return Ok((!value.trim().is_empty()).then_some(value));
+    }
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let env_path = project_directory.join(".env");
+    if !env_path.is_file() {
+        return Ok(None);
+    }
+    let env_path_string = env_path.to_string_lossy();
+    Ok(read_env_value(&env_path_string, key)?.filter(|value| !value.trim().is_empty()))
+}
+
+fn password_reset_mailer_from_environment(
+    path: &str,
+) -> Result<zelyra_web::PasswordResetMailer, String> {
+    let required = |name: &str| {
+        project_optional_setting(path, name)?
+            .ok_or_else(|| format!("{name} is required when password reset is enabled"))
+    };
+    let host = required("ZELYRA_SMTP_HOST")?;
+    let security = project_optional_setting(path, "ZELYRA_SMTP_SECURITY")?
+        .unwrap_or_else(|| "implicit_tls".into());
+    let default_port = match security.as_str() {
+        "implicit_tls" => 465,
+        "starttls" => 587,
+        "local_plaintext" => 25,
+        _ => {
+            return Err(
+                "ZELYRA_SMTP_SECURITY must be implicit_tls, starttls, or local_plaintext".into(),
+            )
+        }
+    };
+    let port = project_optional_setting(path, "ZELYRA_SMTP_PORT")?
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port > 0)
+                .ok_or_else(|| "ZELYRA_SMTP_PORT must be between 1 and 65535".to_owned())
+        })
+        .transpose()?
+        .unwrap_or(default_port);
+    let username = project_optional_setting(path, "ZELYRA_SMTP_USERNAME")?;
+    let password = project_optional_setting(path, "ZELYRA_SMTP_PASSWORD")?;
+    let from = required("ZELYRA_SMTP_FROM")?;
+    let base_url = required("ZELYRA_PUBLIC_BASE_URL")?;
+    zelyra_web::PasswordResetMailer::smtp(
+        &host,
+        port,
+        &security,
+        username.as_deref(),
+        password.as_deref(),
+        &from,
+        &base_url,
+    )
 }
 
 fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -6548,265 +6471,6 @@ fn configured_crud_filter_columns(
         .collect()
 }
 
-fn load_schema(path: &str) -> Result<Schema, ()> {
-    let program = load(path)?;
-    match build_schema(&program) {
-        Ok(schema) => Ok(schema),
-        Err(errors) => {
-            for error in errors {
-                diagnostic(
-                    path,
-                    "E-DB-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            }
-            Err(())
-        }
-    }
-}
-
-fn print_plan(plan: &zelyra_database::SchemaPlan) {
-    if plan.changes.is_empty() {
-        println!("No schema changes.");
-        return;
-    }
-    for check in &plan.nullability_preflights {
-        println!(
-            "[PREFLIGHT] verify `{}.{}` has no NULL values before applying any SQL",
-            check.table, check.column
-        );
-    }
-    for check in &plan.required_column_preflights {
-        println!(
-            "[PREFLIGHT] verify `{}` is empty before adding required column `{}` without a default",
-            check.table, check.column
-        );
-    }
-    for change in &plan.changes {
-        let risk = match change.risk {
-            Risk::Safe => "SAFE",
-            Risk::RequiresApproval => "REVIEW",
-            Risk::Destructive => "DESTRUCTIVE",
-            Risk::Unsupported => "UNSUPPORTED",
-        };
-        println!("[{risk}] {}\n{}\n", change.description, change.sql);
-    }
-}
-
-fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(subcommand) = args.next() else {
-        database_usage();
-        return ExitCode::from(2);
-    };
-    let path = args.next().unwrap_or_else(|| "main.zyl".into());
-    let remaining_args = args.collect::<Vec<_>>();
-    let allow_risky = remaining_args.iter().any(|arg| arg == "--allow-risky");
-    let allow_destructive = remaining_args
-        .iter()
-        .any(|arg| arg == "--allow-destructive");
-    let schema = match load_schema(&path) {
-        Ok(schema) => schema,
-        Err(()) => return ExitCode::from(1),
-    };
-    match subcommand.as_str() {
-        "create" => {
-            println!("{}", schema.create_sql());
-            ExitCode::SUCCESS
-        }
-        "setup" | "bootstrap" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
-                eprintln!(
-                    "error[E-DB-003]: DATABASE_URL is required for db {}",
-                    subcommand
-                );
-                if subcommand == "setup" {
-                    eprintln!("hint: set a MariaDB URL without committing it to source control");
-                    eprintln!(
-                        "  export DATABASE_URL='mariadb://user:<password>@127.0.0.1:3306/my_app'"
-                    );
-                    eprintln!("  # PowerShell: $env:DATABASE_URL = 'mariadb://user:<password>@127.0.0.1:3306/my_app'");
-                }
-                return ExitCode::from(1);
-            };
-            let result = match schema.backend() {
-                Backend::MariaDb => match inspect_mariadb(&url) {
-                    Ok(_) => apply_mariadb(&url, &schema.create_sql()),
-                    Err(_) => create_mariadb_database(&url)
-                        .and_then(|()| apply_mariadb(&url, &schema.create_sql())),
-                },
-                Backend::Sqlite => apply_sqlite(&url, &schema.create_sql()),
-                Backend::Postgres => Err(zelyra_database::DatabaseError {
-                    message: format!(
-                        "db {} currently supports mariadb and sqlite; use db apply for postgres",
-                        subcommand
-                    ),
-                }),
-            };
-            match result {
-                Ok(()) => {
-                    println!("database {} completed successfully", subcommand);
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error[E-DB-005]: {error}");
-                    ExitCode::from(1)
-                }
-            }
-        }
-        "inspect" => match env::var("DATABASE_URL") {
-            Ok(url) => match inspect_for_backend(schema.backend(), &url) {
-                Ok(current) => {
-                    println!("{}", current.summary());
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error[E-DB-002]: {error}");
-                    ExitCode::from(1)
-                }
-            },
-            Err(_) => {
-                eprintln!("error[E-DB-003]: DATABASE_URL is required for db inspect");
-                ExitCode::from(1)
-            }
-        },
-        "plan" => {
-            let current = match env::var("DATABASE_URL") {
-                Ok(url) => match inspect_for_backend(schema.backend(), &url) {
-                    Ok(current) => current,
-                    Err(error) => {
-                        eprintln!("error[E-DB-002]: {error}");
-                        return ExitCode::from(1);
-                    }
-                },
-                Err(_) => {
-                    eprintln!("note: DATABASE_URL is not set; planning against an empty database");
-                    Schema {
-                        database: None,
-                        tables: Vec::new(),
-                    }
-                }
-            };
-            print_plan(&diff(&schema, &current));
-            ExitCode::SUCCESS
-        }
-        "apply" => {
-            let Ok(url) = env::var("DATABASE_URL") else {
-                eprintln!("error[E-DB-003]: DATABASE_URL is required for db apply");
-                return ExitCode::from(1);
-            };
-            let current = match inspect_for_backend(schema.backend(), &url) {
-                Ok(current) => current,
-                Err(error) => {
-                    eprintln!("error[E-DB-002]: {error}");
-                    return ExitCode::from(1);
-                }
-            };
-            let plan = diff(&schema, &current);
-            print_plan(&plan);
-            if plan.has_unsupported() {
-                eprintln!(
-                    "error[E-DB-006]: schema plan contains unsupported changes; no SQL was applied"
-                );
-                return ExitCode::from(1);
-            }
-            let has_review_changes = plan
-                .changes
-                .iter()
-                .any(|change| change.risk == Risk::RequiresApproval);
-            let legacy_approval_is_sufficient = allow_destructive && !has_review_changes;
-            if plan.requires_approval() && !allow_risky && !legacy_approval_is_sufficient {
-                eprintln!("error[E-DB-004]: schema changes requiring review were refused; review the plan and use --allow-risky to approve it");
-                return ExitCode::from(1);
-            }
-            if plan.changes.is_empty() {
-                return ExitCode::SUCCESS;
-            }
-            for check in &plan.nullability_preflights {
-                match count_null_values(&url, schema.backend(), &check.table, &check.column) {
-                    Ok(0) => {}
-                    Ok(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: cannot require `{}.{}` because existing rows contain NULL values; no schema SQL was applied",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                    Err(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: could not verify that `{}.{}` contains no NULL values; no schema SQL was applied",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                }
-            }
-            let mut table_row_presence = HashMap::new();
-            for check in &plan.required_column_preflights {
-                let has_rows = *table_row_presence
-                    .entry(check.table.as_str())
-                    .or_insert_with(|| {
-                        table_has_rows(&url, schema.backend(), &check.table).map_err(|_| ())
-                    });
-                match has_rows {
-                    Ok(false) => {}
-                    Ok(true) => {
-                        eprintln!(
-                            "error[E-DB-005]: cannot add required column `{}.{}` without a default because the table contains existing rows; no schema SQL was applied. Add a default or stage the change: add it as nullable, backfill the rows, then require it",
-                            check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                    Err(_) => {
-                        eprintln!(
-                            "error[E-DB-005]: could not verify that table `{}` is empty before adding required column `{}.{}`; no schema SQL was applied",
-                            check.table, check.table, check.column
-                        );
-                        return ExitCode::from(1);
-                    }
-                }
-            }
-            let mut sql = plan.sql();
-            if schema.backend() == Backend::MariaDb
-                && (!plan.nullability_preflights.is_empty()
-                    || !plan.required_column_preflights.is_empty())
-            {
-                sql = format!(
-                    "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES');\n{sql}"
-                );
-            }
-            let result = match schema.backend() {
-                Backend::Postgres => apply_postgres(&url, &sql),
-                Backend::MariaDb => apply_mariadb(&url, &sql),
-                Backend::Sqlite => apply_sqlite(&url, &sql),
-            };
-            match result {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("error[E-DB-005]: {error}");
-                    ExitCode::from(1)
-                }
-            }
-        }
-        _ => {
-            database_usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
-fn inspect_for_backend(
-    backend: Backend,
-    database_url: &str,
-) -> Result<Schema, zelyra_database::DatabaseError> {
-    match backend {
-        Backend::Postgres => inspect_postgres(database_url),
-        Backend::MariaDb => inspect_mariadb(database_url),
-        Backend::Sqlite => inspect_sqlite(database_url),
-    }
-}
-
 fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(path) = args.next() else {
         usage();
@@ -6845,8 +6509,8 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let program = match load(&path) {
-        Ok(program) => program,
+    let program = match load_project(&path) {
+        Ok(project) => project.program,
         Err(()) => return ExitCode::from(1),
     };
     if theme_css.is_some() && project_uses_reserved_theme_route(&program) {
@@ -6855,6 +6519,19 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             "E-THEME-002",
             &format!(
                 "route `{PROJECT_THEME_CSS_PATH}` is reserved for the project theme stylesheet"
+            ),
+            1,
+            1,
+        );
+        return ExitCode::from(1);
+    }
+    if !program.auth.is_empty() && project_uses_reserved_account_sessions_route(&program) {
+        diagnostic(
+            &path,
+            "E-AUTH-029",
+            &format!(
+                "route `{}` is reserved for account session management",
+                zelyra_web::ACCOUNT_SESSIONS_PATH
             ),
             1,
             1,
@@ -6896,6 +6573,13 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         && program.apis.is_empty()
     {
         eprintln!("error[E-WEB-001]: {path} does not define a page, form, CRUD resource, or API");
+        return ExitCode::from(1);
+    }
+    if !validate_views(&path, &program)
+        || !validate_page_inputs(&path, &program)
+        || !validate_page_data(&path, &program)
+        || !validate_components(&path, &program)
+    {
         return ExitCode::from(1);
     }
     let routes = program
@@ -6997,9 +6681,35 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
             admin_path: auth.admin_path.clone(),
             admin_permission: auth.admin_permission.clone(),
             admin_role: auth.admin_role.clone(),
+            login_rate_limit: auth.login_rate_limit.unwrap_or(zelyra_ast::ApiRateLimit {
+                requests: 5,
+                window_seconds: 15 * 60,
+            }),
+            login_block_seconds: auth.login_block_seconds.unwrap_or(60),
+            reset_tokens_table: auth.reset_tokens_table.clone(),
+            reset_rate_limit: auth
+                .reset_rate_limit
+                .unwrap_or(zelyra_web::DEFAULT_RESET_RATE_LIMIT),
+            reset_block_seconds: auth
+                .reset_block_seconds
+                .unwrap_or(zelyra_web::DEFAULT_RESET_BLOCK_SECONDS),
             schema: schema.clone(),
             csrf,
         })
+    } else {
+        None
+    };
+    let reset_mailer = if auth_route
+        .as_ref()
+        .is_some_and(|auth| auth.reset_tokens_table.is_some())
+    {
+        match password_reset_mailer_from_environment(&path) {
+            Ok(mailer) => Some(mailer),
+            Err(error) => {
+                eprintln!("error[E-AUTH-035]: {error}");
+                return ExitCode::from(1);
+            }
+        }
     } else {
         None
     };
@@ -7195,7 +6905,7 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
         runtime_policy.as_ref(),
     );
     eprintln!("Zelyra server listening on http://{address}");
-    let app = WebApp::with_database_url(routes, form_routes, env::var("DATABASE_URL").ok())
+    let app = WebApp::with_database_url(routes, form_routes, database_url_from_program(&program))
         .with_ui_settings(ui_language, ui_level)
         .with_project_theme_css(theme_css)
         .with_project_ui_catalogs(ui_catalogs)
@@ -7227,6 +6937,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     };
     let app = if let Some(auth_route) = auth_route {
         app.with_auth_route(auth_route)
+    } else {
+        app
+    };
+    let app = if let Some(reset_mailer) = reset_mailer {
+        app.with_password_reset_mailer(reset_mailer)
     } else {
         app
     };
@@ -7429,7 +7144,7 @@ fn generated_api_routes(
     capability_grants: Option<&HashSet<String>>,
     runtime_policy: Option<&RuntimePolicy>,
 ) -> Vec<ApiRoute> {
-    let database_url = env::var("DATABASE_URL").ok();
+    let database_url = database_url_from_program(program);
     program
         .apis
         .iter()
@@ -7442,6 +7157,9 @@ fn generated_api_routes(
             let runtime_policy = runtime_policy.cloned();
             let requires_auth = api.requires_auth;
             let permissions = api.permissions.clone();
+            let api_version = api.version.clone();
+            let api_deprecated = api.deprecated;
+            let api_rate_limit = api.rate_limit;
             Some(
                 ApiRoute::new(
                     api.method.clone(),
@@ -7461,7 +7179,8 @@ fn generated_api_routes(
                         )
                     },
                 )
-                .with_auth(requires_auth, permissions),
+                .with_auth(requires_auth, permissions)
+                .with_metadata(api_version, api_deprecated, api_rate_limit),
             )
         })
         .collect()
@@ -8095,3123 +7814,6 @@ fn form_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     }
 }
 
-fn auth_usage() {
-    eprintln!(
-        "Usage:\n  zelyra auth hash-password\n  zelyra auth hash-password --stdin\n  zelyra auth role grant <file.zyl> <user-id> <role>\n  zelyra auth role revoke <file.zyl> <user-id> <role>\n  zelyra auth role-permission grant <file.zyl> <role> <permission>\n  zelyra auth role-permission revoke <file.zyl> <role> <permission>\n\nRole commands use DATABASE_URL and the role tables declared in the first auth definition.\nThe interactive password form does not echo passwords. Use --stdin for automation."
-    );
-}
-
-#[derive(Clone, Debug)]
-struct AuthRoleTables {
-    assignments: String,
-    permissions: String,
-    audit: Option<String>,
-    audit_chain: bool,
-}
-
-fn auth_role_tables(path: &str) -> Result<AuthRoleTables, ExitCode> {
-    let program = match validate(path) {
-        Ok(program) => program,
-        Err(()) => return Err(ExitCode::from(1)),
-    };
-    let Some(auth) = program.auth.first() else {
-        eprintln!("error[E-AUTH-014]: role commands require an auth definition");
-        return Err(ExitCode::from(1));
-    };
-    let (Some(assignments), Some(permissions)) = (
-        auth.roles_table.clone(),
-        auth.role_permissions_table.clone(),
-    ) else {
-        eprintln!(
-            "error[E-AUTH-015]: role commands require roles and role_permissions in the auth definition"
-        );
-        return Err(ExitCode::from(1));
-    };
-    Ok(AuthRoleTables {
-        assignments,
-        permissions,
-        audit: auth.audit_table.clone(),
-        audit_chain: auth.audit_chain,
-    })
-}
-
-fn auth_role_database_url() -> Result<String, ExitCode> {
-    match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => Ok(url),
-        Ok(_) => {
-            eprintln!("error[E-AUTH-016]: role commands require a MariaDB DATABASE_URL");
-            Err(ExitCode::from(1))
-        }
-        Err(_) => {
-            eprintln!("error[E-AUTH-017]: DATABASE_URL is required for role commands");
-            Err(ExitCode::from(1))
-        }
-    }
-}
-
-fn execute_auth_role_mutation(
-    database_url: &str,
-    sql: String,
-    params: Vec<(String, QueryValue)>,
-    audit: Option<(&str, bool)>,
-    event: &str,
-    target_user_id: Option<i64>,
-    details: String,
-) -> Result<(), zelyra_database::DatabaseError> {
-    let mut queries = vec![Query { sql, params }];
-    if let Some((audit_table, audit_chain)) = audit {
-        queries.extend(audit_insert_queries(
-            audit_table,
-            audit_chain,
-            None,
-            event,
-            target_user_id,
-            &details,
-        ));
-    }
-    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
-}
-
-fn auth_role_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(user_id) = args.next().and_then(|value| value.parse::<i64>().ok()) else {
-        eprintln!("error[E-AUTH-018]: user-id must be an integer");
-        return ExitCode::from(2);
-    };
-    let Some(role) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some() || role.is_empty() || !matches!(operation.as_str(), "grant" | "revoke")
-    {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let tables = match auth_role_tables(&path) {
-        Ok(tables) => tables,
-        Err(code) => return code,
-    };
-    let database_url = match auth_role_database_url() {
-        Ok(url) => url,
-        Err(code) => return code,
-    };
-    let (sql, message) = if operation == "grant" {
-        (
-            format!(
-                "INSERT INTO {} (user_id, role) SELECT :user_id, :role FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE user_id = :user_id AND role = :role)",
-                quote_identifier(&tables.assignments),
-                quote_identifier(&tables.assignments),
-            ),
-            "role granted",
-        )
-    } else {
-        (
-            format!(
-                "DELETE FROM {} WHERE user_id = :user_id AND role = :role",
-                quote_identifier(&tables.assignments),
-            ),
-            "role revoked",
-        )
-    };
-    let event = format!("role.{operation}");
-    let details = format!("source=cli;role={role}");
-    match execute_auth_role_mutation(
-        &database_url,
-        sql,
-        vec![
-            ("user_id".into(), QueryValue::Int(user_id)),
-            ("role".into(), QueryValue::String(role.clone())),
-        ],
-        tables
-            .audit
-            .as_deref()
-            .map(|table| (table, tables.audit_chain)),
-        &event,
-        Some(user_id),
-        details,
-    ) {
-        Ok(_) => {
-            println!("{message}: user {user_id} -> {role}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-019]: cannot change role assignment: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn auth_role_permission_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(role) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    let Some(permission) = args.next() else {
-        auth_usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some()
-        || role.is_empty()
-        || permission.is_empty()
-        || !matches!(operation.as_str(), "grant" | "revoke")
-    {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let tables = match auth_role_tables(&path) {
-        Ok(tables) => tables,
-        Err(code) => return code,
-    };
-    let database_url = match auth_role_database_url() {
-        Ok(url) => url,
-        Err(code) => return code,
-    };
-    let (sql, message) = if operation == "grant" {
-        (
-            format!(
-                "INSERT INTO {} (role, permission) SELECT :role, :permission FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM {} WHERE role = :role AND permission = :permission)",
-                quote_identifier(&tables.permissions),
-                quote_identifier(&tables.permissions),
-            ),
-            "permission granted",
-        )
-    } else {
-        (
-            format!(
-                "DELETE FROM {} WHERE role = :role AND permission = :permission",
-                quote_identifier(&tables.permissions),
-            ),
-            "permission revoked",
-        )
-    };
-    let event = format!("role_permission.{operation}");
-    let details = format!("source=cli;role={role};permission={permission}");
-    match execute_auth_role_mutation(
-        &database_url,
-        sql,
-        vec![
-            ("role".into(), QueryValue::String(role.clone())),
-            ("permission".into(), QueryValue::String(permission.clone())),
-        ],
-        tables
-            .audit
-            .as_deref()
-            .map(|table| (table, tables.audit_chain)),
-        &event,
-        None,
-        details,
-    ) {
-        Ok(_) => {
-            println!("{message}: {role} -> {permission}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-020]: cannot change role permission: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn audit_usage() {
-    eprintln!(
-        "Usage:\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n\nAudit commands use DATABASE_URL and the audit table declared in the first auth definition. The default limit is 100 and the maximum is 10,000. Prune never changes data without --confirm."
-    );
-}
-
-fn audit_project(path: &str) -> Result<(String, String, bool), ExitCode> {
-    let program = match validate(path) {
-        Ok(program) => program,
-        Err(()) => return Err(ExitCode::from(1)),
-    };
-    let Some(auth) = program.auth.first() else {
-        eprintln!("error[E-AUDIT-001]: audit commands require an auth definition");
-        return Err(ExitCode::from(1));
-    };
-    let Some(audit_table) = auth.audit_table.clone() else {
-        eprintln!(
-            "error[E-AUDIT-001]: audit commands require audit: <table> in the auth definition"
-        );
-        return Err(ExitCode::from(1));
-    };
-    let database_url = match env::var("DATABASE_URL") {
-        Ok(url) if url.starts_with("mariadb://") || url.starts_with("mysql://") => url,
-        Ok(_) => {
-            eprintln!("error[E-AUDIT-002]: audit commands require a MariaDB DATABASE_URL");
-            return Err(ExitCode::from(1));
-        }
-        Err(_) => {
-            eprintln!("error[E-AUDIT-003]: DATABASE_URL is required for audit commands");
-            return Err(ExitCode::from(1));
-        }
-    };
-    Ok((database_url, audit_table, auth.audit_chain))
-}
-
-fn audit_limit(value: &str) -> Result<usize, ExitCode> {
-    match value.parse::<usize>() {
-        Ok(limit) if (1..=10_000).contains(&limit) => Ok(limit),
-        _ => {
-            eprintln!("error[E-AUDIT-004]: limit must be an integer between 1 and 10000");
-            Err(ExitCode::from(2))
-        }
-    }
-}
-
-fn audit_rows(
-    database_url: &str,
-    audit_table: &str,
-    limit: usize,
-) -> Result<QueryResult, zelyra_database::DatabaseError> {
-    zelyra_database::execute_mariadb_query(
-        database_url,
-        &format!(
-            "SELECT actor_user_id, event, target_user_id, details, created_at FROM {} ORDER BY created_at DESC LIMIT {limit}",
-            quote_identifier(audit_table)
-        ),
-        Vec::new(),
-    )
-}
-
-fn audit_integrity(
-    database_url: &str,
-    audit_table: &str,
-    chain: bool,
-) -> Result<(u64, u64), zelyra_database::DatabaseError> {
-    let query = if chain {
-        format!(
-            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL OR previous_hash IS NULL OR entry_hash IS NULL OR previous_hash <> COALESCE(expected_previous_hash, '') OR entry_hash <> SHA2(CONCAT(COALESCE(previous_hash, ''), '|', COALESCE(actor_user_id, 'NULL'), '|', event, '|', COALESCE(target_user_id, 'NULL'), '|', details, '|', DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s')), 256) THEN 1 ELSE 0 END), 0) FROM (SELECT id, actor_user_id, event, target_user_id, details, created_at, previous_hash, entry_hash, LAG(entry_hash) OVER (ORDER BY id ASC) AS expected_previous_hash FROM {}) AS audit_rows",
-            quote_identifier(audit_table)
-        )
-    } else {
-        format!(
-            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN event IS NULL OR event = '' OR details IS NULL OR created_at IS NULL THEN 1 ELSE 0 END), 0) FROM {}",
-            quote_identifier(audit_table)
-        )
-    };
-    let result = zelyra_database::execute_mariadb_query(database_url, &query, Vec::new())?;
-    let row = result.rows.first().cloned().unwrap_or_default();
-    let total = row
-        .first()
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0);
-    let invalid = row.get(1).and_then(|value| value.parse().ok()).unwrap_or(0);
-    Ok((total, invalid))
-}
-
-fn audit_prune_count(
-    database_url: &str,
-    audit_table: &str,
-    before: &str,
-) -> Result<u64, zelyra_database::DatabaseError> {
-    let result = zelyra_database::execute_mariadb_query(
-        database_url,
-        &format!(
-            "SELECT COUNT(*) FROM {} WHERE created_at < :before",
-            quote_identifier(audit_table)
-        ),
-        vec![("before".into(), QueryValue::String(before.into()))],
-    )?;
-    Ok(result
-        .rows
-        .first()
-        .and_then(|row| row.first())
-        .and_then(|value| value.parse().ok())
-        .unwrap_or(0))
-}
-
-fn audit_prune(
-    database_url: &str,
-    audit_table: &str,
-    before: &str,
-) -> Result<(), zelyra_database::DatabaseError> {
-    let details = format!("source=cli;before={before}");
-    let queries = vec![
-        Query {
-            sql: format!(
-                "DELETE FROM {} WHERE created_at < :before",
-                quote_identifier(audit_table)
-            ),
-            params: vec![("before".into(), QueryValue::String(before.into()))],
-        },
-        Query {
-            sql: format!(
-                "INSERT INTO {} (actor_user_id, event, target_user_id, details) VALUES (:actor_user_id, :event, :target_user_id, :details)",
-                quote_identifier(audit_table)
-            ),
-            params: vec![
-                ("actor_user_id".into(), QueryValue::Null),
-                ("event".into(), QueryValue::String("audit.prune".into())),
-                ("target_user_id".into(), QueryValue::Null),
-                (
-                    "details".into(),
-                    QueryValue::String(details.chars().take(1000).collect()),
-                ),
-            ],
-        },
-    ];
-    zelyra_database::execute_mariadb_queries(database_url, &queries, true).map(|_| ())
-}
-
-fn audit_optional_value(row: &[String], index: usize) -> Option<&str> {
-    row.get(index)
-        .map(String::as_str)
-        .filter(|value| *value != "NULL")
-}
-
-fn audit_csv_value(value: Option<&str>) -> String {
-    let value = value.unwrap_or_default().replace('"', "\"\"");
-    format!("\"{value}\"")
-}
-
-fn audit_rows_csv(result: &QueryResult) -> String {
-    let mut output = String::from("actor_user_id,event,target_user_id,details,created_at\n");
-    for row in &result.rows {
-        let fields = (0..5)
-            .map(|index| audit_csv_value(audit_optional_value(row, index)))
-            .collect::<Vec<_>>();
-        let _ = writeln!(output, "{}", fields.join(","));
-    }
-    output
-}
-
-fn audit_json_number(value: Option<&str>) -> String {
-    value
-        .and_then(|value| value.parse::<i64>().ok())
-        .map_or_else(|| "null".into(), |value| value.to_string())
-}
-
-fn audit_rows_json(result: &QueryResult) -> String {
-    let rows = result
-        .rows
-        .iter()
-        .map(|row| {
-            format!(
-                "{{\"actor_user_id\":{},\"event\":{},\"target_user_id\":{},\"details\":{},\"created_at\":{}}}",
-                audit_json_number(audit_optional_value(row, 0)),
-                audit_optional_value(row, 1).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-                audit_json_number(audit_optional_value(row, 2)),
-                audit_optional_value(row, 3).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-                audit_optional_value(row, 4).map_or_else(|| "null".into(), |value| format!("\"{}\"", json_escape(value))),
-            )
-        })
-        .collect::<Vec<_>>();
-    format!("[{}]", rows.join(","))
-}
-
-fn audit_rows_inspect(result: &QueryResult) -> String {
-    let mut output = format!(
-        "Audit log: {} entr{}\n",
-        result.rows.len(),
-        if result.rows.len() == 1 { "y" } else { "ies" }
-    );
-    output.push_str("actor_user_id | event | target_user_id | details | created_at\n");
-    for row in &result.rows {
-        let fields = (0..5)
-            .map(|index| {
-                audit_optional_value(row, index)
-                    .unwrap_or("-")
-                    .replace(['\n', '\r', '\t'], " ")
-            })
-            .collect::<Vec<_>>();
-        let _ = writeln!(output, "{}", fields.join(" | "));
-    }
-    output
-}
-
-fn audit_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let Some(operation) = args.next() else {
-        audit_usage();
-        return ExitCode::from(2);
-    };
-    let Some(path) = args.next() else {
-        audit_usage();
-        return ExitCode::from(2);
-    };
-    let mut limit = 100usize;
-    let mut limit_given = false;
-    let mut format = "inspect";
-    let mut before = None;
-    let mut confirm = false;
-    while let Some(argument) = args.next() {
-        match argument.as_str() {
-            "--limit" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                limit = match audit_limit(&value) {
-                    Ok(limit) => limit,
-                    Err(code) => return code,
-                };
-                limit_given = true;
-            }
-            "--format" if operation == "export" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                if !matches!(value.as_str(), "json" | "csv") {
-                    eprintln!("error[E-AUDIT-005]: format must be json or csv");
-                    return ExitCode::from(2);
-                }
-                format = if value == "json" { "json" } else { "csv" };
-            }
-            "--before" if operation == "prune" => {
-                let Some(value) = args.next() else {
-                    audit_usage();
-                    return ExitCode::from(2);
-                };
-                if value.is_empty() {
-                    eprintln!("error[E-AUDIT-007]: before timestamp must not be empty");
-                    return ExitCode::from(2);
-                }
-                before = Some(value);
-            }
-            "--confirm" if operation == "prune" => {
-                confirm = true;
-            }
-            _ => {
-                audit_usage();
-                return ExitCode::from(2);
-            }
-        }
-    }
-    if !matches!(
-        operation.as_str(),
-        "inspect" | "export" | "verify" | "prune"
-    ) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "inspect" && format != "inspect" {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "verify" && (format != "inspect" || before.is_some() || confirm || limit_given)
-    {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation == "prune" && (before.is_none() || format != "inspect" || limit_given) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    if operation != "prune" && (before.is_some() || confirm) {
-        audit_usage();
-        return ExitCode::from(2);
-    }
-    let (database_url, audit_table, audit_chain) = match audit_project(&path) {
-        Ok(project) => project,
-        Err(code) => return code,
-    };
-    if operation == "verify" {
-        let (total, invalid) = match audit_integrity(&database_url, &audit_table, audit_chain) {
-            Ok(result) => result,
-            Err(error) => {
-                eprintln!("error[E-AUDIT-006]: cannot verify audit log: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if invalid == 0 {
-            println!("Audit log verified: {total} entries, no invalid rows.");
-            return ExitCode::SUCCESS;
-        }
-        eprintln!("error[E-AUDIT-008]: audit log contains {invalid} invalid rows out of {total}");
-        return ExitCode::from(1);
-    }
-    if operation == "prune" {
-        if audit_chain {
-            eprintln!(
-                "error[E-AUDIT-010]: audit prune is disabled for chained audit logs because deleting entries would break the hash chain"
-            );
-            return ExitCode::from(1);
-        }
-        let before = before
-            .as_deref()
-            .expect("prune requires a before timestamp");
-        let count = match audit_prune_count(&database_url, &audit_table, before) {
-            Ok(count) => count,
-            Err(error) => {
-                eprintln!("error[E-AUDIT-006]: cannot plan audit prune: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if !confirm {
-            println!("Audit prune plan: {count} entries older than {before} would be removed.");
-            println!("No changes applied. Re-run with --confirm to apply this plan.");
-            return ExitCode::from(2);
-        }
-        if let Err(error) = audit_prune(&database_url, &audit_table, before) {
-            eprintln!("error[E-AUDIT-009]: cannot apply audit prune: {error}");
-            return ExitCode::from(1);
-        }
-        println!("Audit prune applied: {count} entries older than {before} removed.");
-        return ExitCode::SUCCESS;
-    }
-    let result = match audit_rows(&database_url, &audit_table, limit) {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("error[E-AUDIT-006]: cannot read audit log: {error}");
-            return ExitCode::from(1);
-        }
-    };
-    match operation.as_str() {
-        "inspect" => print!("{}", audit_rows_inspect(&result)),
-        "export" if format == "json" => println!("{}", audit_rows_json(&result)),
-        "export" => print!("{}", audit_rows_csv(&result)),
-        _ => unreachable!(),
-    }
-    ExitCode::SUCCESS
-}
-
-fn password_from_stdin() -> Result<String, String> {
-    let mut password = String::new();
-    std::io::stdin()
-        .read_line(&mut password)
-        .map_err(|error| format!("cannot read password from stdin: {error}"))?;
-    Ok(password.trim_end_matches(['\r', '\n']).to_owned())
-}
-
-fn auth_hash_password_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    let use_stdin = match args.next().as_deref() {
-        None => false,
-        Some("--stdin") => true,
-        Some(_) => {
-            auth_usage();
-            return ExitCode::from(2);
-        }
-    };
-    if args.next().is_some() {
-        auth_usage();
-        return ExitCode::from(2);
-    }
-    let password = if use_stdin {
-        match password_from_stdin() {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: {error}");
-                return ExitCode::from(1);
-            }
-        }
-    } else {
-        let password = match rpassword::prompt_password("Password: ") {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: cannot read password: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        let confirmation = match rpassword::prompt_password("Confirm password: ") {
-            Ok(password) => password,
-            Err(error) => {
-                eprintln!("error[E-AUTH-001]: cannot read password confirmation: {error}");
-                return ExitCode::from(1);
-            }
-        };
-        if password != confirmation {
-            eprintln!("error[E-AUTH-002]: passwords do not match");
-            return ExitCode::from(1);
-        }
-        password
-    };
-    match zelyra_web::hash_password(&password) {
-        Ok(hash) => {
-            println!("{hash}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("error[E-AUTH-003]: {error}");
-            ExitCode::from(1)
-        }
-    }
-}
-
-fn auth_command(mut args: impl Iterator<Item = String>) -> ExitCode {
-    match args.next().as_deref() {
-        Some("hash-password") => auth_hash_password_command(args),
-        Some("role") => auth_role_command(args),
-        Some("role-permission") => auth_role_permission_command(args),
-        _ => {
-            auth_usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
 fn main() -> ExitCode {
-    let mut args = env::args().skip(1);
-    let Some(command) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if command == "--help" || command == "-h" {
-        usage();
-        return ExitCode::SUCCESS;
-    }
-    if command == "--version" || command == "-V" || command == "version" {
-        if args.next().is_some() {
-            usage();
-            return ExitCode::from(2);
-        }
-        return version_command();
-    }
-    if command == "update" {
-        let check_only = match (args.next(), args.next()) {
-            (None, None) => false,
-            (Some(flag), None) if flag == "--check" => true,
-            _ => {
-                usage();
-                return ExitCode::from(2);
-            }
-        };
-        return updater::command(check_only);
-    }
-    if command == "db" {
-        return database_command(args);
-    }
-    if command == "form" {
-        return form_command(args);
-    }
-    if command == "auth" {
-        return auth_command(args);
-    }
-    if command == "audit" {
-        return audit_command(args);
-    }
-    if command == "setup" {
-        let mut path = ".".to_owned();
-        let mut path_given = false;
-        let mut web = false;
-        let mut action = "prepare";
-        let mut web_port = DEFAULT_SETUP_WEB_PORT;
-        let mut web_port_given = false;
-        let mut setup_options = SetupOptions::default();
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--web" {
-                web = true;
-            } else if argument == "--database" {
-                action = "database";
-            } else if argument == "--schema" {
-                action = "schema";
-            } else if argument == "--all" {
-                action = "all";
-            } else if argument == "--port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-WEB-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                setup_options.host_port = match parse_web_port(&value) {
-                    Ok(port) => Some(port),
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-002]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    usage();
-                    return ExitCode::from(2);
-                };
-                setup_options.database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => Some(port),
-                    Err(error) => {
-                        eprintln!("error[E-SETUP-002]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if !argument.starts_with('-') && !path_given {
-                path = argument;
-                path_given = true;
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if web {
-            if setup_options.host_port.is_some() || setup_options.database_host_port.is_some() {
-                eprintln!(
-                    "error[E-SETUP-002]: --host-port and --db-host-port cannot be used with --web"
-                );
-                return ExitCode::from(2);
-            }
-            return setup_web_command(&path, web_port, web_port_given);
-        }
-        if web_port_given {
-            eprintln!("error[E-SETUP-002]: --port requires --web");
-            return ExitCode::from(2);
-        }
-        if action == "prepare" {
-            return setup_project(&path, &setup_options);
-        }
-        return match setup_action(&path, action, &setup_options) {
-            Ok(message) => {
-                println!("{message}");
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                eprintln!("error[E-SETUP-006]: {error}");
-                ExitCode::from(1)
-            }
-        };
-    }
-    if command == "new" {
-        let Some(path) = args.next() else {
-            usage();
-            return ExitCode::from(2);
-        };
-        let mut with_mariadb = false;
-        let mut crud_template = false;
-        let mut auth_template = false;
-        let mut business_template = false;
-        let mut web_port = DEFAULT_WEB_PORT;
-        let mut web_port_given = false;
-        let mut host_port = DEFAULT_WEB_PORT;
-        let mut host_port_given = false;
-        let mut database_host_port = DEFAULT_DATABASE_HOST_PORT;
-        let mut database_host_port_given = false;
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--mariadb" && !with_mariadb {
-                with_mariadb = true;
-            } else if argument == "--template" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --template requires a value");
-                    return ExitCode::from(2);
-                };
-                match value.as_str() {
-                    "minimal" => {
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-crud" => {
-                        with_mariadb = true;
-                        crud_template = true;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-auth" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = true;
-                        business_template = false;
-                    }
-                    "mariadb-business" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = true;
-                    }
-                    _ => {
-                        eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
-                        );
-                        return ExitCode::from(2);
-                    }
-                }
-            } else if argument == "--web-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --web-port requires a value");
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                host_port_given = true;
-                host_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --db-host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                database_host_port_given = true;
-                database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if (web_port_given || host_port_given || database_host_port_given) && !with_mariadb {
-            eprintln!(
-                "error[E-CLI-001]: --web-port, --host-port, and --db-host-port require --mariadb"
-            );
-            return ExitCode::from(2);
-        }
-        return create_project(
-            &path,
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb,
-                crud_template,
-                auth_template,
-                business_template,
-                web_port,
-                host_port,
-                database_host_port,
-                host_port_given,
-                database_host_port_given,
-            },
-        );
-    }
-    if command == "init" {
-        let mut path = ".".to_owned();
-        let mut path_given = false;
-        let mut with_mariadb = false;
-        let mut crud_template = false;
-        let mut auth_template = false;
-        let mut business_template = false;
-        let mut web_port = DEFAULT_WEB_PORT;
-        let mut web_port_given = false;
-        let mut host_port = DEFAULT_WEB_PORT;
-        let mut host_port_given = false;
-        let mut database_host_port = DEFAULT_DATABASE_HOST_PORT;
-        let mut database_host_port_given = false;
-        let mut arguments = args;
-        while let Some(argument) = arguments.next() {
-            if argument == "--mariadb" && !with_mariadb {
-                with_mariadb = true;
-            } else if argument == "--template" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --template requires a value");
-                    return ExitCode::from(2);
-                };
-                match value.as_str() {
-                    "minimal" => {
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-crud" => {
-                        with_mariadb = true;
-                        crud_template = true;
-                        auth_template = false;
-                        business_template = false;
-                    }
-                    "mariadb-auth" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = true;
-                        business_template = false;
-                    }
-                    "mariadb-business" => {
-                        with_mariadb = true;
-                        crud_template = false;
-                        auth_template = false;
-                        business_template = true;
-                    }
-                    _ => {
-                        eprintln!(
-                            "error[E-CLI-001]: unknown template `{value}`; expected `minimal`, `mariadb-crud`, `mariadb-auth`, or `mariadb-business`"
-                        );
-                        return ExitCode::from(2);
-                    }
-                }
-            } else if argument == "--web-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --web-port requires a value");
-                    return ExitCode::from(2);
-                };
-                web_port_given = true;
-                web_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                host_port_given = true;
-                host_port = match parse_web_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if argument == "--db-host-port" {
-                let Some(value) = arguments.next() else {
-                    eprintln!("error[E-CLI-001]: --db-host-port requires a value");
-                    return ExitCode::from(2);
-                };
-                database_host_port_given = true;
-                database_host_port = match parse_database_host_port(&value) {
-                    Ok(port) => port,
-                    Err(error) => {
-                        eprintln!("error[E-CLI-001]: {error}");
-                        return ExitCode::from(2);
-                    }
-                };
-            } else if !argument.starts_with('-') && !path_given {
-                path = argument;
-                path_given = true;
-            } else {
-                usage();
-                return ExitCode::from(2);
-            }
-        }
-        if (web_port_given || host_port_given || database_host_port_given) && !with_mariadb {
-            eprintln!(
-                "error[E-CLI-001]: --web-port, --host-port, and --db-host-port require --mariadb"
-            );
-            return ExitCode::from(2);
-        }
-        return create_project(
-            &path,
-            ProjectOptions {
-                allow_current_directory: true,
-                with_mariadb,
-                crud_template,
-                auth_template,
-                business_template,
-                web_port,
-                host_port,
-                database_host_port,
-                host_port_given,
-                database_host_port_given,
-            },
-        );
-    }
-    if command == "serve" {
-        return serve_command(args);
-    }
-    if command == "doctor" {
-        return doctor_command(args);
-    }
-    if command == "doc" {
-        return doc_command(args);
-    }
-    if command == "check" {
-        return check_command(args);
-    }
-    if command == "fmt" {
-        return fmt_command(args);
-    }
-    if command == "impact" {
-        return impact_command(args);
-    }
-    if command == "edit" {
-        return edit_command(args);
-    }
-    if command == "context" {
-        return context_command(args);
-    }
-    if command == "config" {
-        return config_command(args);
-    }
-    if command == "verify" {
-        let Some(path) = args.next() else {
-            usage();
-            return ExitCode::from(2);
-        };
-        let json = match args.next() {
-            None => false,
-            Some(flag) if flag == "--json" => true,
-            Some(_) => {
-                usage();
-                return ExitCode::from(2);
-            }
-        };
-        if args.next().is_some() {
-            usage();
-            return ExitCode::from(2);
-        }
-        return verify_command(&path, json);
-    }
-    let Some(path) = args.next() else {
-        usage();
-        return ExitCode::from(2);
-    };
-    if args.next().is_some() {
-        usage();
-        return ExitCode::from(2);
-    }
-    match command.as_str() {
-        "check" | "build" => {
-            if validate(&path).is_ok() {
-                println!("ok: {path}");
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(1)
-            }
-        }
-        "run" => match validate(&path).and_then(|program| {
-            let grants = match project_capability_grants(&path) {
-                Ok(grants) => grants,
-                Err(error) => {
-                    diagnostic(&path, "E-CAP-002", &error, 1, 1);
-                    return Err(());
-                }
-            };
-            let runtime_policy = match project_runtime_policy(&path) {
-                Ok(policy) => policy,
-                Err(error) => {
-                    diagnostic(&path, "E-POLICY-002", &error, 1, 1);
-                    return Err(());
-                }
-            };
-            let result = match env::var("DATABASE_URL") {
-                Ok(database_url) => execute_with_database_and_capabilities_and_policies(
-                    &program,
-                    &database_url,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
-                Err(_) => execute_with_capabilities_and_policies(
-                    &program,
-                    grants.as_ref(),
-                    runtime_policy.as_ref(),
-                ),
-            };
-            result.map_err(|error| {
-                diagnostic(
-                    &path,
-                    "E-RUNTIME-001",
-                    &error.message,
-                    error.span.line,
-                    error.span.column,
-                );
-            })
-        }) {
-            Ok(output) => {
-                for line in output {
-                    println!("{line}");
-                }
-                ExitCode::SUCCESS
-            }
-            Err(()) => ExitCode::from(1),
-        },
-        _ => {
-            usage();
-            ExitCode::from(2)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn feature_defaults_are_simple_and_enabled() {
-        let features = feature_defaults();
-        assert_eq!(features.len(), PROJECT_FEATURES.len());
-        assert!(features.values().all(|setting| setting.enabled));
-        assert!(features.values().all(|setting| setting.source == "default"));
-    }
-
-    #[test]
-    fn feature_settings_accept_known_manifest_values() {
-        let values = parse_feature_section(
-            "[project]\nname = \"demo\"\n\n[features]\napi = false\ncrud = true\n",
-        )
-        .expect("feature settings should parse");
-        assert_eq!(values.get("api"), Some(&false));
-        assert_eq!(values.get("crud"), Some(&true));
-        assert!(!values.contains_key("web"));
-    }
-
-    #[test]
-    fn project_environment_settings_use_process_then_dotenv_then_fallback() {
-        let directory = std::env::temp_dir().join(format!(
-            "zelyra-ui-settings-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        fs::write(directory.join(".env"), "ZELYRA_TEST_UI_LOCALE=de\n").unwrap();
-
-        let key = "ZELYRA_TEST_UI_LOCALE";
-        let previous = env::var_os(key);
-        env::remove_var(key);
-        assert_eq!(
-            project_ui_setting(source_path.to_str().unwrap(), key, "en").unwrap(),
-            "de"
-        );
-        env::set_var(key, "en");
-        assert_eq!(
-            project_ui_setting(source_path.to_str().unwrap(), key, "fallback").unwrap(),
-            "en"
-        );
-        env::remove_var(key);
-        assert_eq!(
-            project_ui_setting(
-                source_path.to_str().unwrap(),
-                "ZELYRA_TEST_UI_MISSING",
-                "work"
-            )
-            .unwrap(),
-            "work"
-        );
-        if let Some(previous) = previous {
-            env::set_var(key, previous);
-        }
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn allowed_hosts_use_process_then_project_env_then_loopback_fallback() {
-        let directory = std::env::temp_dir().join(format!(
-            "zelyra-allowed-hosts-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        fs::write(
-            directory.join(".env"),
-            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
-        )
-        .unwrap();
-
-        let previous = env::var_os("ZELYRA_ALLOWED_HOSTS");
-        env::remove_var("ZELYRA_ALLOWED_HOSTS");
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["localhost", "app.example"]
-        );
-        fs::remove_file(directory.join(".env")).unwrap();
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["localhost", "127.0.0.1", "[::1]"]
-        );
-        fs::write(
-            directory.join(".env"),
-            "ZELYRA_ALLOWED_HOSTS=localhost,app.example\n",
-        )
-        .unwrap();
-        env::set_var("ZELYRA_ALLOWED_HOSTS", "override.example, localhost");
-        assert_eq!(
-            project_allowed_hosts(source_path.to_str().unwrap()).unwrap(),
-            ["override.example", "localhost"]
-        );
-        env::set_var("ZELYRA_ALLOWED_HOSTS", " , ");
-        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
-        env::set_var("ZELYRA_ALLOWED_HOSTS", "localhost, ");
-        assert!(project_allowed_hosts(source_path.to_str().unwrap()).is_err());
-        if let Some(previous) = previous {
-            env::set_var("ZELYRA_ALLOWED_HOSTS", previous);
-        } else {
-            env::remove_var("ZELYRA_ALLOWED_HOSTS");
-        }
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_theme_css_is_optional_utf8_and_size_limited() {
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-theme-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        assert_eq!(
-            project_theme_css(source_path.to_str().unwrap()).unwrap(),
-            None
-        );
-
-        let theme_path = directory.join(PROJECT_THEME_CSS_FILE);
-        let theme = ":root { --zelyra-color-accent: #e04b67; }";
-        fs::write(&theme_path, theme).unwrap();
-        assert_eq!(
-            project_theme_css(source_path.to_str().unwrap()).unwrap(),
-            Some(theme.into())
-        );
-
-        fs::write(
-            &theme_path,
-            vec![b'x'; PROJECT_THEME_CSS_MAX_BYTES as usize + 1],
-        )
-        .unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("128 KiB size limit"));
-
-        fs::write(&theme_path, [0xff, 0xfe]).unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("UTF-8"));
-
-        fs::remove_file(&theme_path).unwrap();
-        fs::create_dir(&theme_path).unwrap();
-        assert!(project_theme_css(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("regular project file"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn project_theme_css_does_not_follow_symbolic_links() {
-        use std::os::unix::fs::symlink;
-
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-theme-link-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        let outside_file = directory.join("private.css");
-        fs::write(&source_path, "").unwrap();
-        fs::write(&outside_file, "private content").unwrap();
-        symlink(&outside_file, directory.join(PROJECT_THEME_CSS_FILE)).unwrap();
-
-        let error = project_theme_css(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("not a symbolic link"));
-        assert!(!error.contains("private content"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_locale_catalogs_are_optional_validated_and_size_limited() {
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-locales-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
-
-        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
-        fs::create_dir(&locale_directory).unwrap();
-        fs::write(
-            locale_directory.join("de.json"),
-            r#"{"custom.title":"Titel"}"#,
-        )
-        .unwrap();
-        fs::write(
-            locale_directory.join("en.json"),
-            r#"{"custom.title":"Title"}"#,
-        )
-        .unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap()).is_ok());
-
-        fs::write(locale_directory.join("de.json"), r#"{"custom.title":true}"#).unwrap();
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales/de.json"));
-        assert!(error.contains("string values"));
-        assert!(!error.contains("true"));
-
-        fs::write(
-            locale_directory.join("de.json"),
-            vec![b'x'; PROJECT_LOCALE_MAX_BYTES as usize + 1],
-        )
-        .unwrap();
-        assert!(project_ui_catalogs(source_path.to_str().unwrap())
-            .unwrap_err()
-            .contains("256 KiB size limit"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn project_locale_catalog_loader_does_not_follow_symbolic_links() {
-        use std::os::unix::fs::symlink;
-
-        let directory = env::temp_dir().join(format!(
-            "zelyra-project-locales-link-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&directory).unwrap();
-        let source_path = directory.join("main.zyl");
-        fs::write(&source_path, "").unwrap();
-        let outside_file = directory.join("outside.json");
-        fs::write(&outside_file, r#"{"title":"private"}"#).unwrap();
-        let locale_directory = directory.join(PROJECT_LOCALE_DIRECTORY);
-        fs::create_dir(&locale_directory).unwrap();
-        symlink(&outside_file, locale_directory.join("de.json")).unwrap();
-
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales/de.json"));
-        assert!(error.contains("symbolic link"));
-        assert!(!error.contains("private"));
-
-        fs::remove_file(locale_directory.join("de.json")).unwrap();
-        fs::remove_dir(&locale_directory).unwrap();
-        let outside_directory = directory.join("outside-locales");
-        fs::create_dir(&outside_directory).unwrap();
-        symlink(&outside_directory, &locale_directory).unwrap();
-        let error = project_ui_catalogs(source_path.to_str().unwrap()).unwrap_err();
-        assert!(error.contains("locales"));
-        assert!(error.contains("symbolic link"));
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn project_theme_stylesheet_route_is_reserved_only_by_theme_projects() {
-        let themed_program =
-            parse(&lex("page \"/__zelyra/theme.css\" { html { <main>Theme</main> } }").unwrap())
-                .unwrap();
-        let parameter_program =
-            parse(&lex("page \"/{namespace}/{asset}\" { html { <main>Asset</main> } }").unwrap())
-                .unwrap();
-        let ordinary_program = parse(&lex("fn main() { }").unwrap()).unwrap();
-
-        assert!(project_uses_reserved_theme_route(&themed_program));
-        assert!(project_uses_reserved_theme_route(&parameter_program));
-        assert!(!project_uses_reserved_theme_route(&ordinary_program));
-    }
-
-    #[test]
-    fn feature_settings_accept_only_known_env_overrides() {
-        let values = parse_env_feature_overrides(
-            "# optional\nZELYRA_FEATURE_API=false\nZELYRA_WEB_PORT=3000\n",
-        )
-        .expect("feature environment settings should parse");
-        assert_eq!(values.get("api"), Some(&false));
-        assert_eq!(values.len(), 1);
-    }
-
-    #[test]
-    fn feature_settings_reject_unknown_values() {
-        let error = parse_feature_section("[features]\nmagic = true\n")
-            .expect_err("unknown features must not be silently accepted");
-        assert!(error.contains("unknown feature setting"));
-        let error = parse_env_feature_overrides("ZELYRA_FEATURE_MAGIC=true\n")
-            .expect_err("unknown environment features must not be silently accepted");
-        assert!(error.contains("unknown ZELYRA_FEATURE_"));
-    }
-
-    #[test]
-    fn formats_verification_results_with_source_location() {
-        let result = VerificationResult {
-            function: "reduce".into(),
-            kind: zelyra_runtime::ContractKind::LoopInvariant,
-            index: 0,
-            status: VerificationStatus::Proven,
-            span: zelyra_ast::Span::new(6, 12, 2, 1),
-            message: "The verifier proved this condition for all analyzed paths.".into(),
-            counterexample: None,
-        };
-        assert_eq!(
-            format_verification_result("src/reduce.zyl", "first\nsecond value\n", &result),
-            "PROVEN [V-001]: reduce.invariant[0] (src/reduce.zyl:2:1-2:7)\n  = The verifier proved this condition for all analyzed paths.\n    |\n  2 | second value\n    | ^^^^^^"
-        );
-    }
-
-    #[test]
-    fn doctor_rejects_invalid_port() {
-        let arguments = ["--port".to_owned(), "not-a-port".to_owned()];
-        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
-        let arguments = ["--port".to_owned(), "0".to_owned()];
-        assert_eq!(doctor_command(arguments.into_iter()), ExitCode::from(2));
-    }
-
-    #[test]
-    fn reads_database_url_from_an_env_file_without_normalizing_secrets() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-doctor-env-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::write(
-            &path,
-            "# local\nexport DATABASE_URL='mariadb://user:secret@127.0.0.1:3306/app'\n",
-        )
-        .unwrap();
-        assert_eq!(
-            read_env_value(path.to_str().unwrap(), "DATABASE_URL").unwrap(),
-            Some("mariadb://user:secret@127.0.0.1:3306/app".into())
-        );
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn formats_doctor_json_without_database_credentials() {
-        let checks = vec![
-            DoctorCheck {
-                name: "project_file",
-                status: "pass",
-                message: "app.zyl exists".into(),
-            },
-            DoctorCheck {
-                name: "database",
-                status: "warn",
-                message: "mariadb: DATABASE_URL is not set".into(),
-            },
-        ];
-        let document: serde_json::Value =
-            serde_json::from_str(&format_doctor_json("app.zyl", &checks)).unwrap();
-        assert_eq!(document["version"], env!("CARGO_PKG_VERSION"));
-        assert_eq!(document["status"], "ready");
-        assert_eq!(document["warnings"], 1);
-        assert_eq!(document["checks"][1]["status"], "warn");
-        assert!(!format_doctor_json("app.zyl", &checks).contains("password"));
-    }
-
-    #[test]
-    fn formats_verification_results_as_json() {
-        let result = VerificationResult {
-            function: "say\"hello".into(),
-            kind: zelyra_runtime::ContractKind::Ensures,
-            index: 1,
-            status: VerificationStatus::RuntimeCheck,
-            span: zelyra_ast::Span::new(6, 12, 2, 1),
-            message: "This postcondition needs a runtime check because not all return paths are symbolically modeled.".into(),
-            counterexample: Some(vec![("value".into(), 0)]),
-        };
-        assert_eq!(
-            format_verification_json("src/file.zyl", "first\nsecond value\n", &[result]),
-            r#"[{"status":"RUNTIME_CHECK","code":"V-002","message":"This postcondition needs a runtime check because not all return paths are symbolically modeled.","function":"say\"hello","kind":"ensures","index":1,"counterexample":{"value":0},"location":{"file":"src/file.zyl","start":{"line":2,"column":1},"end":{"line":2,"column":7}}}]"#
-        );
-    }
-
-    #[test]
-    fn formats_audit_rows_as_json_and_csv_without_losing_nulls() {
-        let result = QueryResult {
-            columns: vec![
-                "actor_user_id".into(),
-                "event".into(),
-                "target_user_id".into(),
-                "details".into(),
-                "created_at".into(),
-            ],
-            rows: vec![vec![
-                "NULL".into(),
-                "auth.login_failed".into(),
-                "NULL".into(),
-                "email=anna@example.test;note=\"unknown\"".into(),
-                "2026-09-17 12:00:00".into(),
-            ]],
-        };
-        let json: serde_json::Value = serde_json::from_str(&audit_rows_json(&result)).unwrap();
-        assert_eq!(json[0]["actor_user_id"], serde_json::Value::Null);
-        assert_eq!(json[0]["target_user_id"], serde_json::Value::Null);
-        assert_eq!(json[0]["event"], "auth.login_failed");
-        assert!(
-            audit_rows_csv(&result).contains("\"email=anna@example.test;note=\"\"unknown\"\"\"")
-        );
-    }
-
-    #[test]
-    fn composes_a_page_inside_its_named_view() {
-        let source = r#"
-            view Shell {
-                html { <body><slot /></body> }
-            }
-            page "/hello/{name}" {
-                view: Shell
-                html { <h1>Hello, {name}!</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<body>"));
-        assert!(html.contains("<h1>Hello, {name}!</h1>"));
-        assert!(!html.contains("<slot />"));
-    }
-
-    #[test]
-    fn composes_default_component_slots_and_nested_components() {
-        let source = r#"
-            component Panel {
-                html { <section class="panel"><slot /></section> }
-            }
-            component Badge {
-                props { text: String }
-                html { <strong>{text}</strong> }
-            }
-            page "/status" {
-                html {
-                    <Panel><Badge text="Ready" /></Panel>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<section class=\"panel\">"));
-        assert!(html.contains("<strong>Ready</strong>"));
-        assert!(!html.contains("<slot />"));
-    }
-
-    #[test]
-    fn validates_route_values_used_by_typed_view_components() {
-        let source = r#"
-            component Greeting {
-                props { text: String }
-                html { <strong>{text}</strong> }
-            }
-            page "/hello/{name}" {
-                html { <Greeting text="{name}" /> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_data_field_bindings() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers/{name}" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers WHERE name = :name
-                }
-                html { <h1>{customer.name}</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_typed_page_data_field() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers/{name}" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers WHERE name = :name
-                }
-                html { <h1>{customer.email}</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_collection_loops() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers" {
-                load customers = sql<Customer[]> {
-                    SELECT id, name FROM customers
-                }
-                html {
-                    <ul>
-                        for customer in customers {
-                            <li>{customer.name}</li>
-                        }
-                    </ul>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn validates_typed_page_filters_and_rejects_unknown_fields() {
-        let valid_source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-                active: Bool default true
-            }
-            page "/customers" {
-                filter { name active }
-                load customers = sql<Customer[]> {
-                    SELECT id, name, active FROM customers
-                }
-                html { <p>{filter_name}</p> }
-            }
-        "#;
-        let valid_program = parse(&lex(valid_source).unwrap()).unwrap();
-        assert!(validate_page_data("filters.zyl", &valid_program));
-        assert!(validate_components("filters.zyl", &valid_program));
-
-        let invalid_source = valid_source.replace("name active", "username active");
-        let invalid_program = parse(&lex(&invalid_source).unwrap()).unwrap();
-        assert!(!validate_page_data("filters.zyl", &invalid_program));
-    }
-
-    #[test]
-    fn rejects_non_array_page_collection_loops() {
-        let source = r#"
-            table customers { id: Id primary auto name: String(100) }
-            page "/customers" {
-                load customer = sql<Customer> {
-                    SELECT id, name FROM customers
-                }
-                html {
-                    for customer in customer {
-                        <p>{customer.name}</p>
-                    }
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_page_data("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_view_values() {
-        let source = r#"
-            page "/hello" {
-                html { <p>{missing}</p> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_route_values_with_an_incompatible_component_property_type() {
-        let source = r#"
-            component Counter {
-                props { count: Int }
-                html { <strong>{count}</strong> }
-            }
-            page "/hello/{name}" {
-                html { <Counter count="{name}" /> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_component_content_without_a_default_slot() {
-        let source = r#"
-            component Panel {
-                html { <section /> }
-            }
-            page "/status" {
-                html { <Panel><p>Unexpected content</p></Panel> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("components.zyl", &program));
-    }
-
-    #[test]
-    fn composes_named_component_slots() {
-        let source = r#"
-            component Layout {
-                html {
-                    <header><slot name="header" /></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout>
-                        <slot name="header"><h1>Dashboard</h1></slot>
-                        <p>Content</p>
-                    </Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Dashboard</h1></header>"));
-        assert!(html.contains("<main>"));
-        assert!(html.contains("<p>Content</p>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn allows_component_slots_without_a_page_view_layout() {
-        let source = r#"
-            component DashboardPanel {
-                html {
-                    <section>
-                        <header><slot name="header"><h1>Dashboard</h1></slot></header>
-                        <main><slot /></main>
-                    </section>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <DashboardPanel>
-                        <slot name="header"><h1>Custom dashboard</h1></slot>
-                        <p>Reusable content.</p>
-                    </DashboardPanel>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("components.zyl", &program));
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("Custom dashboard"));
-        assert!(html.contains("Reusable content."));
-    }
-
-    #[test]
-    fn uses_named_component_slot_fallbacks_when_not_overridden() {
-        let source = r#"
-            component Layout {
-                html {
-                    <header><slot name="header"><h1>Default heading</h1></slot></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><p>Content</p></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Default heading</h1></header>"));
-        assert!(html.contains("<main><p>Content</p></main>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn supplied_named_component_slot_replaces_its_fallback() {
-        let source = r#"
-            component Layout {
-                html { <header><slot name="header"><h1>Default heading</h1></slot></header> }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><slot name="header"><h1>Custom heading</h1></slot></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_components("components.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
-        assert!(!html.contains("Default heading"));
-    }
-
-    #[test]
-    fn rejects_unknown_named_component_slots() {
-        let source = r#"
-            component Layout {
-                html { <main><slot name="content" /></main> }
-            }
-            page "/dashboard" {
-                html {
-                    <Layout><slot name="footer"><p>Footer</p></slot></Layout>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_components("components.zyl", &program));
-    }
-
-    #[test]
-    fn composes_named_view_slots_and_fallbacks() {
-        let source = r#"
-            view Shell {
-                html {
-                    <html>
-                        <body>
-                            <header><slot name="header"><h1>Default heading</h1></slot></header>
-                            <main><slot /></main>
-                            <footer><slot name="footer">Default footer</slot></footer>
-                        </body>
-                    </html>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="header"><h1>Custom heading</h1></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-        let html = compose_page_view(&program, &program.pages[0]);
-        assert!(html.contains("<header><h1>Custom heading</h1></header>"));
-        assert!(html.contains("<main>"));
-        assert!(html.contains("<p>Dashboard content</p>"));
-        assert!(html.contains("<footer>Default footer</footer>"));
-        assert!(!html.contains("<slot"));
-    }
-
-    #[test]
-    fn rejects_unknown_named_view_slots() {
-        let source = r#"
-            view Shell {
-                html {
-                    <body>
-                        <header><slot name="header" /></header>
-                        <main><slot /></main>
-                    </body>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="footer"><p>Footer</p></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn composes_crud_layout_with_generated_content_marker() {
-        let source = r#"
-            component Badge {
-                props { label: String }
-                html { <strong>{label}</strong> }
-            }
-            view Shell {
-                html {
-                    <html><body>
-                        <header><slot name="heading"><h1>Customers</h1></slot></header>
-                        <main><slot /></main>
-                        <aside><slot name="help"><p>Default help</p></slot></aside>
-                        <footer><slot name="footer"><p>Default footer</p></slot></footer>
-                    </body></html>
-                }
-            }
-            table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers {
-                layout: Shell
-                slots {
-                    heading { html { <Badge label="Machine register" /> } }
-                    help { html { <p>Choose a machine to see its details.</p> } }
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(validate_components("views.zyl", &program));
-        let layout = crud_layout_html(&program, &program.cruds[0]).unwrap();
-        assert!(layout.contains("<strong>Machine register</strong>"));
-        assert!(layout.contains(CRUD_LAYOUT_CONTENT_MARKER));
-        assert!(layout.contains("<p>Choose a machine to see its details.</p>"));
-        assert!(!layout.contains("Default help"));
-        assert!(layout.contains("Default footer"));
-        assert!(!layout.contains("<slot"));
-    }
-
-    #[test]
-    fn rejects_crud_layout_slots_without_a_matching_layout() {
-        let source = r#"
-            view Shell {
-                html { <header><slot name="heading" /></header><main><slot /></main> }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots { missing { html { <p>Custom content</p> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-
-        let source_without_layout = r#"
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                slots { heading { html { <h1>Customers</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source_without_layout).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-
-        let duplicate_slots = r#"
-            view Shell {
-                html {
-                    <header><slot name="heading" /></header><main><slot /></main>
-                }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots {
-                    heading { html { <h1>First heading</h1> } }
-                    heading { html { <h1>Second heading</h1> } }
-                }
-            }
-        "#;
-        let program = parse(&lex(duplicate_slots).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn crud_layout_slot_content_cannot_read_crud_record_values() {
-        let source = r#"
-            view Shell {
-                html { <header><slot name="heading" /></header><main><slot /></main> }
-            }
-            table customers { id: Id primary auto name: String(100) }
-            crud Customer -> customers {
-                layout: Shell
-                slots { heading { html { <h1>{customer.name}</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn crud_layout_components_are_checked_even_without_a_page_using_the_view() {
-        let source = r#"
-            component BrandMark {
-                props { label: String }
-                html { <strong>{label}</strong> }
-            }
-            view Shell {
-                html {
-                    <header><slot name="heading" /><BrandMark /></header><main><slot /></main>
-                }
-            }
-            table customers { id: Id primary auto }
-            crud Customer -> customers {
-                layout: Shell
-                slots { heading { html { <h1>Customers</h1> } } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(validate_views("views.zyl", &program));
-        assert!(!validate_components("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_unknown_crud_layout_view() {
-        let source = r#"
-            table customers { id: Id primary auto }
-            crud Customer -> customers { layout: MissingShell }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_duplicate_named_view_slots() {
-        let source = r#"
-            view Shell {
-                html {
-                    <header><slot name="header" /></header>
-                    <main><slot /></main>
-                }
-            }
-            page "/dashboard" {
-                view: Shell
-                html {
-                    <slot name="header"><h1>First</h1></slot>
-                    <slot name="header"><h1>Second</h1></slot>
-                    <p>Dashboard content</p>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn rejects_invalid_named_view_composition() {
-        let source = r#"
-            view Shell {
-                html { <body>No content slot</body> }
-            }
-            page "/customers" {
-                view: MissingShell
-                html { <h1>Customers</h1> }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        assert!(!validate_views("views.zyl", &program));
-    }
-
-    #[test]
-    fn formats_api_declarations_as_openapi() {
-        let program = parse(
-            &lex(
-                "type CustomerId = Id table customers { id: CustomerId primary auto name: String(100) required } api GET \"/customers/{id}\" { input { id: CustomerId } output Customer errors { 404 NotFound } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let document = format_openapi(&program);
-        assert!(document.contains("\"openapi\":\"3.0.3\""));
-        assert!(document.contains("\"/customers/{id}\""));
-        assert!(document.contains("\"404\":{\"description\":\"NotFound\"}"));
-        assert!(document.contains("#/components/schemas/Customer"));
-    }
-
-    #[test]
-    fn formats_typed_typescript_client_from_api_and_records() {
-        let program = parse(
-            &lex(
-                "struct Address { city: String } api GET \"/customers/{id}\" { input { id: Id, term: String? } output Address errors { 404 NotFound } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let client = format_typescript_client(&program);
-        assert!(client.contains("export interface Address"));
-        assert!(client.contains("async get_customers_id"));
-        assert!(client.contains("encodeURIComponent(String(params.id))"));
-        assert!(client.contains("Promise<Address>"));
-        assert!(client.contains("new URLSearchParams()"));
-        assert!(client.contains("ZelyraApiError"));
-        assert!(client.contains("ZelyraApiErrorCode = \"NotFound\" | (string & {})"));
-        assert!(client.contains("fromResponse(response)"));
-        assert!(client.contains("payload.error.message"));
-    }
-
-    #[test]
-    fn formats_typed_api_error_payloads_for_openapi_and_typescript() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } api GET \"/fail\" { output Result<String, Problem> errors { 422 Validation: Problem } } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let openapi = format_openapi(&program);
-        assert!(openapi.contains("\"details\""));
-        assert!(openapi.contains("#/components/schemas/Problem"));
-        let client = format_typescript_client(&program);
-        assert!(client.contains("ZelyraApiErrorPayloads"));
-        assert!(client.contains("\"Validation\": Problem"));
-        assert!(client.contains("details: Details | undefined"));
-    }
-
-    #[test]
-    fn dispatches_json_api_input_to_a_typed_handler() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n\r\n{\"value\":42}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-        assert_eq!(response.body, "42");
-    }
-
-    #[test]
-    fn dispatches_string_keyed_map_api_input_and_output() {
-        let program = parse(
-            &lex(
-                "api POST \"/settings\" { handler echo input { settings: Map<String, Int> } output Map<String, Int> } fn echo(settings: Map<String, Int>) -> Map<String, Int> { return settings } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /settings HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"settings\":{\"standard\":10,\"premium\":20}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body, serde_json::json!({"premium": 20, "standard": 10}));
-    }
-
-    #[test]
-    fn returns_structured_json_for_invalid_api_input() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: Int } output Int } fn echo(value: Int) -> Int { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-        assert!(response.body.contains("\"code\":\"BadRequest\""));
-        assert!(response.body.contains("missing API input"));
-    }
-
-    #[test]
-    fn rejects_unsupported_api_request_media_types() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: text/plain\r\n\r\nhello",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 415);
-        assert!(response.body.contains("UnsupportedMediaType"));
-    }
-
-    #[test]
-    fn decodes_json_strings_with_commas_colons_and_escapes() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":\"a,b: \\\"quoted\\\"\"}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "\"a,b: \\\"quoted\\\"\"");
-    }
-
-    #[test]
-    fn decodes_json_booleans_and_null_options() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { active: Bool? } output Bool? } fn echo(active: Bool?) -> Bool? { return active } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"active\":null}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "null");
-    }
-
-    #[test]
-    fn decodes_and_serializes_typed_json_arrays() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { values: Int[] } output Int[] } fn echo(values: Int[]) -> Int[] { return values } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"values\":[1,2,3]}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "[1,2,3]");
-    }
-
-    #[test]
-    fn decodes_and_serializes_nested_structured_api_objects() {
-        let program = parse(
-            &lex(
-                "struct Address { city: String } struct CustomerInput { name: String address: Address } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"address\":{\"city\":\"Berlin\"}}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 200);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body["name"], "Anna");
-        assert_eq!(body["address"]["city"], "Berlin");
-    }
-
-    #[test]
-    fn rejects_unknown_and_missing_record_fields() {
-        let program = parse(
-            &lex(
-                "struct CustomerInput { name: String email: Email? } api POST \"/customers\" { handler echo input { customer: CustomerInput } output CustomerInput } fn echo(customer: CustomerInput) -> CustomerInput { return customer } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let unknown = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{\"name\":\"Anna\",\"unknown\":true}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &unknown, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("unknown field"));
-
-        let missing = zelyra_web::parse_request(
-            "POST /customers HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"customer\":{}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &missing, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("missing field"));
-    }
-
-    #[test]
-    fn maps_declared_result_errors_to_http_responses() {
-        let program = parse(
-            &lex(
-                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"NotFound\") } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 404);
-        assert!(response.body.contains("\"code\":\"NotFound\""));
-    }
-
-    #[test]
-    fn returns_internal_error_for_undeclared_result_errors() {
-        let program = parse(
-            &lex(
-                "api GET \"/customers\" { handler find input { } output Result<String, String> errors { 404 NotFound } } fn find() -> Result<String, String> { return Err(\"Other\") } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "find", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 500);
-        assert!(response.body.contains("InternalServerError"));
-        assert!(response.body.contains("unmapped API error"));
-    }
-
-    #[test]
-    fn returns_typed_details_for_declared_api_errors() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Problem } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid customer\" }) } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert!(check_apis(&program).is_ok());
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request("GET /fail HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_api(&program, api, "fail", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 422);
-        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
-        assert_eq!(body["error"]["code"], "Validation");
-        assert_eq!(body["error"]["details"]["message"], "invalid customer");
-    }
-
-    #[test]
-    fn rejects_api_error_payload_that_does_not_match_result_error_type() {
-        let program = parse(
-            &lex(
-                "struct Problem { message: String } struct Other { code: Int } api GET \"/fail\" { handler fail input { } output Result<String, Problem> errors { 422 Validation: Other } } fn fail() -> Result<String, Problem> { return Err(Problem { message: \"invalid\" }) } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let errors = check_apis(&program).unwrap_err();
-        assert!(errors
-            .iter()
-            .any(|error| error.message.contains("does not match handler error type")));
-    }
-
-    #[test]
-    fn rejects_object_json_for_scalar_input() {
-        let program = parse(
-            &lex(
-                "api POST \"/echo\" { handler echo input { value: String } output String } fn echo(value: String) -> String { return value } fn main() { }",
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let api = &program.apis[0];
-        let request = zelyra_web::parse_request(
-            "POST /echo HTTP/1.1\r\nContent-Type: application/json\r\n\r\n{\"value\":{\"nested\":true}}",
-        )
-        .unwrap();
-        let response = dispatch_api(&program, api, "echo", &request, &HashMap::new(), None);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("scalar JSON value"));
-    }
-
-    #[test]
-    fn rejects_unknown_configured_crud_columns() {
-        let source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Machine -> machines {
-                view { fields { missing } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_cruds("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn shared_crud_view_fields_drive_list_and_form_defaults() {
-        let source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-                email: Email?
-                active: Bool default true
-            }
-
-            crud Customer -> customers {
-                view { fields { name email active } }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(validate_cruds("test.zyl", &program, &schema));
-        let crud = &program.cruds[0];
-        let table = program
-            .tables
-            .iter()
-            .find(|table| table.name == "customers")
-            .unwrap();
-        let form = generated_crud_form(
-            crud,
-            table,
-            &schema,
-            false,
-            CrudGenerationContext {
-                layout_html: None,
-                csrf: CsrfProtection::new("test-csrf"),
-                audit_table: None,
-                audit_chain: false,
-            },
-        );
-        assert_eq!(
-            form.form
-                .fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>(),
-            ["name", "email", "active"]
-        );
-        let list = configured_crud_columns(&program, &schema, crud, &crud.view.fields, |table| {
-            table
-                .columns
-                .iter()
-                .map(|column| column.name.clone())
-                .collect()
-        });
-        assert_eq!(list, ["name", "email", "active"]);
-    }
-
-    #[test]
-    fn rejects_invalid_soft_delete_columns() {
-        let missing_source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Machine -> machines {
-                soft_delete { column: deleted_at }
-            }
-        "#;
-        let missing_program = parse(&lex(missing_source).unwrap()).unwrap();
-        let missing_schema = build_schema(&missing_program).unwrap();
-        assert!(!validate_cruds(
-            "test.zyl",
-            &missing_program,
-            &missing_schema
-        ));
-
-        let wrong_type_source = r#"
-            table machines {
-                id: Id primary auto
-                name: String(100) required
-                deleted_at: String?
-            }
-
-            crud Machine -> machines {
-                soft_delete { column: deleted_at }
-            }
-        "#;
-        let wrong_type_program = parse(&lex(wrong_type_source).unwrap()).unwrap();
-        let wrong_type_schema = build_schema(&wrong_type_program).unwrap();
-        assert!(!validate_cruds(
-            "test.zyl",
-            &wrong_type_program,
-            &wrong_type_schema
-        ));
-    }
-
-    #[test]
-    fn rejects_protected_routes_without_auth_definition() {
-        let source = r#"
-            page "/admin" {
-                requires auth
-                html {
-                    <h1>Admin</h1>
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_scoped_crud_permissions_without_auth_definition() {
-        let source = r#"
-            table customers {
-                id: Id primary auto
-                name: String(100) required
-            }
-
-            crud Customer -> customers {
-                permits create "customers.create"
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_protected_form_action_without_auth_definition() {
-        let source = r#"
-            form CustomerForm {
-                field name: String {
-                    required
-                }
-                action save {
-                    requires auth
-                    permits "customers.save"
-                }
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_protected_api_without_auth_definition() {
-        let source = r#"
-            api GET "/admin" {
-                requires auth
-                output String
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn accepts_persistent_auth_tables() {
-        let source = r#"
-            auth users {
-                table: users
-                sessions: auth_sessions
-                permissions: user_permissions
-                roles: user_roles
-                role_permissions: role_permissions
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table auth_sessions {
-                id: Id primary auto
-                user: User required
-                token_hash: String(64) required
-                expires_at: Timestamp required
-            }
-
-            table user_permissions {
-                id: Id primary auto
-                user: User required
-                permission: String(100) required
-            }
-
-            table user_roles {
-                id: Id primary auto
-                user: User required
-                role: String(100) required
-            }
-
-            table role_permissions {
-                id: Id primary auto
-                role: String(100) required
-                permission: String(100) required
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_partial_auth_role_configuration() {
-        let source = r#"
-            auth users {
-                table: users
-                roles: user_roles
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table user_roles {
-                id: Id primary auto
-                user: User required
-                role: String(100) required
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn rejects_chained_audit_without_hash_columns() {
-        let source = r#"
-            auth users {
-                table: users
-                audit: audit_log
-                audit_chain: true
-            }
-
-            table users {
-                id: Id primary auto
-                email: Email required
-                password_hash: String(255) required
-            }
-
-            table audit_log {
-                id: Id primary auto
-                actor_user_id: Int?
-                event: String(100) required
-                target_user_id: Int?
-                details: String(1000) required
-                created_at: Timestamp default now
-            }
-        "#;
-        let program = parse(&lex(source).unwrap()).unwrap();
-        let schema = build_schema(&program).unwrap();
-        assert!(!validate_auth("test.zyl", &program, &schema));
-    }
-
-    #[test]
-    fn reads_project_capability_grants() {
-        let grants = project_capability_grants("../examples/capabilities.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(grants.contains("Database"));
-        assert!(grants.contains("Network"));
-        assert!(grants.contains("Console"));
-    }
-
-    #[test]
-    fn defaults_project_file_system_policy_to_project_root() {
-        let policy = project_filesystem_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(policy
-            .read_roots
-            .iter()
-            .any(|root| root.ends_with("zelyra")));
-        assert!(policy.write_roots.is_empty());
-    }
-
-    #[test]
-    fn defaults_project_network_policy_to_no_allowed_hosts() {
-        let policy = project_network_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(policy.allowed_hosts.is_empty());
-        assert_eq!(policy.timeout_ms, 5_000);
-        assert_eq!(policy.max_response_bytes, 1_048_576);
-    }
-
-    #[test]
-    fn defaults_project_process_policy_to_no_allowed_commands() {
-        let policy = project_process_policy("../examples/filesystem_api.zyl")
-            .unwrap()
-            .unwrap();
-        assert!(policy.allowed_commands.is_empty());
-        assert_eq!(policy.timeout_ms, 5_000);
-        assert_eq!(policy.max_output_bytes, 1_048_576);
-    }
-
-    #[test]
-    fn generates_project_with_target_release_version() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-template-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let status = create_project(
-            path.to_str().unwrap(),
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb: true,
-                crud_template: false,
-                auth_template: false,
-                business_template: false,
-                web_port: DEFAULT_WEB_PORT,
-                host_port: DEFAULT_WEB_PORT,
-                database_host_port: DEFAULT_DATABASE_HOST_PORT,
-                host_port_given: false,
-                database_host_port_given: false,
-            },
-        );
-        assert_eq!(status, ExitCode::SUCCESS);
-
-        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        let project_config = fs::read_to_string(path.join("zelyra.toml")).unwrap();
-        let project_theme = fs::read_to_string(path.join(PROJECT_THEME_CSS_FILE)).unwrap();
-        assert!(dockerfile.contains(&format!("ARG ZELYRA_REF=v{}", env!("CARGO_PKG_VERSION"))));
-        assert!(project_config.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))));
-        assert!(project_config.contains("console = false"));
-        assert!(dockerfile.contains("COPY main.zyl zelyra.toml zelyra.theme.css ./"));
-        assert!(dockerfile.contains("COPY locales ./locales"));
-        assert!(path.join("locales/de.json").is_file());
-        assert!(path.join("locales/en.json").is_file());
-        for token in [
-            "--zelyra-color-accent",
-            "--zelyra-color-accent-strong",
-            "--zelyra-color-accent-text",
-            "--zelyra-color-accent-soft",
-            "--zelyra-color-ink",
-            "--zelyra-color-muted",
-            "--zelyra-color-border",
-            "--zelyra-color-canvas",
-            "--zelyra-color-surface",
-            "--zelyra-color-surface-subtle",
-            "--zelyra-color-sidebar-start",
-            "--zelyra-color-sidebar-middle",
-            "--zelyra-color-sidebar-end",
-            "--zelyra-color-sidebar-foreground",
-            "--zelyra-color-sidebar-muted",
-            "--zelyra-color-hero-start",
-            "--zelyra-color-hero-middle",
-            "--zelyra-color-hero-end",
-            "--zelyra-color-success-background",
-            "--zelyra-color-success-border",
-            "--zelyra-color-success-ink",
-            "--zelyra-color-danger-background",
-            "--zelyra-color-danger-border",
-            "--zelyra-color-danger-ink",
-            "--zelyra-color-focus",
-            "--zelyra-font-body",
-            "--zelyra-radius-card",
-            "--zelyra-radius-control",
-            "--zelyra-content-max-width",
-        ] {
-            assert!(
-                project_theme.contains(token),
-                "generated theme misses {token}"
-            );
-        }
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn mariadb_crud_scaffold_includes_the_fictional_demo_fixture() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-crud-demo-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let status = create_project(
-            path.to_str().unwrap(),
-            ProjectOptions {
-                allow_current_directory: false,
-                with_mariadb: true,
-                crud_template: true,
-                auth_template: false,
-                business_template: false,
-                web_port: DEFAULT_WEB_PORT,
-                host_port: DEFAULT_WEB_PORT,
-                database_host_port: DEFAULT_DATABASE_HOST_PORT,
-                host_port_given: false,
-                database_host_port_given: false,
-            },
-        );
-        assert_eq!(status, ExitCode::SUCCESS);
-
-        let fixture = fs::read_to_string(path.join("machine-management-demo.sql")).unwrap();
-        assert!(fixture.contains("ZLY-DEMO-030"));
-        assert!(fixture.contains("INSERT IGNORE INTO machines"));
-        let source = fs::read_to_string(path.join("main.zyl")).unwrap();
-        assert!(source.contains("machines.resources.title"));
-        assert!(source.contains("mode: cards"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn generated_mariadb_template_uses_selected_web_port() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-port-template-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let mut selected_ports = None;
-        for _ in 0..8 {
-            let database_host_port = find_free_port(34_000, &[]).unwrap();
-            let host_port = find_free_port(35_000, &[database_host_port]).unwrap();
-            let status = create_project(
-                path.to_str().unwrap(),
-                ProjectOptions {
-                    allow_current_directory: false,
-                    with_mariadb: true,
-                    crud_template: false,
-                    auth_template: false,
-                    business_template: false,
-                    web_port: 8080,
-                    host_port,
-                    database_host_port,
-                    host_port_given: true,
-                    database_host_port_given: true,
-                },
-            );
-            if status == ExitCode::SUCCESS {
-                selected_ports = Some((host_port, database_host_port));
-                break;
-            }
-        }
-        let (host_port, database_host_port) =
-            selected_ports.expect("template test should acquire two free host ports");
-
-        let env_example = fs::read_to_string(path.join(".env.example")).unwrap();
-        let compose = fs::read_to_string(path.join("docker-compose.mariadb.yml")).unwrap();
-        let dockerfile = fs::read_to_string(path.join("Dockerfile")).unwrap();
-        let dockerignore = fs::read_to_string(path.join(".dockerignore")).unwrap();
-        let gitignore = fs::read_to_string(path.join(".gitignore")).unwrap();
-        assert!(env_example.contains("ZELYRA_WEB_PORT=8080"));
-        assert!(env_example.contains(&format!("ZELYRA_HOST_PORT={host_port}")));
-        assert!(env_example.contains(&format!("ZELYRA_DB_HOST_PORT={database_host_port}")));
-        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(compose.contains(&format!(
-            "127.0.0.1:${{ZELYRA_HOST_PORT:-{host_port}}}:${{ZELYRA_WEB_PORT:-8080}}"
-        )));
-        assert!(compose.contains(&format!(
-            "127.0.0.1:${{ZELYRA_DB_HOST_PORT:-{database_host_port}}}:3306"
-        )));
-        assert!(compose.contains("0.0.0.0:${ZELYRA_WEB_PORT:-8080}"));
-        assert!(dockerfile.contains("EXPOSE 8080"));
-        assert!(dockerfile.contains("0.0.0.0:8080"));
-        assert!(dockerignore.contains(".env"));
-        assert!(gitignore.contains(".env"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_accepts_mariadb_project_without_env_example() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-config-only-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-
-        assert_eq!(
-            setup_project(path.to_str().unwrap(), &SetupOptions::default()),
-            ExitCode::SUCCESS
-        );
-        let env_file = fs::read_to_string(path.join(".env")).unwrap();
-        assert!(env_file.contains("DATABASE_URL=mariadb://zelyra:"));
-        assert!(env_file.contains("MARIADB_ROOT_PASSWORD="));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_action_prepare_is_idempotent_and_does_not_replace_credentials() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-action-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-
-        let first =
-            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
-        let contents = fs::read_to_string(path.join(".env")).unwrap();
-        let second =
-            setup_action(path.to_str().unwrap(), "prepare", &SetupOptions::default()).unwrap();
-        assert!(first.contains("created protected .env"));
-        assert!(second.contains("kept existing .env"));
-        assert_eq!(contents, fs::read_to_string(path.join(".env")).unwrap());
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_web_url_uses_the_effective_host_port() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-web-url-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(
-            path.join("zelyra.toml"),
-            "[database.main]\nengine = \"mariadb\"\n",
-        )
-        .unwrap();
-        fs::write(
-            path.join(".env.example"),
-            "# ZELYRA_HOST_PORT=18080\nZELYRA_DB_HOST_PORT=3308\n",
-        )
-        .unwrap();
-        fs::write(path.join(".env"), "ZELYRA_HOST_PORT=18443\n").unwrap();
-
-        let env_path = path.join(".env");
-        let env_path = env_path.to_string_lossy();
-        assert_eq!(
-            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
-            "http://127.0.0.1:18443"
-        );
-
-        fs::write(path.join(".env"), "ZELYRA_DB_HOST_PORT=3308\n").unwrap();
-        assert_eq!(
-            project_web_url_with_host_port(&path, None, &env_path).unwrap(),
-            "http://127.0.0.1:18080"
-        );
-
-        assert_eq!(
-            project_web_url_with_host_port(&path, Some("18444"), "unused.env").unwrap(),
-            "http://127.0.0.1:18444"
-        );
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn setup_web_requires_the_token_and_renders_the_local_actions() {
-        let path = env::temp_dir().join(format!(
-            "zelyra-cli-setup-web-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&path).unwrap();
-        let state = Arc::new(Mutex::new(SetupWebState {
-            directory: path.clone(),
-            token: "test-token".into(),
-            message: String::new(),
-        }));
-        let request = |target: &str| zelyra_web::Request {
-            method: "GET".into(),
-            target: target.into(),
-            path: "/".into(),
-            headers: HashMap::new(),
-            body: String::new(),
-        };
-
-        let forbidden = setup_web_response(&state, &request("/?token=wrong"));
-        assert_eq!(forbidden.status, 403);
-        let page = setup_web_response(&state, &request("/?token=test-token"));
-        assert_eq!(page.status, 200);
-        assert!(page.body.contains("Konfiguration vorbereiten"));
-        assert!(page.body.contains("MariaDB und Anwendung starten"));
-
-        fs::remove_dir_all(path).unwrap();
-    }
-
-    #[test]
-    fn web_port_validation_rejects_zero_and_non_numeric_values() {
-        assert_eq!(parse_web_port("1"), Ok(1));
-        assert_eq!(parse_web_port("65535"), Ok(65535));
-        assert!(parse_web_port("0").is_err());
-        assert!(parse_web_port("65536").is_err());
-        assert!(parse_web_port("web").is_err());
-        assert_eq!(parse_database_host_port("3308"), Ok(3308));
-        assert!(parse_database_host_port("0").is_err());
-        assert!(parse_database_host_port("database").is_err());
-    }
-
-    #[test]
-    fn docker_compose_hint_is_actionable_and_platform_specific() {
-        let hint = docker_compose_install_hint();
-        assert!(hint.contains("Docker Compose is unavailable"));
-        assert!(hint.contains("https://docs.docker.com/"));
-        assert!(hint.contains("docker compose version"));
-    }
-
-    #[test]
-    fn compose_start_errors_are_actionable_without_exposing_output() {
-        let secret = "mariadb://zelyra:secret-value@127.0.0.1:3306/zelyra_app";
-        let permission = compose_start_failure_message(
-            DockerComposeCommand::Legacy,
-            &format!("permission denied while connecting to docker.sock: {secret}"),
-        );
-        assert!(permission.contains("usermod -aG docker"));
-        assert!(permission.contains("\n  newgrp docker\n  id -nG\n  docker ps\n"));
-        assert!(permission.contains("Opening another terminal window alone"));
-        assert!(!permission.contains(secret));
-
-        let conflict = compose_start_failure_message(
-            DockerComposeCommand::Plugin,
-            "failed to bind host port: address already in use",
-        );
-        assert!(conflict.contains("port is already in use"));
-        assert!(!conflict.contains("failed to bind"));
-    }
-
-    #[test]
-    fn free_port_selection_skips_a_bound_port() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = listener.local_addr().unwrap().port();
-        let selected = find_free_port(occupied, &[]).unwrap();
-        assert_ne!(selected, occupied);
-    }
-
-    #[test]
-    fn explicit_port_conflicts_are_rejected() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let occupied = listener.local_addr().unwrap().port();
-        let error = resolve_host_port(occupied, true, "web host", true, &[])
-            .expect_err("an explicitly occupied port must be rejected");
-        assert!(error.contains("already in use"));
-        assert!(error.contains("choose a different port"));
-    }
+    command_dispatch::run()
 }

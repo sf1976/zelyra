@@ -84,15 +84,21 @@ if document.get("success") is not True:
 print("generated project check: success")
 '
 TEST_DATABASE_URL="${test_database_url}" awk '
-    BEGIN { updated = 0 }
+    BEGIN { updated_named = 0; updated_legacy = 0 }
+    /^ZELYRA_DATABASE_MAIN_URL=/ {
+        print "ZELYRA_DATABASE_MAIN_URL=" ENVIRON["TEST_DATABASE_URL"]
+        updated_named = 1
+        next
+    }
     /^DATABASE_URL=/ {
         print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
-        updated = 1
+        updated_legacy = 1
         next
     }
     { print }
     END {
-        if (!updated) print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
+        if (!updated_named) print "ZELYRA_DATABASE_MAIN_URL=" ENVIRON["TEST_DATABASE_URL"]
+        if (!updated_legacy) print "DATABASE_URL=" ENVIRON["TEST_DATABASE_URL"]
     }
 ' "${project_dir}/.env" > "${project_dir}/.env.e2e"
 doctor_json="$("${zelyra_bin}" doctor "${project_dir}/main.zyl" \

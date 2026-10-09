@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the final 0.3.0 tag against unfinished gates and undocumented waivers."""
+"""Guard final release tags against unfinished gates and undocumented waivers."""
 
 from __future__ import annotations
 
@@ -30,11 +30,51 @@ REQUIRED_DECISION_RECORDS = {
         "not conducted for 0.3.0",
         "mandatory release gate for 0.4.0",
         "not a test result",
+        "decision authority: project owner",
     ),
     "docs/release-readiness/0.3.0-human-gate-decision.de.md": (
         "nicht durchgeführt",
         "0.4.0",
         "kein testergebnis",
+        "entscheidungsträger: projektverantwortlicher",
+    ),
+}
+
+REQUIRED_GATES_040 = {
+    "docs/release-plans/0.4.0.en.md": (
+        ("P0 implementation and tests", "All P0 items are implemented, reviewed, and backed by positive and"),
+        ("module and migration recovery acceptance", "The multi-file example, generated business application, and a migration"),
+        ("database compatibility claims", "MariaDB compatibility claims match the tested matrix; unsupported"),
+        ("security review and residual risks", "Security review, threat model, dependency audit, and residual risks"),
+        ("machine interface compatibility", "CLI JSON, diagnostics, project files, migration plans, and release"),
+        ("independent human acceptance", "Run a real human acceptance test with a person who does not develop"),
+        ("published candidate verification", "Release artifacts, checksums, SBOM/provenance, upgrade/rollback smoke,"),
+        ("all mandatory release gates", "Publish `v0.4.0` only after every mandatory gate passes."),
+    ),
+    "docs/release-plans/0.4.0.de.md": (
+        ("P0-Implementierung und Tests", "Alle P0-Punkte sind implementiert, geprüft und durch positive sowie"),
+        ("Modul- und Migrationsabnahme", "Mehrdateien-Beispiel, erzeugte Businessanwendung und ein"),
+        ("Datenbank-Kompatibilitätsaussagen", "MariaDB-Aussagen entsprechen der getesteten Matrix; nicht unterstütztes"),
+        ("Sicherheitsreview und Restgefahren", "Sicherheitsreview, Threat Model, Dependency Audit und Restgefahren sind"),
+        ("Kompatibilität der Maschinenschnittstellen", "CLI-JSON, Diagnosen, Projektdateien, Migrationspläne und Releaseartefakte"),
+        ("Unabhängige menschliche Abnahme", "Einen echten menschlichen Abnahmetest mit einer Person durchführen, die"),
+        ("Prüfung des veröffentlichten Kandidaten", "Releaseartefakte, Prüfsummen, SBOM/Provenance sowie Upgrade-/Rollback-"),
+        ("Alle verpflichtenden Release-Gates", "`v0.4.0` erst veröffentlichen, wenn jedes verpflichtende Gate erfüllt"),
+    ),
+}
+
+REQUIRED_HUMAN_ACCEPTANCE_RECORDS_040 = {
+    "docs/release-readiness/0.4.0-human-acceptance.en.md": (
+        "candidate commit:",
+        "completed on:",
+        "decision: accepted",
+        "decision authority: project owner",
+    ),
+    "docs/release-readiness/0.4.0-human-acceptance.de.md": (
+        "kandidaten-commit:",
+        "abgeschlossen am:",
+        "entscheidung: akzeptiert",
+        "entscheidungsträger: projektverantwortlicher",
     ),
 }
 
@@ -46,29 +86,69 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
     return False
 
 
-def unfinished_gates(root: Path, version: str) -> list[str]:
-    if version != "0.3.0":
+def unfinished_gates(
+    root: Path, version: str, candidate_commit: str | None = None
+) -> list[str]:
+    if version not in {"0.3.0", "0.4.0"}:
         return []
 
     failures: list[str] = []
-    for relative_path, gates in REQUIRED_GATES.items():
+    required_gates = REQUIRED_GATES if version == "0.3.0" else REQUIRED_GATES_040
+    for relative_path, gates in required_gates.items():
         path = root / relative_path
         text = path.read_text(encoding="utf-8")
         for name, marker in gates:
             if not _checkbox_is_checked(text, marker):
                 failures.append(f"{name} ({relative_path})")
 
-    for relative_path, markers in REQUIRED_DECISION_RECORDS.items():
+    if version == "0.3.0":
+        required_records = REQUIRED_DECISION_RECORDS
+    else:
+        required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_040
+        english_plan = root / "docs/release-plans/0.4.0.en.md"
+        try:
+            english_text = english_plan.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            return failures + [f"could not read 0.4.0 human acceptance gate: {error}"]
+        if not _checkbox_is_checked(english_text, "Run a real human acceptance test"):
+            required_records = {}
+
+    for relative_path, markers in required_records.items():
         path = root / relative_path
         try:
-            text = " ".join(path.read_text(encoding="utf-8").casefold().split())
+            raw_text = path.read_text(encoding="utf-8")
+            text = " ".join(raw_text.casefold().split())
+            text = re.sub(r"[*_`]", "", text)
         except FileNotFoundError:
-            failures.append(f"human onboarding decision record missing ({relative_path})")
+            failures.append(f"human decision record missing ({relative_path})")
             continue
         for marker in markers:
-            if " ".join(marker.casefold().split()) not in text:
+            normalized_marker = re.sub(r"[*_`]", "", " ".join(marker.casefold().split()))
+            if normalized_marker not in text:
                 failures.append(f"human onboarding decision record incomplete ({relative_path})")
                 break
+        else:
+            if version == "0.4.0" and any(
+                placeholder in text
+                for placeholder in ("pending", "ausstehend", "[todo]", "tbd")
+            ):
+                failures.append(f"human acceptance record contains placeholders ({relative_path})")
+            if version == "0.4.0" and candidate_commit is not None:
+                commit_label = (
+                    "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
+                )
+                recorded_commit = next(
+                    (
+                        line.strip().split(":", 1)[1].strip().strip("`")
+                        for line in raw_text.splitlines()
+                        if line.strip().casefold().lstrip("-* ").startswith(commit_label)
+                    ),
+                    "",
+                )
+                if recorded_commit.casefold() != candidate_commit.casefold():
+                    failures.append(
+                        f"human acceptance record is for a different candidate commit ({relative_path})"
+                    )
     return failures
 
 
@@ -76,16 +156,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--version", required=True, help="workspace version being tagged")
+    parser.add_argument(
+        "--candidate-commit",
+        help="exact commit the 0.4.0 human acceptance must cover",
+    )
     args = parser.parse_args()
 
     try:
-        failures = unfinished_gates(args.root, args.version)
+        failures = unfinished_gates(args.root, args.version, args.candidate_commit)
     except (OSError, UnicodeError) as error:
         print(f"release readiness check failed: {error}", file=sys.stderr)
         return 1
 
     if failures:
-        print("final 0.3.0 release is blocked by unfinished gates:", file=sys.stderr)
+        print(f"final {args.version} release is blocked by unfinished gates:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1

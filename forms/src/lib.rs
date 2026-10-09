@@ -28,7 +28,14 @@ impl ValidationResult {
 
 pub fn check_program(program: &zelyra_ast::Program, schema: &Schema) -> Result<(), Vec<FormError>> {
     let mut errors = Vec::new();
+    let mut form_names = HashSet::new();
     for form in &program.forms {
+        if !form_names.insert(form.name.clone()) {
+            errors.push(FormError {
+                message: format!("duplicate form definition `{}`", form.name),
+                span: form.span,
+            });
+        }
         let table = form
             .table
             .as_deref()
@@ -298,6 +305,7 @@ fn type_error(ty: &Type, value: &str) -> Option<&'static str> {
 mod tests {
     use super::*;
     use zelyra_ast::{ColumnDef, DefaultValue, FormField, TableDef};
+    use zelyra_database::build_schema;
 
     fn field(name: &str, ty: Type, required: bool, max: Option<u32>) -> FormField {
         FormField {
@@ -324,6 +332,31 @@ mod tests {
             actions: Vec::new(),
             span: Span::default(),
         }
+    }
+
+    #[test]
+    fn rejects_duplicate_form_names_in_the_linked_program() {
+        let program = zelyra_ast::Program {
+            imports: Vec::new(),
+            databases: Vec::new(),
+            tables: Vec::new(),
+            types: Vec::new(),
+            records: Vec::new(),
+            views: Vec::new(),
+            components: Vec::new(),
+            pages: Vec::new(),
+            tableviews: Vec::new(),
+            forms: vec![form(), form()],
+            cruds: Vec::new(),
+            auth: Vec::new(),
+            apis: Vec::new(),
+            functions: Vec::new(),
+        };
+        let schema = build_schema(&program).unwrap();
+        let errors = check_program(&program, &schema).unwrap_err();
+        assert!(errors
+            .iter()
+            .any(|error| error.message == "duplicate form definition `CustomerCreate`"));
     }
 
     #[test]
@@ -384,6 +417,7 @@ mod tests {
             }],
             indexes: Vec::new(),
             uniques: Vec::new(),
+            access: Default::default(),
             span: Span::default(),
         };
         let input = HashMap::from([(String::from("name"), String::from("Anna!"))]);

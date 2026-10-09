@@ -1,0 +1,4 @@
+database main {
+    engine: mariadb
+    database: "invoices"
+}

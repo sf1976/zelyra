@@ -2,6 +2,8 @@ use std::fmt;
 use zelyra_ast::*;
 use zelyra_lexer::{Token, TokenKind};
 
+const MAX_NESTING_DEPTH: usize = 32;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParseError {
     pub message: String,
@@ -15,15 +17,49 @@ impl fmt::Display for ParseError {
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
-    Parser { tokens, pos: 0 }.program()
+    let mut complete_tokens = tokens.to_vec();
+    if !matches!(
+        complete_tokens.last().map(|token| &token.kind),
+        Some(TokenKind::Eof)
+    ) {
+        let span = complete_tokens
+            .last()
+            .map_or_else(Span::default, |token| token.span);
+        complete_tokens.push(Token {
+            kind: TokenKind::Eof,
+            span,
+        });
+    }
+    Parser {
+        tokens: &complete_tokens,
+        pos: 0,
+        nesting_depth: 0,
+    }
+    .program()
 }
 
 struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,
+    nesting_depth: usize,
 }
 
 impl<'a> Parser<'a> {
+    fn with_nesting<T>(
+        &mut self,
+        parse: impl FnOnce(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<T, ParseError> {
+        if self.nesting_depth >= MAX_NESTING_DEPTH {
+            return self.error(format!(
+                "maximum parser nesting depth of {MAX_NESTING_DEPTH} exceeded"
+            ));
+        }
+        self.nesting_depth += 1;
+        let result = parse(self);
+        self.nesting_depth -= 1;
+        result
+    }
+
     fn current(&self) -> &'a Token {
         &self.tokens[self.pos]
     }
@@ -31,8 +67,10 @@ impl<'a> Parser<'a> {
         &self.current().kind == kind
     }
     fn advance(&mut self) -> &'a Token {
-        let token = &self.tokens[self.pos];
-        self.pos += 1;
+        let token = self.current();
+        if !matches!(&token.kind, TokenKind::Eof) {
+            self.pos += 1;
+        }
         token
     }
     fn skip_newlines(&mut self) {
@@ -87,6 +125,7 @@ impl<'a> Parser<'a> {
         }
     }
     fn program(mut self) -> Result<Program, ParseError> {
+        let mut imports = Vec::new();
         let mut databases = Vec::new();
         let mut tables = Vec::new();
         let mut types = Vec::new();
@@ -101,37 +140,74 @@ impl<'a> Parser<'a> {
         let mut apis = Vec::new();
         let mut functions = Vec::new();
         self.skip_newlines();
+        let mut declarations_started = false;
         while !self.at(&TokenKind::Eof) {
-            if self.at(&TokenKind::Database) {
+            if self.at(&TokenKind::Import) {
+                if declarations_started {
+                    return self.error("module imports must appear before declarations");
+                }
+                imports.push(self.import_definition()?);
+            } else if self.at(&TokenKind::Pub) {
+                declarations_started = true;
+                self.advance();
+                if self.at(&TokenKind::Fn) {
+                    functions.push(self.function(true)?);
+                } else if self.at(&TokenKind::Type) {
+                    types.push(self.type_definition(true)?);
+                } else if self.at(&TokenKind::Struct) {
+                    records.push(self.record_definition(true)?);
+                } else if self.at(&TokenKind::View) {
+                    views.push(self.view_definition(true)?);
+                } else if self.at(&TokenKind::Component) {
+                    components.push(self.component_definition(true)?);
+                } else {
+                    return self
+                        .error("`pub` currently applies only to functions, types, records, views, and components");
+                }
+            } else if self.at(&TokenKind::Database) {
+                declarations_started = true;
                 databases.push(self.database_definition()?);
             } else if self.at(&TokenKind::Table) {
+                declarations_started = true;
                 tables.push(self.table_definition()?);
             } else if self.at(&TokenKind::Type) {
-                types.push(self.type_definition()?);
+                declarations_started = true;
+                types.push(self.type_definition(false)?);
             } else if self.at(&TokenKind::Struct) {
-                records.push(self.record_definition()?);
+                declarations_started = true;
+                records.push(self.record_definition(false)?);
             } else if self.at(&TokenKind::View) {
-                views.push(self.view_definition()?);
+                declarations_started = true;
+                views.push(self.view_definition(false)?);
             } else if self.at(&TokenKind::Component) {
-                components.push(self.component_definition()?);
+                declarations_started = true;
+                components.push(self.component_definition(false)?);
             } else if self.at(&TokenKind::Page) {
+                declarations_started = true;
                 pages.push(self.page_definition()?);
             } else if self.at(&TokenKind::TableView) {
+                declarations_started = true;
                 tableviews.push(self.tableview_definition()?);
             } else if self.at(&TokenKind::Form) {
+                declarations_started = true;
                 forms.push(self.form_definition()?);
             } else if self.at(&TokenKind::Crud) {
+                declarations_started = true;
                 cruds.push(self.crud_definition()?);
             } else if self.at(&TokenKind::Auth) {
+                declarations_started = true;
                 auth.push(self.auth_definition()?);
             } else if self.at(&TokenKind::Api) {
+                declarations_started = true;
                 apis.push(self.api_definition()?);
             } else {
-                functions.push(self.function()?);
+                declarations_started = true;
+                functions.push(self.function(false)?);
             }
             self.skip_newlines();
         }
         Ok(Program {
+            imports,
             databases,
             tables,
             types,
@@ -145,6 +221,21 @@ impl<'a> Parser<'a> {
             auth,
             apis,
             functions,
+        })
+    }
+
+    fn import_definition(&mut self) -> Result<ImportDef, ParseError> {
+        let start = self.expect(TokenKind::Import, "`import`")?;
+        let path = self.string_value("project-relative module path")?;
+        let (as_keyword, _) = self.ident("`as` after module path")?;
+        if as_keyword != "as" {
+            return self.error("expected `as` after module path");
+        }
+        let (alias, alias_span) = self.ident("module alias")?;
+        Ok(ImportDef {
+            path,
+            alias,
+            span: start.join(alias_span),
         })
     }
 
@@ -165,6 +256,10 @@ impl<'a> Parser<'a> {
         let mut input = Vec::new();
         let mut output = None;
         let mut errors = Vec::new();
+        let mut version = None;
+        let mut deprecated = false;
+        let mut saw_deprecated = false;
+        let mut rate_limit = None;
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Handler) {
@@ -177,6 +272,62 @@ impl<'a> Parser<'a> {
             } else if self.at(&TokenKind::Permits) {
                 self.advance();
                 permissions.push(self.string_value("API permission")?);
+            } else if self.at(&TokenKind::Version) {
+                self.advance();
+                if version.is_some() {
+                    return self.error("API version may only be declared once");
+                }
+                let value = self.string_value("API version")?;
+                if value.is_empty()
+                    || value.len() > 64
+                    || !value.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                {
+                    return self.error(
+                        "API version must contain 1 to 64 ASCII letters, digits, dots, underscores, or hyphens",
+                    );
+                }
+                version = Some(value);
+            } else if self.at(&TokenKind::Deprecated) {
+                self.advance();
+                if saw_deprecated {
+                    return self.error("API deprecation may only be declared once");
+                }
+                saw_deprecated = true;
+                deprecated = true;
+            } else if self.at(&TokenKind::RateLimit) {
+                self.advance();
+                if rate_limit.is_some() {
+                    return self.error("API rate limit may only be declared once");
+                }
+                let requests = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=1_000_000).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self.error("API rate limit requests must be between 1 and 1000000")
+                    }
+                };
+                let (per, _) = self.ident("`per` in API rate limit")?;
+                if per != "per" {
+                    return self.error("expected `per` before API rate limit window");
+                }
+                let window_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self
+                            .error("API rate limit window must be between 1 and 86400 seconds")
+                    }
+                };
+                rate_limit = Some(zelyra_ast::ApiRateLimit {
+                    requests,
+                    window_seconds,
+                });
             } else if self.at(&TokenKind::Input) {
                 self.advance();
                 self.expect(TokenKind::LBrace, "`{` after `input`")?;
@@ -226,7 +377,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBrace, "`}` after API errors")?;
             } else {
                 return self
-                    .error("expected `handler`, `requires auth`, `permits`, `input`, `output`, or `errors` in API definition");
+                    .error("expected `handler`, `requires auth`, `permits`, `version`, `deprecated`, `rate_limit`, `input`, `output`, or `errors` in API definition");
             }
             self.skip_newlines();
         }
@@ -243,6 +394,9 @@ impl<'a> Parser<'a> {
             input,
             output,
             errors,
+            version,
+            deprecated,
+            rate_limit,
             span: start.join(end),
         })
     }
@@ -262,6 +416,11 @@ impl<'a> Parser<'a> {
         let mut admin_path = None;
         let mut admin_permission = None;
         let mut admin_role = None;
+        let mut login_rate_limit = None;
+        let mut login_block_seconds = None;
+        let mut reset_tokens_table = None;
+        let mut reset_rate_limit = None;
+        let mut reset_block_seconds = None;
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let field = match self.current().kind.clone() {
                 TokenKind::Table => "table",
@@ -274,6 +433,11 @@ impl<'a> Parser<'a> {
                 TokenKind::AdminPath => "admin_path",
                 TokenKind::AdminPermission => "admin_permission",
                 TokenKind::AdminRole => "admin_role",
+                TokenKind::LoginRateLimit => "login_rate_limit",
+                TokenKind::LoginBlockSeconds => "login_block_seconds",
+                TokenKind::ResetTokens => "reset_tokens",
+                TokenKind::ResetRateLimit => "reset_rate_limit",
+                TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 _ => return self.error("expected authentication option"),
             };
             self.advance();
@@ -293,6 +457,63 @@ impl<'a> Parser<'a> {
                 self.skip_newlines();
                 continue;
             }
+            if matches!(field, "login_rate_limit" | "reset_rate_limit") {
+                let rate_limit = if field == "login_rate_limit" {
+                    &mut login_rate_limit
+                } else {
+                    &mut reset_rate_limit
+                };
+                if rate_limit.is_some() {
+                    return self.error(format!("{field} may only be declared once"));
+                }
+                let requests = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=1_000).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => return self.error(format!("{field} attempts must be between 1 and 1000")),
+                };
+                let (per, _) = self.ident(&format!("`per` in {field}"))?;
+                if per != "per" {
+                    return self.error(format!("expected `per` before {field} window"));
+                }
+                let window_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        value as u32
+                    }
+                    _ => {
+                        return self.error(format!(
+                            "{field} window must be between 1 and 86400 seconds"
+                        ))
+                    }
+                };
+                *rate_limit = Some(zelyra_ast::ApiRateLimit {
+                    requests,
+                    window_seconds,
+                });
+                self.skip_newlines();
+                continue;
+            }
+            if matches!(field, "login_block_seconds" | "reset_block_seconds") {
+                let block_seconds = if field == "login_block_seconds" {
+                    &mut login_block_seconds
+                } else {
+                    &mut reset_block_seconds
+                };
+                if block_seconds.is_some() {
+                    return self.error(format!("{field} may only be declared once"));
+                }
+                *block_seconds = match self.current().kind.clone() {
+                    TokenKind::Int(value) if (1..=86_400).contains(&value) => {
+                        self.advance();
+                        Some(value as u32)
+                    }
+                    _ => return self.error(format!("{field} must be between 1 and 86400")),
+                };
+                self.skip_newlines();
+                continue;
+            }
             let value = if matches!(field, "admin_path" | "admin_permission") {
                 self.string_value("authentication option value")?
             } else {
@@ -308,6 +529,7 @@ impl<'a> Parser<'a> {
                 "admin_path" => admin_path = Some(value),
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
+                "reset_tokens" => reset_tokens_table = Some(value),
                 _ => return self.error("unknown authentication option"),
             }
             self.skip_newlines();
@@ -331,6 +553,11 @@ impl<'a> Parser<'a> {
             admin_path,
             admin_permission,
             admin_role,
+            login_rate_limit,
+            login_block_seconds,
+            reset_tokens_table,
+            reset_rate_limit,
+            reset_block_seconds,
             span: start.join(end),
         })
     }
@@ -978,7 +1205,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn view_definition(&mut self) -> Result<ViewDef, ParseError> {
+    fn view_definition(&mut self, is_public: bool) -> Result<ViewDef, ParseError> {
         let start = self.expect(TokenKind::View, "`view`")?;
         let (name, _) = self.ident("view name")?;
         self.expect(TokenKind::LBrace, "`{` after view name")?;
@@ -1008,6 +1235,7 @@ impl<'a> Parser<'a> {
         };
         Ok(ViewDef {
             name,
+            is_public,
             html,
             span: start.join(end),
         })
@@ -1115,7 +1343,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn component_definition(&mut self) -> Result<ComponentDef, ParseError> {
+    fn component_definition(&mut self, is_public: bool) -> Result<ComponentDef, ParseError> {
         let start = self.expect(TokenKind::Component, "`component`")?;
         let (name, _) = self.ident("component name")?;
         self.expect(TokenKind::LBrace, "`{` after component name")?;
@@ -1162,6 +1390,7 @@ impl<'a> Parser<'a> {
         };
         Ok(ComponentDef {
             name,
+            is_public,
             props,
             html,
             span: start.join(end),
@@ -1432,12 +1661,18 @@ impl<'a> Parser<'a> {
         let mut columns = Vec::new();
         let mut indexes = Vec::new();
         let mut uniques = Vec::new();
+        let mut access = zelyra_ast::TableAccessDef::default();
         self.skip_newlines();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             if self.at(&TokenKind::Index) {
                 indexes.push(self.index_definition(TokenKind::Index)?);
             } else if self.at(&TokenKind::Unique) {
                 uniques.push(self.index_definition(TokenKind::Unique)?);
+            } else if matches!(&self.current().kind, TokenKind::Ident(name) if name == "access") {
+                if access.span.is_some() {
+                    return self.error("a table may declare its access contract only once");
+                }
+                access = self.table_access_definition()?;
             } else {
                 columns.push(self.column_definition()?);
             }
@@ -1449,8 +1684,75 @@ impl<'a> Parser<'a> {
             columns,
             indexes,
             uniques,
+            access,
             span: start.join(end),
         })
+    }
+
+    fn table_access_definition(&mut self) -> Result<zelyra_ast::TableAccessDef, ParseError> {
+        let (name, start) = self.ident("`access`")?;
+        if name != "access" {
+            return self.error("expected `access`");
+        }
+        self.expect(TokenKind::LBrace, "`{` after table access")?;
+        let mut access = zelyra_ast::TableAccessDef {
+            span: Some(start),
+            ..zelyra_ast::TableAccessDef::default()
+        };
+        let mut seen = std::collections::HashSet::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
+            let (mode, _) = self.ident("`read`, `write`, or `read_write`")?;
+            if !matches!(mode.as_str(), "read" | "write" | "read_write") {
+                return self.error("table access mode must be `read`, `write`, or `read_write`");
+            }
+            if !seen.insert(mode.clone()) {
+                return self.error(format!(
+                    "table access mode `{mode}` is declared more than once"
+                ));
+            }
+            self.expect(TokenKind::Colon, "`:` after table access mode")?;
+            let modules = self.table_access_module_list()?;
+            match mode.as_str() {
+                "read" => access.read = modules,
+                "write" => access.write = modules,
+                "read_write" => access.read_write = modules,
+                _ => unreachable!(),
+            }
+            self.skip_newlines();
+        }
+        self.expect(TokenKind::RBrace, "`}` after table access contract")?;
+        Ok(access)
+    }
+
+    fn table_access_module_list(&mut self) -> Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::LBracket, "`[` before granted module paths")?;
+        let mut modules = Vec::new();
+        self.skip_newlines();
+        while !self.at(&TokenKind::RBracket) && !self.at(&TokenKind::Eof) {
+            let path = match self.current().kind.clone() {
+                TokenKind::String(path) => {
+                    self.advance();
+                    path
+                }
+                _ => {
+                    return self.error("table access grants must be project-relative path strings")
+                }
+            };
+            if modules.contains(&path) {
+                return self.error(format!("table access grant `{path}` is repeated"));
+            }
+            modules.push(path);
+            self.skip_newlines();
+            if self.at(&TokenKind::Comma) {
+                self.advance();
+                self.skip_newlines();
+            } else if !self.at(&TokenKind::RBracket) {
+                return self.error("expected `,` between table access grants");
+            }
+        }
+        self.expect(TokenKind::RBracket, "`]` after granted module paths")?;
+        Ok(modules)
     }
     fn column_definition(&mut self) -> Result<ColumnDef, ParseError> {
         let (name, span) = self.ident("column name")?;
@@ -1552,19 +1854,20 @@ impl<'a> Parser<'a> {
             span: start.join(end),
         })
     }
-    fn type_definition(&mut self) -> Result<TypeDef, ParseError> {
+    fn type_definition(&mut self, is_public: bool) -> Result<TypeDef, ParseError> {
         let start = self.expect(TokenKind::Type, "`type`")?;
         let (name, _) = self.ident("type name")?;
         self.expect(TokenKind::Equal, "`=` in type definition")?;
         let target = self.type_name()?;
         Ok(TypeDef {
             name,
+            is_public,
             target,
             span: start,
         })
     }
 
-    fn record_definition(&mut self) -> Result<RecordDef, ParseError> {
+    fn record_definition(&mut self, is_public: bool) -> Result<RecordDef, ParseError> {
         let start = self.expect(TokenKind::Struct, "`struct`")?;
         let (name, _) = self.ident("record name")?;
         self.expect(TokenKind::LBrace, "`{` after record name")?;
@@ -1591,11 +1894,12 @@ impl<'a> Parser<'a> {
         }
         Ok(RecordDef {
             name,
+            is_public,
             fields,
             span: start.join(end),
         })
     }
-    fn function(&mut self) -> Result<Function, ParseError> {
+    fn function(&mut self, is_public: bool) -> Result<Function, ParseError> {
         let start = self.expect(TokenKind::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         self.expect(TokenKind::LParen, "`(`")?;
@@ -1631,7 +1935,14 @@ impl<'a> Parser<'a> {
         if self.at(&TokenKind::Uses) {
             self.advance();
             loop {
-                capabilities.push(self.ident("capability name")?.0);
+                let (mut capability, _) = self.ident("capability name")?;
+                if capability == "Database" && self.at(&TokenKind::LParen) {
+                    self.advance();
+                    let (access, _) = self.ident("database access effect")?;
+                    self.expect(TokenKind::RParen, "`)` after database access effect")?;
+                    capability = format!("Database({access})");
+                }
+                capabilities.push(capability);
                 self.skip_newlines();
                 if !self.at(&TokenKind::Comma) {
                     break;
@@ -1658,6 +1969,7 @@ impl<'a> Parser<'a> {
         let body = self.block()?;
         Ok(Function {
             name,
+            is_public,
             params,
             return_type,
             capabilities,
@@ -1682,7 +1994,17 @@ impl<'a> Parser<'a> {
         Ok(expressions)
     }
     fn type_name(&mut self) -> Result<Type, ParseError> {
-        let (name, _) = self.ident("type name")?;
+        self.with_nesting(Self::type_name_inner)
+    }
+
+    fn type_name_inner(&mut self) -> Result<Type, ParseError> {
+        let (mut name, _) = self.ident("type name")?;
+        while self.at(&TokenKind::DoubleColon) {
+            self.advance();
+            let (segment, _) = self.ident("type name after `::`")?;
+            name.push_str("::");
+            name.push_str(&segment);
+        }
         let mut ty = match name.as_str() {
             "Int" => Type::Int,
             "UInt" => Type::UInt,
@@ -1738,6 +2060,10 @@ impl<'a> Parser<'a> {
         Ok(ty)
     }
     fn block(&mut self) -> Result<Block, ParseError> {
+        self.with_nesting(Self::block_inner)
+    }
+
+    fn block_inner(&mut self) -> Result<Block, ParseError> {
         let start = self.expect(TokenKind::LBrace, "`{`")?;
         let mut statements = Vec::new();
         self.skip_newlines();
@@ -1940,6 +2266,10 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Expr(self.expression()?))
     }
     fn pattern(&mut self) -> Result<Pattern, ParseError> {
+        self.with_nesting(Self::pattern_inner)
+    }
+
+    fn pattern_inner(&mut self) -> Result<Pattern, ParseError> {
         let token = self.advance().clone();
         match token.kind {
             TokenKind::Ident(name) if name == "_" => Ok(Pattern {
@@ -1990,7 +2320,7 @@ impl<'a> Parser<'a> {
         }
     }
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.binary(0)
+        self.with_nesting(|parser| parser.binary(0))
     }
     fn binary(&mut self, min_prec: u8) -> Result<Expr, ParseError> {
         let mut left = self.unary()?;
@@ -2031,6 +2361,10 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
     fn unary(&mut self) -> Result<Expr, ParseError> {
+        self.with_nesting(Self::unary_inner)
+    }
+
+    fn unary_inner(&mut self) -> Result<Expr, ParseError> {
         self.skip_newlines();
         if self.at(&TokenKind::Await) {
             let start = self.advance().span;
@@ -2145,6 +2479,13 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Sql => self.sql_expression(token.span),
             TokenKind::Ident(name) => {
+                let mut name = name;
+                while self.at(&TokenKind::DoubleColon) {
+                    self.advance();
+                    let (segment, _) = self.ident("name after `::`")?;
+                    name.push_str("::");
+                    name.push_str(&segment);
+                }
                 let type_args =
                     if matches!(name.as_str(), "json_decode" | "http_json" | "http_result")
                         && self.at(&TokenKind::Less)
@@ -2305,6 +2646,69 @@ mod tests {
         assert_eq!(program.functions.len(), 1);
         assert_eq!(program.functions[0].name, "main");
     }
+    #[test]
+    fn incomplete_expression_at_end_of_input_returns_a_parse_error() {
+        let tokens = lex("fn e(){n*").unwrap();
+        let error = parse(&tokens).unwrap_err();
+        assert!(error.message.contains("expected expression"));
+    }
+
+    #[test]
+    fn fuzzed_recursive_input_returns_a_parse_error() {
+        let source = std::str::from_utf8(include_bytes!(
+            "../../fuzz/corpus/lexer_parser/parser_recursive_stack_overflow"
+        ))
+        .unwrap();
+        let tokens = lex(source).unwrap();
+        let error = parse(&tokens).unwrap_err();
+        assert!(error.message.contains("maximum parser nesting depth"));
+    }
+
+    #[test]
+    fn excessive_recursive_syntax_returns_a_parse_error() {
+        let depth = 256;
+        let cases = [
+            format!(
+                "fn main() {{ value = {}0{} }}",
+                "[".repeat(depth),
+                "]".repeat(depth)
+            ),
+            format!("fn main() {{ value = {}true }}", "!".repeat(depth)),
+            format!(
+                "fn main() {{ {} }}",
+                "if true { ".repeat(depth) + &"}".repeat(depth)
+            ),
+            format!(
+                "fn main(value: {}Int{}) {{}}",
+                "Option<".repeat(depth),
+                ">".repeat(depth)
+            ),
+            format!(
+                "fn main() {{ match value {{ {}value{} => {{}} }} }}",
+                "Some(".repeat(depth),
+                ")".repeat(depth)
+            ),
+        ];
+
+        for source in cases {
+            let tokens = lex(&source).unwrap();
+            let error = parse(&tokens).unwrap_err();
+            assert!(
+                error.message.contains("maximum parser nesting depth"),
+                "unexpected error for deeply nested source: {}",
+                error.message
+            );
+        }
+    }
+
+    #[test]
+    fn parse_adds_an_eof_token_when_callers_omit_it() {
+        let tokens = lex("fn main() {}").unwrap();
+        let without_eof = &tokens[..tokens.len() - 1];
+        let program = parse(without_eof).unwrap();
+        assert_eq!(program.functions[0].name, "main");
+    }
+
     #[test]
     fn parses_multiline_return() {
         let source = "fn f(n: Int) -> Int { return n +\n 1 }";
@@ -3039,6 +3443,115 @@ mod tests {
     }
 
     #[test]
+    fn parses_api_version_deprecation_and_bounded_rate_limit() {
+        let program = parse(
+            &lex(r#"api GET "/v1/customers" {
+                    version "v1"
+                    deprecated
+                    rate_limit 30 per 60
+                    output String
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        let api = &program.apis[0];
+        assert_eq!(api.version.as_deref(), Some("v1"));
+        assert!(api.deprecated);
+        assert_eq!(
+            api.rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 30,
+                window_seconds: 60,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_configurable_login_rate_limit_and_block_duration() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                    login_rate_limit: 3 per 120
+                    login_block_seconds: 45
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.auth[0].login_rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 3,
+                window_seconds: 120,
+            })
+        );
+        assert_eq!(program.auth[0].login_block_seconds, Some(45));
+    }
+
+    #[test]
+    fn parses_configurable_password_reset_table_and_rate_limit() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                    reset_tokens: password_resets
+                    reset_rate_limit: 3 per 900
+                    reset_block_seconds: 600
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.auth[0].reset_tokens_table.as_deref(),
+            Some("password_resets")
+        );
+        assert_eq!(
+            program.auth[0].reset_rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 3,
+                window_seconds: 900,
+            })
+        );
+        assert_eq!(program.auth[0].reset_block_seconds, Some(600));
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_or_duplicate_login_rate_settings() {
+        for source in [
+            r#"auth users { table: users login_rate_limit: 0 per 60 } fn main() { }"#,
+            r#"auth users { table: users login_rate_limit: 5 per 0 } fn main() { }"#,
+            r#"auth users { table: users login_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users login_rate_limit: 5 per 60 login_rate_limit: 3 per 30 } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_or_duplicate_reset_rate_settings() {
+        for source in [
+            r#"auth users { table: users reset_rate_limit: 0 per 60 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limit: 5 per 0 } fn main() { }"#,
+            r#"auth users { table: users reset_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limit: 5 per 60 reset_rate_limit: 3 per 30 } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_api_rate_limits_and_invalid_versions() {
+        for source in [
+            r#"api GET "/limited" { rate_limit 0 per 60 output String } fn main() { }"#,
+            r#"api GET "/limited" { rate_limit 10 per 86401 output String } fn main() { }"#,
+            r#"api GET "/versioned" { version "v1\nInjected" output String } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
+    }
+
+    #[test]
     fn parses_structured_record_definition() {
         let program = parse(
             &lex(r#"struct CustomerInput {
@@ -3175,6 +3688,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_scoped_database_capabilities() {
+        let program = parse(
+            &lex("fn report() uses Database(read) { rows = sql<Int> { SELECT 1 } } fn main() { }")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.functions[0].capabilities, ["Database(read)"]);
+    }
+
+    #[test]
     fn parses_function_contracts() {
         let program = parse(
             &lex(
@@ -3185,6 +3708,117 @@ mod tests {
         .unwrap();
         assert_eq!(program.functions[0].requires.len(), 1);
         assert_eq!(program.functions[0].ensures.len(), 1);
+    }
+
+    #[test]
+    fn parses_project_relative_import_and_public_function() {
+        let program = parse(
+            &lex("import \"src/math.zyl\" as math\npub fn add(a: Int, b: Int) -> Int { return a + b }\nfn main() { print(math::add(2, 3)) }").unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(program.imports.len(), 1);
+        assert_eq!(program.imports[0].path, "src/math.zyl");
+        assert_eq!(program.imports[0].alias, "math");
+        assert!(program.functions[0].is_public);
+        let Stmt::Expr(expression) = &program.functions[1].body.statements[0] else {
+            panic!("expected print expression");
+        };
+        let ExprKind::Call { args, .. } = &expression.kind else {
+            panic!("expected print call");
+        };
+        assert!(matches!(
+            &args[0].kind,
+            ExprKind::Call { name, .. } if name == "math::add"
+        ));
+    }
+
+    #[test]
+    fn parses_public_views_and_components() {
+        let program = parse(
+            &lex(
+                "pub view Shell { html { <main><slot /></main> } }\npub component Badge { html { <strong>Badge</strong> } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        assert!(program.views[0].is_public);
+        assert!(program.components[0].is_public);
+    }
+
+    #[test]
+    fn rejects_imports_after_declarations_and_public_unsupported_declarations() {
+        let late_import =
+            parse(&lex("fn main() {}\nimport \"src/math.zyl\" as math").unwrap()).unwrap_err();
+        assert!(late_import
+            .message
+            .contains("must appear before declarations"));
+
+        let invalid_visibility =
+            parse(&lex("pub table customers { id: Id primary auto }").unwrap()).unwrap_err();
+        assert!(invalid_visibility
+            .message
+            .contains("functions, types, records, views, and components"));
+    }
+
+    #[test]
+    fn parses_table_module_access_grants() {
+        let program = parse(
+            &lex(
+                "table customers { id: Id primary auto access { read: [\"src/reports.zyl\"] write: [\"src/importer.zyl\"] read_write: [\"src/admin.zyl\"] } }",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(program.tables[0].access.read, ["src/reports.zyl"]);
+        assert_eq!(program.tables[0].access.write, ["src/importer.zyl"]);
+        assert_eq!(program.tables[0].access.read_write, ["src/admin.zyl"]);
+        assert!(program.tables[0].access.span.is_some());
+    }
+
+    #[test]
+    fn rejects_duplicate_table_access_modes_and_grants() {
+        let duplicate_mode = parse(
+            &lex("table customers { id: Id primary auto access { read: [] read: [] } }").unwrap(),
+        )
+        .unwrap_err();
+        assert!(duplicate_mode.message.contains("declared more than once"));
+
+        let duplicate_grant = parse(
+            &lex("table customers { id: Id primary auto access { write: [\"src/admin.zyl\", \"src/admin.zyl\"] } }")
+                .unwrap(),
+        )
+        .unwrap_err();
+        assert!(duplicate_grant.message.contains("is repeated"));
+    }
+
+    #[test]
+    fn parses_public_records_aliases_and_qualified_types() {
+        let program = parse(
+            &lex("pub type CustomerId = Int\npub struct Customer { id: CustomerId }\nfn load(id: crm::CustomerId) -> crm::Customer { return crm::Customer { id: id } }").unwrap(),
+        )
+        .unwrap();
+
+        assert!(program.types[0].is_public);
+        assert!(program.records[0].is_public);
+        assert_eq!(
+            program.functions[0].params[0].ty,
+            Type::Named("crm::CustomerId".into())
+        );
+        assert_eq!(
+            program.functions[0].return_type,
+            Some(Type::Named("crm::Customer".into()))
+        );
+        let Stmt::Return {
+            value: Some(value), ..
+        } = &program.functions[0].body.statements[0]
+        else {
+            panic!("expected returned record literal");
+        };
+        assert!(
+            matches!(&value.kind, ExprKind::Record { type_name, .. } if type_name == "crm::Customer")
+        );
     }
 
     #[test]

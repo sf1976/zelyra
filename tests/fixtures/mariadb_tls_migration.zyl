@@ -1,0 +1,8 @@
+database main {
+    engine: mariadb
+    database: "zelyra_ci"
+}
+
+table tls_migration_probe {
+    id: Id primary auto
+}

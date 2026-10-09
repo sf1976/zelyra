@@ -1,11 +1,11 @@
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use blake2::{Blake2s256, Digest};
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use zelyra_ast::{
@@ -15,16 +15,32 @@ use zelyra_ast::{
 };
 use zelyra_database::{QueryValue, Schema};
 use zelyra_forms::{validate, FieldError};
+mod forms;
+mod http;
 mod i18n;
+mod password_reset;
+mod server;
+mod ui;
+use forms::*;
+pub use forms::{localized_identifier, render_form};
+use http::*;
+pub use http::{parse_request, HttpError, MAX_REQUEST_BODY_BYTES};
 #[cfg(test)]
 use i18n::framework_text;
 use i18n::{
     field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
     LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
+pub use password_reset::PasswordResetMailer;
+pub use server::serve_app;
+#[cfg(test)]
+pub(crate) use server::{spawn_connection, MAX_CONCURRENT_CONNECTIONS};
+use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
+pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
+pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
 pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +79,7 @@ pub struct Request {
     pub path: String,
     pub headers: HashMap<String, String>,
     pub body: String,
+    pub remote_addr: Option<SocketAddr>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,8 +126,20 @@ pub struct ApiRoute {
     pub path: String,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
+    pub version: Option<String>,
+    pub deprecated: bool,
+    pub rate_limit: Option<zelyra_ast::ApiRateLimit>,
     handler: Arc<ApiHandler>,
 }
+
+#[derive(Clone, Debug)]
+struct ApiThrottle {
+    window_started: Instant,
+    requests: u32,
+    window_seconds: u32,
+}
+
+const API_THROTTLE_MAX_CLIENTS: usize = 4096;
 
 impl fmt::Debug for ApiRoute {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -120,6 +149,9 @@ impl fmt::Debug for ApiRoute {
             .field("path", &self.path)
             .field("requires_auth", &self.requires_auth)
             .field("permissions", &self.permissions)
+            .field("version", &self.version)
+            .field("deprecated", &self.deprecated)
+            .field("rate_limit", &self.rate_limit)
             .finish_non_exhaustive()
     }
 }
@@ -135,6 +167,9 @@ impl ApiRoute {
             path: path.into(),
             requires_auth: false,
             permissions: Vec::new(),
+            version: None,
+            deprecated: false,
+            rate_limit: None,
             handler: Arc::new(handler),
         }
     }
@@ -142,6 +177,18 @@ impl ApiRoute {
     pub fn with_auth(mut self, requires_auth: bool, permissions: Vec<String>) -> Self {
         self.requires_auth = requires_auth;
         self.permissions = permissions;
+        self
+    }
+
+    pub fn with_metadata(
+        mut self,
+        version: Option<String>,
+        deprecated: bool,
+        rate_limit: Option<zelyra_ast::ApiRateLimit>,
+    ) -> Self {
+        self.version = version;
+        self.deprecated = deprecated;
+        self.rate_limit = rate_limit;
         self
     }
 }
@@ -239,418 +286,6 @@ impl Response {
     fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));
         self
-    }
-}
-
-const CRUD_LAYOUT_CONTENT_MARKER: &str = "\u{0}ZELYRA_CRUD_CONTENT\u{0}";
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct DefaultNavigationLink {
-    path: String,
-    label: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct DefaultUiContext {
-    current_path: String,
-    current_label: String,
-    navigation: Vec<DefaultNavigationLink>,
-}
-
-fn apply_generated_layout(mut response: Response, layout_html: Option<&str>) -> Response {
-    let Some(layout_html) = layout_html else {
-        return response;
-    };
-    if response.location.is_some() || !response.content_type.starts_with("text/html") {
-        return response;
-    }
-    response.body = layout_html.replace(CRUD_LAYOUT_CONTENT_MARKER, &response.body);
-    response
-}
-
-fn render_default_application_shell(
-    content: &str,
-    context: &DefaultUiContext,
-    language: UiLanguage,
-) -> String {
-    let document_start = content.trim_start();
-    if document_start
-        .get(..14)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<!doctype html"))
-        || document_start
-            .get(..5)
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("<html"))
-    {
-        return content.to_owned();
-    }
-
-    let localized_current_label = localize_user_text(language, &context.current_label);
-    let current_label = html_escape_preserving_locale_references(&localized_current_label);
-    let page_title =
-        html_escape_preserving_locale_references(&format!("{localized_current_label} | Zelyra"));
-    let home_path = context
-        .navigation
-        .first()
-        .map(|link| link.path.as_str())
-        .unwrap_or(if context.current_path == "/login" {
-            "/"
-        } else {
-            &context.current_path
-        });
-    let mut navigation = String::new();
-    for (index, link) in context.navigation.iter().enumerate() {
-        let active = navigation_link_is_active(&link.path, &context.current_path);
-        let current = if active { " aria-current=\"page\"" } else { "" };
-        let label =
-            html_escape_preserving_locale_references(&localize_user_text(language, &link.label));
-        navigation.push_str(&format!(
-            "<a href=\"{}\" aria-label=\"{label}\"{current}><span class=\"zelyra-nav-icon\" aria-hidden=\"true\">{:02}</span><span class=\"zelyra-nav-label\">{label}</span></a>",
-            html_escape(&link.path),
-            index + 1,
-        ));
-    }
-
-    let main_content = if content.trim_start().starts_with("<main") {
-        content.to_owned()
-    } else {
-        format!("<main>{content}</main>")
-    };
-    format!(
-        "<!doctype html><html data-zelyra-language><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{page_title}</title></head><body><a class=\"zelyra-skip-link\" href=\"#zelyra-content\">{}</a><div class=\"zelyra-app\"><aside class=\"zelyra-sidebar\"><a class=\"zelyra-brand\" aria-label=\"Zelyra\" href=\"{}\"><span class=\"zelyra-mark\" aria-hidden=\"true\">Z</span><span class=\"zelyra-brand-copy\"><span class=\"zelyra-brand-name\">Zelyra</span><span class=\"zelyra-brand-descriptor\">{}</span></span></a><p class=\"zelyra-sidebar-caption\">{}</p><nav class=\"zelyra-nav\" aria-label=\"{}\">{navigation}</nav><div class=\"zelyra-sidebar-footer\"><span class=\"zelyra-status-dot\" aria-hidden=\"true\"></span><span>{}</span></div></aside><div class=\"zelyra-workspace\"><header class=\"zelyra-topbar\"><div class=\"zelyra-breadcrumb\"><span>{}</span><span aria-hidden=\"true\">/</span><strong>{current_label}</strong></div><span class=\"zelyra-environment\">{}</span></header><div class=\"zelyra-page-content\" id=\"zelyra-content\">{main_content}</div></div></div></body></html>",
-        tr(language, "shell.skip_to_content"),
-        html_escape(home_path),
-        tr(language, "shell.brand_descriptor"),
-        tr(language, "shell.navigation_caption"),
-        tr(language, "shell.navigation_label"),
-        tr(language, "shell.powered_by"),
-        tr(language, "shell.workspace_label"),
-        tr(language, "shell.environment_label"),
-    )
-}
-
-fn navigation_link_is_active(link_path: &str, current_path: &str) -> bool {
-    if link_path == "/" {
-        return current_path == "/";
-    }
-    current_path == link_path
-        || current_path
-            .strip_prefix(link_path.trim_end_matches('/'))
-            .is_some_and(|suffix| suffix.starts_with('/'))
-}
-
-fn crud_route_matches_path(crud: &CrudRoute, path: &str) -> bool {
-    let base = crud.path.trim_end_matches('/');
-    let base = if base.is_empty() { "/" } else { base };
-    let patterns = [
-        crud.path.clone(),
-        format!("{base}/new"),
-        format!("{base}/{{id}}"),
-        format!("{base}/{{id}}/edit"),
-        format!("{base}/{{id}}/delete"),
-        format!("{base}/{{id}}/restore"),
-    ];
-    patterns
-        .iter()
-        .any(|pattern| match_path(pattern, path).is_some())
-        || crud
-            .actions
-            .iter()
-            .any(|action| match_path(&action.form.path, path).is_some())
-}
-
-fn add_navigation_link(
-    navigation: &mut Vec<DefaultNavigationLink>,
-    path: impl Into<String>,
-    label: impl Into<String>,
-) {
-    let path = path.into();
-    if !navigation.iter().any(|link| link.path == path) {
-        navigation.push(DefaultNavigationLink {
-            path,
-            label: label.into(),
-        });
-    }
-}
-
-fn tr(_language: UiLanguage, key: &str) -> String {
-    i18n::reference(key)
-}
-
-#[cfg(test)]
-fn localize_html(source: &str, language: UiLanguage) -> String {
-    localize_html_with_catalog(source, language, &ProjectUiCatalogs::default())
-}
-
-fn localize_html_with_catalog(
-    source: &str,
-    language: UiLanguage,
-    project_catalogs: &ProjectUiCatalogs,
-) -> String {
-    let language_code = match language {
-        UiLanguage::English => "en",
-        UiLanguage::German => "de",
-    };
-    let translated = localize_framework_markup_with_catalog(source, language, project_catalogs);
-    let mut html = translated.replace("data-zelyra-language", &format!("lang=\"{language_code}\""));
-    let marker = "data-zelyra-i18n=\"";
-    let mut search_from = 0;
-    while let Some(relative_start) = html[search_from..].find(marker) {
-        let marker_start = search_from + relative_start;
-        let key_start = marker_start + marker.len();
-        let Some(key_end_relative) = html[key_start..].find('"') else {
-            break;
-        };
-        let key_end = key_start + key_end_relative;
-        let key = html[key_start..key_end].to_owned();
-        let Some(open_tag_start) = html[..marker_start].rfind('<') else {
-            break;
-        };
-        let Some(tag_name_end_relative) = html[open_tag_start + 1..]
-            .find(|character: char| character.is_whitespace() || character == '>')
-        else {
-            break;
-        };
-        let tag_name_end = open_tag_start + 1 + tag_name_end_relative;
-        let tag_name = html[open_tag_start + 1..tag_name_end].to_owned();
-        let Some(open_tag_end_relative) = html[tag_name_end..].find('>') else {
-            break;
-        };
-        let content_start = tag_name_end + open_tag_end_relative + 1;
-        let closing_tag = format!("</{tag_name}>");
-        let Some(content_end_relative) = html[content_start..].find(&closing_tag) else {
-            break;
-        };
-        let content_end = content_start + content_end_relative;
-        let translated = html_escape(&project_catalogs.text(language, &key));
-        html.replace_range(content_start..content_end, &translated);
-        search_from = content_start + translated.len() + closing_tag.len();
-    }
-    resolve_locale_references(&html, language, project_catalogs)
-}
-
-fn localize_framework_markup_with_catalog(
-    source: &str,
-    language: UiLanguage,
-    project_catalogs: &ProjectUiCatalogs,
-) -> String {
-    let mut html = source.to_owned();
-    for tag in [
-        "h1", "h2", "h3", "p", "button", "label", "legend", "th", "option",
-    ] {
-        let opening = format!("<{tag}");
-        let closing = format!("</{tag}>");
-        let mut cursor = 0;
-        while let Some(relative_start) = html[cursor..].find(&opening) {
-            let start = cursor + relative_start;
-            let after_name = start + opening.len();
-            if html
-                .as_bytes()
-                .get(after_name)
-                .is_some_and(|byte| !byte.is_ascii_whitespace() && *byte != b'>')
-            {
-                cursor = after_name;
-                continue;
-            }
-            let Some(open_end_relative) = html[after_name..].find('>') else {
-                break;
-            };
-            let content_start = after_name + open_end_relative + 1;
-            let Some(content_end_relative) = html[content_start..].find(&closing) else {
-                break;
-            };
-            let content_end = content_start + content_end_relative;
-            if !html[content_start..content_end].contains('<') {
-                if let Some(copy) = framework_text_with_catalog(
-                    language,
-                    &html[content_start..content_end],
-                    project_catalogs,
-                ) {
-                    let translated = html_escape(&copy);
-                    html.replace_range(content_start..content_end, &translated);
-                    cursor = content_start + translated.len() + closing.len();
-                    continue;
-                }
-            }
-            cursor = content_end + closing.len();
-        }
-    }
-    html
-}
-
-fn resolve_locale_references(
-    source: &str,
-    language: UiLanguage,
-    project_catalogs: &ProjectUiCatalogs,
-) -> String {
-    let mut output = String::with_capacity(source.len());
-    let mut remaining = source;
-    while let Some(start) = remaining.find(LOCALE_REFERENCE_START) {
-        output.push_str(&remaining[..start]);
-        let reference_start = start + LOCALE_REFERENCE_START.len();
-        let Some(end_relative) = remaining[reference_start..].find(LOCALE_REFERENCE_END) else {
-            output.push_str(&remaining[start..]);
-            return output;
-        };
-        let end = reference_start + end_relative;
-        let token_end = end + LOCALE_REFERENCE_END.len_utf8();
-        let reference = &remaining[reference_start..end];
-        if let Some(translated) = locale_reference_text(reference, language, project_catalogs, 0) {
-            output.push_str(&html_escape(&translated));
-        } else {
-            output.push_str(&remaining[start..token_end]);
-        }
-        remaining = &remaining[token_end..];
-    }
-    output.push_str(remaining);
-    output
-}
-
-fn locale_reference_text(
-    reference: &str,
-    language: UiLanguage,
-    project_catalogs: &ProjectUiCatalogs,
-    depth: usize,
-) -> Option<String> {
-    if depth > 8 {
-        return None;
-    }
-    let (key, encoded_field) = reference
-        .split_once(LOCALE_REFERENCE_PARAMETER)
-        .map_or((reference, None), |(key, value)| (key, Some(value)));
-    if !i18n::valid_catalog_key(key) {
-        return None;
-    }
-    let mut translated = project_catalogs.text(language, key).into_owned();
-    if let Some(encoded_parameter) = encoded_field {
-        let (parameter, encoded_value) = encoded_parameter.split_once('=')?;
-        if !i18n::valid_catalog_key(parameter) {
-            return None;
-        }
-        let mut value = decode_locale_parameter(encoded_value)?;
-        if parameter == "field" {
-            if let Some(nested) = value
-                .strip_prefix(LOCALE_REFERENCE_START)
-                .and_then(|value| value.strip_suffix(LOCALE_REFERENCE_END))
-            {
-                value = locale_reference_text(nested, language, project_catalogs, depth + 1)?;
-            }
-        }
-        translated = translated.replace(&format!("{{{parameter}}}"), &value);
-    }
-    Some(translated)
-}
-
-fn decode_locale_parameter(value: &str) -> Option<String> {
-    if value.len() & 1 != 0 {
-        return None;
-    }
-    let bytes = value
-        .as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            let pair: &[u8; 2] = pair.try_into().ok()?;
-            let digits = std::str::from_utf8(pair).ok()?;
-            u8::from_str_radix(digits, 16).ok()
-        })
-        .collect::<Option<Vec<_>>>()?;
-    String::from_utf8(bytes).ok()
-}
-
-fn localize_user_text(_language: UiLanguage, source: &str) -> String {
-    source.strip_prefix("@i18n:").map_or_else(
-        || {
-            source
-                .replace(LOCALE_REFERENCE_START, "&#xe000;zelyra-locale:")
-                .replace(LOCALE_REFERENCE_PARAMETER, "&#xe002;")
-                .replace(LOCALE_REFERENCE_END, "&#xe001;")
-        },
-        i18n::reference,
-    )
-}
-
-fn inject_design_system(source: &str, has_project_theme: bool) -> String {
-    if !source.contains("class=\"zelyra-app\"") {
-        return source.to_owned();
-    }
-    let default_theme_missing = !source.contains("data-zelyra-theme=\"default\"");
-    let project_theme_missing =
-        has_project_theme && !source.contains(&format!("href=\"{PROJECT_THEME_CSS_PATH}\""));
-    if !default_theme_missing && !project_theme_missing {
-        return source.to_owned();
-    }
-    let mut stylesheets = String::new();
-    if default_theme_missing {
-        stylesheets.push_str(&format!(
-            "<style data-zelyra-theme=\"default\">{ZELYRA_DESIGN_SYSTEM_CSS}</style>"
-        ));
-    }
-    if project_theme_missing {
-        stylesheets.push_str(&format!(
-            "<link rel=\"stylesheet\" href=\"{PROJECT_THEME_CSS_PATH}\" data-zelyra-theme=\"project\">"
-        ));
-    }
-    if let Some(head_end) = source.rfind("</head>") {
-        let mut html = String::with_capacity(source.len() + stylesheets.len());
-        html.push_str(&source[..head_end]);
-        html.push_str(&stylesheets);
-        html.push_str(&source[head_end..]);
-        html
-    } else {
-        format!("{stylesheets}{source}")
-    }
-}
-
-fn append_learning_assistant(
-    html: &str,
-    path: &str,
-    language: UiLanguage,
-    generated_crud: bool,
-) -> String {
-    let machine_page = path.starts_with("/machines");
-    let section = if machine_page {
-        "machine"
-    } else if generated_crud {
-        "crud"
-    } else {
-        "view"
-    };
-    let title = tr(language, &format!("learning.{section}.title"));
-    let introduction = tr(language, &format!("learning.{section}.intro"));
-    let heading = tr(language, &format!("learning.{section}.heading"));
-    let example = tr(language, &format!("learning.{section}.example"));
-    let guidance = tr(language, &format!("learning.{section}.guidance"));
-    let title = html_escape_preserving_locale_references(&title);
-    let introduction = html_escape_preserving_locale_references(&introduction);
-    let heading = html_escape_preserving_locale_references(&heading);
-    let example = html_escape_preserving_locale_references(&example);
-    let guidance = html_escape_preserving_locale_references(&guidance);
-    let button_label = html_escape_preserving_locale_references(&tr(language, "learning.button"));
-    let style = r#"<style>
-.zelyra-learning-assistant{position:fixed;right:24px;bottom:24px;z-index:2147483000;font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#17243b}
-.zelyra-learning-assistant summary{display:flex;align-items:center;gap:9px;list-style:none;cursor:pointer;padding:10px 16px 10px 10px;border:1px solid #dce3f2;border-radius:999px;background:linear-gradient(135deg,#fff 5%,#f2f5ff 100%);box-shadow:0 10px 34px #17243b2b;color:#27375a;font-weight:700}
-.zelyra-learning-assistant summary::-webkit-details-marker{display:none}
-.zelyra-learning-assistant summary:focus-visible{outline:3px solid #927cff;outline-offset:3px}
-.zelyra-learning-assistant-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(145deg,#8067ff,#32c7c1);color:white;font-weight:800}
-.zelyra-learning-assistant[open] summary{border-color:#a89bff}
-.zelyra-learning-panel{position:absolute;right:0;bottom:56px;width:min(390px,calc(100vw - 32px));padding:22px;border:1px solid #e1e6f0;border-radius:18px;background:#fff;box-shadow:0 22px 70px #17243b30}
-.zelyra-learning-panel h2{margin:0 0 6px;font-size:19px;letter-spacing:-.02em}
-.zelyra-learning-panel h3{margin:18px 0 8px;font-size:15px}
-.zelyra-learning-panel p{margin:8px 0;color:#526078}
-.zelyra-learning-panel pre{overflow:auto;margin:10px 0;padding:13px 15px;border-radius:10px;background:#111b31;color:#e4e9ff;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
-.zelyra-learning-panel code{color:#5140bb;font:600 12px ui-monospace,SFMono-Regular,Consolas,monospace}
-@media(max-width:560px){.zelyra-learning-assistant{right:14px;bottom:14px}.zelyra-learning-panel{right:-2px;max-height:70vh;overflow:auto}}
-</style>"#;
-    let widget = format!(
-        "{style}<details class=\"zelyra-learning-assistant\"><summary aria-label=\"{button_label}\"><span class=\"zelyra-learning-assistant-icon\" aria-hidden=\"true\">i</span><span>{button_label}</span></summary><section class=\"zelyra-learning-panel\" role=\"region\" aria-label=\"{title}\"><h2>{title}</h2><p>{introduction}</p><h3>{heading}</h3><pre><code>{example}</code></pre><p>{guidance}</p></section></details>"
-    );
-    if let Some(body_end) = html.rfind("</body>") {
-        let mut rendered = String::with_capacity(html.len() + widget.len());
-        rendered.push_str(&html[..body_end]);
-        rendered.push_str(&widget);
-        rendered.push_str(&html[body_end..]);
-        rendered
-    } else {
-        format!("{html}{widget}")
     }
 }
 
@@ -804,6 +439,11 @@ pub struct AuthRoute {
     pub admin_path: Option<String>,
     pub admin_permission: Option<String>,
     pub admin_role: Option<String>,
+    pub login_rate_limit: zelyra_ast::ApiRateLimit,
+    pub login_block_seconds: u32,
+    pub reset_tokens_table: Option<String>,
+    pub reset_rate_limit: zelyra_ast::ApiRateLimit,
+    pub reset_block_seconds: u32,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -812,18 +452,60 @@ pub struct AuthRoute {
 struct Session {
     user_id: Option<i64>,
     permissions: Vec<String>,
+    expires_at: Instant,
 }
 
 #[derive(Clone, Debug)]
 struct LoginThrottle {
     window_started: Instant,
+    window_seconds: u32,
     failures: u32,
     blocked_until: Option<Instant>,
 }
 
-const LOGIN_FAILURE_LIMIT: u32 = 5;
-const LOGIN_FAILURE_WINDOW: Duration = Duration::from_secs(15 * 60);
-const LOGIN_BLOCK_DURATION: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const DEFAULT_LOGIN_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLimit {
+    requests: 5,
+    window_seconds: 15 * 60,
+};
+#[cfg(test)]
+const DEFAULT_LOGIN_BLOCK_SECONDS: u32 = 60;
+const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
+const LOGIN_THROTTLE_MAX_KEYS: usize = 4096;
+pub const DEFAULT_RESET_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLimit {
+    requests: 3,
+    window_seconds: 15 * 60,
+};
+pub const DEFAULT_RESET_BLOCK_SECONDS: u32 = 15 * 60;
+static REQUEST_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn valid_request_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn request_id(request: &Request) -> String {
+    if let Some(value) = request.headers.get("x-request-id") {
+        if valid_request_id(value) {
+            return value.clone();
+        }
+    }
+
+    new_request_id()
+}
+
+fn new_request_id() -> String {
+    let mut random = [0_u8; 16];
+    if OsRng.try_fill_bytes(&mut random).is_ok() {
+        return hex_encode(&random);
+    }
+
+    let sequence = REQUEST_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("local-{sequence}")
+}
 
 #[derive(Clone, Debug)]
 pub struct WebApp {
@@ -845,6 +527,10 @@ pub struct WebApp {
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    reset_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    password_reset_issue_lock: Arc<Mutex<()>>,
+    password_reset_mailer: Option<Arc<crate::password_reset::PasswordResetMailer>>,
+    api_throttle: Arc<Mutex<HashMap<String, ApiThrottle>>>,
 }
 
 impl WebApp {
@@ -868,6 +554,10 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_issue_lock: Arc::new(Mutex::new(())),
+            password_reset_mailer: None,
+            api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -895,6 +585,10 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_issue_lock: Arc::new(Mutex::new(())),
+            password_reset_mailer: None,
+            api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -956,6 +650,14 @@ impl WebApp {
 
     pub fn with_auth_route(mut self, auth_route: AuthRoute) -> Self {
         self.auth_route = Some(auth_route);
+        self
+    }
+
+    pub fn with_password_reset_mailer(
+        mut self,
+        mailer: crate::password_reset::PasswordResetMailer,
+    ) -> Self {
+        self.password_reset_mailer = Some(Arc::new(mailer));
         self
     }
 
@@ -1023,6 +725,12 @@ impl WebApp {
                 current_label: "@i18n:auth.login_title".into(),
                 navigation: Vec::new(),
             }
+        } else if request.path == ACCOUNT_SESSIONS_PATH && self.auth_route.is_some() {
+            DefaultUiContext {
+                current_path: request.path.clone(),
+                current_label: "@i18n:auth.self_sessions_title".into(),
+                navigation: Vec::new(),
+            }
         } else {
             let admin_path = self
                 .auth_route
@@ -1072,6 +780,11 @@ impl WebApp {
                 add_navigation_link(&mut context.navigation, form.path.clone(), label);
             }
             if let Some(auth) = &self.auth_route {
+                add_navigation_link(
+                    &mut context.navigation,
+                    ACCOUNT_SESSIONS_PATH,
+                    "@i18n:auth.self_sessions_title",
+                );
                 if let Some(path) = &auth.admin_path {
                     add_navigation_link(
                         &mut context.navigation,
@@ -1092,7 +805,14 @@ impl WebApp {
     }
 
     pub fn dispatch(&self, request: &Request) -> Response {
-        if (request.headers.contains_key("host") || request_has_browser_origin_or_session(request))
+        let request_id = request_id(request);
+        let mut correlated_request = request.clone();
+        correlated_request
+            .headers
+            .insert("x-request-id".into(), request_id.clone());
+
+        let mut response = if (correlated_request.headers.contains_key("host")
+            || request_has_browser_origin_or_session(&correlated_request))
             && !request_host_is_allowed(request, &self.allowed_hosts)
         {
             let title = framework_text_with_catalog(
@@ -1107,19 +827,20 @@ impl WebApp {
                 &self.project_ui_catalogs,
             )
             .unwrap_or_default();
-            return Response::html(
+            Response::html(
                 400,
                 format!(
                     "<h1>{}</h1><p>{}</p>",
                     html_escape(&title),
                     html_escape(&message)
                 ),
-            );
-        }
-        let mut response = self.dispatch_inner(request);
+            )
+        } else {
+            self.dispatch_inner(&correlated_request)
+        };
         if response.content_type.starts_with("text/html") {
             if response.location.is_none() {
-                if let Some(context) = self.default_ui_context(request) {
+                if let Some(context) = self.default_ui_context(&correlated_request) {
                     response.body = render_default_application_shell(
                         &response.body,
                         &context,
@@ -1130,7 +851,7 @@ impl WebApp {
             response.body = inject_design_system(&response.body, self.project_theme_css.is_some());
         }
         if self.ui_level == UiLevel::Learn
-            && request.method == "GET"
+            && correlated_request.method == "GET"
             && response.status == 200
             && response.content_type.starts_with("text/html")
         {
@@ -1140,7 +861,7 @@ impl WebApp {
                 .any(|crud| crud_route_matches_path(crud, &request.path));
             response.body = append_learning_assistant(
                 &response.body,
-                &request.path,
+                &correlated_request.path,
                 self.ui_language,
                 generated_crud,
             );
@@ -1153,9 +874,23 @@ impl WebApp {
             );
         }
         response
+            .headers
+            .retain(|(name, _)| !name.eq_ignore_ascii_case("x-request-id"));
+        response.headers.push(("X-Request-ID".into(), request_id));
+        response
     }
 
     fn dispatch_inner(&self, request: &Request) -> Response {
+        if request.path == HEALTH_LIVENESS_PATH {
+            return match request.method.as_str() {
+                "GET" => Response::json(200, r#"{"status":"ok"}"#)
+                    .with_header("Cache-Control", "no-store"),
+                "HEAD" => Response::json(200, "").with_header("Cache-Control", "no-store"),
+                _ => Response::empty(405)
+                    .with_header("Allow", "GET, HEAD")
+                    .with_header("Cache-Control", "no-store"),
+            };
+        }
         if request.path == PROJECT_THEME_CSS_PATH {
             return match (&self.project_theme_css, request.method.as_str()) {
                 (Some(css), "GET") => {
@@ -1166,11 +901,20 @@ impl WebApp {
             };
         }
         if let Some(auth_route) = &self.auth_route {
+            if matches!(
+                request.path.as_str(),
+                "/forgot-password" | "/reset-password"
+            ) {
+                return password_reset::dispatch_password_reset(self, auth_route, request);
+            }
             if request.path == "/login" {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
             }
             if request.path == "/logout" {
                 return dispatch_logout(self, request, self.database_url.as_deref());
+            }
+            if request.path == ACCOUNT_SESSIONS_PATH {
+                return dispatch_account_sessions(self, request, self.database_url.as_deref());
             }
             if auth_route
                 .admin_path
@@ -1198,11 +942,24 @@ impl WebApp {
                 if api_request_requires_origin_check(request)
                     && !self.api_request_origin_is_allowed(request)
                 {
-                    return self.apply_api_cors(
+                    return self.apply_api_metadata(api, self.apply_api_cors(
                         request,
                         Response::json(
                             403,
                             "{\"error\":{\"code\":\"Forbidden\",\"message\":\"request origin is not allowed\"}}",
+                        ),
+                    ));
+                }
+                if let Some(retry_after) = self.api_rate_limit_retry_after(api, request) {
+                    return self.apply_api_metadata(
+                        api,
+                        self.apply_api_cors(
+                            request,
+                            Response::json(
+                                429,
+                                "{\"error\":{\"code\":\"RateLimitExceeded\",\"message\":\"API request limit exceeded\"}}",
+                            )
+                            .with_header("Retry-After", retry_after.to_string()),
                         ),
                     );
                 }
@@ -1213,9 +970,12 @@ impl WebApp {
                     self,
                     self.database_url.as_deref(),
                 ) {
-                    return self.apply_api_cors(request, response);
+                    return self.apply_api_metadata(api, self.apply_api_cors(request, response));
                 }
-                return self.apply_api_cors(request, (api.handler)(request, &path_params));
+                return self.apply_api_metadata(
+                    api,
+                    self.apply_api_cors(request, (api.handler)(request, &path_params)),
+                );
             }
         }
         if api_path_matched {
@@ -1460,6 +1220,63 @@ impl WebApp {
         methods.sort();
         methods.dedup();
         methods.join(", ")
+    }
+
+    fn apply_api_metadata(&self, api: &ApiRoute, mut response: Response) -> Response {
+        if let Some(version) = &api.version {
+            response = response.with_header("X-Zelyra-API-Version", version.clone());
+        }
+        if api.deprecated {
+            response = response.with_header("X-Zelyra-API-Deprecated", "true");
+        }
+        response
+    }
+
+    fn api_rate_limit_retry_after(&self, api: &ApiRoute, request: &Request) -> Option<u64> {
+        let limit = api.rate_limit?;
+        let window = Duration::from_secs(u64::from(limit.window_seconds));
+        let now = Instant::now();
+        let client = request
+            .remote_addr
+            .map(|address| address.ip().to_string())
+            .unwrap_or_else(|| "in-process".into());
+        let key = format!("{} {} {client}", api.method, api.path);
+        let Ok(mut clients) = self.api_throttle.lock() else {
+            return Some(u64::from(limit.window_seconds));
+        };
+
+        clients.retain(|_, throttle| {
+            now.duration_since(throttle.window_started)
+                < Duration::from_secs(u64::from(throttle.window_seconds))
+        });
+
+        if let Some(throttle) = clients.get_mut(&key) {
+            if now.duration_since(throttle.window_started) >= window {
+                throttle.window_started = now;
+                throttle.requests = 1;
+                throttle.window_seconds = limit.window_seconds;
+                return None;
+            }
+            if throttle.requests >= limit.requests {
+                let remaining = window.saturating_sub(now.duration_since(throttle.window_started));
+                return Some(remaining.as_secs().max(1));
+            }
+            throttle.requests += 1;
+            return None;
+        }
+
+        if clients.len() >= API_THROTTLE_MAX_CLIENTS {
+            return Some(u64::from(limit.window_seconds));
+        }
+        clients.insert(
+            key,
+            ApiThrottle {
+                window_started: now,
+                requests: 1,
+                window_seconds: limit.window_seconds,
+            },
+        );
+        None
     }
 
     fn api_preflight(&self, path: &str, request: &Request) -> Response {
@@ -1871,9 +1688,9 @@ fn dispatch_login(
                 );
             }
             let throttle_key = login_throttle_key(&email);
-            if login_is_blocked(app, &throttle_key) {
+            if login_is_blocked_with_policy(app, &throttle_key, auth.login_rate_limit) {
                 return Response::html(429, "<h1>429 Too Many Requests</h1><p>Too many failed login attempts. Try again later.</p>")
-                    .with_header("Retry-After", LOGIN_BLOCK_DURATION.as_secs().to_string());
+                    .with_header("Retry-After", auth.login_block_seconds.to_string());
             }
             let Some(table) = auth
                 .schema
@@ -1932,7 +1749,12 @@ fn dispatch_login(
                         eprintln!("zelyra web: failed-login audit write failed: {error}");
                     }
                 }
-                record_login_failure(app, throttle_key);
+                record_login_failure_with_policy(
+                    app,
+                    throttle_key,
+                    auth.login_rate_limit,
+                    auth.login_block_seconds,
+                );
                 return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
             }
             clear_login_failures(app, &throttle_key);
@@ -1994,6 +1816,7 @@ fn dispatch_login(
                     Session {
                         user_id: Some(user_id),
                         permissions,
+                        expires_at: Instant::now() + SESSION_LIFETIME,
                     },
                 );
                 if auth.audit_table.is_some() {
@@ -2023,21 +1846,38 @@ fn dispatch_login(
 }
 
 fn login_throttle_key(email: &str) -> String {
-    email.trim().to_ascii_lowercase()
+    let normalized = email.trim().to_ascii_lowercase();
+    let digest = Blake2s256::digest(normalized.as_bytes());
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("email:{encoded}")
 }
 
+#[cfg(test)]
 fn login_is_blocked(app: &WebApp, key: &str) -> bool {
+    login_is_blocked_with_policy(app, key, DEFAULT_LOGIN_RATE_LIMIT)
+}
+
+fn login_is_blocked_with_policy(
+    app: &WebApp,
+    key: &str,
+    rate_limit: zelyra_ast::ApiRateLimit,
+) -> bool {
     let Ok(mut throttle) = app.login_throttle.lock() else {
-        return false;
-    };
-    let Some(state) = throttle.get_mut(key) else {
-        return false;
+        return true;
     };
     let now = Instant::now();
-    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
-        throttle.remove(key);
-        return false;
-    }
+    throttle.retain(|_, state| {
+        let window_expired = now.duration_since(state.window_started)
+            >= Duration::from_secs(u64::from(state.window_seconds));
+        let still_blocked = state.blocked_until.is_some_and(|until| now < until);
+        !window_expired || still_blocked
+    });
+    let Some(state) = throttle.get_mut(key) else {
+        return throttle.len() >= LOGIN_THROTTLE_MAX_KEYS;
+    };
     if let Some(blocked_until) = state.blocked_until {
         if now < blocked_until {
             return true;
@@ -2045,28 +1885,63 @@ fn login_is_blocked(app: &WebApp, key: &str) -> bool {
         state.failures = 0;
         state.blocked_until = None;
         state.window_started = now;
+        return false;
+    }
+    if now.duration_since(state.window_started)
+        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
+    {
+        throttle.remove(key);
+        return false;
     }
     false
 }
 
+#[cfg(test)]
 fn record_login_failure(app: &WebApp, key: String) {
+    record_login_failure_with_policy(
+        app,
+        key,
+        DEFAULT_LOGIN_RATE_LIMIT,
+        DEFAULT_LOGIN_BLOCK_SECONDS,
+    );
+}
+
+fn record_login_failure_with_policy(
+    app: &WebApp,
+    key: String,
+    rate_limit: zelyra_ast::ApiRateLimit,
+    block_seconds: u32,
+) {
     let Ok(mut throttle) = app.login_throttle.lock() else {
         return;
     };
     let now = Instant::now();
+    throttle.retain(|_, state| {
+        let window_expired = now.duration_since(state.window_started)
+            >= Duration::from_secs(u64::from(state.window_seconds));
+        let still_blocked = state.blocked_until.is_some_and(|until| now < until);
+        !window_expired || still_blocked
+    });
+    if !throttle.contains_key(&key) && throttle.len() >= LOGIN_THROTTLE_MAX_KEYS {
+        return;
+    }
     let state = throttle.entry(key).or_insert(LoginThrottle {
         window_started: now,
+        window_seconds: rate_limit.window_seconds,
         failures: 0,
         blocked_until: None,
     });
-    if now.duration_since(state.window_started) >= LOGIN_FAILURE_WINDOW {
+    if now.duration_since(state.window_started)
+        >= Duration::from_secs(u64::from(rate_limit.window_seconds))
+    {
         state.window_started = now;
+        state.window_seconds = rate_limit.window_seconds;
         state.failures = 0;
         state.blocked_until = None;
     }
     state.failures = state.failures.saturating_add(1);
-    if state.failures >= LOGIN_FAILURE_LIMIT {
-        state.blocked_until = Some(now + LOGIN_BLOCK_DURATION);
+    if state.failures >= rate_limit.requests {
+        state.blocked_until = Some(now + Duration::from_secs(u64::from(block_seconds)));
     }
 }
 
@@ -2170,13 +2045,391 @@ fn dispatch_logout(app: &WebApp, request: &Request, database_url: Option<&str>) 
     )
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AccountSessionRow {
+    key: String,
+    number: Option<String>,
+    expires: String,
+    expires_relative: bool,
+    current: bool,
+}
+
+fn dispatch_account_sessions(
+    app: &WebApp,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    let Some(auth) = app.auth_route.as_ref() else {
+        return Response::empty(404);
+    };
+    if app.database_capability_granted == Some(false) && auth.session_table.is_some() {
+        return database_capability_denied();
+    }
+    let Some(session) = session_from_request(app, request, database_url) else {
+        return Response::redirect("/login");
+    };
+    let Some(user_id) = session.user_id.filter(|id| *id > 0) else {
+        return Response::redirect("/login");
+    };
+    match request.method.as_str() {
+        "GET" => {
+            let rows = match account_sessions_for_user(
+                app,
+                auth,
+                database_url,
+                user_id,
+                cookie_value(request, "zelyra_session").as_deref(),
+            ) {
+                Ok(rows) => rows,
+                Err(error) => {
+                    eprintln!("zelyra web: account session lookup failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+            };
+            Response::html(200, render_account_sessions(auth, &rows, app.ui_language))
+        }
+        "POST" => {
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(error) => {
+                    return Response::html(400, format!("<h1>400 Bad Request</h1><p>{error}</p>"))
+                }
+            };
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
+                return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
+            }
+            let Some(key) = input.get("session_key").map(String::as_str) else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                );
+            };
+            let current_token_hash = cookie_value(request, "zelyra_session")
+                .as_deref()
+                .map(session_token_hash);
+            let target_token_hash = if let (Some(table), Some(database_url)) =
+                (auth.session_table.as_deref(), database_url)
+            {
+                let has_id = session_table_has_id(auth);
+                let target_hash = match lookup_account_session_token_hash(
+                    table,
+                    database_url,
+                    user_id,
+                    key,
+                    has_id,
+                ) {
+                    Ok(Some(token_hash)) => token_hash,
+                    Ok(None) => return Response::redirect(ACCOUNT_SESSIONS_PATH),
+                    Err(error) => {
+                        eprintln!("zelyra web: account session lookup failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
+                };
+                let (predicate, parameter, audit_details) = if has_id {
+                    let Some(id) = key
+                        .strip_prefix("id:")
+                        .and_then(|id| id.parse::<i64>().ok())
+                        .filter(|id| *id > 0)
+                    else {
+                        return Response::html(
+                            422,
+                            "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                        );
+                    };
+                    (
+                        "id = :session_id",
+                        ("session_id", zelyra_database::QueryValue::Int(id)),
+                        format!("session_id={id}"),
+                    )
+                } else {
+                    let Some(hash) = key
+                        .strip_prefix("hash:")
+                        .filter(|hash| is_session_hash(hash))
+                    else {
+                        return Response::html(
+                            422,
+                            "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                        );
+                    };
+                    (
+                        "token_hash = :token_hash",
+                        (
+                            "token_hash",
+                            zelyra_database::QueryValue::String(hash.into()),
+                        ),
+                        "session_id=redacted".into(),
+                    )
+                };
+                let query = zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE user_id = :user_id AND {predicate}",
+                        quote_identifier(table)
+                    ),
+                    params: vec![
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                        (parameter.0.into(), parameter.1),
+                    ],
+                };
+                if let Err(error) = execute_auth_admin_mutation(
+                    auth,
+                    database_url,
+                    vec![query],
+                    Some(user_id),
+                    "auth.session_self_revoke",
+                    Some(user_id),
+                    &audit_details,
+                ) {
+                    eprintln!("zelyra web: account session revocation failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                }
+                target_hash
+            } else {
+                let Some(hash) = key
+                    .strip_prefix("hash:")
+                    .filter(|hash| is_session_hash(hash))
+                else {
+                    return Response::html(
+                        422,
+                        "<h1>422 Unprocessable Entity</h1><p>A valid session is required.</p>",
+                    );
+                };
+                let Ok(mut sessions) = app.sessions.lock() else {
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                };
+                let target = sessions
+                    .iter()
+                    .find(|(token, candidate)| {
+                        candidate.user_id == Some(user_id) && session_token_hash(token) == hash
+                    })
+                    .map(|(token, _)| token.clone());
+                if let Some(token) = target {
+                    sessions.remove(&token);
+                }
+                hash.to_owned()
+            };
+            if current_token_hash.as_deref() == Some(target_token_hash.as_str()) {
+                return Response::redirect("/login").with_header(
+                    "Set-Cookie",
+                    format!(
+                        "zelyra_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+                        secure_cookie_attribute(request)
+                    ),
+                );
+            }
+            Response::redirect(ACCOUNT_SESSIONS_PATH)
+        }
+        _ => Response::empty(405).with_header("Allow", "GET, POST"),
+    }
+}
+
+fn session_table_has_id(auth: &AuthRoute) -> bool {
+    auth.session_table.as_deref().is_some_and(|name| {
+        auth.schema
+            .tables
+            .iter()
+            .find(|table| table.name == name)
+            .is_some_and(|table| table.columns.iter().any(|column| column.name == "id"))
+    })
+}
+
+fn is_session_hash(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn lookup_account_session_token_hash(
+    table: &str,
+    database_url: &str,
+    user_id: i64,
+    key: &str,
+    has_id: bool,
+) -> Result<Option<String>, String> {
+    let (selector, value) = if has_id {
+        let Some(id) = key
+            .strip_prefix("id:")
+            .and_then(|id| id.parse::<i64>().ok())
+            .filter(|id| *id > 0)
+        else {
+            return Ok(None);
+        };
+        (
+            "id = :session_id",
+            ("session_id", zelyra_database::QueryValue::Int(id)),
+        )
+    } else {
+        let Some(hash) = key
+            .strip_prefix("hash:")
+            .filter(|hash| is_session_hash(hash))
+        else {
+            return Ok(None);
+        };
+        (
+            "token_hash = :token_hash",
+            (
+                "token_hash",
+                zelyra_database::QueryValue::String(hash.into()),
+            ),
+        )
+    };
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT token_hash FROM {} WHERE user_id = :user_id AND {selector} AND expires_at > CURRENT_TIMESTAMP LIMIT 1",
+            quote_identifier(table)
+        ),
+        vec![
+            ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+            (value.0.into(), value.1),
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(result.rows.first().and_then(|row| row.first()).cloned())
+}
+
+fn account_sessions_for_user(
+    app: &WebApp,
+    auth: &AuthRoute,
+    database_url: Option<&str>,
+    user_id: i64,
+    current_token: Option<&str>,
+) -> Result<Vec<AccountSessionRow>, String> {
+    let current_hash = current_token.map(session_token_hash);
+    if let (Some(table), Some(database_url)) = (auth.session_table.as_deref(), database_url) {
+        let has_id = session_table_has_id(auth);
+        let first_column = if has_id { "id" } else { "token_hash" };
+        let result = zelyra_database::execute_mariadb_query(
+            database_url,
+            &format!(
+                "SELECT {first_column}, token_hash, expires_at FROM {} WHERE user_id = :user_id AND expires_at > CURRENT_TIMESTAMP ORDER BY expires_at DESC LIMIT 100",
+                quote_identifier(table)
+            ),
+            vec![("user_id".into(), zelyra_database::QueryValue::Int(user_id))],
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(result
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let key = row.first()?;
+                let token_hash = row.get(1)?;
+                let expires = row.get(2)?;
+                Some(AccountSessionRow {
+                    key: if has_id {
+                        format!("id:{key}")
+                    } else {
+                        format!("hash:{key}")
+                    },
+                    number: has_id.then(|| key.clone()),
+                    expires: expires.clone(),
+                    expires_relative: false,
+                    current: current_hash.as_deref() == Some(token_hash.as_str()),
+                })
+            })
+            .collect());
+    }
+    let mut sessions = app
+        .sessions
+        .lock()
+        .map_err(|_| "session state is unavailable".to_owned())?;
+    let now = Instant::now();
+    sessions.retain(|_, session| session.expires_at > now);
+    let mut rows = sessions
+        .iter()
+        .filter(|(_, session)| session.user_id == Some(user_id))
+        .map(|(token, session)| {
+            let hash = session_token_hash(token);
+            AccountSessionRow {
+                key: format!("hash:{hash}"),
+                number: None,
+                expires: session
+                    .expires_at
+                    .saturating_duration_since(now)
+                    .as_secs()
+                    .to_string(),
+                expires_relative: true,
+                current: current_hash.as_deref() == Some(hash.as_str()),
+            }
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| std::cmp::Reverse(row.current));
+    rows.truncate(100);
+    Ok(rows)
+}
+
+fn render_account_sessions(
+    auth: &AuthRoute,
+    sessions: &[AccountSessionRow],
+    language: UiLanguage,
+) -> String {
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<main><h1>{}</h1><p>{}</p><table><thead><tr><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+        tr(language, "auth.self_sessions_title"),
+        tr(language, "auth.self_sessions_help"),
+        tr(language, "auth.session_label"),
+        tr(language, "auth.session_expiry"),
+        tr(language, "auth.actions"),
+    );
+    for session in sessions {
+        let label = session
+            .number
+            .as_ref()
+            .map(|number| {
+                format!(
+                    "{} {}",
+                    tr(language, "auth.session_label"),
+                    html_escape(number)
+                )
+            })
+            .unwrap_or_else(|| tr(language, "auth.session_label"));
+        let label = if session.current {
+            format!("{} ({})", label, tr(language, "auth.current_session"))
+        } else {
+            label
+        };
+        let expires = if session.expires_relative {
+            format!(
+                "{} {}",
+                html_escape(&session.expires),
+                tr(language, "auth.seconds_remaining")
+            )
+        } else {
+            html_escape(&session.expires)
+        };
+        html.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"session_key\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+            label,
+            expires,
+            ACCOUNT_SESSIONS_PATH,
+            csrf,
+            html_escape(&session.key),
+            tr(language, "auth.revoke_session"),
+        ));
+    }
+    html.push_str("</tbody></table></main>");
+    html
+}
+
 fn render_login(auth: &AuthRoute, language: UiLanguage) -> String {
+    let reset_link = auth
+        .reset_tokens_table
+        .as_ref()
+        .map(|_| {
+            format!(
+                "<p><a href=\"/forgot-password\">{}</a></p>",
+                tr(language, "auth.reset_request_link")
+            )
+        })
+        .unwrap_or_default();
     format!(
         "<main><h1>{}</h1><form method=\"post\" action=\"/login\">\
          <input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\">\
          <label for=\"email\">{}</label><input id=\"email\" name=\"email\" type=\"email\" required>\
          <label for=\"password\">{}</label><input id=\"password\" name=\"password\" type=\"password\" required>\
-         <button type=\"submit\">{}</button></form></main>",
+         <button type=\"submit\">{}</button></form>{reset_link}</main>",
         tr(language, "auth.login_title"),
         html_escape(auth.csrf.token()),
         tr(language, "auth.email"),
@@ -2222,6 +2475,7 @@ fn dispatch_auth_admin(
                     &data.assignments,
                     &data.permissions,
                     &data.audit,
+                    &data.sessions,
                     app.ui_language,
                 ),
             ),
@@ -2246,6 +2500,7 @@ struct AuthAdminData {
     assignments: Vec<Vec<String>>,
     permissions: Vec<Vec<String>>,
     audit: Vec<Vec<String>>,
+    sessions: Vec<Vec<String>>,
 }
 
 fn execute_auth_admin_mutation(
@@ -2478,11 +2733,27 @@ fn load_auth_admin_data(auth: &AuthRoute, database_url: &str) -> Result<AuthAdmi
     } else {
         Vec::new()
     };
+    let sessions = if let Some(session_table) = administrable_session_table(auth) {
+        zelyra_database::execute_mariadb_query(
+            database_url,
+            &format!(
+                "SELECT s.id, s.user_id, u.email, s.expires_at FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.expires_at > CURRENT_TIMESTAMP ORDER BY s.expires_at, s.id LIMIT 100",
+                quote_identifier(session_table),
+                quote_identifier(&auth.table),
+            ),
+            Vec::new(),
+        )
+        .map_err(|error| error.to_string())?
+        .rows
+    } else {
+        Vec::new()
+    };
     Ok(AuthAdminData {
         users,
         assignments,
         permissions,
         audit,
+        sessions,
     })
 }
 
@@ -2527,6 +2798,51 @@ fn dispatch_auth_admin_post(
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
     let result = match operation {
+        "revoke_session" => {
+            let Some(session_table) = administrable_session_table(auth) else {
+                return Response::html(
+                    409,
+                    "<h1>409 Conflict</h1><p>Session administration requires a persistent session table with an id column.</p>",
+                );
+            };
+            let Some(session_id) = input
+                .get("session_id")
+                .and_then(|value| value.parse::<i64>().ok())
+                .filter(|id| *id > 0)
+            else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid session ID is required.</p>",
+                );
+            };
+            let Some(user_id) = user_id.filter(|id| *id > 0) else {
+                return Response::html(
+                    422,
+                    "<h1>422 Unprocessable Entity</h1><p>A valid user ID is required.</p>",
+                );
+            };
+            execute_auth_admin_mutation(
+                auth,
+                database_url,
+                vec![zelyra_database::Query {
+                    sql: format!(
+                        "DELETE FROM {} WHERE id = :session_id AND user_id = :user_id",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![
+                        (
+                            "session_id".into(),
+                            zelyra_database::QueryValue::Int(session_id),
+                        ),
+                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
+                    ],
+                }],
+                actor_user_id,
+                "auth.session_revoke_requested",
+                Some(user_id),
+                &format!("session_id={session_id}"),
+            )
+        }
         "create_user" => {
             let email = input
                 .get("email")
@@ -2953,6 +3269,7 @@ fn render_auth_admin(
     assignments: &[Vec<String>],
     permissions: &[Vec<String>],
     audit: &[Vec<String>],
+    sessions: &[Vec<String>],
     language: UiLanguage,
 ) -> String {
     let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
@@ -3001,7 +3318,11 @@ fn render_auth_admin(
             ));
         }
     }
-    html.push_str("</table><h2>");
+    html.push_str("</table>");
+    if administrable_session_table(auth).is_some() {
+        html.push_str(&render_auth_sessions(auth, sessions, language));
+    }
+    html.push_str("<h2>");
     html.push_str(&tr(language, "auth.assign_role"));
     html.push_str("</h2><form method=\"post\" action=\"");
     html.push_str(&path);
@@ -3167,6 +3488,208 @@ fn load_user_permissions(
     Ok(permissions)
 }
 
+fn administrable_session_table(auth: &AuthRoute) -> Option<&str> {
+    let name = auth.session_table.as_deref()?;
+    auth.schema
+        .tables
+        .iter()
+        .find(|table| table.name == name && table.columns.iter().any(|column| column.name == "id"))
+        .map(|_| name)
+}
+
+fn render_auth_sessions(
+    auth: &AuthRoute,
+    sessions: &[Vec<String>],
+    language: UiLanguage,
+) -> String {
+    let path = html_escape(auth.admin_path.as_deref().unwrap_or("/"));
+    let csrf = html_escape(auth.csrf.token());
+    let mut html = format!(
+        "<h2>{}</h2><p>{}</p><table><tr><th>ID</th><th>{}</th><th>{}</th><th>{}</th></tr>",
+        tr(language, "auth.sessions"),
+        tr(language, "auth.sessions_help"),
+        tr(language, "auth.email"),
+        tr(language, "auth.session_expires"),
+        tr(language, "auth.actions")
+    );
+    for row in sessions {
+        if let [id, user_id, email, expires, ..] = row.as_slice() {
+            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td><form method=\"post\" action=\"{path}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"operation\" value=\"revoke_session\"><input type=\"hidden\" name=\"session_id\" value=\"{}\"><input type=\"hidden\" name=\"user_id\" value=\"{}\"><button type=\"submit\">{}</button></form></td></tr>",
+                html_escape(id), html_escape(email), html_escape(expires), html_escape(id), html_escape(user_id), tr(language, "auth.revoke_session")));
+        }
+    }
+    html.push_str("</table>");
+    html
+}
+
+#[cfg(test)]
+fn account_sessions_test_auth() -> AuthRoute {
+    AuthRoute {
+        table: "users".into(),
+        session_table: None,
+        permissions_table: None,
+        roles_table: None,
+        role_permissions_table: None,
+        audit_table: None,
+        audit_chain: false,
+        admin_path: None,
+        admin_permission: None,
+        admin_role: None,
+        login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
+        login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
+        reset_tokens_table: None,
+        reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
+        reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        schema: Schema {
+            database: None,
+            tables: Vec::new(),
+        },
+        csrf: CsrfProtection::new("sessions-csrf"),
+    }
+}
+
+#[test]
+fn account_sessions_are_scoped_to_the_signed_in_user_and_hide_bearer_tokens() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    {
+        let mut sessions = app.sessions.lock().unwrap();
+        for (token, user_id) in [
+            ("current-bearer", 7),
+            ("other-bearer", 7),
+            ("foreign-bearer", 8),
+        ] {
+            sessions.insert(
+                token.into(),
+                Session {
+                    user_id: Some(user_id),
+                    permissions: Vec::new(),
+                    expires_at: Instant::now() + Duration::from_secs(3600),
+                },
+            );
+        }
+    }
+    let request = parse_request(
+        "GET /account/sessions HTTP/1.1\r\nHost: localhost\r\nCookie: zelyra_session=current-bearer\r\n\r\n",
+    )
+    .unwrap();
+    let response = app.dispatch(&request);
+    assert_eq!(response.status, 200);
+    assert!(response.body.contains("Your sessions"));
+    assert!(response.body.contains("Session (current)"));
+    assert!(response
+        .body
+        .contains(&format!("hash:{}", session_token_hash("other-bearer"))));
+    assert!(!response.body.contains("current-bearer"));
+    assert!(!response.body.contains("other-bearer"));
+    assert!(!response
+        .body
+        .contains(&session_token_hash("foreign-bearer")));
+    let german_app = app.with_ui_settings(UiLanguage::German, UiLevel::Work);
+    let german_response = german_app.dispatch(&request);
+    assert!(german_response.body.contains("Deine Sitzungen"));
+    assert!(german_response.body.contains("Sekunden verbleibend"));
+    assert!(german_response.body.contains("(aktuell)"));
+}
+
+#[test]
+fn account_sessions_revoke_only_owned_sessions_and_sign_out_if_current_is_revoked() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    {
+        let mut sessions = app.sessions.lock().unwrap();
+        for (token, user_id) in [
+            ("current-bearer", 7),
+            ("other-bearer", 7),
+            ("foreign-bearer", 8),
+        ] {
+            sessions.insert(
+                token.into(),
+                Session {
+                    user_id: Some(user_id),
+                    permissions: Vec::new(),
+                    expires_at: Instant::now() + Duration::from_secs(3600),
+                },
+            );
+        }
+    }
+    let other_key = format!("hash:{}", session_token_hash("other-bearer"));
+    let other_body = format!("_zelyra_csrf=sessions-csrf&session_key={other_key}");
+    let other_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        other_body.len(), other_body
+    ))
+    .unwrap();
+    let response = app.dispatch(&other_request);
+    assert_eq!(response.status, 303);
+    assert_eq!(response.location.as_deref(), Some(ACCOUNT_SESSIONS_PATH));
+    let sessions = app.sessions.lock().unwrap();
+    assert!(sessions.contains_key("current-bearer"));
+    assert!(!sessions.contains_key("other-bearer"));
+    assert!(sessions.contains_key("foreign-bearer"));
+    drop(sessions);
+
+    let foreign_key = format!("hash:{}", session_token_hash("foreign-bearer"));
+    let foreign_body = format!("_zelyra_csrf=sessions-csrf&session_key={foreign_key}");
+    let foreign_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        foreign_body.len(), foreign_body
+    ))
+    .unwrap();
+    app.dispatch(&foreign_request);
+    assert!(app.sessions.lock().unwrap().contains_key("foreign-bearer"));
+
+    let current_key = format!("hash:{}", session_token_hash("current-bearer"));
+    let current_body = format!("_zelyra_csrf=sessions-csrf&session_key={current_key}");
+    let current_request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        current_body.len(), current_body
+    ))
+    .unwrap();
+    let response = app.dispatch(&current_request);
+    assert_eq!(response.location.as_deref(), Some("/login"));
+    assert!(response.headers.iter().any(
+        |(name, value)| name.eq_ignore_ascii_case("set-cookie") && value.contains("Max-Age=0")
+    ));
+    assert!(!app.sessions.lock().unwrap().contains_key("current-bearer"));
+}
+
+#[test]
+fn account_session_revocation_requires_valid_csrf() {
+    let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(account_sessions_test_auth());
+    app.sessions.lock().unwrap().insert(
+        "current-bearer".into(),
+        Session {
+            user_id: Some(7),
+            permissions: Vec::new(),
+            expires_at: Instant::now() + Duration::from_secs(3600),
+        },
+    );
+    let key = format!("hash:{}", session_token_hash("current-bearer"));
+    let body = format!("_zelyra_csrf=wrong&session_key={key}");
+    let request = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    ))
+    .unwrap();
+    assert_eq!(app.dispatch(&request).status, 403);
+    assert!(app.sessions.lock().unwrap().contains_key("current-bearer"));
+
+    let body = format!("_zelyra_csrf=sessions-csrf&session_key={key}");
+    let cross_origin = parse_request(&format!(
+        "POST /account/sessions HTTP/1.1\r\nHost: localhost\r\nOrigin: https://attacker.test\r\nCookie: zelyra_session=current-bearer\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(), body
+    ))
+    .unwrap();
+    assert_eq!(app.dispatch(&cross_origin).status, 403);
+    assert!(app.sessions.lock().unwrap().contains_key("current-bearer"));
+}
+
+fn memory_session(app: &WebApp, session_id: &str) -> Option<Session> {
+    let mut sessions = app.sessions.lock().ok()?;
+    let now = Instant::now();
+    sessions.retain(|_, session| session.expires_at > now);
+    sessions.get(session_id).cloned()
+}
+
 fn session_from_request(
     app: &WebApp,
     request: &Request,
@@ -3174,10 +3697,10 @@ fn session_from_request(
 ) -> Option<Session> {
     let session_id = cookie_value(request, "zelyra_session")?;
     let Some(auth) = &app.auth_route else {
-        return app.sessions.lock().ok()?.get(&session_id).cloned();
+        return memory_session(app, &session_id);
     };
     let (Some(session_table), Some(database_url)) = (&auth.session_table, database_url) else {
-        return app.sessions.lock().ok()?.get(&session_id).cloned();
+        return memory_session(app, &session_id);
     };
     if app.database_capability_granted == Some(false) {
         return None;
@@ -3230,6 +3753,7 @@ fn session_from_request(
     Some(Session {
         user_id: Some(user_id),
         permissions,
+        expires_at: Instant::now() + SESSION_LIFETIME,
     })
 }
 
@@ -3336,206 +3860,6 @@ impl Router {
         }
         Response::html(404, "<h1>404 Not Found</h1>")
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HttpError {
-    pub message: String,
-}
-
-impl fmt::Display for HttpError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.message.fmt(f)
-    }
-}
-
-impl std::error::Error for HttpError {}
-
-pub fn parse_request(raw: &str) -> Result<Request, HttpError> {
-    let (header_text, body) = raw.split_once("\r\n\r\n").unwrap_or((raw, ""));
-    let mut lines = header_text.split("\r\n");
-    let request_line = lines.next().ok_or_else(|| HttpError {
-        message: "request is empty".into(),
-    })?;
-    let mut request_parts = request_line.split_whitespace();
-    let method = request_parts.next().ok_or_else(|| HttpError {
-        message: "request method is missing".into(),
-    })?;
-    let target = request_parts.next().ok_or_else(|| HttpError {
-        message: "request target is missing".into(),
-    })?;
-    let version = request_parts.next().ok_or_else(|| HttpError {
-        message: "HTTP version is missing".into(),
-    })?;
-    if version != "HTTP/1.1" && version != "HTTP/1.0" {
-        return Err(HttpError {
-            message: format!("unsupported HTTP version `{version}`"),
-        });
-    }
-    if request_parts.next().is_some() {
-        return Err(HttpError {
-            message: "request line contains too many fields".into(),
-        });
-    }
-    let mut headers: HashMap<String, String> = HashMap::new();
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-        let (name, value) = line.split_once(':').ok_or_else(|| HttpError {
-            message: "malformed HTTP header".into(),
-        })?;
-        let name = name.trim().to_ascii_lowercase();
-        if matches!(
-            name.as_str(),
-            "host" | "origin" | "referer" | "x-forwarded-proto" | "cookie" | "authorization"
-        ) && headers.contains_key(&name)
-        {
-            return Err(HttpError {
-                message: "request contains a duplicate security-sensitive header".into(),
-            });
-        }
-        headers.insert(name, value.trim().into());
-    }
-    if let Some(content_length) = headers.get("content-length") {
-        let content_length = content_length.parse::<usize>().map_err(|_| HttpError {
-            message: "content-length must be a non-negative integer".into(),
-        })?;
-        if content_length > MAX_REQUEST_BODY_BYTES {
-            return Err(HttpError {
-                message: format!(
-                    "request body exceeds the {} byte limit",
-                    MAX_REQUEST_BODY_BYTES
-                ),
-            });
-        }
-        if content_length != body.len() {
-            return Err(HttpError {
-                message: format!(
-                    "content-length declares {content_length} bytes, received {}",
-                    body.len()
-                ),
-            });
-        }
-    }
-    if body.len() > MAX_REQUEST_BODY_BYTES {
-        return Err(HttpError {
-            message: format!(
-                "request body exceeds the {} byte limit",
-                MAX_REQUEST_BODY_BYTES
-            ),
-        });
-    }
-    let path = target.split_once('?').map_or(target, |(path, _)| path);
-    Ok(Request {
-        method: method.into(),
-        target: target.into(),
-        path: path.into(),
-        headers,
-        body: body.into(),
-    })
-}
-
-pub const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
-const MAX_REQUEST_HEADER_BYTES: usize = 64 * 1024;
-
-#[derive(Debug)]
-enum RequestReadError {
-    Io(io::Error),
-    Http(HttpError),
-    PayloadTooLarge,
-}
-
-fn find_header_end(buffer: &[u8]) -> Option<usize> {
-    buffer.windows(4).position(|window| window == b"\r\n\r\n")
-}
-
-fn declared_content_length(header_text: &str) -> Result<Option<usize>, HttpError> {
-    let mut content_length = None;
-    for line in header_text.split("\r\n").skip(1) {
-        let Some((name, value)) = line.split_once(':') else {
-            if !line.is_empty() {
-                return Err(HttpError {
-                    message: "malformed HTTP header".into(),
-                });
-            }
-            continue;
-        };
-        if name.trim().eq_ignore_ascii_case("content-length") {
-            let parsed = value.trim().parse::<usize>().map_err(|_| HttpError {
-                message: "content-length must be a non-negative integer".into(),
-            })?;
-            if let Some(previous) = content_length {
-                if previous != parsed {
-                    return Err(HttpError {
-                        message: "conflicting content-length headers".into(),
-                    });
-                }
-            }
-            content_length = Some(parsed);
-        }
-    }
-    Ok(content_length)
-}
-
-fn read_http_request_from<R: Read>(reader: &mut R) -> Result<String, RequestReadError> {
-    let mut buffer = Vec::new();
-    let total_length = loop {
-        let mut chunk = [0_u8; 8192];
-        let size = reader.read(&mut chunk).map_err(RequestReadError::Io)?;
-        if size == 0 {
-            break None;
-        }
-        buffer.extend_from_slice(&chunk[..size]);
-        if buffer.len() > MAX_REQUEST_HEADER_BYTES && find_header_end(&buffer).is_none() {
-            return Err(RequestReadError::Http(HttpError {
-                message: "HTTP headers exceed the configured limit".into(),
-            }));
-        }
-        let Some(header_end) = find_header_end(&buffer) else {
-            continue;
-        };
-        if header_end > MAX_REQUEST_HEADER_BYTES {
-            return Err(RequestReadError::Http(HttpError {
-                message: "HTTP headers exceed the configured limit".into(),
-            }));
-        }
-        let header_text = std::str::from_utf8(&buffer[..header_end]).map_err(|error| {
-            RequestReadError::Http(HttpError {
-                message: error.to_string(),
-            })
-        })?;
-        let content_length = declared_content_length(header_text)
-            .map_err(RequestReadError::Http)?
-            .unwrap_or(0);
-        if content_length > MAX_REQUEST_BODY_BYTES {
-            return Err(RequestReadError::PayloadTooLarge);
-        }
-        let total_length = header_end + 4 + content_length;
-        if buffer.len() >= total_length {
-            break Some(total_length);
-        }
-        while buffer.len() < total_length {
-            let size = reader.read(&mut chunk).map_err(RequestReadError::Io)?;
-            if size == 0 {
-                break;
-            }
-            buffer.extend_from_slice(&chunk[..size]);
-        }
-        break Some(total_length);
-    };
-    if let Some(total_length) = total_length {
-        buffer.truncate(total_length);
-    }
-    String::from_utf8(buffer).map_err(|error| {
-        RequestReadError::Http(HttpError {
-            message: error.to_string(),
-        })
-    })
-}
-
-fn read_http_request(stream: &mut TcpStream) -> Result<String, RequestReadError> {
-    read_http_request_from(stream)
 }
 
 pub fn html_escape(value: &str) -> String {
@@ -6470,345 +6794,6 @@ fn form_query_parameters(
     Ok(parameters)
 }
 
-pub fn render_form(
-    route: &FormRoute,
-    values: &HashMap<String, String>,
-    errors: &[FieldError],
-    notice: Option<&str>,
-) -> String {
-    render_form_with_options(route, values, errors, notice, &HashMap::new())
-}
-
-fn render_form_with_options(
-    route: &FormRoute,
-    values: &HashMap<String, String>,
-    errors: &[FieldError],
-    notice: Option<&str>,
-    relation_options: &HashMap<String, Vec<SelectOption>>,
-) -> String {
-    render_form_with_language(
-        route,
-        values,
-        errors,
-        notice,
-        relation_options,
-        UiLanguage::English,
-    )
-}
-
-fn render_form_with_language(
-    route: &FormRoute,
-    values: &HashMap<String, String>,
-    errors: &[FieldError],
-    notice: Option<&str>,
-    relation_options: &HashMap<String, Vec<SelectOption>>,
-    language: UiLanguage,
-) -> String {
-    let mut html = String::new();
-    let form_kind = if route.form.name.ends_with("Create") {
-        Some(("form.create_title", "form.create_submit"))
-    } else if route.form.name.ends_with("Edit") {
-        Some(("form.edit_title", "form.save_submit"))
-    } else {
-        None
-    };
-    let generated_resource = form_kind.map(|_| {
-        route
-            .form
-            .name
-            .strip_suffix("Create")
-            .or_else(|| route.form.name.strip_suffix("Edit"))
-            .unwrap_or_else(|| route.form.table.as_deref().unwrap_or("record"))
-    });
-    let generated_title = form_kind
-        .zip(generated_resource)
-        .map(|((title_key, _), resource)| {
-            field_text(
-                language,
-                title_key,
-                &localized_identifier_reference(language, resource),
-            )
-        });
-    if let Some(title) = route
-        .form_view
-        .title
-        .as_ref()
-        .map(|title| localize_user_text(language, title))
-        .or(generated_title)
-    {
-        html.push_str("<h1>");
-        html.push_str(&html_escape_preserving_locale_references(&title));
-        html.push_str("</h1>");
-    }
-    let cards = route.form_view.mode == CrudFormViewMode::Cards;
-    if cards {
-        html.push_str("<section class=\"zelyra-crud-form-card\">");
-    }
-    html.push_str("<form method=\"post\" action=\"");
-    html.push_str(&html_escape(&route.action));
-    html.push_str("\">");
-    html.push_str("<input type=\"hidden\" name=\"_zelyra_csrf\" value=\"");
-    html.push_str(&html_escape(route.csrf.token()));
-    html.push_str("\">");
-    if let Some(notice) = notice {
-        html.push_str("<p class=\"zelyra-notice\">");
-        html.push_str(&html_escape_preserving_locale_references(
-            &localize_user_text(language, notice),
-        ));
-        html.push_str("</p>");
-    }
-    for field in &route.form.fields {
-        let label = field
-            .label
-            .as_deref()
-            .map(|label| localize_user_text(language, label))
-            .unwrap_or_else(|| localized_identifier_reference(language, &field.name));
-        let value = values.get(&field.name).map(String::as_str).unwrap_or("");
-        let field_errors = errors
-            .iter()
-            .filter(|error| error.field == field.name)
-            .collect::<Vec<_>>();
-        let required = is_required(route, field);
-        let max = field_max(route, field);
-        html.push_str("<div class=\"zelyra-field\">");
-        html.push_str("<label for=\"");
-        html.push_str(&html_escape(&field.name));
-        html.push_str("\">");
-        html.push_str(&html_escape_preserving_locale_references(&label));
-        html.push_str("</label>");
-        if let Some(options) = relation_options.get(&field.name) {
-            html.push_str("<select id=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push_str("\" name=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push('"');
-            if required {
-                html.push_str(" required");
-            }
-            html.push('>');
-            if !required {
-                html.push_str(&format!(
-                    "<option value=\"\">-- {} --</option>",
-                    tr(language, "action.select")
-                ));
-            }
-            for option in options {
-                html.push_str("<option value=\"");
-                html.push_str(&html_escape(&option.value));
-                html.push('"');
-                if option.value == value {
-                    html.push_str(" selected");
-                }
-                html.push('>');
-                html.push_str(&html_escape(&option.label));
-                html.push_str("</option>");
-            }
-            html.push_str("</select>");
-        } else {
-            let input_type = input_type(route, field);
-            html.push_str("<input id=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push_str("\" name=\"");
-            html.push_str(&html_escape(&field.name));
-            html.push_str("\" type=\"");
-            html.push_str(input_type);
-            html.push('"');
-            if input_type == "checkbox" {
-                html.push_str(" value=\"true\"");
-                if matches!(value, "true" | "1") {
-                    html.push_str(" checked");
-                }
-            } else {
-                html.push_str(" value=\"");
-                html.push_str(&html_escape(value));
-                html.push('"');
-            }
-            if required {
-                html.push_str(" required");
-            }
-            if let Some(max) = max {
-                html.push_str(" maxlength=\"");
-                html.push_str(&max.to_string());
-                html.push('"');
-            }
-            if let Some(placeholder) = &field.placeholder {
-                html.push_str(" placeholder=\"");
-                html.push_str(&html_escape_preserving_locale_references(
-                    &localize_user_text(language, placeholder),
-                ));
-                html.push('"');
-            }
-            if field.readonly {
-                html.push_str(" readonly");
-            }
-            html.push('>');
-        }
-        for error in field_errors {
-            html.push_str("<p class=\"zelyra-error\">");
-            html.push_str(&html_escape_preserving_locale_references(
-                &localized_validation_message(language, &error.message),
-            ));
-            html.push_str("</p>");
-        }
-        html.push_str("</div>");
-    }
-    html.push_str("<button type=\"submit\">");
-    let default_submit = form_kind
-        .map(|(_, submit_key)| tr(language, submit_key))
-        .unwrap_or(tr(language, "form.submit"));
-    let submit = route
-        .form_view
-        .submit
-        .as_deref()
-        .map(|submit| localize_user_text(language, submit))
-        .unwrap_or(default_submit);
-    html.push_str(&html_escape_preserving_locale_references(&submit));
-    html.push_str("</button></form>");
-    if cards {
-        html.push_str("</section>");
-    }
-    html
-}
-
-fn localized_validation_message(language: UiLanguage, message: &str) -> String {
-    let key = match message {
-        "unknown form field" => "validation.unknown_field",
-        "read-only field cannot be submitted" => "validation.readonly",
-        "value is required" => "validation.required",
-        "must be an integer" => "validation.integer",
-        "must be an unsigned integer" => "validation.unsigned_integer",
-        "must be a number" => "validation.number",
-        "must be true or false" => "validation.boolean",
-        "must be a valid email address" => "validation.email",
-        "must be a valid HTTP URL" => "validation.url",
-        "must be an integer identifier" => "validation.id",
-        "must be a UUID" => "validation.uuid",
-        _ => {
-            if let Some(maximum) = message.strip_prefix("value exceeds maximum length of ") {
-                return i18n::parameterized_reference("validation.max_length", "max", maximum);
-            }
-            return message.to_owned();
-        }
-    };
-    tr(language, key).to_owned()
-}
-
-fn input_type(route: &FormRoute, field: &zelyra_ast::FormField) -> &'static str {
-    if let Some(widget) = field.widget.as_deref() {
-        return match widget {
-            "email" => "email",
-            "number" => "number",
-            "url" => "url",
-            "checkbox" => "checkbox",
-            "date" => "date",
-            "time" => "time",
-            _ => "text",
-        };
-    }
-    let ty = field.ty.as_ref().or_else(|| {
-        route.table.as_ref().and_then(|table| {
-            table
-                .columns
-                .iter()
-                .find(|column| column.name == field.name)
-                .map(|column| &column.ty)
-        })
-    });
-    match ty {
-        Some(Type::Bool) => "checkbox",
-        Some(Type::Int | Type::UInt | Type::Float | Type::Decimal) => "number",
-        Some(Type::Named(name)) if name == "Email" => "email",
-        Some(Type::Named(name)) if name == "Url" => "url",
-        _ => "text",
-    }
-}
-
-fn is_required(route: &FormRoute, field: &zelyra_ast::FormField) -> bool {
-    if field.required {
-        return true;
-    }
-    let table_required = route.table.as_ref().and_then(|table| {
-        table
-            .columns
-            .iter()
-            .find(|column| column.name == field.name)
-            .map(|column| column.required || column.primary_key)
-    });
-    let schema_required = route.schema.as_ref().and_then(|schema| {
-        route.form.table.as_deref().and_then(|table_name| {
-            schema
-                .tables
-                .iter()
-                .find(|table| table.name == table_name)
-                .and_then(|table| {
-                    table
-                        .columns
-                        .iter()
-                        .find(|column| column.name == field.name)
-                })
-                .map(|column| !column.nullable || column.primary_key)
-        })
-    });
-    table_required.unwrap_or(false) || schema_required.unwrap_or(false)
-}
-
-fn field_max(route: &FormRoute, field: &zelyra_ast::FormField) -> Option<u32> {
-    field.max.or_else(|| {
-        route.table.as_ref().and_then(|table| {
-            table
-                .columns
-                .iter()
-                .find(|column| column.name == field.name)
-                .and_then(|column| column.length)
-        })
-    })
-}
-
-fn humanize(name: &str) -> String {
-    let mut result = name.replace('_', " ");
-    if let Some(first) = result.get_mut(0..1) {
-        first.make_ascii_uppercase();
-    }
-    result
-}
-
-pub fn localized_identifier(language: UiLanguage, name: &str) -> String {
-    if let Some(label) = locale_identifier(language, name) {
-        return label.to_owned();
-    }
-    if language == UiLanguage::English {
-        return humanize(name);
-    }
-    let words = name
-        .to_ascii_lowercase()
-        .split('_')
-        .map(|word| locale_identifier(language, word).unwrap_or(word))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let mut characters = words.chars();
-    characters.next().map_or(words.clone(), |first| {
-        first.to_uppercase().collect::<String>() + characters.as_str()
-    })
-}
-
-fn localized_identifier_reference(language: UiLanguage, name: &str) -> String {
-    let key = format!("identifier.{}", name.to_ascii_lowercase());
-    if i18n::valid_catalog_key(&key) {
-        i18n::reference(&key)
-    } else {
-        localized_identifier(language, name)
-    }
-}
-
-fn localized_identifier_marker(language: UiLanguage, name: &str) -> String {
-    let key = format!("identifier.{}", name.to_ascii_lowercase());
-    if i18n::valid_catalog_key(&key) {
-        format!("@i18n:{key}")
-    } else {
-        localized_identifier(language, name)
-    }
-}
-
 pub fn parse_urlencoded(body: &str) -> Result<HashMap<String, String>, HttpError> {
     let mut values = HashMap::new();
     if body.is_empty() {
@@ -7774,21 +7759,22 @@ pub fn route_pattern_matches_path(pattern: &str, path: &str) -> bool {
     match_path(pattern, path).is_some()
 }
 
-pub fn serve_app(app: WebApp, address: &str) -> io::Result<()> {
-    let listener = TcpListener::bind(address)?;
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => handle_connection(&mut stream, &app)?,
-            Err(error) => eprintln!("zelyra web: connection failed: {error}"),
-        }
-    }
-    Ok(())
+fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
+    handle_connection_until(stream, app, Instant::now() + HTTP_EXCHANGE_TIMEOUT)
 }
 
-fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
-    let response = match read_http_request(stream) {
+fn handle_connection_until(
+    stream: &mut TcpStream,
+    app: &WebApp,
+    deadline: Instant,
+) -> io::Result<()> {
+    let response = match read_http_request(stream, deadline) {
         Ok(raw) => match parse_request(&raw) {
-            Ok(request) => app.dispatch(&request),
+            Ok(mut request) => {
+                request.remote_addr = stream.peer_addr().ok();
+                let _query_deadline = zelyra_database::set_query_deadline(deadline);
+                app.dispatch(&request)
+            }
             Err(error) if error.message.contains("request body exceeds") => Response::json(
                 413,
                 "{\"error\":{\"code\":\"PayloadTooLarge\",\"message\":\"request body is too large\"}}",
@@ -7803,2866 +7789,57 @@ fn handle_connection(stream: &mut TcpStream, app: &WebApp) -> io::Result<()> {
             drop(error);
             Response::html(400, "<h1>400 Bad Request</h1>")
         }
+        Err(RequestReadError::Io(error))
+            if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) =>
+        {
+            return Ok(())
+        }
         Err(RequestReadError::Io(error)) => return Err(error),
     };
-    stream.write_all(response.to_http().as_bytes())
+    let mut response = response;
+    if !response
+        .headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("x-request-id"))
+    {
+        response
+            .headers
+            .push(("X-Request-ID".into(), new_request_id()));
+    }
+    let response = response.to_http().into_bytes();
+    let mut written_total = 0;
+    while written_total < response.len() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Ok(());
+        }
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(&response[written_total..]) {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write HTTP response",
+                ))
+            }
+            Ok(written) => {
+                written_total += written;
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Ok(())
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn chained_audit_insert_uses_previous_hash_and_sha256() {
-        let queries = audit_insert_queries(
-            "audit_log",
-            true,
-            Some(7),
-            "crud.update",
-            Some(42),
-            "table=customers;changed=name",
-        );
-        assert_eq!(queries.len(), 3);
-        assert!(queries[1].sql.contains("INTO @zelyra_prev_hash"));
-        assert!(queries[2].sql.contains("previous_hash"));
-        assert!(queries[2].sql.contains("SHA2(CONCAT"));
-        assert!(queries[2].sql.contains("DATE_FORMAT(CURRENT_TIMESTAMP"));
-    }
-
-    fn router() -> Router {
-        Router::new(vec![Route {
-            path: "/hello/{name}".into(),
-            html: "<h1>Hello, {name}!</h1>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        }])
-    }
-
-    #[test]
-    fn applies_crud_layout_only_to_html_responses() {
-        let response = apply_generated_layout(
-            Response::html(200, "<main>CRUD content</main>"),
-            Some("<body>\u{0}ZELYRA_CRUD_CONTENT\u{0}</body>"),
-        );
-        assert_eq!(response.body, "<body><main>CRUD content</main></body>");
-
-        let redirect = apply_generated_layout(
-            Response::redirect("/customers"),
-            Some("<body>\u{0}ZELYRA_CRUD_CONTENT\u{0}</body>"),
-        );
-        assert_eq!(redirect.location.as_deref(), Some("/customers"));
-        assert!(redirect.body.is_empty());
-    }
-
-    fn form_route() -> FormRoute {
-        FormRoute {
-            path: "/forms/CustomerCreate".into(),
-            action: "/forms/CustomerCreate".into(),
-            form: FormDef {
-                name: "CustomerCreate".into(),
-                table: None,
-                fields: vec![zelyra_ast::FormField {
-                    name: "name".into(),
-                    ty: Some(Type::String),
-                    label: Some("Name".into()),
-                    placeholder: None,
-                    required: true,
-                    max: Some(20),
-                    widget: None,
-                    readonly: false,
-                    span: zelyra_ast::Span::default(),
-                }],
-                actions: Vec::new(),
-                span: zelyra_ast::Span::default(),
-            },
-            table: None,
-            schema: None,
-            requires_auth: false,
-            permissions: Vec::new(),
-            csrf: CsrfProtection::new("csrf-token"),
-            form_view: CrudFormViewDef::default(),
-            post_only: false,
-            audit_table: None,
-            audit_event: None,
-            audit_chain: false,
-            layout_html: None,
-        }
-    }
-
-    fn default_shell_crud(layout_html: Option<String>) -> CrudRoute {
-        CrudRoute {
-            path: "/machines".into(),
-            title: "Maschinen".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        }
-    }
-
-    #[test]
-    fn generated_crud_routes_use_the_default_localized_shell_and_crud_guide() {
-        let mut create_form = form_route();
-        create_form.path = "/machines/new".into();
-        create_form.action = "/machines/new".into();
-        create_form.form.name = "MachineCreate".into();
-        let mut edit_form = create_form.clone();
-        edit_form.path = "/machines/{id}/edit".into();
-        edit_form.action = "/machines/{id}/edit".into();
-        edit_form.form.name = "MachineEdit".into();
-        let app = WebApp::new(Vec::new(), vec![create_form, edit_form])
-            .with_cruds(vec![default_shell_crud(None)])
-            .with_ui_settings(UiLanguage::German, UiLevel::Learn);
-
-        for path in [
-            "/machines",
-            "/machines/new",
-            "/machines/7",
-            "/machines/7/edit",
-            "/machines/7/delete",
-            "/machines/7/restore",
-        ] {
-            let request =
-                parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
-            let response = app.dispatch(&request);
-            assert!(
-                response.body.contains("class=\"zelyra-app\""),
-                "default app shell missing for {path}"
-            );
-            assert!(response.body.contains("lang=\"de\""));
-            assert!(response.body.contains("data-zelyra-theme=\"default\""));
-            assert!(response
-                .body
-                .contains("<a href=\"/machines\" aria-label=\"Maschinen\" aria-current=\"page\">"));
-        }
-    }
-
-    #[test]
-    fn generated_crud_learning_guide_uses_general_crud_guidance() {
-        let html = append_learning_assistant(
-            "<html><body><main>Inventory</main></body></html>",
-            "/inventory",
-            UiLanguage::German,
-            true,
-        );
-        let html = localize_html(&html, UiLanguage::German);
-        assert!(html.contains("Deine Zelyra-CRUD-Lernhilfe"));
-        assert!(html.contains("Ein Feld in der Verwaltung ergänzen"));
-        assert!(html.contains("list, search, filter oder form"));
-    }
-
-    #[test]
-    fn default_application_shell_escapes_project_navigation_labels_and_paths() {
-        let context = DefaultUiContext {
-            current_path: "/machines".into(),
-            current_label: "Machines <script>".into(),
-            navigation: vec![DefaultNavigationLink {
-                path: "/machines\" onmouseover=\"alert(1)".into(),
-                label: "Machines <script>".into(),
-            }],
-        };
-        let html =
-            render_default_application_shell("<h1>Machines</h1>", &context, UiLanguage::English);
-
-        assert!(html.contains("Machines &lt;script&gt;"));
-        assert!(html.contains("href=\"/machines&quot; onmouseover=&quot;alert(1)\""));
-        assert!(!html.contains("<script>"));
-    }
-
-    #[test]
-    fn default_application_shell_does_not_rewrap_complete_html_documents() {
-        let context = DefaultUiContext {
-            current_path: "/machines".into(),
-            current_label: "Machines".into(),
-            navigation: Vec::new(),
-        };
-        for document in [
-            "<!doctype html><html><body>Existing shell</body></html>",
-            "  <HTML><body>Existing shell</body></HTML>",
-        ] {
-            assert_eq!(
-                render_default_application_shell(document, &context, UiLanguage::English),
-                document
-            );
-        }
-    }
-
-    #[test]
-    fn explicitly_configured_crud_layout_takes_precedence_over_the_default_shell() {
-        let app = WebApp::new(Vec::new(), Vec::new()).with_cruds(vec![default_shell_crud(Some(
-            format!("<div class=\"custom-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"),
-        ))]);
-        let request = parse_request("GET /machines HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-
-        assert!(response.body.starts_with("<div class=\"custom-shell\">"));
-        assert!(!response.body.contains("class=\"zelyra-app\""));
-        assert!(!response.body.contains("data-zelyra-theme=\"default\""));
-    }
-
-    #[test]
-    fn default_shell_covers_standalone_forms_and_tableviews_but_not_custom_pages() {
-        let form = form_route();
-        let tableview = TableViewRoute {
-            path: "/reports".into(),
-            title: "Reports".into(),
-            source: "report query".into(),
-            columns: Vec::new(),
-            filters: Vec::new(),
-            searchable: false,
-            sortable: false,
-            page_size: None,
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let app = WebApp::new(Vec::new(), vec![form])
-            .with_cruds(vec![default_shell_crud(None)])
-            .with_tableviews(vec![tableview])
-            .with_ui_settings(UiLanguage::English, UiLevel::Work);
-
-        for path in ["/forms/CustomerCreate", "/reports"] {
-            let request =
-                parse_request(&format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n")).unwrap();
-            let response = app.dispatch(&request);
-            assert!(response.body.contains("class=\"zelyra-app\""));
-            assert!(response.body.contains("href=\"/forms/CustomerCreate\""));
-        }
-
-        let page = Route {
-            path: "/custom".into(),
-            html: "<main>My custom page</main>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let custom_app = WebApp::new(vec![page], Vec::new())
-            .with_project_theme_css(Some(":root { --zelyra-color-accent: #e04b67; }".into()));
-        let request = parse_request("GET /custom HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let response = custom_app.dispatch(&request);
-        assert_eq!(response.body, "<main>My custom page</main>");
-        assert!(!response.body.contains("data-zelyra-theme"));
-        assert!(!response.body.contains(PROJECT_THEME_CSS_PATH));
-    }
-
-    #[test]
-    fn generated_login_page_uses_the_localized_default_shell() {
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: Some("/admin".into()),
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("login-csrf"),
-        };
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_auth_route(auth)
-            .with_ui_settings(UiLanguage::German, UiLevel::Work);
-        let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-
-        assert!(response.body.contains("class=\"zelyra-app\""));
-        assert!(response.body.contains("lang=\"de\""));
-        assert!(response.body.contains("<title>Anmelden | Zelyra</title>"));
-        assert!(response.body.contains("Zum Inhalt springen"));
-        assert!(response.body.contains("id=\"zelyra-content\""));
-        assert!(response.body.contains("href=\"/\""));
-    }
-
-    #[test]
-    fn project_theme_css_is_linked_after_the_default_design_and_served_as_css() {
-        let route = Route {
-            path: "/".into(),
-            html: "<html><head></head><body><div class=\"zelyra-app\"><main>Home</main></div></body></html>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let theme_css = ":root { --zelyra-color-accent: #e04b67; }";
-        let app =
-            WebApp::new(vec![route], Vec::new()).with_project_theme_css(Some(theme_css.into()));
-        let page_request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let page = app.dispatch(&page_request);
-
-        let default_style = page
-            .body
-            .find("data-zelyra-theme=\"default\"")
-            .expect("default design system should be embedded");
-        let project_style = page
-            .body
-            .find("href=\"/__zelyra/theme.css\"")
-            .expect("project theme should be linked");
-        assert!(default_style < project_style);
-
-        let css_request =
-            parse_request("GET /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let css = app.dispatch(&css_request);
-        assert_eq!(css.status, 200);
-        assert_eq!(css.content_type, "text/css; charset=utf-8");
-        assert_eq!(css.body, theme_css);
-        assert!(css.to_http().contains("Cache-Control: no-cache\r\n"));
-
-        let post_request =
-            parse_request("POST /__zelyra/theme.css HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let rejected = app.dispatch(&post_request);
-        assert_eq!(rejected.status, 405);
-        assert!(rejected.to_http().contains("Allow: GET\r\n"));
-
-        let no_theme = WebApp::new(Vec::new(), Vec::new()).dispatch(&css_request);
-        assert_eq!(no_theme.status, 404);
-    }
-
-    #[test]
-    fn default_design_system_exposes_the_complete_public_theme_token_set() {
-        for token in [
-            "--zelyra-color-accent",
-            "--zelyra-color-accent-strong",
-            "--zelyra-color-accent-text",
-            "--zelyra-color-accent-soft",
-            "--zelyra-color-ink",
-            "--zelyra-color-muted",
-            "--zelyra-color-border",
-            "--zelyra-color-canvas",
-            "--zelyra-color-surface",
-            "--zelyra-color-surface-subtle",
-            "--zelyra-color-sidebar-start",
-            "--zelyra-color-sidebar-middle",
-            "--zelyra-color-sidebar-end",
-            "--zelyra-color-sidebar-foreground",
-            "--zelyra-color-sidebar-muted",
-            "--zelyra-color-hero-start",
-            "--zelyra-color-hero-middle",
-            "--zelyra-color-hero-end",
-            "--zelyra-color-success-background",
-            "--zelyra-color-success-border",
-            "--zelyra-color-success-ink",
-            "--zelyra-color-danger-background",
-            "--zelyra-color-danger-border",
-            "--zelyra-color-danger-ink",
-            "--zelyra-color-focus",
-            "--zelyra-font-body",
-            "--zelyra-radius-card",
-            "--zelyra-radius-control",
-            "--zelyra-content-max-width",
-        ] {
-            assert!(
-                ZELYRA_DESIGN_SYSTEM_CSS.contains(token),
-                "default design system misses {token}"
-            );
-        }
-    }
-
-    #[test]
-    fn default_design_system_covers_all_generated_state_families_responsively() {
-        for selector in [
-            ".zelyra-crud-cards",
-            ".zelyra-crud-card",
-            ".zelyra-crud-detail-card",
-            ".zelyra-crud-form-card",
-            ".zelyra-action-confirmation",
-            ".zelyra-action-error",
-            ".zelyra-crud-error",
-            ".zelyra-delete-message",
-            ".zelyra-query-controls",
-            ".zelyra-pagination",
-            "main[data-loading-message]",
-        ] {
-            assert!(
-                ZELYRA_DESIGN_SYSTEM_CSS.contains(selector),
-                "default design system misses generated state selector {selector}"
-            );
-        }
-        assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:700px)"));
-        assert!(ZELYRA_DESIGN_SYSTEM_CSS.contains("@media(max-width:560px)"));
-    }
-
-    fn relation_form_route() -> FormRoute {
-        let mut route = form_route();
-        route.form.fields.push(zelyra_ast::FormField {
-            name: "department".into(),
-            ty: None,
-            label: Some("Department".into()),
-            placeholder: None,
-            required: true,
-            max: None,
-            widget: None,
-            readonly: false,
-            span: zelyra_ast::Span::default(),
-        });
-        route.table = Some(zelyra_ast::TableDef {
-            name: "customers".into(),
-            columns: vec![zelyra_ast::ColumnDef {
-                name: "department".into(),
-                ty: Type::Named("Department".into()),
-                length: None,
-                required: true,
-                primary_key: false,
-                auto: false,
-                unique: false,
-                default: None,
-                span: zelyra_ast::Span::default(),
-            }],
-            indexes: Vec::new(),
-            uniques: Vec::new(),
-            span: zelyra_ast::Span::default(),
-        });
-        route.schema = Some(zelyra_database::Schema {
-            database: None,
-            tables: vec![zelyra_database::Table {
-                name: "departments".into(),
-                columns: vec![
-                    zelyra_database::Column {
-                        name: "id".into(),
-                        sql_type: "BIGINT".into(),
-                        nullable: false,
-                        primary_key: true,
-                        auto: true,
-                        unique: false,
-                        default: None,
-                    },
-                    zelyra_database::Column {
-                        name: "name".into(),
-                        sql_type: "VARCHAR(100)".into(),
-                        nullable: false,
-                        primary_key: false,
-                        auto: false,
-                        unique: false,
-                        default: None,
-                    },
-                ],
-                foreign_keys: Vec::new(),
-                indexes: Vec::new(),
-                uniques: Vec::new(),
-            }],
-        });
-        route
-    }
-
-    #[test]
-    fn formats_crud_audit_changes_without_exposing_sensitive_values() {
-        let mut route = form_route();
-        route.table = Some(zelyra_ast::TableDef {
-            name: "customers".into(),
-            columns: Vec::new(),
-            indexes: Vec::new(),
-            uniques: Vec::new(),
-            span: zelyra_ast::Span::default(),
-        });
-        route.form.fields.push(zelyra_ast::FormField {
-            name: "password".into(),
-            ty: Some(Type::String),
-            label: None,
-            placeholder: None,
-            required: false,
-            max: None,
-            widget: None,
-            readonly: false,
-            span: zelyra_ast::Span::default(),
-        });
-        let before = HashMap::from([
-            ("name".into(), "Old customer".into()),
-            ("password".into(), "old-secret".into()),
-        ]);
-        let after = HashMap::from([
-            ("name".into(), "New customer".into()),
-            ("password".into(), "new-secret".into()),
-        ]);
-        let path_params = HashMap::from([(String::from("id"), String::from("7"))]);
-        let (record_id, details) =
-            form_audit_details(&route, "crud.update", &path_params, Some(&before), &after);
-        assert_eq!(record_id, Some(7));
-        assert!(details.contains("name:Old customer->New customer"));
-        assert!(details.contains("password=changed"));
-        assert!(!details.contains("old-secret"));
-        assert!(!details.contains("new-secret"));
-    }
-
-    #[test]
-    fn dispatches_literal_and_parameter_routes() {
-        let response = router().dispatch("GET", "/hello/Zelyra");
-        assert_eq!(response.status, 200);
-        assert_eq!(response.body, "<h1>Hello, Zelyra!</h1>");
-    }
-
-    #[test]
-    fn applies_locale_catalog_theme_and_learning_mode_to_template_views() {
-        let route = Route {
-            path: "/".into(),
-            html: "<html data-zelyra-language><head><title data-zelyra-i18n=\"app.document_title\">Fallback</title></head><body><div class=\"zelyra-app\"><h1 data-zelyra-i18n=\"app.home_title\">Fallback</h1></div></body></html>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let german = WebApp::new(vec![route.clone()], Vec::new())
-            .with_ui_settings(UiLanguage::German, UiLevel::Learn);
-        let german_response = german.dispatch(&request);
-        assert!(german_response.body.contains("lang=\"de\""));
-        assert!(german_response
-            .body
-            .contains("Maschinenverwaltung | Zelyra"));
-        assert!(german_response.body.contains("Alle Maschinen im Blick."));
-        assert!(german_response
-            .body
-            .contains("data-zelyra-theme=\"default\""));
-        assert!(
-            german_response.body.contains("Zelyra-Lernhilfe")
-                || german_response.body.contains("Lernhilfe")
-        );
-
-        let english = WebApp::new(vec![route], Vec::new())
-            .with_ui_settings(UiLanguage::English, UiLevel::Work);
-        let english_response = english.dispatch(&request);
-        assert!(english_response.body.contains("lang=\"en\""));
-        assert!(english_response.body.contains("Machine workspace | Zelyra"));
-        assert!(english_response
-            .body
-            .contains("A clear view of every machine."));
-        assert!(!english_response
-            .body
-            .contains("<details class=\"zelyra-learning-assistant\""));
-    }
-
-    #[test]
-    fn project_catalogs_override_markers_escape_html_and_fall_back_to_english() {
-        let action_label = localize_user_text(UiLanguage::German, "@i18n:custom.action");
-        let route = Route {
-            path: "/".into(),
-            html: format!(
-                r#"<main><h1 data-zelyra-i18n="custom.title"></h1><p data-zelyra-i18n="app.home_title"></p><strong>{action_label}</strong></main>"#
-            ),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let request = parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let mut catalogs = ProjectUiCatalogs::default();
-        catalogs
-            .set_json(
-                UiLanguage::English,
-                r#"{"custom.title":"Project title","custom.action":"<script>alert(1)</script>","app.home_title":"Project home"}"#,
-            )
-            .unwrap();
-        catalogs
-            .set_json(UiLanguage::German, r#"{"custom.title":"Projekttitel"}"#)
-            .unwrap();
-
-        let app = WebApp::new(vec![route], Vec::new())
-            .with_ui_settings(UiLanguage::German, UiLevel::Work)
-            .with_project_ui_catalogs(catalogs);
-        let response = app.dispatch(&request);
-        assert!(response.body.contains(">Projekttitel</h1>"));
-        assert!(response.body.contains(">Project home</p>"));
-        assert!(response
-            .body
-            .contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
-        assert!(!response.body.contains("<script>alert(1)</script>"));
-    }
-
-    #[test]
-    fn project_catalogs_override_generated_ui_and_parameterized_labels() {
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("catalog-csrf"),
-        };
-        let mut catalogs = ProjectUiCatalogs::default();
-        catalogs
-            .set_json(
-                UiLanguage::German,
-                r#"{"shell.brand_descriptor":"Eigene Oberfläche","auth.login_title":"Projektanmeldung","auth.email":"E-Mail-Adresse","learning.button":"Projekt-Hilfe öffnen","query.filter_value":"Wert für {field}","identifier.department":"Kostenstelle"}"#,
-            )
-            .unwrap();
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_auth_route(auth)
-            .with_ui_settings(UiLanguage::German, UiLevel::Learn)
-            .with_project_ui_catalogs(catalogs.clone());
-        let request = parse_request("GET /login HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-
-        assert!(response.body.contains("Eigene Oberfläche"));
-        assert!(response.body.contains("<h1>Projektanmeldung</h1>"));
-        assert!(response
-            .body
-            .contains("<label for=\"email\">E-Mail-Adresse</label>"));
-        assert!(response.body.contains("Projekt-Hilfe öffnen"));
-        assert!(!response.body.contains(LOCALE_REFERENCE_START));
-
-        let filter_label = field_text(
-            UiLanguage::German,
-            "query.filter_value",
-            &localized_identifier_reference(UiLanguage::German, "department"),
-        );
-        assert_eq!(
-            resolve_locale_references(&filter_label, UiLanguage::German, &catalogs),
-            "Wert für Kostenstelle"
-        );
-    }
-
-    #[test]
-    fn html_escaped_user_text_cannot_forge_a_locale_reference() {
-        let forged_reference =
-            format!("{LOCALE_REFERENCE_START}shell.brand_descriptor{LOCALE_REFERENCE_END}");
-        let escaped = html_escape(&forged_reference);
-        let resolved =
-            resolve_locale_references(&escaped, UiLanguage::German, &ProjectUiCatalogs::default());
-
-        assert_eq!(resolved, escaped);
-        assert!(!resolved.contains("Zuverlässige Business-Anwendungen"));
-    }
-
-    #[test]
-    fn framework_errors_auth_labels_and_validation_use_the_locale_catalog() {
-        let error = localize_html(
-            "<main><h1>403 Forbidden</h1><p>The Database capability is not granted.</p></main>",
-            UiLanguage::German,
-        );
-        assert!(error.contains("403 Zugriff verweigert"));
-        assert!(error.contains("Die Datenbank-Capability wurde nicht freigegeben."));
-        assert_eq!(
-            framework_text(
-                UiLanguage::German,
-                "Operator `contains` is not supported for filter `active`."
-            ),
-            Some("Der Operator `contains` wird für den Filter `active` nicht unterstützt.".into())
-        );
-
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("csrf-token"),
-        };
-        let login = localize_html(&render_login(&auth, UiLanguage::German), UiLanguage::German);
-        assert!(login.contains("<h1>Anmelden</h1>"));
-        assert!(login.contains("<label for=\"email\">E-Mail</label>"));
-        assert!(!login.contains(">Login<"));
-
-        assert_eq!(
-            localize_html(
-                &localized_validation_message(UiLanguage::German, "value is required"),
-                UiLanguage::German,
-            ),
-            "Ein Wert ist erforderlich."
-        );
-        assert_eq!(
-            localize_html(
-                &localized_validation_message(
-                    UiLanguage::German,
-                    "value exceeds maximum length of 80",
-                ),
-                UiLanguage::German,
-            ),
-            "Der Wert überschreitet die maximale Länge von 80 Zeichen."
-        );
-    }
-
-    #[test]
-    fn generated_form_titles_buttons_and_field_names_use_selected_language() {
-        let mut route = form_route();
-        route.form.fields[0].label = None;
-        let html = render_form_with_language(
-            &route,
-            &HashMap::new(),
-            &[],
-            None,
-            &HashMap::new(),
-            UiLanguage::German,
-        );
-        let html = localize_html(&html, UiLanguage::German);
-        assert!(html.contains("<h1>Kunde anlegen</h1>"));
-        assert!(html.contains("<label for=\"name\">Name</label>"));
-        assert!(html.contains(">Anlegen</button>"));
-    }
-
-    #[test]
-    fn localized_filter_and_identifier_labels_are_readable_german() {
-        assert_eq!(
-            localized_identifier(UiLanguage::German, "machine_number"),
-            "Maschinennummer"
-        );
-        assert_eq!(
-            localized_identifier(UiLanguage::German, "department"),
-            "Abteilung"
-        );
-        assert_eq!(
-            localize_html(
-                &FilterOperator::Contains.label(UiLanguage::German),
-                UiLanguage::German,
-            ),
-            "enthält"
-        );
-        assert_eq!(
-            localize_html(
-                &field_text(UiLanguage::German, "query.filter_value", "Aktiv"),
-                UiLanguage::German,
-            ),
-            "Wert für Aktiv"
-        );
-    }
-
-    #[test]
-    fn dispatches_typed_api_routes_through_a_handler() {
-        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![ApiRoute::new(
-            "GET",
-            "/customers/{id}",
-            |_request, parameters| {
-                Response::json(200, format!("{{\"id\":\"{}\"}}", parameters["id"]))
-            },
-        )]);
-        let request =
-            parse_request("GET /customers/42 HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 200);
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-        assert_eq!(response.body, "{\"id\":\"42\"}");
-        assert_eq!(
-            app.dispatch(&parse_request("POST /customers/42 HTTP/1.1\r\n\r\n").unwrap())
-                .status,
-            405
-        );
-    }
-
-    #[test]
-    fn dispatches_the_matching_method_when_api_routes_share_a_path() {
-        let app = WebApp::new(Vec::new(), Vec::new()).with_apis(vec![
-            ApiRoute::new("GET", "/setup", |_request, _| Response::html(200, "get")),
-            ApiRoute::new("POST", "/setup", |_request, _| Response::html(200, "post")),
-        ]);
-        let get = parse_request("GET /setup HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let post = parse_request("POST /setup HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&get).body, "get");
-        assert_eq!(app.dispatch(&post).body, "post");
-    }
-
-    #[test]
-    fn adds_cors_headers_for_an_allowed_api_origin() {
-        let policy = CorsPolicy::new(vec!["http://localhost:5173".into()], false).unwrap();
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![ApiRoute::new("GET", "/health", |_request, _| {
-                Response::json(200, "{}")
-            })])
-            .with_cors(policy);
-        let request = parse_request(
-            "GET /health HTTP/1.1\r\nHost: localhost:3000\r\nOrigin: http://localhost:5173\r\n\r\n",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 200);
-        assert!(response.headers.contains(&(
-            "Access-Control-Allow-Origin".into(),
-            "http://localhost:5173".into()
-        )));
-        assert!(response.headers.contains(&("Vary".into(), "Origin".into())));
-    }
-
-    #[test]
-    fn answers_cors_preflight_for_an_allowed_api_method() {
-        let policy = CorsPolicy::new(vec!["https://app.example".into()], true).unwrap();
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![ApiRoute::new("POST", "/customers", |_request, _| {
-                Response::json(201, "{}")
-            })])
-            .with_cors(policy);
-        let request = parse_request(
-            "OPTIONS /customers HTTP/1.1\r\nHost: localhost\r\nOrigin: https://app.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, authorization\r\n\r\n",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 204);
-        assert!(response
-            .headers
-            .contains(&("Access-Control-Allow-Methods".into(), "POST".into())));
-        assert!(response.headers.contains(&(
-            "Access-Control-Allow-Headers".into(),
-            "content-type, authorization".into()
-        )));
-        assert!(response
-            .headers
-            .contains(&("Access-Control-Allow-Credentials".into(), "true".into())));
-    }
-
-    #[test]
-    fn rejects_disallowed_cors_preflight_origin() {
-        let policy = CorsPolicy::new(vec!["https://app.example".into()], false).unwrap();
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![ApiRoute::new("GET", "/health", |_request, _| {
-                Response::json(200, "{}")
-            })])
-            .with_cors(policy);
-        let request = parse_request(
-            "OPTIONS /health HTTP/1.1\r\nHost: localhost\r\nOrigin: https://evil.example\r\nAccess-Control-Request-Method: GET\r\n\r\n",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("CorsDenied"));
-    }
-
-    #[test]
-    fn rejects_invalid_cors_origins() {
-        assert!(CorsPolicy::new(vec!["*".into()], false).is_err());
-        assert!(CorsPolicy::new(vec!["https://app.example/path".into()], false).is_err());
-    }
-
-    #[test]
-    fn csrf_requires_a_same_origin_browser_request() {
-        let csrf = CsrfProtection::new("known-form-token");
-        let same_origin = parse_request(
-            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
-        )
-        .unwrap();
-        assert!(verify_csrf_request(
-            &same_origin,
-            &csrf,
-            Some("known-form-token")
-        ));
-
-        let cross_origin = parse_request(
-            "POST /save HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
-        )
-        .unwrap();
-        assert!(!verify_csrf_request(
-            &cross_origin,
-            &csrf,
-            Some("known-form-token")
-        ));
-
-        let forwarded_https = parse_request(
-            "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\n\r\n",
-        )
-        .unwrap();
-        assert!(verify_csrf_request(
-            &forwarded_https,
-            &csrf,
-            Some("known-form-token")
-        ));
-        assert!(secure_cookie_attribute(&forwarded_https).contains("Secure"));
-
-        let missing_origin =
-            parse_request("POST /save HTTP/1.1\r\nHost: example.test\r\n\r\n").unwrap();
-        assert!(!verify_csrf_request(
-            &missing_origin,
-            &csrf,
-            Some("known-form-token")
-        ));
-    }
-
-    #[test]
-    fn csrf_rejects_mismatched_scheme_and_malformed_origins() {
-        let csrf = CsrfProtection::new("known-form-token");
-        for origin in [
-            "http://example.test",
-            "https://example.test.evil.test",
-            "null",
-            "https://user@example.test",
-            "https://example.test/path",
-        ] {
-            let request = parse_request(&format!(
-                "POST /save HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: {origin}\r\n\r\n"
-            ))
-            .unwrap();
-            assert!(
-                !verify_csrf_request(&request, &csrf, Some("known-form-token")),
-                "accepted unexpected origin {origin}"
-            );
-        }
-
-        let referer = parse_request(
-            "POST /save HTTP/1.1\r\nHost: example.test:443\r\nX-Forwarded-Proto: https\r\nReferer: https://EXAMPLE.test/path?x=1\r\n\r\n",
-        )
-        .unwrap();
-        assert!(verify_csrf_request(
-            &referer,
-            &csrf,
-            Some("known-form-token")
-        ));
-    }
-
-    #[test]
-    fn host_allowlist_blocks_dns_rebinding_and_accepts_configured_hosts() {
-        let health = Route {
-            path: "/health".into(),
-            html: "ok".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let app = WebApp::new(vec![health], Vec::new());
-        let rebinding = parse_request(
-            "GET /health HTTP/1.1\r\nHost: attacker.example:3000\r\nOrigin: http://attacker.example:3000\r\n\r\n",
-        )
-        .unwrap();
-        let response = app.dispatch(&rebinding);
-        assert_eq!(response.status, 400);
-        assert!(response.body.contains("This request host is not allowed."));
-
-        let german_app = WebApp::new(
-            vec![Route {
-                path: "/health".into(),
-                html: "ok".into(),
-                query: Vec::new(),
-                page_size: None,
-                sort_columns: Vec::new(),
-                search_columns: Vec::new(),
-                filters: Vec::new(),
-                data: Vec::new(),
-                requires_auth: false,
-                permissions: Vec::new(),
-            }],
-            Vec::new(),
-        )
-        .with_ui_settings(UiLanguage::German, UiLevel::Work);
-        let german_response = german_app.dispatch(&rebinding);
-        assert_eq!(german_response.status, 400);
-        assert!(german_response
-            .body
-            .contains("Der Hostname dieser Anfrage ist nicht freigegeben."));
-
-        let configured = app
-            .with_allowed_hosts(vec!["APP.Example".to_owned()])
-            .unwrap();
-        let request = parse_request(
-            "GET /health HTTP/1.1\r\nHost: app.example:8080\r\nOrigin: http://app.example:8080\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(configured.dispatch(&request).status, 200);
-    }
-
-    #[test]
-    fn host_allowlist_normalizes_equivalent_ipv6_literals() {
-        let app = WebApp::new(Vec::new(), Vec::new());
-        let request = parse_request("GET / HTTP/1.1\r\nHost: [0:0:0:0:0:0:0:1]\r\n\r\n").unwrap();
-
-        assert_eq!(app.dispatch(&request).status, 404);
-    }
-
-    #[test]
-    fn host_allowlist_rejects_missing_host_for_browser_requests_and_invalid_config() {
-        let health = Route {
-            path: "/health".into(),
-            html: "ok".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let app = WebApp::new(vec![health], Vec::new());
-        let missing_host =
-            parse_request("GET /health HTTP/1.1\r\nOrigin: http://localhost\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&missing_host).status, 400);
-
-        assert!(app
-            .clone()
-            .with_allowed_hosts(Vec::<String>::new())
-            .is_err());
-        assert!(app
-            .clone()
-            .with_allowed_hosts(vec!["https://app.example".to_owned()])
-            .is_err());
-        assert!(app
-            .clone()
-            .with_allowed_hosts(vec!["app.example:8080".to_owned()])
-            .is_err());
-        assert!(app
-            .with_allowed_hosts(vec!["bad..example".to_owned()])
-            .is_err());
-    }
-
-    #[test]
-    fn secure_session_cookie_is_set_when_tls_terminates_at_a_proxy() {
-        let request = parse_request(
-            "POST /login HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(secure_cookie_attribute(&request), "; Secure");
-
-        let local_request =
-            parse_request("POST /login HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n").unwrap();
-        assert_eq!(secure_cookie_attribute(&local_request), "");
-    }
-
-    #[test]
-    fn logout_clears_session_cookie_with_the_matching_secure_attribute() {
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("csrf-token"),
-        };
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_auth_route(auth)
-            .with_allowed_hosts(vec!["example.test".into()])
-            .unwrap();
-        let request = parse_request(
-            "POST /logout HTTP/1.1\r\nHost: example.test\r\nX-Forwarded-Proto: https\r\nOrigin: https://example.test\r\nCookie: zelyra_session=old-token\r\n\r\n_zelyra_csrf=csrf-token",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 303);
-        let cookie = response
-            .headers
-            .iter()
-            .find(|(name, _)| name == "Set-Cookie")
-            .map(|(_, value)| value.as_str())
-            .unwrap();
-        assert!(cookie.contains("Max-Age=0"));
-        assert!(cookie.contains("; Secure"));
-    }
-
-    #[test]
-    fn escapes_route_parameters() {
-        let response = router().dispatch("GET", "/hello/<script>");
-        assert_eq!(response.body, "<h1>Hello, &lt;script&gt;!</h1>");
-    }
-
-    #[test]
-    fn escapes_loaded_page_data_fields() {
-        let params = HashMap::new();
-        let data = HashMap::from([("customer.name".into(), "<script>".into())]);
-        assert_eq!(
-            render_template(
-                "<h1>{customer.name}</h1>",
-                &params,
-                &LoadedRouteData {
-                    values: data,
-                    collections: HashMap::new(),
-                },
-            ),
-            "<h1>&lt;script&gt;</h1>"
-        );
-    }
-
-    #[test]
-    fn validates_typed_page_query_values() {
-        assert!(matches!(
-            page_query_value(&Type::Option(Box::new(Type::UInt)), "25"),
-            Ok(QueryValue::UInt(25))
-        ));
-        assert!(matches!(
-            page_query_value(&Type::Bool, "true"),
-            Ok(QueryValue::Bool(true))
-        ));
-        assert!(page_query_value(&Type::Int, "not-a-number").is_err());
-        assert!(page_query_value(&Type::Bool, "yes").is_err());
-    }
-
-    #[test]
-    fn validates_page_pagination_state_and_wraps_sql_safely() {
-        assert_eq!(page_number(&HashMap::new()), Ok(1));
-        assert_eq!(
-            page_number(&HashMap::from([("page".into(), "3".into())])),
-            Ok(3)
-        );
-        assert!(page_number(&HashMap::from([("page".into(), "0".into())])).is_err());
-        assert!(page_number(&HashMap::from([("page".into(), "nope".into())])).is_err());
-        let (query, parameters) = page_collection_query(
-            " SELECT id FROM customers; ",
-            PageCollectionQueryOptions {
-                search: None,
-                search_columns: &[],
-                filters: &[],
-                sort: None,
-                order: "ASC",
-                page_size: Some(25),
-                page: 1,
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            query,
-            "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page LIMIT :zelyra_page_limit OFFSET :zelyra_page_offset"
-        );
-        assert_eq!(parameters.len(), 2);
-        let (sorted_query, _) = page_collection_query(
-            "SELECT id FROM customers",
-            PageCollectionQueryOptions {
-                search: None,
-                search_columns: &[],
-                filters: &[],
-                sort: Some("name"),
-                order: "DESC",
-                page_size: None,
-                page: 1,
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            sorted_query,
-            "SELECT zelyra_page.* FROM (SELECT id FROM customers) AS zelyra_page ORDER BY zelyra_page.`name` DESC"
-        );
-        let (searched_query, search_parameters) = page_collection_query(
-            "SELECT id, name, email FROM customers",
-            PageCollectionQueryOptions {
-                search: Some("Ada"),
-                search_columns: &["name".into(), "email".into()],
-                filters: &[],
-                sort: Some("name"),
-                order: "ASC",
-                page_size: Some(25),
-                page: 1,
-            },
-        )
-        .unwrap();
-        assert!(searched_query.contains(
-            "WHERE (CAST(zelyra_page.`name` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%') OR CAST(zelyra_page.`email` AS CHAR) LIKE CONCAT('%', :zelyra_page_search, '%'))"
-        ));
-        assert!(searched_query.contains("ORDER BY zelyra_page.`name` ASC"));
-        assert_eq!(search_parameters.len(), 3);
-        let route = Route {
-            path: "/customers".into(),
-            html: String::new(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: vec!["name".into(), "created_at".into()],
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        assert_eq!(
-            page_sort_state(
-                &route,
-                &HashMap::from([
-                    ("sort".into(), "name".into()),
-                    ("order".into(), "desc".into())
-                ])
-            ),
-            Ok((Some("name".into()), "DESC"))
-        );
-        assert!(page_sort_state(&route, &HashMap::from([("sort".into(), "id".into())])).is_err());
-        assert!(page_sort_state(
-            &route,
-            &HashMap::from([("order".into(), "sideways".into())])
-        )
-        .is_err());
-        let mut searchable_route = route.clone();
-        searchable_route.search_columns = vec!["name".into(), "email".into()];
-        assert_eq!(
-            page_search_state(
-                &searchable_route,
-                &HashMap::from([("search".into(), "Ada".into())])
-            ),
-            Ok(Some("Ada".into()))
-        );
-        assert!(
-            page_search_state(&route, &HashMap::from([("search".into(), "Ada".into())])).is_err()
-        );
-        let mut filter_route = route;
-        filter_route.filters = vec![
-            TableViewFilter {
-                name: "name".into(),
-                kind: TableViewFilterKind::Text,
-            },
-            TableViewFilter {
-                name: "quantity".into(),
-                kind: TableViewFilterKind::Numeric,
-            },
-        ];
-        let filter_values = HashMap::from([
-            ("filter_name".into(), "Ada".into()),
-            ("filter_name__operator".into(), "contains".into()),
-            ("filter_quantity".into(), "10".into()),
-            ("filter_quantity__operator".into(), "gte".into()),
-        ]);
-        let page_filters = page_filter_state(&filter_route, &filter_values).unwrap();
-        assert_eq!(page_filters.len(), 2);
-        let (filtered_query, filter_parameters) = page_collection_query(
-            "SELECT id, name, quantity FROM customers",
-            PageCollectionQueryOptions {
-                search: None,
-                search_columns: &[],
-                filters: &page_filters,
-                sort: None,
-                order: "ASC",
-                page_size: None,
-                page: 1,
-            },
-        )
-        .unwrap();
-        assert!(filtered_query.contains(
-            "WHERE zelyra_page.`name` LIKE CONCAT('%', :zelyra_page_filter_name, '%') AND zelyra_page.`quantity` >= :zelyra_page_filter_quantity"
-        ));
-        assert_eq!(filter_parameters.len(), 2);
-        assert!(page_filter_state(
-            &filter_route,
-            &HashMap::from([("filter_name__operator".into(), "gte".into())])
-        )
-        .is_err());
-        assert!(page_filter_state(
-            &filter_route,
-            &HashMap::from([("filter_missing".into(), "value".into())])
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn renders_each_loaded_page_collection_row_with_escaping() {
-        let params = HashMap::new();
-        let data = LoadedRouteData {
-            values: HashMap::new(),
-            collections: HashMap::from([(
-                "customers".into(),
-                vec![
-                    HashMap::from([("name".into(), "Ada".into())]),
-                    HashMap::from([("name".into(), "<Grace>".into())]),
-                ],
-            )]),
-        };
-        assert_eq!(
-            render_template(
-                "<ul>\nfor customer in customers {<li>{customer.name}</li>}\n</ul>",
-                &params,
-                &data,
-            ),
-            "<ul>\n<li>Ada</li><li>&lt;Grace&gt;</li>\n</ul>"
-        );
-    }
-
-    #[test]
-    fn renders_page_query_controls_and_preserves_state() {
-        let route = Route {
-            path: "/customers".into(),
-            html: "<html><body><h1>Customers</h1><p>{total}/{pages}</p></body></html>".into(),
-            query: Vec::new(),
-            page_size: Some(2),
-            sort_columns: vec!["name".into()],
-            search_columns: vec!["name".into()],
-            filters: vec![TableViewFilter {
-                name: "name".into(),
-                kind: TableViewFilterKind::Text,
-            }],
-            data: vec![RouteData {
-                name: "customers".into(),
-                query: "SELECT id, name FROM customers".into(),
-                fields: vec!["id".into(), "name".into()],
-                collection: true,
-                optional: false,
-            }],
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let query_values = HashMap::from([
-            ("filter_name".into(), "Ada".into()),
-            ("filter_name__operator".into(), "contains".into()),
-            ("order".into(), "desc".into()),
-            ("page".into(), "2".into()),
-            ("search".into(), "A".into()),
-            ("sort".into(), "name".into()),
-        ]);
-        let data = LoadedRouteData {
-            values: HashMap::from([
-                ("page".into(), "2".into()),
-                ("pages".into(), "3".into()),
-                ("total".into(), "5".into()),
-            ]),
-            collections: HashMap::new(),
-        };
-        let html = localize_html(
-            &render_page(&route, "/customers", &HashMap::new(), &query_values, &data),
-            UiLanguage::English,
-        );
-        assert!(html.contains("<body><form method=\"get\">"));
-        assert!(html.contains("name=\"filter_name\" value=\"Ada\""));
-        assert!(html.contains("Page 2 of 3"));
-        assert!(html.contains(
-            "/customers?page=1&amp;filter_name=Ada&amp;filter_name__operator=contains&amp;order=desc&amp;search=A&amp;sort=name"
-        ));
-        assert!(html.contains("<p>5/3</p>"));
-    }
-
-    #[test]
-    fn returns_not_found_and_method_errors() {
-        assert_eq!(router().dispatch("GET", "/missing").status, 404);
-        assert_eq!(router().dispatch("POST", "/hello/Ada").status, 405);
-    }
-
-    #[test]
-    fn parses_request_and_query_string() {
-        let request = parse_request(
-            "GET /hello/Ada?active=true HTTP/1.1\r\nHost: localhost\r\nAccept: text/html\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(request.path, "/hello/Ada");
-        assert_eq!(request.target, "/hello/Ada?active=true");
-        assert_eq!(request.headers["host"], "localhost");
-    }
-
-    #[test]
-    fn rejects_duplicate_security_sensitive_request_headers() {
-        for header in [
-            "Host",
-            "Origin",
-            "Referer",
-            "X-Forwarded-Proto",
-            "Cookie",
-            "Authorization",
-        ] {
-            let raw = format!("GET / HTTP/1.1\r\n{header}: first\r\n{header}: second\r\n\r\n");
-            let error = parse_request(&raw).unwrap_err();
-            assert!(
-                error
-                    .message
-                    .contains("duplicate security-sensitive header"),
-                "did not reject duplicate {header}"
-            );
-        }
-    }
-
-    #[test]
-    fn validates_declared_request_body_length() {
-        assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 2\r\n\r\nok").is_ok());
-        assert!(parse_request("POST /echo HTTP/1.1\r\nContent-Length: 3\r\n\r\nok").is_err());
-        assert!(
-            parse_request("POST /echo HTTP/1.1\r\nContent-Length: not-a-number\r\n\r\nok").is_err()
-        );
-    }
-
-    #[test]
-    fn rejects_request_bodies_over_the_limit() {
-        let raw = format!(
-            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
-            MAX_REQUEST_BODY_BYTES + 1
-        );
-        let error = parse_request(&raw).unwrap_err();
-        assert!(error.message.contains("exceeds"));
-    }
-
-    #[test]
-    fn reads_complete_requests_across_multiple_network_reads() {
-        let body = "x".repeat(12_000);
-        let raw = format!(
-            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n{body}",
-            body.len()
-        );
-        let mut reader = std::io::Cursor::new(raw.into_bytes());
-        let request = parse_request(&read_http_request_from(&mut reader).unwrap()).unwrap();
-        assert_eq!(request.body, body);
-    }
-
-    #[test]
-    fn rejects_oversized_requests_before_reading_the_body() {
-        let raw = format!(
-            "POST /echo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
-            MAX_REQUEST_BODY_BYTES + 1
-        );
-        let mut reader = std::io::Cursor::new(raw.into_bytes());
-        assert!(matches!(
-            read_http_request_from(&mut reader),
-            Err(RequestReadError::PayloadTooLarge)
-        ));
-    }
-
-    #[test]
-    fn rejects_headers_over_the_limit() {
-        let raw = format!(
-            "GET /echo HTTP/1.1\r\nX-Large: {}\r\n\r\n",
-            "x".repeat(MAX_REQUEST_HEADER_BYTES)
-        );
-        let mut reader = std::io::Cursor::new(raw.into_bytes());
-        assert!(matches!(
-            read_http_request_from(&mut reader),
-            Err(RequestReadError::Http(_))
-        ));
-    }
-
-    #[test]
-    fn serializes_http_response() {
-        let wire = Response::html(200, "ok").to_http();
-        assert!(wire.starts_with("HTTP/1.1 200 OK\r\n"));
-        assert!(wire.contains("Content-Length: 2\r\n"));
-        assert!(wire.contains("X-Content-Type-Options: nosniff\r\n"));
-        assert!(wire.contains("X-Frame-Options: DENY\r\n"));
-        assert!(wire.contains("Referrer-Policy: same-origin\r\n"));
-        assert!(wire.ends_with("\r\n\r\nok"));
-    }
-
-    #[test]
-    fn serializes_redirect_response() {
-        let wire = Response::redirect("/customers").to_http();
-        assert!(wire.starts_with("HTTP/1.1 303 See Other\r\n"));
-        assert!(wire.contains("Location: /customers\r\n"));
-    }
-
-    #[test]
-    fn generated_password_hash_is_argon2_and_verifiable() {
-        let encoded = hash_password("correct horse battery staple").unwrap();
-        let parsed = PasswordHash::new(&encoded).unwrap();
-        assert!(Argon2::default()
-            .verify_password(b"correct horse battery staple", &parsed)
-            .is_ok());
-        assert!(Argon2::default()
-            .verify_password(b"wrong", &parsed)
-            .is_err());
-    }
-
-    #[test]
-    fn password_hash_rejects_empty_password() {
-        assert!(hash_password("").is_err());
-    }
-
-    #[test]
-    fn logout_requires_csrf() {
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("csrf-token"),
-        };
-        let app = WebApp::new(Vec::new(), Vec::new()).with_auth_route(auth);
-        let request = parse_request("POST /logout HTTP/1.1\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 403);
-    }
-
-    #[test]
-    fn throttles_after_five_failed_login_attempts() {
-        let app = WebApp::new(Vec::new(), Vec::new());
-        let key = login_throttle_key(" User@Example.test ");
-        assert_eq!(key, "user@example.test");
-        for attempt in 1..=4 {
-            record_login_failure(&app, key.clone());
-            assert!(
-                !login_is_blocked(&app, &key),
-                "blocked on attempt {attempt}"
-            );
-        }
-        record_login_failure(&app, key.clone());
-        assert!(login_is_blocked(&app, &key));
-        clear_login_failures(&app, &key);
-        assert!(!login_is_blocked(&app, &key));
-    }
-
-    #[test]
-    fn rotating_memory_session_invalidates_previous_token() {
-        let old_token = "old-session-token";
-        let app = WebApp::new(Vec::new(), Vec::new());
-        app.sessions.lock().unwrap().insert(
-            old_token.into(),
-            Session {
-                user_id: None,
-                permissions: Vec::new(),
-            },
-        );
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: None,
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("csrf-token"),
-        };
-        let request = parse_request(&format!(
-            "POST /login HTTP/1.1\r\nCookie: zelyra_session={old_token}\r\n\r\n"
-        ))
-        .unwrap();
-        rotate_existing_session(&app, &auth, &request, None).unwrap();
-        assert!(!app.sessions.lock().unwrap().contains_key(old_token));
-    }
-
-    #[test]
-    fn renders_form_with_csrf_and_field_attributes() {
-        let route = form_route();
-        let html = render_form(&route, &HashMap::new(), &[], None);
-        assert!(html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
-        assert!(html.contains("name=\"name\" type=\"text\""));
-        assert!(html.contains(" required"));
-        assert!(html.contains("maxlength=\"20\""));
-
-        let mut cards_route = route.clone();
-        cards_route.form_view.mode = CrudFormViewMode::Cards;
-        cards_route.form_view.title = Some("Customer form".into());
-        cards_route.form_view.submit = Some("Save customer <now>".into());
-        let cards_html = render_form(&cards_route, &HashMap::new(), &[], None);
-        assert!(cards_html.contains(">Customer form</h1>"));
-        assert!(cards_html.contains("zelyra-crud-form-card"));
-        assert!(cards_html.contains("Save customer &lt;now&gt;"));
-        assert!(cards_html.contains("name=\"_zelyra_csrf\" value=\"csrf-token\""));
-
-        let mut post_only_route = route.clone();
-        post_only_route.post_only = true;
-        let get_request = parse_request("GET /forms/action HTTP/1.1\r\n\r\n").unwrap();
-        let response = dispatch_form(&post_only_route, &get_request, &HashMap::new(), None, None);
-        assert_eq!(response.status, 405);
-    }
-
-    #[test]
-    fn renders_relationship_as_escaped_select_options() {
-        let route = relation_form_route();
-        let options = HashMap::from([(
-            "department".into(),
-            vec![SelectOption {
-                value: "7".into(),
-                label: "R&D <East>".into(),
-            }],
-        )]);
-        let html = render_form_with_options(
-            &route,
-            &HashMap::from([(String::from("department"), String::from("7"))]),
-            &[],
-            None,
-            &options,
-        );
-        assert!(html.contains("<select id=\"department\" name=\"department\" required>"));
-        assert!(html.contains("value=\"7\" selected>R&amp;D &lt;East&gt;</option>"));
-        assert!(!html.contains("<input id=\"department\""));
-    }
-
-    #[test]
-    fn rejects_unknown_relationship_value() {
-        let route = relation_form_route();
-        let options = HashMap::from([(
-            "department".into(),
-            vec![SelectOption {
-                value: "7".into(),
-                label: "R&D".into(),
-            }],
-        )]);
-        let values = HashMap::from([(String::from("department"), String::from("99"))]);
-        let mut errors = Vec::new();
-        validate_relation_values(&route, &options, &values, &mut errors);
-        assert_eq!(errors[0].field, "department");
-        assert_eq!(errors[0].message, "selected value does not exist");
-    }
-
-    #[test]
-    fn supports_typed_filter_operators() {
-        let text = zelyra_database::Column {
-            name: "name".into(),
-            sql_type: "VARCHAR(100)".into(),
-            nullable: false,
-            primary_key: false,
-            auto: false,
-            unique: false,
-            default: None,
-        };
-        let number = zelyra_database::Column {
-            name: "quantity".into(),
-            sql_type: "BIGINT".into(),
-            nullable: false,
-            primary_key: false,
-            auto: false,
-            unique: false,
-            default: None,
-        };
-        assert_eq!(
-            FilterOperator::parse("contains"),
-            Some(FilterOperator::Contains)
-        );
-        assert!(filter_operator_supported(&text, FilterOperator::Contains));
-        assert!(!filter_operator_supported(
-            &number,
-            FilterOperator::Contains
-        ));
-        assert_eq!(FilterOperator::GreaterThanOrEqual.key(), "gte");
-    }
-
-    #[test]
-    fn builds_safe_filter_conditions_for_text_and_null_checks() {
-        let table = zelyra_database::Table {
-            name: "machines".into(),
-            columns: vec![zelyra_database::Column {
-                name: "name".into(),
-                sql_type: "VARCHAR(100)".into(),
-                nullable: true,
-                primary_key: false,
-                auto: false,
-                unique: false,
-                default: None,
-            }],
-            foreign_keys: Vec::new(),
-            indexes: Vec::new(),
-            uniques: Vec::new(),
-        };
-        assert_eq!(
-            filter_condition(&table, "name", FilterOperator::Contains),
-            "`base`.`name` LIKE CONCAT('%', :filter_name, '%')"
-        );
-        assert_eq!(
-            filter_condition(&table, "name", FilterOperator::IsNull),
-            "`base`.`name` IS NULL"
-        );
-    }
-
-    #[test]
-    fn renders_tableview_with_escaped_values_and_pagination_state() {
-        let tableview = TableViewRoute {
-            path: "/views/customers".into(),
-            title: "Customers".into(),
-            source: "SELECT id, name FROM customers".into(),
-            columns: vec!["id".into(), "name".into()],
-            filters: Vec::new(),
-            searchable: true,
-            sortable: true,
-            page_size: Some(1),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let query_values = HashMap::from([
-            ("search".into(), "CNC machine".into()),
-            ("sort".into(), "name".into()),
-            ("order".into(), "desc".into()),
-        ]);
-        let html = render_tableview(
-            &tableview,
-            &[vec!["1".into(), "<unsafe>".into()]],
-            TableViewRenderState {
-                query_values: &query_values,
-                search: "CNC machine",
-                sort: "name",
-                order: "DESC",
-                page: 2,
-                per_page: 1,
-            },
-            UiLanguage::English,
-        );
-        let html = localize_html(&html, UiLanguage::English);
-        assert!(html.contains("&lt;unsafe&gt;"));
-        assert!(html.contains("value=\"CNC machine\""));
-        assert!(html.contains("page=1&amp;sort=name&amp;order=desc&amp;search=CNC%20machine"));
-        assert!(html.contains("name=\"sort\""));
-    }
-
-    #[test]
-    fn renders_typed_tableview_filters_and_preserves_state() {
-        let tableview = TableViewRoute {
-            path: "/views/customers".into(),
-            title: "Customers".into(),
-            source: "SELECT id, orders FROM customer_overview".into(),
-            columns: vec!["id".into(), "orders".into()],
-            filters: vec![TableViewFilter {
-                name: "orders".into(),
-                kind: TableViewFilterKind::Numeric,
-            }],
-            searchable: false,
-            sortable: true,
-            page_size: Some(25),
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let query_values = HashMap::from([
-            ("filter_orders".into(), "3".into()),
-            ("filter_orders__operator".into(), "gte".into()),
-        ]);
-        let html = render_tableview(
-            &tableview,
-            &[vec!["1".into(), "3".into()]],
-            TableViewRenderState {
-                query_values: &query_values,
-                search: "",
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 25,
-            },
-            UiLanguage::English,
-        );
-        let html = localize_html(&html, UiLanguage::English);
-        assert!(html.contains(
-            "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
-        ));
-        assert!(html.contains("name=\"filter_orders__operator\""));
-        assert!(html.contains("for=\"filter_orders__operator\">Filter Orders operator</label>"));
-        assert!(html.contains("for=\"filter_orders\">Filter Orders value</label>"));
-        assert!(html.contains("<option value=\"gte\" selected>at least</option>"));
-        assert!(html.contains("name=\"filter_orders\" value=\"3\""));
-        assert_eq!(
-            tableview_filter_condition("orders", FilterOperator::GreaterThanOrEqual),
-            "`zelyra_view`.`orders` >= :filter_orders"
-        );
-        assert!(tableview_filter_operator_supported(
-            TableViewFilterKind::Numeric,
-            FilterOperator::GreaterThanOrEqual
-        ));
-        assert!(!tableview_filter_operator_supported(
-            TableViewFilterKind::Numeric,
-            FilterOperator::Contains
-        ));
-        let unordered_query_values = HashMap::from([
-            ("filter_z".into(), "2".into()),
-            ("filter_a".into(), "1".into()),
-        ]);
-        assert_eq!(
-            tableview_page_url(&tableview, &unordered_query_values, "", "id", "ASC", 1,),
-            "/views/customers?page=1&sort=id&order=asc&filter_a=1&filter_z=2"
-        );
-    }
-
-    #[test]
-    fn renders_crud_list_with_escaped_rows_and_pagination() {
-        let route = CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: zelyra_database::Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        };
-        let _table = zelyra_database::Table {
-            name: "machines".into(),
-            columns: vec![
-                zelyra_database::Column {
-                    name: "id".into(),
-                    sql_type: "BIGINT".into(),
-                    nullable: false,
-                    primary_key: true,
-                    auto: true,
-                    unique: false,
-                    default: None,
-                },
-                zelyra_database::Column {
-                    name: "name".into(),
-                    sql_type: "VARCHAR(100)".into(),
-                    nullable: false,
-                    primary_key: false,
-                    auto: false,
-                    unique: false,
-                    default: None,
-                },
-            ],
-            foreign_keys: Vec::new(),
-            indexes: Vec::new(),
-            uniques: Vec::new(),
-        };
-        let columns = ["id", "name"];
-        let rows = [vec!["1".into(), "<unsafe>".into()]];
-        let query_values = HashMap::new();
-        let html = render_crud_list(
-            &route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &columns,
-                filter_columns: &["name"],
-                sort_columns: &columns,
-                rows: &rows,
-                search: "CNC machine",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 2,
-                per_page: 1,
-                archived: false,
-                success: Some("Saved <unsafe>"),
-                success_title: Some("Completed"),
-            },
-        );
-        let html = localize_html(&html, UiLanguage::English);
-        assert!(html.contains("&lt;unsafe&gt;"));
-        assert!(html.contains(
-            "<fieldset class=\"zelyra-query-controls\"><legend>Search and filters</legend>"
-        ));
-        assert!(html.contains("for=\"filter_name__operator\">Filter Name operator</label>"));
-        assert!(html.contains("for=\"filter_name\">Filter Name value</label>"));
-        assert!(html.contains(
-            "class=\"zelyra-success\" role=\"status\"><h2>Completed</h2><p>Saved &lt;unsafe&gt;</p>"
-        ));
-        assert!(html.contains("value=\"CNC machine\""));
-        assert!(html
-            .contains("page=1&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
-        assert!(html
-            .contains("page=3&amp;per_page=1&amp;sort=id&amp;order=asc&amp;search=CNC%20machine"));
-
-        let name_column = ["name"];
-        let name_only_html = render_crud_list(
-            &route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &name_column,
-                filter_columns: &[],
-                sort_columns: &columns,
-                rows: &rows,
-                search: "",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-        );
-        assert!(name_only_html.contains("<td><a href=\"/machines/1\">&lt;unsafe&gt;</a></td>"));
-
-        let restricted_html = render_crud_list_with_actions(
-            &route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &columns,
-                filter_columns: &["name"],
-                sort_columns: &columns,
-                rows: &rows,
-                search: "",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-            CrudUiActions {
-                create: false,
-                edit: false,
-                delete: false,
-                restore: false,
-                custom: Vec::new(),
-            },
-            UiLanguage::English,
-        );
-        assert!(!restricted_html.contains("href=\"/machines/new\""));
-
-        let mut cards_route = route.clone();
-        cards_route.list_view.mode = CrudListViewMode::Cards;
-        cards_route.list_view.empty = Some("Nothing <yet>.".into());
-        cards_route.loading_view.message = Some("Loading machines...".into());
-        let cards_html = render_crud_list(
-            &cards_route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &columns,
-                filter_columns: &[],
-                sort_columns: &columns,
-                rows: &rows,
-                search: "",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-        );
-        assert!(cards_html.contains("zelyra-crud-cards"));
-        assert!(cards_html.contains("zelyra-crud-card"));
-        assert!(cards_html.contains("data-loading-message=\"Loading machines...\""));
-        assert!(!cards_html.contains("<table>"));
-
-        let cards_name_only_html = render_crud_list(
-            &cards_route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &name_column,
-                filter_columns: &[],
-                sort_columns: &columns,
-                rows: &rows,
-                search: "",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-        );
-        assert!(
-            cards_name_only_html.contains("<dd><a href=\"/machines/1\">&lt;unsafe&gt;</a></dd>")
-        );
-
-        let empty_rows: Vec<Vec<String>> = Vec::new();
-        let empty_html = render_crud_list(
-            &cards_route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &columns,
-                filter_columns: &[],
-                sort_columns: &columns,
-                rows: &empty_rows,
-                search: "",
-                query_values: &query_values,
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-        );
-        assert!(empty_html.contains("Nothing &lt;yet&gt;."));
-
-        let mut error_route = route.clone();
-        error_route.error_view.title = Some("Customer error".into());
-        error_route.error_view.message = Some("Try <again>.".into());
-        error_route.loading_view.message = Some("Loading customers".into());
-        let error_response =
-            crud_error_response(&error_route, 500, "Internal Server Error", "Fallback");
-        assert_eq!(error_response.status, 500);
-        assert!(error_response.body.contains(">Customer error</h1>"));
-        assert!(error_response.body.contains("Try &lt;again&gt;."));
-        assert!(error_response
-            .body
-            .contains("data-loading-message=\"Loading customers\""));
-    }
-
-    #[test]
-    fn renders_relationship_labels_in_crud_views() {
-        let schema = Schema {
-            database: None,
-            tables: vec![
-                zelyra_database::Table {
-                    name: "departments".into(),
-                    columns: vec![zelyra_database::Column {
-                        name: "name".into(),
-                        sql_type: "VARCHAR(100)".into(),
-                        nullable: false,
-                        primary_key: false,
-                        auto: false,
-                        unique: false,
-                        default: None,
-                    }],
-                    foreign_keys: Vec::new(),
-                    indexes: Vec::new(),
-                    uniques: Vec::new(),
-                },
-                zelyra_database::Table {
-                    name: "machines".into(),
-                    columns: vec![
-                        zelyra_database::Column {
-                            name: "id".into(),
-                            sql_type: "BIGINT".into(),
-                            nullable: false,
-                            primary_key: true,
-                            auto: true,
-                            unique: false,
-                            default: None,
-                        },
-                        zelyra_database::Column {
-                            name: "department_id".into(),
-                            sql_type: "BIGINT".into(),
-                            nullable: false,
-                            primary_key: false,
-                            auto: false,
-                            unique: false,
-                            default: None,
-                        },
-                    ],
-                    foreign_keys: vec![zelyra_database::ForeignKey {
-                        name: None,
-                        column: "department_id".into(),
-                        referenced_table: "departments".into(),
-                        referenced_column: "id".into(),
-                    }],
-                    indexes: Vec::new(),
-                    uniques: Vec::new(),
-                },
-            ],
-        };
-        let route = CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema,
-        };
-        let columns = ["id", "department_id"];
-        let rows = [vec!["1".into(), "Production".into()]];
-        let html = render_crud_list(
-            &route,
-            CrudListView {
-                query_columns: &columns,
-                display_columns: &columns,
-                filter_columns: &columns,
-                sort_columns: &columns,
-                rows: &rows,
-                search: "",
-                query_values: &HashMap::new(),
-                sort: "id",
-                order: "ASC",
-                page: 1,
-                per_page: 50,
-                archived: false,
-                success: None,
-                success_title: None,
-            },
-        );
-        let html = localize_html(&html, UiLanguage::English);
-        assert!(html.contains("<th>Department</th>"));
-        assert!(html.contains("<td>Production</td>"));
-        assert!(html.contains("Filter Department"));
-    }
-
-    #[test]
-    fn crud_requires_database_url() {
-        let app = WebApp::new(Vec::new(), Vec::new()).with_cruds(vec![CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: zelyra_database::Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        }]);
-        let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 503);
-    }
-
-    #[test]
-    fn database_capability_denies_crud_before_connecting() {
-        let app = WebApp::with_database_url(
-            Vec::new(),
-            Vec::new(),
-            Some("mariadb://root:invalid@127.0.0.1:1/test".into()),
-        )
-        .with_database_capability(false)
-        .with_cruds(vec![CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: zelyra_database::Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        }]);
-        let request = parse_request("GET /machines HTTP/1.1\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("Database capability is not granted"));
-    }
-
-    #[test]
-    fn database_capability_denies_forms_before_database_access() {
-        let app = WebApp::new(Vec::new(), vec![form_route()]).with_database_capability(false);
-        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("Database capability is not granted"));
-    }
-
-    #[test]
-    fn database_capability_denies_page_data_before_database_access() {
-        let route = Route {
-            path: "/customers/{name}".into(),
-            html: "<h1>{customer.name}</h1>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: vec![RouteData {
-                name: "customer".into(),
-                query: "SELECT name FROM customers WHERE name = :name".into(),
-                fields: vec!["name".into()],
-                collection: false,
-                optional: false,
-            }],
-            requires_auth: false,
-            permissions: Vec::new(),
-        };
-        let app = WebApp::new(vec![route], Vec::new()).with_database_capability(false);
-        let request = parse_request("GET /customers/Ada HTTP/1.1\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("Database capability is not granted"));
-    }
-
-    #[test]
-    fn database_capability_denies_persistent_login() {
-        let auth = AuthRoute {
-            table: "users".into(),
-            session_table: Some("sessions".into()),
-            permissions_table: None,
-            roles_table: None,
-            role_permissions_table: None,
-            audit_table: None,
-            audit_chain: false,
-            admin_path: None,
-            admin_permission: None,
-            admin_role: None,
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-            csrf: CsrfProtection::new("csrf-token"),
-        };
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_database_capability(false)
-            .with_auth_route(auth);
-        let request = parse_request("POST /login HTTP/1.1\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("Database capability is not granted"));
-    }
-
-    #[test]
-    fn protects_routes_with_authentication_and_permissions() {
-        let route = Route {
-            path: "/admin".into(),
-            html: "<h1>Admin</h1>".into(),
-            query: Vec::new(),
-            page_size: None,
-            sort_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filters: Vec::new(),
-            data: Vec::new(),
-            requires_auth: true,
-            permissions: vec!["admin.view".into()],
-        };
-        let app = WebApp::new(vec![route], Vec::new())
-            .with_auth(Some("test-token".into()), vec!["admin.view".into()]);
-        let request = parse_request("GET /admin HTTP/1.1\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 401);
-        let request =
-            parse_request("GET /admin HTTP/1.1\r\nAuthorization: Bearer wrong\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 401);
-        let request =
-            parse_request("GET /admin HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n")
-                .unwrap();
-        assert_eq!(app.dispatch(&request).status, 200);
-        let app = WebApp::new(
-            vec![Route {
-                path: "/admin".into(),
-                html: "<h1>Admin</h1>".into(),
-                query: Vec::new(),
-                page_size: None,
-                sort_columns: Vec::new(),
-                search_columns: Vec::new(),
-                filters: Vec::new(),
-                data: Vec::new(),
-                requires_auth: true,
-                permissions: vec!["admin.delete".into()],
-            }],
-            Vec::new(),
-        )
-        .with_auth(Some("test-token".into()), vec!["admin.view".into()]);
-        assert_eq!(app.dispatch(&request).status, 403);
-    }
-
-    #[test]
-    fn protects_generated_crud_forms_with_action_permissions() {
-        let mut form = form_route();
-        form.requires_auth = true;
-        form.permissions = vec!["customers.create".into()];
-        let app = WebApp::new(Vec::new(), vec![form])
-            .with_auth(Some("test-token".into()), vec!["customers.create".into()]);
-
-        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 401);
-        let request = parse_request(
-            "GET /forms/CustomerCreate HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&request).status, 200);
-
-        let mut form = form_route();
-        form.requires_auth = true;
-        form.permissions = vec!["customers.edit".into()];
-        let app = WebApp::new(Vec::new(), vec![form])
-            .with_auth(Some("test-token".into()), vec!["customers.create".into()]);
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("customers.edit"));
-    }
-
-    #[test]
-    fn protects_crud_delete_with_delete_permission() {
-        let app = WebApp::with_database_url(
-            Vec::new(),
-            Vec::new(),
-            Some("mariadb://root:invalid@127.0.0.1:1/test".into()),
-        )
-        .with_auth(Some("test-token".into()), vec!["customers.view".into()])
-        .with_cruds(vec![CrudRoute {
-            path: "/customers".into(),
-            title: "Customers".into(),
-            table: "customers".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: true,
-            permissions: vec!["customers.view".into()],
-            create_permissions: vec!["customers.create".into()],
-            edit_permissions: vec!["customers.edit".into()],
-            delete_permissions: vec!["customers.delete".into()],
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        }]);
-        let request = parse_request(
-            "POST /customers/1/delete HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("customers.delete"));
-    }
-
-    #[test]
-    fn protects_api_routes_with_json_authentication_errors() {
-        let api = ApiRoute::new("GET", "/customers", |_request, _parameters| {
-            Response::json(200, "[]")
-        })
-        .with_auth(true, vec!["customers.view".into()]);
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_auth(Some("test-token".into()), vec!["customers.view".into()])
-            .with_apis(vec![api]);
-
-        let request = parse_request("GET /customers HTTP/1.1\r\n\r\n").unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 401);
-        assert!(response.body.contains("Unauthorized"));
-        assert_eq!(response.content_type, "application/json; charset=utf-8");
-
-        let request =
-            parse_request("GET /customers HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n")
-                .unwrap();
-        assert_eq!(app.dispatch(&request).status, 200);
-
-        let api = ApiRoute::new("GET", "/customers", |_request, _parameters| {
-            Response::json(200, "[]")
-        })
-        .with_auth(true, vec!["customers.delete".into()]);
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_auth(Some("test-token".into()), vec!["customers.view".into()])
-            .with_apis(vec![api]);
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("customers.delete"));
-    }
-
-    #[test]
-    fn mutating_api_rejects_cross_origin_browser_requests_unless_cors_allows_them() {
-        let route = ApiRoute::new("POST", "/mutate", |_request, _| {
-            Response::json(200, "{\"ok\":true}")
-        });
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![route.clone()])
-            .with_allowed_hosts(vec!["example.test".into()])
-            .unwrap();
-        let cross_origin = parse_request(
-            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&cross_origin).status, 403);
-
-        let same_origin = parse_request(
-            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nOrigin: http://example.test\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&same_origin).status, 200);
-
-        let policy = CorsPolicy::new(vec!["https://attacker.test".into()], true).unwrap();
-        let explicitly_allowed = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![route])
-            .with_cors(policy)
-            .with_allowed_hosts(vec!["example.test".into()])
-            .unwrap();
-        assert_eq!(explicitly_allowed.dispatch(&cross_origin).status, 200);
-
-        let cookie_only = parse_request(
-            "POST /mutate HTTP/1.1\r\nHost: example.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&cookie_only).status, 403);
-
-        let get_route = ApiRoute::new("GET", "/possibly-stateful", |_request, _| {
-            Response::json(200, "{\"ok\":true}")
-        });
-        let app = WebApp::new(Vec::new(), Vec::new())
-            .with_apis(vec![get_route])
-            .with_allowed_hosts(vec!["example.test".into()])
-            .unwrap();
-        let cross_origin_get = parse_request(
-            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nOrigin: https://attacker.test\r\nCookie: zelyra_session=session-token\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&cross_origin_get).status, 403);
-
-        let same_origin_get = parse_request(
-            "GET /possibly-stateful HTTP/1.1\r\nHost: example.test\r\nReferer: http://example.test/customers\r\nCookie: zelyra_session=session-token\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&same_origin_get).status, 200);
-    }
-
-    #[test]
-    fn crud_delete_requires_csrf() {
-        let app = WebApp::with_database_url(
-            Vec::new(),
-            Vec::new(),
-            Some("mariadb://root:invalid@127.0.0.1:3306/test".into()),
-        )
-        .with_cruds(vec![CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: zelyra_database::Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        }]);
-        let request = parse_request(
-            "POST /machines/1/delete HTTP/1.1\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&request).status, 403);
-    }
-
-    #[test]
-    fn renders_crud_delete_confirmation_form() {
-        let route = CrudRoute {
-            path: "/machines".into(),
-            title: "Machines".into(),
-            table: "machines".into(),
-            list_columns: Vec::new(),
-            search_columns: Vec::new(),
-            filter_columns: Vec::new(),
-            list_view: CrudListViewDef::default(),
-            detail_view: CrudDetailViewDef::default(),
-            delete_view: CrudDeleteViewDef::default(),
-            loading_view: CrudLoadingViewDef::default(),
-            error_view: CrudErrorViewDef::default(),
-            layout_html: None,
-            soft_delete: None,
-            actions: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            create_permissions: Vec::new(),
-            edit_permissions: Vec::new(),
-            delete_permissions: Vec::new(),
-            csrf: CsrfProtection::new("crud-csrf"),
-            schema: zelyra_database::Schema {
-                database: None,
-                tables: Vec::new(),
-            },
-        };
-        let html = localize_html(
-            &render_crud_detail(&route, &["id", "name"], &["1".into(), "CNC".into()], "1"),
-            UiLanguage::English,
-        );
-        assert!(html.contains("method=\"post\" action=\"/machines/1/delete\""));
-        assert!(html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
-        assert!(html.contains(">Delete</button>"));
-
-        let restricted_html = render_crud_detail_with_actions(
-            &route,
-            &["id", "name"],
-            &["1".into(), "CNC".into()],
-            "1",
-            CrudUiActions {
-                create: false,
-                edit: false,
-                delete: false,
-                restore: false,
-                custom: Vec::new(),
-            },
-            UiLanguage::English,
-        );
-        assert!(!restricted_html.contains("/machines/1/edit"));
-        assert!(!restricted_html.contains("/machines/new"));
-        assert!(!restricted_html.contains(">Delete</button>"));
-
-        let action_html = render_crud_detail_with_actions(
-            &route,
-            &["id", "name"],
-            &["1".into(), "CNC".into()],
-            "1",
-            CrudUiActions {
-                create: false,
-                edit: false,
-                delete: false,
-                restore: false,
-                custom: vec![CrudUiActionLink {
-                    label: "Deactivate".into(),
-                    icon: Some("pause".into()),
-                    path: "/machines/{id}/deactivate".into(),
-                    csrf: "crud-csrf".into(),
-                    confirm: Some("Deactivate <unsafe> customer?".into()),
-                    confirm_page: None,
-                    fields: vec![
-                        CrudUiActionField {
-                            name: "active".into(),
-                            label: "Active".into(),
-                            input_type: "checkbox".into(),
-                            required: true,
-                            max: None,
-                            relation: false,
-                            options: Vec::new(),
-                        },
-                        CrudUiActionField {
-                            name: "department".into(),
-                            label: "Department".into(),
-                            input_type: "text".into(),
-                            required: true,
-                            max: None,
-                            relation: true,
-                            options: vec![SelectOption {
-                                value: "2".into(),
-                                label: "Production <unsafe>".into(),
-                            }],
-                        },
-                    ],
-                }],
-            },
-            UiLanguage::English,
-        );
-        assert!(action_html.contains("action=\"/machines/1/deactivate\""));
-        assert!(action_html.contains(">Deactivate</button>"));
-        assert!(action_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
-        assert!(action_html.contains("name=\"active\" type=\"checkbox\" value=\"true\""));
-        assert!(action_html
-            .contains("class=\"zelyra-action-icon zelyra-action-icon-pause\" data-icon=\"pause\""));
-        assert!(action_html.contains("<select id=\"department\" name=\"department\" required>"));
-        assert!(action_html.contains("<option value=\"2\">Production &lt;unsafe&gt;</option>"));
-        assert!(action_html.contains(
-            "data-confirm=\"Deactivate &lt;unsafe&gt; customer?\" onsubmit=\"return confirm(this.dataset.confirm)\""
-        ));
-
-        let mut custom_route = route.clone();
-        custom_route.delete_view.title = Some("Delete machine".into());
-        custom_route.delete_view.message = Some("Delete <unsafe>?".into());
-        custom_route.delete_view.submit = Some("Delete now".into());
-        let custom_html = render_crud_detail(
-            &custom_route,
-            &["id", "name"],
-            &["1".into(), "CNC".into()],
-            "1",
-        );
-        assert!(custom_html.contains(">Delete machine</h2>"));
-        assert!(custom_html.contains("Delete &lt;unsafe&gt;?"));
-        assert!(custom_html.contains(">Delete now</button>"));
-        assert!(custom_html.contains("name=\"_zelyra_csrf\" value=\"crud-csrf\""));
-
-        let mut cards_route = route.clone();
-        cards_route.detail_view.mode = CrudDetailViewMode::Cards;
-        cards_route.detail_view.title = Some("Machine overview".into());
-        let cards_html = render_crud_detail(
-            &cards_route,
-            &["id", "name"],
-            &["1".into(), "CNC <unsafe>".into()],
-            "1",
-        );
-        assert!(cards_html.contains(">Machine overview</h1>"));
-        assert!(cards_html.contains("zelyra-crud-detail-card"));
-        assert!(cards_html.contains("CNC &lt;unsafe&gt;"));
-        assert!(cards_html.contains("name=\"_zelyra_csrf\""));
-    }
-
-    #[test]
-    fn renders_action_error_without_database_details() {
-        let action = zelyra_ast::FormAction {
-            name: "save".into(),
-            label: None,
-            icon: None,
-            confirm: None,
-            confirm_page: None,
-            success_page: None,
-            error_page: Some(zelyra_ast::CrudActionNoticeDef {
-                title: Some("Action failed <unsafe>".into()),
-                message: Some("Please try again <later>.".into()),
-            }),
-            fields: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            statements: Vec::new(),
-            success: None,
-            redirect: None,
-            span: zelyra_ast::Span::default(),
-        };
-        let response = action_error_response(
-            &action,
-            500,
-            "Internal Server Error",
-            "database password must not leak",
-        );
-        assert_eq!(response.status, 500);
-        assert!(response.body.contains("Action failed &lt;unsafe&gt;"));
-        assert!(response.body.contains("Please try again &lt;later&gt;."));
-        assert!(!response.body.contains("database password"));
-    }
-
-    #[test]
-    fn form_post_requires_csrf_and_reports_validation_errors() {
-        let app = WebApp::new(Vec::new(), vec![form_route()]);
-        let invalid_csrf = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\nContent-Length: 18\r\n\r\n_zelyra_csrf=wrong",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&invalid_csrf).status, 403);
-
-        let missing_name = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token",
-        )
-        .unwrap();
-        let response = app.dispatch(&missing_name);
-        assert_eq!(response.status, 422);
-        assert!(response.body.contains("value is required"));
-
-        let cross_origin = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: https://attacker.test\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&cross_origin).status, 403);
-    }
-
-    #[test]
-    fn custom_form_layout_cannot_bypass_csrf_validation_or_authorization() {
-        let mut route = form_route();
-        route.layout_html = Some(format!(
-            "<div class=\"custom-form-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"
-        ));
-        let app = WebApp::new(Vec::new(), vec![route.clone()]);
-
-        let invalid_csrf = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=wrong",
-        )
-        .unwrap();
-        let csrf_response = app.dispatch(&invalid_csrf);
-        assert_eq!(csrf_response.status, 403);
-        assert!(csrf_response.body.contains("custom-form-shell"));
-
-        let missing_name = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token",
-        )
-        .unwrap();
-        let validation_response = app.dispatch(&missing_name);
-        assert_eq!(validation_response.status, 422);
-        assert!(validation_response.body.contains("custom-form-shell"));
-        assert!(validation_response.body.contains("value is required"));
-
-        let mut protected_route = route;
-        protected_route.requires_auth = true;
-        protected_route.permissions = vec!["customers.view".into()];
-        let protected_app = WebApp::new(Vec::new(), vec![protected_route]);
-        let get_request =
-            parse_request("GET /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
-        let authorization_response = protected_app.dispatch(&get_request);
-        assert_eq!(authorization_response.status, 401);
-        assert!(!authorization_response.body.contains("custom-form-shell"));
-    }
-
-    #[test]
-    fn custom_crud_layout_preserves_escaping_for_loaded_record_values() {
-        let route = default_shell_crud(Some(format!(
-            "<div class=\"custom-record-shell\">{CRUD_LAYOUT_CONTENT_MARKER}</div>"
-        )));
-        let content = render_crud_detail(
-            &route,
-            &["id", "name"],
-            &["7".into(), "<script>alert(1)</script>".into()],
-            "7",
-        );
-        let response =
-            apply_generated_layout(Response::html(200, content), route.layout_html.as_deref());
-
-        assert_eq!(response.status, 200);
-        assert!(response.body.contains("custom-record-shell"));
-        assert!(response
-            .body
-            .contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
-        assert!(!response.body.contains("<script>alert(1)</script>"));
-    }
-
-    #[test]
-    fn form_post_returns_accepted_after_validating_input() {
-        let app = WebApp::new(Vec::new(), vec![form_route()]);
-        let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
-        )
-        .unwrap();
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 202);
-        assert!(response.body.contains("Input validated"));
-    }
-
-    #[test]
-    fn protects_custom_form_actions_with_action_permissions() {
-        let mut route = form_route();
-        route.form.actions.push(zelyra_ast::FormAction {
-            name: "save".into(),
-            label: None,
-            icon: None,
-            confirm: None,
-            confirm_page: None,
-            success_page: None,
-            error_page: None,
-            fields: Vec::new(),
-            requires_auth: true,
-            permissions: vec!["customers.save".into()],
-            statements: Vec::new(),
-            success: None,
-            redirect: None,
-            span: zelyra_ast::Span::default(),
-        });
-        let app = WebApp::new(Vec::new(), vec![route])
-            .with_auth(Some("test-token".into()), vec!["customers.save".into()]);
-        let request = parse_request("GET /forms/CustomerCreate HTTP/1.1\r\n\r\n").unwrap();
-        assert_eq!(app.dispatch(&request).status, 401);
-        let request = parse_request(
-            "GET /forms/CustomerCreate HTTP/1.1\r\nAuthorization: Bearer test-token\r\n\r\n",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&request).status, 200);
-
-        let mut route = form_route();
-        route.form.actions.push(zelyra_ast::FormAction {
-            name: "save".into(),
-            label: None,
-            icon: None,
-            confirm: None,
-            confirm_page: None,
-            success_page: None,
-            error_page: None,
-            fields: Vec::new(),
-            requires_auth: true,
-            permissions: vec!["customers.save".into()],
-            statements: Vec::new(),
-            success: None,
-            redirect: None,
-            span: zelyra_ast::Span::default(),
-        });
-        let app = WebApp::new(Vec::new(), vec![route])
-            .with_auth(Some("test-token".into()), vec!["customers.view".into()]);
-        let response = app.dispatch(&request);
-        assert_eq!(response.status, 403);
-        assert!(response.body.contains("customers.save"));
-    }
-
-    #[test]
-    fn form_action_requires_database_url() {
-        let mut route = form_route();
-        route.form.actions.push(zelyra_ast::FormAction {
-            name: "save".into(),
-            label: None,
-            icon: None,
-            confirm: None,
-            confirm_page: None,
-            success_page: None,
-            error_page: None,
-            fields: Vec::new(),
-            requires_auth: false,
-            permissions: Vec::new(),
-            statements: vec![zelyra_ast::Stmt::Expr(zelyra_ast::Expr {
-                kind: zelyra_ast::ExprKind::Sql {
-                    result_type: Type::Unit,
-                    query: "INSERT INTO customers (name) VALUES (:name)".into(),
-                },
-                span: zelyra_ast::Span::default(),
-            })],
-            success: Some("Saved".into()),
-            redirect: Some("/customers".into()),
-            span: zelyra_ast::Span::default(),
-        });
-        let app = WebApp::new(Vec::new(), vec![route]);
-        let request = parse_request(
-            "POST /forms/CustomerCreate HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost\r\n\r\n_zelyra_csrf=csrf-token&name=Anna",
-        )
-        .unwrap();
-        assert_eq!(app.dispatch(&request).status, 503);
-    }
-}
+mod fuzz_regressions;
+#[cfg(test)]
+mod tests;

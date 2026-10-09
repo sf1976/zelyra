@@ -10,6 +10,14 @@ on:
       - 'Cargo.lock'
       - '**/Cargo.toml'
       - '**/src/**'
+      - 'scripts/generate_sbom.py'
+      - 'scripts/verify_sbom.py'
+      - 'scripts/check_release_readiness.py'
+      - 'scripts/test_release_readiness.py'
+      - 'docs/release-plans/0.4.0.en.md'
+      - 'docs/release-plans/0.4.0.de.md'
+      - 'docs/release-readiness/0.4.0-human-acceptance.en.md'
+      - 'docs/release-readiness/0.4.0-human-acceptance.de.md'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -67,8 +75,13 @@ jobs:
           fi
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
-          if [[ "${release_tag}" == "v0.3.0" ]]; then
-            python3 scripts/check_release_readiness.py --version "${package_version}"
+          if [[ "${release_tag}" == "v${package_version}" ]]; then
+            if [[ "${package_version}" == "0.4.0" ]]; then
+              python3 scripts/check_release_readiness.py \
+                --version "${package_version}" --candidate-commit "${GITHUB_SHA}"
+            else
+              python3 scripts/check_release_readiness.py --version "${package_version}"
+            fi
           fi
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 
@@ -176,6 +189,23 @@ jobs:
             --tag "${RELEASE_TAG}" \
             --target "${TARGET}" \
             --run-binary
+      - name: Generate and verify Linux SBOM
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          source_date_epoch="$(git log -1 --format=%ct)"
+          cargo metadata --locked --format-version 1 > "${RUNNER_TEMP}/zelyra-cargo-metadata.json"
+          sbom="release-out/zelyra-${RELEASE_TAG}-${TARGET}.spdx.json"
+          python3 scripts/generate_sbom.py \
+            --metadata "${RUNNER_TEMP}/zelyra-cargo-metadata.json" \
+            --binary "target/${TARGET}/release/zelyra" \
+            --output "${sbom}" --tag "${RELEASE_TAG}" --target "${TARGET}" \
+            --source-date-epoch "${source_date_epoch}"
+          python3 scripts/verify_sbom.py --sbom "${sbom}" \
+            --binary "target/${TARGET}/release/zelyra" --tag "${RELEASE_TAG}" --target "${TARGET}"
       - name: Package Windows release
         if: runner.os == 'Windows'
         shell: pwsh
@@ -205,16 +235,63 @@ jobs:
             --tag $env:RELEASE_TAG `
             --target $env:TARGET `
             --run-binary
+      - name: Generate and verify Windows SBOM
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          $sourceDateEpoch = [long](git log -1 --format=%ct)
+          cargo metadata --locked --format-version 1 | Set-Content -Path "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" -Encoding utf8NoBOM
+          $sbom = "release-out/zelyra-$env:RELEASE_TAG-$env:TARGET.spdx.json"
+          python scripts/generate_sbom.py `
+            --metadata "$env:RUNNER_TEMP/zelyra-cargo-metadata.json" `
+            --binary "target/$env:TARGET/release/zelyra.exe" `
+            --output $sbom --tag $env:RELEASE_TAG --target $env:TARGET `
+            --source-date-epoch $sourceDateEpoch
+          python scripts/verify_sbom.py --sbom $sbom `
+            --binary "target/$env:TARGET/release/zelyra.exe" `
+            --tag $env:RELEASE_TAG --target $env:TARGET
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
           name: zelyra-${{ matrix.target }}
           path: release-out/*
 
+  attest:
+    name: Attest ${{ matrix.target }} release artifacts
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            archive: zip
+    steps:
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: zelyra-${{ matrix.target }}
+          path: release-assets
+      - name: Attest release archive and SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: release-assets/zelyra-${{ needs.validate.outputs.release_tag }}-${{ matrix.target }}.${{ matrix.archive }}
+          sbom-path: release-assets/zelyra-${{ needs.validate.outputs.release_tag }}-${{ matrix.target }}.spdx.json
+
   publish:
     name: Publish GitHub release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [validate, build]
+    needs: [validate, build, attest]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -239,7 +316,9 @@ jobs:
 
             Dies ist eine experimentelle Version. Nicht für Produktivsysteme verwenden.
 
-            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/main/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'No independent human onboarding study was conducted for 0.3.0. The project owner explicitly deferred it to 0.4.0; this is not usability evidence. See the [decision record](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.en.md).' || '' }}
 
-            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/main/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.3.0' && 'Für 0.3.0 wurde keine unabhängige menschliche Einsteigerstudie durchgeführt. Der Projektverantwortliche hat sie ausdrücklich auf 0.4.0 vertagt; dies ist kein Nachweis der Nutzerfreundlichkeit. Siehe das [Entscheidungsprotokoll](https://github.com/sf1976/zelyra/blob/v0.3.0/docs/release-readiness/0.3.0-human-gate-decision.de.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'The required independent human acceptance was recorded for the published 0.4.0 candidate. See the [tag-pinned acceptance record](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md).' || '' }}
+            ${{ needs.validate.outputs.release_tag == 'v0.4.0' && 'Die verpflichtende unabhängige menschliche Abnahme wurde für den veröffentlichten 0.4.0-Kandidaten dokumentiert. Siehe das [taggebundene Abnahmeprotokoll](https://github.com/sf1976/zelyra/blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.de.md).' || '' }}
           files: release-assets/*

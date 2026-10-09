@@ -1,0 +1,12 @@
+database main {
+    engine: mariadb
+    database: "schema_migration_history"
+}
+
+table migration_first {
+    id: Id primary auto
+}
+
+table migration_second {
+    id: Id primary auto
+}

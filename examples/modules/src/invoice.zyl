@@ -1,0 +1,35 @@
+import "src/database.zyl" as storage
+import "src/math.zyl" as math
+import "src/money.zyl" as money
+
+table invoice_headers {
+    id: Id primary auto
+    invoice_number: String(40) required unique
+    total_cents: Int required
+    access {
+        read_write: ["src/invoice_admin.zyl"]
+    }
+}
+
+struct InvoiceOverviewRow {
+    id: Id
+    invoice_number: String
+    total_cents: Int
+}
+
+tableview InvoiceOverview {
+    source sql<InvoiceOverviewRow[]> {
+        SELECT id, invoice_number, total_cents
+        FROM invoice_headers
+    }
+    columns { id invoice_number total_cents }
+}
+
+fn add_tax(net: Int, tax: Int) -> Int {
+    return math::sum(net, tax)
+}
+pub fn total(net: Int, tax: Int) -> money::Money {
+    return money::Money {
+        cents: add_tax(net, tax)
+    }
+}

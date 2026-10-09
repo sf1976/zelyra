@@ -1,7 +1,16 @@
+use mysql::prelude::Queryable;
+use mysql::{Conn, OptsBuilder, SslOpts, Value};
+use r2d2::{ManageConnection, Pool};
+use sha2::{Digest, Sha256};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fmt;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
 pub mod sql;
@@ -71,7 +80,7 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
     let mut errors = Vec::new();
     if program.databases.len() > 1 {
         errors.push(SchemaError {
-            message: "only one database definition is supported in Phase 3".into(),
+            message: "only one database definition is supported per project graph; the runtime uses a single project-wide DATABASE_URL connection".into(),
             span: program.databases[1].span,
         });
     }
@@ -87,11 +96,15 @@ pub fn build_schema(program: &Program) -> Result<Schema, Vec<SchemaError>> {
         });
     }
     let backend = backend.and_then(Result::ok).unwrap_or(Backend::MariaDb);
-    let table_names = program
-        .tables
-        .iter()
-        .map(|table| table.name.clone())
-        .collect::<HashSet<_>>();
+    let mut table_names = HashSet::new();
+    for table in &program.tables {
+        if !table_names.insert(table.name.clone()) {
+            errors.push(SchemaError {
+                message: format!("duplicate table definition {}", table.name),
+                span: table.span,
+            });
+        }
+    }
     let mut tables = Vec::new();
     for table in &program.tables {
         let mut column_names = HashSet::new();
@@ -363,6 +376,7 @@ fn resolve_type(ty: &Type, definitions: &[TypeDef]) -> Type {
 }
 
 fn table_for_type(name: &str, table_names: &HashSet<String>) -> Option<String> {
+    let name = name.rsplit("::").next().unwrap_or(name);
     let snake = name.to_ascii_lowercase();
     if table_names.contains(&snake) {
         return Some(snake);
@@ -620,11 +634,28 @@ pub struct RequiredColumnPreflight {
     pub column: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UniqueIndexPreflight {
+    pub table: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForeignKeyPreflight {
+    pub table: String,
+    pub column: String,
+    pub referenced_table: String,
+    pub referenced_column: String,
+    pub referenced_table_exists: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SchemaPlan {
     pub changes: Vec<SchemaChange>,
     pub nullability_preflights: Vec<NullabilityPreflight>,
     pub required_column_preflights: Vec<RequiredColumnPreflight>,
+    pub unique_index_preflights: Vec<UniqueIndexPreflight>,
+    pub foreign_key_preflights: Vec<ForeignKeyPreflight>,
 }
 
 impl SchemaPlan {
@@ -890,6 +921,12 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                         Risk::Safe
                     },
                 });
+                if index.unique {
+                    plan.unique_index_preflights.push(UniqueIndexPreflight {
+                        table: desired_table.name.clone(),
+                        columns: index.columns.clone(),
+                    });
+                }
             }
         }
         for index in &current_indexes {
@@ -925,6 +962,16 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
                 } else {
                     Risk::RequiresApproval
                 };
+                if backend != Backend::Sqlite {
+                    plan.foreign_key_preflights.push(ForeignKeyPreflight {
+                        table: desired_table.name.clone(),
+                        column: foreign_key.column.clone(),
+                        referenced_table: foreign_key.referenced_table.clone(),
+                        referenced_column: foreign_key.referenced_column.clone(),
+                        referenced_table_exists: current_tables
+                            .contains_key(foreign_key.referenced_table.as_str()),
+                    });
+                }
                 plan.changes.push(SchemaChange {
                     description: format!(
                         "add foreign key {}.{}; existing rows must satisfy it",
@@ -996,6 +1043,18 @@ pub fn diff(desired: &Schema, current: &Schema) -> SchemaPlan {
         left.table
             .cmp(&right.table)
             .then_with(|| left.column.cmp(&right.column))
+    });
+    plan.unique_index_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.columns.cmp(&right.columns))
+    });
+    plan.foreign_key_preflights.sort_by(|left, right| {
+        left.table
+            .cmp(&right.table)
+            .then_with(|| left.column.cmp(&right.column))
+            .then_with(|| left.referenced_table.cmp(&right.referenced_table))
+            .then_with(|| left.referenced_column.cmp(&right.referenced_column))
     });
     plan
 }
@@ -1387,6 +1446,262 @@ pub struct DatabaseError {
     pub message: String,
 }
 
+thread_local! {
+    static QUERY_DEADLINE: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// Temporarily bounds database work on the current thread by an absolute
+/// request deadline. Dropping the guard restores the prior deadline.
+pub struct QueryDeadlineGuard {
+    previous: Option<Instant>,
+}
+
+impl Drop for QueryDeadlineGuard {
+    fn drop(&mut self) {
+        QUERY_DEADLINE.with(|deadline| deadline.set(self.previous));
+    }
+}
+
+pub fn set_query_deadline(deadline: Instant) -> QueryDeadlineGuard {
+    let previous = QUERY_DEADLINE.with(|active| {
+        let previous = active.get();
+        active.set(Some(previous.map_or(deadline, |value| value.min(deadline))));
+        previous
+    });
+    QueryDeadlineGuard { previous }
+}
+
+fn remaining_query_budget() -> Result<Option<Duration>, DatabaseError> {
+    QUERY_DEADLINE.with(|deadline| {
+        deadline.get().map_or(Ok(None), |deadline| {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining < Duration::from_millis(1) {
+                Err(DatabaseError {
+                    message: "request deadline exceeded before database operation".into(),
+                })
+            } else {
+                Ok(Some(remaining))
+            }
+        })
+    })
+}
+
+const MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS: u32 = 10;
+const MARIADB_MAX_CONNECT_TIMEOUT_SECS: u32 = 300;
+const MARIADB_DEFAULT_QUERY_TIMEOUT_SECS: u32 = 30;
+const MARIADB_MAX_QUERY_TIMEOUT_SECS: u32 = 3600;
+const MARIADB_DEFAULT_POOL_MAX_SIZE: u32 = 8;
+const MARIADB_MAX_POOL_SIZE: u32 = 64;
+const MARIADB_DEFAULT_POOL_WAIT_TIMEOUT_SECS: u32 = 10;
+const MARIADB_MAX_POOL_WAIT_TIMEOUT_SECS: u32 = 300;
+const MARIADB_MAX_CACHED_POOLS: usize = 8;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MariaDbTimeouts {
+    connect_seconds: u32,
+    query_seconds: u32,
+    pool_max_size: u32,
+    pool_wait_seconds: u32,
+}
+
+impl MariaDbTimeouts {
+    fn from_env() -> Result<Self, DatabaseError> {
+        let connect_value = env::var_os("ZELYRA_DB_CONNECT_TIMEOUT_SECS");
+        let query_value = env::var_os("ZELYRA_DB_QUERY_TIMEOUT_SECS");
+        let pool_size_value = env::var_os("ZELYRA_DB_POOL_MAX_SIZE");
+        let pool_wait_value = env::var_os("ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS");
+        let connect = connect_value.as_deref().and_then(|value| value.to_str());
+        let query = query_value.as_deref().and_then(|value| value.to_str());
+        let pool_size = pool_size_value.as_deref().and_then(|value| value.to_str());
+        let pool_wait = pool_wait_value.as_deref().and_then(|value| value.to_str());
+        if connect_value.is_some() && connect.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
+                    .into(),
+            });
+        }
+        if query_value.is_some() && query.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_QUERY_TIMEOUT_SECS must be a positive integer from 1 to 3600"
+                    .into(),
+            });
+        }
+        if pool_size_value.is_some() && pool_size.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_POOL_MAX_SIZE must be an integer from 1 to 64".into(),
+            });
+        }
+        if pool_wait_value.is_some() && pool_wait.is_none() {
+            return Err(DatabaseError {
+                message: "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS must be an integer from 1 to 300".into(),
+            });
+        }
+        Self::parse(connect, query, pool_size, pool_wait)
+    }
+
+    fn parse(
+        connect: Option<&str>,
+        query: Option<&str>,
+        pool_size: Option<&str>,
+        pool_wait: Option<&str>,
+    ) -> Result<Self, DatabaseError> {
+        Ok(Self {
+            connect_seconds: parse_timeout(
+                "ZELYRA_DB_CONNECT_TIMEOUT_SECS",
+                connect,
+                MARIADB_DEFAULT_CONNECT_TIMEOUT_SECS,
+                MARIADB_MAX_CONNECT_TIMEOUT_SECS,
+            )?,
+            query_seconds: parse_timeout(
+                "ZELYRA_DB_QUERY_TIMEOUT_SECS",
+                query,
+                MARIADB_DEFAULT_QUERY_TIMEOUT_SECS,
+                MARIADB_MAX_QUERY_TIMEOUT_SECS,
+            )?,
+            pool_max_size: parse_timeout(
+                "ZELYRA_DB_POOL_MAX_SIZE",
+                pool_size,
+                MARIADB_DEFAULT_POOL_MAX_SIZE,
+                MARIADB_MAX_POOL_SIZE,
+            )?,
+            pool_wait_seconds: parse_timeout(
+                "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS",
+                pool_wait,
+                MARIADB_DEFAULT_POOL_WAIT_TIMEOUT_SECS,
+                MARIADB_MAX_POOL_WAIT_TIMEOUT_SECS,
+            )?,
+        })
+    }
+
+    fn connect_args(self) -> [String; 2] {
+        [
+            format!("--connect-timeout={}", self.connect_seconds),
+            "--skip-reconnect".into(),
+        ]
+    }
+
+    fn query_args(self) -> [String; 1] {
+        [format!(
+            "--init-command=SET SESSION max_statement_time={}",
+            self.query_seconds
+        )]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MariaDbTlsSettings {
+    mode: MariaDbTlsMode,
+    ca_cert_file: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MariaDbTlsMode {
+    Auto,
+    Disabled,
+    Required,
+}
+
+impl MariaDbTlsSettings {
+    fn from_env() -> Result<Self, DatabaseError> {
+        let mode = match env::var("ZELYRA_DB_TLS_MODE") {
+            Ok(value) => value,
+            Err(env::VarError::NotPresent) => "auto".into(),
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`".into(),
+                })
+            }
+        };
+        let ca_cert_file = env::var_os("ZELYRA_DB_TLS_CA_CERT_FILE")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from);
+        Self::parse(&mode, ca_cert_file)
+    }
+
+    fn parse(mode: &str, ca_cert_file: Option<PathBuf>) -> Result<Self, DatabaseError> {
+        let mode = match mode {
+            "auto" => MariaDbTlsMode::Auto,
+            "disabled" => MariaDbTlsMode::Disabled,
+            "required" => MariaDbTlsMode::Required,
+            _ => {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`".into(),
+                })
+            }
+        };
+        if ca_cert_file.is_some() && mode == MariaDbTlsMode::Disabled {
+            return Err(DatabaseError {
+                message:
+                    "ZELYRA_DB_TLS_CA_CERT_FILE cannot be used when ZELYRA_DB_TLS_MODE=disabled"
+                        .into(),
+            });
+        }
+        if let Some(path) = &ca_cert_file {
+            if !path.is_absolute() || !path.is_file() || path.to_str().is_none() {
+                return Err(DatabaseError {
+                    message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+                });
+            }
+            std::fs::File::open(path).map_err(|_| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+            })?;
+        }
+        Ok(Self { mode, ca_cert_file })
+    }
+
+    fn tls_required_for_host(&self, host: &str) -> bool {
+        match self.mode {
+            MariaDbTlsMode::Disabled => false,
+            MariaDbTlsMode::Required => true,
+            MariaDbTlsMode::Auto => self.ca_cert_file.is_some() || !is_local_database_host(host),
+        }
+    }
+
+    fn ssl_opts_for_host(&self, host: &str) -> Option<SslOpts> {
+        self.tls_required_for_host(host)
+            .then(|| SslOpts::default().with_root_cert_path(self.ca_cert_file.clone()))
+    }
+
+    fn client_args_for_host(&self, host: &str) -> Result<Vec<String>, DatabaseError> {
+        if !self.tls_required_for_host(host) {
+            return Ok(Vec::new());
+        }
+        let mut args = vec!["--ssl".into(), "--ssl-verify-server-cert".into()];
+        if let Some(path) = &self.ca_cert_file {
+            let path = path.to_str().ok_or_else(|| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file".into(),
+            })?;
+            args.push(format!("--ssl-ca={path}"));
+        }
+        Ok(args)
+    }
+}
+
+fn is_local_database_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
+}
+
+fn parse_timeout(
+    name: &str,
+    value: Option<&str>,
+    default: u32,
+    maximum: u32,
+) -> Result<u32, DatabaseError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    match value.parse::<u32>() {
+        Ok(value) if (1..=maximum).contains(&value) => Ok(value),
+        _ => Err(DatabaseError {
+            message: format!("{name} must be a positive integer from 1 to {maximum}"),
+        }),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
     Postgres,
@@ -1467,6 +1782,7 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
                 c.column_default
             FROM information_schema.columns c
             WHERE c.table_schema = 'public'
+                AND c.table_name <> '_zelyra_schema_history'
         )
         SELECT
             table_name,
@@ -1488,12 +1804,12 @@ pub fn inspect_postgres(database_url: &str) -> Result<Schema, DatabaseError> {
     let mut schema = parse_inspection_output(&output)?;
     let index_output = run_psql(
         database_url,
-        "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'u') FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'p') ORDER BY t.relname, i.relname",
+        "SELECT t.relname, i.relname, pg_get_indexdef(i.oid), EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'u') FROM pg_index x JOIN pg_class t ON t.oid = x.indrelid JOIN pg_class i ON i.oid = x.indexrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = 'public' AND t.relname <> '_zelyra_schema_history' AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.oid AND c.contype = 'p') ORDER BY t.relname, i.relname",
     )?;
     parse_index_output(&mut schema, &index_output)?;
     let foreign_keys = run_psql(
         database_url,
-        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' ORDER BY child.relname, constraint_row.conname, child_key.position",
+        "SELECT child.relname, child_column.attname, parent.relname, parent_column.attname, constraint_row.conname FROM pg_constraint constraint_row JOIN pg_class child ON child.oid = constraint_row.conrelid JOIN pg_namespace child_schema ON child_schema.oid = child.relnamespace JOIN pg_class parent ON parent.oid = constraint_row.confrelid JOIN LATERAL unnest(constraint_row.conkey) WITH ORDINALITY AS child_key(attnum, position) ON TRUE JOIN LATERAL unnest(constraint_row.confkey) WITH ORDINALITY AS parent_key(attnum, position) ON parent_key.position = child_key.position JOIN pg_attribute child_column ON child_column.attrelid = child.oid AND child_column.attnum = child_key.attnum JOIN pg_attribute parent_column ON parent_column.attrelid = parent.oid AND parent_column.attnum = parent_key.attnum WHERE constraint_row.contype = 'f' AND child_schema.nspname = 'public' AND child.relname <> '_zelyra_schema_history' ORDER BY child.relname, constraint_row.conname, child_key.position",
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
     Ok(schema)
@@ -1637,7 +1953,16 @@ fn parse_index_output(schema: &mut Schema, output: &str) -> Result<(), DatabaseE
 
 pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     let mut child = Command::new("psql")
-        .args(["-X", "-v", "ON_ERROR_STOP=1", "-d", database_url, "-f", "-"])
+        .args([
+            "-X",
+            "-1",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-d",
+            database_url,
+            "-f",
+            "-",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())
@@ -1668,19 +1993,19 @@ pub fn apply_postgres(database_url: &str, sql: &str) -> Result<(), DatabaseError
 pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
     let output = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA, COALESCE(CHARACTER_MAXIMUM_LENGTH, ''), COALESCE(NUMERIC_PRECISION, ''), COALESCE(NUMERIC_SCALE, ''), CASE WHEN COLUMN_DEFAULT IS NULL THEN 'N' ELSE CONCAT('V', HEX(CAST(COLUMN_DEFAULT AS CHAR CHARACTER SET utf8mb4))) END FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' ORDER BY TABLE_NAME, ORDINAL_POSITION",
         None,
     )?;
     let mut schema = parse_mariadb_columns(&output)?;
     let indexes = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+        "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND INDEX_NAME <> 'PRIMARY' ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
         None,
     )?;
     parse_mariadb_indexes(&mut schema, &indexes)?;
     let foreign_keys = run_mariadb(
         database_url,
-        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
+        "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> '_zelyra_schema_history' AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION",
         None,
     )?;
     parse_foreign_key_output(&mut schema, &foreign_keys)?;
@@ -1689,6 +2014,163 @@ pub fn inspect_mariadb(database_url: &str) -> Result<Schema, DatabaseError> {
 
 pub fn apply_mariadb(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     run_mariadb_sql(database_url, sql, None)
+}
+
+/// Runs an operation while holding a database-scoped MariaDB advisory lock.
+/// The server releases the lock if the process or connection is interrupted.
+pub fn with_mariadb_schema_lock<T>(
+    database_url: &str,
+    operation: impl FnOnce() -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let lock_name = mariadb_schema_lock_name(database_url)?;
+    let acquired: Option<i64> = connection
+        .connection
+        .exec_first("SELECT GET_LOCK(?, 0)", (lock_name.as_str(),))
+        .map_err(mariadb_driver_error)?;
+    if acquired != Some(1) {
+        return Err(DatabaseError {
+            message: "another Zelyra schema migration is active for this database".into(),
+        });
+    }
+    let guard = MariaDbSchemaLockGuard {
+        connection: &mut connection.connection,
+        lock_name,
+    };
+    let result = operation();
+    drop(guard);
+    result
+}
+
+/// Runs a MariaDB transaction while holding a named server-side advisory lock.
+/// The lock and transaction share one connection, so the closure also works
+/// when the configured connection pool contains only one connection.
+pub fn with_mariadb_advisory_transaction<T>(
+    database_url: &str,
+    lock_name: &str,
+    wait_seconds: u32,
+    operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    if lock_name.is_empty() || lock_name.len() > 64 || lock_name.chars().any(char::is_control) {
+        return Err(DatabaseError {
+            message: "MariaDB advisory lock name must contain 1 to 64 non-control bytes".into(),
+        });
+    }
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    let acquired: Option<i64> = connection
+        .connection
+        .exec_first("SELECT GET_LOCK(?, ?)", (lock_name, wait_seconds))
+        .map_err(mariadb_driver_error)?;
+    if acquired != Some(1) {
+        return Err(DatabaseError {
+            message: "timed out waiting for the MariaDB advisory lock".into(),
+        });
+    }
+    let lock_guard = MariaDbSchemaLockGuard {
+        connection: &mut connection.connection,
+        lock_name: lock_name.to_owned(),
+    };
+    if let Err(error) = lock_guard.connection.query_drop("START TRANSACTION") {
+        drop(lock_guard);
+        connection.discard = true;
+        return Err(mariadb_driver_error(error));
+    }
+    let result = {
+        let mut transaction = MariaDbTransaction {
+            connection: lock_guard.connection,
+        };
+        operation(&mut transaction)
+    };
+    let (result, discard_connection) = match result {
+        Ok(value) => match lock_guard.connection.query_drop("COMMIT") {
+            Ok(()) => (Ok(value), false),
+            Err(error) => (Err(mariadb_driver_error(error)), true),
+        },
+        Err(error) => {
+            let _ = lock_guard.connection.query_drop("ROLLBACK");
+            (Err(error), true)
+        }
+    };
+    drop(lock_guard);
+    connection.discard |= discard_connection;
+    result
+}
+
+/// Produces a stable per-database lock name that coordinates connections
+/// through DNS/IP aliases without embedding the database URL or credentials.
+pub fn mariadb_advisory_lock_name(
+    database_url: &str,
+    scope: &str,
+) -> Result<String, DatabaseError> {
+    if scope.is_empty() || scope.chars().any(char::is_control) {
+        return Err(DatabaseError {
+            message:
+                "MariaDB advisory lock scope must be non-empty and contain no control characters"
+                    .into(),
+        });
+    }
+    let connection = parse_mariadb_url(database_url)?;
+    let database = connection.database.to_ascii_lowercase();
+    let mut input = database.into_bytes();
+    input.push(0);
+    input.extend_from_slice(scope.as_bytes());
+    let digest = Sha256::digest(input);
+    let digest = format!("{digest:x}");
+    Ok(format!("zelyra:app:{}", &digest[..52]))
+}
+
+/// Returns whether a Zelyra schema migration currently holds this database's
+/// advisory lock. A journal entry marked `running` without this lock is stale
+/// and can be reported as interrupted.
+pub fn mariadb_schema_migration_lock_is_held(database_url: &str) -> Result<bool, DatabaseError> {
+    let lock_name = mariadb_schema_lock_name(database_url)?;
+    let held = run_mariadb(
+        database_url,
+        &format!("SELECT IS_USED_LOCK('{}') IS NOT NULL", lock_name),
+        None,
+    )?;
+    match held.trim() {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        _ => Err(DatabaseError {
+            message: "MariaDB returned an invalid schema migration lock status".into(),
+        }),
+    }
+}
+
+/// Runs a read-only query through the configured MariaDB client connection.
+pub fn query_mariadb(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_mariadb(database_url, query, None)
+}
+
+struct MariaDbSchemaLockGuard<'a> {
+    connection: &'a mut Conn,
+    lock_name: String,
+}
+
+impl Drop for MariaDbSchemaLockGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self
+            .connection
+            .exec_first::<Option<i64>, _, _>("SELECT RELEASE_LOCK(?)", (self.lock_name.as_str(),));
+    }
+}
+
+fn mariadb_schema_lock_name(database_url: &str) -> Result<String, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    // Named locks are scoped to a MariaDB server, not a database. Key only on
+    // the database name so aliases such as a service DNS name and its IP still
+    // coordinate migrations. Same-name databases on different servers may
+    // contend unnecessarily, but migrations through host aliases cannot race.
+    let database = connection.database.to_ascii_lowercase();
+    let digest = format!("{:x}", Sha256::digest(database.as_bytes()));
+    Ok(format!("zelyra:mig:{}", &digest[..52]))
 }
 
 pub fn count_null_values(
@@ -1710,6 +2192,76 @@ pub fn count_null_values(
     output.trim().parse().map_err(|_| DatabaseError {
         message: "database returned an invalid NULL row count".into(),
     })
+}
+
+pub fn count_duplicate_value_groups(
+    database_url: &str,
+    backend: Backend,
+    table: &str,
+    columns: &[String],
+) -> Result<u64, DatabaseError> {
+    if columns.is_empty() {
+        return Err(DatabaseError {
+            message: "unique-index preflight requires at least one column".into(),
+        });
+    }
+    let query = duplicate_value_groups_sql(table, columns, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => run_sqlite(&sqlite_path(database_url)?, &query)?,
+    };
+    output.trim().parse().map_err(|_| DatabaseError {
+        message: "database returned an invalid duplicate group count".into(),
+    })
+}
+
+pub fn count_foreign_key_orphans(
+    database_url: &str,
+    backend: Backend,
+    preflight: &ForeignKeyPreflight,
+) -> Result<u64, DatabaseError> {
+    let query = foreign_key_orphans_sql(preflight, backend);
+    let output = match backend {
+        Backend::MariaDb => run_mariadb(database_url, &query, None)?,
+        Backend::Postgres => run_psql(database_url, &query)?,
+        Backend::Sqlite => run_sqlite(&sqlite_path(database_url)?, &query)?,
+    };
+    output.trim().parse().map_err(|_| DatabaseError {
+        message: "database returned an invalid foreign-key orphan count".into(),
+    })
+}
+
+fn duplicate_value_groups_sql(table: &str, columns: &[String], backend: Backend) -> String {
+    let table = quote_identifier(table, backend);
+    let columns = columns
+        .iter()
+        .map(|column| quote_identifier(column, backend))
+        .collect::<Vec<_>>();
+    let non_null = columns
+        .iter()
+        .map(|column| format!("{column} IS NOT NULL"))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let grouped_columns = columns.join(", ");
+    format!(
+        "SELECT COUNT(*) FROM (SELECT {grouped_columns} FROM {table} WHERE {non_null} GROUP BY {grouped_columns} HAVING COUNT(*) > 1) AS zelyra_duplicate_groups"
+    )
+}
+
+fn foreign_key_orphans_sql(preflight: &ForeignKeyPreflight, backend: Backend) -> String {
+    let table = quote_identifier(&preflight.table, backend);
+    let child_column = quote_identifier(&preflight.column, backend);
+    if !preflight.referenced_table_exists {
+        return format!(
+            "SELECT COUNT(*) FROM {table} AS zelyra_child WHERE zelyra_child.{child_column} IS NOT NULL"
+        );
+    }
+    let referenced_table = quote_identifier(&preflight.referenced_table, backend);
+    let referenced_column = quote_identifier(&preflight.referenced_column, backend);
+    format!(
+        "SELECT COUNT(*) FROM {table} AS zelyra_child LEFT JOIN {referenced_table} AS zelyra_parent ON zelyra_child.{child_column} = zelyra_parent.{referenced_column} WHERE zelyra_child.{child_column} IS NOT NULL AND zelyra_parent.{referenced_column} IS NULL"
+    )
 }
 
 pub fn table_has_rows(
@@ -1775,51 +2327,258 @@ pub fn execute_mariadb_queries(
     queries: &[Query],
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
-    let _ = parse_mariadb_url(database_url)?;
-    let mut script = String::new();
+    let results = execute_mariadb_queries_in_transaction(database_url, queries, transaction)?;
     if transaction {
-        script.push_str("START TRANSACTION;\n");
+        Ok(Vec::new())
+    } else {
+        Ok(results)
     }
-    for (query_index, query) in queries.iter().enumerate() {
-        let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
-        for (parameter_index, parameter_name) in parameter_order.iter().enumerate() {
-            let value = query
+}
+
+/// Executes a batch and returns each query result, including when the batch is
+/// transactional. Callers should prefer `execute_mariadb_queries` unless they
+/// need to inspect a result before committing a security-sensitive update.
+pub fn execute_mariadb_queries_in_transaction(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    execute_mariadb_queries_on_pool(&pool, settings, queries, transaction)
+}
+
+/// A single connection inside a MariaDB transaction. The value cannot escape
+/// the closure passed to `with_mariadb_transaction`.
+pub struct MariaDbTransaction<'a> {
+    connection: &'a mut Conn,
+}
+
+impl MariaDbTransaction<'_> {
+    pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        let (sql, parameters) = prepare_mariadb_query(query)?;
+        execute_prepared_mariadb_query(self.connection, &sql, parameters)
+    }
+}
+
+/// Runs a decision-making transaction on one MariaDB connection. Returning
+/// `Ok` commits; returning an error rolls back.
+pub fn with_mariadb_transaction<T>(
+    database_url: &str,
+    operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+        connection.discard = true;
+        return Err(mariadb_driver_error(error));
+    }
+    let result = {
+        let mut transaction = MariaDbTransaction {
+            connection: &mut connection.connection,
+        };
+        operation(&mut transaction)
+    };
+    match result {
+        Ok(value) => {
+            if let Err(error) = connection.connection.query_drop("COMMIT") {
+                connection.discard = true;
+                Err(mariadb_driver_error(error))
+            } else {
+                Ok(value)
+            }
+        }
+        Err(error) => {
+            let _ = connection.connection.query_drop("ROLLBACK");
+            connection.discard = true;
+            Err(error)
+        }
+    }
+}
+
+fn execute_mariadb_queries_on_pool(
+    pool: &MariaDbPool,
+    settings: MariaDbTimeouts,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let prepared = queries
+        .iter()
+        .map(prepare_mariadb_query)
+        .collect::<Result<Vec<_>, _>>()?;
+    if prepared.is_empty() && !transaction {
+        return Ok(Vec::new());
+    }
+
+    let mut connection = acquire_mariadb_connection(pool, settings)?;
+    if transaction {
+        if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+    }
+
+    let mut results = Vec::with_capacity(prepared.len());
+    for (sql, parameters) in prepared {
+        let budget = match remaining_query_budget() {
+            Ok(budget) => budget,
+            Err(error) => {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(error);
+            }
+        };
+        if let Some(remaining) = budget {
+            let seconds = remaining
+                .as_secs_f64()
+                .min(f64::from(settings.query_seconds));
+            if seconds < 0.001 {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(DatabaseError {
+                    message: "request deadline exceeded before database statement".into(),
+                });
+            }
+            if let Err(error) = connection
+                .connection
+                .query_drop(format!("SET SESSION max_statement_time={seconds:.6}"))
+            {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(mariadb_driver_error(error));
+            }
+        }
+        match execute_prepared_mariadb_query(&mut connection.connection, &sql, parameters) {
+            Ok(result) => results.push(result),
+            Err(error) => {
+                if transaction {
+                    let _ = connection.connection.query_drop("ROLLBACK");
+                }
+                connection.discard = true;
+                return Err(error);
+            }
+        }
+    }
+
+    if QUERY_DEADLINE.with(Cell::get).is_some() {
+        if let Err(error) = connection.connection.query_drop(format!(
+            "SET SESSION max_statement_time={}",
+            settings.query_seconds
+        )) {
+            if transaction {
+                let _ = connection.connection.query_drop("ROLLBACK");
+            }
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+    }
+
+    if transaction {
+        if let Err(error) = connection.connection.query_drop("COMMIT") {
+            connection.discard = true;
+            return Err(mariadb_driver_error(error));
+        }
+    }
+    Ok(results)
+}
+
+fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), DatabaseError> {
+    let (sql, parameter_order) = bind_named_parameters(&query.sql)?;
+    let parameters = parameter_order
+        .iter()
+        .map(|parameter_name| {
+            query
                 .params
                 .iter()
                 .find(|(name, _)| name == parameter_name)
-                .map(|(_, value)| value)
+                .map(|(_, value)| mysql_parameter_value(value))
                 .ok_or_else(|| DatabaseError {
                     message: format!("missing SQL parameter `:{parameter_name}`"),
-                })?;
-            script.push_str(&format!(
-                "SET @zelyra_p{query_index}_{parameter_index} = {};\n",
-                query_value_sql(value)
-            ));
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((sql, parameters))
+}
+
+fn mysql_parameter_value(value: &QueryValue) -> Value {
+    match value {
+        QueryValue::Null => Value::NULL,
+        QueryValue::Int(value) => Value::Int(*value),
+        QueryValue::UInt(value) => Value::UInt(*value),
+        QueryValue::Float(value) if value.is_finite() => Value::Double(*value),
+        QueryValue::Float(_) => Value::NULL,
+        QueryValue::Bool(value) => Value::Int(i64::from(*value)),
+        QueryValue::String(value) => Value::Bytes(value.as_bytes().to_vec()),
+    }
+}
+
+fn execute_prepared_mariadb_query(
+    connection: &mut Conn,
+    sql: &str,
+    parameters: Vec<Value>,
+) -> Result<QueryResult, DatabaseError> {
+    let result = connection
+        .exec_iter(sql, parameters)
+        .map_err(mariadb_driver_error)?;
+    let columns = result
+        .columns()
+        .as_ref()
+        .iter()
+        .map(|column| column.name_str().into_owned())
+        .collect();
+    let rows = result
+        .map(|row| {
+            row.map(|row| row.unwrap().into_iter().map(mariadb_value_string).collect())
+                .map_err(mariadb_driver_error)
+        })
+        .collect::<Result<Vec<Vec<String>>, _>>()?;
+    Ok(QueryResult { columns, rows })
+}
+
+fn mariadb_value_string(value: Value) -> String {
+    match value {
+        Value::NULL => "\\N".into(),
+        Value::Bytes(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        Value::Int(value) => value.to_string(),
+        Value::UInt(value) => value.to_string(),
+        Value::Float(value) => value.to_string(),
+        Value::Double(value) => value.to_string(),
+        Value::Date(year, month, day, hour, minute, second, micros) => {
+            if hour == 0 && minute == 0 && second == 0 && micros == 0 {
+                format!("{year:04}-{month:02}-{day:02}")
+            } else if micros == 0 {
+                format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
+            } else {
+                format!(
+                    "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}.{micros:06}"
+                )
+            }
         }
-        let statement_name = format!("zelyra_stmt_{query_index}");
-        let prepared_sql = quote_string(&sql.replace('\\', "\\\\"));
-        script.push_str(&format!("PREPARE {statement_name} FROM {prepared_sql};\n"));
-        if parameter_order.is_empty() {
-            script.push_str(&format!("EXECUTE {statement_name};\n"));
-        } else {
-            let variables = parameter_order
-                .iter()
-                .enumerate()
-                .map(|(parameter_index, _)| format!("@zelyra_p{query_index}_{parameter_index}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            script.push_str(&format!("EXECUTE {statement_name} USING {variables};\n"));
+        Value::Time(negative, days, hour, minute, second, micros) => {
+            let hours = days * 24 + u32::from(hour);
+            let sign = if negative { "-" } else { "" };
+            if micros == 0 {
+                format!("{sign}{hours:02}:{minute:02}:{second:02}")
+            } else {
+                format!("{sign}{hours:02}:{minute:02}:{second:02}.{micros:06}")
+            }
         }
-        script.push_str(&format!("DEALLOCATE PREPARE {statement_name};\n"));
     }
-    if transaction {
-        script.push_str("COMMIT;\n");
+}
+
+fn mariadb_driver_error(error: mysql::Error) -> DatabaseError {
+    DatabaseError {
+        message: error.to_string(),
     }
-    let output = run_mariadb_query(database_url, &script)?;
-    if transaction {
-        return Ok(Vec::new());
-    }
-    Ok(vec![parse_query_result(&output)])
 }
 
 fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
@@ -1830,6 +2589,12 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
     let mut quote = None;
     while index < bytes.len() {
         let byte = bytes[index];
+        if byte >= 0x80 {
+            let character = sql[index..].chars().next().expect("valid UTF-8 boundary");
+            bound.push(character);
+            index += character.len_utf8();
+            continue;
+        }
         if let Some(active_quote) = quote {
             bound.push(byte as char);
             if byte == active_quote {
@@ -1872,74 +2637,11 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
     Ok((bound, parameters))
 }
 
-fn query_value_sql(value: &QueryValue) -> String {
-    match value {
-        QueryValue::Null => "NULL".into(),
-        QueryValue::Int(value) => value.to_string(),
-        QueryValue::UInt(value) => value.to_string(),
-        QueryValue::Float(value) if value.is_finite() => value.to_string(),
-        QueryValue::Float(_) => "NULL".into(),
-        QueryValue::Bool(value) => if *value { "1" } else { "0" }.into(),
-        QueryValue::String(value) => {
-            format!("'{}'", value.replace('\\', "\\\\").replace('\'', "''"))
-        }
-    }
-}
-
-fn run_mariadb_query(database_url: &str, script: &str) -> Result<String, DatabaseError> {
-    let connection = parse_mariadb_url(database_url)?;
-    let mut command = Command::new("mariadb");
-    command
-        .args([
-            "--batch",
-            "--raw",
-            "--host",
-            &connection.host,
-            "--port",
-            &connection.port,
-            "--user",
-            &connection.user,
-            "--database",
-            &connection.database,
-        ])
-        .env("MYSQL_PWD", &connection.password)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|error| DatabaseError {
-        message: format!("could not start mariadb: {error}"),
-    })?;
-    child
-        .stdin
-        .take()
-        .expect("mariadb stdin was piped")
-        .write_all(script.as_bytes())
-        .map_err(|error| DatabaseError {
-            message: format!("could not send SQL to mariadb: {error}"),
-        })?;
-    let output = child.wait_with_output().map_err(|error| DatabaseError {
-        message: format!("could not wait for mariadb: {error}"),
-    })?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    } else {
-        Err(DatabaseError {
-            message: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        })
-    }
-}
-
-fn parse_query_result(output: &str) -> QueryResult {
-    let mut lines = output.lines();
-    let Some(header) = lines.next() else {
-        return QueryResult::default();
-    };
-    QueryResult {
-        columns: header.split('\t').map(str::to_owned).collect(),
-        rows: lines
-            .map(|line| line.split('\t').map(str::to_owned).collect())
-            .collect(),
-    }
+/// Exposes the named-parameter scanner only to the dedicated fuzz target.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub fn fuzz_bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), String> {
+    bind_named_parameters(sql).map_err(|error| error.to_string())
 }
 
 pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> {
@@ -1959,7 +2661,7 @@ pub fn create_mariadb_database(database_url: &str) -> Result<(), DatabaseError> 
 
 pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
     let path = sqlite_path(database_url)?;
-    let tables_output = run_sqlite(&path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")?;
+    let tables_output = run_sqlite(&path, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_zelyra_schema_history' ORDER BY name;")?;
     let mut schema = Schema {
         database: Some(DatabaseConfig {
             name: "sqlite".into(),
@@ -2008,9 +2710,20 @@ pub fn inspect_sqlite(database_url: &str) -> Result<Schema, DatabaseError> {
     Ok(schema)
 }
 
+pub fn query_postgres(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_psql(database_url, query)
+}
+
+pub fn query_sqlite(database_url: &str, query: &str) -> Result<String, DatabaseError> {
+    run_sqlite(&sqlite_path(database_url)?, query)
+}
+
 pub fn apply_sqlite(database_url: &str, sql: &str) -> Result<(), DatabaseError> {
     let path = sqlite_path(database_url)?;
-    run_sqlite_sql(&path, &format!("PRAGMA foreign_keys = ON;\n{sql}"))
+    run_sqlite_sql(
+        &path,
+        &format!("PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n{sql}\nCOMMIT;\n"),
+    )
 }
 
 fn parse_mariadb_url(url: &str) -> Result<MariaConnection, DatabaseError> {
@@ -2051,12 +2764,186 @@ struct MariaConnection {
     database: String,
 }
 
+struct MariaDbConnectionManager {
+    options: mysql::Opts,
+}
+
+struct ManagedMariaDbConnection {
+    connection: Conn,
+    discard: bool,
+}
+
+impl ManageConnection for MariaDbConnectionManager {
+    type Connection = ManagedMariaDbConnection;
+    type Error = mysql::Error;
+
+    fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        Conn::new(self.options.clone()).map(|connection| ManagedMariaDbConnection {
+            connection,
+            discard: false,
+        })
+    }
+
+    fn is_valid(&self, connection: &mut Self::Connection) -> Result<(), Self::Error> {
+        connection.connection.ping()
+    }
+
+    fn has_broken(&self, connection: &mut Self::Connection) -> bool {
+        connection.discard
+    }
+}
+
+type MariaDbPool = Pool<MariaDbConnectionManager>;
+
+struct MariaDbPoolEntry {
+    settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
+    pool: MariaDbPool,
+}
+
+#[derive(Default)]
+struct MariaDbPoolRegistry {
+    entries: HashMap<[u8; 32], MariaDbPoolEntry>,
+    #[cfg(test)]
+    builds: usize,
+}
+
+impl MariaDbPoolRegistry {
+    fn get_or_build(
+        &mut self,
+        database_url: &str,
+        settings: MariaDbTimeouts,
+        tls: MariaDbTlsSettings,
+    ) -> Result<MariaDbPool, DatabaseError> {
+        let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
+        if let Some(entry) = self.entries.get(&fingerprint) {
+            if entry.settings != settings {
+                return Err(DatabaseError {
+                    message: "MariaDB pool settings changed while the process is running; restart the process to apply them".into(),
+                });
+            }
+            if entry.tls != tls {
+                return Err(DatabaseError {
+                    message: "MariaDB TLS settings changed while the process is running; restart the process to apply them".into(),
+                });
+            }
+            return Ok(entry.pool.clone());
+        }
+        if self.entries.len() >= MARIADB_MAX_CACHED_POOLS {
+            return Err(DatabaseError {
+                message: format!(
+                    "this process already owns the maximum number of distinct MariaDB pools ({MARIADB_MAX_CACHED_POOLS})"
+                ),
+            });
+        }
+
+        let pool = build_mariadb_pool(database_url, settings, &tls)?;
+        #[cfg(test)]
+        {
+            self.builds += 1;
+        }
+        self.entries.insert(
+            fingerprint,
+            MariaDbPoolEntry {
+                settings,
+                tls,
+                pool: pool.clone(),
+            },
+        );
+        Ok(pool)
+    }
+}
+
+static MARIADB_POOLS: OnceLock<Mutex<MariaDbPoolRegistry>> = OnceLock::new();
+
+fn mariadb_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
+) -> Result<MariaDbPool, DatabaseError> {
+    let cache = MARIADB_POOLS.get_or_init(|| Mutex::new(MariaDbPoolRegistry::default()));
+    let mut cache = cache.lock().map_err(|_| DatabaseError {
+        message: "MariaDB connection-pool state is unavailable".into(),
+    })?;
+    cache.get_or_build(database_url, settings, tls)
+}
+
+fn build_mariadb_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+    tls: &MariaDbTlsSettings,
+) -> Result<MariaDbPool, DatabaseError> {
+    let connection = parse_mariadb_url(database_url)?;
+    let port = connection.port.parse::<u16>().map_err(|_| DatabaseError {
+        message: "MariaDB URL has an invalid TCP port".into(),
+    })?;
+    let ssl_opts = tls.ssl_opts_for_host(&connection.host);
+    let options = OptsBuilder::new()
+        .ip_or_hostname(Some(connection.host))
+        .tcp_port(port)
+        .prefer_socket(false)
+        .user(Some(connection.user))
+        .pass(Some(connection.password))
+        .db_name(Some(connection.database))
+        .connect_attrs(None::<HashMap<String, String>>)
+        .tcp_connect_timeout(Some(Duration::from_secs(u64::from(
+            settings.connect_seconds,
+        ))))
+        .read_timeout(Some(Duration::from_secs(u64::from(settings.query_seconds))))
+        .init(vec![format!(
+            "SET SESSION max_statement_time={}",
+            settings.query_seconds
+        )]);
+    let options = match ssl_opts {
+        Some(ssl_opts) => options.ssl_opts(Some(ssl_opts)),
+        None => options,
+    };
+    let manager = MariaDbConnectionManager {
+        options: options.into(),
+    };
+    Pool::builder()
+        .max_size(settings.pool_max_size)
+        .min_idle(Some(0))
+        .connection_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
+        .test_on_check_out(true)
+        .error_handler(Box::new(r2d2::NopErrorHandler))
+        .build(manager)
+        .map_err(|_| DatabaseError {
+            message: "could not initialize the MariaDB connection pool".into(),
+        })
+}
+
+fn acquire_mariadb_connection(
+    pool: &MariaDbPool,
+    settings: MariaDbTimeouts,
+) -> Result<r2d2::PooledConnection<MariaDbConnectionManager>, DatabaseError> {
+    let configured_wait = Duration::from_secs(u64::from(settings.pool_wait_seconds));
+    let wait = remaining_query_budget()?
+        .map_or(configured_wait, |remaining| configured_wait.min(remaining));
+    pool.get_timeout(wait).map_err(|error| DatabaseError {
+        message: mariadb_pool_acquisition_message(&error.to_string()).into(),
+    })
+}
+
+fn mariadb_pool_acquisition_message(detail: &str) -> &'static str {
+    let detail = detail.to_ascii_lowercase();
+    if detail.contains("certificate") || detail.contains("tls") || detail.contains("ssl") {
+        "could not establish a verified MariaDB TLS connection; check CA trust, the certificate hostname, and server TLS configuration"
+    } else if detail.contains("access denied") {
+        "MariaDB rejected authentication; check the database username and grants"
+    } else {
+        "timed out obtaining a MariaDB connection; check connectivity and pool saturation"
+    }
+}
+
 fn run_mariadb(
     database_url: &str,
     query: &str,
     database_override: Option<&str>,
 ) -> Result<String, DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
+    let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2075,6 +2962,9 @@ fn run_mariadb(
             "--execute",
             query,
         ])
+        .args(timeouts.connect_args())
+        .args(timeouts.query_args())
+        .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password);
     let output = command.output().map_err(|error| DatabaseError {
         message: format!("could not start mariadb: {error}"),
@@ -2093,6 +2983,8 @@ fn run_mariadb_sql(
     database_override: Option<&str>,
 ) -> Result<(), DatabaseError> {
     let connection = parse_mariadb_url(database_url)?;
+    let timeouts = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
     let database = database_override.unwrap_or(&connection.database);
     let mut command = Command::new("mariadb");
     command
@@ -2107,6 +2999,9 @@ fn run_mariadb_sql(
             "--database",
             database,
         ])
+        .args(timeouts.connect_args())
+        .args(timeouts.query_args())
+        .args(tls.client_args_for_host(&connection.host)?)
         .env("MYSQL_PWD", &connection.password)
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
@@ -2347,7 +3242,7 @@ fn run_sqlite(path: &str, query: &str) -> Result<String, DatabaseError> {
 
 fn run_sqlite_sql(path: &str, sql: &str) -> Result<(), DatabaseError> {
     let mut child = Command::new("sqlite3")
-        .args(["-batch", path])
+        .args(["-batch", "-bail", path])
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())
@@ -2567,12 +3462,592 @@ fn percent_decode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    include!("../../tests/support/bounded_mutations.rs");
+
+    #[test]
+    fn mariadb_sql_binder_handles_reproducible_mutated_queries() {
+        let seeds = [
+            "SELECT ':literal', value FROM items WHERE id = :id",
+            "UPDATE customers SET name = :name WHERE id = :id",
+            "SELECT `a:b`, \"c:d\" FROM t -- :ignored\nWHERE x=:x",
+            "INSERT INTO events (payload) VALUES ('{\"url\":\"https://x:y\"}')",
+            "SELECT \"Grüße\", city FROM customers WHERE city = :city",
+            "SELECT value /* :comment */ FROM items WHERE id=:id OR parent=:id",
+        ];
+        let parameters = (0..32)
+            .map(|index| (format!("p{index}"), QueryValue::String("safe-value".into())))
+            .collect::<Vec<_>>();
+        for sql in corpus(&seeds, 1024, 12) {
+            let query = Query {
+                sql,
+                params: parameters.clone(),
+            };
+            let first = prepare_mariadb_query(&query);
+            let second = prepare_mariadb_query(&query);
+            match (first, second) {
+                (Ok(first), Ok(second)) => assert_eq!(first, second),
+                (Err(first), Err(second)) => assert_eq!(first.message, second.message),
+                _ => panic!("SQL binder result changed between identical inputs"),
+            }
+        }
+    }
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
 
     fn schema(source: &str) -> Schema {
         let program = parse(&lex(source).unwrap()).unwrap();
         build_schema(&program).unwrap()
+    }
+
+    #[test]
+    fn sqlite_schema_apply_rolls_back_all_steps_and_can_be_retried() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "zelyra-sqlite-atomic-apply-{}-{unique}.db",
+            std::process::id()
+        ));
+        let path = path.to_string_lossy().into_owned();
+        let url = format!("sqlite://{path}");
+
+        apply_sqlite(
+            &url,
+            "CREATE TABLE existing_records (id INTEGER PRIMARY KEY, label TEXT NOT NULL);\
+             INSERT INTO existing_records VALUES (1, 'duplicate'), (2, 'duplicate');",
+        )
+        .unwrap();
+
+        let failing_plan = "CREATE TABLE added_records (id INTEGER PRIMARY KEY);\
+                            CREATE UNIQUE INDEX existing_label_unique ON existing_records(label);";
+        let error = apply_sqlite(&url, failing_plan).unwrap_err();
+        assert!(!error.message.is_empty());
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'added_records';",
+            )
+            .unwrap()
+            .trim(),
+            "0"
+        );
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM existing_records WHERE label = 'duplicate';"
+            )
+            .unwrap()
+            .trim(),
+            "2"
+        );
+
+        run_sqlite(
+            &path,
+            "UPDATE existing_records SET label = 'unique' WHERE id = 2;",
+        )
+        .unwrap();
+        apply_sqlite(&url, failing_plan).unwrap();
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'added_records';",
+            )
+            .unwrap()
+            .trim(),
+            "1"
+        );
+        assert_eq!(
+            run_sqlite(
+                &path,
+                "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'existing_label_unique';",
+            )
+            .unwrap()
+            .trim(),
+            "1"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn table_result_types_accept_module_qualified_record_names() {
+        let table_names = HashSet::from(["customers".to_owned()]);
+
+        assert_eq!(
+            table_for_type("src/models.zyl::Customer", &table_names),
+            Some("customers".to_owned())
+        );
+    }
+
+    #[test]
+    fn mariadb_timeouts_have_bounded_defaults_and_client_options() {
+        let timeouts = MariaDbTimeouts::parse(None, None, None, None).unwrap();
+        assert_eq!(
+            timeouts,
+            MariaDbTimeouts {
+                connect_seconds: 10,
+                query_seconds: 30,
+                pool_max_size: 8,
+                pool_wait_seconds: 10,
+            }
+        );
+        assert_eq!(
+            timeouts.connect_args(),
+            ["--connect-timeout=10", "--skip-reconnect"]
+        );
+        assert_eq!(
+            timeouts.query_args(),
+            ["--init-command=SET SESSION max_statement_time=30"]
+        );
+    }
+
+    #[test]
+    fn mariadb_schema_lock_name_coordinates_connection_aliases() {
+        let primary =
+            mariadb_schema_lock_name("mariadb://zelyra:secret@127.0.0.1:3306/ProjectData").unwrap();
+        let alias = mariadb_schema_lock_name(
+            "mariadb://another-user:other-secret@db.internal:4406/projectdata",
+        )
+        .unwrap();
+        assert_eq!(primary, alias);
+        assert!(primary.len() <= 64);
+        assert!(primary.starts_with("zelyra:mig:"));
+    }
+
+    #[test]
+    fn mariadb_advisory_lock_names_coordinate_aliases_and_isolate_scopes() {
+        let primary = mariadb_advisory_lock_name(
+            "mariadb://zelyra:secret@127.0.0.1:3306/ProjectData",
+            "password-reset:tokens:42",
+        )
+        .unwrap();
+        let alias = mariadb_advisory_lock_name(
+            "mariadb://another-user:other-secret@db.internal:4406/projectdata",
+            "password-reset:tokens:42",
+        )
+        .unwrap();
+        let other_scope = mariadb_advisory_lock_name(
+            "mariadb://zelyra:secret@127.0.0.1:3306/ProjectData",
+            "password-reset:tokens:43",
+        )
+        .unwrap();
+        assert_eq!(primary, alias);
+        assert_ne!(primary, other_scope);
+        assert!(primary.len() <= 64);
+        assert!(primary.starts_with("zelyra:app:"));
+        assert!(!primary.contains("secret"));
+    }
+
+    #[test]
+    fn mariadb_advisory_lock_name_rejects_empty_or_control_scope() {
+        assert!(mariadb_advisory_lock_name("mariadb://user:pass@localhost/db", "").is_err());
+        assert!(
+            mariadb_advisory_lock_name("mariadb://user:pass@localhost/db", "bad\nscope").is_err()
+        );
+    }
+
+    #[test]
+    fn mariadb_pool_registry_reuses_and_isolates_named_connection_profiles() {
+        let settings = MariaDbTimeouts::parse(None, None, None, None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 1);
+        assert_eq!(registry.builds, 1);
+
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 1);
+        assert_eq!(registry.builds, 1, "the same profile should reuse its pool");
+
+        registry
+            .get_or_build(
+                "mariadb://inventory:secret@127.0.0.1:3307/inventory",
+                settings,
+                tls,
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 2);
+        assert_eq!(registry.builds, 2);
+    }
+
+    #[test]
+    fn mariadb_pool_registry_rejects_profile_changes_without_rejecting_other_urls() {
+        let settings = MariaDbTimeouts::parse(None, None, None, None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+        registry
+            .get_or_build(
+                "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+                settings,
+                tls.clone(),
+            )
+            .unwrap();
+
+        let changed_settings = MariaDbTimeouts::parse(None, Some("45"), None, None).unwrap();
+        let changed_profile = registry.get_or_build(
+            "mariadb://zelyra:secret@127.0.0.1:3307/invoices",
+            changed_settings,
+            tls.clone(),
+        );
+        let Err(error) = changed_profile else {
+            panic!("changing a live pool profile must be rejected");
+        };
+        assert!(error.message.contains("pool settings changed"));
+
+        registry
+            .get_or_build(
+                "mariadb://inventory:secret@127.0.0.1:3307/inventory",
+                changed_settings,
+                tls,
+            )
+            .unwrap();
+        assert_eq!(registry.entries.len(), 2);
+        assert_eq!(registry.builds, 2);
+    }
+
+    #[test]
+    fn mariadb_pool_registry_bounds_distinct_profiles() {
+        let settings = MariaDbTimeouts::parse(None, None, Some("1"), None).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let mut registry = MariaDbPoolRegistry::default();
+
+        for index in 0..MARIADB_MAX_CACHED_POOLS {
+            registry
+                .get_or_build(
+                    &format!("mariadb://zelyra:secret@127.0.0.1:{}/app", 3307 + index),
+                    settings,
+                    tls.clone(),
+                )
+                .unwrap();
+        }
+        let over_limit =
+            registry.get_or_build("mariadb://zelyra:secret@127.0.0.1:3315/app", settings, tls);
+        let Err(error) = over_limit else {
+            panic!("the pool registry must reject profiles beyond its bound");
+        };
+        assert!(error
+            .message
+            .contains("maximum number of distinct MariaDB pools"));
+        assert_eq!(registry.entries.len(), MARIADB_MAX_CACHED_POOLS);
+        assert_eq!(registry.builds, MARIADB_MAX_CACHED_POOLS);
+    }
+
+    #[test]
+    fn mariadb_timeouts_accept_only_bounded_positive_integers() {
+        assert_eq!(
+            MariaDbTimeouts::parse(Some("15"), Some("45"), Some("12"), Some("20")).unwrap(),
+            MariaDbTimeouts {
+                connect_seconds: 15,
+                query_seconds: 45,
+                pool_max_size: 12,
+                pool_wait_seconds: 20,
+            }
+        );
+        for value in ["0", "-1", "301", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(Some(value), None, None, None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_CONNECT_TIMEOUT_SECS must be a positive integer from 1 to 300"
+            );
+        }
+        for value in ["0", "-1", "3601", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, Some(value), None, None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_QUERY_TIMEOUT_SECS must be a positive integer from 1 to 3600"
+            );
+        }
+        for value in ["0", "-1", "65", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, None, Some(value), None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_POOL_MAX_SIZE must be a positive integer from 1 to 64"
+            );
+        }
+        for value in ["0", "-1", "301", "1.5", "secret"] {
+            let error = MariaDbTimeouts::parse(None, None, None, Some(value)).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS must be a positive integer from 1 to 300"
+            );
+        }
+    }
+
+    #[test]
+    fn mariadb_query_timeout_aborts_long_statements_when_configured() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB timeout integration: test URL is not configured");
+            return;
+        };
+        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, timeouts, &tls).unwrap();
+        let first_connection = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap()[0]
+            .rows[0][0]
+            .clone();
+        let started = std::time::Instant::now();
+        let error = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT SLEEP(5)".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .expect_err("MariaDB should abort a statement over its configured time limit");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "statement timeout did not bound execution"
+        );
+        assert!(!error.message.contains(&database_url));
+        let replacement_connection = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap()[0]
+            .rows[0][0]
+            .clone();
+        assert_ne!(first_connection, replacement_connection);
+    }
+
+    #[test]
+    fn mariadb_request_deadline_aborts_a_statement_before_the_default_timeout() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB request-deadline integration: test URL is not configured");
+            return;
+        };
+        let settings = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("2")).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, settings, &tls).unwrap();
+        let _deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+        let started = Instant::now();
+        let error = execute_mariadb_queries_on_pool(
+            &pool,
+            settings,
+            &[Query {
+                sql: "SELECT SLEEP(5)".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .expect_err("the request deadline should bound the server-side statement");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "request deadline did not interrupt the MariaDB statement"
+        );
+        assert!(!error.message.contains(&database_url));
+    }
+
+    #[test]
+    fn query_deadline_scopes_restore_nested_deadlines() {
+        assert!(remaining_query_budget().unwrap().is_none());
+        let outer_deadline = Instant::now() + Duration::from_secs(2);
+        let outer = set_query_deadline(outer_deadline);
+        assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        {
+            let _inner = set_query_deadline(Instant::now() + Duration::from_secs(4));
+            assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        }
+        assert!(remaining_query_budget().unwrap().unwrap() <= Duration::from_secs(2));
+        drop(outer);
+        assert!(remaining_query_budget().unwrap().is_none());
+
+        let _expired = set_query_deadline(Instant::now() - Duration::from_millis(1));
+        assert!(remaining_query_budget().is_err());
+    }
+
+    #[test]
+    fn mariadb_connection_pool_reuses_connections_and_enforces_its_limit() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB pool integration: test URL is not configured");
+            return;
+        };
+        let settings = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("1")).unwrap();
+        let tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = build_mariadb_pool(&database_url, settings, &tls).unwrap();
+        let query_connection_id = || {
+            execute_mariadb_queries_on_pool(
+                &pool,
+                settings,
+                &[Query {
+                    sql: "SELECT CONNECTION_ID() AS connection_id".into(),
+                    params: Vec::new(),
+                }],
+                false,
+            )
+            .unwrap()[0]
+                .rows[0][0]
+                .clone()
+        };
+
+        let first_connection = query_connection_id();
+        let reused_connection = query_connection_id();
+        assert_eq!(first_connection, reused_connection);
+
+        let held = pool.get_timeout(Duration::from_secs(1)).unwrap();
+        let started = std::time::Instant::now();
+        let second_checkout = pool.get_timeout(Duration::from_millis(100));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(second_checkout.is_err());
+        drop(held);
+    }
+
+    #[test]
+    fn mariadb_pool_uses_verified_tls_when_enabled_for_the_test_database() {
+        let Ok(database_url) = env::var("ZELYRA_DB_TIMEOUT_TEST_URL") else {
+            eprintln!("skipping MariaDB TLS integration: test URL is not configured");
+            return;
+        };
+        let connection = parse_mariadb_url(&database_url).unwrap();
+        let tls = MariaDbTlsSettings::from_env().unwrap();
+        if !tls.tls_required_for_host(&connection.host) {
+            eprintln!(
+                "skipping MariaDB TLS integration: TLS mode does not require TLS for this host"
+            );
+            return;
+        }
+        let timeouts = MariaDbTimeouts::parse(Some("5"), Some("5"), Some("1"), Some("1")).unwrap();
+        let pool = build_mariadb_pool(&database_url, timeouts, &tls).unwrap();
+        let result = execute_mariadb_queries_on_pool(
+            &pool,
+            timeouts,
+            &[Query {
+                sql: "SHOW SESSION STATUS LIKE 'Ssl_version'".into(),
+                params: Vec::new(),
+            }],
+            false,
+        )
+        .unwrap();
+        let tls_version = result
+            .first()
+            .and_then(|result| result.rows.first())
+            .and_then(|row| row.get(1))
+            .expect("MariaDB TLS session should report its negotiated TLS version");
+        assert!(
+            tls_version.starts_with("TLSv"),
+            "unexpected TLS status: {tls_version}"
+        );
+    }
+
+    #[test]
+    fn mariadb_tls_requires_explicit_mode_and_keeps_certificate_checks_enabled() {
+        let disabled = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        assert!(disabled.ssl_opts_for_host("db.example.test").is_none());
+        assert!(disabled
+            .client_args_for_host("db.example.test")
+            .unwrap()
+            .is_empty());
+
+        let required = MariaDbTlsSettings::parse("required", None).unwrap();
+        let ssl_opts = required
+            .ssl_opts_for_host("localhost")
+            .expect("required mode must enable the TLS backend");
+        assert!(!ssl_opts.accept_invalid_certs());
+        assert!(!ssl_opts.skip_domain_validation());
+        assert_eq!(
+            required.client_args_for_host("localhost").unwrap(),
+            vec!["--ssl", "--ssl-verify-server-cert"]
+        );
+
+        let auto = MariaDbTlsSettings::parse("auto", None).unwrap();
+        assert!(auto.ssl_opts_for_host("localhost").is_none());
+        assert!(auto.ssl_opts_for_host("127.0.0.1").is_none());
+        assert!(auto.ssl_opts_for_host("::1").is_none());
+        assert!(auto.ssl_opts_for_host("db.example.test").is_some());
+        assert_eq!(
+            auto.client_args_for_host("localhost").unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            auto.client_args_for_host("db.example.test").unwrap(),
+            vec!["--ssl", "--ssl-verify-server-cert"]
+        );
+
+        for mode in ["optional", "verify", "true", ""] {
+            let error = MariaDbTlsSettings::parse(mode, None).unwrap_err();
+            assert_eq!(
+                error.message,
+                "ZELYRA_DB_TLS_MODE must be `auto`, `disabled`, or `required`"
+            );
+        }
+    }
+
+    #[test]
+    fn mariadb_tls_ca_file_must_be_absolute_readable_and_enables_auto_tls() {
+        let relative =
+            MariaDbTlsSettings::parse("required", Some(PathBuf::from("ca.pem"))).unwrap_err();
+        assert_eq!(
+            relative.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file"
+        );
+
+        let disabled =
+            MariaDbTlsSettings::parse("disabled", Some(PathBuf::from("/tmp/zelyra-ca.pem")))
+                .unwrap_err();
+        assert_eq!(
+            disabled.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE cannot be used when ZELYRA_DB_TLS_MODE=disabled"
+        );
+
+        let custom_ca =
+            std::env::temp_dir().join(format!("zelyra-test-ca-{}.pem", std::process::id()));
+        std::fs::write(&custom_ca, "test-only CA placeholder").unwrap();
+        let auto_with_ca = MariaDbTlsSettings::parse("auto", Some(custom_ca.clone())).unwrap();
+        assert!(auto_with_ca.tls_required_for_host("localhost"));
+        assert!(auto_with_ca.ssl_opts_for_host("localhost").is_some());
+        std::fs::remove_file(custom_ca).unwrap();
+
+        let missing = MariaDbTlsSettings::parse(
+            "required",
+            Some(
+                std::env::temp_dir().join(format!("zelyra-missing-ca-{}.pem", std::process::id())),
+            ),
+        )
+        .unwrap_err();
+        assert_eq!(
+            missing.message,
+            "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file"
+        );
+    }
+
+    #[test]
+    fn mariadb_pool_connection_failures_use_safe_actionable_diagnostics() {
+        assert!(mariadb_pool_acquisition_message("invalid peer certificate")
+            .contains("verified MariaDB TLS"));
+        assert!(mariadb_pool_acquisition_message("Access denied for user")
+            .contains("rejected authentication"));
+        assert!(mariadb_pool_acquisition_message("timed out").contains("pool saturation"));
+        assert!(!mariadb_pool_acquisition_message("password=secret").contains("secret"));
     }
 
     #[test]
@@ -2919,6 +4394,82 @@ mod tests {
             nullability_count_sql("user\"data", "e\"mail", Backend::Postgres),
             "SELECT COUNT(*) FROM \"user\"\"data\" WHERE \"e\"\"mail\" IS NULL"
         );
+    }
+
+    #[test]
+    fn unique_and_foreign_key_preflight_queries_quote_backend_identifiers() {
+        assert_eq!(
+            duplicate_value_groups_sql(
+                "user`data",
+                &["first`name".into(), "last`name".into()],
+                Backend::MariaDb,
+            ),
+            "SELECT COUNT(*) FROM (SELECT `first``name`, `last``name` FROM `user``data` WHERE `first``name` IS NOT NULL AND `last``name` IS NOT NULL GROUP BY `first``name`, `last``name` HAVING COUNT(*) > 1) AS zelyra_duplicate_groups"
+        );
+        assert_eq!(
+            foreign_key_orphans_sql(
+                &ForeignKeyPreflight {
+                    table: "child\"data".into(),
+                    column: "parent\"id".into(),
+                    referenced_table: "parent\"data".into(),
+                    referenced_column: "id\"value".into(),
+                    referenced_table_exists: true,
+                },
+                Backend::Postgres,
+            ),
+            "SELECT COUNT(*) FROM \"child\"\"data\" AS zelyra_child LEFT JOIN \"parent\"\"data\" AS zelyra_parent ON zelyra_child.\"parent\"\"id\" = zelyra_parent.\"id\"\"value\" WHERE zelyra_child.\"parent\"\"id\" IS NOT NULL AND zelyra_parent.\"id\"\"value\" IS NULL"
+        );
+        assert_eq!(
+            foreign_key_orphans_sql(
+                &ForeignKeyPreflight {
+                    table: "machines".into(),
+                    column: "department_id".into(),
+                    referenced_table: "departments".into(),
+                    referenced_column: "id".into(),
+                    referenced_table_exists: false,
+                },
+                Backend::MariaDb,
+            ),
+            "SELECT COUNT(*) FROM `machines` AS zelyra_child WHERE zelyra_child.`department_id` IS NOT NULL"
+        );
+    }
+
+    #[test]
+    fn new_unique_indexes_and_foreign_keys_receive_data_preflights() {
+        let desired = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto email: Email required unique } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let current = schema(
+            "database main { engine: mariadb } table users { id: Id primary auto email: Email required } table departments { id: Id primary auto } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let plan = diff(&desired, &current);
+        assert_eq!(
+            plan.unique_index_preflights,
+            [UniqueIndexPreflight {
+                table: "users".into(),
+                columns: vec!["email".into()],
+            }]
+        );
+        assert_eq!(
+            plan.foreign_key_preflights,
+            [ForeignKeyPreflight {
+                table: "machines".into(),
+                column: "department_id".into(),
+                referenced_table: "departments".into(),
+                referenced_column: "id".into(),
+                referenced_table_exists: true,
+            }]
+        );
+
+        let missing_parent = schema(
+            "database main { engine: mariadb } table departments { id: Id primary auto } table machines { id: Id primary auto department: Department required }",
+        );
+        let existing_child = schema(
+            "database main { engine: mariadb } table machines { id: Id primary auto department_id: Id required }",
+        );
+        let plan = diff(&missing_parent, &existing_child);
+        assert_eq!(plan.foreign_key_preflights.len(), 1);
+        assert!(!plan.foreign_key_preflights[0].referenced_table_exists);
     }
 
     #[test]
@@ -3391,5 +4942,11 @@ mod tests {
             "SELECT ':literal', name FROM customers WHERE id = ? OR id = ?"
         );
         assert_eq!(parameters, ["id", "id"]);
+
+        let (sql, parameters) =
+            bind_named_parameters("SELECT 'Grüße', city FROM customers WHERE city = :city")
+                .unwrap();
+        assert_eq!(sql, "SELECT 'Grüße', city FROM customers WHERE city = ?");
+        assert_eq!(parameters, ["city"]);
     }
 }

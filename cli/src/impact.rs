@@ -1,17 +1,47 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::project::{ProjectModule, ProjectSource};
 use serde_json::{json, Value};
-use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt};
+use zelyra_ast::{Expr, ExprKind, Program, Span, Stmt, Type};
 
-pub fn build_impact(program: &Program, source: &str) -> Value {
+pub fn build_impact_with_sources(
+    program: &Program,
+    project_sources: &[ProjectSource],
+    fallback_source: &str,
+) -> Value {
+    build_impact_with_modules(program, project_sources, &[], fallback_source)
+}
+
+pub fn build_impact_with_modules(
+    program: &Program,
+    project_sources: &[ProjectSource],
+    modules: &[ProjectModule],
+    fallback_source: &str,
+) -> Value {
+    let sources = ImpactSources {
+        project_sources,
+        fallback_source,
+    };
     let table_names = program
         .tables
         .iter()
         .map(|table| table.name.clone())
         .collect::<Vec<_>>();
-    let sql = sql_entries(program, &table_names, source);
+    let sql = sql_entries(program, &table_names, &sources);
     let table_consumers = table_consumers(program, &table_names, &sql);
-    let references = semantic_references(program, &table_names, &sql, source);
+    let mut references = semantic_references(program, &table_names, &sql, &sources);
+    for module in modules {
+        for import in &module.imports {
+            add_reference(
+                &mut references,
+                format!("module:{}", module.path),
+                format!("module:{}", import.path),
+                "module_import",
+                Value::Null,
+            );
+        }
+    }
+    references.sort_by_key(reference_sort_key);
     let permissions = permissions(program);
 
     json!({
@@ -19,7 +49,7 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "name": table.name,
             "columns": table.columns.iter().map(|column| column.name.clone()).collect::<Vec<_>>(),
             "consumers": table_consumers.get(&table.name).cloned().unwrap_or_default(),
-            "span": span_value(table.span, source),
+            "span": span_value(table.span, &sources),
         })).collect::<Vec<_>>(),
         "sql": sql,
         "references": references,
@@ -28,7 +58,7 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "table": form.table,
             "fields": form.fields.iter().map(|field| field.name.clone()).collect::<Vec<_>>(),
             "actions": form.actions.iter().map(|action| action.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(form.span, source),
+            "span": span_value(form.span, &sources),
         })).collect::<Vec<_>>(),
         "crud": program.cruds.iter().map(|crud| json!({
             "name": crud.name,
@@ -36,40 +66,52 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "layout": crud.layout,
             "permissions": crud_permissions(crud),
             "actions": crud.actions.iter().map(|action| action.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(crud.span, source),
+            "span": span_value(crud.span, &sources),
         })).collect::<Vec<_>>(),
         "views": program.views.iter().map(|view| json!({
             "name": view.name,
             "kind": "named",
-            "span": span_value(view.span, source),
+            "span": span_value(view.span, &sources),
         })).chain(program.components.iter().map(|component| json!({
             "name": component.name,
             "kind": "component",
             "props": component.props.iter().map(|prop| prop.name.clone()).collect::<Vec<_>>(),
-            "span": span_value(component.span, source),
+            "span": span_value(component.span, &sources),
         }))).chain(program.pages.iter().map(|page| json!({
             "name": page.path,
             "kind": "page",
             "view": page.view,
             "permissions": page.permissions,
-            "span": span_value(page.span, source),
+            "span": span_value(page.span, &sources),
         }))).collect::<Vec<_>>(),
         "apis": program.apis.iter().map(|api| json!({
             "method": api.method,
             "path": api.path,
             "handler": api.handler,
             "permissions": api.permissions,
-            "span": span_value(api.span, source),
+            "span": span_value(api.span, &sources),
         })).collect::<Vec<_>>(),
         "permissions": permissions,
+        "modules": modules.iter().map(|module| json!({
+            "path": module.path,
+            "imports": module.imports.iter().map(|import| json!({
+                "alias": import.alias,
+                "path": import.path,
+            })).collect::<Vec<_>>(),
+            "exports": module.exports.iter().map(|export| json!({
+                "kind": export.kind,
+                "name": export.name,
+            })).collect::<Vec<_>>(),
+            "declarations": module.declarations,
+        })).collect::<Vec<_>>(),
         "contracts": program.functions.iter()
             .filter(|function| !function.requires.is_empty() || !function.ensures.is_empty())
             .map(|function| json!({
                 "function": function.name,
-                "requires": function.requires.iter().map(|expression| span_value(expression.span, source)).collect::<Vec<_>>(),
-                "ensures": function.ensures.iter().map(|expression| span_value(expression.span, source)).collect::<Vec<_>>(),
+                "requires": function.requires.iter().map(|expression| span_value(expression.span, &sources)).collect::<Vec<_>>(),
+                "ensures": function.ensures.iter().map(|expression| span_value(expression.span, &sources)).collect::<Vec<_>>(),
                 "capabilities": function.capabilities,
-                "span": span_value(function.span, source),
+                "span": span_value(function.span, &sources),
             })).collect::<Vec<_>>(),
         "emails": [],
         "jobs": [],
@@ -80,6 +122,25 @@ pub fn build_impact(program: &Program, source: &str) -> Value {
             "items": []
         }
     })
+}
+
+struct ImpactSources<'a> {
+    project_sources: &'a [ProjectSource],
+    fallback_source: &'a str,
+}
+
+impl ImpactSources<'_> {
+    fn text(&self, span: Span) -> &str {
+        self.project_sources
+            .get(span.source_id as usize)
+            .map_or(self.fallback_source, |source| source.text.as_str())
+    }
+
+    fn path(&self, span: Span) -> Option<&str> {
+        self.project_sources
+            .get(span.source_id as usize)
+            .map(|source| source.path.as_str())
+    }
 }
 
 pub fn focus_impact(impact: &Value, query: &str) -> Result<Value, String> {
@@ -186,6 +247,16 @@ fn known_impact_nodes(impact: &Value, references: &[Value]) -> HashSet<String> {
             nodes.insert(format!("api:{method} {path}"));
         }
     }
+    for module in impact
+        .get("modules")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(path) = module.get("path").and_then(Value::as_str) {
+            nodes.insert(format!("module:{path}"));
+        }
+    }
     for reference in references {
         for key in ["from", "to"] {
             if let Some(node) = reference.get(key).and_then(Value::as_str) {
@@ -200,7 +271,7 @@ fn semantic_references(
     program: &Program,
     table_names: &[String],
     sql: &[Value],
-    source: &str,
+    sources: &ImpactSources<'_>,
 ) -> Vec<Value> {
     let mut references = Vec::new();
 
@@ -211,7 +282,7 @@ fn semantic_references(
                 format!("form:{}", form.name),
                 format!("table:{table}"),
                 "table",
-                span_value(form.span, source),
+                span_value(form.span, sources),
             );
         }
     }
@@ -221,7 +292,7 @@ fn semantic_references(
             format!("crud:{}", crud.name),
             format!("table:{}", crud.table),
             "table",
-            span_value(crud.span, source),
+            span_value(crud.span, sources),
         );
         if let Some(layout) = &crud.layout {
             add_reference(
@@ -229,41 +300,180 @@ fn semantic_references(
                 format!("crud:{}", crud.name),
                 format!("view:{layout}"),
                 "view",
-                span_value(crud.span, source),
+                span_value(crud.span, sources),
+            );
+        }
+    }
+    for auth in &program.auth {
+        let auth_node = format!("auth:{}", auth.name);
+        let auth_span = span_value(auth.span, sources);
+        for table in [
+            Some(auth.table.as_str()),
+            auth.session_table.as_deref(),
+            auth.permissions_table.as_deref(),
+            auth.roles_table.as_deref(),
+            auth.role_permissions_table.as_deref(),
+            auth.audit_table.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            add_reference(
+                &mut references,
+                auth_node.clone(),
+                format!("table:{table}"),
+                "auth_table",
+                auth_span.clone(),
             );
         }
     }
     for tableview in &program.tableviews {
-        for table in referenced_tables(&tableview.source, table_names) {
-            add_reference(
+        let (_, accesses) =
+            zelyra_database::sql::analyze_table_access(&tableview.source, table_names);
+        for access in accesses {
+            add_reference_with_access(
                 &mut references,
                 format!("tableview:{}", tableview.name),
-                format!("table:{table}"),
+                format!("table:{}", access.table),
                 "table",
-                span_value(tableview.span, source),
+                span_value(tableview.span, sources),
+                access.mode.as_str(),
             );
+        }
+    }
+    for page in &program.pages {
+        for data in &page.data {
+            let (_, accesses) =
+                zelyra_database::sql::analyze_table_access(&data.query, table_names);
+            for access in accesses {
+                add_reference_with_access(
+                    &mut references,
+                    format!("page:{}", page.path),
+                    format!("table:{}", access.table),
+                    "page_data_sql",
+                    span_value(data.span, sources),
+                    access.mode.as_str(),
+                );
+            }
+        }
+    }
+
+    if let Some(auth) = program.auth.first() {
+        let auth_node = format!("auth:{}", auth.name);
+        for page in &program.pages {
+            if page.requires_auth || !page.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("page:{}", page.path),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(page.span, sources),
+                );
+            }
+        }
+        for api in &program.apis {
+            if api.requires_auth || !api.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("api:{} {}", api.method, api.path),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(api.span, sources),
+                );
+            }
+        }
+        for form in &program.forms {
+            if form
+                .actions
+                .iter()
+                .any(|action| action.requires_auth || !action.permissions.is_empty())
+            {
+                add_reference(
+                    &mut references,
+                    format!("form:{}", form.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(form.span, sources),
+                );
+            }
+        }
+        for crud in &program.cruds {
+            if crud.requires_auth
+                || !crud.permissions.is_empty()
+                || !crud.create_permissions.is_empty()
+                || !crud.edit_permissions.is_empty()
+                || !crud.delete_permissions.is_empty()
+                || crud
+                    .actions
+                    .iter()
+                    .any(|action| action.requires_auth || !action.permissions.is_empty())
+            {
+                add_reference(
+                    &mut references,
+                    format!("crud:{}", crud.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(crud.span, sources),
+                );
+            }
+        }
+        for tableview in &program.tableviews {
+            if tableview.requires_auth || !tableview.permissions.is_empty() {
+                add_reference(
+                    &mut references,
+                    format!("tableview:{}", tableview.name),
+                    auth_node.clone(),
+                    "authentication",
+                    span_value(tableview.span, sources),
+                );
+            }
+        }
+    }
+    for table in &program.tables {
+        for column in &table.columns {
+            let zelyra_ast::Type::Named(name) = &column.ty else {
+                continue;
+            };
+            if let Some(target) = relation_table(name, table_names) {
+                add_reference(
+                    &mut references,
+                    format!("table:{}", table.name),
+                    format!("table:{target}"),
+                    "relation",
+                    span_value(column.span, sources),
+                );
+            }
         }
     }
     for entry in sql {
         let Some(owner) = entry.get("owner").and_then(Value::as_str) else {
             continue;
         };
-        let Some(tables) = entry.get("tables").and_then(Value::as_array) else {
+        let Some(accesses) = entry.get("table_accesses").and_then(Value::as_array) else {
             continue;
         };
-        let source_owner = if entry.get("kind").and_then(Value::as_str) == Some("function") {
-            format!("function:{owner}")
-        } else {
-            owner.to_owned()
+        let source_owner = match entry.get("kind").and_then(Value::as_str) {
+            Some("function") => format!("function:{owner}"),
+            Some("form_action" | "crud_action") => owner
+                .split_once(" action:")
+                .map_or_else(|| owner.to_owned(), |(resource, _)| resource.to_owned()),
+            _ => owner.to_owned(),
         };
         let span = entry.get("span").cloned().unwrap_or(Value::Null);
-        for table in tables.iter().filter_map(Value::as_str) {
-            add_reference(
+        for access in accesses {
+            let (Some(table), Some(mode)) = (
+                access.get("table").and_then(Value::as_str),
+                access.get("mode").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            add_reference_with_access(
                 &mut references,
                 source_owner.clone(),
                 format!("table:{table}"),
                 "sql_table",
                 span.clone(),
+                mode,
             );
         }
     }
@@ -281,7 +491,7 @@ fn semantic_references(
                     format!("page:{}", page.path),
                     format!("view:{view}"),
                     "view",
-                    span_value(page.span, source),
+                    span_value(page.span, sources),
                 );
             }
         }
@@ -299,7 +509,7 @@ fn semantic_references(
                 format!("view:{}", view.name),
                 format!("component:{component}"),
                 "component",
-                span_value(view.span, source),
+                span_value(view.span, sources),
             );
         }
     }
@@ -310,7 +520,7 @@ fn semantic_references(
                 format!("component:{}", component.name),
                 format!("component:{nested}"),
                 "component",
-                span_value(component.span, source),
+                span_value(component.span, sources),
             );
         }
     }
@@ -321,7 +531,7 @@ fn semantic_references(
                 format!("page:{}", page.path),
                 format!("component:{component}"),
                 "component",
-                span_value(page.span, source),
+                span_value(page.span, sources),
             );
         }
     }
@@ -338,7 +548,7 @@ fn semantic_references(
                 format!("function:{}", function.name),
                 format!("function:{call}"),
                 "call",
-                span_value(function.span, source),
+                span_value(function.span, sources),
             );
         }
         for expression in function.requires.iter().chain(function.ensures.iter()) {
@@ -348,7 +558,34 @@ fn semantic_references(
                     format!("function:{}", function.name),
                     format!("function:{call}"),
                     "call",
-                    span_value(function.span, source),
+                    span_value(function.span, sources),
+                );
+            }
+        }
+    }
+
+    for form in &program.forms {
+        for action in &form.actions {
+            for call in called_functions(&action.statements, &function_names) {
+                add_reference(
+                    &mut references,
+                    format!("form:{}", form.name),
+                    format!("function:{call}"),
+                    "call",
+                    span_value(action.span, sources),
+                );
+            }
+        }
+    }
+    for crud in &program.cruds {
+        for action in &crud.actions {
+            for call in called_functions(&action.statements, &function_names) {
+                add_reference(
+                    &mut references,
+                    format!("crud:{}", crud.name),
+                    format!("function:{call}"),
+                    "call",
+                    span_value(action.span, sources),
                 );
             }
         }
@@ -363,7 +600,242 @@ fn semantic_references(
                     format!("api:{} {}", api.method, api.path),
                     format!("function:{handler}"),
                     "handler",
-                    span_value(api.span, source),
+                    span_value(api.span, sources),
+                );
+            }
+        }
+    }
+
+    let type_names = program
+        .types
+        .iter()
+        .map(|definition| definition.name.as_str())
+        .collect::<HashSet<_>>();
+    let record_names = program
+        .records
+        .iter()
+        .map(|record| record.name.as_str())
+        .collect::<HashSet<_>>();
+    for table in &program.tables {
+        let owner = format!("table:{}", table.name);
+        for column in &table.columns {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &column.ty,
+                &type_names,
+                &record_names,
+                column.span,
+                sources,
+            );
+        }
+    }
+    for definition in &program.types {
+        add_type_references(
+            &mut references,
+            format!("type:{}", definition.name),
+            &definition.target,
+            &type_names,
+            &record_names,
+            definition.span,
+            sources,
+        );
+    }
+    for record in &program.records {
+        let owner = format!("record:{}", record.name);
+        for field in &record.fields {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &field.ty,
+                &type_names,
+                &record_names,
+                field.span,
+                sources,
+            );
+        }
+    }
+    for form in &program.forms {
+        let owner = format!("form:{}", form.name);
+        for field in form
+            .fields
+            .iter()
+            .chain(form.actions.iter().flat_map(|action| action.fields.iter()))
+        {
+            if let Some(ty) = &field.ty {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    ty,
+                    &type_names,
+                    &record_names,
+                    field.span,
+                    sources,
+                );
+            }
+        }
+        for action in &form.actions {
+            add_statement_type_references(
+                &mut references,
+                &owner,
+                &action.statements,
+                &type_names,
+                &record_names,
+                sources,
+            );
+        }
+    }
+    for crud in &program.cruds {
+        let owner = format!("crud:{}", crud.name);
+        for field in crud.actions.iter().flat_map(|action| action.fields.iter()) {
+            if let Some(ty) = &field.ty {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    ty,
+                    &type_names,
+                    &record_names,
+                    field.span,
+                    sources,
+                );
+            }
+        }
+        for action in &crud.actions {
+            add_statement_type_references(
+                &mut references,
+                &owner,
+                &action.statements,
+                &type_names,
+                &record_names,
+                sources,
+            );
+        }
+    }
+    for function in &program.functions {
+        let owner = format!("function:{}", function.name);
+        for parameter in &function.params {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &parameter.ty,
+                &type_names,
+                &record_names,
+                parameter.span,
+                sources,
+            );
+        }
+        if let Some(return_type) = &function.return_type {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                return_type,
+                &type_names,
+                &record_names,
+                function.span,
+                sources,
+            );
+        }
+        add_statement_type_references(
+            &mut references,
+            &owner,
+            &function.body.statements,
+            &type_names,
+            &record_names,
+            sources,
+        );
+        for expression in function.requires.iter().chain(function.ensures.iter()) {
+            add_expression_type_references(
+                &mut references,
+                &owner,
+                expression,
+                &type_names,
+                &record_names,
+                sources,
+            );
+        }
+    }
+    for page in &program.pages {
+        let owner = format!("page:{}", page.path);
+        for input in &page.inputs {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &input.ty,
+                &type_names,
+                &record_names,
+                input.span,
+                sources,
+            );
+        }
+        for data in &page.data {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &data.result_type,
+                &type_names,
+                &record_names,
+                data.span,
+                sources,
+            );
+        }
+    }
+    for component in &program.components {
+        let owner = format!("component:{}", component.name);
+        for prop in &component.props {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &prop.ty,
+                &type_names,
+                &record_names,
+                prop.span,
+                sources,
+            );
+        }
+    }
+    for tableview in &program.tableviews {
+        add_type_references(
+            &mut references,
+            format!("tableview:{}", tableview.name),
+            &tableview.result_type,
+            &type_names,
+            &record_names,
+            tableview.span,
+            sources,
+        );
+    }
+    for api in &program.apis {
+        let owner = format!("api:{} {}", api.method, api.path);
+        for input in &api.input {
+            add_type_references(
+                &mut references,
+                owner.clone(),
+                &input.ty,
+                &type_names,
+                &record_names,
+                input.span,
+                sources,
+            );
+        }
+        add_type_references(
+            &mut references,
+            owner.clone(),
+            &api.output,
+            &type_names,
+            &record_names,
+            api.span,
+            sources,
+        );
+        for error in &api.errors {
+            if let Some(payload) = &error.payload {
+                add_type_references(
+                    &mut references,
+                    owner.clone(),
+                    payload,
+                    &type_names,
+                    &record_names,
+                    error.span,
+                    sources,
                 );
             }
         }
@@ -375,6 +847,413 @@ fn semantic_references(
         left_key.cmp(&right_key)
     });
     references
+}
+
+fn add_type_references(
+    references: &mut Vec<Value>,
+    owner: String,
+    ty: &Type,
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    span: Span,
+    sources: &ImpactSources<'_>,
+) {
+    let node = match ty {
+        Type::Option(inner) | Type::Array(inner) | Type::HttpResult(inner) => {
+            add_type_references(
+                references,
+                owner,
+                inner,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            return;
+        }
+        Type::Result(ok, error) | Type::Map(ok, error) => {
+            add_type_references(
+                references,
+                owner.clone(),
+                ok,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            add_type_references(
+                references,
+                owner,
+                error,
+                type_names,
+                record_names,
+                span,
+                sources,
+            );
+            return;
+        }
+        Type::Named(name) if record_names.contains(name.as_str()) => format!("record:{name}"),
+        Type::Named(name) if type_names.contains(name.as_str()) => format!("type:{name}"),
+        _ => return,
+    };
+    add_reference(references, owner, node, "type", span_value(span, sources));
+}
+
+fn add_statement_type_references(
+    references: &mut Vec<Value>,
+    owner: &str,
+    statements: &[Stmt],
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    sources: &ImpactSources<'_>,
+) {
+    for statement in statements {
+        match statement {
+            Stmt::Let {
+                ty, value, span, ..
+            } => {
+                if let Some(ty) = ty {
+                    add_type_references(
+                        references,
+                        owner.to_owned(),
+                        ty,
+                        type_names,
+                        record_names,
+                        *span,
+                        sources,
+                    );
+                }
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Return { value, .. } => {
+                if let Some(value) = value {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        value,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    condition,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &then_block.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                if let Some(else_block) = else_block {
+                    add_statement_type_references(
+                        references,
+                        owner,
+                        &else_block.statements,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    condition,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                for invariant in invariants {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        invariant,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::For { iterable, body, .. } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    iterable,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    add_expression_type_references(
+                        references,
+                        owner,
+                        invariant,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Match { value, arms, .. } => {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                for arm in arms {
+                    add_statement_type_references(
+                        references,
+                        owner,
+                        &arm.body.statements,
+                        type_names,
+                        record_names,
+                        sources,
+                    );
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                add_statement_type_references(
+                    references,
+                    owner,
+                    &body.statements,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
+        }
+    }
+}
+
+fn add_expression_type_references(
+    references: &mut Vec<Value>,
+    owner: &str,
+    expression: &Expr,
+    type_names: &HashSet<&str>,
+    record_names: &HashSet<&str>,
+    sources: &ImpactSources<'_>,
+) {
+    match &expression.kind {
+        ExprKind::Array(values) => {
+            for value in values {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    key,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Record { type_name, fields } => {
+            let ty = Type::Named(type_name.clone());
+            add_type_references(
+                references,
+                owner.to_owned(),
+                &ty,
+                type_names,
+                record_names,
+                expression.span,
+                sources,
+            );
+            for (_, value) in fields {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    value,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Index { target, index } => {
+            add_expression_type_references(
+                references,
+                owner,
+                target,
+                type_names,
+                record_names,
+                sources,
+            );
+            add_expression_type_references(
+                references,
+                owner,
+                index,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Field { target, .. } | ExprKind::Await(target) => {
+            add_expression_type_references(
+                references,
+                owner,
+                target,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Call {
+            type_args, args, ..
+        } => {
+            for ty in type_args {
+                add_type_references(
+                    references,
+                    owner.to_owned(),
+                    ty,
+                    type_names,
+                    record_names,
+                    expression.span,
+                    sources,
+                );
+            }
+            for argument in args {
+                add_expression_type_references(
+                    references,
+                    owner,
+                    argument,
+                    type_names,
+                    record_names,
+                    sources,
+                );
+            }
+        }
+        ExprKind::Unary { expr, .. } => add_expression_type_references(
+            references,
+            owner,
+            expr,
+            type_names,
+            record_names,
+            sources,
+        ),
+        ExprKind::Binary { left, right, .. } => {
+            add_expression_type_references(
+                references,
+                owner,
+                left,
+                type_names,
+                record_names,
+                sources,
+            );
+            add_expression_type_references(
+                references,
+                owner,
+                right,
+                type_names,
+                record_names,
+                sources,
+            );
+        }
+        ExprKind::Sql { result_type, .. } => add_type_references(
+            references,
+            owner.to_owned(),
+            result_type,
+            type_names,
+            record_names,
+            expression.span,
+            sources,
+        ),
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::Variable(_) => {}
+    }
 }
 
 fn add_reference(references: &mut Vec<Value>, from: String, to: String, kind: &str, span: Value) {
@@ -389,6 +1268,31 @@ fn add_reference(references: &mut Vec<Value>, from: String, to: String, kind: &s
         "from": from,
         "to": to,
         "kind": kind,
+        "span": span,
+    }));
+}
+
+fn add_reference_with_access(
+    references: &mut Vec<Value>,
+    from: String,
+    to: String,
+    kind: &str,
+    span: Value,
+    access: &str,
+) {
+    if references.iter().any(|reference| {
+        reference.get("from").and_then(Value::as_str) == Some(from.as_str())
+            && reference.get("to").and_then(Value::as_str) == Some(to.as_str())
+            && reference.get("kind").and_then(Value::as_str) == Some(kind)
+            && reference.get("access").and_then(Value::as_str) == Some(access)
+    }) {
+        return;
+    }
+    references.push(json!({
+        "from": from,
+        "to": to,
+        "kind": kind,
+        "access": access,
         "span": span,
     }));
 }
@@ -601,12 +1505,16 @@ fn reference_sort_key(reference: &Value) -> (String, String, String, usize) {
     )
 }
 
-fn span_value(span: Span, source: &str) -> Value {
-    let (end_line, end_column) = source_position(source, span.end);
-    json!({
+fn span_value(span: Span, sources: &ImpactSources<'_>) -> Value {
+    let (end_line, end_column) = source_position(sources.text(span), span.end);
+    let mut value = json!({
         "start": { "offset": span.start, "line": span.line, "column": span.column },
         "end": { "offset": span.end, "line": end_line, "column": end_column }
-    })
+    });
+    if let Some(path) = sources.path(span) {
+        value["file"] = json!(path);
+    }
+    value
 }
 
 fn source_position(source: &str, offset: usize) -> (usize, usize) {
@@ -641,10 +1549,12 @@ fn table_consumers(
         add_consumer(&mut consumers, &crud.table, format!("crud:{}", crud.name));
     }
     for tableview in &program.tableviews {
-        for table in referenced_tables(&tableview.source, table_names) {
+        let (_, accesses) =
+            zelyra_database::sql::analyze_table_access(&tableview.source, table_names);
+        for access in accesses {
             add_consumer(
                 &mut consumers,
-                &table,
+                &access.table,
                 format!("tableview:{}", tableview.name),
             );
         }
@@ -674,7 +1584,11 @@ fn add_consumer(consumers: &mut HashMap<String, Vec<String>>, table: &str, consu
     }
 }
 
-fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<Value> {
+fn sql_entries(
+    program: &Program,
+    table_names: &[String],
+    sources: &ImpactSources<'_>,
+) -> Vec<Value> {
     let mut entries = Vec::new();
     for function in &program.functions {
         collect_statement_sql(
@@ -682,7 +1596,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
             &function.name,
             "function",
             table_names,
-            source,
+            sources,
             &mut entries,
         );
     }
@@ -693,7 +1607,7 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
                 &format!("form:{} action:{}", form.name, action.name),
                 "form_action",
                 table_names,
-                source,
+                sources,
                 &mut entries,
             );
         }
@@ -705,17 +1619,21 @@ fn sql_entries(program: &Program, table_names: &[String], source: &str) -> Vec<V
                 &format!("crud:{} action:{}", crud.name, action.name),
                 "crud_action",
                 table_names,
-                source,
+                sources,
                 &mut entries,
             );
         }
     }
     for tableview in &program.tableviews {
+        let (operation, tables, table_accesses) =
+            analyzed_sql_accesses(&tableview.source, table_names);
         entries.push(json!({
             "owner": format!("tableview:{}", tableview.name),
             "kind": "tableview",
-            "tables": referenced_tables(&tableview.source, table_names),
-            "span": span_value(tableview.span, source),
+            "operation": operation,
+            "tables": tables,
+            "table_accesses": table_accesses,
+            "span": span_value(tableview.span, sources),
         }));
     }
     entries
@@ -726,11 +1644,11 @@ fn collect_statement_sql(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     for statement in statements {
-        collect_statement_sql_inner(statement, owner, kind, table_names, source, entries);
+        collect_statement_sql_inner(statement, owner, kind, table_names, sources, entries);
     }
 }
 
@@ -739,16 +1657,16 @@ fn collect_statement_sql_inner(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     match statement {
         Stmt::Let { value, .. } | Stmt::BindOrAssign { value, .. } | Stmt::Expr(value) => {
-            collect_expr_sql(value, owner, kind, table_names, source, entries)
+            collect_expr_sql(value, owner, kind, table_names, sources, entries)
         }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
-                collect_expr_sql(value, owner, kind, table_names, source, entries);
+                collect_expr_sql(value, owner, kind, table_names, sources, entries);
             }
         }
         Stmt::If {
@@ -757,13 +1675,13 @@ fn collect_statement_sql_inner(
             else_block,
             ..
         } => {
-            collect_expr_sql(condition, owner, kind, table_names, source, entries);
+            collect_expr_sql(condition, owner, kind, table_names, sources, entries);
             collect_statement_sql(
                 &then_block.statements,
                 owner,
                 kind,
                 table_names,
-                source,
+                sources,
                 entries,
             );
             if let Some(else_block) = else_block {
@@ -772,7 +1690,7 @@ fn collect_statement_sql_inner(
                     owner,
                     kind,
                     table_names,
-                    source,
+                    sources,
                     entries,
                 );
             }
@@ -783,39 +1701,39 @@ fn collect_statement_sql_inner(
             body,
             ..
         } => {
-            collect_expr_sql(condition, owner, kind, table_names, source, entries);
+            collect_expr_sql(condition, owner, kind, table_names, sources, entries);
             for invariant in invariants {
-                collect_expr_sql(invariant, owner, kind, table_names, source, entries);
+                collect_expr_sql(invariant, owner, kind, table_names, sources, entries);
             }
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::For { iterable, body, .. } => {
-            collect_expr_sql(iterable, owner, kind, table_names, source, entries);
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_expr_sql(iterable, owner, kind, table_names, sources, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Loop {
             invariants, body, ..
         } => {
             for invariant in invariants {
-                collect_expr_sql(invariant, owner, kind, table_names, source, entries);
+                collect_expr_sql(invariant, owner, kind, table_names, sources, entries);
             }
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Match { value, arms, .. } => {
-            collect_expr_sql(value, owner, kind, table_names, source, entries);
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
             for arm in arms {
                 collect_statement_sql(
                     &arm.body.statements,
                     owner,
                     kind,
                     table_names,
-                    source,
+                    sources,
                     entries,
                 );
             }
         }
         Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
-            collect_statement_sql(&body.statements, owner, kind, table_names, source, entries);
+            collect_statement_sql(&body.statements, owner, kind, table_names, sources, entries);
         }
         Stmt::Break { .. } | Stmt::Continue { .. } => {}
     }
@@ -826,42 +1744,47 @@ fn collect_expr_sql(
     owner: &str,
     kind: &str,
     table_names: &[String],
-    source: &str,
+    sources: &ImpactSources<'_>,
     entries: &mut Vec<Value>,
 ) {
     match &expression.kind {
-        ExprKind::Sql { query, .. } => entries.push(json!({
-            "owner": owner,
-            "kind": kind,
-            "tables": referenced_tables(query, table_names),
-            "span": span_value(expression.span, source),
-        })),
+        ExprKind::Sql { query, .. } => {
+            let (operation, tables, table_accesses) = analyzed_sql_accesses(query, table_names);
+            entries.push(json!({
+                "owner": owner,
+                "kind": kind,
+                "operation": operation,
+                "tables": tables,
+                "table_accesses": table_accesses,
+                "span": span_value(expression.span, sources),
+            }));
+        }
         ExprKind::Array(values) => values
             .iter()
-            .for_each(|value| collect_expr_sql(value, owner, kind, table_names, source, entries)),
+            .for_each(|value| collect_expr_sql(value, owner, kind, table_names, sources, entries)),
         ExprKind::Map(map_entries) => map_entries.iter().for_each(|(key, value)| {
-            collect_expr_sql(key, owner, kind, table_names, source, entries);
-            collect_expr_sql(value, owner, kind, table_names, source, entries);
+            collect_expr_sql(key, owner, kind, table_names, sources, entries);
+            collect_expr_sql(value, owner, kind, table_names, sources, entries);
         }),
         ExprKind::Record { fields, .. } => fields.iter().for_each(|(_, value)| {
-            collect_expr_sql(value, owner, kind, table_names, source, entries)
+            collect_expr_sql(value, owner, kind, table_names, sources, entries)
         }),
         ExprKind::Index { target, index } => {
-            collect_expr_sql(target, owner, kind, table_names, source, entries);
-            collect_expr_sql(index, owner, kind, table_names, source, entries);
+            collect_expr_sql(target, owner, kind, table_names, sources, entries);
+            collect_expr_sql(index, owner, kind, table_names, sources, entries);
         }
         ExprKind::Field { target, .. } | ExprKind::Await(target) => {
-            collect_expr_sql(target, owner, kind, table_names, source, entries)
+            collect_expr_sql(target, owner, kind, table_names, sources, entries)
         }
         ExprKind::Call { args, .. } => args.iter().for_each(|argument| {
-            collect_expr_sql(argument, owner, kind, table_names, source, entries)
+            collect_expr_sql(argument, owner, kind, table_names, sources, entries)
         }),
         ExprKind::Unary { expr, .. } => {
-            collect_expr_sql(expr, owner, kind, table_names, source, entries)
+            collect_expr_sql(expr, owner, kind, table_names, sources, entries)
         }
         ExprKind::Binary { left, right, .. } => {
-            collect_expr_sql(left, owner, kind, table_names, source, entries);
-            collect_expr_sql(right, owner, kind, table_names, source, entries);
+            collect_expr_sql(left, owner, kind, table_names, sources, entries);
+            collect_expr_sql(right, owner, kind, table_names, sources, entries);
         }
         ExprKind::Int(_)
         | ExprKind::UInt(_)
@@ -873,19 +1796,36 @@ fn collect_expr_sql(
     }
 }
 
-fn referenced_tables(query: &str, table_names: &[String]) -> Vec<String> {
-    table_names
-        .iter()
-        .filter(|table| contains_identifier(query, table))
-        .cloned()
-        .collect()
+fn analyzed_sql_accesses(
+    query: &str,
+    table_names: &[String],
+) -> (Option<&'static str>, Vec<String>, Vec<Value>) {
+    let (operation, accesses) = zelyra_database::sql::analyze_table_access(query, table_names);
+    let tables = accesses.iter().map(|access| access.table.clone()).collect();
+    let accesses = accesses
+        .into_iter()
+        .map(|access| json!({ "table": access.table, "mode": access.mode.as_str() }))
+        .collect();
+    (operation, tables, accesses)
 }
 
-fn contains_identifier(source: &str, needle: &str) -> bool {
-    let needle = needle.to_ascii_lowercase();
-    source
-        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
-        .any(|word| word.eq_ignore_ascii_case(&needle))
+fn relation_table(name: &str, table_names: &[String]) -> Option<String> {
+    let normalized = name.to_ascii_lowercase();
+    if let Some(table) = table_names
+        .iter()
+        .find(|table| table.eq_ignore_ascii_case(&normalized))
+    {
+        return Some(table.clone());
+    }
+    let plural = if normalized.ends_with('y') {
+        format!("{}ies", &normalized[..normalized.len() - 1])
+    } else {
+        format!("{normalized}s")
+    };
+    table_names
+        .iter()
+        .find(|table| table.eq_ignore_ascii_case(&plural))
+        .cloned()
 }
 
 fn crud_permissions(crud: &zelyra_ast::CrudDef) -> Vec<String> {
@@ -974,14 +1914,32 @@ mod tests {
     fn builds_deterministic_source_impact() {
         let source = r#"
             table customers { id: Id }
+            table audit_events { id: Id message: String(100) }
+            table users { id: Id email: Email password_hash: String(255) }
+            auth users { table: users }
             component Badge { html { <strong>Ready</strong> } }
             view Shell { html { <Badge /><slot /> } }
             page "/customers" {
+                requires auth
                 view: Shell
+                load customers = sql<Customer[]> { SELECT id FROM customers }
                 html { <Badge /> }
             }
-            form CustomerForm -> customers { fields { id } }
-            crud Customer -> customers
+            table invoices { id: Id customer: Customer }
+            form CustomerForm -> customers {
+                fields { id }
+                action save {
+                    requires auth
+                    permits "customers.write"
+                    sql { INSERT INTO audit_events (message) VALUES ('saved') }
+                }
+            }
+            crud Customer -> customers { requires auth }
+            tableview CustomerList {
+                source sql<Int[]> { SELECT id FROM customers }
+                columns { id }
+                requires auth
+            }
             fn load() uses Database {
                 return sql<Customer> { SELECT id FROM customers }
             }
@@ -993,7 +1951,7 @@ mod tests {
             }
         "#;
         let program = parse(&lex(source).expect("source should lex")).expect("source should parse");
-        let impact = build_impact(&program, source);
+        let impact = build_impact_with_sources(&program, &[], source);
         assert_eq!(impact["tables"][0]["name"], "customers");
         assert_eq!(impact["sql"][0]["tables"][0], "customers");
         assert_eq!(impact["permissions"][0]["name"], "customers.read");
@@ -1005,6 +1963,41 @@ mod tests {
                 && reference["kind"] == "table"
         }));
         assert!(references.iter().any(|reference| {
+            reference["from"] == "form:CustomerForm"
+                && reference["to"] == "table:audit_events"
+                && reference["kind"] == "sql_table"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "form:CustomerForm"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "page:/customers"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "auth:users"
+                && reference["to"] == "table:users"
+                && reference["kind"] == "auth_table"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "api:GET /customers"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "crud:Customer"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "tableview:CustomerList"
+                && reference["to"] == "auth:users"
+                && reference["kind"] == "authentication"
+        }));
+        assert!(references.iter().any(|reference| {
             reference["from"] == "function:load"
                 && reference["to"] == "table:customers"
                 && reference["kind"] == "sql_table"
@@ -1013,6 +2006,16 @@ mod tests {
             reference["from"] == "page:/customers"
                 && reference["to"] == "view:Shell"
                 && reference["kind"] == "view"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "page:/customers"
+                && reference["to"] == "table:customers"
+                && reference["kind"] == "page_data_sql"
+        }));
+        assert!(references.iter().any(|reference| {
+            reference["from"] == "table:invoices"
+                && reference["to"] == "table:customers"
+                && reference["kind"] == "relation"
         }));
         assert!(references.iter().any(|reference| {
             reference["from"] == "view:Shell"
@@ -1029,7 +2032,7 @@ mod tests {
                 && reference["to"] == "function:load"
                 && reference["kind"] == "call"
         }));
-        assert_eq!(impact, build_impact(&program, source));
+        assert_eq!(impact, build_impact_with_sources(&program, &[], source));
     }
 
     #[test]
@@ -1040,7 +2043,7 @@ mod tests {
             crud Customer -> customers
         "#;
         let program = parse(&lex(source).expect("source should lex")).expect("source should parse");
-        let impact = build_impact(&program, source);
+        let impact = build_impact_with_sources(&program, &[], source);
         let focused = focus_impact(&impact, "table:customers").expect("table should be known");
         assert_eq!(focused["focus"], "table:customers");
         assert!(focused["references"]
