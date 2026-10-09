@@ -244,8 +244,9 @@ def unfinished_gates(
 def _record_value(raw_text: str, label: str) -> str:
     normalized_label = label.casefold()
     for line in raw_text.splitlines():
-        if line.strip().casefold().startswith(normalized_label):
-            return line.split(":", 1)[1].strip().strip("` ")
+        cleaned = line.strip().lstrip("-* ").strip()
+        if cleaned.casefold().startswith(normalized_label):
+            return cleaned.split(":", 1)[1].strip().strip("` ")
     return ""
 
 

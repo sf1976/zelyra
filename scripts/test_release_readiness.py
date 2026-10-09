@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_release_readiness import REQUIRED_GATES_040, REQUIRED_GATES_050, unfinished_gates
+from check_release_readiness import REQUIRED_GATES_040, REQUIRED_GATES_050, candidate_tag, unfinished_gates
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -110,6 +110,7 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path = root / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content, encoding="utf-8")
+            self.assertEqual(candidate_tag(root, "0.5.0"), "v0.5.0-rc.1")
             self.assertEqual(unfinished_gates(root, "0.5.0", "a" * 40), [])
             self.assertTrue(any("different candidate commit" in failure for failure in unfinished_gates(root, "0.5.0", "b" * 40)))
             (root / "docs/release-readiness/0.5.0-human-acceptance.en.md").unlink()
