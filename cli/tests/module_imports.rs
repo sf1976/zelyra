@@ -2580,6 +2580,49 @@ fn imported_capabilities_remain_subject_to_project_grants() {
 }
 
 #[test]
+fn scoped_database_effects_propagate_across_imported_modules() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/reader.zyl\" as reader\nfn main() uses Database(read) { reader::readiness() }\n",
+        ),
+        (
+            "src/reader.zyl",
+            "pub fn readiness() -> Int uses Database(read) { return sql<Int> { SELECT 1 } }\n",
+        ),
+        (
+            "zelyra.toml",
+            "[project]\nname = \"module-test\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase_read = true\ndatabase_write = false\n",
+        ),
+    ]);
+
+    let allowed = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(
+        allowed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed.stdout)
+    );
+
+    fs::write(
+        directory.join("zelyra.toml"),
+        "[project]\nname = \"module-test\"\nversion = \"0.4.0-dev\"\nzelyra = \"0.1\"\n\n[capabilities]\ndatabase_read = false\ndatabase_write = true\n",
+    )
+    .unwrap();
+    let denied = run(&directory, &["check", "main.zyl", "--format=json"]);
+    assert!(!denied.status.success());
+    let document: Value = serde_json::from_slice(&denied.stdout).unwrap();
+    assert!(document["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|diagnostic| diagnostic["code"] == "E-CAP-001"
+            && diagnostic["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("database_read"))));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn check_composes_a_project_database_from_an_imported_configuration_module() {
     let directory = project(&[
         (
