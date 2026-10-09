@@ -152,6 +152,40 @@ aus einem Projekt. Maschinelle API-/JSON-Verträge und Compilerdiagnosen bleiben
 sprachneutral beziehungsweise in ihrer festgelegten technischen Sprache und
 werden nicht anhand der UI-Einstellung verändert.
 
+## Passwortwiederherstellung im 0.4-Entwicklungszweig
+
+Eine Auth-Deklaration kann `reset_tokens: password_resets` konfigurieren.
+Die Reset-Tabelle braucht `user_id`, einen eindeutigen `token_hash`,
+`expires_at`, `consumed_at` und einen Fremdschlüssel auf `users.id`; außerdem
+muss eine Auth-Audit-Tabelle konfiguriert sein. Das Feature läuft derzeit nur
+mit MariaDB. Reset-Limits sind pro Prozess und TCP-Peer-IP begrenzt; sie werden
+beim Neustart zurückgesetzt.
+
+| Variable | Standard | Verwendung und Sicherheitsklasse |
+|---|---:|---|
+| `ZELYRA_PUBLIC_BASE_URL` | keiner | Öffentliche HTTPS-Origin für E-Mail-Links; HTTP ist nur für Loopback erlaubt. Kein Secret. |
+| `ZELYRA_SMTP_HOST` | keiner | SMTP-Relay-Hostname; erforderlich, wenn `reset_tokens` aktiv ist. |
+| `ZELYRA_SMTP_PORT` | `465` / `587` / `25` | Port für `implicit_tls` / `starttls` / `local_plaintext`; der letzte Modus ist nur ungeschützt auf Loopback ohne Anmeldung erlaubt. |
+| `ZELYRA_SMTP_SECURITY` | `implicit_tls` | `implicit_tls`, `starttls` oder `local_plaintext`; TLS-Fehler führen nicht zu einem unverschlüsselten Fallback. |
+| `ZELYRA_SMTP_FROM` | keiner | Absenderadresse für Reset-E-Mails. |
+| `ZELYRA_SMTP_USERNAME` | keiner | Optionaler SMTP-Benutzer; muss zusammen mit dem Passwort gesetzt werden. Secret. |
+| `ZELYRA_SMTP_PASSWORD` | keiner | SMTP-Passwort. Secret; nie ausgeben oder committen. |
+
+Für `zelyra serve` gilt Prozessumgebung vor Projekt-`.env`. Ohne vollständige
+SMTP-Konfiguration startet `serve` nicht, wenn die Auth-Deklaration
+`reset_tokens` enthält. `ZELYRA_PUBLIC_BASE_URL` muss eine HTTPS-Origin oder
+eine Loopback-HTTP-Origin ohne Pfad, Query oder Fragment sein. Reset-Links
+enthalten 256 Bit Zufall, werden nach 15 Minuten ungültig und nach Austausch
+aus der URL in ein HttpOnly-Cookie übernommen. In der Datenbank wird nur der
+Token-Hash abgelegt. Eine erfolgreiche Änderung verbraucht den Token und
+widerruft persistente und prozesslokale Sitzungen des Kontos.
+
+Diese Funktion ist experimentell. SMTP-Verfügbarkeit, öffentliche TLS-
+Terminierung, dauerhafte Ratenbegrenzung über Neustarts und unabhängige
+Sicherheitsprüfung bleiben Betriebs- beziehungsweise Release-Gates. Der
+Ende-zu-Ende-Test `tests/password-reset-e2e.sh` verwendet eine lokale
+Loopback-SMTP-Senke und MariaDB; er sendet keine externe E-Mail.
+
 ## Host-Allowlist des Webservers
 
 | Variable | Werte | Standard in neuer MariaDB-`.env` / Fallback | Vorrang | Sicherheitsklasse und Wirkung | Betroffene Befehle und Tests |

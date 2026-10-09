@@ -2128,10 +2128,76 @@ pub fn execute_mariadb_queries(
     queries: &[Query],
     transaction: bool,
 ) -> Result<Vec<QueryResult>, DatabaseError> {
+    let results = execute_mariadb_queries_in_transaction(database_url, queries, transaction)?;
+    if transaction {
+        Ok(Vec::new())
+    } else {
+        Ok(results)
+    }
+}
+
+/// Executes a batch and returns each query result, including when the batch is
+/// transactional. Callers should prefer `execute_mariadb_queries` unless they
+/// need to inspect a result before committing a security-sensitive update.
+pub fn execute_mariadb_queries_in_transaction(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
     let settings = MariaDbTimeouts::from_env()?;
     let tls = MariaDbTlsSettings::from_env()?;
     let pool = mariadb_pool(database_url, settings, tls)?;
     execute_mariadb_queries_on_pool(&pool, settings, queries, transaction)
+}
+
+/// A single connection inside a MariaDB transaction. The value cannot escape
+/// the closure passed to `with_mariadb_transaction`.
+pub struct MariaDbTransaction<'a> {
+    connection: &'a mut Conn,
+}
+
+impl MariaDbTransaction<'_> {
+    pub fn execute(&mut self, query: &Query) -> Result<QueryResult, DatabaseError> {
+        let (sql, parameters) = prepare_mariadb_query(query)?;
+        execute_prepared_mariadb_query(self.connection, &sql, parameters)
+    }
+}
+
+/// Runs a decision-making transaction on one MariaDB connection. Returning
+/// `Ok` commits; returning an error rolls back.
+pub fn with_mariadb_transaction<T>(
+    database_url: &str,
+    operation: impl FnOnce(&mut MariaDbTransaction<'_>) -> Result<T, DatabaseError>,
+) -> Result<T, DatabaseError> {
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    let pool = mariadb_pool(database_url, settings, tls)?;
+    let mut connection = acquire_mariadb_connection(&pool, settings)?;
+    if let Err(error) = connection.connection.query_drop("START TRANSACTION") {
+        connection.discard = true;
+        return Err(mariadb_driver_error(error));
+    }
+    let result = {
+        let mut transaction = MariaDbTransaction {
+            connection: &mut connection.connection,
+        };
+        operation(&mut transaction)
+    };
+    match result {
+        Ok(value) => {
+            if let Err(error) = connection.connection.query_drop("COMMIT") {
+                connection.discard = true;
+                Err(mariadb_driver_error(error))
+            } else {
+                Ok(value)
+            }
+        }
+        Err(error) => {
+            let _ = connection.connection.query_drop("ROLLBACK");
+            connection.discard = true;
+            Err(error)
+        }
+    }
 }
 
 fn execute_mariadb_queries_on_pool(
@@ -2175,10 +2241,8 @@ fn execute_mariadb_queries_on_pool(
             connection.discard = true;
             return Err(mariadb_driver_error(error));
         }
-        Ok(Vec::new())
-    } else {
-        Ok(results)
     }
+    Ok(results)
 }
 
 fn prepare_mariadb_query(query: &Query) -> Result<(String, Vec<Value>), DatabaseError> {

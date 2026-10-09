@@ -15,6 +15,8 @@ sha2 = "0.10"
 mysql = { version = "28.0.3", default-features = false, features = ["minimal-rust", "rustls-tls-ring"] }
 r2d2 = "0.8.10"
 ureq = { version = "3.4.2", default-features = true }
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "rustls", "ring", "webpki-roots"] }
+url = "2.5.8"
 zelyra-ast = { path = "ast", version = "0.3" }
 zelyra-lexer = { path = "lexer", version = "0.3" }
 zelyra-parser = { path = "parser", version = "0.3" }

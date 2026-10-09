@@ -12,3 +12,5 @@ argon2 = "0.5"
 blake2 = "0.10"
 rand_core.workspace = true
 serde_json.workspace = true
+lettre.workspace = true
+url.workspace = true

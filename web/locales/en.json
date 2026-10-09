@@ -282,5 +282,14 @@
   "identifier.serial_number": "Serial number",
   "identifier.category": "Category",
   "identifier.commissioned_year": "Commissioned year",
-  "identifier.operating_hours": "Operating hours"
+  "identifier.operating_hours": "Operating hours",
+  "auth.reset_request_title": "Reset your password",
+  "auth.reset_request_submit": "Send reset instructions",
+  "auth.reset_password_title": "Choose a new password",
+  "auth.reset_password_submit": "Update password",
+  "auth.reset_generic_response": "If the account can receive password reset messages, instructions will be sent shortly.",
+  "auth.reset_invalid": "This password reset link is invalid or has expired.",
+  "auth.reset_request_link": "Forgot your password?",
+  "auth.reset_email_subject": "Password reset",
+  "auth.reset_email_body": "Use this link within {minutes} minutes to reset your password:\n\n{link}\n\nIf you did not request this, ignore this message."
 }

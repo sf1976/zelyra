@@ -514,7 +514,12 @@ architecture requirement for every phase, not a provider-specific feature.
 - [x] Password login, persistent sessions, CSRF, account activation, and
   last-administrator protection.
 - [🧪] Auth definitions can tune process-local login failure windows and lockout
-  duration; reset-token and configurable reset throttling remain open.
+  duration. Password recovery is partially implemented in the unreleased 0.4
+  development branch: MariaDB stores single-use token hashes, generic
+  responses, audit, loopback/HTTPS SMTP configuration, and session revocation
+  are covered by a MariaDB/SMTP-sink E2E. Process-local reset throttling and
+  independent security review remain open; the account lifecycle is not
+  complete.
 - [x] Direct permissions and role-derived permissions.
 - [x] Browser administration and CLI role management.
 - [x] Audit inspection, bounded export, structural verification, and safe prune.
@@ -530,8 +535,9 @@ architecture requirement for every phase, not a provider-specific feature.
 - [ ] Explicit, user-controlled audit exports to destinations such as syslog,
   object storage, or SIEM, with delivery status and retry behavior; usage
   telemetry and hidden remote collection are out of scope.
-- [ ] MFA/WebAuthn, password reset flows, session/device management, and login
-  notifications.
+- [🧪] Password reset and session controls are partial in unreleased 0.4;
+  expiry-boundary/concurrency behavior, persistent reset throttling, device
+  metadata, MFA/WebAuthn, and login notifications remain open.
 - [ ] Fine-grained policy expressions, policy testing, and permission explain
   output.
 - [ ] Security review, threat model, dependency audit, and penetration testing.

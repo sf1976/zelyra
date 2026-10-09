@@ -380,6 +380,9 @@ impl<'a> Parser<'a> {
         let mut admin_role = None;
         let mut login_rate_limit = None;
         let mut login_block_seconds = None;
+        let mut reset_tokens_table = None;
+        let mut reset_rate_limit = None;
+        let mut reset_block_seconds = None;
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let field = match self.current().kind.clone() {
                 TokenKind::Table => "table",
@@ -394,6 +397,9 @@ impl<'a> Parser<'a> {
                 TokenKind::AdminRole => "admin_role",
                 TokenKind::LoginRateLimit => "login_rate_limit",
                 TokenKind::LoginBlockSeconds => "login_block_seconds",
+                TokenKind::ResetTokens => "reset_tokens",
+                TokenKind::ResetRateLimit => "reset_rate_limit",
+                TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 _ => return self.error("expected authentication option"),
             };
             self.advance();
@@ -413,20 +419,25 @@ impl<'a> Parser<'a> {
                 self.skip_newlines();
                 continue;
             }
-            if field == "login_rate_limit" {
-                if login_rate_limit.is_some() {
-                    return self.error("login_rate_limit may only be declared once");
+            if matches!(field, "login_rate_limit" | "reset_rate_limit") {
+                let rate_limit = if field == "login_rate_limit" {
+                    &mut login_rate_limit
+                } else {
+                    &mut reset_rate_limit
+                };
+                if rate_limit.is_some() {
+                    return self.error(format!("{field} may only be declared once"));
                 }
                 let requests = match self.current().kind.clone() {
                     TokenKind::Int(value) if (1..=1_000).contains(&value) => {
                         self.advance();
                         value as u32
                     }
-                    _ => return self.error("login_rate_limit attempts must be between 1 and 1000"),
+                    _ => return self.error(format!("{field} attempts must be between 1 and 1000")),
                 };
-                let (per, _) = self.ident("`per` in login_rate_limit")?;
+                let (per, _) = self.ident(&format!("`per` in {field}"))?;
                 if per != "per" {
-                    return self.error("expected `per` before login rate limit window");
+                    return self.error(format!("expected `per` before {field} window"));
                 }
                 let window_seconds = match self.current().kind.clone() {
                     TokenKind::Int(value) if (1..=86_400).contains(&value) => {
@@ -434,27 +445,33 @@ impl<'a> Parser<'a> {
                         value as u32
                     }
                     _ => {
-                        return self
-                            .error("login rate limit window must be between 1 and 86400 seconds")
+                        return self.error(format!(
+                            "{field} window must be between 1 and 86400 seconds"
+                        ))
                     }
                 };
-                login_rate_limit = Some(zelyra_ast::ApiRateLimit {
+                *rate_limit = Some(zelyra_ast::ApiRateLimit {
                     requests,
                     window_seconds,
                 });
                 self.skip_newlines();
                 continue;
             }
-            if field == "login_block_seconds" {
-                if login_block_seconds.is_some() {
-                    return self.error("login_block_seconds may only be declared once");
+            if matches!(field, "login_block_seconds" | "reset_block_seconds") {
+                let block_seconds = if field == "login_block_seconds" {
+                    &mut login_block_seconds
+                } else {
+                    &mut reset_block_seconds
+                };
+                if block_seconds.is_some() {
+                    return self.error(format!("{field} may only be declared once"));
                 }
-                login_block_seconds = match self.current().kind.clone() {
+                *block_seconds = match self.current().kind.clone() {
                     TokenKind::Int(value) if (1..=86_400).contains(&value) => {
                         self.advance();
                         Some(value as u32)
                     }
-                    _ => return self.error("login_block_seconds must be between 1 and 86400"),
+                    _ => return self.error(format!("{field} must be between 1 and 86400")),
                 };
                 self.skip_newlines();
                 continue;
@@ -474,6 +491,7 @@ impl<'a> Parser<'a> {
                 "admin_path" => admin_path = Some(value),
                 "admin_permission" => admin_permission = Some(value),
                 "admin_role" => admin_role = Some(value),
+                "reset_tokens" => reset_tokens_table = Some(value),
                 _ => return self.error("unknown authentication option"),
             }
             self.skip_newlines();
@@ -499,6 +517,9 @@ impl<'a> Parser<'a> {
             admin_role,
             login_rate_limit,
             login_block_seconds,
+            reset_tokens_table,
+            reset_rate_limit,
+            reset_block_seconds,
             span: start.join(end),
         })
     }
@@ -3345,12 +3366,51 @@ mod tests {
     }
 
     #[test]
+    fn parses_configurable_password_reset_table_and_rate_limit() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                    reset_tokens: password_resets
+                    reset_rate_limit: 3 per 900
+                    reset_block_seconds: 600
+                }
+                fn main() { }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.auth[0].reset_tokens_table.as_deref(),
+            Some("password_resets")
+        );
+        assert_eq!(
+            program.auth[0].reset_rate_limit,
+            Some(zelyra_ast::ApiRateLimit {
+                requests: 3,
+                window_seconds: 900,
+            })
+        );
+        assert_eq!(program.auth[0].reset_block_seconds, Some(600));
+    }
+
+    #[test]
     fn rejects_out_of_bounds_or_duplicate_login_rate_settings() {
         for source in [
             r#"auth users { table: users login_rate_limit: 0 per 60 } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 0 } fn main() { }"#,
             r#"auth users { table: users login_block_seconds: 86401 } fn main() { }"#,
             r#"auth users { table: users login_rate_limit: 5 per 60 login_rate_limit: 3 per 30 } fn main() { }"#,
+        ] {
+            assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
+        }
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_or_duplicate_reset_rate_settings() {
+        for source in [
+            r#"auth users { table: users reset_rate_limit: 0 per 60 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limit: 5 per 0 } fn main() { }"#,
+            r#"auth users { table: users reset_block_seconds: 86401 } fn main() { }"#,
+            r#"auth users { table: users reset_rate_limit: 5 per 60 reset_rate_limit: 3 per 30 } fn main() { }"#,
         ] {
             assert!(parse(&lex(source).unwrap()).is_err(), "accepted {source}");
         }

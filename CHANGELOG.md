@@ -15,12 +15,24 @@ releases follow Semantic Versioning independently of the language line.
   self-service session listing and revocation, limited to the signed-in user.
   CSRF and same-origin checks apply; revoking the current session clears its
   cookie. Memory and MariaDB-backed sessions are covered by HTTP tests and the
-  protected-app MariaDB E2E. Device metadata and password recovery remain open.
+  protected-app MariaDB E2E. Device metadata remain open. Password recovery
+  is now partially implemented in the 0.4 development branch: MariaDB stores
+  only single-use token hashes; generic responses, audit, CSRF, throttling,
+  loopback/HTTPS SMTP delivery, expiry/replay checks, and persistent/in-memory
+  session revocation have a MariaDB/SMTP-sink E2E. SMTP outage review,
+  persistent rate limits, concurrency/expiry-boundary review, and independent
+  security acceptance remain open.
   / Generierte Auth-Seiten bieten jetzt `/account/sessions` zum Anzeigen und
   Beenden eigener Sitzungen. CSRF- und Same-Origin-Prüfungen gelten; beim
   Beenden der aktuellen Sitzung wird das Cookie gelöscht. HTTP-Tests und der
   MariaDB-Ende-zu-Ende-Test der geschützten Anwendung decken Speicher- und
-  Datenbanksitzungen ab. Gerätemetadaten und Passwortwiederherstellung bleiben offen.
+  Datenbanksitzungen ab. Gerätemetadaten bleiben offen. Die
+  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
+  MariaDB speichert nur einmalige Token-Hashes; generische Antworten, Audit,
+  CSRF, Ratenbegrenzung, Loopback-/HTTPS-SMTP-Versand, Ablauf-/Replay-Prüfung
+  und Widerruf persistenter und flüchtiger Sitzungen haben einen
+  MariaDB-/SMTP-Senken-E2E-Test. SMTP-Ausfall, persistente Limits,
+  Ablaufgrenze/parallele Requests und unabhängige Sicherheitsabnahme bleiben offen.
 - Login throttle state is now capped at 4,096 keys, expired windows are cleaned,
   normalized email keys are hashed, configured lockout durations are honored
   independently of the failure window, and new keys fail closed at capacity. /

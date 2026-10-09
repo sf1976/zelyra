@@ -1788,6 +1788,43 @@ fn accepts_persistent_auth_tables() {
 }
 
 #[test]
+fn accepts_password_reset_schema_with_audit_and_single_use_token_storage() {
+    let source = r#"
+        auth users {
+            table: users
+            reset_tokens: password_resets
+            audit: auth_audit_log
+        }
+
+        table users {
+            id: Id primary auto
+            email: Email required unique
+            password_hash: String(255) required
+        }
+
+        table password_resets {
+            id: Id primary auto
+            user: User required
+            token_hash: String(64) required unique
+            expires_at: Timestamp required
+            consumed_at: Timestamp?
+        }
+
+        table auth_audit_log {
+            id: Id primary auto
+            actor_user_id: Int?
+            event: String(100) required
+            target_user_id: Int?
+            details: String(1000) required
+            created_at: Timestamp default now
+        }
+    "#;
+    let program = parse(&lex(source).unwrap()).unwrap();
+    let schema = build_schema(&program).unwrap();
+    assert!(validate_auth("test.zyl", &program, &schema));
+}
+
+#[test]
 fn rejects_partial_auth_role_configuration() {
     let source = r#"
         auth users {

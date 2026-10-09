@@ -282,5 +282,14 @@
   "identifier.serial_number": "Seriennummer",
   "identifier.category": "Kategorie",
   "identifier.commissioned_year": "Baujahr",
-  "identifier.operating_hours": "Betriebsstunden"
+  "identifier.operating_hours": "Betriebsstunden",
+  "auth.reset_request_title": "Passwort zurücksetzen",
+  "auth.reset_request_submit": "Anleitung anfordern",
+  "auth.reset_password_title": "Neues Passwort festlegen",
+  "auth.reset_password_submit": "Passwort ändern",
+  "auth.reset_generic_response": "Wenn das Konto Reset-Nachrichten empfangen kann, wird die Anleitung in Kürze versendet.",
+  "auth.reset_invalid": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen.",
+  "auth.reset_request_link": "Passwort vergessen?",
+  "auth.reset_email_subject": "Passwort zurücksetzen",
+  "auth.reset_email_body": "Verwende diesen Link innerhalb von {minutes} Minuten, um dein Passwort zurückzusetzen:\n\n{link}\n\nWenn du das nicht angefordert hast, ignoriere diese Nachricht."
 }

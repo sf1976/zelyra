@@ -31,7 +31,12 @@ den tatsächlich implementierten Stand.
   Unter `/account/sessions` können angemeldete Nutzer außerdem eigene
   dauerhafte und flüchtige Sitzungen mit CSRF- und Same-Origin-Prüfung anzeigen
   und beenden. Speichersitzungen laufen nach 24 Stunden ab. Gerätemetadaten und
-  Passwortwiederherstellung bleiben offen; der Kontolebenszyklus ist nicht abgeschlossen.
+  Passwortwiederherstellung ist im 0.4-Entwicklungszweig teilweise umgesetzt:
+  MariaDB speichert nur Einweg-Token-Hashes, generische Antworten, Audit,
+  Loopback-/HTTPS-SMTP-Konfiguration und Sitzungswiderruf sind vorhanden und
+  werden durch ein MariaDB-/SMTP-Senken-E2E geprüft. Prozesslokale Reset-Limits
+  und unabhängige Sicherheitsprüfung bleiben offen; der Kontolebenszyklus ist
+  nicht abgeschlossen.
   Bestehende Sitzungstabellen ohne `id`-Spalte behalten ihr bisheriges Verhalten;
   Anzeige und Sperrung im Verwaltungsbereich setzen diese Spalte weiterhin voraus.
 
@@ -567,8 +572,10 @@ Feature eines bestimmten Anbieters.
 - [ ] Ausdrückliche, anwenderkontrollierte Audit-Exporte an Ziele wie Syslog,
   Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
   und versteckte externe Erfassung sind ausgeschlossen.
-- [ ] MFA/WebAuthn, Passwort-Reset-Flows, Geräte-/Sessionverwaltung und
-  Login-Benachrichtigungen.
+- [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
+  teilweise umgesetzt; Ablaufgrenze/parallele Requests, persistente
+  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und Login-Benachrichtigungen
+  bleiben offen.
 - [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
   Berechtigungen.
 - [ ] Security Review, Threat Model, Dependency Audit und Penetrationstests.

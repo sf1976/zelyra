@@ -18,6 +18,7 @@ use zelyra_forms::{validate, FieldError};
 mod forms;
 mod http;
 mod i18n;
+mod password_reset;
 mod ui;
 use forms::*;
 pub use forms::{localized_identifier, render_form};
@@ -29,6 +30,7 @@ use i18n::{
     field_text, framework_text_with_catalog, identifier as locale_identifier, LOCALE_REFERENCE_END,
     LOCALE_REFERENCE_PARAMETER, LOCALE_REFERENCE_START,
 };
+pub use password_reset::PasswordResetMailer;
 use ui::*;
 
 const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
@@ -434,6 +436,9 @@ pub struct AuthRoute {
     pub admin_role: Option<String>,
     pub login_rate_limit: zelyra_ast::ApiRateLimit,
     pub login_block_seconds: u32,
+    pub reset_tokens_table: Option<String>,
+    pub reset_rate_limit: zelyra_ast::ApiRateLimit,
+    pub reset_block_seconds: u32,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -462,6 +467,11 @@ const DEFAULT_LOGIN_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLi
 const DEFAULT_LOGIN_BLOCK_SECONDS: u32 = 60;
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 const LOGIN_THROTTLE_MAX_KEYS: usize = 4096;
+pub const DEFAULT_RESET_RATE_LIMIT: zelyra_ast::ApiRateLimit = zelyra_ast::ApiRateLimit {
+    requests: 3,
+    window_seconds: 15 * 60,
+};
+pub const DEFAULT_RESET_BLOCK_SECONDS: u32 = 15 * 60;
 static REQUEST_ID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn valid_request_id(value: &str) -> bool {
@@ -512,6 +522,8 @@ pub struct WebApp {
     project_ui_catalogs: ProjectUiCatalogs,
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     login_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    reset_throttle: Arc<Mutex<HashMap<String, LoginThrottle>>>,
+    password_reset_mailer: Option<Arc<crate::password_reset::PasswordResetMailer>>,
     api_throttle: Arc<Mutex<HashMap<String, ApiThrottle>>>,
 }
 
@@ -536,6 +548,8 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -564,6 +578,8 @@ impl WebApp {
             project_ui_catalogs: ProjectUiCatalogs::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             login_throttle: Arc::new(Mutex::new(HashMap::new())),
+            reset_throttle: Arc::new(Mutex::new(HashMap::new())),
+            password_reset_mailer: None,
             api_throttle: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -626,6 +642,14 @@ impl WebApp {
 
     pub fn with_auth_route(mut self, auth_route: AuthRoute) -> Self {
         self.auth_route = Some(auth_route);
+        self
+    }
+
+    pub fn with_password_reset_mailer(
+        mut self,
+        mailer: crate::password_reset::PasswordResetMailer,
+    ) -> Self {
+        self.password_reset_mailer = Some(Arc::new(mailer));
         self
     }
 
@@ -859,6 +883,12 @@ impl WebApp {
             };
         }
         if let Some(auth_route) = &self.auth_route {
+            if matches!(
+                request.path.as_str(),
+                "/forgot-password" | "/reset-password"
+            ) {
+                return password_reset::dispatch_password_reset(self, auth_route, request);
+            }
             if request.path == "/login" {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
             }
@@ -2366,12 +2396,22 @@ fn render_account_sessions(
 }
 
 fn render_login(auth: &AuthRoute, language: UiLanguage) -> String {
+    let reset_link = auth
+        .reset_tokens_table
+        .as_ref()
+        .map(|_| {
+            format!(
+                "<p><a href=\"/forgot-password\">{}</a></p>",
+                tr(language, "auth.reset_request_link")
+            )
+        })
+        .unwrap_or_default();
     format!(
         "<main><h1>{}</h1><form method=\"post\" action=\"/login\">\
          <input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\">\
          <label for=\"email\">{}</label><input id=\"email\" name=\"email\" type=\"email\" required>\
          <label for=\"password\">{}</label><input id=\"password\" name=\"password\" type=\"password\" required>\
-         <button type=\"submit\">{}</button></form></main>",
+         <button type=\"submit\">{}</button></form>{reset_link}</main>",
         tr(language, "auth.login_title"),
         html_escape(auth.csrf.token()),
         tr(language, "auth.email"),
@@ -3479,6 +3519,9 @@ fn account_sessions_test_auth() -> AuthRoute {
         admin_role: None,
         login_rate_limit: DEFAULT_LOGIN_RATE_LIMIT,
         login_block_seconds: DEFAULT_LOGIN_BLOCK_SECONDS,
+        reset_tokens_table: None,
+        reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
+        reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
         schema: Schema {
             database: None,
             tables: Vec::new(),

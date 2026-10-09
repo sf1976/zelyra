@@ -301,6 +301,15 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 ZELYRA_DB_TLS_MODE=disabled
 # Optional absolute CA path, readable inside the Zelyra container/process.
 # ZELYRA_DB_TLS_CA_CERT_FILE=
+# Optional password recovery mail delivery. Configure these values only when
+# auth declares a reset_tokens table; credentials remain local secrets.
+# ZELYRA_PUBLIC_BASE_URL=https://app.example.test
+# ZELYRA_SMTP_HOST=mail.example.test
+# ZELYRA_SMTP_PORT=465
+# ZELYRA_SMTP_SECURITY=implicit_tls
+# ZELYRA_SMTP_FROM=Zelyra <no-reply@example.test>
+# ZELYRA_SMTP_USERNAME=
+# ZELYRA_SMTP_PASSWORD=
 ZELYRA_DATABASE_MAIN_URL=mariadb://zelyra:change-me@127.0.0.1:${{ZELYRA_DB_HOST_PORT:-3306}}/zelyra_app
 MARIADB_DATABASE=zelyra_app
 MARIADB_USER=zelyra
@@ -708,6 +717,13 @@ console = false
       ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS: ${ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS:-10}
       ZELYRA_DB_TLS_MODE: ${ZELYRA_DB_TLS_MODE:-disabled}
       ZELYRA_DB_TLS_CA_CERT_FILE: ${ZELYRA_DB_TLS_CA_CERT_FILE:-}
+      ZELYRA_PUBLIC_BASE_URL: ${ZELYRA_PUBLIC_BASE_URL:-}
+      ZELYRA_SMTP_HOST: ${ZELYRA_SMTP_HOST:-}
+      ZELYRA_SMTP_PORT: ${ZELYRA_SMTP_PORT:-}
+      ZELYRA_SMTP_SECURITY: ${ZELYRA_SMTP_SECURITY:-implicit_tls}
+      ZELYRA_SMTP_FROM: ${ZELYRA_SMTP_FROM:-}
+      ZELYRA_SMTP_USERNAME: ${ZELYRA_SMTP_USERNAME:-}
+      ZELYRA_SMTP_PASSWORD: ${ZELYRA_SMTP_PASSWORD:-}
     depends_on:
       mariadb:
         condition: service_healthy
@@ -5527,6 +5543,114 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
                 }
             }
         }
+        if let Some(reset_table_name) = &auth.reset_tokens_table {
+            if schema.backend() != Backend::MariaDb {
+                diagnostic(
+                    path,
+                    "E-AUTH-034",
+                    "password reset currently requires the MariaDB runtime",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            if auth.audit_table.is_none() {
+                diagnostic(
+                    path,
+                    "E-AUTH-033",
+                    "password reset requires an authentication audit table",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            let Some(reset_table) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *reset_table_name)
+            else {
+                diagnostic(
+                    path,
+                    "E-AUTH-030",
+                    &format!(
+                        "authentication refers to unknown password reset table {}",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+                continue;
+            };
+            if reset_table_name == &auth.table {
+                diagnostic(
+                    path,
+                    "E-AUTH-030",
+                    "password reset tokens must use a separate table from user accounts",
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            for required_column in ["user_id", "token_hash", "expires_at", "consumed_at"] {
+                if !reset_table
+                    .columns
+                    .iter()
+                    .any(|column| column.name == required_column)
+                {
+                    diagnostic(
+                        path,
+                        "E-AUTH-031",
+                        &format!(
+                            "authentication password reset table {} requires column {}",
+                            reset_table_name, required_column
+                        ),
+                        auth.span.line,
+                        auth.span.column,
+                    );
+                    valid = false;
+                }
+            }
+            let token_hash_is_unique = reset_table
+                .columns
+                .iter()
+                .any(|column| column.name == "token_hash" && column.unique)
+                || reset_table
+                    .indexes
+                    .iter()
+                    .chain(reset_table.uniques.iter())
+                    .any(|index| index.unique && index.columns == ["token_hash"]);
+            if !token_hash_is_unique {
+                diagnostic(
+                    path,
+                    "E-AUTH-032",
+                    &format!(
+                        "authentication password reset table {} requires a unique token_hash",
+                        reset_table_name
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+            if !reset_table.foreign_keys.iter().any(|foreign_key| {
+                foreign_key.column == "user_id"
+                    && foreign_key.referenced_table == auth.table
+                    && foreign_key.referenced_column == "id"
+            }) {
+                diagnostic(
+                    path,
+                    "E-AUTH-036",
+                    &format!(
+                        "authentication password reset table {} requires user_id to reference {}.id",
+                        reset_table_name, auth.table
+                    ),
+                    auth.span.line,
+                    auth.span.column,
+                );
+                valid = false;
+            }
+        }
         if let Some(permissions_table_name) = &auth.permissions_table {
             let Some(permissions_table) = schema
                 .tables
@@ -5818,6 +5942,68 @@ fn validate_auth(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> 
         valid = false;
     }
     valid
+}
+
+fn project_optional_setting(path: &str, key: &str) -> Result<Option<String>, String> {
+    if let Ok(value) = env::var(key) {
+        return Ok((!value.trim().is_empty()).then_some(value));
+    }
+    let source_path = std::path::Path::new(path);
+    let project_directory = source_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let env_path = project_directory.join(".env");
+    if !env_path.is_file() {
+        return Ok(None);
+    }
+    let env_path_string = env_path.to_string_lossy();
+    Ok(read_env_value(&env_path_string, key)?.filter(|value| !value.trim().is_empty()))
+}
+
+fn password_reset_mailer_from_environment(
+    path: &str,
+) -> Result<zelyra_web::PasswordResetMailer, String> {
+    let required = |name: &str| {
+        project_optional_setting(path, name)?
+            .ok_or_else(|| format!("{name} is required when password reset is enabled"))
+    };
+    let host = required("ZELYRA_SMTP_HOST")?;
+    let security = project_optional_setting(path, "ZELYRA_SMTP_SECURITY")?
+        .unwrap_or_else(|| "implicit_tls".into());
+    let default_port = match security.as_str() {
+        "implicit_tls" => 465,
+        "starttls" => 587,
+        "local_plaintext" => 25,
+        _ => {
+            return Err(
+                "ZELYRA_SMTP_SECURITY must be implicit_tls, starttls, or local_plaintext".into(),
+            )
+        }
+    };
+    let port = project_optional_setting(path, "ZELYRA_SMTP_PORT")?
+        .map(|value| {
+            value
+                .parse::<u16>()
+                .ok()
+                .filter(|port| *port > 0)
+                .ok_or_else(|| "ZELYRA_SMTP_PORT must be between 1 and 65535".to_owned())
+        })
+        .transpose()?
+        .unwrap_or(default_port);
+    let username = project_optional_setting(path, "ZELYRA_SMTP_USERNAME")?;
+    let password = project_optional_setting(path, "ZELYRA_SMTP_PASSWORD")?;
+    let from = required("ZELYRA_SMTP_FROM")?;
+    let base_url = required("ZELYRA_PUBLIC_BASE_URL")?;
+    zelyra_web::PasswordResetMailer::smtp(
+        &host,
+        port,
+        &security,
+        username.as_deref(),
+        password.as_deref(),
+        &from,
+        &base_url,
+    )
 }
 
 fn validate_cruds(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {
@@ -6432,9 +6618,30 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
                 window_seconds: 15 * 60,
             }),
             login_block_seconds: auth.login_block_seconds.unwrap_or(60),
+            reset_tokens_table: auth.reset_tokens_table.clone(),
+            reset_rate_limit: auth
+                .reset_rate_limit
+                .unwrap_or(zelyra_web::DEFAULT_RESET_RATE_LIMIT),
+            reset_block_seconds: auth
+                .reset_block_seconds
+                .unwrap_or(zelyra_web::DEFAULT_RESET_BLOCK_SECONDS),
             schema: schema.clone(),
             csrf,
         })
+    } else {
+        None
+    };
+    let reset_mailer = if auth_route
+        .as_ref()
+        .is_some_and(|auth| auth.reset_tokens_table.is_some())
+    {
+        match password_reset_mailer_from_environment(&path) {
+            Ok(mailer) => Some(mailer),
+            Err(error) => {
+                eprintln!("error[E-AUTH-035]: {error}");
+                return ExitCode::from(1);
+            }
+        }
     } else {
         None
     };
@@ -6662,6 +6869,11 @@ fn serve_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     };
     let app = if let Some(auth_route) = auth_route {
         app.with_auth_route(auth_route)
+    } else {
+        app
+    };
+    let app = if let Some(reset_mailer) = reset_mailer {
+        app.with_password_reset_mailer(reset_mailer)
     } else {
         app
     };

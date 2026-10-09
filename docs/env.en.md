@@ -141,6 +141,38 @@ project. Machine API/JSON contracts and compiler diagnostics remain language
 neutral or in their defined technical language; the UI locale does not change
 them.
 
+## Password recovery in the 0.4 development branch
+
+An auth declaration can set `reset_tokens: password_resets`. The reset table
+needs `user_id`, a unique `token_hash`, `expires_at`, `consumed_at`, and a
+foreign key to `users.id`; an auth audit table is also required. This feature
+currently runs only on MariaDB. Reset limits are process-local and keyed by
+the TCP peer IP; they reset on restart.
+
+| Variable | Default | Use and security classification |
+|---|---:|---|
+| `ZELYRA_PUBLIC_BASE_URL` | none | Public HTTPS origin for email links; HTTP is allowed only for loopback. Not a secret. |
+| `ZELYRA_SMTP_HOST` | none | SMTP relay hostname; required when `reset_tokens` is enabled. |
+| `ZELYRA_SMTP_PORT` | `465` / `587` / `25` | Port for `implicit_tls` / `starttls` / `local_plaintext`; the last mode permits plaintext only on loopback without authentication. |
+| `ZELYRA_SMTP_SECURITY` | `implicit_tls` | `implicit_tls`, `starttls`, or `local_plaintext`; TLS failure never falls back to plaintext. |
+| `ZELYRA_SMTP_FROM` | none | Sender address for reset email. |
+| `ZELYRA_SMTP_USERNAME` | none | Optional SMTP user; must be set together with the password. Secret. |
+| `ZELYRA_SMTP_PASSWORD` | none | SMTP password. Secret; never print or commit it. |
+
+For `zelyra serve`, process environment takes precedence over the project
+`.env`. If the auth declaration includes `reset_tokens`, `serve` will not start
+without complete SMTP configuration. `ZELYRA_PUBLIC_BASE_URL` must be an HTTPS
+origin or a loopback HTTP origin without a path, query, or fragment. Reset
+links contain 256 bits of randomness, expire after 15 minutes, and are moved
+from the URL into an HttpOnly cookie after exchange. Only the token hash is
+stored in the database. A successful password change consumes the token and
+revokes the account's persistent and in-process sessions.
+
+This feature is experimental. SMTP availability, public TLS termination,
+rate-limit persistence across restarts, and independent security review remain
+operational or release gates. `tests/password-reset-e2e.sh` uses a local
+loopback SMTP sink and MariaDB; it sends no external email.
+
 ## Web server host allowlist
 
 | Variable | Values | New MariaDB `.env` default / fallback | Precedence | Security classification and effect | Affected commands and tests |
