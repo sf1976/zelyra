@@ -76,7 +76,12 @@ jobs:
 
           python3 scripts/check_release_metadata.py --tag "${release_tag}"
           if [[ "${release_tag}" == "v${package_version}" ]]; then
-            python3 scripts/check_release_readiness.py --version "${package_version}"
+            if [[ "${package_version}" == "0.4.0" ]]; then
+              python3 scripts/check_release_readiness.py \
+                --version "${package_version}" --candidate-commit "${GITHUB_SHA}"
+            else
+              python3 scripts/check_release_readiness.py --version "${package_version}"
+            fi
           fi
           printf 'release_tag=%s\n' "${release_tag}" >> "${GITHUB_OUTPUT}"
 

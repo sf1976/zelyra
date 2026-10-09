@@ -62,6 +62,9 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text(content, encoding="utf-8")
 
             self.assertEqual(unfinished_gates(root, "0.4.0"), [])
+            self.assertEqual(unfinished_gates(root, "0.4.0", "abc123"), [])
+            wrong_candidate = unfinished_gates(root, "0.4.0", "def456")
+            self.assertTrue(any("different candidate commit" in item for item in wrong_candidate))
 
             english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
             english.write_text(
@@ -164,6 +167,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             'if [[ "${release_tag}" == "v${package_version}" ]]; then',
             workflow,
         )
+        self.assertIn('--candidate-commit "${GITHUB_SHA}"', workflow)
         self.assertIn(
             "blob/v0.4.0/docs/release-readiness/0.4.0-human-acceptance.en.md",
             workflow,

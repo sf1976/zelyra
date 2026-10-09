@@ -86,7 +86,9 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
     return False
 
 
-def unfinished_gates(root: Path, version: str) -> list[str]:
+def unfinished_gates(
+    root: Path, version: str, candidate_commit: str | None = None
+) -> list[str]:
     if version not in {"0.3.0", "0.4.0"}:
         return []
 
@@ -114,7 +116,8 @@ def unfinished_gates(root: Path, version: str) -> list[str]:
     for relative_path, markers in required_records.items():
         path = root / relative_path
         try:
-            text = " ".join(path.read_text(encoding="utf-8").casefold().split())
+            raw_text = path.read_text(encoding="utf-8")
+            text = " ".join(raw_text.casefold().split())
             text = re.sub(r"[*_`]", "", text)
         except FileNotFoundError:
             failures.append(f"human decision record missing ({relative_path})")
@@ -130,6 +133,22 @@ def unfinished_gates(root: Path, version: str) -> list[str]:
                 for placeholder in ("pending", "ausstehend", "[todo]", "tbd")
             ):
                 failures.append(f"human acceptance record contains placeholders ({relative_path})")
+            if version == "0.4.0" and candidate_commit is not None:
+                commit_label = (
+                    "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
+                )
+                recorded_commit = next(
+                    (
+                        line.strip().split(":", 1)[1].strip().strip("`")
+                        for line in raw_text.splitlines()
+                        if line.strip().casefold().lstrip("-* ").startswith(commit_label)
+                    ),
+                    "",
+                )
+                if recorded_commit.casefold() != candidate_commit.casefold():
+                    failures.append(
+                        f"human acceptance record is for a different candidate commit ({relative_path})"
+                    )
     return failures
 
 
@@ -137,10 +156,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--version", required=True, help="workspace version being tagged")
+    parser.add_argument(
+        "--candidate-commit",
+        help="exact commit the 0.4.0 human acceptance must cover",
+    )
     args = parser.parse_args()
 
     try:
-        failures = unfinished_gates(args.root, args.version)
+        failures = unfinished_gates(args.root, args.version, args.candidate_commit)
     except (OSError, UnicodeError) as error:
         print(f"release readiness check failed: {error}", file=sys.stderr)
         return 1
