@@ -671,9 +671,12 @@ Feature eines bestimmten Anbieters.
   rekursive Parser-Aufrufe haben nun eine 32-Frame-Grenze mit Diagnose,
   gezielte Regressionen und einen aufbewahrten Crash-Seed. Vier lokale 60-Sekunden-Läufe bestanden
   danach; der 15-Sekunden-CI-Lauf auf dem korrigierten Stand steht noch aus.
-- [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen teilweise
-  in CI; ein vollständiger menschlicher Audit und weitere Security-Regressionen
-  bleiben offen.
+- [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen in CI.
+  Die Abdeckung umfasst Secret-Redaction, Netzwerk-Capabilities,
+  CSRF-/Origin-/Host-Grenzen, Traversal- und Duplikatprüfung von Release-
+  Archiven, Prüfsummenvalidierung und atomaren Updater-Austausch. Ein eigener
+  Regressionstest gegen ungefragte Netzwerk-/Telemetrieaktivität und eine
+  unabhängige Sicherheitsprüfung bleiben offen.
 - [ ] Regressionstest gegen ungefragte Netzwerk- oder Telemetrieaktivität;
   explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
   Update- oder Installationsbefehle müssen klar getrennt bleiben.

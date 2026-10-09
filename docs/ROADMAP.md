@@ -621,8 +621,12 @@ architecture requirement for every phase, not a provider-specific feature.
   now has a 32-frame recursion limit, focused regressions, and a retained crash
   seed. Four post-fix 60-second local runs passed; the 15-second CI rerun for
   the fixed revision remains open.
-- [~] Security regression coverage and dependency/license scanning run in CI;
-  a complete human audit and the remaining security regressions are still open.
+- [~] Security regression coverage and dependency/license scanning run in CI.
+  Coverage includes credential redaction, network capability enforcement,
+  CSRF/origin/host boundaries, release-archive traversal and duplicate-member
+  rejection, checksum validation, and atomic updater replacement. A separate
+  unsolicited-network/telemetry regression guard and independent security
+  review remain open.
 - [ ] Regression guard against unsolicited network or telemetry activity;
   explicit application network capabilities and user-initiated update or
   installation commands must remain separately visible.

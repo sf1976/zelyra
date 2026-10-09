@@ -9,7 +9,7 @@ import re
 import subprocess
 import tarfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from package_release import RELEASE_FILES, TARGETS
 
@@ -46,29 +46,42 @@ def _expected_archive_entries(package: str, executable: str) -> set[str]:
     return {f"{package}/{executable}", *(f"{package}/{name}" for name in RELEASE_FILES)}
 
 
+def _validate_archive_paths(names: list[str], archive_type: str) -> None:
+    for name in names:
+        posix_path = PurePosixPath(name)
+        windows_path = PureWindowsPath(name)
+        if (
+            posix_path.is_absolute()
+            or windows_path.is_absolute()
+            or windows_path.drive
+            or "\\" in name
+            or ".." in posix_path.parts
+            or ".." in windows_path.parts
+        ):
+            raise ValueError(f"unsafe {archive_type} path: {name}")
+
+
 def _verify_archive(path: Path, platform: str, package: str) -> None:
     executable = "zelyra.exe" if platform == "windows" else "zelyra"
     expected = _expected_archive_entries(package, executable)
     if platform == "windows":
         with zipfile.ZipFile(path) as archive:
             entries = archive.infolist()
+            _validate_archive_paths([entry.filename for entry in entries], "ZIP")
             names = {entry.filename for entry in entries}
-            if names != expected:
+            if names != expected or len(entries) != len(expected):
                 raise ValueError(f"unexpected ZIP entries: {sorted(names)}")
             for entry in entries:
-                if entry.filename.startswith("/") or ".." in Path(entry.filename).parts:
-                    raise ValueError(f"unsafe ZIP path: {entry.filename}")
                 if entry.is_dir() or (entry.external_attr >> 16) & 0o170000 != 0o100000:
                     raise ValueError(f"non-regular ZIP entry: {entry.filename}")
     else:
         with tarfile.open(path, "r:gz") as archive:
             entries = archive.getmembers()
+            _validate_archive_paths([entry.name for entry in entries], "TAR")
             names = {entry.name for entry in entries}
-            if names != expected:
+            if names != expected or len(entries) != len(expected):
                 raise ValueError(f"unexpected TAR entries: {sorted(names)}")
             for entry in entries:
-                if entry.name.startswith("/") or ".." in Path(entry.name).parts:
-                    raise ValueError(f"unsafe TAR path: {entry.name}")
                 if not entry.isfile():
                     raise ValueError(f"non-regular TAR entry: {entry.name}")
 

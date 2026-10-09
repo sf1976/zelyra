@@ -513,7 +513,9 @@ mod tests {
 
         let directory = test_directory("atomic-replace");
         let executable = directory.join("zelyra");
+        let neighboring_file = directory.join("zelyra-config");
         fs::write(&executable, b"old executable").unwrap();
+        fs::write(&neighboring_file, b"must remain untouched").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
 
         assert_eq!(
@@ -526,7 +528,11 @@ mod tests {
             fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
             0o755
         );
-        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
+        assert_eq!(
+            fs::read(&neighboring_file).unwrap(),
+            b"must remain untouched"
+        );
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 2);
         fs::remove_dir_all(directory).unwrap();
     }
 
