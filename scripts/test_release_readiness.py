@@ -7,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from check_release_readiness import REQUIRED_GATES_040, REQUIRED_GATES_050, candidate_tag, unfinished_gates
+from check_release_readiness import (
+    REQUIRED_GATES_040,
+    REQUIRED_GATES_050,
+    candidate_tag,
+    unfinished_gates,
+)
 
 
 class ReleaseReadinessTests(unittest.TestCase):
@@ -79,7 +84,12 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertEqual(candidate_tag(root, "0.4.0"), "v0.4.0-rc.1")
             self.assertEqual(unfinished_gates(root, "0.4.0"), [])
             self.assertEqual(unfinished_gates(root, "0.4.0", "a" * 40), [])
-            self.assertTrue(any("published candidate tag" in failure for failure in unfinished_gates(root, "0.4.0", "b" * 40)))
+            self.assertTrue(
+                any(
+                    "published candidate tag" in failure
+                    for failure in unfinished_gates(root, "0.4.0", "b" * 40)
+                )
+            )
 
             english = root / "docs/release-readiness/0.4.0-human-acceptance.en.md"
             english.write_text(
@@ -99,12 +109,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text("\n".join(f"- [x] {marker}" for _, marker in gates), encoding="utf-8")
             records = {
                 "docs/release-readiness/0.5.0-human-acceptance.en.md": (
-                    "Candidate tag: v0.5.0-rc.1\nCandidate commit: " + "a" * 40 + "\nCompleted on: 2026-10-09\n"
+                    "Candidate tag: v0.5.0-rc.1\nCandidate commit: "
+                    + "a" * 40
+                    + "\nCompleted on: 2026-10-09\n"
                     "Observations: redacted\nBlockers: none\n"
                     "Decision: accepted\nDecision authority: project owner\n"
                 ),
                 "docs/release-readiness/0.5.0-human-acceptance.de.md": (
-                    "Kandidaten-Tag: v0.5.0-rc.1\nKandidaten-Commit: " + "a" * 40 + "\nAbgeschlossen am: 2026-10-09\n"
+                    "Kandidaten-Tag: v0.5.0-rc.1\nKandidaten-Commit: "
+                    + "a" * 40
+                    + "\nAbgeschlossen am: 2026-10-09\n"
                     "Beobachtungen: redigiert\nBlockaden: keine\n"
                     "Entscheidung: akzeptiert\nEntscheidungsträger: Projektverantwortlicher\n"
                 ),
@@ -115,7 +129,12 @@ class ReleaseReadinessTests(unittest.TestCase):
                 path.write_text(content, encoding="utf-8")
             self.assertEqual(candidate_tag(root, "0.5.0"), "v0.5.0-rc.1")
             self.assertEqual(unfinished_gates(root, "0.5.0", "a" * 40), [])
-            self.assertTrue(any("different candidate commit" in failure for failure in unfinished_gates(root, "0.5.0", "b" * 40)))
+            self.assertTrue(
+                any(
+                    "different candidate commit" in failure
+                    for failure in unfinished_gates(root, "0.5.0", "b" * 40)
+                )
+            )
             (root / "docs/release-readiness/0.5.0-human-acceptance.en.md").unlink()
             self.assertTrue(any("record missing" in failure for failure in unfinished_gates(root, "0.5.0")))
 

@@ -157,9 +157,15 @@ def unfinished_gates(
             flattened = re.sub(r"[*_`]", "", " ".join(candidate_text.casefold().split()))
             missing = [marker for marker in REQUIRED_CANDIDATE_RECORD_040 if marker not in flattened]
             if missing:
-                failures.append("candidate verification record incomplete (docs/release-readiness/0.4.0-candidate-verification.md)")
+                failures.append(
+                    "candidate verification record incomplete "
+                    "(docs/release-readiness/0.4.0-candidate-verification.md)"
+                )
             if any(placeholder in flattened for placeholder in ("pending", "ausstehend", "[todo]", "tbd", "not run")):
-                failures.append("candidate verification record contains placeholders (docs/release-readiness/0.4.0-candidate-verification.md)")
+                failures.append(
+                    "candidate verification record contains placeholders "
+                    "(docs/release-readiness/0.4.0-candidate-verification.md)"
+                )
         except (OSError, UnicodeError):
             failures.append("candidate verification record missing (docs/release-readiness/0.4.0-candidate-verification.md)")
 
@@ -215,7 +221,9 @@ def unfinished_gates(
                     if not _record_value(raw_text, label).casefold().startswith("passed"):
                         failures.append(f"candidate {label[:-1]} is not passed ({relative_path})")
                 if candidate_commit is not None and recorded_commit.casefold() != candidate_commit.casefold():
-                    failures.append(f"candidate record does not match published candidate tag ({relative_path})")
+                    failures.append(
+                        f"candidate record does not match published candidate tag ({relative_path})"
+                    )
             if version == "0.5.0" and candidate_commit is not None:
                 commit_label = (
                     "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
@@ -251,6 +259,8 @@ def _record_value(raw_text: str, label: str) -> str:
 
 
 def candidate_tag(root: Path, version: str) -> str:
+    if version not in {"0.4.0", "0.5.0"}:
+        raise ValueError(f"candidate tags are not configured for {version}")
     paths = (
         [root / "docs/release-readiness/0.4.0-candidate-verification.md"]
         if version == "0.4.0"
@@ -268,6 +278,8 @@ def candidate_tag(root: Path, version: str) -> str:
     ]
     if not values or not values[0] or any(value.casefold() != values[0].casefold() for value in values):
         raise ValueError(f"candidate tag missing or inconsistent for {version}")
+    if not re.fullmatch(rf"v{re.escape(version)}-rc\.[0-9]+", values[0].casefold()):
+        raise ValueError(f"candidate tag is invalid for {version}")
     return values[0]
 
 
