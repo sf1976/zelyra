@@ -137,7 +137,11 @@ verifying the target again.
   fresh plan, then apply that plan. Do not assume reapplying an old plan safely
   repairs a partial state. A crash during a DDL statement can still leave that
   statement's result ambiguous; verify the schema and restore from backup when
-  needed.
+  needed. The schema safety E2E also holds a MariaDB table metadata lock until
+  the server reports an `ALTER TABLE` waiting on it, kills the Zelyra process,
+  verifies the interrupted journal entry and unchanged schema, then recovers
+  with a freshly reviewed plan. This covers interruption while the DDL request
+  waits for the lock, not a crash during the server's DDL execution.
 - `--allow-risky` and `--allow-destructive` are not backup or rollback
   options. Use them only after reviewing the plan and verifying an independent
   backup.

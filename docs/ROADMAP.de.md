@@ -344,12 +344,19 @@ Feature eines bestimmten Anbieters.
   SQL-Schritten, Vorprüfungen und explizitem Freigabeflag. `db apply` kann die
   Plan-ID entgegennehmen und lehnt einen veralteten Plan vor Vorprüfungen oder
   SQL ab; ein SQLite-CLI-Integrationstest prüft Ablehnung und Anwendung mit
-  einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. Ein
-  Datenbank-Migrationsverlauf und sicheres inverses SQL fehlen weiterhin; der
-  Plan weist
-  `rollback.generated: false` aus. `db apply` führt PostgreSQL- und SQLite-DDL
-  transaktional aus; Tests prüfen das Rollback bei einem Fehler. MariaDB-DDL
-  kann weiterhin Teilzustände hinterlassen. Backups bleiben
+  einer neu geprüften ID. Aufrufe ohne ID bleiben möglich. `db apply` speichert
+  MariaDB-Plan-Fingerprints und Prüfpunkte je DDL-Schritt in
+  `_zelyra_schema_history`; `db history` zeigt angewendete, fehlgeschlagene,
+  aktive und unterbrochene Läufe. Eine datenbankweite Advisory-Sperre
+  verhindert parallele Zelyra-Migrationen. E2E-Tests unterbrechen zwischen
+  DDL-Schritten und während ein gesendetes `ALTER TABLE` auf eine gehaltene
+  Metadatensperre wartet und prüfen anschließend die Wiederherstellung mit
+  einem neuen Plan. Ein Absturz während der eigentlichen MariaDB-DDL-Ausführung
+  kann deren Ergebnis weiterhin unklar lassen. SQLite und PostgreSQL haben
+  keinen persistenten Verlauf; sicheres inverses SQL wird nicht erzeugt und der
+  JSON-Plan weist `rollback.generated: false` aus. `db apply` führt PostgreSQL-
+  und SQLite-DDL transaktional aus; Tests prüfen das Rollback bei einem Fehler.
+  MariaDB-DDL kann Teilzustände hinterlassen. Backups bleiben
   Betreiberverantwortung.
 - [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
   Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem

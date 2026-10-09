@@ -26,6 +26,7 @@ mariadb_migration_database=""
 mariadb_migration_url=""
 migration_lock_pid=""
 migration_apply_pid=""
+mariadb_lock_pid=""
 mariadb_user=""
 mariadb_password=""
 mariadb_host=""
@@ -35,6 +36,10 @@ cleanup() {
     if [[ -n "${migration_apply_pid}" ]] && kill -0 "-${migration_apply_pid}" 2>/dev/null; then
         kill -KILL -- "-${migration_apply_pid}" 2>/dev/null || true
         wait "${migration_apply_pid}" 2>/dev/null || true
+    fi
+    if [[ -n "${mariadb_lock_pid}" ]] && kill -0 "${mariadb_lock_pid}" 2>/dev/null; then
+        kill -KILL "${mariadb_lock_pid}" 2>/dev/null || true
+        wait "${mariadb_lock_pid}" 2>/dev/null || true
     fi
     if [[ -n "${mariadb_migration_database}" ]]; then
         MYSQL_PWD="${mariadb_password}" mariadb \
@@ -672,6 +677,74 @@ EOF
         -e "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_first' AND COLUMN_NAME='applied_marker'), ':', (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='operator_review'));" )"
     [[ "${migration_state}" == "1:1" ]]
     echo "[MariaDB] process interruption between DDL steps is journaled; lock release and recovery with a freshly reviewed plan pass"
+
+    local running_after running_migration_pid running_query_count
+    running_after="${fixture_dir}/schema_migration_running_after_mariadb.zyl"
+    MYSQL_PWD="${mariadb_password}" setsid mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        --execute="LOCK TABLES migration_second WRITE; SELECT SLEEP(120); UNLOCK TABLES;" \
+        >"${temp_dir}/migration-ddl-lock.log" 2>&1 &
+    mariadb_lock_pid=$!
+    for attempt in $(seq 1 60); do
+        running_query_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='${mariadb_migration_database}' AND INFO LIKE 'SELECT SLEEP(120)%';")"
+        [[ "${running_query_count}" == "1" ]] && break
+        sleep 0.1
+    done
+    if [[ "${running_query_count}" != "1" ]]; then
+        cat "${temp_dir}/migration-ddl-lock.log" >&2
+        echo "error: could not acquire a MariaDB table lock for the running-DDL interruption test" >&2
+        exit 1
+    fi
+
+    setsid env DATABASE_URL="${mariadb_migration_url}" \
+        "${zelyra_bin}" db apply "${running_after}" --allow-risky \
+        >"${temp_dir}/migration-running-ddl-apply.log" 2>&1 &
+    running_migration_pid=$!
+    migration_apply_pid="${running_migration_pid}"
+    for attempt in $(seq 1 120); do
+        running_query_count="$(MYSQL_PWD="${mariadb_password}" mariadb \
+            --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+            --user="${mariadb_user}" --batch --skip-column-names \
+            -e "SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='${mariadb_migration_database}' AND INFO LIKE 'ALTER TABLE%' AND INFO LIKE '%recovery_marker%' AND STATE='Waiting for table metadata lock';")"
+        [[ "${running_query_count}" == "1" ]] && break
+        if ! kill -0 "${running_migration_pid}" 2>/dev/null; then
+            cat "${temp_dir}/migration-running-ddl-apply.log" >&2
+            echo "error: migration exited before reaching the MariaDB DDL lock" >&2
+            exit 1
+        fi
+        sleep 0.1
+    done
+    if [[ "${running_query_count}" != "1" ]]; then
+        cat "${temp_dir}/migration-running-ddl-apply.log" >&2
+        echo "error: MariaDB did not report the expected DDL waiting for its metadata lock" >&2
+        exit 1
+    fi
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${running_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"running"' <<<"${migration_history}"
+    kill -KILL -- "-${running_migration_pid}"
+    wait "${running_migration_pid}" 2>/dev/null || true
+    migration_apply_pid=""
+    kill -KILL -- "-${mariadb_lock_pid}" 2>/dev/null || true
+    wait "${mariadb_lock_pid}" 2>/dev/null || true
+    mariadb_lock_pid=""
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${running_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"interrupted"' <<<"${migration_history}"
+    migration_state="$(MYSQL_PWD="${mariadb_password}" mariadb \
+        --protocol=tcp --host="${mariadb_host}" --port="${mariadb_port}" \
+        --user="${mariadb_user}" "${mariadb_migration_database}" --batch --skip-column-names \
+        -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${mariadb_migration_database}' AND TABLE_NAME='migration_second' AND COLUMN_NAME='recovery_marker';")"
+    [[ "${migration_state}" == "0" ]]
+    DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db apply "${running_after}" --allow-risky >/dev/null
+    migration_history="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db history "${running_after}" --format=json)"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"interrupted"' <<<"${migration_history}"
+    grep -Eq '"status"[[:space:]]*:[[:space:]]*"applied"' <<<"${migration_history}"
+    migration_state="$(DATABASE_URL="${mariadb_migration_url}" "${zelyra_bin}" db plan "${running_after}")"
+    grep -Fq "No schema changes." <<<"${migration_state}"
+    echo "[MariaDB] killing Zelyra while DDL waits on a metadata lock records an interrupted attempt; fresh-plan recovery succeeds"
 }
 
 assert_sqlite_safety

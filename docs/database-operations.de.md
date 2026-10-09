@@ -142,7 +142,12 @@ nach Abschluss der Prüfung und erneuter Kontrolle des Ziels.
   dich nicht darauf, dass ein alter Plan einen Teilzustand sicher repariert.
   Ein Absturz innerhalb eines DDL-Befehls kann dessen Ergebnis weiterhin
   unklar lassen; prüfe dann das Schema und stelle es bei Bedarf aus einem
-  Backup wieder her.
+  Backup wieder her. Das Schema-Sicherheits-E2E hält außerdem eine
+  MariaDB-Tabellen-Metadatensperre, bis der Server ein daran wartendes
+  `ALTER TABLE` meldet, beendet den Zelyra-Prozess, prüft den unterbrochenen
+  Journaleintrag und das unveränderte Schema und stellt es mit einem neu
+  geprüften Plan wieder her. Das prüft den Abbruch, während der DDL-Aufruf auf
+  die Sperre wartet, nicht einen Absturz während der serverseitigen DDL.
 - `--allow-risky` und `--allow-destructive` sind keine Backup- oder
   Rollback-Optionen. Nutze sie nur nach Planprüfung und mit einer unabhängig
   verifizierten Sicherung.

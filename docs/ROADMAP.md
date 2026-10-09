@@ -311,11 +311,18 @@ architecture requirement for every phase, not a provider-specific feature.
   ID can now be supplied to `db apply`, which recomputes and rejects stale
   reviewed plans before preflights or SQL; a SQLite CLI integration test checks
   stale rejection and applying a freshly reviewed ID. Applying without an ID
-  remains supported for existing workflows. A database migration history and
-  safe inverse SQL remain unimplemented; the plan reports
-  `rollback.generated: false`. PostgreSQL and SQLite `db apply` now run DDL
-  transactionally and tests verify rollback after a failing step; MariaDB DDL
-  can still leave partial state. Before any plan SQL, read-only checks now
+  remains supported for existing workflows. MariaDB `db apply` now journals
+  plan fingerprints and per-DDL checkpoints in `_zelyra_schema_history`; `db
+  history` reports applied, failed, active, and interrupted attempts. A
+  database-scoped advisory lock prevents concurrent Zelyra migrations. E2E
+  tests interrupt between DDL steps and while a submitted `ALTER TABLE` waits
+  on a held metadata lock, then verify fresh-plan recovery. A crash during
+  actual MariaDB DDL execution can still leave that statement's result
+  ambiguous. SQLite and PostgreSQL have no persistent history, and safe inverse
+  SQL is not generated; the JSON plan reports `rollback.generated: false`.
+  PostgreSQL and SQLite `db apply` run transactionally and tests verify rollback
+  after a failing step; MariaDB DDL can still leave partial state. Before any
+  plan SQL, read-only checks now
   reject duplicate values for new unique indexes and orphan values for new
   foreign keys; the checks also cover required-column and nullability changes.
   They do not prevent concurrent-write races. Backups remain the operator's
