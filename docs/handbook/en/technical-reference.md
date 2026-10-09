@@ -2488,7 +2488,9 @@ zelyra edit --format=json change.json
 The request is versioned and must point to an existing `.zyl` file inside the
 resolved Zelyra project root. Source code before and after the change must pass
 all compiler checks. The result reports exact token spans and a deterministic
-source fingerprint.
+source fingerprint. It also reports `affected_files`; because this version
+edits one source file per request, that list contains the entry file. Effects,
+dependent tests, and schema references are not yet calculated by edit previews.
 
 When applying changes with `--apply`, the request must include the fingerprint
 from the preview to prevent overwriting concurrently modified files (stale-source

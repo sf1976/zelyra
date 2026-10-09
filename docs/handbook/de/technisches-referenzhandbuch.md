@@ -2670,7 +2670,10 @@ zelyra edit --format=json change.json
 Die Anfrage ist versioniert und darf nur auf eine existierende `.zyl`-Datei
 innerhalb der aufgelösten Zelyra-Projektwurzel zeigen. Quelltext vor und nach
 der Änderung muss die Compilerprüfungen bestehen. Das Ergebnis meldet die
-genauen Token-Spans und einen deterministischen Quelltext-Fingerprint.
+genauen Token-Spans und einen deterministischen Quelltext-Fingerprint. Es
+meldet außerdem `affected_files`; da diese Version pro Anfrage eine Quelldatei
+ändert, enthält die Liste die Entry-Datei. Effekte, abhängige Tests und
+Schema-Referenzen berechnet die Edit-Vorschau noch nicht.
 
 Für `--apply` muss die Anfrage den Fingerprint aus der Vorschau enthalten; so
 wird eine zwischenzeitlich geänderte Datei nicht überschrieben (Stale-Source-

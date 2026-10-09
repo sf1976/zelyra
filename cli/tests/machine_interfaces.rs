@@ -1681,6 +1681,10 @@ fn edit_json_is_preview_only_by_default_and_applies_explicitly() {
     assert_eq!(document["command"], "edit");
     assert_eq!(document["success"], true);
     assert_eq!(document["preview"]["applied"], false);
+    assert_eq!(
+        document["preview"]["affected_files"],
+        serde_json::json!(["main.zyl"])
+    );
     assert_eq!(document["preview"]["changed_tokens"], 2);
 
     fs::write(&source_path, "fn changed() {}\nfn main() {}\n").expect("source should change");

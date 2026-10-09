@@ -2510,6 +2510,7 @@ fn edit_command(arguments: impl Iterator<Item = String>) -> ExitCode {
                                             "apply_requested": apply_requested,
                                             "applied": applied,
                                             "entry": entry_display.clone(),
+                                            "affected_files": [entry_display.clone()],
                                             "source_fingerprint": current_fingerprint,
                                             "operations": result.operations,
                                             "changes": result.changes,
