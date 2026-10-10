@@ -1,4 +1,5 @@
 import "src/database.zyl" as storage
+import "src/auth.zyl" as identity
 import "src/customers.zyl" as customers
 import "src/orders.zyl" as orders
 
@@ -11,6 +12,9 @@ struct CustomerOrderOverview {
 }
 
 tableview CustomerOrderOverview {
+    requires auth
+    permits "reporting.view"
+
     source sql<CustomerOrderOverview[]> {
         SELECT
             c.id,

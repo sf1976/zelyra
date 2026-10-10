@@ -70,6 +70,7 @@ echo "[1/5] generating a fresh MariaDB CRUD project"
     --host-port "${host_port}" \
     --db-host-port "${database_host_port}"
 sed -i '/^database main {/,/^}/d' "${project_dir}/main.zyl"
+sed -i '1i import "src/auth.zyl" as identity' "${project_dir}/main.zyl"
 sed -i '1i import "src/invoices.zyl" as invoices' "${project_dir}/main.zyl"
 sed -i '1i import "src/inventory.zyl" as inventory' "${project_dir}/main.zyl"
 sed -i '1i import "src/customers.zyl" as customers' "${project_dir}/main.zyl"
@@ -89,6 +90,7 @@ printf 'page "/docker-module" { html { <h1>Imported Docker module</h1> } }\n' \
 printf 'page "/inventory-module" { html { <h1>Imported inventory module</h1> } }\n' \
     > "${project_dir}/src/inventory-smoke.zyl"
 cp "${repo_dir}/examples/customer_orders_modules/src/customers.zyl" "${project_dir}/src/customers.zyl"
+cp "${repo_dir}/examples/customer_orders_modules/src/auth.zyl" "${project_dir}/src/auth.zyl"
 cp "${repo_dir}/examples/customer_orders_modules/src/orders.zyl" "${project_dir}/src/orders.zyl"
 cp "${repo_dir}/examples/customer_orders_modules/src/reporting.zyl" "${project_dir}/src/reporting.zyl"
 cp "${repo_dir}/examples/customer_orders_modules/src/shell.zyl" "${project_dir}/src/shell.zyl"
@@ -238,8 +240,25 @@ docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" ps
 echo "[5/5] exporting two database-backed CRUD modules as independent Docker apps"
+auth_password="E2E-Module-Auth-$$-Password"
+auth_password_hash="$(printf '%s\n' "${auth_password}" | "${zelyra_bin}" auth hash-password --stdin)"
+auth_admin_email="e2e-module-admin-$$@example.test"
+auth_viewer_email="e2e-module-viewer-$$@example.test"
 database_test_sql="INSERT INTO zelyra_app.invoices (number) VALUES ('INV-COMBINED');
 INSERT INTO zelyra_app.inventory (sku) VALUES ('SKU-COMBINED');
+INSERT INTO zelyra_app.users (email, password_hash, active)
+VALUES ('${auth_admin_email}', '${auth_password_hash}', TRUE),
+       ('${auth_viewer_email}', '${auth_password_hash}', TRUE);
+SET @e2e_admin_user = (SELECT id FROM zelyra_app.users WHERE email='${auth_admin_email}');
+SET @e2e_viewer_user = (SELECT id FROM zelyra_app.users WHERE email='${auth_viewer_email}');
+INSERT INTO zelyra_app.role_permissions (role, permission) VALUES
+    ('e2e_admin', 'customers.view'), ('e2e_admin', 'customers.create'),
+    ('e2e_admin', 'customers.edit'), ('e2e_admin', 'customers.delete'),
+    ('e2e_admin', 'orders.view'), ('e2e_admin', 'orders.create'),
+    ('e2e_admin', 'orders.edit'), ('e2e_admin', 'orders.delete'),
+    ('e2e_admin', 'reporting.view'), ('e2e_viewer', 'customers.view');
+INSERT INTO zelyra_app.user_roles (user_id, role)
+VALUES (@e2e_admin_user, 'e2e_admin'), (@e2e_viewer_user, 'e2e_viewer');
 CREATE DATABASE zelyra_invoice CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE TABLE zelyra_invoice.invoices LIKE zelyra_app.invoices;
 INSERT INTO zelyra_invoice.invoices (number) VALUES ('INV-MODULE-ONLY');
@@ -319,6 +338,22 @@ print(parser.token)
 PY
 }
 
+login_fixture_user() {
+    local email="$1" cookie_file="$2" csrf status
+    curl --silent --show-error --fail "http://${address}/login" \
+        -o "${project_root}/login-form.html"
+    csrf="$(extract_csrf_token "${project_root}/login-form.html")"
+    status="$(curl --silent --show-error --output "${project_root}/login-response.html" \
+        --write-out '%{http_code}' --header "Origin: http://${address}" \
+        --cookie-jar "${cookie_file}" --data-urlencode "_zelyra_csrf=${csrf}" \
+        --data-urlencode "email=${email}" --data-urlencode "password=${auth_password}" \
+        "http://${address}/login")"
+    if [[ "${status}" != 303 ]]; then
+        echo "error: fixture login returned ${status}, expected 303" >&2
+        return 1
+    fi
+}
+
 extract_form_snapshot() {
     python3 - "$1" <<'PY'
 from html.parser import HTMLParser
@@ -344,21 +379,26 @@ assert_bundle_crud() {
     local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
     local token snapshot stale_snapshot status list_file="${project_root}/write-list.html" record_id
     local extra_data="${7:-}"
+    local cookie_file="${8:-}"
     local extra_args=()
+    local cookie_args=()
+    if [[ -n "${cookie_file}" ]]; then
+        cookie_args+=(--cookie "${cookie_file}")
+    fi
     if [[ -n "${extra_data}" ]]; then
         extra_args+=(--data-urlencode "${extra_data}")
     fi
 
-    curl --silent --show-error --fail "${origin}/${resource}/new" -o "${form_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/new" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         --data-urlencode "${field}=${created}" "${extra_args[@]}" "${origin}/${resource}/new")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD create returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${created}" "new row from generated CRUD create"
     record_id="$(python3 - "${list_file}" "${resource}" "${created}" <<'PY'
 from html.parser import HTMLParser
@@ -402,12 +442,12 @@ print(parser.record_id)
 PY
 )"
 
-    curl --silent --show-error --fail "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/${record_id}/edit" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     snapshot="$(extract_form_snapshot "${form_file}")"
     stale_snapshot="${snapshot}"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         --data-urlencode "_zelyra_snapshot=${snapshot}" \
         --data-urlencode "${field}=${updated}" "${extra_args[@]}" \
         "${origin}/${resource}/${record_id}/edit")"
@@ -415,11 +455,11 @@ PY
         echo "error: generated CRUD update returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${updated}" "updated row from generated CRUD update"
 
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         --data-urlencode "_zelyra_snapshot=${stale_snapshot}" \
         --data-urlencode "${field}=${created}-stale" "${extra_args[@]}" \
         "${origin}/${resource}/${record_id}/edit")"
@@ -427,7 +467,7 @@ PY
         echo "error: stale generated CRUD update returned ${status}, expected 409" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     assert_file_contains "${list_file}" "${updated}" "current row after stale update rejection"
     if grep -Fq -- "${created}-stale" "${list_file}"; then
         echo "error: stale generated CRUD update overwrote the current row" >&2
@@ -439,16 +479,16 @@ PY
         return 0
     fi
 
-    curl --silent --show-error --fail "${origin}/${resource}/${record_id}" -o "${form_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}/${record_id}" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-        --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
+        "${cookie_args[@]}" --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         "${origin}/${resource}/${record_id}/delete")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD delete returned ${status}, expected 303" >&2
         return 1
     fi
-    curl --silent --show-error --fail "${origin}/${resource}" -o "${list_file}"
+    curl --silent --show-error --fail "${cookie_args[@]}" "${origin}/${resource}" -o "${list_file}"
     if grep -Fq -- "${updated}" "${list_file}"; then
         echo "error: generated CRUD delete left the removed row visible" >&2
         return 1
@@ -474,26 +514,48 @@ docker compose --project-name "${compose_project}" \
     --env-file "${project_dir}/.env" \
     -f "${project_dir}/docker-compose.mariadb.yml" up --no-build --detach web >/dev/null
 for _ in $(seq 1 60); do
-    if curl --silent --show-error --fail "http://${address}/customers" \
-        -o "${project_root}/customers.html"; then
+    if curl --silent --show-error --fail "http://${address}/login" \
+        -o "${project_root}/login.html"; then
         break
     fi
     sleep 1
 done
-if ! curl --silent --show-error --fail "http://${address}/customers" \
-    -o "${project_root}/customers.html"; then
+if ! curl --silent --show-error --fail "http://${address}/login" \
+    -o "${project_root}/login.html"; then
     docker compose --project-name "${compose_project}" \
         --env-file "${project_dir}/.env" \
         -f "${project_dir}/docker-compose.mariadb.yml" logs web >&2 || true
     echo "error: modular customer route did not start" >&2
     exit 1
 fi
+anonymous_customer_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    "http://${address}/customers")"
+if [[ "${anonymous_customer_status}" != 401 ]]; then
+    echo "error: anonymous customer access returned ${anonymous_customer_status}, expected 401" >&2
+    exit 1
+fi
+admin_cookie="${project_root}/module-admin.cookies"
+viewer_cookie="${project_root}/module-viewer.cookies"
+login_fixture_user "${auth_admin_email}" "${admin_cookie}"
+login_fixture_user "${auth_viewer_email}" "${viewer_cookie}"
+viewer_create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${viewer_cookie}" "http://${address}/customers/new")"
+if [[ "${viewer_create_status}" != 403 ]]; then
+    echo "error: viewer customer create returned ${viewer_create_status}, expected 403" >&2
+    exit 1
+fi
+viewer_report_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+    --cookie "${viewer_cookie}" "http://${address}/views/customerorderoverview")"
+if [[ "${viewer_report_status}" != 403 ]]; then
+    echo "error: viewer report access returned ${viewer_report_status}, expected 403" >&2
+    exit 1
+fi
 customer_name="E2E-Module-Customer-$$"
 customer_updated="${customer_name}-updated"
 assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_updated}" true \
-    "email=${customer_name}@example.test"
+    "email=${customer_name}@example.test" "${admin_cookie}"
 customer_id="${last_crud_record_id}"
-curl --silent --show-error --fail "http://${address}/orders/new" \
+curl --silent --show-error --fail --cookie "${admin_cookie}" "http://${address}/orders/new" \
     -o "${project_root}/order-form.html"
 assert_file_contains "${project_root}/order-form.html" \
     '<select id="customer" name="customer" required>' \
@@ -503,7 +565,8 @@ assert_file_contains "${project_root}/order-form.html" "value=\"${customer_id}\"
 order_csrf="$(extract_csrf_token "${project_root}/order-form.html")"
 order_number="E2E-MODULE-ORDER-$$"
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --cookie "${admin_cookie}" --header "Origin: http://${address}" \
+    --data-urlencode "_zelyra_csrf=${order_csrf}" \
     --data-urlencode "customer=${customer_id}" --data-urlencode "order_number=${order_number}" \
     --data-urlencode 'status=open' --data-urlencode 'total=123.45' \
     "http://${address}/orders/new")"
@@ -512,7 +575,8 @@ if [[ "${status}" != 303 ]]; then
     exit 1
 fi
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    --header "Origin: http://${address}" --data-urlencode "_zelyra_csrf=${order_csrf}" \
+    --cookie "${admin_cookie}" --header "Origin: http://${address}" \
+    --data-urlencode "_zelyra_csrf=${order_csrf}" \
     --data-urlencode 'customer=999999999' --data-urlencode "order_number=${order_number}-invalid" \
     --data-urlencode 'status=open' --data-urlencode 'total=1.00' \
     "http://${address}/orders/new")"
@@ -520,10 +584,11 @@ if [[ "${status}" != 422 ]]; then
     echo "error: order with an unknown customer returned ${status}, expected 422" >&2
     exit 1
 fi
-curl --silent --show-error --fail "http://${address}/orders" \
+curl --silent --show-error --fail --cookie "${admin_cookie}" "http://${address}/orders" \
     -o "${project_root}/orders.html"
 assert_file_contains "${project_root}/orders.html" "${order_number}" "new modular order"
-curl --silent --show-error --fail "http://${address}/views/customerorderoverview" \
+curl --silent --show-error --fail --cookie "${admin_cookie}" \
+    "http://${address}/views/customerorderoverview" \
     -o "${project_root}/customer-order-report.html"
 assert_file_contains "${project_root}/customer-order-report.html" "${customer_updated}" \
     "modular customer-order report row"

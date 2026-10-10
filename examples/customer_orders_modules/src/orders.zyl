@@ -1,4 +1,5 @@
 import "src/database.zyl" as storage
+import "src/auth.zyl" as identity
 import "src/customers.zyl" as customers
 import "src/shell.zyl" as shell
 
@@ -14,6 +15,12 @@ table orders {
 }
 
 crud Order -> orders {
+    requires auth
+    permits "orders.view"
+    permits create "orders.create"
+    permits edit "orders.edit"
+    permits delete "orders.delete"
+
     layout: CustomerOrderShell
     title: "Orders"
 

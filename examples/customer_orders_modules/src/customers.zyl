@@ -1,4 +1,5 @@
 import "src/database.zyl" as storage
+import "src/auth.zyl" as identity
 import "src/shell.zyl" as shell
 
 pub struct Customer {
@@ -17,6 +18,12 @@ table customers {
 }
 
 crud Customer -> customers {
+    requires auth
+    permits "customers.view"
+    permits create "customers.create"
+    permits edit "customers.edit"
+    permits delete "customers.delete"
+
     layout: CustomerOrderShell
     title: "Customers"
 
