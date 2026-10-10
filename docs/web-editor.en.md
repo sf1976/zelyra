@@ -56,3 +56,13 @@ checking and formatting use the local Zelyra compiler.
 CodeMirror components are MIT-licensed. Build dependencies and versions are
 recorded in `editor/package-lock.json`; browser assets are bundled locally
 before release.
+
+## Planned path to the visual database builder
+
+The 0.7 editor is the coding and checking foundation. The planned 0.8 step adds
+a read-only database browser and relationship map, then a guided CRUD builder:
+select a table, choose visible fields and views, inspect the generated Zelyra
+source diff, run the compiler, and apply the change explicitly. Schema writes
+continue through a reviewed migration plan. Version 0.9 is planned to guide
+users through invoice and other small business workflows and help them add
+business rules. See the [invoice tutorial](tutorials/invoice.en.md).

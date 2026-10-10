@@ -58,3 +58,14 @@ Zelyra-Compiler.
 Die CodeMirror-Komponenten stehen unter MIT-Lizenz. Build-Abhängigkeiten und
 Versionen sind in `editor/package-lock.json` festgehalten; die Browserdateien
 werden vor dem Release lokal gebündelt.
+
+## Geplanter Weg zum visuellen Datenbankassistenten
+
+Der Editor in 0.7 ist die Grundlage zum Schreiben und Prüfen. Für 0.8 ist ein
+schreibgeschützter Datenbankbrowser mit Beziehungskarte und anschließend ein
+geführter CRUD-Assistent geplant: Tabelle auswählen, sichtbare Felder und Views
+festlegen, den erzeugten Zelyra-Quelltext-Diff prüfen, den Compiler ausführen
+und die Änderung ausdrücklich übernehmen. Schemaänderungen laufen weiterhin
+über einen geprüften Migrationsplan. 0.9 soll Rechnungen und weitere kleine
+Geschäftsabläufe führen und beim Ergänzen von Geschäftsregeln helfen. Siehe das
+[Rechnungstutorial](tutorials/invoice.de.md).

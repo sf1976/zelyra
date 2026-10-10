@@ -535,15 +535,21 @@ relationships to source modules that shows differences from the live database.
 Module ownership remains advisory and changes neither schema nor permissions.
 Independent human acceptance remains deferred to 1.0.0.
 
-The [0.7 release plan](release-plans/0.7.0.en.md) now includes a real MySQL
+The [0.7 release plan](release-plans/0.7.0.en.md) includes a real MySQL
 server path, bounded tenant context, local developer studio, and the invoice
-tutorial. The editor is implemented on the feature branch; MySQL and tutorial
-work, combined verification, and review remain open. Version 0.8 adds durable tasks,
-outbox, controlled studio editing, and text changes with named regex patterns,
-preview, and explicit application. Version 0.9 verifies core workflows for
-MariaDB, MySQL, and PostgreSQL and may add optional MFA/WebAuthn and OIDC.
+tutorial. The editor, bounded MySQL query path, and tutorial have local
+implementation evidence on the feature branch; combined-head CI, migration
+and rollback review, and independent security review remain open. Version 0.8 prioritizes a
+visual database map and guided CRUD builder: choose a connection/table, inspect
+fields and relationships, preview generated Zelyra source, and apply the
+compiler-checked change explicitly. The first data browser is read-only. Version
+0.9 adds guided business workflows and help for extending generated apps while
+verifying the supported MariaDB, MySQL, and PostgreSQL paths end to end; optional
+MFA/WebAuthn and OIDC remain subject to security review. A general queue and
+transactional outbox move beyond 1.0.0 so the editor and the three required
+database paths can receive focused release work.
 Version 0.99 freezes features; only independent human acceptance remains before
-1.0.0, the first productive release. Complete SQL parity, broad visual editing, arbitrary client hydration, compiler
+1.0.0, the first productive release. Complete SQL parity, arbitrary client hydration, compiler
 self-hosting, native backend, mandatory cloud/AI services, telemetry, and
 unsupported performance claims remain excluded.
 ## First productive release 1.0.0
