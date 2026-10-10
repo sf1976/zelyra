@@ -495,8 +495,11 @@ assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_
 customer_id="${last_crud_record_id}"
 curl --silent --show-error --fail "http://${address}/orders/new" \
     -o "${project_root}/order-form.html"
-assert_file_contains "${project_root}/order-form.html" 'name="customer"' \
-    "customer relationship input on the order form"
+assert_file_contains "${project_root}/order-form.html" \
+    '<select id="customer" name="customer" required>' \
+    "customer relationship selector on the order form"
+assert_file_contains "${project_root}/order-form.html" "value=\"${customer_id}\"" \
+    "newly created customer option on the order form"
 order_csrf="$(extract_csrf_token "${project_root}/order-form.html")"
 order_number="E2E-MODULE-ORDER-$$"
 status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \

@@ -6796,7 +6796,7 @@ fn relation_target_for_field(form: &FormRoute, field: &zelyra_ast::FormField) ->
         return None;
     }
     let schema = form.schema.as_ref()?;
-    let lower = name.to_ascii_lowercase();
+    let lower = name.rsplit("::").next()?.to_ascii_lowercase();
     if schema.tables.iter().any(|table| table.name == lower) {
         return Some(lower);
     }

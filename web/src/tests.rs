@@ -2231,6 +2231,18 @@ fn rejects_unknown_relationship_value() {
 }
 
 #[test]
+fn resolves_module_qualified_relationship_types_to_schema_tables() {
+    let mut route = relation_form_route();
+    route.table.as_mut().unwrap().columns[0].ty = Type::Named("crm::Department".into());
+    let field = &route.form.fields[1];
+
+    assert_eq!(
+        relation_target_for_field(&route, field).as_deref(),
+        Some("departments")
+    );
+}
+
+#[test]
 fn supports_typed_filter_operators() {
     let text = zelyra_database::Column {
         name: "name".into(),
