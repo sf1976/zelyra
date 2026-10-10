@@ -78,10 +78,11 @@ approve `REVIEW` changes; use `--allow-risky` after reviewing the plan.
 A direct PostgreSQL runtime slice is being developed on `release/0.6.0`. It
 currently covers PostgreSQL 16 raw SQL dispatch, named parameters, scalar
 result conversion, transactions, statement timeouts, and verified TLS with a
-test CA. Local PostgreSQL 16 tests passed; the CI step is configured but has
-not run. This slice is not in the tested support matrix and does not include
-generated web/CRUD paths, schema tooling parity, backup and restore, or all
-PostgreSQL result types.
+test CA. PostgreSQL 16 schema safety and the dedicated parameterized runtime
+integration step passed CI #521 on branch head `2cd6298`; release validation
+#241 passed on that head as well. This slice is not in the tested support
+matrix and does not include generated web/CRUD paths, schema tooling parity,
+backup and restore, or all PostgreSQL result types.
 
 ## What this does not establish
 

@@ -84,11 +84,12 @@ dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.
 Auf `release/0.6.0` entsteht eine experimentelle direkte PostgreSQL-Runtime-
 Teilmenge. Sie deckt derzeit PostgreSQL 16 mit rohen SQL-Abfragen, benannten
 Parametern, skalaren Ergebnissen, Transaktionen, Statement-Timeouts und
-geprüftem TLS mit Test-CA ab. Die lokalen PostgreSQL-16-Tests bestanden; der
-CI-Schritt ist konfiguriert, wurde aber noch nicht ausgeführt. Die Teilmenge
-gehört nicht zur geprüften Kompatibilitätsmatrix und umfasst weder generierte
-Web-/CRUD-Pfade noch Backup/Restore, vollständige Schemawerkzeuge oder alle
-PostgreSQL-Ergebnistypen.
+geprüftem TLS mit Test-CA ab. PostgreSQL-16-Schema-Safety und der dedizierte
+parametrisierte Runtime-Integrationsschritt bestanden CI-Lauf 521 auf Branch-
+Head `2cd6298`; Paketprüfung 241 bestand ebenfalls auf diesem Head. Die
+Teilmenge gehört nicht zur geprüften Kompatibilitätsmatrix und umfasst weder
+generierte Web-/CRUD-Pfade noch Backup/Restore, vollständige Schemawerkzeuge
+oder alle PostgreSQL-Ergebnistypen.
 
 ## Was damit nicht nachgewiesen wird
 
