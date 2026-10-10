@@ -538,6 +538,12 @@ admin_cookie="${project_root}/module-admin.cookies"
 viewer_cookie="${project_root}/module-viewer.cookies"
 login_fixture_user "${auth_admin_email}" "${admin_cookie}"
 login_fixture_user "${auth_viewer_email}" "${viewer_cookie}"
+viewer_list_status="$(curl --silent --show-error --output "${project_root}/viewer-customers.html" \
+    --write-out '%{http_code}' --cookie "${viewer_cookie}" "http://${address}/customers")"
+if [[ "${viewer_list_status}" != 200 ]]; then
+    echo "error: viewer customer list returned ${viewer_list_status}, expected 200" >&2
+    exit 1
+fi
 viewer_create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --cookie "${viewer_cookie}" "http://${address}/customers/new")"
 if [[ "${viewer_create_status}" != 403 ]]; then
