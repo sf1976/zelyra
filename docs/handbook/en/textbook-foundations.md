@@ -2021,8 +2021,9 @@ zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invo
 ~~~
 
 It materializes the source files known to the plan in a new output directory,
-generates an entry file, validates the result with `zelyra check`, and only
-publishes the directory after that check succeeds. It also copies
+generates an entry file that imports those modules and supplies the required
+empty `fn main()`, validates the result with `zelyra check`, and only publishes
+the directory after that check succeeds. It also copies
 `zelyra.toml`, `zelyra.theme.css`, and JSON locale catalogs when present. An
 existing destination, unresolved reference, or dependency on the original
 entry is rejected. The selected source file is included in full.
@@ -2036,6 +2037,11 @@ The result is explicitly only an experimental source bundle:
 binary, database service, or `.env`; credentials are not copied. Running it
 still requires a compatible Zelyra build, external runtime configuration, and
 MariaDB when applicable. This is not yet an independent Docker export.
+The manifest also carries the plan's declared `runtime_effects`, explicit
+`external_service_contracts`, and `deployment_readiness` blockers so operators
+can see modeled effects that still need runtime configuration. A `ready: false`
+status and the two false completeness flags do not turn this experimental
+bundle into a complete deployment description.
 
 An experimental Docker package can additionally be generated:
 

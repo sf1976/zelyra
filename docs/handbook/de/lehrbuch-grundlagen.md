@@ -2013,7 +2013,8 @@ zelyra module bundle examples/modules/main.zyl 'page:/invoices' --output ../invo
 ~~~
 
 Der Befehl materialisiert die im Plan bekannten Quelldateien in einem neuen
-Zielordner, erzeugt einen Einstieg, prüft das Ergebnis mit `zelyra check` und
+Zielordner, erzeugt einen Einstieg, der diese Module importiert und das nötige
+leere `fn main()` enthält, prüft das Ergebnis mit `zelyra check` und
 veröffentlicht den Ordner erst nach erfolgreicher Prüfung. Er kopiert außerdem
 `zelyra.toml`, `zelyra.theme.css` und JSON-Sprachkataloge, sofern vorhanden.
 Ein vorhandenes Ziel, ein nicht auflösbarer Verweis oder eine Abhängigkeit vom
@@ -2030,6 +2031,11 @@ Compiler-Binärdatei, Datenbankdienst noch `.env`; Zugangsdaten werden nicht
 kopiert. Für Betrieb und Datenbank sind weiterhin eine passende Zelyra-Version,
 eine externe Laufzeitkonfiguration und gegebenenfalls eine MariaDB nötig. Ein
 eigenständiger Dockerexport ist damit noch nicht erreicht.
+Das Manifest übernimmt außerdem `runtime_effects`, ausdrückliche
+`external_service_contracts` und `deployment_readiness`-Blocker aus dem Plan,
+damit modellierte Effekte mit fehlender Laufzeitkonfiguration sichtbar bleiben.
+`ready: false` und die beiden Vollständigkeitsfelder bleiben `false`; das
+experimentelle Bundle ist weiterhin keine vollständige Deploymentbeschreibung.
 
 Eine experimentelle Docker-Paketierung lässt sich zusätzlich erzeugen:
 

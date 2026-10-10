@@ -1286,7 +1286,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
                 .collect::<Vec<_>>();
             fs::write(
                 staging.join("main.zyl"),
-                format!("{}\n", imports.join("\n")),
+                format!("{}\n\nfn main() {{}}\n", imports.join("\n")),
             )
             .map_err(|error| format!("cannot write generated entry: {error}"))?;
             copied.push("main.zyl".to_owned());
@@ -1451,6 +1451,14 @@ ZELYRA_DB_TLS_MODE=auto
             "source_files": copied,
             "support_files": support_files,
             "database": database,
+            "runtime_effects": plan
+                .get("runtime_effects")
+                .cloned()
+                .unwrap_or(Value::Null),
+            "deployment_readiness": plan
+                .get("deployment_readiness")
+                .cloned()
+                .unwrap_or(Value::Null),
             "external_service_contracts": external_service_contracts,
             "source_closure_complete": false,
             "complete_deployment": false,

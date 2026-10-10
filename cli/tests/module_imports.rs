@@ -1139,6 +1139,38 @@ fn module_plan_reports_runtime_effects_in_its_source_closure() {
         document["plan"]["deployment_readiness"]["blockers"][0]["reason"],
         "file_system_paths_are_not_declared_in_the_bundle_manifest"
     );
+    let bundle = directory.with_extension("effect-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let bundled = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/storage.zyl",
+            "--output",
+            &bundle_arg,
+        ],
+    );
+    assert!(
+        bundled.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&bundled.stdout),
+        String::from_utf8_lossy(&bundled.stderr)
+    );
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["complete_deployment"], false);
+    assert_eq!(manifest["deployment_readiness"]["ready"], false);
+    assert_eq!(
+        manifest["deployment_readiness"]["blockers"][0]["reason"],
+        "file_system_paths_are_not_declared_in_the_bundle_manifest"
+    );
+    assert_eq!(
+        manifest["runtime_effects"]["effects"][0]["capability"],
+        "FileSystem"
+    );
+    fs::remove_dir_all(bundle).unwrap();
     fs::remove_dir_all(directory).unwrap();
 }
 
