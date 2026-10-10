@@ -16,10 +16,14 @@ geprüftem SQL, Webseiten, Formularen, CRUD, Authentifizierung, Capabilities und
 Verträgen. Dieses Handbuch führt anhand einer kleinen Maschinenverwaltung vom
 ersten Programm bis zur datenbankgestützten Webanwendung.
 
-> **Projektstatus:** Zelyra 0.3.0 ist experimentell und nicht für den
-> Produktionseinsatz freigegeben. Die menschliche Einsteigerabnahme für 0.3.0
-> wurde ausdrücklich verschoben und ist vor dem finalen 0.4.0-Release
-> verpflichtend. Siehe das [Entscheidungsprotokoll](../../release-readiness/0.3.0-human-gate-decision.de.md).
+Ein neues lokales Lernprojekt für Kunden, Artikel und Rechnungen erzeugst du
+mit [`zelyra --tutorial invoice`](../../tutorials/invoice.de.md).
+
+> **Projektstatus:** Zelyra 0.6.0 ist stabil veröffentlicht, bleibt aber
+> experimentell und ist nicht für den Produktiveinsatz freigegeben. Die
+> unabhängige menschliche Abnahme früherer Releases ist auf 1.0.0 verschoben.
+> Siehe [Roadmap](../../ROADMAP.de.md) und
+> [Abnahmeentscheidung](../../release-readiness/1.0.0-human-acceptance.de.md).
 
 Die verbindlichen Produktziele zu digitaler Souveränität und ehrlichen
 Korrektheitsversprechen stehen im [Zelyra-Manifest](../../MANIFESTO.de.md).

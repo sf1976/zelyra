@@ -81,21 +81,22 @@ dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.
 
 ## Experimentelle PostgreSQL-Runtime-Teilmenge
 
-Auf `release/0.6.0` entsteht eine experimentelle direkte PostgreSQL-Runtime-
-Teilmenge. Sie deckt derzeit PostgreSQL 16 mit rohen SQL-Abfragen, benannten
-Parametern, skalaren Ergebnissen, Transaktionen, Statement-Timeouts und
-geprüftem TLS mit Test-CA ab. PostgreSQL-16-Schema-Safety und der dedizierte
-parametrisierte Runtime-Integrationsschritt bestanden CI-Lauf 523 auf
-Dokumentations-Head `04cf026`; Paketprüfung 242 bestand exakt auf diesem Head.
-CI 521 bestand dieselben PostgreSQL-Schritte auf Code-Head `2cd6298`. Die
-Teilmenge gehört nicht zur geprüften Kompatibilitätsmatrix und umfasst weder
-generierte Web-/CRUD-Pfade noch Backup/Restore, vollständige Schemawerkzeuge
-oder alle PostgreSQL-Ergebnistypen.
+Eine begrenzte native PostgreSQL-Runtime für direkte SQL-Abfragen ist in 0.6.0
+enthalten. CI-Lauf
+[#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730)
+bestand auf exakt dem PR-Head `a35a5ee`, einschließlich parametrisierter
+PostgreSQL-16-Runtime-Integration und Schema-Safety. Enthalten sind benannte
+Parameter, skalare Ergebnistypen, Transaktionen, Statement-Timeouts und
+TLS-Prüfung. PostgreSQL 16 bleibt eine experimentelle geprüfte Teilmenge und
+keine allgemeine Support-Parität. Generierte Web-/CRUD-Pfade und die
+Schemainspektion verwenden weiterhin externe Werkzeuge. Der unveränderliche Tag `v0.6.0-rc.1` bestand die vollständige CI und Paketprüfung vor dem stabilen Tag.
 
 ## Was damit nicht nachgewiesen wird
 
-- Kompatibilität mit MySQL Server. Die Annahme einer `mysql://`-URL bedeutet
-  nicht, dass MySQL Teil dieser Testmatrix ist.
+- MySQL-Kompatibilität jenseits des begrenzten parametrisierten
+  SQL-Runtime-Tests aus 0.7 mit MySQL 8.4.11. Das weist keine
+  Schemainspektion, Migrationen, generiertes Web-/CRUD, Authentifizierung oder
+  Datenbankadministration nach.
 - Unterstützung anderer MariaDB-Versionen oder nicht aufgeführter
   Patch-Releases.
 - PostgreSQL- oder SQL-Server-Laufzeitparität.
@@ -110,3 +111,16 @@ Laufzeitverhalten ein verifiziertes Backup erstellen und den resultierenden
 Plan mit einer wegwerfbaren Kopie des echten Schemas und repräsentativen Daten
 prüfen. Ein ausführlicher Betreiberablauf steht in
 [MariaDB-Backup und Wiederherstellung](database-operations.de.md).
+
+## Experimentelle MySQL-Runtime-Teilmenge
+
+Der 0.7-Branch ergänzt einen ausdrücklich deklarierten `engine: mysql`-Pfad
+für typisierte, parametrisierte SQL-Abfragen mit einer `mysql://`-URL. Der
+CI-Job verwendet das offizielle Image `mysql:8.4.11`, prüft die Serverversion
+und startet `tests/mysql-runtime-e2e.sh`. MySQL 8.4.11 ist ein exakt geprüfter
+Stand und keine allgemeine MySQL-Kompatibilitätszusage. Schema- und
+Administrationsbefehle von `zelyra db` brechen mit `E-DB-019` sicher ab;
+Migrationen, Schemainspektion, generierte CRUD-/Web-Routen und ungeprüfte
+SQL-Funktionen sind ausgeschlossen. Siehe die
+[MySQL-8.4-Release-Notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-11.html)
+und das [offizielle MySQL-Container-Image](https://hub.docker.com/_/mysql).

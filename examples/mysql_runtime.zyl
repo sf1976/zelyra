@@ -1,0 +1,14 @@
+database main {
+    engine: mysql
+    database: "zelyra_ci"
+}
+
+fn main()
+    uses Database
+{
+    expected = 42
+    rows = sql<Int[]> {
+        SELECT :expected AS value
+    }
+    print("MySQL parameterized query passed")
+}

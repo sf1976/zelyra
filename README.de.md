@@ -11,21 +11,25 @@ Business-, Datenbank- und Webanwendungen. Schemaabhängiges SQL, Formulare,
 CRUD, Views und Geschäftslogik greifen ineinander; gewöhnlicher Programmcode
 und natives SQL bleiben jederzeit möglich.
 
-> **Aktueller Compilerstand: 0.4.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
+> **Aktueller stabiler Compilerstand: 0.6.0 · Sprachkompatibilitätslinie: 0.1 · experimentell**
 >
-> Zelyra 0.4.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
+> Zelyra 0.6.0 ist nicht für den Produktiveinsatz freigegeben. „Korrektheit
 > beweisen“ ist ein Entwicklungsziel: Der aktuelle Verifier deckt nur einen
 > begrenzten Teil ab und beweist nicht die Korrektheit beliebiger Anwendungen.
 
-Das stabile [`v0.4.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) wurde am 10.10.2026 veröffentlicht. Es bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Für 0.4.0 wurde keine unabhängige menschliche Abnahmestudie durchgeführt; der Projektverantwortliche hat sie ausdrücklich auf das verpflichtende 0.5.0-Gate verschoben. Dies ist kein Abnahmenachweis. Siehe das [Entscheidungsprotokoll](docs/release-readiness/0.4.0-human-acceptance.de.md).
+Das stabile [`v0.6.0`-Release](https://github.com/sf1976/zelyra/releases/tag/v0.6.0) wurde am 10.10.2026 veröffentlicht. Es bleibt experimentell und ist nicht für den Produktiveinsatz freigegeben. Die unabhängige menschliche Abnahme früherer Versionen wurde auf die erste produktive Version 1.0.0 verschoben; dieses README ist kein Abnahmenachweis. Siehe die [Release-Notizen 0.6.0](docs/release-notes/0.6.0.de.md) und den [Abnahmebeschluss 0.5.0](docs/release-readiness/0.5.0-human-acceptance.de.md).
 
-## Was ist neu in 0.4.0?
+## Was ist neu in 0.6.0?
 
-Zelyra 0.4.0 ergänzt experimentelle Mehrdatei-Module, sicherere
-Datenbankabläufe, Passwort-Wiederherstellung mit verschlüsselter dauerhafter
-Mail-Outbox und begrenzte Runtime-Kontrollen. Verifizierte Release-Artefakte
-stehen für Linux und Windows x86_64 bereit. Die genauen Kompatibilitätsgrenzen
-und Einschränkungen stehen in den [Release-Notizen](docs/release-notes/0.4.0.de.md).
+Zelyra 0.6.0 ergänzt `zelyra routes <entry.zyl>` für eine deterministische
+Routenübersicht mit Quellfundstellen und Diagnosen für doppelte Routen sowie
+`zelyra db map <file.zyl>` für einen schreibgeschützten Vergleich der
+Tabellendeklarationen mit der Live-Datenbank. Außerdem enthält die Version eine
+begrenzte experimentelle PostgreSQL-16-Runtime für direkte parametrisierte
+SQL-Abfragen und Transaktionen. Das ist keine vollständige PostgreSQL-Parität;
+generierte Web-/CRUD-Pfade sind nicht abgedeckt. Linux- und Windows-x86_64-
+Release-Artefakte enthalten Prüfsummen, SPDX-SBOMs und GitHub-Attestierungen.
+Details und Grenzen stehen in den [Release-Notizen](docs/release-notes/0.6.0.de.md).
 
 Die [Roadmap](docs/ROADMAP.de.md) hält Implementierungsstand und Grenzen fest.
 Das README ist ein Projektüberblick und kein zweites Handbuch oder Changelog.
@@ -74,7 +78,7 @@ unter Unix nur Besitzerrechte (`0600`). Unter Windows gelten die ACLs des
 Verzeichnisses; vorhandene `.env`-Dateien werden nicht nachträglich mit neuen
 Rechten versehen. Die Datei darf nicht committet oder geteilt werden. Für den
 Produktiveinsatz geeignete Secret-Verwaltung und eigene Zugangsdaten nutzen;
-0.4.0 ist nicht für den Produktiveinsatz freigegeben.
+0.6.0 ist nicht für den Produktiveinsatz freigegeben.
 
 Ein neu erzeugtes MariaDB-Projekt verwendet standardmäßig Deutsch und den
 Lernmodus. Mit `ZELYRA_LANGUAGE=de|en` und `ZELYRA_LEVEL=learn|work` in der
@@ -86,11 +90,11 @@ weitere Einstellungen stehen in der Umgebungsreferenz.
 | Wenn du … | lies … |
 | --- | --- |
 | Zelyra Schritt für Schritt lernen möchtest | [Getting Started](docs/getting-started.de.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) · [English handbook](docs/handbook/en/handbook.md) |
-| sehen möchtest, was Compiler 0.4.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
+| sehen möchtest, was Compiler 0.6.0 tatsächlich kann | [Umgesetzte Funktionen](docs/implemented.de.md) · [English](docs/implemented.en.md) |
 | wissen möchtest, was die Sprache spezifiziert | [Sprachspezifikation](docs/specification.de.md) · [Quellenlandkarte und Prüfanleitung](docs/source-authority.de.md) |
 | Projekt oder Umgebung konfigurieren möchtest | [Umgebung und Konfiguration](docs/env.md) · [English reference](docs/env.en.md) |
 | Datenbankunterstützung prüfen möchtest | [MariaDB-Kompatibilitätsmatrix](docs/database-compatibility.de.md) · [English](docs/database-compatibility.en.md) |
-| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.4.0](docs/release-plans/0.4.0.de.md) · [0.5.0-Roadmapentwurf](docs/release-plans/0.5.0.de.md) |
+| aktuelle und geplante Arbeiten prüfen möchtest | [Roadmap](docs/ROADMAP.de.md) · [Releaseplan 0.6.0](docs/release-plans/0.6.0.de.md) · [Releaseplan 1.0.0](docs/release-plans/1.0.0.de.md) |
 | die Entwicklungsrichtung verstehen möchtest | [Manifest](docs/MANIFESTO.de.md) · [KI-native Architektur](docs/architecture/ai-native-development.de.md) |
 | konkrete Release-Änderungen suchst | [Changelog](CHANGELOG.md) · [GitHub-Releases](https://github.com/sf1976/zelyra/releases) |
 
@@ -104,8 +108,9 @@ anderen Sprachen abgeleitet werden.
 
 - **Datenbankorientiert, MariaDB-zuerst:** Schema, geprüftes natives SQL,
   Formulare und erzeugte Businessoberflächen verwenden gemeinsame Typen.
-  SQLite ist für getestete Abläufe unterstützt; PostgreSQL-Schemaunterstützung
-  bedeutet weder vollständige Runtime-Parität noch allgemeine Portabilität.
+  SQLite ist für getestete Abläufe unterstützt; PostgreSQL 16 bietet eine
+  begrenzte experimentelle Runtime für direkte SQL-Abfragen, aber keine
+  vollständige Parität oder allgemeine Datenbankportabilität.
 - **Views gehören zur Plattform:** Wiederverwendbare Layouts, Komponenten,
   Slots, generierte CRUD-Views, Lokalisierung und lokale Designanpassung
   entwickeln sich gemeinsam weiter. Offene Punkte stehen in der Roadmap.

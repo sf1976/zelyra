@@ -4,6 +4,9 @@ The repository's implementation specification is maintained across the phase
 documents, the bilingual handbook, and the roadmap. This file defines the
 cross-cutting AI-native contract that applies to all of them.
 
+The language compatibility declaration and policy are described in the
+[language compatibility guide](language-compatibility.en.md).
+
 ## AI-native, AI-independent development
 
 > AI writes. Zelyra verifies.
