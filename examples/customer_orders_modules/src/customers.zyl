@@ -1,0 +1,32 @@
+import "src/database.zyl" as storage
+import "src/shell.zyl" as shell
+
+pub struct Customer {
+    id: Id
+    name: String
+    email: Email?
+}
+
+table customers {
+    id: Id primary auto
+    name: String(120) required
+    email: Email?
+    access {
+        read: ["src/reporting.zyl"]
+    }
+}
+
+crud Customer -> customers {
+    layout: CustomerOrderShell
+    title: "Customers"
+
+    view {
+        fields { name email }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+
+    list { name email }
+    search { name email }
+}

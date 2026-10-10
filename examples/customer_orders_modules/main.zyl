@@ -1,0 +1,16 @@
+import "src/database.zyl" as storage
+import "src/customers.zyl" as customers
+import "src/orders.zyl" as orders
+import "src/reporting.zyl" as reporting
+import "src/shell.zyl" as shell
+
+page "/" {
+    view: CustomerOrderShell
+    html {
+        <section>
+            <h2>Customer order workspace</h2>
+            <p>Review customers, orders, and aggregated turnover in one local application.</p>
+            <p><a href="/customers">Manage customers</a> <a href="/orders">Manage orders</a></p>
+        </section>
+    }
+}

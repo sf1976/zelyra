@@ -189,6 +189,49 @@ fn checked_in_multifile_example_checks_and_runs_without_external_services() {
 }
 
 #[test]
+fn checked_in_customer_orders_module_example_checks_and_plans_its_boundaries() {
+    let example = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/customer_orders_modules");
+
+    let check = run(&example, &["check", "main.zyl"]);
+    assert!(
+        check.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+
+    let plan = run(
+        &example,
+        &["module", "plan", "main.zyl", "src/reporting.zyl"],
+    );
+    assert!(
+        plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let document: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    let source_files = document["plan"]["source_files"].as_array().unwrap();
+    for source in [
+        "src/customers.zyl",
+        "src/database.zyl",
+        "src/orders.zyl",
+        "src/reporting.zyl",
+    ] {
+        assert!(source_files.iter().any(|path| path == source), "{source}");
+    }
+    assert_eq!(document["plan"]["complete_deployment"], false);
+    assert_eq!(document["plan"]["deployment_readiness"]["ready"], false);
+    assert!(document["plan"]["unresolved_references"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn module_bundle_materializes_a_checked_source_closure_without_secrets() {
     let directory = project(&[
         (
