@@ -745,27 +745,24 @@ generated applications, and isolated customer/order workflow all passed.
 The clean installed-CLI onboarding path is also green in [CI run
 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419).
 
-## Proposed release milestone 0.4.0
+## Release milestone 0.4.0 (published, not fully closed)
 
-The separate [0.4.0 release plan](release-plans/0.4.0.en.md) is a working
-proposal for the next milestone after the final 0.3.0 release. It prioritizes
-modules and deterministic multi-file projects, reliable database/runtime
-lifecycle management, safer account and API lifecycle controls, granular
-AI-native effects, and supply-chain/accessibility evidence. It deliberately
-does not turn PostgreSQL runtime parity, multi-tenancy, background jobs, MFA,
-OIDC, or a visual editor into automatic 0.4.0 promises.
-
-The stable `v0.3.0` release was published on 2026-10-03. The project owner
-explicitly deferred the 0.3.0 human onboarding test to 0.4.0; this is risk
-acceptance, not test evidence. The 0.4.0 plan requires that independent test
-before its final release. Scope and status remain subject to the plan's risk
-register and acceptance gates.
+Stable `v0.4.0` is published and its artifacts passed technical verification.
+The [0.4.0 release plan](release-plans/0.4.0.en.md) remains open: independent
+human onboarding acceptance was deferred to 0.5.0 and has not been conducted.
+Manual feedback using the published 0.4.0 CLI also exposed an incorrect
+absolute-path invocation for `setup` and unclear expectations for `setup` in a
+minimal `init` project. The diagnosis and documentation were corrected for
+0.5.0 preparation and regression-checked; published 0.4.0 artifacts do not
+contain these corrections. See the bilingual 0.5.0
+[study protocol](release-readiness/0.5.0-onboarding-study.en.md) for the record
+and its limits.
 
 ## Proposed release milestone 0.5.0
 
-The bilingual [0.5.0 roadmap proposal](release-plans/0.5.0.en.md) is a
-forward-looking plan, not an implementation or release claim. It is gated on
-the final 0.3.0 release and published 0.4.0 baseline. The scoped 0.5.0 candidate
+The bilingual [0.5.0 roadmap](release-plans/0.5.0.en.md) carries forward the
+open 0.4.0 acceptance and its feedback; it is not a release promise. It is
+gated on the final 0.3.0 release and published 0.4.0 baseline. The scoped 0.5.0 candidate
 provides experimental Docker bundles for a statically recognized subset, with
 separate schemas and least-privilege accounts. Complete dependency/effect
 closure, shared schema ownership, and a reusable multi-connection database

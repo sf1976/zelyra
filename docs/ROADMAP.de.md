@@ -812,28 +812,25 @@ Workflow waren erfolgreich.
 Der Clean-Onboardingpfad mit installierter CLI ist außerdem im [CI-Lauf
 35573616419](https://github.com/sf1976/zelyra/actions/runs/35573616419) grün.
 
-## Vorgeschlagener Release-Meilenstein 0.4.0
+## Release-Meilenstein 0.4.0 (veröffentlicht, nicht vollständig abgeschlossen)
 
-Der separate [Releaseplan 0.4.0](release-plans/0.4.0.de.md) ist ein
-Arbeitsvorschlag für den nächsten Meilenstein nach dem finalen 0.3.0-Release.
-Er priorisiert Module und deterministische Mehrdateiprojekte, einen
-zuverlässigen Datenbank-/Runtime-Lebenszyklus, sicherere Konto- und
-API-Lebenszyklen, granulare AI-native Effekte sowie Nachweise für Lieferkette
-und Barrierefreiheit. PostgreSQL-Runtime-Parität, Multi-Tenancy,
-Hintergrundjobs, MFA, OIDC oder ein visueller Editor werden dadurch bewusst
-nicht automatisch zu 0.4.0-Versprechen.
-
-Das stabile `v0.3.0` wurde am 03.10.2026 veröffentlicht. Der Projektverantwortliche
-hat den menschlichen Einsteigertest für 0.3.0 ausdrücklich auf 0.4.0 vertagt;
-dies ist eine Risikoakzeptanz, kein Testnachweis. Der 0.4.0-Plan verlangt diese
-unabhängige Abnahme vor seinem finalen Release. Umfang und Status bleiben dem
-Risikoregister und den Abnahme-Gates des Plans unterstellt.
+Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
+geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
+offen: Die unabhängige menschliche Einsteigerabnahme wurde auf 0.5.0 verschoben
+und ist nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
+unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
+und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
+geprüft; die veröffentlichten 0.4.0-Artefakte enthalten diese Korrekturen
+nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
+[Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md).
 
 ## Vorgeschlagener Release-Meilenstein 0.5.0
 
-Der zweisprachige [0.5.0-Roadmapentwurf](release-plans/0.5.0.de.md) ist ein
-Ausblick, keine Implementierungs- oder Releasezusage. Voraussetzung sind das
-finale 0.3.0-Release und die veröffentlichte 0.4.0-Basis. Der eingegrenzte
+Der zweisprachige [0.5.0-Roadmapplan](release-plans/0.5.0.de.md) führt die
+offene 0.4.0-Abnahme und deren Rückmeldungen weiter; er ist keine
+Releasezusage. Voraussetzung sind das finale 0.3.0-Release und die
+veröffentlichte 0.4.0-Basis. Der eingegrenzte
 0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
 Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
 Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
