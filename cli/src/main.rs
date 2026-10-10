@@ -46,14 +46,17 @@ mod command_dispatch;
 mod database_cli;
 mod docs;
 mod edit;
+mod editor;
 mod formatter;
 mod holes;
 mod impact;
 mod module_cli;
 mod outbox_cli;
 mod project;
+mod route_cli;
 #[cfg(test)]
 mod tests;
+mod tutorial;
 mod updater;
 use account_cli::{audit_command, auth_command};
 #[cfg(test)]
@@ -120,6 +123,9 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 "#;
 
 fn usage() {
+    eprintln!("  zelyra --tutorial invoice [directory] creates the guided invoice application");
+    eprintln!("  zelyra editor [directory] [--port <port>] starts the local browser editor");
+    eprintln!("  routes: `zelyra routes <entry.zyl> [--format human|json]` lists declared routes and generated resource routes");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");
@@ -127,7 +133,7 @@ fn usage() {
     eprintln!("  doctor supports `--env-file <path>` for generated MariaDB projects");
     eprintln!("  setup supports `--database`, `--schema`, `--all`, `--host-port`, `--db-host-port`, and `--web [--port <port>]`");
     eprintln!("  outbox: `setup [file.zyl]`, `list [file.zyl] [--limit <1..200>] [--format text|json]`, `requeue <event-id> [file.zyl]`, or `run [file.zyl] --handler <event.type=function_name> [--once] [--lease-seconds <5..3600>]");
-    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
+    eprintln!("Zelyra {}\n\nUsage:\n  zelyra --version\n  zelyra version\n  zelyra update [--check]\n  zelyra new <directory> [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra init [directory] [--mariadb] [--template minimal|mariadb-crud|mariadb-auth|mariadb-business] [--web-port <port>] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] [--database|--schema|--all] [--host-port <port>] [--db-host-port <port>]\n  zelyra setup [directory] --web [--port <port>]\n  zelyra check <file.zyl> [--format human|json]\n  zelyra fmt <file.zyl> [--check]\n  zelyra impact <file.zyl> [--format human|json]\n  zelyra edit --format=json [--apply] <change.json>\n  zelyra context <file.zyl> [--format human|json]\n  zelyra config <file.zyl> [--format human|json]\n  zelyra build <file.zyl>\n  zelyra run <file.zyl>\n  zelyra serve <file.zyl> [address]\n  zelyra module plan <entry.zyl> <module.zyl|resource-id>\n  zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--docker --compiler-ref <40-character-commit>]\n  zelyra doctor [file.zyl] [--port <port>] [--json]\n  zelyra verify <file.zyl> [--json]\n  zelyra doc <file.zyl> [--openapi|--typescript]\n  zelyra auth hash-password [--stdin]\n  zelyra auth role <grant|revoke> <file.zyl> <user-id> <role>\n  zelyra auth role-permission <grant|revoke> <file.zyl> <role> <permission>\n  zelyra audit inspect <file.zyl> [--limit <n>]\n  zelyra audit export <file.zyl> [--limit <n>] [--format json|csv]\n  zelyra audit verify <file.zyl>\n  zelyra audit prune <file.zyl> --before <timestamp> [--confirm]\n  zelyra form validate <file.zyl> <FormName> [field=value ...]\n  zelyra db <create|setup|bootstrap|inspect|map|plan|apply> <file.zyl>", env!("CARGO_PKG_VERSION"));
 }
 
 fn version_command() -> ExitCode {
@@ -151,7 +157,7 @@ thread_local! {
 
 fn database_usage() {
     eprintln!(
-        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
+        "Usage:\n  zelyra db create <file.zyl>\n  zelyra db setup <file.zyl>\n  zelyra db bootstrap <file.zyl>\n  zelyra db inspect <file.zyl>\n  zelyra db map <file.zyl> [--format=text|json]\n  zelyra db plan <file.zyl> [--format=text|json]\n  zelyra db apply <file.zyl> [--plan-id <sha256:...>] [--allow-risky]\n  zelyra db history <file.zyl> [--format=text|json]\n\nUse a plan id from `db plan --format=json` to refuse applying a plan if the database schema changed after review.\nThe read-only database map groups declared tables by source module and reports live tables without a declaration; module ownership is advisory.\nMariaDB migrations are journaled; use `db history` to inspect progress and interrupted runs.\n--allow-destructive remains available for DESTRUCTIVE plans only.\nA project database uses ZELYRA_DATABASE_<NAME>_URL (for example ZELYRA_DATABASE_MAIN_URL); DATABASE_URL remains a compatibility fallback."
     );
 }
 
@@ -1439,6 +1445,9 @@ fn validate_program(
         }
         return Err(());
     }
+    if !route_cli::validate_no_collisions(path, &program) {
+        return Err(());
+    }
     if !validate_views(path, &program) {
         return Err(());
     }
@@ -1465,6 +1474,9 @@ fn validate_program(
             return Err(());
         }
         if !validate_cruds(path, &program, &schema) {
+            return Err(());
+        }
+        if !validate_tenant_access_boundaries(path, &program, &schema) {
             return Err(());
         }
         if !validate_tableviews(path, &program, &schema) {
@@ -5158,11 +5170,103 @@ fn project_features(path: &str) -> Result<ProjectFeatures, String> {
     Ok(features)
 }
 
+const LANGUAGE_COMPATIBILITY_LINE: &str = "0.1";
+
+fn project_language_line(path: &str) -> Result<Option<String>, String> {
+    let Some(config_path) = project_config_path(path)? else {
+        return Ok(None);
+    };
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let mut in_project = false;
+    let mut language_line = None;
+    for (line_index, raw_line) in contents.lines().enumerate() {
+        let line = strip_toml_comment(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_project = line == "[project]";
+            continue;
+        }
+        if !in_project {
+            continue;
+        }
+        let Some((key, raw_value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "zelyra" {
+            continue;
+        }
+        if language_line.is_some() {
+            return Err(format!(
+                "language compatibility line is configured more than once on line {}",
+                line_index + 1
+            ));
+        }
+        let value = raw_value.trim();
+        let Some(value) = value
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix('"'))
+            .or_else(|| {
+                raw_value
+                    .trim()
+                    .strip_prefix('\'')
+                    .and_then(|value| value.strip_suffix('\''))
+            })
+        else {
+            return Err(format!(
+                "language compatibility line on line {} must be a quoted string",
+                line_index + 1
+            ));
+        };
+        language_line = Some(value.to_owned());
+    }
+    Ok(language_line)
+}
+
+fn strip_toml_comment(line: &str) -> &str {
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, character) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, character) {
+            (Some('"'), '\\') => escaped = true,
+            (Some(current), value) if current == value => quote = None,
+            (None, '"' | '\'') => quote = Some(character),
+            (None, '#') => return &line[..index],
+            _ => {}
+        }
+    }
+    line
+}
+
+fn validate_language_compatibility(path: &str) -> Result<(), String> {
+    let language_line = project_language_line(path)?.unwrap_or_else(|| {
+        // Projects predating the explicit declaration continue on the original line.
+        LANGUAGE_COMPATIBILITY_LINE.to_owned()
+    });
+    if language_line == LANGUAGE_COMPATIBILITY_LINE {
+        Ok(())
+    } else {
+        Err(format!(
+            "project requests language compatibility line `{language_line}`, but this compiler supports `{LANGUAGE_COMPATIBILITY_LINE}`"
+        ))
+    }
+}
+
 fn feature_enabled(features: &ProjectFeatures, feature: &str) -> bool {
     features.get(feature).is_none_or(|setting| setting.enabled)
 }
 
 fn validate_project_features(path: &str, program: &zelyra_ast::Program) -> Result<(), ()> {
+    if let Err(error) = validate_language_compatibility(path) {
+        diagnostic(path, "E-LANG-001", &error, 1, 1);
+        return Err(());
+    }
     if project_uses_reserved_health_route(program) {
         diagnostic(
             path,
@@ -6721,6 +6825,256 @@ fn crud_column_exists(
                 .iter()
                 .any(|candidate| candidate.name == storage)
         })
+}
+
+fn validate_tenant_access_boundaries(
+    path: &str,
+    program: &zelyra_ast::Program,
+    schema: &Schema,
+) -> bool {
+    let tenant_tables = program
+        .cruds
+        .iter()
+        .filter(|crud| crud.tenant_column.is_some())
+        .map(|crud| crud.table.clone())
+        .collect::<HashSet<_>>();
+    if tenant_tables.is_empty() {
+        return true;
+    }
+    let protected_tables = program
+        .auth
+        .iter()
+        .filter_map(|auth| auth.membership_table.clone())
+        .chain(tenant_tables.iter().cloned())
+        .collect::<HashSet<_>>();
+    let known_tables = schema
+        .tables
+        .iter()
+        .map(|table| table.name.clone())
+        .collect::<Vec<_>>();
+    let mut valid = true;
+    let check_query = |query: &str, span: zelyra_ast::Span| -> bool {
+        let (operation, accesses) =
+            zelyra_database::sql::analyze_table_access(query, &known_tables);
+        if operation.is_none() {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "tenant-enabled projects may use only SQL forms whose table access can be checked",
+                span,
+            );
+            return false;
+        }
+        let mut query_valid = true;
+        for access in accesses {
+            if access.table.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-003",
+                    "quoted SQL table references cannot be verified in a tenant-enabled project",
+                    span,
+                );
+                query_valid = false;
+                continue;
+            }
+            if protected_tables
+                .iter()
+                .any(|table| table.eq_ignore_ascii_case(&access.table))
+            {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-003",
+                    &format!(
+                        "unscoped SQL access to `{}` is not allowed in a tenant-enabled project; use its generated tenant CRUD route",
+                        access.table
+                    ),
+                    span,
+                );
+                query_valid = false;
+            }
+        }
+        query_valid
+    };
+
+    for form in &program.forms {
+        if form.table.as_ref().is_some_and(|table| {
+            protected_tables
+                .iter()
+                .any(|protected| protected.eq_ignore_ascii_case(table))
+        }) {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "forms cannot access tenant-owned or membership tables outside the generated tenant CRUD route",
+                form.span,
+            );
+            valid = false;
+        }
+        for action in &form.actions {
+            visit_block_sql(
+                &zelyra_ast::Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &mut |query, span| valid &= check_query(query, span),
+            );
+        }
+    }
+    for crud in &program.cruds {
+        if tenant_tables
+            .iter()
+            .any(|table| table.eq_ignore_ascii_case(&crud.table))
+            && crud.tenant_column.is_none()
+        {
+            diagnostic_with_span(
+                path,
+                "E-TENANT-003",
+                "every CRUD resource for a tenant-owned table must use its declared tenant column",
+                crud.span,
+            );
+            valid = false;
+        }
+        for action in &crud.actions {
+            visit_block_sql(
+                &zelyra_ast::Block {
+                    statements: action.statements.clone(),
+                    span: action.span,
+                },
+                &mut |query, span| valid &= check_query(query, span),
+            );
+        }
+    }
+    for page in &program.pages {
+        for data in &page.data {
+            valid &= check_query(&data.query, data.span);
+        }
+    }
+    for tableview in &program.tableviews {
+        valid &= check_query(&tableview.source, tableview.span);
+    }
+    for function in &program.functions {
+        for expression in function.requires.iter().chain(&function.ensures) {
+            visit_expression_sql(expression, &mut |query, span| {
+                valid &= check_query(query, span)
+            });
+        }
+        visit_block_sql(&function.body, &mut |query, span| {
+            valid &= check_query(query, span)
+        });
+    }
+    valid
+}
+
+fn visit_expression_sql<'a>(
+    expression: &'a zelyra_ast::Expr,
+    visitor: &mut impl FnMut(&'a str, zelyra_ast::Span),
+) {
+    use zelyra_ast::ExprKind;
+    match &expression.kind {
+        ExprKind::Array(values) => {
+            for value in values {
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Map(entries) => {
+            for (key, value) in entries {
+                visit_expression_sql(key, visitor);
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Record { fields, .. } => {
+            for (_, value) in fields {
+                visit_expression_sql(value, visitor);
+            }
+        }
+        ExprKind::Index { target, index } => {
+            visit_expression_sql(target, visitor);
+            visit_expression_sql(index, visitor);
+        }
+        ExprKind::Field { target, .. }
+        | ExprKind::Unary { expr: target, .. }
+        | ExprKind::Await(target) => visit_expression_sql(target, visitor),
+        ExprKind::Call { args, .. } => {
+            for argument in args {
+                visit_expression_sql(argument, visitor);
+            }
+        }
+        ExprKind::Binary { left, right, .. } => {
+            visit_expression_sql(left, visitor);
+            visit_expression_sql(right, visitor);
+        }
+        ExprKind::Sql { query, .. } => visitor(query, expression.span),
+        ExprKind::Int(_)
+        | ExprKind::UInt(_)
+        | ExprKind::Float(_)
+        | ExprKind::Bool(_)
+        | ExprKind::String(_)
+        | ExprKind::Char(_)
+        | ExprKind::Variable(_) => {}
+    }
+}
+
+fn visit_block_sql<'a>(
+    block: &'a zelyra_ast::Block,
+    visitor: &mut impl FnMut(&'a str, zelyra_ast::Span),
+) {
+    use zelyra_ast::Stmt;
+    for statement in &block.statements {
+        match statement {
+            Stmt::Let { value, .. }
+            | Stmt::BindOrAssign { value, .. }
+            | Stmt::Expr(value)
+            | Stmt::Return {
+                value: Some(value), ..
+            } => visit_expression_sql(value, visitor),
+            Stmt::Return { value: None, .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+            Stmt::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                visit_expression_sql(condition, visitor);
+                visit_block_sql(then_block, visitor);
+                if let Some(else_block) = else_block {
+                    visit_block_sql(else_block, visitor);
+                }
+            }
+            Stmt::While {
+                condition,
+                invariants,
+                body,
+                ..
+            } => {
+                visit_expression_sql(condition, visitor);
+                for invariant in invariants {
+                    visit_expression_sql(invariant, visitor);
+                }
+                visit_block_sql(body, visitor);
+            }
+            Stmt::For { iterable, body, .. } => {
+                visit_expression_sql(iterable, visitor);
+                visit_block_sql(body, visitor);
+            }
+            Stmt::Loop {
+                invariants, body, ..
+            } => {
+                for invariant in invariants {
+                    visit_expression_sql(invariant, visitor);
+                }
+                visit_block_sql(body, visitor);
+            }
+            Stmt::Match { value, arms, .. } => {
+                visit_expression_sql(value, visitor);
+                for arm in arms {
+                    visit_block_sql(&arm.body, visitor);
+                }
+            }
+            Stmt::Transaction { body, .. } | Stmt::Parallel { body, .. } => {
+                visit_block_sql(body, visitor)
+            }
+        }
+    }
 }
 
 fn validate_tableviews(path: &str, program: &zelyra_ast::Program, schema: &Schema) -> bool {

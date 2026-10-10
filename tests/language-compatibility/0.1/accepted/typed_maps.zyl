@@ -1,0 +1,19 @@
+fn main() {
+    values: Map<String, Int> = Map {
+        "one": 1
+        "two": 2
+    }
+    mutable updated = put(values, "three", 3)
+    updated = put(updated, "two", 20)
+    match get(updated, "two") {
+        Some(value) => {
+            print(value)
+        }
+        None => {
+            print(0)
+        }
+    }
+    print(contains(updated, "three"))
+    print(keys(updated))
+    print(values(updated))
+}

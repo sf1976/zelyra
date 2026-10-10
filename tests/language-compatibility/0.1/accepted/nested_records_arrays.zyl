@@ -1,0 +1,22 @@
+struct Address {
+    city: String
+}
+
+struct Customer {
+    name: String
+    address: Address
+}
+
+fn main() {
+    customer = Customer {
+        name: "Anna"
+        address: Address {
+            city: "Berlin"
+        }
+    }
+
+    print(customer.address.city)
+    print(contains([1, 2, 3], 2))
+    print(first([4, 5]))
+    print(last([4, 5]))
+}

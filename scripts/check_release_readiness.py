@@ -65,12 +65,27 @@ REQUIRED_GATES_040 = {
 
 REQUIRED_GATES_050 = {
     "docs/release-plans/0.5.0.en.md": (
-        ("independent human acceptance", "Independent human acceptance by a non-developer"),
-        ("published candidate verification", "Release artifacts, checksums, update, and rollback verification"),
+        ("human acceptance deferral", "Record the explicit owner decision to defer independent human acceptance"),
+        ("published candidate verification", "Release artifacts, checksums, installation, update, and rollback verification"),
     ),
     "docs/release-plans/0.5.0.de.md": (
-        ("unabhängige menschliche Abnahme", "Unabhängige menschliche Abnahme durch eine Person ohne Entwicklerrolle"),
-        ("Prüfung des veröffentlichten Kandidaten", "Releaseartefakte, Prüfsummen, Update- und Rollbackprüfung"),
+        ("Vertagung der menschlichen Abnahme", "Die ausdrückliche Entscheidung, die unabhängige menschliche Abnahme auf"),
+        ("Prüfung des veröffentlichten Kandidaten", "Releaseartefakte, Prüfsummen, Installation, Update und Rollback"),
+    ),
+}
+
+REQUIRED_GATES_100 = {
+    "docs/release-plans/1.0.0.en.md": (
+        ("frozen release scope", "Freeze the 1.0.0 product scope, support matrix"),
+        ("published candidate human study", "Publish an immutable 1.0.0 release candidate and conduct the independent"),
+        ("completed human acceptance", "Complete the bilingual human acceptance record with the exact candidate"),
+        ("stable release gate", "Publish stable `v1.0.0` only after every technical gate and the human"),
+    ),
+    "docs/release-plans/1.0.0.de.md": (
+        ("festgelegter Releaseumfang", "Produktumfang, Supportmatrix, Kompatibilitätszusagen und Dokumentation"),
+        ("veröffentlichte Kandidatenstudie", "Einen unveränderlichen 1.0.0-Release-Kandidaten veröffentlichen und die"),
+        ("abgeschlossene menschliche Abnahme", "Das zweisprachige Abnahmeprotokoll mit exaktem Kandidaten-Tag und Commit"),
+        ("stabiles Release-Gate", "`v1.0.0` stabil erst veröffentlichen, wenn alle technischen Gates und die"),
     ),
 }
 
@@ -91,19 +106,42 @@ REQUIRED_HUMAN_DECISION_RECORDS_040 = {
 
 REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050 = {
     "docs/release-readiness/0.5.0-human-acceptance.en.md": (
+        "decision: deferred to 1.0.0",
+        "not conducted; not a test result",
         "candidate tag:",
         "candidate commit:",
-        "completed on:",
-        "observations:",
+        "decision authority: project owner",
+    ),
+    "docs/release-readiness/0.5.0-human-acceptance.de.md": (
+        "entscheidung: auf 1.0.0 verschoben",
+        "nicht durchgeführt; kein testergebnis",
+        "kandidaten-tag:",
+        "kandidaten-commit:",
+        "entscheidungsträger: projektverantwortlicher",
+    ),
+}
+
+REQUIRED_HUMAN_ACCEPTANCE_RECORDS_100 = {
+    "docs/release-readiness/1.0.0-human-acceptance.en.md": (
+        "candidate tag:",
+        "candidate commit:",
+        "study completed on:",
+        "participant count",
+        "task outcomes:",
+        "interventions:",
+        "redacted observations:",
         "blockers:",
         "decision: accepted",
         "decision authority: project owner",
     ),
-    "docs/release-readiness/0.5.0-human-acceptance.de.md": (
+    "docs/release-readiness/1.0.0-human-acceptance.de.md": (
         "kandidaten-tag:",
         "kandidaten-commit:",
-        "abgeschlossen am:",
-        "beobachtungen:",
+        "studie abgeschlossen am:",
+        "anzahl teilnehmende",
+        "aufgabenergebnisse:",
+        "eingriffe:",
+        "redigierte beobachtungen:",
         "blockaden:",
         "entscheidung: akzeptiert",
         "entscheidungsträger: projektverantwortlicher",
@@ -123,6 +161,31 @@ REQUIRED_CANDIDATE_RECORD_040 = (
     "rollback smoke:",
 )
 
+# Later pre-production milestones use bilingual, reviewable checklists. Every
+# item must be completed before a stable tag is allowed to publish.
+RELEASE_PLAN_CHECKLISTS = {
+    "0.7.0": (
+        ("docs/release-plans/0.7.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.7.0.de.md", "## Release-Gates"),
+    ),
+    "0.8.0": (
+        ("docs/release-plans/0.8.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.8.0.de.md", "## Release-Gates"),
+    ),
+    "0.9.0": (
+        ("docs/release-plans/0.9.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.9.0.de.md", "## Release-Gates"),
+    ),
+    "0.95.0": (
+        ("docs/release-plans/0.95.0.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.95.0.de.md", "## Abschlusskriterien"),
+    ),
+    "0.99.0": (
+        ("docs/release-plans/0.99.0.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.99.0.de.md", "## Abschlusskriterien"),
+    ),
+}
+
 
 def _checkbox_is_checked(text: str, marker: str) -> bool:
     for line in text.splitlines():
@@ -131,10 +194,48 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
     return False
 
 
+def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: str) -> list[str]:
+    path = root / relative_path
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return [f"release plan missing or unreadable ({relative_path})"]
+
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == heading)
+    except StopIteration:
+        return [f"release gate section missing ({relative_path})"]
+
+    section: list[tuple[int, str]] = []
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("## "):
+            break
+        if lines[index].lstrip().startswith("- "):
+            section.append((index + 1, lines[index].lstrip()))
+
+    if not section:
+        return [f"release gate checklist is empty ({relative_path})"]
+
+    failures = []
+    for line_number, item in section:
+        match = re.match(r"^- \[([ xX])\] .+", item)
+        if match is None:
+            failures.append(f"release gate is not a checklist item ({relative_path}:{line_number})")
+        elif match.group(1).casefold() != "x":
+            failures.append(f"release gate is incomplete ({relative_path}:{line_number})")
+    return failures
+
+
 def unfinished_gates(
     root: Path, version: str, candidate_commit: str | None = None
 ) -> list[str]:
-    if version not in {"0.3.0", "0.4.0", "0.5.0"}:
+    if version in RELEASE_PLAN_CHECKLISTS:
+        failures = []
+        for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
+            failures.extend(_unfinished_release_plan_checklist(root, relative_path, heading))
+        return failures
+
+    if version not in {"0.3.0", "0.4.0", "0.5.0", "1.0.0"}:
         return []
 
     failures: list[str] = []
@@ -142,6 +243,7 @@ def unfinished_gates(
         "0.3.0": REQUIRED_GATES,
         "0.4.0": REQUIRED_GATES_040,
         "0.5.0": REQUIRED_GATES_050,
+        "1.0.0": REQUIRED_GATES_100,
     }[version]
     for relative_path, gates in required_gates.items():
         path = root / relative_path
@@ -176,6 +278,8 @@ def unfinished_gates(
             **REQUIRED_HUMAN_DECISION_RECORDS_040,
             "docs/release-readiness/0.4.0-candidate-verification.md": REQUIRED_CANDIDATE_RECORD_040,
         }
+    elif version == "1.0.0":
+        required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_100
     else:
         required_records = REQUIRED_HUMAN_ACCEPTANCE_RECORDS_050
 
@@ -194,7 +298,7 @@ def unfinished_gates(
                 failures.append(f"human onboarding decision record incomplete ({relative_path})")
                 break
         else:
-            if version in {"0.4.0", "0.5.0"} and any(
+            if version in {"0.4.0", "0.5.0", "1.0.0"} and any(
                 placeholder in text
                 for placeholder in ("pending", "ausstehend", "[todo]", "tbd")
             ):
@@ -224,7 +328,7 @@ def unfinished_gates(
                     failures.append(
                         f"candidate record does not match published candidate tag ({relative_path})"
                     )
-            if version == "0.5.0" and candidate_commit is not None:
+            if version in {"0.5.0", "1.0.0"} and candidate_commit is not None:
                 commit_label = (
                     "kandidaten-commit:" if relative_path.endswith(".de.md") else "candidate commit:"
                 )
@@ -240,7 +344,7 @@ def unfinished_gates(
                 recorded_tag = _record_value(raw_text, tag_label)
                 if not re.fullmatch(r"[0-9a-f]{40}", recorded_commit.casefold()):
                     failures.append(f"human acceptance candidate commit is invalid ({relative_path})")
-                if not re.fullmatch(r"v0\.5\.0-rc\.[0-9]+", recorded_tag.casefold()):
+                if not re.fullmatch(rf"v{re.escape(version)}-rc\.[0-9]+", recorded_tag.casefold()):
                     failures.append(f"human acceptance candidate tag is invalid ({relative_path})")
                 if recorded_commit.casefold() != candidate_commit.casefold():
                     failures.append(
@@ -259,15 +363,22 @@ def _record_value(raw_text: str, label: str) -> str:
 
 
 def candidate_tag(root: Path, version: str) -> str:
-    if version not in {"0.4.0", "0.5.0"}:
+    if version not in {"0.4.0", "0.5.0", "1.0.0"}:
         raise ValueError(f"candidate tags are not configured for {version}")
     paths = (
         [root / "docs/release-readiness/0.4.0-candidate-verification.md"]
         if version == "0.4.0"
-        else [
-            root / "docs/release-readiness/0.5.0-human-acceptance.en.md",
-            root / "docs/release-readiness/0.5.0-human-acceptance.de.md",
-        ]
+        else (
+            [
+                root / "docs/release-readiness/0.5.0-human-acceptance.en.md",
+                root / "docs/release-readiness/0.5.0-human-acceptance.de.md",
+            ]
+            if version == "0.5.0"
+            else [
+                root / "docs/release-readiness/1.0.0-human-acceptance.en.md",
+                root / "docs/release-readiness/1.0.0-human-acceptance.de.md",
+            ]
+        )
     )
     values = [
         _record_value(
@@ -309,7 +420,7 @@ def main() -> int:
         return 1
 
     if failures:
-        print(f"final {args.version} release is blocked by unfinished gates:", file=sys.stderr)
+        print(f"release {args.version} is blocked by unfinished gates:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1

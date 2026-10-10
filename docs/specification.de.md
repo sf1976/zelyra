@@ -4,6 +4,9 @@ Die Implementierungsspezifikation des Repositorys verteilt sich auf
 Phasendokumente, das zweisprachige Handbuch und die Roadmap. Diese Datei legt
 den querschnittlichen KI-nativen Vertrag fest.
 
+Die Sprachkompatibilitätserklärung und ihre Regeln stehen im
+[Leitfaden zur Sprachkompatibilität](language-compatibility.de.md).
+
 ## KI-native, KI-unabhängige Entwicklung
 
 > Die KI schreibt. Zelyra prüft.
