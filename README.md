@@ -17,7 +17,7 @@ and native SQL available.
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.4.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) was published on 2026-10-10. It is experimental, not production-approved. No independent human acceptance study was conducted for 0.4.0; the project owner explicitly deferred it to the mandatory 0.5.0 gate. This is not acceptance evidence. See the [decision record](docs/release-readiness/0.4.0-human-acceptance.en.md).
+The stable [`v0.4.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) was published on 2026-10-10. It is experimental, not production-approved. No independent human acceptance study was conducted for 0.4.0; the project owner explicitly deferred all independent human testing to the 1.0.0 major release. This is not acceptance evidence. See the [decision record](docs/release-readiness/0.4.0-human-acceptance.en.md).
 
 ## What changed in 0.4.0
 

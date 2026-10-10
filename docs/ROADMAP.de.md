@@ -880,7 +880,8 @@ Gate für 1.0.0.
   Dateien schreibt. Das Manifest
   weist weiterhin `source_closure_complete: false` und
   `complete_deployment: false` aus. Vollständige Abhängigkeitsanalyse,
-  modulare Datenbankschnittstelle und vollständige 0.5.0-Abnahme bleiben offen.
+  modulare Datenbankschnittstelle und technische Kandidatenprüfung bleiben
+  offen. Die menschliche Abnahme ist auf 1.0.0 verschoben.
   `module plan` verfolgt jetzt auch Funktionsaufrufe in Formular- und
   CRUD-Aktionen bis zu den aufgerufenen Deklarationen und deren Quelldateien;
   ein Mehrmodul-Integrationstest prüft beide Fälle. Das erweitert die bekannte
