@@ -170,7 +170,7 @@ page "/items" {
 | `zelyra auth hash-password` | `[--stdin]` | Generates secure Argon2 password hashes |
 | `zelyra form validate <file> <Form>` | | Tests forms with sample values on console |
 | `zelyra context <file.zyl>` | `[--format json]` | Emits semantic source context for developer tools |
-| `zelyra module plan <entry> <module-or-resource-id>` | | Shows known dependency closure from a source module or application resource; not a deployment export |
+| `zelyra module plan <entry> <module-or-resource-id>` | | Shows known source dependencies and declared runtime effects; readiness blockers remain and it is not a deployment export |
 
 ---
 

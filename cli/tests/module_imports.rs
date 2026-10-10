@@ -976,6 +976,55 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
 }
 
 #[test]
+fn module_plan_reports_runtime_effects_in_its_source_closure() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/storage.zyl\" as storage\nfn main() {}\n",
+        ),
+        (
+            "src/storage.zyl",
+            "pub fn read_customer_file(path: String) -> String uses FileSystem { return read_text(path) }\n",
+        ),
+    ]);
+    let result = run(
+        &directory,
+        &["module", "plan", "main.zyl", "src/storage.zyl"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let document: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["runtime_effects"]["effects"],
+        serde_json::json!([{
+            "capability": "FileSystem",
+            "declared_by": ["function:src/storage.zyl::read_customer_file"],
+            "source_modules": ["src/storage.zyl"]
+        }])
+    );
+    assert_eq!(document["plan"]["deployment_readiness"]["ready"], false);
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["status"],
+        "incomplete"
+    );
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["unverified_requirements"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        document["plan"]["deployment_readiness"]["blockers"][0]["reason"],
+        "file_system_paths_are_not_declared_in_the_bundle_manifest"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_adds_cross_module_views_components_and_database_tables() {
     let directory = project(&[
         (

@@ -1874,6 +1874,12 @@ Laufzeitvariable. Der Plan kennzeichnet außerdem `connection_model` als
 `false`. Die Deklaration beschreibt also Schema-/Backend-Konfiguration; sie ist
 noch keine separat adressierbare Datenbankschnittstelle. Zugangsdaten werden
 nicht in den Plan aufgenommen.
+`runtime_effects.effects` listet ausdrücklich deklarierte Funktions-Capabilities
+in den einbezogenen Quellmodulen auf. `deployment_readiness.blockers` nennt
+nicht deklarierte Datei-Umfänge, ausgehende Netzwerkverträge,
+Prozessabhängigkeiten, Umgebungsvariablennamen und nicht aufgelöste statische
+Verweise. `ready` bleibt `false`; implizite Ressourceneffekte sind noch nicht
+vollständig modelliert, und der Plan beweist kein vollständiges Deployment.
 `additional_declarations_in_included_source_files`
 führt Deklarationen auf, die wegen der einbezogenen Dateien zusätzlich
 auftauchen. Das ist nur eine Analyse des bekannten Graphen: `complete` bleibt

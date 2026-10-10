@@ -1892,6 +1892,12 @@ source file, and current runtime variable `DATABASE_URL`. The plan also marks
 `supports_multiple_connections` as `false`. A declaration therefore describes
 schema/backend configuration; it is not yet a separately addressable database
 interface. Credentials are not included in the plan.
+`runtime_effects.effects` lists explicitly declared function capabilities in
+the included source modules. `deployment_readiness.blockers` identifies
+undeclared file scopes, outbound network contracts, process dependencies,
+environment variable names, and unresolved static references. `ready` remains
+`false`; implicit resource effects are not fully modeled, and this is not a
+complete deployment proof.
 `additional_declarations_in_included_source_files` lists code that
 is present only because an included source file contains it. This analyzes only
 the known graph: `complete` remains `false`, and unrecognized dependencies may

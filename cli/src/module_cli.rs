@@ -355,6 +355,61 @@ pub(super) fn module_declaration_owners(program: &zelyra_ast::Program) -> HashMa
     owners
 }
 
+fn module_runtime_effects(
+    program: &zelyra_ast::Program,
+    owners: &HashMap<String, String>,
+    included: &BTreeSet<String>,
+) -> (Vec<Value>, Vec<Value>) {
+    let mut functions_by_capability = BTreeMap::<String, BTreeSet<String>>::new();
+    for function in &program.functions {
+        let declaration = format!("function:{}", function.name);
+        if !owners
+            .get(&declaration)
+            .is_some_and(|module| included.contains(module))
+        {
+            continue;
+        }
+        for capability in &function.capabilities {
+            functions_by_capability
+                .entry(capability.clone())
+                .or_default()
+                .insert(declaration.clone());
+        }
+    }
+
+    let effects = functions_by_capability
+        .iter()
+        .map(|(capability, functions)| {
+            json!({
+                "capability": capability,
+                "declared_by": functions,
+                "source_modules": functions.iter().filter_map(|function| {
+                    owners.get(function).cloned()
+                }).collect::<BTreeSet<_>>()
+            })
+        })
+        .collect::<Vec<_>>();
+    let blockers = functions_by_capability
+        .iter()
+        .filter_map(|(capability, functions)| {
+            let reason = match capability.as_str() {
+                "FileSystem" => Some("file_system_paths_are_not_declared_in_the_bundle_manifest"),
+                "Network" => Some("outbound_network_service_contract_is_not_declared"),
+                "Process" => Some("process_executable_and_runtime_dependencies_are_not_declared"),
+                "Environment" => Some("environment_variable_names_are_not_declared"),
+                _ => None,
+            }?;
+            Some(json!({
+                "kind": "runtime_capability",
+                "capability": capability,
+                "reason": reason,
+                "declared_by": functions
+            }))
+        })
+        .collect::<Vec<_>>();
+    (effects, blockers)
+}
+
 pub(super) fn module_uses_database(
     program: &zelyra_ast::Program,
     module_path: &str,
@@ -736,6 +791,15 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         })
                     })
                     .collect::<BTreeMap<_, _>>();
+                let (runtime_effects, mut deployment_blockers) =
+                    module_runtime_effects(&program, &owners, &included);
+                if !unresolved_references.is_empty() {
+                    deployment_blockers.push(json!({
+                        "kind": "unresolved_reference",
+                        "count": unresolved_references.len(),
+                        "reason": "one_or_more_static_references_have_no_declaration_owner"
+                    }));
+                }
                 plan = Some(json!({
                     "kind": "known-semantic-dependency-closure",
                     "closure_semantics": "explicit-imports-plus-statically-recognized-references",
@@ -770,6 +834,21 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "declarations": module.declarations
                     })).collect::<Vec<_>>(),
                     "resource_dependencies": resource_dependencies.values().cloned().collect::<Vec<_>>(),
+                    "runtime_effects": {
+                        "model": "capabilities_declared_by_functions_in_included_source_modules",
+                        "effects": runtime_effects,
+                        "complete": true
+                    },
+                    "deployment_readiness": {
+                        "status": "incomplete",
+                        "ready": false,
+                        "blockers": deployment_blockers,
+                        "unverified_requirements": [
+                            "resource-level effects and service contracts are not fully modeled",
+                            "runtime and asset dependencies are not proven complete"
+                        ],
+                        "note": "A complete source import closure does not prove that external runtime effects or service contracts are deployable."
+                    },
                     "schema_ownership": {
                         "model": "inferred_from_table_declaration_source_module",
                         "enforced": false,
