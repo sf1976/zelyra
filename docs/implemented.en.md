@@ -1,11 +1,10 @@
 # Implemented in Zelyra 0.6.0
 
-**Snapshot:** 0.6.0 release candidate · language compatibility line `0.1` · 2026-10-10
-**Maturity:** candidate; experimental and not approved for production use
+**Snapshot:** stable 0.6.0 · language compatibility line `0.1` · 2026-10-10
+**Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the Zelyra 0.6.0 candidate.
-It does not claim a stable publication or human acceptance; acceptance remains
-scheduled for 1.0.0. It records delivered scope, not the full language vision
+This is an inventory of capabilities implemented in the stable Zelyra 0.6.0
+release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
@@ -157,11 +156,14 @@ workspace tests, four MariaDB compatibility jobs, PostgreSQL 16 runtime
 integration, fuzzing, dependency audit, and Linux/Windows CI. Package validation
 [#38057534736](https://github.com/sf1976/zelyra/actions/runs/38057534736) built
 deterministic Linux/Windows packages and verified checksums and SPDX SBOMs on
-the same feature head. Those runs still used package version 0.5.0. Verification
-for the version-bumped 0.6.0 candidate and its release artifacts is tracked in
-the [candidate record](release-readiness/0.6.0-candidate-verification.md);
-pending gates must not be reported as complete. Independent human acceptance
-remains scheduled for 1.0.0.
+the same feature head. Those runs verified the feature implementation before the version bump. The
+version-bumped candidate then passed CI #38058823265. The immutable tag
+`v0.6.0-rc.1` passed tag CI #38059555233; RC release workflow #38059555140 built the candidate packages. Stable release
+workflow #38060275164 built Linux and Windows packages, verified checksums and
+228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
+SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
+[release verification record](release-readiness/0.6.0-candidate-verification.md).
+Independent human acceptance remains scheduled for 1.0.0.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.

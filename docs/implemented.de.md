@@ -1,11 +1,11 @@
 # In Zelyra 0.6.0 umgesetzt
 
-**Stand:** 0.6.0-Releasekandidat · Sprachkompatibilitätslinie `0.1` · 2026-10-10
-**Reifegrad:** Kandidat; experimentell und nicht für den Produktiveinsatz freigegeben
+**Stand:** stabiles Release 0.6.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-10
+**Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im Zelyra-0.6.0-Kandidaten
-tatsächlich implementiert sind. Sie behauptet keine stabile Veröffentlichung oder
-menschliche Abnahme; diese bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.6.0
+tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
+sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
 [Roadmap](ROADMAP.de.md) dokumentiert offene Arbeiten; das
 [Changelog](../CHANGELOG.md) hält die Änderungen der Releases fest. Die Links
@@ -173,11 +173,15 @@ geprüft: Workspace-Tests, vier MariaDB-Kompatibilitätsjobs, PostgreSQL-16-
 Runtime-Integration, Fuzzing, Dependency-Audit sowie Linux-/Windows-CI
 bestanden. Paketprüfung [#38057534736](https://github.com/sf1976/zelyra/actions/runs/38057534736)
 erstellte deterministische Linux-/Windows-Pakete und prüfte Prüfsummen sowie
-SPDX-SBOMs für denselben Funktions-Head. Diese Läufe verwendeten noch die
-Paketversion 0.5.0. Die Prüfung des versionsangehobenen 0.6.0-Kandidaten und
-seiner Release-Artefakte ist im
-[Abnahmenachweis](release-readiness/0.6.0-candidate-verification.md)
-dokumentiert; offene Gates dürfen nicht als abgeschlossen gelten.
+SPDX-SBOMs für denselben Funktions-Head. Diese Läufe prüften die Funktionsimplementierung vor der Versionsanhebung.
+Der versionsangehobene Kandidat bestand anschließend CI-Lauf #38058823265.
+Der unveränderliche Tag `v0.6.0-rc.1` bestand Tag-CI #38059555233; Release-
+Workflow #38059555140 erstellte die RC-Pakete. Der stabile Release-Workflow
+#38060275164 erstellte Linux-/Windows-Pakete, prüfte Prüfsummen und SPDX-SBOMs
+mit 228 Paketen und veröffentlichte GitHub-Attestierungen.
+Heruntergeladene Release-Artefakte bestanden Prüfsummen- und SBOM-Prüfung; das
+Linux-Binary meldet `zelyra 0.6.0`. Siehe den
+[Release-Prüfnachweis](release-readiness/0.6.0-candidate-verification.md).
 Die unabhängige menschliche Abnahme ist für 1.0.0 vorgesehen.
 
 Diese Übersicht wird angepasst, wenn sich ausgelieferte Funktionen oder ihre

@@ -81,16 +81,15 @@ dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.
 
 ## Experimentelle PostgreSQL-Runtime-Teilmenge
 
-Eine begrenzte native PostgreSQL-Runtime für direkte SQL-Abfragen ist im
-0.6.0-Releasekandidaten enthalten. CI-Lauf
+Eine begrenzte native PostgreSQL-Runtime für direkte SQL-Abfragen ist in 0.6.0
+enthalten. CI-Lauf
 [#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730)
 bestand auf exakt dem PR-Head `a35a5ee`, einschließlich parametrisierter
 PostgreSQL-16-Runtime-Integration und Schema-Safety. Enthalten sind benannte
 Parameter, skalare Ergebnistypen, Transaktionen, Statement-Timeouts und
 TLS-Prüfung. PostgreSQL 16 bleibt eine experimentelle geprüfte Teilmenge und
 keine allgemeine Support-Parität. Generierte Web-/CRUD-Pfade und die
-Schemainspektion verwenden weiterhin externe Werkzeuge. Der versionsangehobene
-Kandidat muss vor der Veröffentlichung seine eigene CI bestehen.
+Schemainspektion verwenden weiterhin externe Werkzeuge. Der unveränderliche Tag `v0.6.0-rc.1` bestand die vollständige CI und Paketprüfung vor dem stabilen Tag.
 
 ## Was damit nicht nachgewiesen wird
 
