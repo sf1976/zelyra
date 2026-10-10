@@ -80,6 +80,10 @@ extract_csrf() {
     sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "$1"
 }
 
+extract_snapshot() {
+    sed -n 's/.*name="_zelyra_snapshot" value="\([^"]*\)".*/\1/p' "$1"
+}
+
 request_status() {
     local output_file="$1"
     shift
@@ -190,9 +194,12 @@ edit_form_status="$(request_status "${temp_dir}/edit-form.html" \
 [[ "${edit_form_status}" == "200" ]]
 edit_csrf="$(extract_csrf "${temp_dir}/edit-form.html")"
 [[ -n "${edit_csrf}" ]]
+edit_snapshot="$(extract_snapshot "${temp_dir}/edit-form.html")"
+[[ -n "${edit_snapshot}" ]]
 edit_status="$(request_status "${temp_dir}/edit-response.html" \
     --cookie "${primary_cookie}" \
     --data-urlencode "_zelyra_csrf=${edit_csrf}" \
+    --data-urlencode "_zelyra_snapshot=${edit_snapshot}" \
     --data-urlencode "number=${machine_number}" \
     --data-urlencode "name=${updated_machine_name}" \
     --data-urlencode "category=Production" \
