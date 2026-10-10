@@ -1474,10 +1474,10 @@ fn validate_program(
         if !validate_cruds(path, &program, &schema) {
             return Err(());
         }
-        if !validate_tableviews(path, &program, &schema) {
+        if !validate_tenant_access_boundaries(path, &program, &schema) {
             return Err(());
         }
-        if !validate_tenant_access_boundaries(path, &program, &schema) {
+        if !validate_tableviews(path, &program, &schema) {
             return Err(());
         }
         if let Err(errors) = check_sql_program(&program, &schema) {
@@ -6619,6 +6619,16 @@ fn validate_tenant_access_boundaries(
         }
         let mut query_valid = true;
         for access in accesses {
+            if access.table.is_empty() {
+                diagnostic_with_span(
+                    path,
+                    "E-TENANT-003",
+                    "quoted SQL table references cannot be verified in a tenant-enabled project",
+                    span,
+                );
+                query_valid = false;
+                continue;
+            }
             if protected_tables
                 .iter()
                 .any(|table| table.eq_ignore_ascii_case(&access.table))

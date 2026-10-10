@@ -332,7 +332,11 @@ tableview InvoiceSummaryView {
 
     let check = run(&["check", path.to_str().unwrap()]);
     assert!(!check.status.success());
-    assert!(String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"));
+    assert!(
+        String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"),
+        "stderr: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
     assert!(String::from_utf8_lossy(&check.stderr).contains("invoices"));
 
     let qualified = source.replace("FROM invoices", "FROM billing.invoices");
@@ -340,6 +344,29 @@ tableview InvoiceSummaryView {
     let check = run(&["check", path.to_str().unwrap()]);
     assert!(!check.status.success());
     assert!(String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"));
+
+    let mut quoted = fs::read_to_string(example("tenant_crud.zyl")).unwrap();
+    quoted.push_str(
+        r#"
+
+struct InvoiceSummary {
+    id: Id
+    title: String
+}
+
+fn load_invoices() uses Database {
+    rows = sql<InvoiceSummary[]> { SELECT id, title FROM "invoices" }
+}
+"#,
+    );
+    fs::write(&path, quoted).unwrap();
+    let check = run(&["check", path.to_str().unwrap()]);
+    assert!(!check.status.success());
+    assert!(
+        String::from_utf8_lossy(&check.stderr).contains("E-TENANT-003"),
+        "stderr: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 

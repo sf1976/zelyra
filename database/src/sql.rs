@@ -88,6 +88,15 @@ pub fn analyze_table_access(
                 name
             }
             (Some(SqlToken::Word(name)), _, _) => name,
+            (Some(SqlToken::String), _, _) => {
+                modes
+                    .entry(String::new())
+                    .and_modify(|existing| {
+                        *existing = merge_access(*existing, SqlAccessMode::Unknown)
+                    })
+                    .or_insert(SqlAccessMode::Unknown);
+                return;
+            }
             _ => return,
         };
         let normalized = candidate.to_ascii_lowercase();
@@ -1168,6 +1177,18 @@ fn tokenize(query: &str) -> Vec<SqlToken> {
             }
             continue;
         }
+        if byte == b'`' || byte == b'[' {
+            let closing_quote = if byte == b'`' { b'`' } else { b']' };
+            index += 1;
+            while index < bytes.len() && bytes[index] != closing_quote {
+                index += 1;
+            }
+            if index < bytes.len() {
+                index += 1;
+            }
+            tokens.push(SqlToken::String);
+            continue;
+        }
         if byte.is_ascii_digit() {
             index += 1;
             while index < bytes.len() && (bytes[index].is_ascii_digit() || bytes[index] == b'.') {
@@ -1327,6 +1348,21 @@ mod tests {
                 mode: SqlAccessMode::Read
             }]
         );
+
+        for query in [
+            "SELECT id FROM \"invoices\"",
+            "SELECT id FROM `invoices`",
+            "SELECT id FROM [invoices]",
+        ] {
+            let (_, accesses) = analyze_table_access(query, &["invoices".to_owned()]);
+            assert_eq!(
+                accesses,
+                vec![SqlTableAccess {
+                    table: String::new(),
+                    mode: SqlAccessMode::Unknown
+                }]
+            );
+        }
     }
 
     #[test]
