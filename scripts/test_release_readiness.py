@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from check_release_readiness import (
+    RELEASE_PLAN_CHECKLISTS,
     REQUIRED_GATES_040,
     REQUIRED_GATES_050,
     REQUIRED_GATES_100,
@@ -19,6 +20,38 @@ from check_release_readiness import (
 class ReleaseReadinessTests(unittest.TestCase):
     def test_non_030_version_has_no_final_gate(self) -> None:
         self.assertEqual(unfinished_gates(Path("."), "0.2.0"), [])
+
+    def test_later_milestones_cannot_bypass_open_bilingual_release_gates(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for version, plans in RELEASE_PLAN_CHECKLISTS.items():
+            failures = unfinished_gates(root, version)
+            self.assertTrue(failures, f"{version} must stay blocked while its gates are open")
+            for relative_path, _heading in plans:
+                self.assertTrue(
+                    any(relative_path in failure for failure in failures),
+                    f"{version} must report incomplete gates from {relative_path}",
+                )
+
+    def test_later_milestone_gate_checklists_require_both_languages_and_all_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            version = "0.95.0"
+            for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
+                path = root / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"{heading}\n\n- [x] Gate passed\n", encoding="utf-8")
+            self.assertEqual(unfinished_gates(root, version), [])
+
+            english_path = root / RELEASE_PLAN_CHECKLISTS[version][0][0]
+            english_path.write_text("## Exit criteria\n\n- Gate passed\n", encoding="utf-8")
+            self.assertTrue(
+                any("not a checklist item" in item for item in unfinished_gates(root, version))
+            )
+
+            english_path.unlink()
+            self.assertTrue(
+                any("missing or unreadable" in item for item in unfinished_gates(root, version))
+            )
 
     def test_current_030_plan_requires_a_documented_onboarding_deferral(self) -> None:
         root = Path(__file__).resolve().parents[1]
