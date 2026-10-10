@@ -28,6 +28,9 @@ pub(super) fn run() -> ExitCode {
         };
         return updater::command(check_only);
     }
+    if command == "--tutorial" {
+        return tutorial::command(args);
+    }
     if command == "db" {
         return database_command(args);
     }

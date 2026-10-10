@@ -256,6 +256,45 @@ fn customer_order_acceptance_example_is_valid() {
 }
 
 #[test]
+fn invoice_tutorial_creates_a_checkable_project_without_overwriting() {
+    let directory = temporary_directory("invoice-tutorial");
+    let tutorial = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
+    assert!(
+        tutorial.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&tutorial.stdout),
+        String::from_utf8_lossy(&tutorial.stderr)
+    );
+    let source = fs::read_to_string(directory.join("main.zyl")).unwrap();
+    for section in [
+        "table customers",
+        "table items",
+        "table invoices",
+        "table invoice_lines",
+        "tableview InvoiceDashboard",
+    ] {
+        assert!(
+            source.contains(section),
+            "tutorial source omitted {section}"
+        );
+    }
+    assert!(String::from_utf8_lossy(&tutorial.stdout).contains("zelyra serve main.zyl"));
+
+    let overwrite = run(&["--tutorial", "invoice", directory.to_str().unwrap()]);
+    assert!(!overwrite.status.success());
+    assert!(directory.join(".env").is_file());
+
+    let check = run(&["check", directory.join("main.zyl").to_str().unwrap()]);
+    assert!(
+        check.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_mariadb_project_propagates_the_selected_web_port() {
     let directory = temporary_directory("new-web-port");
     let database_host_port = free_test_port();

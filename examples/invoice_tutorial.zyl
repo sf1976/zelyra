@@ -1,0 +1,156 @@
+database main {
+    engine: mariadb
+}
+
+table customers {
+    id: Id primary auto
+    name: String(120) required
+    email: Email?
+}
+
+table items {
+    id: Id primary auto
+    sku: String(40) required unique
+    name: String(120) required
+    unit_price: Decimal required
+    active: Bool default true
+}
+
+table invoices {
+    id: Id primary auto
+    invoice_number: String(40) required unique
+    customer: Customer required
+    issued_at: Timestamp default now
+    status: String(20) default "draft"
+    total: Decimal required
+}
+
+table invoice_lines {
+    id: Id primary auto
+    invoice: Invoice required
+    item: Item required
+    quantity: Int required
+    unit_price: Decimal required
+}
+
+view InvoiceTutorialShell {
+    html {
+        <!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Rechnungstutorial mit Zelyra</title>
+            </head>
+            <body>
+                <header>
+                    <h1>Rechnungsbüro</h1>
+                    <nav>
+                        <a href="/">Übersicht</a>
+                        <a href="/customers">Kunden</a>
+                        <a href="/items">Artikel</a>
+                        <a href="/invoices">Rechnungen</a>
+                        <a href="/invoice_lines">Positionen</a>
+                    </nav>
+                </header>
+                <main><slot /></main>
+            </body>
+        </html>
+    }
+}
+
+page "/" {
+    view: InvoiceTutorialShell
+    html {
+        <section>
+            <h2>Rechnungsübersicht</h2>
+            <p>Kunden, wiederverwendbare Artikel, Rechnungen und Rechnungspositionen gehören zusammen in eine lokale Anwendung.</p>
+            <p>
+                <a href="/customers">Kunde erfassen</a>
+                <a href="/items">Artikel erfassen</a>
+                <a href="/invoices">Rechnung schreiben</a>
+            </p>
+            <p><a href="/views/invoicedashboard">Rechnungsübersicht öffnen</a></p>
+        </section>
+    }
+}
+
+crud Customer -> customers {
+    layout: InvoiceTutorialShell
+    title: "Kunden"
+    view {
+        fields { name email }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { name email }
+    search { name email }
+}
+
+crud Item -> items {
+    layout: InvoiceTutorialShell
+    title: "Artikel"
+    view {
+        fields { sku name unit_price active }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { sku name unit_price active }
+    search { sku name }
+    filter { active }
+}
+
+crud Invoice -> invoices {
+    layout: InvoiceTutorialShell
+    title: "Rechnungen"
+    view {
+        fields { invoice_number customer issued_at status total }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { invoice_number customer issued_at status total }
+    search { invoice_number status }
+    filter { status }
+}
+
+crud InvoiceLine -> invoice_lines {
+    layout: InvoiceTutorialShell
+    title: "Rechnungspositionen"
+    view {
+        fields { invoice item quantity unit_price }
+        list { mode: cards }
+        detail { mode: cards }
+        form { mode: cards }
+    }
+    list { invoice item quantity unit_price }
+}
+
+struct InvoiceDashboardRow {
+    id: Id
+    invoice_number: String
+    customer_name: String
+    status: String?
+    total: Decimal
+}
+
+tableview InvoiceDashboard {
+    source sql<InvoiceDashboardRow[]> {
+        SELECT
+            invoices.id,
+            invoices.invoice_number,
+            customers.name AS customer_name,
+            invoices.status,
+            invoices.total
+        FROM invoices
+        JOIN customers ON customers.id = invoices.customer_id
+    }
+
+    columns { id invoice_number customer_name status total }
+    filter { status }
+    searchable
+    sortable
+    paginated 20
+}

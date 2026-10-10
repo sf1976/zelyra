@@ -340,6 +340,11 @@ jobs:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
           ZELYRA_BIN: target/debug/zelyra
         run: ./tests/mariadb-tenant-crud-e2e.sh
+      - name: Run guided invoice tutorial integration test
+        env:
+          DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_ci
+          ZELYRA_BIN: target/debug/zelyra
+        run: bash ./tests/invoice-tutorial-e2e.sh
   mariadb-compatibility:
     name: MariaDB ${{ matrix.version }} compatibility
     runs-on: ubuntu-latest
