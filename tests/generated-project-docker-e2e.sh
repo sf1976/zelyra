@@ -374,12 +374,17 @@ assert_bundle_crud() {
     local port="$1" resource="$2" field="$3" created="$4" updated="$5"
     local origin="http://127.0.0.1:${port}" form_file="${project_root}/write-form.html"
     local token snapshot stale_snapshot status list_file="${project_root}/write-list.html" record_id
+    local extra_data="${7:-}"
+    local extra_args=()
+    if [[ -n "${extra_data}" ]]; then
+        extra_args+=(--data-urlencode "${extra_data}")
+    fi
 
     curl --silent --show-error --fail "${origin}/${resource}/new" -o "${form_file}"
     token="$(extract_csrf_token "${form_file}")"
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
         --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
-        --data-urlencode "${field}=${created}" "${origin}/${resource}/new")"
+        --data-urlencode "${field}=${created}" "${extra_args[@]}" "${origin}/${resource}/new")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD create returned ${status}, expected 303" >&2
         return 1
@@ -435,7 +440,7 @@ PY
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
         --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         --data-urlencode "_zelyra_snapshot=${snapshot}" \
-        --data-urlencode "${field}=${updated}" \
+        --data-urlencode "${field}=${updated}" "${extra_args[@]}" \
         "${origin}/${resource}/${record_id}/edit")"
     if [[ "${status}" != 303 ]]; then
         echo "error: generated CRUD update returned ${status}, expected 303" >&2
@@ -447,7 +452,7 @@ PY
     status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
         --header "Origin: ${origin}" --data-urlencode "_zelyra_csrf=${token}" \
         --data-urlencode "_zelyra_snapshot=${stale_snapshot}" \
-        --data-urlencode "${field}=${created}-stale" \
+        --data-urlencode "${field}=${created}-stale" "${extra_args[@]}" \
         "${origin}/${resource}/${record_id}/edit")"
     if [[ "${status}" != 409 ]]; then
         echo "error: stale generated CRUD update returned ${status}, expected 409" >&2
@@ -516,7 +521,8 @@ if ! curl --silent --show-error --fail "http://${address}/customers" \
 fi
 customer_name="E2E-Module-Customer-$$"
 customer_updated="${customer_name}-updated"
-assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_updated}" true
+assert_bundle_crud "${host_port}" customers name "${customer_name}" "${customer_updated}" true \
+    "email=${customer_name}@example.test"
 customer_id="${last_crud_record_id}"
 curl --silent --show-error --fail "http://${address}/orders/new" \
     -o "${project_root}/order-form.html"
