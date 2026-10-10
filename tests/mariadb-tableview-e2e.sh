@@ -5,7 +5,15 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -- "${script_dir}/.." && pwd)"
 project_file="${ZELYRA_TABLEVIEW_E2E_PROJECT:-${repo_dir}/examples/tableview.zyl}"
 zelyra_bin="${ZELYRA_BIN:-${repo_dir}/target/debug/zelyra}"
-address="${ZELYRA_TABLEVIEW_E2E_ADDRESS:-127.0.0.1:38515}"
+address="${ZELYRA_TABLEVIEW_E2E_ADDRESS:-}"
+if [[ -z "${address}" ]]; then
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "error: python3 is required to select a free loopback port" >&2
+        exit 1
+    fi
+    port="$(python3 -c 'import socket; sock = socket.socket(); sock.bind(("127.0.0.1", 0)); print(sock.getsockname()[1]); sock.close()')"
+    address="127.0.0.1:${port}"
+fi
 tableview_path="${ZELYRA_TABLEVIEW_E2E_PATH:-/views/customers}"
 base_url="http://${address}"
 database_url="${DATABASE_URL:-}"

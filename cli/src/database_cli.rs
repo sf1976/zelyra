@@ -711,6 +711,209 @@ fn print_native_migration_history(
     Ok(())
 }
 
+fn database_map_column_json(column: &zelyra_database::Column) -> Value {
+    json!({
+        "name": column.name,
+        "type": column.sql_type,
+        "nullable": column.nullable,
+        "primary_key": column.primary_key,
+        "auto_increment": column.auto,
+        "unique": column.unique,
+    })
+}
+
+fn database_map_table_json(
+    table: Option<&zelyra_database::Table>,
+    live_table: Option<&zelyra_database::Table>,
+    module: &str,
+    status: &str,
+) -> Value {
+    let mut declared_columns = table
+        .into_iter()
+        .flat_map(|table| table.columns.iter())
+        .collect::<Vec<_>>();
+    declared_columns.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut live_columns = live_table
+        .into_iter()
+        .flat_map(|table| table.columns.iter())
+        .collect::<Vec<_>>();
+    live_columns.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut foreign_keys = table
+        .into_iter()
+        .flat_map(|table| table.foreign_keys.iter())
+        .collect::<Vec<_>>();
+    foreign_keys.sort_by_key(|key| {
+        (
+            key.column.as_str(),
+            key.referenced_table.as_str(),
+            key.referenced_column.as_str(),
+        )
+    });
+    let mut live_foreign_keys = live_table
+        .into_iter()
+        .flat_map(|table| table.foreign_keys.iter())
+        .collect::<Vec<_>>();
+    live_foreign_keys.sort_by_key(|key| {
+        (
+            key.column.as_str(),
+            key.referenced_table.as_str(),
+            key.referenced_column.as_str(),
+        )
+    });
+    json!({
+        "name": table.map(|table| table.name.as_str()).or_else(|| live_table.map(|table| table.name.as_str())),
+        "module": module,
+        "status": status,
+        "declared_columns": declared_columns.iter().map(|column| database_map_column_json(column)).collect::<Vec<_>>(),
+        "live_columns": live_columns.iter().map(|column| database_map_column_json(column)).collect::<Vec<_>>(),
+        "foreign_keys": foreign_keys.iter().map(|key| json!({
+            "column": key.column,
+            "references_table": key.referenced_table,
+            "references_column": key.referenced_column,
+        })).collect::<Vec<_>>(),
+        "live_foreign_keys": live_foreign_keys.iter().map(|key| json!({
+            "column": key.column,
+            "references_table": key.referenced_table,
+            "references_column": key.referenced_column,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+pub(super) fn database_map_json(
+    declared: &Schema,
+    live: &Schema,
+    owners: &HashMap<String, String>,
+) -> Value {
+    let live_tables = live
+        .tables
+        .iter()
+        .map(|table| (table.name.as_str(), table))
+        .collect::<HashMap<_, _>>();
+    let declared_names = declared
+        .tables
+        .iter()
+        .map(|table| table.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut modules = BTreeMap::<String, Vec<Value>>::new();
+    let mut declared_tables = declared.tables.iter().collect::<Vec<_>>();
+    declared_tables.sort_by(|left, right| left.name.cmp(&right.name));
+    for table in declared_tables {
+        let module = owners
+            .get(&format!("table:{}", table.name))
+            .cloned()
+            .unwrap_or_else(|| "(source module unknown)".into());
+        let status = if live_tables.contains_key(table.name.as_str()) {
+            "matched"
+        } else {
+            "declared_missing_live"
+        };
+        modules
+            .entry(module.clone())
+            .or_default()
+            .push(database_map_table_json(
+                Some(table),
+                live_tables.get(table.name.as_str()).copied(),
+                &module,
+                status,
+            ));
+    }
+    let mut live_only = live
+        .tables
+        .iter()
+        .filter(|table| !declared_names.contains(table.name.as_str()))
+        .collect::<Vec<_>>();
+    live_only.sort_by(|left, right| left.name.cmp(&right.name));
+    let unmapped_live_tables = live_only
+        .iter()
+        .map(|table| database_map_table_json(None, Some(table), "(unmapped)", "live_unmapped"))
+        .collect::<Vec<_>>();
+    json!({
+        "schema_version": 1,
+        "read_only": true,
+        "ownership_enforced": false,
+        "backend": declared.backend().name(),
+        "database": declared.database.as_ref().and_then(|database| database.database.clone()),
+        "modules": modules.into_iter().map(|(path, tables)| json!({
+            "source_module": path,
+            "tables": tables,
+        })).collect::<Vec<_>>(),
+        "unmapped_live_tables": unmapped_live_tables,
+    })
+}
+
+fn print_database_map(declared: &Schema, live: &Schema, owners: &HashMap<String, String>) {
+    println!("Database map (read-only; module ownership is advisory)");
+    println!("Backend: {}", declared.backend().name());
+    if let Some(database) = declared
+        .database
+        .as_ref()
+        .and_then(|database| database.database.as_deref())
+    {
+        println!("Database: {database}");
+    }
+    let live_names = live
+        .tables
+        .iter()
+        .map(|table| table.name.as_str())
+        .collect::<HashSet<_>>();
+    let declared_names = declared
+        .tables
+        .iter()
+        .map(|table| table.name.as_str())
+        .collect::<HashSet<_>>();
+    let mut modules = BTreeMap::<String, Vec<&zelyra_database::Table>>::new();
+    for table in &declared.tables {
+        let module = owners
+            .get(&format!("table:{}", table.name))
+            .cloned()
+            .unwrap_or_else(|| "(source module unknown)".into());
+        modules.entry(module).or_default().push(table);
+    }
+    for (module, mut tables) in modules {
+        tables.sort_by(|left, right| left.name.cmp(&right.name));
+        println!("\nSource module: {module}");
+        for table in tables {
+            let status = if live_names.contains(table.name.as_str()) {
+                "matched"
+            } else {
+                "declared, missing from live database"
+            };
+            println!("  {} [{status}]", table.name);
+            let mut columns = table.columns.iter().collect::<Vec<_>>();
+            columns.sort_by(|left, right| left.name.cmp(&right.name));
+            for column in columns {
+                println!("    {}: {}", column.name, column.sql_type);
+            }
+            for key in &table.foreign_keys {
+                println!(
+                    "    {} -> {}.{}",
+                    key.column, key.referenced_table, key.referenced_column
+                );
+            }
+        }
+    }
+    let mut unmapped = live
+        .tables
+        .iter()
+        .filter(|table| !declared_names.contains(table.name.as_str()))
+        .collect::<Vec<_>>();
+    unmapped.sort_by(|left, right| left.name.cmp(&right.name));
+    println!("\nLive tables without a source declaration:");
+    if unmapped.is_empty() {
+        println!("  (none)");
+    } else {
+        for table in unmapped {
+            println!("  {}", table.name);
+            let mut columns = table.columns.iter().collect::<Vec<_>>();
+            columns.sort_by(|left, right| left.name.cmp(&right.name));
+            for column in columns {
+                println!("    {}: {}", column.name, column.sql_type);
+            }
+        }
+    }
+    println!("\nThis map does not enforce database ownership or change the schema.");
+}
+
 pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(subcommand) = args.next() else {
         database_usage();
@@ -797,6 +1000,43 @@ pub(super) fn database_command(mut args: impl Iterator<Item = String>) -> ExitCo
                 ExitCode::from(1)
             }
         },
+        "map" => {
+            let json_format = match remaining_args.as_slice() {
+                [] => false,
+                [format] if format == "--format=text" => false,
+                [format] if format == "--format=json" => true,
+                _ => {
+                    database_usage();
+                    return ExitCode::from(2);
+                }
+            };
+            let Some(url) = database_url_from_schema(&schema) else {
+                eprintln!("error[E-DB-003]: DATABASE_URL is required for db map");
+                return ExitCode::from(1);
+            };
+            let live = match inspect_for_backend(schema.backend(), &url) {
+                Ok(current) => current,
+                Err(error) => {
+                    eprintln!("error[E-DB-002]: {error}");
+                    return ExitCode::from(1);
+                }
+            };
+            let project = match load_project(&path) {
+                Ok(project) => project,
+                Err(()) => return ExitCode::from(1),
+            };
+            let owners = module_declaration_owners(&project.program);
+            if json_format {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&database_map_json(&schema, &live, &owners))
+                        .expect("database map JSON is serializable")
+                );
+            } else {
+                print_database_map(&schema, &live, &owners);
+            }
+            ExitCode::SUCCESS
+        }
         "history" => {
             let json_format =
                 if remaining_args.is_empty() || remaining_args.as_slice() == ["--format=text"] {

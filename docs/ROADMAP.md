@@ -438,30 +438,27 @@ The clean installed-CLI onboarding path is also green in [CI run
 
 Stable `v0.4.0` is published and its artifacts passed technical verification.
 The [0.4.0 release plan](release-plans/0.4.0.en.md) remains open: independent
-human onboarding acceptance was deferred to 0.5.0 and has not been conducted.
+human onboarding acceptance was deferred first to 0.5.0 and, by the newer
+project-owner decision, is now deferred to 1.0.0. It has not been conducted.
 Manual feedback using the published 0.4.0 CLI also exposed an incorrect
 absolute-path invocation for `setup` and unclear expectations for `setup` in a
 minimal `init` project. The diagnosis and documentation were corrected for
 0.5.0 preparation and regression-checked; published 0.4.0 artifacts do not
 contain these corrections. See the bilingual 0.5.0
 [study protocol](release-readiness/0.5.0-onboarding-study.en.md) for the record
-and its limits.
+and its limits. It is not evidence of human acceptance.
 
-## Proposed release milestone 0.5.0
+## Release milestone 0.5.0 (published)
 
-The bilingual [0.5.0 roadmap](release-plans/0.5.0.en.md) carries forward the
-open 0.4.0 acceptance and its feedback; it is not a release promise. It is
-gated on the final 0.3.0 release and published 0.4.0 baseline. The scoped 0.5.0 candidate
-provides experimental Docker bundles for a statically recognized subset, with
-separate schemas and least-privilege accounts. Complete dependency/effect
-closure, shared schema ownership, and a reusable multi-connection database
-module are explicitly deferred. Bundles continue to report incomplete closure
-and require operator review; the roadmap makes no claim of production
-readiness or PostgreSQL runtime parity.
-The scoped implementation and technical gates have passed on code head
-`cae59e2` (full CI #514 and release package validation #234). A published,
-immutable RC, its install/update/rollback rehearsal, and independent human
-acceptance are still required before stable `v0.5.0`.
+Stable `v0.5.0` is published from commit `6c0c0e6`. It delivers experimental
+Docker bundles for a statically recognized subset, separate schemas and
+least-privilege database accounts, and a modular customer/order workflow.
+Complete dependency/effect closure, shared schema ownership, and a reusable
+multi-connection database module are not included. Technical release gates,
+artifact verification, and published install/update/rollback smoke passed.
+Human acceptance was not conducted and remains deferred to 1.0.0. See the
+[release notes](release-notes/0.5.0.en.md) and
+[verification record](release-readiness/0.5.0-candidate-verification.md).
 
 - [🧪] The unreleased 0.4 branch can now generate a commit-pinned Dockerfile,
   a Compose app, and a secret-free `.env.example` from `zelyra module bundle`;
@@ -494,7 +491,8 @@ acceptance are still required before stable `v0.5.0`.
   files; only one project-wide connection is supported. The manifest still
   records `source_closure_complete: false` and
   `complete_deployment: false`. Complete dependency analysis, a modular
-  database interface, and full 0.5.0 acceptance remain open. The same
+  database interface, and technical candidate verification remain open. Human
+  acceptance is deferred to 1.0.0. The same
   dependency preview now follows named function calls in form and CRUD action
   bodies to their declarations and source modules; a multi-module integration
   test covers both cases. This expands known edges but does not establish
@@ -526,33 +524,39 @@ acceptance are still required before stable `v0.5.0`.
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
 
-## Released: 0.6.0
+## Release 0.6.0
 
-Stable [release 0.6.0](https://github.com/sf1976/zelyra/releases/tag/v0.6.0)
-was published on 2026-10-10. It adds route inventory and database mapping,
-plus an experimental native PostgreSQL 16 subset for direct parameterized SQL
-and transactions. This does not provide full PostgreSQL runtime parity or
-generated PostgreSQL web/CRUD paths. Human acceptance remains scheduled for
-1.0.0.
+The scoped [0.6.0 release](release-plans/0.6.0.en.md) shipped a native, pooled
+PostgreSQL 16 direct-SQL path for a bounded set of parameter types and
+transactions. It does not promise complete PostgreSQL parity or generated
+web/CRUD support. The release also added a deterministic route inventory with
+collision errors and `zelyra db map`, a read-only mapping of tables and
+relationships to source modules that shows differences from the live database.
+Module ownership remains advisory and changes neither schema nor permissions.
+Independent human acceptance remains deferred to 1.0.0.
 
-## Planned release 0.7.0
+The [0.7 release plan](release-plans/0.7.0.en.md) now includes a real MySQL
+server path, bounded tenant context, local developer studio, and the invoice
+tutorial. The editor is implemented on the feature branch; MySQL and tutorial
+work, combined verification, and review remain open. Version 0.8 adds durable tasks,
+outbox, controlled studio editing, and text changes with named regex patterns,
+preview, and explicit application. Version 0.9 verifies core workflows for
+MariaDB, MySQL, and PostgreSQL and may add optional MFA/WebAuthn and OIDC.
+Version 0.99 freezes features; only independent human acceptance remains before
+1.0.0, the first productive release. Complete SQL parity, broad visual editing, arbitrary client hydration, compiler
+self-hosting, native backend, mandatory cloud/AI services, telemetry, and
+unsupported performance claims remain excluded.
+## First productive release 1.0.0
 
-The [0.7 release plan](release-plans/0.7.0.en.md) combines two priorities:
-experimental tenant-scoped MariaDB CRUD and Zelyra Studio, an integrated local
-web editor. Tenant head `748420e` passed CI and package validation. The editor
-adds a project tree, tabs, syntax highlighting, search/replace, conflict-safe
-saves, local compiler diagnostics, and formatting. The combined head and
-editor security boundaries still need release CI and review. Tenant guarantees
-for arbitrary SQL, APIs, TableViews, exports, and custom actions remain out of
-scope.
-
-After 0.7, a bounded local MariaDB outbox is planned for 0.8 and optional local
-TOTP MFA with recovery codes for 0.9. WebAuthn/passkeys and OAuth2/OIDC remain
-subject to separate protocol and security review. Version 1.0.0 stabilizes
-language, CLI, project, and runtime contracts and includes independent human
-acceptance. Full SQL parity, arbitrary client hydration, compiler self-hosting,
-a native backend, mandatory cloud/AI services, telemetry, and unsupported
-performance claims remain excluded.
+`v1.0.0` is the first productive publication and the mandatory target for all
+independent human onboarding and acceptance studies deferred from 0.3.0,
+0.4.0, and 0.5.0. No earlier release may imply those studies were completed.
+Before stable `v1.0.0`, publish an immutable release candidate after the
+technical gates pass, have independent non-developer participants use the
+candidate and shipped documentation, fix and re-verify any blockers, and record
+redacted observations and the owner decision against the exact tested commit.
+The study scope must match the final 1.0.0 product; automated CI, internal
+rehearsals, and owner feedback do not substitute for participant testing.
 
 ## Real-world acceptance applications
 

@@ -1,10 +1,10 @@
-# Implemented in Zelyra 0.2.0
+# Implemented in Zelyra 0.6.0
 
-**Snapshot:** compiler release `0.2.0` · language compatibility line `0.1` · 2026-09-20
+**Snapshot:** stable 0.6.0 · language compatibility line `0.1` · 2026-10-10
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities that have working implementations in the
-Zelyra 0.2.0 codebase. It records delivered scope, not the full language vision
+This is an inventory of capabilities implemented in the stable Zelyra 0.6.0
+release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
 Links below lead to detailed instructions and test evidence so this page does
@@ -43,8 +43,10 @@ See the [formal specification](specification.md),
 ## Databases and SQL
 
 - ✅ MariaDB is the primary tested runtime backend. The CLI implements
-  `zelyra db create|setup|bootstrap|inspect|plan|apply` for supported
-  operations.
+  `zelyra db create|setup|bootstrap|inspect|map|plan|apply|history` for
+  supported operations. `zelyra db map <file.zyl>` compares declared tables by
+  source module with live tables, columns, and foreign keys. It is read-only;
+  module ownership is advisory and does not create authorization rules.
 - ✅ Table schemas, columns, keys, relationships, indexes, schema inspection,
   desired/current schema comparison, and SQL DDL planning/application are
   implemented for their documented backend scopes.
@@ -52,8 +54,10 @@ See the [formal specification](specification.md),
   parameters, nullability, and result mapping. Parameters are bound safely;
   transactions are available.
 - ✅ SQLite has tested schema and local database workflows. PostgreSQL schema
-  inspection/planning and selected safety checks are tested; this does not
-  establish PostgreSQL runtime parity.
+  inspection/planning and selected safety checks are tested. 0.6.0 adds an
+  experimental native PostgreSQL 16 runtime slice for direct parameterized SQL
+  and transactions. It does not establish full PostgreSQL parity; generated
+  web/CRUD paths do not use this runtime yet.
 - 🧪 Schema planning classifies selected changes as safe, requiring review,
   destructive, or unsupported. Destructive and unsupported changes fail
   closed; selected populated-table and nullability changes receive read-only
@@ -65,7 +69,11 @@ The exact backend boundaries and tested MariaDB versions are in the
 ## Web applications, views, forms, and CRUD
 
 - ✅ Built-in HTTP server, pages, route parameters, typed view interpolation,
-  safe HTML escaping, and project-local theme-token overrides.
+  safe HTML escaping, and project-local theme-token overrides. `zelyra routes
+  <entry.zyl>` lists recognized page, API, form, tableview, CRUD, and
+  authentication routes with HTTP methods and source locations. Imported and
+  generated resource routes are included; overlapping paths with the same HTTP
+  method fail with `E-ROUTE-001`. JSON output is available.
 - ✅ Schema-aware forms with validation, parameterized database actions,
   transactions, redirects, and generated relationship selectors for supported
   cases.
@@ -142,13 +150,20 @@ benchmark result is claimed here.
 
 ## Test and release evidence
 
-The repository includes workspace tests, generated-project first-run and
-recovery tests, MariaDB-backed CRUD/auth/API/tableview/audit integrations,
-SQLite schema integration, and PostgreSQL schema-safety checks. The 0.2.0 CI
-matrix exercises core MariaDB paths on `10.11.19`, `11.4.13`, `11.8.9`, and
-`12.3.3`. Release evidence is described in the
-[0.2.0 roadmap record](ROADMAP.md#020-release-milestone) and
-[release notes](../CHANGELOG.md).
+The feature implementation passed CI on PR head `a35a5ee` in run
+[#38057534730](https://github.com/sf1976/zelyra/actions/runs/38057534730):
+workspace tests, four MariaDB compatibility jobs, PostgreSQL 16 runtime
+integration, fuzzing, dependency audit, and Linux/Windows CI. Package validation
+[#38057534736](https://github.com/sf1976/zelyra/actions/runs/38057534736) built
+deterministic Linux/Windows packages and verified checksums and SPDX SBOMs on
+the same feature head. Those runs verified the feature implementation before the version bump. The
+version-bumped candidate then passed CI #38058823265. The immutable tag
+`v0.6.0-rc.1` passed tag CI #38059555233; RC release workflow #38059555140 built the candidate packages. Stable release
+workflow #38060275164 built Linux and Windows packages, verified checksums and
+228-package SPDX SBOMs, and published GitHub attestations. Downloaded release assets passed checksum and
+SBOM verification; the Linux binary reports `zelyra 0.6.0`. See the
+[release verification record](release-readiness/0.6.0-candidate-verification.md).
+Independent human acceptance remains scheduled for 1.0.0.
 
 This page is updated when a delivered capability or its evidence changes. It
 does not turn a specification or roadmap entry into an implementation claim.
