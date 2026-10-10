@@ -10,6 +10,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  web-editor-assets:
+    name: Verify bundled web editor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.2
+          cache: npm
+          cache-dependency-path: editor/package-lock.json
+      - name: Install locked editor dependencies
+        run: npm ci --prefix editor
+      - name: Audit editor dependencies
+        run: npm audit --prefix editor --audit-level=high
+      - name: Rebuild self-hosted editor assets
+        run: npm run build --prefix editor
+      - name: Check committed browser bundles
+        run: git diff --exit-code -- cli/assets/editor.js cli/assets/editor.css
+
   coverage-guided-fuzz:
     runs-on: ubuntu-latest
     steps:

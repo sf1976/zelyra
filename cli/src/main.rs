@@ -46,6 +46,7 @@ mod command_dispatch;
 mod database_cli;
 mod docs;
 mod edit;
+mod editor;
 mod formatter;
 mod holes;
 mod impact;
@@ -119,6 +120,7 @@ Token reference: https://github.com/sf1976/zelyra/blob/main/docs/env.md
 "#;
 
 fn usage() {
+    eprintln!("  zelyra editor [directory] [--port <port>] starts the local browser editor");
     eprintln!("  impact focus: use `--symbol <kind:name>` to inspect one known node");
     eprintln!("  module plan: `zelyra module plan <entry.zyl> <module.zyl|resource-id>` previews known dependencies");
     eprintln!("  module bundle: `zelyra module bundle <entry.zyl> <module.zyl|resource-id> --output <dir> [--dry-run] [--docker --compiler-ref <40-char-commit>]` plans or writes a checked experimental bundle");

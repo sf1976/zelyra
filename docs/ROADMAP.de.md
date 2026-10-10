@@ -502,37 +502,34 @@ erforderlich.
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
 
-## Vorgeschlagener Release-Meilenstein 0.6.0
+## Veröffentlicht: 0.6.0
 
-Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
-nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit einer
-begrenzten Menge an Parametertypen und Transaktionen. Vollständige
-PostgreSQL-Parität und generierte Web-/CRUD-Unterstützung werden nicht
-versprochen. Auf Merge-Stand `715ecc2` bestehen CI 518 und Paketprüfung 238;
-gezielte Transaktions- und Runtime-Dispatch-Tests bestehen auch lokal gegen
-PostgreSQL 16. Der spätere Dokumentations-Head `04cf026` bestand CI 523,
-einschließlich PostgreSQL-Schema-Safety und parametrisierter Runtime-Tests,
-sowie Paketprüfung 242. Die geprüften Pakete melden noch `zelyra 0.5.0`;
-Versionssprung und Kandidat für 0.6.0 bleiben bis zur Veröffentlichung und
-unabhängigen menschlichen Abnahme von 0.5.0 zurückgestellt. Den 0.6-PR getrennt
-und bis zu dieser Abnahme ungemergt lassen.
+Das stabile [Release 0.6.0](https://github.com/sf1976/zelyra/releases/tag/v0.6.0)
+ist am 10.10.2026 veröffentlicht. Es ergänzt Routenübersicht und
+Datenbanklandkarte sowie eine experimentelle native PostgreSQL-16-Teilmenge für
+direkte parametrisierte SQL-Abfragen und Transaktionen. Vollständige
+PostgreSQL-Runtime-Parität und generierte PostgreSQL-Web-/CRUD-Pfade sind damit
+nicht erreicht. Eine menschliche Abnahme bleibt für 1.0.0 vorgesehen.
 
-Der 0.7-Branch ergänzt experimentellen Mandantenkontext für generiertes
-MariaDB-CRUD. Er ermittelt den Principal aus einer geprüften Session, prüft
-Membership pro Request, behandelt Tenant-Selector als nicht vertrauenswürdige
-Eingabe und begrenzt generierte CRUD-Lese- und Schreibabfragen auf den
-Mandanten. Beliebiges SQL, APIs, TableViews, Exporte und eigene Aktionen werden
-nicht geschützt; Migrationen, Backfill und ein unabhängiges Sicherheitsreview
-bleiben Release-Gates. Siehe die [0.7-Roadmap](release-plans/0.7.0.de.md).
+## Geplantes Release 0.7.0
 
-Nach 0.7 folgen eine lokale MariaDB-Outbox in 0.8 und optionale lokale
-TOTP-MFA mit Wiederherstellungscodes in 0.9. WebAuthn/Passkeys und OAuth2/OIDC
-werden für separate Protokoll- und Sicherheitsreviews zurückgestellt; danach
-folgen Vertragsstabilisierung und unabhängige menschliche Abnahme für 1.0.0.
-Vollständige SQL-Parität, allgemeine visuelle Bearbeitung, beliebige
-Client-Hydration, Compiler-Self-Hosting, ein natives Backend, verpflichtende
-Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
-ausgeschlossen; Details und Grenzen stehen in der 0.6-Roadmap.
+Der [0.7-Releaseplan](release-plans/0.7.0.de.md) bündelt zwei Prioritäten:
+experimentelles mandantengebundenes MariaDB-CRUD und Zelyra Studio, einen
+lokalen, integrierten Webeditor. Der Tenant-Head `748420e` bestand CI und
+Paketprüfung. Der Editor fügt Projektdateibaum, Tabs, Syntaxhervorhebung,
+Suche/Ersetzen, Speichern mit Konfliktschutz, lokale Compilerdiagnosen und
+Formatierung hinzu. Der kombinierte Head und die Editor-Sicherheitsgrenzen
+brauchen noch Release-CI und Review. Tenant-Schutz für beliebiges SQL, APIs,
+TableViews, Exporte und eigene Aktionen bleibt außerhalb des Umfangs.
+
+Nach 0.7 sind eine begrenzte lokale MariaDB-Outbox in 0.8 und optionale lokale
+TOTP-MFA mit Wiederherstellungscodes in 0.9 geplant. WebAuthn/Passkeys und
+OAuth2/OIDC bleiben einer getrennten Protokoll- und Sicherheitsprüfung
+vorbehalten. 1.0.0 stabilisiert Sprach-, CLI-, Projekt- und Runtime-Verträge
+und enthält die unabhängige menschliche Abnahme. Vollständige SQL-Parität,
+beliebige Client-Hydration, Compiler-Self-Hosting, ein natives Backend,
+verpflichtende Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen
+bleiben ausgeschlossen.
 
 ## Akzeptanzanwendungen aus der Praxis
 

@@ -526,35 +526,33 @@ acceptance are still required before stable `v0.5.0`.
   disposable MariaDB 11 fixture; complete module closure and schema ownership
   enforcement remain open.
 
-## Proposed release milestone 0.6.0
+## Released: 0.6.0
 
-The scoped [0.6.0 roadmap](release-plans/0.6.0.en.md) adds a native, pooled
-PostgreSQL 16 direct-SQL path for a bounded set of parameter types and
-transactions. It does not promise complete PostgreSQL parity or generated
-web/CRUD support. On merged branch head `715ecc2`, CI #518 and package
-validation #238 pass; focused transaction and runtime-dispatch tests also pass
-locally against PostgreSQL 16. The later documentation head `04cf026` passed
-CI #523, including PostgreSQL schema-safety and parameterized runtime tests,
-and release validation #242. The validation packages still identify as
-`zelyra 0.5.0`; the 0.6 version bump and candidate remain gated on publication
-and independent acceptance of 0.5.0. Keep the 0.6 PR separate and unmerged
-until that gate passes.
+Stable [release 0.6.0](https://github.com/sf1976/zelyra/releases/tag/v0.6.0)
+was published on 2026-10-10. It adds route inventory and database mapping,
+plus an experimental native PostgreSQL 16 subset for direct parameterized SQL
+and transactions. This does not provide full PostgreSQL runtime parity or
+generated PostgreSQL web/CRUD paths. Human acceptance remains scheduled for
+1.0.0.
 
-The 0.7 branch adds experimental tenant context to generated MariaDB CRUD.
-It resolves the principal from a validated session, checks membership per
-request, treats tenant selectors as untrusted input, and scopes generated CRUD
-reads and mutations. It does not protect arbitrary SQL, APIs, TableViews,
-exports, or custom actions; migrations, backfill, and independent security
-review remain release gates. See the [0.7 roadmap](release-plans/0.7.0.en.md).
+## Planned release 0.7.0
 
-The planned path after 0.7 is a local MariaDB transactional outbox in 0.8 and
-optional local TOTP MFA with recovery codes in 0.9. WebAuthn/passkeys and
-OAuth2/OIDC are deferred for separate protocol and security reviews, followed
-by contract stabilization and independent human acceptance for 1.0.0.
-Complete SQL parity, broad visual editing, arbitrary client hydration,
-compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
-and unsupported performance claims remain excluded; see the 0.6 roadmap for
-scope and limits.
+The [0.7 release plan](release-plans/0.7.0.en.md) combines two priorities:
+experimental tenant-scoped MariaDB CRUD and Zelyra Studio, an integrated local
+web editor. Tenant head `748420e` passed CI and package validation. The editor
+adds a project tree, tabs, syntax highlighting, search/replace, conflict-safe
+saves, local compiler diagnostics, and formatting. The combined head and
+editor security boundaries still need release CI and review. Tenant guarantees
+for arbitrary SQL, APIs, TableViews, exports, and custom actions remain out of
+scope.
+
+After 0.7, a bounded local MariaDB outbox is planned for 0.8 and optional local
+TOTP MFA with recovery codes for 0.9. WebAuthn/passkeys and OAuth2/OIDC remain
+subject to separate protocol and security review. Version 1.0.0 stabilizes
+language, CLI, project, and runtime contracts and includes independent human
+acceptance. Full SQL parity, arbitrary client hydration, compiler self-hosting,
+a native backend, mandatory cloud/AI services, telemetry, and unsupported
+performance claims remain excluded.
 
 ## Real-world acceptance applications
 
