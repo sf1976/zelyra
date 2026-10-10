@@ -6,9 +6,10 @@ semantic area. Rust integration tests copy each source into a temporary project
 and invoke the built CLI so the corpus exercises the same command users run.
 
 - `accepted/*.zyl` must pass `zelyra check` and remain stable under repeated
-  `zelyra fmt` runs.
+  `zelyra fmt` runs. The audited cases include nested records, arrays, typed
+  maps, and pattern matching.
 - `rejected/*.zyl` must fail with the stable diagnostic code in its sibling
-  `.code` file.
+  `.code` file. Capability denial is part of the checked contract.
 - `runtime/*.zyl` must pass checking and produce the exact bytes recorded in
   its sibling `.out` file when run with the fixture project's declared
   capabilities.

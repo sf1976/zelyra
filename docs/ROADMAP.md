@@ -256,7 +256,9 @@ architecture requirement for every phase, not a provider-specific feature.
   release numbers do not change it automatically. 0.7 now includes the first
   runnable accepted/rejected/runtime corpus. Version 0.8 expands grammar,
   typing, and formatter coverage; 0.9 adds runtime, module, effect, contract,
-  and SQL fixtures; 0.95 audits reference and corpus gaps. Version 0.99 freezes
+  and SQL fixtures; 0.95 audits reference and corpus gaps and adds fixtures for
+  nested records, arrays, typed maps, deterministic map output, and denied
+  capabilities. Version 0.99 freezes
   grammar and semantics as a release candidate and allows only documented
   corrections. Only 1.0.0, after its independent human acceptance gate, makes
   the contract production-ready.
@@ -576,7 +578,10 @@ Independent human acceptance remains deferred to 1.0.0.
 
 - [🗺️] Stabilize the planned production scope: close technical, security,
   upgrade, rollback, dependency, release-artifact, and documentation gaps. Audit
-  the language reference and corpus without adding a large subsystem. See the
+  the language reference and corpus without adding a large subsystem. Initial
+  corpus expansion covers nested records, arrays, typed maps, deterministic
+  map output, and denied capabilities; broader language and release gates remain
+  open. See the
   [0.95.0 plan](release-plans/0.95.0.en.md).
 
 ## Release 0.99.0

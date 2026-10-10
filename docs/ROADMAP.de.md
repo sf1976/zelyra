@@ -543,7 +543,10 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 - [🗺️] Den geplanten Produktumfang stabilisieren: technische, Sicherheits-,
   Upgrade-, Rollback-, Abhängigkeits-, Artefakt- und Dokumentationslücken
   schließen. Sprachreferenz und Korpus prüfen, ohne ein großes Teilsystem
-  hinzuzufügen. Siehe [0.95.0-Plan](release-plans/0.95.0.de.md).
+  hinzuzufügen. Die erste Korpuserweiterung umfasst verschachtelte Records,
+  Arrays, typisierte Maps, deterministische Map-Ausgabe und verweigerte
+  Capabilities; weitere Sprach- und Release-Gates bleiben offen. Siehe
+  [0.95.0-Plan](release-plans/0.95.0.de.md).
 
 ## Release 0.99.0
 
