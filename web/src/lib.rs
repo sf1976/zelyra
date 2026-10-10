@@ -2370,13 +2370,15 @@ fn dispatch_account_security(
                         .map(|session_id| session_token_hash(&session_id))
                         .unwrap_or_default();
                     confirm_mfa_enrollment(
-                        auth,
-                        database_url,
-                        mfa_table,
-                        recovery_table,
-                        session_table,
-                        user_id,
-                        &current_token_hash,
+                        MfaAccountContext {
+                            auth,
+                            database_url,
+                            mfa_table,
+                            recovery_table,
+                            session_table,
+                            user_id,
+                            current_token_hash: &current_token_hash,
+                        },
                         input.get("code").map(String::as_str).unwrap_or_default(),
                     )
                 }
@@ -2385,13 +2387,15 @@ fn dispatch_account_security(
                         .map(|session_id| session_token_hash(&session_id))
                         .unwrap_or_default();
                     update_mfa_security(
-                        auth,
-                        database_url,
-                        mfa_table,
-                        recovery_table,
-                        session_table,
-                        user_id,
-                        &current_token_hash,
+                        MfaAccountContext {
+                            auth,
+                            database_url,
+                            mfa_table,
+                            recovery_table,
+                            session_table,
+                            user_id,
+                            current_token_hash: &current_token_hash,
+                        },
                         input.get("code").map(String::as_str).unwrap_or_default(),
                         input.get("action").map(String::as_str) == Some("disable"),
                     )
@@ -2479,7 +2483,7 @@ fn begin_mfa_enrollment(
         Ok(secret) => zeroize::Zeroizing::new(secret),
         Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
     };
-    let encrypted = match mfa::encrypt_totp_secret(&*key, &secret) {
+    let encrypted = match mfa::encrypt_totp_secret(&key, &secret) {
         Ok(encrypted) => encrypted,
         Err(_) => {
             eprintln!("zelyra web: MFA secret encryption failed");
@@ -2537,16 +2541,27 @@ fn begin_mfa_enrollment(
     }
 }
 
-fn confirm_mfa_enrollment(
-    auth: &AuthRoute,
-    database_url: &str,
-    mfa_table: &str,
-    recovery_table: &str,
-    session_table: &str,
+#[derive(Clone, Copy)]
+struct MfaAccountContext<'a> {
+    auth: &'a AuthRoute,
+    database_url: &'a str,
+    mfa_table: &'a str,
+    recovery_table: &'a str,
+    session_table: &'a str,
     user_id: i64,
-    current_token_hash: &str,
-    code: &str,
-) -> Response {
+    current_token_hash: &'a str,
+}
+
+fn confirm_mfa_enrollment(context: MfaAccountContext<'_>, code: &str) -> Response {
+    let MfaAccountContext {
+        auth,
+        database_url,
+        mfa_table,
+        recovery_table,
+        session_table,
+        user_id,
+        current_token_hash,
+    } = context;
     let key = match load_mfa_encryption_key() {
         Ok(key) => key,
         Err(_) => {
@@ -2574,7 +2589,7 @@ fn confirm_mfa_enrollment(
             return Ok(EnrollmentResult::Locked);
         }
         let encrypted = row.first().map(String::as_str).unwrap_or_default();
-        let secret = mfa::decrypt_totp_secret(&*key, encrypted).map_err(|_| {
+        let secret = mfa::decrypt_totp_secret(&key, encrypted).map_err(|_| {
             zelyra_database::DatabaseError {
                 message: "MFA enrollment secret could not be decrypted".into(),
             }
@@ -2706,16 +2721,19 @@ enum EnrollmentResult {
 }
 
 fn update_mfa_security(
-    auth: &AuthRoute,
-    database_url: &str,
-    mfa_table: &str,
-    recovery_table: &str,
-    session_table: &str,
-    user_id: i64,
-    current_token_hash: &str,
+    context: MfaAccountContext<'_>,
     supplied_code: &str,
     disable: bool,
 ) -> Response {
+    let MfaAccountContext {
+        auth,
+        database_url,
+        mfa_table,
+        recovery_table,
+        session_table,
+        user_id,
+        current_token_hash,
+    } = context;
     let key = match load_mfa_encryption_key() {
         Ok(key) => key,
         Err(_) => {
@@ -2760,7 +2778,7 @@ fn update_mfa_security(
         }
         let encrypted_secret = row.first().map(String::as_str).unwrap_or_default();
         let last_step = row.get(1).and_then(|value| value.parse::<u64>().ok());
-        let secret = mfa::decrypt_totp_secret(&*key, encrypted_secret).map_err(|_| {
+        let secret = mfa::decrypt_totp_secret(&key, encrypted_secret).map_err(|_| {
             zelyra_database::DatabaseError {
                 message: "MFA factor could not be decrypted".into(),
             }
@@ -3023,7 +3041,7 @@ fn dispatch_login_mfa(
                 }
                 let encrypted_secret = row.first().map(String::as_str).unwrap_or_default();
                 let last_step = row.get(1).and_then(|value| value.parse::<u64>().ok());
-                let secret = mfa::decrypt_totp_secret(&*key, encrypted_secret)
+                let secret = mfa::decrypt_totp_secret(&key, encrypted_secret)
                     .map_err(|_| zelyra_database::DatabaseError { message: "MFA factor could not be decrypted".into() })?;
                 let matched_step = mfa::matching_totp_step(&secret, &code, now)
                     .ok()

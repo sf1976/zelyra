@@ -92,7 +92,7 @@ pub(crate) fn encryption_key_from_hex(value: &str) -> Result<Zeroizing<[u8; 32]>
         return Err(MfaError::InvalidEncryptionKey);
     }
     let mut key = Zeroizing::new([0u8; 32]);
-    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         key[index] = (hex_nibble(pair[0]).ok_or(MfaError::InvalidEncryptionKey)? << 4)
             | hex_nibble(pair[1]).ok_or(MfaError::InvalidEncryptionKey)?;
     }
@@ -274,11 +274,11 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(value: &str) -> Result<Zeroizing<Vec<u8>>, MfaError> {
-    if value.is_empty() || value.len() % 2 != 0 || value.len() > 1024 {
+    if value.is_empty() || !value.len().is_multiple_of(2) || value.len() > 1024 {
         return Err(MfaError::EncryptionFailed);
     }
     let mut output = Zeroizing::new(Vec::with_capacity(value.len() / 2));
-    for pair in value.as_bytes().chunks_exact(2) {
+    for pair in value.as_bytes().as_chunks::<2>().0.iter() {
         let high = hex_nibble(pair[0]).ok_or(MfaError::EncryptionFailed)?;
         let low = hex_nibble(pair[1]).ok_or(MfaError::EncryptionFailed)?;
         output.push((high << 4) | low);
