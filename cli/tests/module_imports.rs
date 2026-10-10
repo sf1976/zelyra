@@ -976,6 +976,88 @@ fn module_plan_lists_only_the_selected_modules_source_dependency_closure() {
 }
 
 #[test]
+fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
+    let directory = project(&[
+        (
+            "main.zyl",
+            "import \"src/auth.zyl\" as account_data\nfn main() {}\n",
+        ),
+        (
+            "src/auth.zyl",
+            "auth users { table: users sessions: auth_sessions reset_tokens: password_resets audit: auth_audit_log }\ntable users { id: Id primary auto email: Email required unique password_hash: String(255) required }\ntable auth_sessions { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required }\ntable password_resets { id: Id primary auto user: User required token_hash: String(64) required unique expires_at: Timestamp required consumed_at: Timestamp? delivery_payload: String(2048) delivery_retry_at: Timestamp? }\ntable auth_audit_log { id: Id primary auto actor_user_id: Int? event: String(100) required target_user_id: Int? details: String(1000) required created_at: Timestamp default now }\n",
+        ),
+    ]);
+    let plan = run(&directory, &["module", "plan", "main.zyl", "src/auth.zyl"]);
+    assert!(
+        plan.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&plan.stdout),
+        String::from_utf8_lossy(&plan.stderr)
+    );
+    let document: Value = serde_json::from_slice(&plan.stdout).unwrap();
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["kind"],
+        "smtp"
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["used_by"],
+        "auth:users"
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["secret_environment_variables"],
+        serde_json::json!(["ZELYRA_SMTP_USERNAME", "ZELYRA_SMTP_PASSWORD"])
+    );
+
+    let bundle = directory.with_extension("smtp-docker-bundle");
+    let bundle_arg = bundle.to_string_lossy().into_owned();
+    let compiler_ref = "a".repeat(40);
+    let result = run(
+        &directory,
+        &[
+            "module",
+            "bundle",
+            "main.zyl",
+            "src/auth.zyl",
+            "--output",
+            &bundle_arg,
+            "--docker",
+            "--compiler-ref",
+            &compiler_ref,
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
+    for variable in [
+        "ZELYRA_SMTP_HOST=",
+        "ZELYRA_SMTP_PORT=587",
+        "ZELYRA_SMTP_SECURITY=starttls",
+        "ZELYRA_SMTP_FROM=",
+        "ZELYRA_SMTP_USERNAME=",
+        "ZELYRA_SMTP_PASSWORD=",
+    ] {
+        assert!(
+            env_example.lines().any(|line| line == variable),
+            "{variable}"
+        );
+    }
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(bundle.join("zelyra.bundle.json")).unwrap()).unwrap();
+    assert_eq!(manifest["external_service_contracts"][0]["kind"], "smtp");
+    assert_eq!(
+        manifest["external_service_contracts"][0]["delivery_semantics"],
+        "at_least_once"
+    );
+    assert!(!env_example.contains("must-not-be-copied"));
+    fs::remove_dir_all(bundle).unwrap();
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn module_plan_reports_runtime_effects_in_its_source_closure() {
     let directory = project(&[
         (

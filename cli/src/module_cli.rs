@@ -410,6 +410,43 @@ fn module_runtime_effects(
     (effects, blockers)
 }
 
+fn module_external_service_contracts(
+    program: &zelyra_ast::Program,
+    owners: &HashMap<String, String>,
+    included: &BTreeSet<String>,
+) -> Vec<Value> {
+    program
+        .auth
+        .iter()
+        .filter(|auth| auth.reset_tokens_table.is_some())
+        .filter(|auth| {
+            owners
+                .get(&format!("auth:{}", auth.name))
+                .is_some_and(|module| included.contains(module))
+        })
+        .map(|auth| {
+            json!({
+                "kind": "smtp",
+                "used_by": format!("auth:{}", auth.name),
+                "required_when": "password_reset_email_delivery_is_used",
+                "environment_variables": [
+                    "ZELYRA_SMTP_HOST",
+                    "ZELYRA_SMTP_PORT",
+                    "ZELYRA_SMTP_SECURITY",
+                    "ZELYRA_SMTP_FROM",
+                    "ZELYRA_SMTP_USERNAME",
+                    "ZELYRA_SMTP_PASSWORD"
+                ],
+                "secret_environment_variables": [
+                    "ZELYRA_SMTP_USERNAME",
+                    "ZELYRA_SMTP_PASSWORD"
+                ],
+                "delivery_semantics": "at_least_once"
+            })
+        })
+        .collect()
+}
+
 pub(super) fn module_uses_database(
     program: &zelyra_ast::Program,
     module_path: &str,
@@ -793,6 +830,8 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                     .collect::<BTreeMap<_, _>>();
                 let (runtime_effects, mut deployment_blockers) =
                     module_runtime_effects(&program, &owners, &included);
+                let external_service_contracts =
+                    module_external_service_contracts(&program, &owners, &included);
                 if !unresolved_references.is_empty() {
                     deployment_blockers.push(json!({
                         "kind": "unresolved_reference",
@@ -840,6 +879,7 @@ fn module_plan_command(mut arguments: impl Iterator<Item = String>) -> ExitCode 
                         "explicit_function_capabilities_complete": true,
                         "implicit_resource_effects_complete": false
                     },
+                    "external_service_contracts": external_service_contracts,
                     "deployment_readiness": {
                         "status": "incomplete",
                         "ready": false,
@@ -1315,6 +1355,19 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             .first()
             .and_then(|configuration| configuration["connection_environment"].as_str())
             .unwrap_or("DATABASE_URL");
+        let external_service_contracts = plan
+            .get("external_service_contracts")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let smtp_environment_example = if external_service_contracts
+            .iter()
+            .any(|contract| contract["kind"] == "smtp")
+        {
+            "\n# Configure SMTP only when password-reset email delivery is enabled.\nZELYRA_SMTP_HOST=\nZELYRA_SMTP_PORT=587\nZELYRA_SMTP_SECURITY=starttls\nZELYRA_SMTP_FROM=\nZELYRA_SMTP_USERNAME=\nZELYRA_SMTP_PASSWORD=\n"
+        } else {
+            ""
+        };
         if docker {
             let compiler_ref = compiler_ref.as_deref().expect("validated compiler ref");
             let dockerfile = format!(
@@ -1367,6 +1420,7 @@ ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS=10
 # Remote database connections use verified TLS automatically.
 ZELYRA_DB_TLS_MODE=auto
 # ZELYRA_DB_TLS_CA_CERT_FILE=/absolute/path/to/your/database-ca.pem
+{smtp_environment_example}
 "#
             );
             let dockerignore = ".git\n.env\n.env.*\ntarget/\nbuild/\ndist/\n*.log\n*.sqlite*\n*.db\n*.pem\n*.key\n*.p12\n*.pfx\n";
@@ -1391,6 +1445,7 @@ ZELYRA_DB_TLS_MODE=auto
             "source_files": copied,
             "support_files": support_files,
             "database": database,
+            "external_service_contracts": external_service_contracts,
             "source_closure_complete": false,
             "complete_deployment": false,
             "docker": if docker {
