@@ -384,4 +384,3 @@ jobs:
         run: bash ./tests/mariadb-backup-restore-e2e.sh
       - name: Validate Handbook Code Snippets
         run: python3 scripts/validate_handbook.py
-c6383312347d158278670c1788b0b7966415617a
