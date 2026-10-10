@@ -1145,6 +1145,97 @@ Fehlversuche für dieselbe normalisierte E-Mail-Adresse innerhalb von 15
 Minuten lösen eine 60-sekündige HTTP-429-Sperre aus. Ein erfolgreicher Login
 rotiert das vorherige Session-Token dieses Browsers und entwertet es.
 
+### Optionale lokale TOTP-MFA (0.9.0 in Arbeit)
+
+Der aktuelle 0.9.0-Branch ergänzt optionale TOTP-MFA für MariaDB-gestützte
+Authentifizierung. Deklariere beide dedizierten MFA-Tabellen und ergänze die
+persistent gespeicherte Sitzung um das nicht-nullbare boolesche Feld
+`mfa_verified`. Die Faktorzeile eines Kontos verwendet `user_id` als Schlüssel;
+Wiederherstellungscodes haben eine eigene Primärschlüsselspalte `id`:
+
+~~~zelyra
+auth users {
+    table: users
+    sessions: auth_sessions
+    audit: auth_audit_log
+    mfa: user_mfa
+    mfa_recovery: user_mfa_recovery
+}
+
+table auth_sessions {
+    id: Id primary auto
+    user: User required
+    token_hash: String(64) required unique
+    expires_at: Timestamp required
+    mfa_verified: Bool default false
+}
+
+table user_mfa {
+    user_id: Int primary
+    secret_ciphertext: String(1024) required
+    enabled_at: Timestamp?
+    last_totp_step: Int?
+    failed_attempts: Int default 0
+    locked_until: Timestamp?
+    enrollment_expires_at: Timestamp?
+}
+
+table user_mfa_recovery {
+    id: Id primary auto
+    user_id: Int required
+    code_hash: String(255) required
+    used_at: Timestamp?
+}
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
+}
+~~~
+
+Setze `ZELYRA_MFA_ENCRYPTION_KEY` in der Serverprozess-Umgebung auf 64
+hexadezimale Zeichen aus einer vom Betreiber verwalteten Geheimnisquelle (zum
+Beispiel `openssl rand -hex 32`). Zum Laden aus der Projekt-`.env` in einer
+Unix-Shell die Datei vor dem Serverstart exportieren: `set -a; . ./.env; set
++a`. Committe den Wert nicht und bewahre ihn nicht in Datenbank-Backups auf,
+auf die die Anwendungsdatenbank Zugriff hat. Geht der Schlüssel verloren, sind die
+gespeicherten Faktoren nicht lesbar; bei einer Datenbankwiederherstellung muss
+derselbe Schlüssel ebenfalls wiederhergestellt werden. MFA benötigt persistente
+MariaDB-Sessions und eine Audit-Tabelle für Login- und Faktoränderungsereignisse.
+Passwort-Sessions gelten bis zu einem gültigen TOTP- oder
+unbenutzten Wiederherstellungscode als ungeprüft. Einrichtung, Deaktivierung
+und Erneuerung der Codes verlangen Passwort und einen aktuellen TOTP-Code.
+Wiederherstellungscodes werden einmal angezeigt und nur als Argon2-Hashes
+gespeichert.
+
+Die Notfallwiederherstellung für ein Konto, das Authenticator und
+Wiederherstellungscodes verloren hat, ist ein Betreiberverfahren über die
+Datenbank und keine Anwendungsseite. Genehmigung und betroffenes Konto
+dokumentieren, dann in einem Wartungsfenster die konfigurierten Tabellennamen
+und die numerische Benutzer-ID einsetzen:
+
+~~~sql
+START TRANSACTION;
+DELETE FROM user_mfa_recovery WHERE user_id = 123;
+DELETE FROM user_mfa WHERE user_id = 123;
+DELETE FROM auth_sessions WHERE user_id = 123;
+COMMIT;
+~~~
+
+Damit werden Faktor und Recovery-Prüfsummen entfernt und die Sessions des
+Kontos widerrufen. Danach kann sich das Konto mit Passwort anmelden und MFA
+erneut einrichten. Bei Verlust des Verschlüsselungsschlüssels gilt das für alle
+betroffenen Konten. Einen Betreiber-Audit-Eintrag aufbewahren. Verschlüsselte
+Faktoren nicht als Wiederherstellungsmethode kopieren oder exportieren.
+
+Dieser Branch ist noch in Arbeit. Integrationstests, eine Probe des
+Betreiber-Recovery-Verfahrens und ein unabhängiges Sicherheitsreview sind offene
+Release-Gates; dieser Abschnitt ist keine Produktions-Sicherheitszusage.
+
 Der Login-Grenzwert und die Sperrdauer lassen sich in `auth` konfigurieren:
 `login_rate_limit: 5 per 900` setzt fünf Fehler je 900 Sekunden,
 `login_block_seconds: 60` eine Sperre von 60 Sekunden. Das sind die Defaults.

@@ -393,6 +393,10 @@ pub struct AuthDef {
     pub reset_tokens_table: Option<String>,
     pub reset_rate_limit: Option<ApiRateLimit>,
     pub reset_block_seconds: Option<u32>,
+    /// Optional table for encrypted local TOTP factors.
+    pub mfa_table: Option<String>,
+    /// Optional table for hashed, single-use MFA recovery codes.
+    pub mfa_recovery_table: Option<String>,
     pub span: Span,
 }
 

@@ -19,6 +19,7 @@ use zelyra_forms::{validate, FieldError};
 mod forms;
 mod http;
 mod i18n;
+mod mfa;
 mod password_reset;
 mod server;
 mod ui;
@@ -42,6 +43,8 @@ const ZELYRA_DESIGN_SYSTEM_CSS: &str = include_str!("../assets/zelyra.css");
 pub const PROJECT_THEME_CSS_PATH: &str = "/__zelyra/theme.css";
 pub const HEALTH_LIVENESS_PATH: &str = "/__zelyra/health/live";
 pub const ACCOUNT_SESSIONS_PATH: &str = "/account/sessions";
+pub const ACCOUNT_SECURITY_PATH: &str = "/account/security";
+pub const LOGIN_MFA_PATH: &str = "/login/mfa";
 pub use i18n::{ProjectUiCatalogs, UiLanguage, UiLevel};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -450,6 +453,8 @@ pub struct AuthRoute {
     pub reset_tokens_table: Option<String>,
     pub reset_rate_limit: zelyra_ast::ApiRateLimit,
     pub reset_block_seconds: u32,
+    pub mfa_table: Option<String>,
+    pub mfa_recovery_table: Option<String>,
     pub schema: Schema,
     pub csrf: CsrfProtection,
 }
@@ -1149,11 +1154,22 @@ impl WebApp {
             if request.path == "/login" {
                 return dispatch_login(self, auth_route, request, self.database_url.as_deref());
             }
+            if request.path == LOGIN_MFA_PATH && auth_route.mfa_table.is_some() {
+                return dispatch_login_mfa(self, auth_route, request, self.database_url.as_deref());
+            }
             if request.path == "/logout" {
                 return dispatch_logout(self, request, self.database_url.as_deref());
             }
             if request.path == ACCOUNT_SESSIONS_PATH {
                 return dispatch_account_sessions(self, request, self.database_url.as_deref());
+            }
+            if request.path == ACCOUNT_SECURITY_PATH && auth_route.mfa_table.is_some() {
+                return dispatch_account_security(
+                    self,
+                    auth_route,
+                    request,
+                    self.database_url.as_deref(),
+                );
             }
             if auth_route
                 .admin_path
@@ -2109,6 +2125,9 @@ fn dispatch_login(
                 return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid credentials.</p>");
             }
             clear_login_failures(app, &throttle_key);
+            let Some(user_id) = login_user_id else {
+                return Response::html(500, "<h1>500 Internal Server Error</h1>");
+            };
             if let Err(error) = rotate_existing_session(app, auth, request, Some(database_url)) {
                 eprintln!("zelyra web: session rotation failed: {error}");
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
@@ -2118,51 +2137,85 @@ fn dispatch_login(
                 return Response::html(500, "<h1>500 Internal Server Error</h1>");
             };
             let device = request_device_metadata(request);
-            if let Some(session_table) = &auth.session_table {
-                let Some(user_id) = login_user_id else {
-                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
-                };
+            let mfa_pending = if let Some(session_table) = &auth.session_table {
                 let has_device_column = auth_session_has_column(auth, "device_label");
-                let query = zelyra_database::Query {
-                    sql: format!(
-                        "INSERT INTO {} (user_id, token_hash, expires_at{}) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY){})",
-                        quote_identifier(session_table),
-                        if has_device_column { ", device_label" } else { "" },
-                        if has_device_column { ", :device_label" } else { "" },
-                    ),
-                    params: vec![
-                        ("user_id".into(), zelyra_database::QueryValue::Int(user_id)),
-                        (
-                            "token_hash".into(),
-                            zelyra_database::QueryValue::String(session_token_hash(&session_id)),
+                let has_mfa_column = auth.mfa_table.is_some();
+                match zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+                    let mfa_pending = if let Some(mfa_table) = auth.mfa_table.as_deref() {
+                        let factor = transaction.execute(&zelyra_database::Query {
+                            sql: format!(
+                                "SELECT enabled_at IS NOT NULL FROM {} WHERE user_id = :user_id LIMIT 1 FOR UPDATE",
+                                quote_identifier(mfa_table)
+                            ),
+                            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+                        })?;
+                        factor
+                            .rows
+                            .first()
+                            .and_then(|row| row.first())
+                            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+                    } else {
+                        false
+                    };
+                    let query = zelyra_database::Query {
+                        sql: format!(
+                            "INSERT INTO {} (user_id, token_hash, expires_at{}{} ) VALUES (:user_id, :token_hash, DATE_ADD(NOW(), INTERVAL 1 DAY){}{})",
+                            quote_identifier(session_table),
+                            if has_device_column { ", device_label" } else { "" },
+                            if has_mfa_column { ", mfa_verified" } else { "" },
+                            if has_device_column { ", :device_label" } else { "" },
+                            if has_mfa_column { ", :mfa_verified" } else { "" },
                         ),
-                    ]
-                    .into_iter()
-                    .chain(has_device_column.then(|| (
-                        "device_label".into(),
-                        device
-                            .clone()
-                            .map(zelyra_database::QueryValue::String)
-                            .unwrap_or(zelyra_database::QueryValue::Null),
-                    )))
-                    .collect(),
-                };
-                if let Err(error) = execute_auth_admin_mutation(
-                    auth,
-                    database_url,
-                    vec![query],
-                    Some(user_id),
-                    "auth.login",
-                    Some(user_id),
-                    "",
-                ) {
-                    eprintln!("zelyra web: session creation failed: {error}");
-                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                        params: vec![
+                            ("user_id".into(), QueryValue::Int(user_id)),
+                            (
+                                "token_hash".into(),
+                                QueryValue::String(session_token_hash(&session_id)),
+                            ),
+                        ]
+                        .into_iter()
+                        .chain(has_device_column.then(|| (
+                            "device_label".into(),
+                            device
+                                .clone()
+                                .map(QueryValue::String)
+                                .unwrap_or(QueryValue::Null),
+                        )))
+                        .chain(has_mfa_column.then_some((
+                            "mfa_verified".into(),
+                            QueryValue::Bool(!mfa_pending),
+                        )))
+                        .collect(),
+                    };
+                    transaction.execute(&query)?;
+                    if let Some(audit_table) = auth.audit_table.as_deref() {
+                        for query in audit_insert_queries(
+                            audit_table,
+                            auth.audit_chain,
+                            Some(user_id),
+                            if mfa_pending {
+                                "auth.login_mfa_pending"
+                            } else {
+                                "auth.login"
+                            },
+                            Some(user_id),
+                            "",
+                        ) {
+                            transaction.execute(&query)?;
+                        }
+                    }
+                    Ok(mfa_pending)
+                }) {
+                    Ok(mfa_pending) => mfa_pending,
+                    Err(error) => {
+                        eprintln!("zelyra web: session creation failed: {error}");
+                        return Response::html(500, "<h1>500 Internal Server Error</h1>");
+                    }
                 }
             } else {
-                let Some(user_id) = login_user_id else {
-                    return Response::html(500, "<h1>500 Internal Server Error</h1>");
-                };
+                if auth.mfa_table.is_some() {
+                    return Response::html(503, "<h1>503 Service Unavailable</h1>");
+                }
                 let permissions =
                     match load_user_permissions(auth, database_url, user_id, &app.auth_permissions)
                     {
@@ -2197,8 +2250,9 @@ fn dispatch_login(
                         eprintln!("zelyra web: login audit write failed: {error}");
                     }
                 }
-            }
-            Response::redirect("/").with_header(
+                false
+            };
+            Response::redirect(if mfa_pending { "/login/mfa" } else { "/" }).with_header(
                 "Set-Cookie",
                 format!(
                     "zelyra_session={session_id}; Path=/; HttpOnly; SameSite=Lax{}",
@@ -2208,6 +2262,930 @@ fn dispatch_login(
         }
         _ => Response::html(405, "<h1>405 Method Not Allowed</h1>"),
     }
+}
+
+fn dispatch_account_security(
+    app: &WebApp,
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    if app.database_capability_granted == Some(false) {
+        return database_capability_denied();
+    }
+    let (Some(database_url), Some(mfa_table), Some(recovery_table), Some(session_table)) = (
+        database_url,
+        auth.mfa_table.as_deref(),
+        auth.mfa_recovery_table.as_deref(),
+        auth.session_table.as_deref(),
+    ) else {
+        return Response::html(503, "<h1>503 Service Unavailable</h1>")
+            .with_header("Cache-Control", "no-store");
+    };
+    let Some(session) = session_from_request(app, request, Some(database_url)) else {
+        return Response::redirect("/login");
+    };
+    let Some(user_id) = session.user_id.filter(|id| *id > 0) else {
+        return Response::redirect("/login");
+    };
+    match request.method.as_str() {
+        "GET" => {
+            let result = zelyra_database::execute_mariadb_query(
+                database_url,
+                &format!(
+                    "SELECT enabled_at IS NOT NULL, enrollment_expires_at > CURRENT_TIMESTAMP FROM {} WHERE user_id = :user_id LIMIT 1",
+                    quote_identifier(mfa_table)
+                ),
+                vec![("user_id".into(), QueryValue::Int(user_id))],
+            );
+            let row = match result {
+                Ok(result) => result.rows.into_iter().next(),
+                Err(error) => {
+                    eprintln!("zelyra web: MFA settings lookup failed: {error}");
+                    return Response::html(500, "<h1>500 Internal Server Error</h1>")
+                        .with_header("Cache-Control", "no-store");
+                }
+            };
+            let enabled = row
+                .as_ref()
+                .and_then(|row| row.first())
+                .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
+            let pending = row
+                .as_ref()
+                .and_then(|row| row.get(1))
+                .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
+            let status = if enabled {
+                "Multi-factor authentication is enabled."
+            } else if pending {
+                "MFA setup is pending. Start again to replace the pending secret."
+            } else {
+                "Multi-factor authentication is not enabled."
+            };
+            let actions = if enabled {
+                format!(
+                    "<section><h2>Replace recovery codes</h2><form method=\"post\" action=\"{ACCOUNT_SECURITY_PATH}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"action\" value=\"rotate_recovery\"><label for=\"rotate-password\">Confirm password</label><input id=\"rotate-password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required><label for=\"rotate-code\">Current authenticator code</label><input id=\"rotate-code\" name=\"code\" inputmode=\"numeric\" pattern=\"[0-9]{{6}}\" required><button type=\"submit\">Replace recovery codes</button></form></section><section><h2>Turn off MFA</h2><form method=\"post\" action=\"{ACCOUNT_SECURITY_PATH}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"action\" value=\"disable\"><label for=\"disable-password\">Confirm password</label><input id=\"disable-password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required><label for=\"disable-code\">Current authenticator code</label><input id=\"disable-code\" name=\"code\" inputmode=\"numeric\" pattern=\"[0-9]{{6}}\" required><button type=\"submit\">Turn off MFA</button></form></section>",
+                    html_escape(auth.csrf.token()),
+                    html_escape(auth.csrf.token())
+                )
+            } else {
+                format!(
+                    "<form method=\"post\" action=\"{ACCOUNT_SECURITY_PATH}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><input type=\"hidden\" name=\"action\" value=\"begin\"><label for=\"password\">Confirm password</label><input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required><button type=\"submit\">Set up authenticator</button></form>",
+                    html_escape(auth.csrf.token())
+                )
+            };
+            let html = format!("<main><h1>Account security</h1><p>{status}</p>{actions}</main>");
+            Response::html(200, html).with_header("Cache-Control", "no-store")
+        }
+        "POST" => {
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(_) => {
+                    return Response::html(400, "<h1>400 Bad Request</h1>")
+                        .with_header("Cache-Control", "no-store")
+                }
+            };
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
+                return Response::html(403, "<h1>403 Forbidden</h1>")
+                    .with_header("Cache-Control", "no-store");
+            }
+            let password = input
+                .get("password")
+                .map(String::as_str)
+                .unwrap_or_default();
+            if !verify_current_account_password(auth, database_url, user_id, password) {
+                return Response::html(
+                    401,
+                    "<h1>401 Unauthorized</h1><p>Password confirmation failed.</p>",
+                )
+                .with_header("Cache-Control", "no-store");
+            }
+            match input.get("action").map(String::as_str) {
+                Some("begin") => begin_mfa_enrollment(auth, database_url, mfa_table, user_id),
+                Some("confirm") => {
+                    let current_token_hash = cookie_value(request, "zelyra_session")
+                        .map(|session_id| session_token_hash(&session_id))
+                        .unwrap_or_default();
+                    confirm_mfa_enrollment(
+                        MfaAccountContext {
+                            auth,
+                            database_url,
+                            mfa_table,
+                            recovery_table,
+                            session_table,
+                            user_id,
+                            current_token_hash: &current_token_hash,
+                        },
+                        input.get("code").map(String::as_str).unwrap_or_default(),
+                    )
+                }
+                Some("rotate_recovery") | Some("disable") => {
+                    let current_token_hash = cookie_value(request, "zelyra_session")
+                        .map(|session_id| session_token_hash(&session_id))
+                        .unwrap_or_default();
+                    update_mfa_security(
+                        MfaAccountContext {
+                            auth,
+                            database_url,
+                            mfa_table,
+                            recovery_table,
+                            session_table,
+                            user_id,
+                            current_token_hash: &current_token_hash,
+                        },
+                        input.get("code").map(String::as_str).unwrap_or_default(),
+                        input.get("action").map(String::as_str) == Some("disable"),
+                    )
+                }
+                _ => Response::html(422, "<h1>422 Unprocessable Entity</h1>")
+                    .with_header("Cache-Control", "no-store"),
+            }
+        }
+        _ => Response::empty(405)
+            .with_header("Allow", "GET, POST")
+            .with_header("Cache-Control", "no-store"),
+    }
+}
+
+fn verify_current_account_password(
+    auth: &AuthRoute,
+    database_url: &str,
+    user_id: i64,
+    password: &str,
+) -> bool {
+    if password.is_empty() {
+        return false;
+    }
+    let Some(user_table) = auth
+        .schema
+        .tables
+        .iter()
+        .find(|table| table.name == auth.table)
+    else {
+        return false;
+    };
+    let active_clause = if user_table
+        .columns
+        .iter()
+        .any(|column| column.name == "active")
+    {
+        " AND active = true"
+    } else {
+        ""
+    };
+    let Ok(result) = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT password_hash FROM {} WHERE id = :user_id{active_clause} LIMIT 1",
+            quote_identifier(&auth.table)
+        ),
+        vec![("user_id".into(), QueryValue::Int(user_id))],
+    ) else {
+        return false;
+    };
+    result.rows.first().is_some_and(|row| {
+        row.first()
+            .and_then(|hash| PasswordHash::new(hash).ok())
+            .is_some_and(|hash| {
+                Argon2::default()
+                    .verify_password(password.as_bytes(), &hash)
+                    .is_ok()
+            })
+    })
+}
+
+fn load_mfa_encryption_key() -> Result<zeroize::Zeroizing<[u8; 32]>, mfa::MfaError> {
+    let value = zeroize::Zeroizing::new(
+        std::env::var("ZELYRA_MFA_ENCRYPTION_KEY")
+            .map_err(|_| mfa::MfaError::InvalidEncryptionKey)?,
+    );
+    mfa::encryption_key_from_hex(&value)
+}
+
+fn begin_mfa_enrollment(
+    auth: &AuthRoute,
+    database_url: &str,
+    mfa_table: &str,
+    user_id: i64,
+) -> Response {
+    let key = match load_mfa_encryption_key() {
+        Ok(key) => key,
+        Err(_) => {
+            eprintln!("zelyra web: MFA encryption key is missing or invalid");
+            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+    };
+    let secret = match mfa::generate_totp_secret() {
+        Ok(secret) => zeroize::Zeroizing::new(secret),
+        Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+    };
+    let encrypted = match mfa::encrypt_totp_secret(&key, &secret) {
+        Ok(encrypted) => encrypted,
+        Err(_) => {
+            eprintln!("zelyra web: MFA secret encryption failed");
+            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+    };
+    let result = zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        let existing = transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "SELECT enabled_at IS NOT NULL FROM {} WHERE user_id = :user_id LIMIT 1 FOR UPDATE",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+        })?;
+        if existing
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        {
+            return Ok(false);
+        }
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "INSERT INTO {} (user_id, secret_ciphertext, enabled_at, last_totp_step, failed_attempts, locked_until, enrollment_expires_at) VALUES (:user_id, :secret, NULL, NULL, 0, NULL, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 10 MINUTE)) ON DUPLICATE KEY UPDATE secret_ciphertext = VALUES(secret_ciphertext), enabled_at = NULL, last_totp_step = NULL, failed_attempts = 0, locked_until = NULL, enrollment_expires_at = VALUES(enrollment_expires_at)",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![
+                ("user_id".into(), QueryValue::Int(user_id)),
+                ("secret".into(), QueryValue::String(encrypted)),
+            ],
+        })?;
+        Ok(true)
+    });
+    match result {
+        Ok(true) => {
+            let csrf = html_escape(auth.csrf.token());
+            Response::html(
+                200,
+                format!(
+                    "<main><h1>Set up authenticator</h1><p>Enter this key in your authenticator app. It is shown only during setup.</p><p><code>{}</code></p><form method=\"post\" action=\"{ACCOUNT_SECURITY_PATH}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{csrf}\"><input type=\"hidden\" name=\"action\" value=\"confirm\"><label for=\"password\">Confirm password again</label><input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required><label for=\"code\">Six-digit authenticator code</label><input id=\"code\" name=\"code\" inputmode=\"numeric\" pattern=\"[0-9]{{6}}\" required><button type=\"submit\">Enable MFA</button></form></main>",
+                    html_escape(&secret)
+                ),
+            )
+            .with_header("Cache-Control", "no-store")
+        }
+        Ok(false) => Response::html(409, "<h1>409 Conflict</h1><p>MFA is already enabled.</p>")
+            .with_header("Cache-Control", "no-store"),
+        Err(error) => {
+            eprintln!("zelyra web: MFA enrollment could not be started: {error}");
+            Response::html(500, "<h1>500 Internal Server Error</h1>")
+                .with_header("Cache-Control", "no-store")
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MfaAccountContext<'a> {
+    auth: &'a AuthRoute,
+    database_url: &'a str,
+    mfa_table: &'a str,
+    recovery_table: &'a str,
+    session_table: &'a str,
+    user_id: i64,
+    current_token_hash: &'a str,
+}
+
+fn confirm_mfa_enrollment(context: MfaAccountContext<'_>, code: &str) -> Response {
+    let MfaAccountContext {
+        auth,
+        database_url,
+        mfa_table,
+        recovery_table,
+        session_table,
+        user_id,
+        current_token_hash,
+    } = context;
+    let key = match load_mfa_encryption_key() {
+        Ok(key) => key,
+        Err(_) => {
+            eprintln!("zelyra web: MFA encryption key is missing or invalid");
+            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+    };
+    let code = zeroize::Zeroizing::new(code.to_owned());
+    let result = zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        let factor = transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "SELECT secret_ciphertext, failed_attempts, locked_until > CURRENT_TIMESTAMP FROM {} WHERE user_id = :user_id AND enabled_at IS NULL AND enrollment_expires_at > CURRENT_TIMESTAMP LIMIT 1 FOR UPDATE",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+        })?;
+        let Some(row) = factor.rows.first() else {
+            return Ok(EnrollmentResult::Expired);
+        };
+        if row
+            .get(2)
+            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        {
+            return Ok(EnrollmentResult::Locked);
+        }
+        let encrypted = row.first().map(String::as_str).unwrap_or_default();
+        let secret = mfa::decrypt_totp_secret(&key, encrypted).map_err(|_| {
+            zelyra_database::DatabaseError {
+                message: "MFA enrollment secret could not be decrypted".into(),
+            }
+        })?;
+        let now = mfa::unix_time_seconds().map_err(|_| zelyra_database::DatabaseError {
+            message: "MFA clock is unavailable".into(),
+        })?;
+        let step = mfa::matching_totp_step(&secret, &code, now).ok().flatten();
+        let Some(step) = step else {
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NULL",
+                    quote_identifier(mfa_table)
+                ),
+                params: vec![("user_id".into(), QueryValue::Int(user_id))],
+            })?;
+            return Ok(EnrollmentResult::Invalid);
+        };
+        let recovery_codes =
+            mfa::generate_recovery_codes().map_err(|_| zelyra_database::DatabaseError {
+                message: "recovery code generation failed".into(),
+            })?;
+        let mut recovery_hashes = Vec::with_capacity(recovery_codes.len());
+        for recovery_code in &recovery_codes {
+            let hash = mfa::hash_recovery_code(recovery_code).map_err(|_| {
+                zelyra_database::DatabaseError {
+                    message: "recovery code hashing failed".into(),
+                }
+            })?;
+            recovery_hashes.push(hash);
+        }
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "UPDATE {} SET enabled_at = CURRENT_TIMESTAMP, last_totp_step = :step, failed_attempts = 0, locked_until = NULL, enrollment_expires_at = NULL WHERE user_id = :user_id AND enabled_at IS NULL",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![
+                ("step".into(), QueryValue::Int(step as i64)),
+                ("user_id".into(), QueryValue::Int(user_id)),
+            ],
+        })?;
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "DELETE FROM {} WHERE user_id = :user_id",
+                quote_identifier(recovery_table)
+            ),
+            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+        })?;
+        for hash in recovery_hashes {
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "INSERT INTO {} (user_id, code_hash, used_at) VALUES (:user_id, :code_hash, NULL)",
+                    quote_identifier(recovery_table)
+                ),
+                params: vec![
+                    ("user_id".into(), QueryValue::Int(user_id)),
+                    ("code_hash".into(), QueryValue::String(hash)),
+                ],
+            })?;
+        }
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "DELETE FROM {} WHERE user_id = :user_id AND token_hash <> :current_hash",
+                quote_identifier(session_table)
+            ),
+            params: vec![
+                ("user_id".into(), QueryValue::Int(user_id)),
+                (
+                    "current_hash".into(),
+                    QueryValue::String(current_token_hash.to_owned()),
+                ),
+            ],
+        })?;
+        if let Some(audit_table) = auth.audit_table.as_deref() {
+            for query in audit_insert_queries(
+                audit_table,
+                auth.audit_chain,
+                Some(user_id),
+                "auth.mfa_enabled",
+                Some(user_id),
+                "recovery_codes=10",
+            ) {
+                transaction.execute(&query)?;
+            }
+        }
+        Ok(EnrollmentResult::Enabled(recovery_codes))
+    });
+    match result {
+        Ok(EnrollmentResult::Enabled(codes)) => {
+            let rendered_codes = codes
+                .iter()
+                .map(|code| format!("<li><code>{}</code></li>", html_escape(code)))
+                .collect::<String>();
+            Response::html(
+                200,
+                format!(
+                    "<main><h1>MFA enabled</h1><p>Save these recovery codes now. They will not be shown again.</p><ol>{rendered_codes}</ol><a href=\"{ACCOUNT_SECURITY_PATH}\">Continue</a></main>"
+                ),
+            )
+            .with_header("Cache-Control", "no-store")
+        }
+        Ok(EnrollmentResult::Invalid) => Response::html(
+            401,
+            "<h1>401 Unauthorized</h1><p>Invalid verification code.</p>",
+        )
+        .with_header("Cache-Control", "no-store"),
+        Ok(EnrollmentResult::Locked) => {
+            Response::html(429, "<h1>429 Too Many Requests</h1><p>Try again later.</p>")
+                .with_header("Retry-After", "900")
+                .with_header("Cache-Control", "no-store")
+        }
+        Ok(EnrollmentResult::Expired) => {
+            Response::html(410, "<h1>410 Gone</h1><p>Start MFA setup again.</p>")
+                .with_header("Cache-Control", "no-store")
+        }
+        Err(error) => {
+            eprintln!("zelyra web: MFA enrollment could not be completed: {error}");
+            Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store")
+        }
+    }
+}
+
+enum EnrollmentResult {
+    Enabled(Vec<zeroize::Zeroizing<String>>),
+    Invalid,
+    Locked,
+    Expired,
+}
+
+fn update_mfa_security(
+    context: MfaAccountContext<'_>,
+    supplied_code: &str,
+    disable: bool,
+) -> Response {
+    let MfaAccountContext {
+        auth,
+        database_url,
+        mfa_table,
+        recovery_table,
+        session_table,
+        user_id,
+        current_token_hash,
+    } = context;
+    let key = match load_mfa_encryption_key() {
+        Ok(key) => key,
+        Err(_) => {
+            eprintln!("zelyra web: MFA encryption key is missing or invalid");
+            return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+    };
+    let supplied_code = zeroize::Zeroizing::new(supplied_code.to_owned());
+    let (recovery_codes, recovery_hashes) = if disable {
+        (Vec::new(), Vec::new())
+    } else {
+        let codes = match mfa::generate_recovery_codes() {
+            Ok(codes) => codes,
+            Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+        };
+        let mut hashes = Vec::with_capacity(codes.len());
+        for code in &codes {
+            match mfa::hash_recovery_code(code) {
+                Ok(hash) => hashes.push(hash),
+                Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+            }
+        }
+        (codes, hashes)
+    };
+    let result = zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        let factor = transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "SELECT secret_ciphertext, last_totp_step, locked_until > CURRENT_TIMESTAMP FROM {} WHERE user_id = :user_id AND enabled_at IS NOT NULL LIMIT 1 FOR UPDATE",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+        })?;
+        let Some(row) = factor.rows.first() else {
+            return Ok(MfaSecurityResult::NotEnabled);
+        };
+        if row
+            .get(2)
+            .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        {
+            return Ok(MfaSecurityResult::Locked);
+        }
+        let encrypted_secret = row.first().map(String::as_str).unwrap_or_default();
+        let last_step = row.get(1).and_then(|value| value.parse::<u64>().ok());
+        let secret = mfa::decrypt_totp_secret(&key, encrypted_secret).map_err(|_| {
+            zelyra_database::DatabaseError {
+                message: "MFA factor could not be decrypted".into(),
+            }
+        })?;
+        let now = mfa::unix_time_seconds().map_err(|_| zelyra_database::DatabaseError {
+            message: "MFA clock is unavailable".into(),
+        })?;
+        let matched_step = mfa::matching_totp_step(&secret, &supplied_code, now)
+            .ok()
+            .flatten()
+            .filter(|step| last_step.is_some_and(|last| *step > last));
+        let Some(step) = matched_step else {
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                    quote_identifier(mfa_table)
+                ),
+                params: vec![("user_id".into(), QueryValue::Int(user_id))],
+            })?;
+            return Ok(MfaSecurityResult::Invalid);
+        };
+
+        if disable {
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "DELETE FROM {} WHERE user_id = :user_id",
+                    quote_identifier(recovery_table)
+                ),
+                params: vec![("user_id".into(), QueryValue::Int(user_id))],
+            })?;
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "DELETE FROM {} WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                    quote_identifier(mfa_table)
+                ),
+                params: vec![("user_id".into(), QueryValue::Int(user_id))],
+            })?;
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "DELETE FROM {} WHERE user_id = :user_id AND token_hash <> :current_hash",
+                    quote_identifier(session_table)
+                ),
+                params: vec![
+                    ("user_id".into(), QueryValue::Int(user_id)),
+                    (
+                        "current_hash".into(),
+                        QueryValue::String(current_token_hash.to_owned()),
+                    ),
+                ],
+            })?;
+            if let Some(audit_table) = auth.audit_table.as_deref() {
+                for query in audit_insert_queries(
+                    audit_table,
+                    auth.audit_chain,
+                    Some(user_id),
+                    "auth.mfa_disabled",
+                    Some(user_id),
+                    "",
+                ) {
+                    transaction.execute(&query)?;
+                }
+            }
+            return Ok(MfaSecurityResult::Disabled);
+        }
+
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "UPDATE {} SET last_totp_step = :step, failed_attempts = 0, locked_until = NULL WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                quote_identifier(mfa_table)
+            ),
+            params: vec![
+                ("step".into(), QueryValue::Int(step as i64)),
+                ("user_id".into(), QueryValue::Int(user_id)),
+            ],
+        })?;
+        transaction.execute(&zelyra_database::Query {
+            sql: format!(
+                "DELETE FROM {} WHERE user_id = :user_id",
+                quote_identifier(recovery_table)
+            ),
+            params: vec![("user_id".into(), QueryValue::Int(user_id))],
+        })?;
+        for hash in &recovery_hashes {
+            transaction.execute(&zelyra_database::Query {
+                sql: format!(
+                    "INSERT INTO {} (user_id, code_hash, used_at) VALUES (:user_id, :code_hash, NULL)",
+                    quote_identifier(recovery_table)
+                ),
+                params: vec![
+                    ("user_id".into(), QueryValue::Int(user_id)),
+                    ("code_hash".into(), QueryValue::String(hash.clone())),
+                ],
+            })?;
+        }
+        if let Some(audit_table) = auth.audit_table.as_deref() {
+            for query in audit_insert_queries(
+                audit_table,
+                auth.audit_chain,
+                Some(user_id),
+                "auth.mfa_recovery_codes_replaced",
+                Some(user_id),
+                "recovery_codes=10",
+            ) {
+                transaction.execute(&query)?;
+            }
+        }
+        Ok(MfaSecurityResult::RecoveryCodes(recovery_codes))
+    });
+
+    match result {
+        Ok(MfaSecurityResult::Disabled) => {
+            Response::redirect(ACCOUNT_SECURITY_PATH).with_header("Cache-Control", "no-store")
+        }
+        Ok(MfaSecurityResult::RecoveryCodes(codes)) => {
+            let rendered_codes = codes
+                .iter()
+                .map(|code| format!("<li><code>{}</code></li>", html_escape(code)))
+                .collect::<String>();
+            Response::html(
+                200,
+                format!(
+                    "<main><h1>Recovery codes replaced</h1><p>Save these codes now. Earlier recovery codes no longer work. They will not be shown again.</p><ol>{rendered_codes}</ol><a href=\"{ACCOUNT_SECURITY_PATH}\">Continue</a></main>"
+                ),
+            )
+            .with_header("Cache-Control", "no-store")
+        }
+        Ok(MfaSecurityResult::Invalid) => Response::html(
+            401,
+            "<h1>401 Unauthorized</h1><p>Invalid authenticator code.</p>",
+        )
+        .with_header("Cache-Control", "no-store"),
+        Ok(MfaSecurityResult::Locked) => {
+            Response::html(429, "<h1>429 Too Many Requests</h1><p>Try again later.</p>")
+                .with_header("Retry-After", "900")
+                .with_header("Cache-Control", "no-store")
+        }
+        Ok(MfaSecurityResult::NotEnabled) => {
+            Response::html(409, "<h1>409 Conflict</h1><p>MFA is not enabled.</p>")
+                .with_header("Cache-Control", "no-store")
+        }
+        Err(error) => {
+            eprintln!("zelyra web: MFA security update failed: {error}");
+            Response::html(503, "<h1>503 Service Unavailable</h1>")
+                .with_header("Cache-Control", "no-store")
+        }
+    }
+}
+
+enum MfaSecurityResult {
+    Disabled,
+    RecoveryCodes(Vec<zeroize::Zeroizing<String>>),
+    Invalid,
+    Locked,
+    NotEnabled,
+}
+
+fn dispatch_login_mfa(
+    app: &WebApp,
+    auth: &AuthRoute,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Response {
+    if app.database_capability_granted == Some(false) {
+        return database_capability_denied();
+    }
+    let (Some(session_table), Some(mfa_table), Some(recovery_table), Some(database_url)) = (
+        auth.session_table.as_deref(),
+        auth.mfa_table.as_deref(),
+        auth.mfa_recovery_table.as_deref(),
+        database_url,
+    ) else {
+        return Response::html(503, "<h1>503 Service Unavailable</h1>")
+            .with_header("Cache-Control", "no-store");
+    };
+    let Some(session_id) = cookie_value(request, "zelyra_session") else {
+        return Response::redirect("/login");
+    };
+    let token_hash = session_token_hash(&session_id);
+    let pending_user = match pending_mfa_user(auth, database_url, session_table, &token_hash) {
+        Ok(Some(user_id)) => user_id,
+        Ok(None) => return Response::redirect("/login"),
+        Err(error) => {
+            eprintln!("zelyra web: MFA session lookup failed: {error}");
+            return Response::html(500, "<h1>500 Internal Server Error</h1>")
+                .with_header("Cache-Control", "no-store");
+        }
+    };
+    match request.method.as_str() {
+        "GET" => Response::html(
+            200,
+            format!(
+                "<main><h1>Additional verification</h1><p>Enter an authenticator code or an unused recovery code.</p><form method=\"post\" action=\"{LOGIN_MFA_PATH}\"><input type=\"hidden\" name=\"_zelyra_csrf\" value=\"{}\"><label for=\"code\">Authenticator or recovery code</label><input id=\"code\" name=\"code\" autocomplete=\"one-time-code\" required><button type=\"submit\">Verify</button></form></main>",
+                html_escape(auth.csrf.token())
+            ),
+        )
+        .with_header("Cache-Control", "no-store"),
+        "POST" => {
+            let input = match parse_urlencoded(&request.body) {
+                Ok(input) => input,
+                Err(_) => {
+                    return Response::html(400, "<h1>400 Bad Request</h1>")
+                        .with_header("Cache-Control", "no-store")
+                }
+            };
+            if !verify_csrf_request(
+                request,
+                &auth.csrf,
+                input.get("_zelyra_csrf").map(String::as_str),
+            ) {
+                return Response::html(403, "<h1>403 Forbidden</h1>")
+                    .with_header("Cache-Control", "no-store");
+            }
+            let Some(code) = input.get("code").map(String::as_str) else {
+                return Response::html(401, "<h1>401 Unauthorized</h1><p>Invalid verification code.</p>")
+                    .with_header("Cache-Control", "no-store");
+            };
+            let key = match load_mfa_encryption_key() {
+                Ok(key) => key,
+                Err(_) => {
+                    eprintln!("zelyra web: MFA encryption key is missing or invalid");
+                    return Response::html(503, "<h1>503 Service Unavailable</h1>")
+                        .with_header("Cache-Control", "no-store");
+                }
+            };
+            let now = match mfa::unix_time_seconds() {
+                Ok(now) => now,
+                Err(_) => return Response::html(503, "<h1>503 Service Unavailable</h1>"),
+            };
+            let code = code.to_owned();
+            let result = zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+                let session = transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND s.mfa_verified = false{} LIMIT 1 FOR UPDATE",
+                        quote_identifier(session_table),
+                        quote_identifier(&auth.table),
+                        if auth.schema.tables.iter().find(|table| table.name == auth.table).is_some_and(|table| table.columns.iter().any(|column| column.name == "active")) { " AND u.active = true" } else { "" },
+                    ),
+                    params: vec![("token_hash".into(), QueryValue::String(token_hash.clone()))],
+                })?;
+                let user_id = session
+                    .rows
+                    .first()
+                    .and_then(|row| row.first())
+                    .and_then(|value| value.parse::<i64>().ok());
+                if user_id != Some(pending_user) {
+                    return Ok(MfaChallengeResult::NoPendingSession);
+                }
+                let factor = transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "SELECT secret_ciphertext, last_totp_step, locked_until > CURRENT_TIMESTAMP FROM {} WHERE user_id = :user_id AND enabled_at IS NOT NULL LIMIT 1 FOR UPDATE",
+                        quote_identifier(mfa_table)
+                    ),
+                    params: vec![("user_id".into(), QueryValue::Int(pending_user))],
+                })?;
+                let Some(row) = factor.rows.first() else {
+                    return Ok(MfaChallengeResult::Invalid);
+                };
+                if row.get(2).is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true")) {
+                    return Ok(MfaChallengeResult::Locked);
+                }
+                let encrypted_secret = row.first().map(String::as_str).unwrap_or_default();
+                let last_step = row.get(1).and_then(|value| value.parse::<u64>().ok());
+                let secret = mfa::decrypt_totp_secret(&key, encrypted_secret)
+                    .map_err(|_| zelyra_database::DatabaseError { message: "MFA factor could not be decrypted".into() })?;
+                let matched_step = mfa::matching_totp_step(&secret, &code, now)
+                    .ok()
+                    .flatten()
+                    .filter(|step| last_step.is_some_and(|last| *step > last));
+                let recovery_id = if matched_step.is_none() {
+                    let recovery_rows = transaction.execute(&zelyra_database::Query {
+                        sql: format!(
+                            "SELECT id, code_hash FROM {} WHERE user_id = :user_id AND used_at IS NULL ORDER BY id LIMIT 20 FOR UPDATE",
+                            quote_identifier(recovery_table)
+                        ),
+                        params: vec![("user_id".into(), QueryValue::Int(pending_user))],
+                    })?;
+                    recovery_rows.rows.into_iter().find_map(|recovery| {
+                        let id = recovery.first()?.parse::<i64>().ok()?;
+                        let hash = recovery.get(1)?;
+                        mfa::verify_recovery_code(&code, hash).then_some(id)
+                    })
+                } else {
+                    None
+                };
+                if matched_step.is_none() && recovery_id.is_none() {
+                    transaction.execute(&zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET failed_attempts = failed_attempts + 1, locked_until = IF(failed_attempts + 1 >= 5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE), locked_until) WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                            quote_identifier(mfa_table)
+                        ),
+                        params: vec![("user_id".into(), QueryValue::Int(pending_user))],
+                    })?;
+                    return Ok(MfaChallengeResult::Invalid);
+                }
+                if let Some(step) = matched_step {
+                    transaction.execute(&zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET last_totp_step = :step, failed_attempts = 0, locked_until = NULL WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                            quote_identifier(mfa_table)
+                        ),
+                        params: vec![
+                            ("step".into(), QueryValue::Int(step as i64)),
+                            ("user_id".into(), QueryValue::Int(pending_user)),
+                        ],
+                    })?;
+                } else if let Some(recovery_id) = recovery_id {
+                    transaction.execute(&zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET used_at = CURRENT_TIMESTAMP WHERE id = :id AND user_id = :user_id AND used_at IS NULL",
+                            quote_identifier(recovery_table)
+                        ),
+                        params: vec![
+                            ("id".into(), QueryValue::Int(recovery_id)),
+                            ("user_id".into(), QueryValue::Int(pending_user)),
+                        ],
+                    })?;
+                    transaction.execute(&zelyra_database::Query {
+                        sql: format!(
+                            "UPDATE {} SET failed_attempts = 0, locked_until = NULL WHERE user_id = :user_id AND enabled_at IS NOT NULL",
+                            quote_identifier(mfa_table)
+                        ),
+                        params: vec![("user_id".into(), QueryValue::Int(pending_user))],
+                    })?;
+                }
+                transaction.execute(&zelyra_database::Query {
+                    sql: format!(
+                        "UPDATE {} SET mfa_verified = true WHERE token_hash = :token_hash AND user_id = :user_id AND mfa_verified = false AND expires_at > CURRENT_TIMESTAMP",
+                        quote_identifier(session_table)
+                    ),
+                    params: vec![
+                        ("token_hash".into(), QueryValue::String(token_hash.clone())),
+                        ("user_id".into(), QueryValue::Int(pending_user)),
+                    ],
+                })?;
+                if let Some(audit_table) = auth.audit_table.as_deref() {
+                    for query in audit_insert_queries(
+                        audit_table,
+                        auth.audit_chain,
+                        Some(pending_user),
+                        "auth.login",
+                        Some(pending_user),
+                        "mfa=verified",
+                    ) {
+                        transaction.execute(&query)?;
+                    }
+                }
+                Ok(MfaChallengeResult::Verified)
+            });
+            match result {
+                Ok(MfaChallengeResult::Verified) => {
+                    Response::redirect("/").with_header("Cache-Control", "no-store")
+                }
+                Ok(MfaChallengeResult::Locked) => Response::html(
+                    429,
+                    "<h1>429 Too Many Requests</h1><p>Try again later.</p>",
+                )
+                .with_header("Retry-After", "900")
+                .with_header("Cache-Control", "no-store"),
+                Ok(MfaChallengeResult::NoPendingSession) => Response::redirect("/login"),
+                Ok(MfaChallengeResult::Invalid) => Response::html(
+                    401,
+                    "<h1>401 Unauthorized</h1><p>Invalid verification code.</p>",
+                )
+                .with_header("Cache-Control", "no-store"),
+                Err(error) => {
+                    eprintln!("zelyra web: MFA challenge failed: {error}");
+                    Response::html(503, "<h1>503 Service Unavailable</h1>")
+                        .with_header("Cache-Control", "no-store")
+                }
+            }
+        }
+        _ => Response::empty(405)
+            .with_header("Allow", "GET, POST")
+            .with_header("Cache-Control", "no-store"),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MfaChallengeResult {
+    Verified,
+    Invalid,
+    Locked,
+    NoPendingSession,
+}
+
+fn pending_mfa_user(
+    auth: &AuthRoute,
+    database_url: &str,
+    session_table: &str,
+    token_hash: &str,
+) -> Result<Option<i64>, String> {
+    let result = zelyra_database::execute_mariadb_query(
+        database_url,
+        &format!(
+            "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND s.mfa_verified = false{} LIMIT 1",
+            quote_identifier(session_table),
+            quote_identifier(&auth.table),
+            if auth.schema.tables.iter().find(|table| table.name == auth.table).is_some_and(|table| table.columns.iter().any(|column| column.name == "active")) { " AND u.active = true" } else { "" },
+        ),
+        vec![("token_hash".into(), QueryValue::String(token_hash.into()))],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(result
+        .rows
+        .first()
+        .and_then(|row| row.first())
+        .and_then(|value| value.parse::<i64>().ok()))
 }
 
 fn login_throttle_key(email: &str) -> String {
@@ -3954,6 +4932,8 @@ fn account_sessions_test_auth() -> AuthRoute {
         reset_tokens_table: None,
         reset_rate_limit: DEFAULT_RESET_RATE_LIMIT,
         reset_block_seconds: DEFAULT_RESET_BLOCK_SECONDS,
+        mfa_table: None,
+        mfa_recovery_table: None,
         schema: Schema {
             database: None,
             tables: Vec::new(),
@@ -4128,11 +5108,21 @@ fn session_from_request(
         .iter()
         .find(|table| table.name == auth.table)
         .is_some_and(|table| table.columns.iter().any(|column| column.name == "active"));
+    let mfa_clause = if auth.mfa_table.is_some() {
+        " AND s.mfa_verified = true"
+    } else {
+        ""
+    };
     let query = if active_clause {
         format!(
-            "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND u.active = true LIMIT 1",
+            "SELECT s.user_id FROM {} AS s INNER JOIN {} AS u ON u.id = s.user_id WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP AND u.active = true{mfa_clause} LIMIT 1",
             quote_identifier(session_table),
             quote_identifier(&auth.table),
+        )
+    } else if auth.mfa_table.is_some() {
+        format!(
+            "SELECT s.user_id FROM {} AS s WHERE s.token_hash = :token_hash AND s.expires_at > CURRENT_TIMESTAMP{mfa_clause} LIMIT 1",
+            quote_identifier(session_table),
         )
     } else {
         format!(
