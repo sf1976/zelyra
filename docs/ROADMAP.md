@@ -560,7 +560,9 @@ Independent human acceptance remains deferred to 1.0.0.
 - [🗺️] Add a read-only visual database map and guided CRUD builder. A developer
   selects a connection and table, inspects fields and relationships, previews
   compiler-checked source, and explicitly applies the change. Expand language
-  fixtures across grammar, typing, and formatting. See the
+  fixtures across grammar, typing, and formatting. Include the bounded local
+  MariaDB transactional outbox already under review, with explicit worker
+  invocation and at-least-once delivery semantics. See the
   [0.8.0 plan](release-plans/0.8.0.en.md).
 
 ## Release 0.9.0
@@ -584,10 +586,11 @@ Independent human acceptance remains deferred to 1.0.0.
   independent human acceptance remains before the first productive release.
   See the [0.99.0 plan](release-plans/0.99.0.en.md).
 
-A general queue and transactional outbox remain beyond 1.0.0. Complete SQL
-parity, arbitrary client hydration, compiler self-hosting, native backend,
-mandatory cloud/AI services, telemetry, and unsupported performance claims
-remain excluded.
+A general queue platform remains beyond 1.0.0. The 0.8 outbox is a bounded,
+local MariaDB feature and does not imply a scheduler, distributed workers, or
+exactly-once delivery. Complete SQL parity, arbitrary client hydration,
+compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
+and unsupported performance claims remain excluded.
 ## First productive release 1.0.0
 
 `v1.0.0` is the first productive publication and the mandatory target for all

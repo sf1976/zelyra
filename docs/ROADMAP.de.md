@@ -527,7 +527,9 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   CRUD-Assistenten ergänzen. Entwickler wählen Verbindung und Tabelle, prüfen
   Felder und Beziehungen, sehen compilergeprüften Quelltext und übernehmen die
   Änderung ausdrücklich. Sprach-Fixtures für Grammatik, Typprüfung und Formatter
-  ausbauen. Siehe [0.8.0-Plan](release-plans/0.8.0.de.md).
+  ausbauen. Dazu kommt die bereits in Prüfung befindliche begrenzte lokale
+  MariaDB-Outbox mit ausdrücklich gestartetem Worker und At-least-once-Zustellung.
+  Siehe [0.8.0-Plan](release-plans/0.8.0.de.md).
 
 ## Release 0.9.0
 
@@ -551,10 +553,12 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
   bleibt nur die unabhängige menschliche Abnahme offen. Siehe
   [0.99.0-Plan](release-plans/0.99.0.de.md).
 
-Eine allgemeine Queue und transaktionale Outbox bleiben hinter 1.0.0.
-Vollständige SQL-Parität, beliebige Client-Hydration, Compiler-Self-Hosting,
-natives Backend, verpflichtende Cloud-/KI-Dienste, Telemetrie und unbelegte
-Leistungsversprechen bleiben ausgeschlossen.
+Eine allgemeine Queue-Plattform bleibt hinter 1.0.0. Die Outbox in 0.8 ist
+lokal und auf MariaDB begrenzt; sie bietet weder Scheduler noch verteilte
+Worker oder Exactly-once-Zustellung. Vollständige SQL-Parität, beliebige
+Client-Hydration, Compiler-Self-Hosting, natives Backend, verpflichtende
+Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
+ausgeschlossen.
 
 Die detaillierten Abnahmekriterien stehen in den Plänen für [0.8.0](release-plans/0.8.0.de.md),
 [0.9.0](release-plans/0.9.0.de.md), [0.95.0 Stabilisierung](release-plans/0.95.0.de.md),
