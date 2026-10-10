@@ -1069,7 +1069,7 @@ table auth_sessions {
     user: User required
     token_hash: String(64) required unique
     expires_at: Timestamp required
-    mfa_verified: Bool default true
+    mfa_verified: Bool default false
 }
 
 table user_mfa {
