@@ -3276,6 +3276,7 @@ fn build_postgres_pool(
             && (tls.ca_cert_file.is_some()
                 || config.get_hosts().iter().any(|host| match host {
                     PostgresHost::Tcp(host) => !is_local_database_host(host),
+                    #[cfg(unix)]
                     PostgresHost::Unix(_) => false,
                 })));
     if !use_tls {
@@ -4073,6 +4074,24 @@ mod tests {
             timeout.is_err(),
             "the configured statement timeout must interrupt a long query"
         );
+
+        let pool_settings =
+            MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
+        let no_tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = match build_postgres_pool(&database_url, pool_settings, &no_tls).unwrap() {
+            PostgresPool::Plain(pool) => pool,
+            PostgresPool::Tls(_) => panic!("TLS was disabled for this pool exhaustion check"),
+        };
+        let held = pool.get().unwrap();
+        let started = Instant::now();
+        let saturated = match pool.get() {
+            Ok(_) => panic!("a size-one PostgreSQL pool returned a second connection"),
+            Err(error) => error,
+        };
+        assert!(saturated.to_string().contains("timed out"));
+        assert!(started.elapsed() >= Duration::from_millis(900));
+        drop(held);
+        assert!(pool.get().is_ok(), "the pool must recover after release");
     }
     use zelyra_lexer::lex;
     use zelyra_parser::parse;
