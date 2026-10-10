@@ -1005,7 +1005,15 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
     );
     assert_eq!(
         document["plan"]["external_service_contracts"][0]["secret_environment_variables"],
-        serde_json::json!(["ZELYRA_SMTP_USERNAME", "ZELYRA_SMTP_PASSWORD"])
+        serde_json::json!([
+            "ZELYRA_SMTP_USERNAME",
+            "ZELYRA_SMTP_PASSWORD",
+            "ZELYRA_RESET_DELIVERY_KEY"
+        ])
+    );
+    assert_eq!(
+        document["plan"]["external_service_contracts"][0]["required_when"],
+        "auth_reset_tokens_enabled"
     );
 
     let bundle = directory.with_extension("smtp-docker-bundle");
@@ -1033,12 +1041,14 @@ fn module_plan_and_docker_bundle_export_password_reset_smtp_contracts() {
     );
     let env_example = fs::read_to_string(bundle.join(".env.example")).unwrap();
     for variable in [
+        "ZELYRA_PUBLIC_BASE_URL=https://app.example.test",
         "ZELYRA_SMTP_HOST=",
-        "ZELYRA_SMTP_PORT=587",
-        "ZELYRA_SMTP_SECURITY=starttls",
+        "ZELYRA_SMTP_PORT=465",
+        "ZELYRA_SMTP_SECURITY=implicit_tls",
         "ZELYRA_SMTP_FROM=",
         "ZELYRA_SMTP_USERNAME=",
         "ZELYRA_SMTP_PASSWORD=",
+        "ZELYRA_RESET_DELIVERY_KEY=",
     ] {
         assert!(
             env_example.lines().any(|line| line == variable),

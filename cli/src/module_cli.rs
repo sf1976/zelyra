@@ -428,18 +428,21 @@ fn module_external_service_contracts(
             json!({
                 "kind": "smtp",
                 "used_by": format!("auth:{}", auth.name),
-                "required_when": "password_reset_email_delivery_is_used",
+                "required_when": "auth_reset_tokens_enabled",
                 "environment_variables": [
+                    "ZELYRA_PUBLIC_BASE_URL",
                     "ZELYRA_SMTP_HOST",
                     "ZELYRA_SMTP_PORT",
                     "ZELYRA_SMTP_SECURITY",
                     "ZELYRA_SMTP_FROM",
                     "ZELYRA_SMTP_USERNAME",
-                    "ZELYRA_SMTP_PASSWORD"
+                    "ZELYRA_SMTP_PASSWORD",
+                    "ZELYRA_RESET_DELIVERY_KEY"
                 ],
                 "secret_environment_variables": [
                     "ZELYRA_SMTP_USERNAME",
-                    "ZELYRA_SMTP_PASSWORD"
+                    "ZELYRA_SMTP_PASSWORD",
+                    "ZELYRA_RESET_DELIVERY_KEY"
                 ],
                 "delivery_semantics": "at_least_once"
             })
@@ -1364,7 +1367,7 @@ fn module_bundle_command(mut arguments: impl Iterator<Item = String>) -> ExitCod
             .iter()
             .any(|contract| contract["kind"] == "smtp")
         {
-            "\n# Configure SMTP only when password-reset email delivery is enabled.\nZELYRA_SMTP_HOST=\nZELYRA_SMTP_PORT=587\nZELYRA_SMTP_SECURITY=starttls\nZELYRA_SMTP_FROM=\nZELYRA_SMTP_USERNAME=\nZELYRA_SMTP_PASSWORD=\n"
+            "\n# Required when auth declares reset_tokens; put secrets only in the local .env or a secret store.\nZELYRA_PUBLIC_BASE_URL=https://app.example.test\nZELYRA_SMTP_HOST=\nZELYRA_SMTP_PORT=465\nZELYRA_SMTP_SECURITY=implicit_tls\nZELYRA_SMTP_FROM=\nZELYRA_SMTP_USERNAME=\nZELYRA_SMTP_PASSWORD=\nZELYRA_RESET_DELIVERY_KEY=\n"
         } else {
             ""
         };
