@@ -7186,51 +7186,19 @@ fn query_parameters(
     env: &Environment,
     span: Span,
 ) -> Result<Vec<(String, zelyra_database::QueryValue)>, RuntimeError> {
-    let bytes = query.as_bytes();
     let mut parameters = Vec::new();
-    let mut index = 0;
-    let mut quote = None;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if let Some(active_quote) = quote {
-            if byte == active_quote {
-                if bytes.get(index + 1) == Some(&active_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
-            continue;
+    let names = zelyra_database::sql_parameter_names(query).map_err(|error| RuntimeError {
+        message: format!("could not scan SQL parameters: {error}"),
+        span,
+    })?;
+    for name in names {
+        if !parameters.iter().any(|(existing, _)| existing == &name) {
+            let value = env.get(&name).ok_or_else(|| RuntimeError {
+                message: format!("SQL parameter `:{name}` is not available"),
+                span,
+            })?;
+            parameters.push((name, value_to_query_value(&value, span)?));
         }
-        if byte == b'\'' || byte == b'"' {
-            quote = Some(byte);
-            index += 1;
-            continue;
-        }
-        if byte == b':'
-            && bytes.get(index.wrapping_sub(1)) != Some(&b':')
-            && bytes.get(index + 1) != Some(&b':')
-        {
-            let start = index + 1;
-            let mut end = start;
-            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-                end += 1;
-            }
-            if end > start {
-                let name = query[start..end].to_owned();
-                if !parameters.iter().any(|(existing, _)| existing == &name) {
-                    let value = env.get(&name).ok_or_else(|| RuntimeError {
-                        message: format!("SQL parameter `:{name}` is not available"),
-                        span,
-                    })?;
-                    parameters.push((name, value_to_query_value(&value, span)?));
-                }
-                index = end;
-                continue;
-            }
-        }
-        index += 1;
     }
     Ok(parameters)
 }

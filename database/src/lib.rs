@@ -3048,7 +3048,7 @@ fn bind_named_parameters_for(
                 continue;
             }
         }
-        if byte == b'\'' || byte == b'"' || (!postgres && byte == b'`') {
+        if byte == b'\'' || byte == b'"' || byte == b'`' {
             quote = Some(byte);
             bound.push(byte as char);
             index += 1;
@@ -3095,6 +3095,11 @@ fn bind_named_parameters_for(
         index += 1;
     }
     Ok((bound, parameters))
+}
+
+/// Returns named SQL parameters while ignoring quoted text, comments, and casts.
+pub fn sql_parameter_names(sql: &str) -> Result<Vec<String>, DatabaseError> {
+    bind_named_parameters_for(sql, true).map(|(_, names)| names)
 }
 
 /// Exposes the named-parameter scanner only to the dedicated fuzz target.
@@ -4107,6 +4112,13 @@ mod tests {
             "SELECT $1::bigint, ':ignored?', $$:also_ignored$$ -- :comment\n/* :block */"
         );
         assert_eq!(names, ["value"]);
+        assert_eq!(
+            sql_parameter_names(
+                "SELECT :value::bigint, ':ignored', `:identifier`, $$:dollar$$ -- :line\n/* :block */"
+            )
+            .unwrap(),
+            ["value"]
+        );
         let (sql, names) =
             bind_named_parameters_for("SELECT value FROM items WHERE key=:key", true).unwrap();
         assert_eq!(sql, "SELECT value FROM items WHERE key=$1");
