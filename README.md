@@ -11,21 +11,22 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current compiler release: 0.4.0 · language compatibility line: 0.1 · experimental**
+> **Current stable compiler release: 0.5.0 · language compatibility line: 0.1 · experimental**
 >
-> Zelyra 0.4.0 is not approved for production use. “Prove correctness” is a
+> Zelyra 0.5.0 is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.4.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.4.0) was published on 2026-10-10. It is experimental, not production-approved. No independent human acceptance study was conducted for 0.4.0; the project owner explicitly deferred all independent human testing to the 1.0.0 major release. This is not acceptance evidence. See the [decision record](docs/release-readiness/0.4.0-human-acceptance.en.md).
+The stable [`v0.5.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.5.0) was published on 2026-10-10. It remains experimental, not production-approved. Independent human acceptance for earlier releases is deferred to the first productive release, 1.0.0; this README is not acceptance evidence. See the [0.5.0 release notes](docs/release-notes/0.5.0.en.md) and [acceptance decision](docs/release-readiness/0.5.0-human-acceptance.en.md).
 
-## What changed in 0.4.0
+## What changed in 0.5.0
 
-Zelyra 0.4.0 adds experimental multi-file modules, safer database operations,
-password recovery with a durable encrypted mail outbox, and bounded runtime
-controls. It includes verified Linux and Windows x86_64 release artifacts;
-the precise compatibility boundaries and limitations are in the [release
-notes](docs/release-notes/0.4.0.en.md).
+Zelyra 0.5.0 adds experimental Docker bundles for a statically recognized
+subset of multi-file projects, separate invoice and inventory apps with
+independent MariaDB schemas and least-privilege accounts, and a modular
+customer/order workflow. It includes verified Linux and Windows x86_64 release
+artifacts. The exact compatibility boundaries and limitations are in the
+[release notes](docs/release-notes/0.5.0.en.md).
 
 The [roadmap](docs/ROADMAP.md) tracks implementation status and limitations.
 This README is a project overview, not a second handbook or changelog.
@@ -71,7 +72,7 @@ excluded from Git and Docker build contexts; Zelyra sets newly created files to
 owner-only permissions (`0600`) on Unix. On Windows, the file inherits the
 directory's ACL, and existing `.env` files are not re-permissioned. Do not
 commit or share the file. For production, use an appropriate secrets manager
-and deployment-specific credentials; 0.4.0 is not production-approved.
+and deployment-specific credentials; 0.5.0 is not production-approved.
 
 The generated MariaDB project defaults to German and learn mode. Set
 `ZELYRA_LANGUAGE=de|en` and `ZELYRA_LEVEL=learn|work` in its `.env` to change
@@ -83,11 +84,11 @@ other settings.
 | If you want to… | Read |
 | --- | --- |
 | Learn Zelyra step by step | [Getting started](docs/getting-started.md) · [English handbook](docs/handbook/en/handbook.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) |
-| See what works in compiler 0.4.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
+| See what works in compiler 0.5.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [Release plan 0.4.0](docs/release-plans/0.4.0.en.md) · [0.5.0 roadmap proposal](docs/release-plans/0.5.0.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.6.0 release plan](docs/release-plans/0.6.0.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

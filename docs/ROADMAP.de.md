@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 15710)
+Total output lines: 958
+
 # Zelyra Roadmap
 
 Dies ist die dauerhaft gepflegte Roadmap für Zelyra. Sie enthält notwendige
@@ -271,419 +274,7 @@ Feature eines bestimmten Anbieters.
   mit sicheren Defaults und Vorschau der Konfiguration.
 - [~] `zelyra doctor` prüft Projektgültigkeit, Datenbankverbindung, Docker
   Compose, eine optionale `.env` ohne Zugangsdaten auszugeben, und die
-  Host-Port-Bereitschaft. JSON-Checks enthalten nun stabile Kategorien für
-  Konfiguration, Projekt, Verbindung, Authentifizierung, Timeout, Schema und Werkzeuge;
-  Datenbankfehler werden geheimnisfrei normalisiert. TLS, Dateirechte und
-  umfassendere Werkzeug-Hinweise bleiben offen.
-- [~] Projektvorlagen: minimales Skript sowie MariaDB-CRUD-,
-  MariaDB-Authentifizierungs- und MariaDB-Business-Starter sind vorhanden;
-  API- und Produktionsdeployment-Vorlagen folgen.
-- [ ] Offline-Installationspaket und reproduzierbare Toolchain-Metadaten.
-- [?] Paketmanager-Distribution, soweit sinnvoll (Homebrew, winget,
-  Debian-Pakete und Container-Images).
-
-## 2. Sprache und Compiler
-
-- [ ] Stabile Grammatik-Spezifikation und versionierte Kompatibilitätsregeln.
-- [~] Experimentelle Funktions-/Typ-/Record-/Tabellen-/View-/Komponenten-Imports und projektweite
-  Datenbankkonfiguration im aktuellen
-  Entwicklungszweig unterstützen projektrelative Imports, `pub`-Deklarationen,
-  qualifizierte Aufrufe und Typreferenzen, Zyklenerkennung,
-  Projektstamm-/Symlink-Schutz, dateibezogene Quell-IDs sowie
-  Typ-, Capability- und Contract-Prüfungen über importierte Aufrufe hinweg.
-  `check`, `build`, `run`, `serve`, `context` und `verify` prüfen diesen Graphen; der
-  maschinenlesbare Kontext enthält nun einen deterministischen, sortierten
-  Modul-/Import-Überblick. Importierte Datenbankdefinitionen und Tabellen
-  fließen in das gemeinsame Schema ein; Views und Komponenten werden in die
-  Anwendung integriert und durch `serve` gerendert. Ihre Kontextspannen
-  enthalten den projektrelativen Dateipfad. Importierte Seiten werden in die
-  Anwendungsrouten integriert; überlappende Seitenpfade werden abgelehnt.
-  Bei Template-Diagnosen und Verifikationsergebnissen fehlt noch eine
-  vollständige Quellzuordnung pro Modul. Datenbankkonfiguration wird nicht über den Alias angesprochen und ist
-  pro Projekt auf eine Verbindung begrenzt. Importierte Tabellen behalten
-  globale SQL-Namen; importierte `tableview`-, View- und Komponentennamen sind global, Kollisionen
-  werden abgelehnt. Formulare, CRUD-Deklarationen, API-Routen und
-  Authentifizierungskonfiguration werden ebenfalls aus importierten Dateien
-  zusammengesetzt. API-Handler und Typen werden im jeweiligen Modulkontext
-  aufgelöst; Authentifizierungstabellen werden gegen das gemeinsame Schema
-  geprüft. MariaDB-gestützte `tableview`s werden nun
-  zusammengesetzt und bereitgestellt.
-  Datenbankbefehle laden den verknüpften Graphen für das gemeinsame Schema;
-  Schemafehler behalten Quelldatei und Span importierter Module.
-  Template- und Verifikationsdiagnosen brauchen noch eine vollständige
-  Modul-Quellzuordnung.
-  `impact` analysiert den Graphen mit dateibezogenen Spannen; `fmt` und `edit`
-  bleiben dateilokal.
-  Das Feature ist
-  nicht im veröffentlichten 0.3.0-Binary enthalten.
-- [ ] Generics, Interfaces/Traits, Enums, Tagged Unions und Pattern Matching
-  für alle Fachdaten-Typen.
-- [ ] Bessere Typinferenz mit präzisen Quellpositionen und Fix-Vorschlägen.
-- [ ] Typisierte Literale und Konversionen für Decimal, Money, Date, Time,
-  UUID, URL, Email, Bytes und Duration.
-- [~] Ein erstes Capability-/Effect-Modell für Database, Network, FileSystem,
-  Environment, Process, Clock, Random und Console ist vorhanden; interaktive
-  Terminaleingabe mit `read_console(prompt) -> String?` ist für `zelyra run`
-  umgesetzt und an `uses Console` sowie die Projektfreigabe gebunden. Feinere
-  Effekte wie `Database(read)` und `Database(write)` bleiben geplant.
-- [ ] Strukturierte Fehlerweitergabe und eigene Fehlertypen.
-- [ ] Deterministischer Build-Graph, inkrementelle und parallele Kompilierung.
-- [~] Der deterministische Formatter ist umgesetzt; Language Server,
-  Editor-Erweiterungen, Linter und Debugger bleiben geplant.
-- [ ] Stabile IR und ein backendunabhängiges Runtime-ABI.
-- [ ] Langfristiger Self-Hosting-Pfad: Compiler-Werkzeuge schrittweise aus Rust
-  nach Zelyra verlagern, mit einem kleinen vertrauenswürdigen Bootstrapcompiler.
-- [?] Native Codegenerierung über das Bootstrap-Backend hinaus (LLVM,
-  Cranelift oder ein anderes gepflegtes Backend).
-- [?] Paket-Registry und Lockfile-Konzept.
-
-## 3. Datenbankplattform
-
-- [x] MariaDB als primäres getestetes Backend.
-- [x] SQLite für lokale und eingebettete Anwendungen.
-- [x] PostgreSQL für Schema und Planung.
-- [x] Datenbank-CLI: `create`, `setup`, `bootstrap`, `inspect`, `plan` und das
-  geschützte `apply` sind mit ausdrücklichem Backend-Verhalten und Schutz vor
-  destruktiven Änderungen umgesetzt. MariaDB-DDL aus `create` und `setup`
-  verwendet ausdrücklich InnoDB mit utf8mb4/utf8mb4_unicode_ci; SQLite- und
-  PostgreSQL-Ausgaben behalten ihr backend-spezifisches Verhalten.
-- [ ] Vollständige PostgreSQL-Runtime-Parität.
-- [~] MariaDB-Kompatibilität wird für die offiziellen Image-Tags `10.11.19`,
-  `11.4.13`, `11.8.9` und `12.3.3` hinsichtlich Schema-/CRUD-HTTP-Pfad und
-  Freigabe destruktiver Änderungen ausdrücklich getestet. Dies ist keine
-  MySQL-Kompatibilitätsaussage; versionsabhängige Diagnostik bleibt geplant.
-  Siehe die [deutsche Kompatibilitätsmatrix](database-compatibility.de.md) und
-  die [englische Kompatibilitätsmatrix](database-compatibility.en.md).
-- [ ] SQL-Server-Backend prüfen und bei ausreichendem Bedarf implementieren.
-- [🧪] `zelyra db plan --format=json` erzeugt einen versionierten
-  `zelyra.schema-plan/v1`-Plan mit stabiler Vorwärts-ID, Schema-Fingerprints,
-  Drift, geordneten SQL-Schritten, Datenvorprüfungen und ausdrücklichem
-  Freigabeflag. Wenn alle Rückwärtsoperationen unterstützt werden, enthält er
-  auch einen inversen Schema-Diff mit eigener ID, erwarteten Fingerprints,
-  Vorprüfungen und Freigabebedarf. Nicht unterstützte Umkehrungen bleiben
-  fail-closed. Rückwärts-DDL wird nie automatisch ausgeführt und kann spätere
-  Daten löschen; jede Schemaänderung benötigt weiterhin ein unabhängig
-  geprüftes Backup. `db apply` akzeptiert die geprüfte Plan-ID und lehnt
-  veraltete Pläne vor Vorprüfungen oder SQL ab; Integrationstests prüfen
-  Ablehnung, Vorwärtsanwendung und ausdrückliche Rückwärtsanwendung nach
-  Wiederherstellung der vorherigen Quelle. Alle drei Backends protokollieren
-  Schema-Fingerprints und Ergebnisse in `_zelyra_schema_history`; `db history`
-  zeigt angewendete, fehlgeschlagene und unterbrochene Läufe. MariaDB speichert
-  Prüfpunkte je DDL-Schritt und verwendet eine datenbankweite Advisory-Sperre;
-  E2E-Tests prüfen die Wiederherstellung nach Abbruch zwischen Schritten und
-  während DDL auf eine Metadatensperre wartet. Das MariaDB-E2E führt außerdem
-  einen geprüften Rückwärtsplan nur nach ausdrücklicher Freigabe aus und prüft,
-  dass neue Spalten verschwinden, Zeilen und IDs aber erhalten bleiben. Ein
-  Absturz während tatsächlicher MariaDB-DDL kann das Ergebnis des Befehls
-  weiterhin unklar lassen.
-  PostgreSQL und SQLite wenden DDL transaktional an. Lesende Vorprüfungen
-  kontrollieren NULL-Werte, Pflichtspalten, Dubletten neuer Unique-Indizes und
-  verwaiste Fremdschlüssel, verhindern aber keine konkurrierenden Schreibzugriffe.
-  Backups bleiben Betreiberverantwortung.
-- [~] Die Live-Inspektion erkennt Drift bei Defaults, Primärschlüsseln und
-  Auto-Increment für MariaDB, bei Defaults, Primärschlüsseln und explizitem
-  `AUTOINCREMENT` für SQLite sowie bei Defaults, Primärschlüsseln und
-  Serial-/Identity-Eigenschaften für PostgreSQL. Das Setzen, Ändern und
-  Entfernen von Defaults erzeugt für MariaDB und PostgreSQL nun `REVIEW`-Pläne
-  und benötigt `--allow-risky`; E2E-Tests prüfen Datenerhalt und idempotente
-  Neuplanung. SQLite-Defaultänderungen sowie Schlüssel-/Auto-Increment-Drift
-  bleiben `UNSUPPORTED`. Schlüssel-/Auto-Increment-Änderungen bleiben auch
-  für MariaDB und PostgreSQL `UNSUPPORTED`. PostgreSQL-Schemasicherheit wird
-  in CI mit PostgreSQL 16 geprüft; das ist keine Runtime-Paritätsaussage.
-- [~] Der Schema-Planner klassifiziert Pflichtspalten ohne Standardwert,
-  Unique-Constraints und Index-/Foreign-Key-Änderungen mit generierten
-  Zelyra-Namen; unbekannte externe Indizes bleiben erhalten, nicht verfolgte
-  Foreign-Key-Entfernungen werden blockiert. Vor dem Hinzufügen einer
-  Pflichtspalte ohne Standardwert prüft ein lesender Preflight, ob die
-  vorhandene Tabelle leer ist; andernfalls wird der gesamte Plan vor jeglichem
-  SQL blockiert. Neue Unique-Indizes und Foreign Keys erhalten vor jeglichem
-  Plan-SQL lesende Prüfungen auf Dubletten und verwaiste Werte. Diese Prüfungen
-  verhindern keine parallelen Schreibzugriffe. Nullbarkeitsänderungen bei
-  MariaDB und PostgreSQL benötigen `REVIEW`; vor einer Verschärfung auf
-  `NOT NULL` prüft ein lesender NULL-Zeilen-Preflight den gesamten Plan und
-  blockiert ihn vor jeglichem SQL, wenn Daten korrigiert werden müssen.
-  SQLite-Nullbarkeit sowie SQLite-Typ-, Foreign-Key- und Unique-Constraint-
-  Änderungen bleiben nicht unterstützt. Allgemeine Zeilenschätzungen,
-  Lock-Warnungen, Daten-Backfill-Pläne und Wartungsfenster bleiben geplant.
-- [~] Der Entwicklungszweig begrenzt den MariaDB-Verbindungsaufbau (Standard
-  10 s; zulässig 1–300) und Runtime-/Lese-Statements serverseitig (Standard
-  30 s; zulässig 1–3600), lehnt ungültige Werte ohne Ausgabe des Eingabewerts
-  ab und deaktiviert transparentes Client-Reconnect. Der Runtime-SQL-Pfad hat
-  jetzt einen prozessweiten Pool mit harter Obergrenze (Standard 8; zulässig
-  1–64), Checkout-Healthchecks, begrenzter Wartezeit (Standard 10 s; zulässig
-  1–300) und verwirft Verbindungen nach Statementfehlern. Timeout- und
-  Pool-Integrationstests sind lokal gegen eine isolierte MariaDB 11.4 sowie im
-  [PR-CI-Lauf 37156746403](https://github.com/sf1976/zelyra/actions/runs/37156746403)
-  gegen MariaDB 10.11.19, 11.4.13, 11.8.9 und 12.3.3 geprüft.
-  Runtime- und CLI-Verbindungen unterstützen jetzt verifiziertes TLS: `auto`
-  verlangt geprüfte Zertifikatskette und Hostnamen für externe Hosts,
-  `required` erzwingt TLS und `disabled` schaltet es ausdrücklich ab. Eine
-  eigene CA-Datei ist unterstützt. Erfolgreicher Handshake, CLI-Inspektion und
-  Ablehnung einer nicht vertrauenswürdigen CA liefen lokal gegen MariaDB 11.4
-  und im PR-CI-Lauf 37161345832 gegen alle vier MariaDB-Matrixversionen.
-  Exportierte Docker-Module verwenden standardmäßig `auto`; nur die vollständige
-  lokale
-  Compose-Vorlage schaltet TLS für ihr isoliertes internes Datenbanknetz ab.
-  Schema-Inspektion/DDL verwenden weiterhin den CLI-Prozess;
-  Ergebnisübertragung ist nicht global begrenzt und automatische Retries gibt
-  es nicht. Windows-TLS wurde noch nicht separat geprüft. Nicht Teil von 0.3.0.
-  Antwortfristen und Health-Diagnostik bleiben offen.
-- [ ] Streaming großer Ergebnisse und begrenzter Speicherverbrauch.
-- [ ] N+1-Erkennung, Query-Plan-Hinweise, Slow-Query-Diagnostik und lokal
-  einsehbares, vom Anwendungsinhaber kontrolliertes Query-Monitoring.
-- [ ] Typisierte Relationen, Joins, Aggregate, Subqueries, CTEs, Unions und
-  datenbankspezifische Erweiterungen.
-- [ ] Read Replicas, Read/Write-Routing, Mandantentrennung und Umgebungen.
-- [?] Seed-, Fixture-, Snapshot- und anonymisierte Testdaten-Befehle.
-
-## 4. Views und Webdarstellung
-
-- [~] Das minimale und das Maschinenverwaltungs-Starterprojekt enthalten
-  responsive, gebrandete Rahmen mit kataloggebundenen deutschen/englischen
-  UI-Texten; das Maschinenverwaltungs-Starterprojekt ergänzt die Lernhilfe im
-  `learn`-Modus. Das Template `mariadb-crud` definiert jetzt umfassendere
-  Maschinen- und Bereichsdaten, lokalisierte CRUD-Listen, -Details, -Formulare
-  und Löschzustände, Kartenansichten sowie eine optionale, wiederholt
-  importierbare SQL-Fixture mit sechs fiktionalen Bereichen und 30 Maschinen.
-  Erzeugte CRUD-, eigenständige Formular-, Tableview-, Login-
-  und Authentifizierungsverwaltungsseiten erhalten jetzt ebenfalls diesen
-  responsiven Standardrahmen; explizite CRUD-Layouts haben Vorrang und selbst
-  verfasste Seiten werden nicht umgeschrieben. CRUD-, Formular-,
-  Authentifizierungs-, Validierungs- und Standard-HTTP-Fehlertexte nutzen
-  dieselben Sprachkataloge. Projektlokale Sprachkataloge können alle
-  kataloggebundenen generierten Beschriftungen einschließlich parametrisierter
-  Feldlabels ergänzen oder überschreiben sowie markierte View-/Texteinträge
-  bereitstellen; Geschäftsdaten und nicht markierte eigene Texte bleiben
-  unverändert. Projektlokale `zelyra.theme.css`-Überschreibungen für
-  Design-Tokens sind verfügbar; umfassender Theme-Austausch und weitere
-  Vorlagen bleiben offen.
-
-- [~] Benannte Views/Layout mit `view: Name`, einem validierten Default-
-  `<slot />`-Inhaltsslot und validierten benannten Slots mit Fallback-Inhalten.
-- [~] Typisierte View-Ausdrücke prüfen Identifier- und
-  Record-Feldinterpolationen, Seiten-Routenbindungen, Component-Properties
-  und dynamische Property-Typen. Option-aware Feld-Ausdrücke und reichere
-  View-Daten bleiben offen.
-- [~] Benannte Komponenten mit typisierten Properties sind verfügbar; typisierte
-  Events bleiben geplant.
-- [~] Deklarative MariaDB-`tableview`-Routen mit geprüften SQL-Quellen,
-  deklarierten Spalten, typisierten Filtern, Suche, Sortierung, Pagination,
-  URL-Zustand und Escaping sind für tabellen- und struct-basierte Ergebnistypen
-  verfügbar.
-- [~] Komponenten und benannte Views unterstützen Default- und benannte Slots,
-  sichere Fallback-Inhalte sowie verschachtelte Komposition. View-Layouts
-  prüfen deklarierte Slotnamen und ersetzen sie deterministisch ohne globalen
-  Zustand; View-Vererbung und reichere verschachtelte Szenarien bleiben offen.
-- [~] CRUD-Ressourcen können mit `layout: ViewName` einen geprüften benannten
-  View wiederverwenden. Der Default-Slot erhält erzeugte Listen, Details und
-  CRUD-Formulare, ohne SQL-, Validierungs-, CSRF-, Autorisierungs- oder
-  Escaping-Prüfungen zu umgehen; benannte Slots können pro Ressource mit
-  statischem, komponentengeprüftem Inhalt befüllt werden. Der erzeugte CRUD-
-  Inhalt bleibt auf den Default-Slot beschränkt; datensatzgebundener
-  Slot-Inhalt bleibt offen.
-- [~] View-lokales Laden unterstützt explizite, schema-geprüfte Abfragen für
-  einzelne Datensätze und Record-Collections mit `load name = sql<Type> { ... }`.
-  Array-Ergebnisse können mit typisierten
-  `for item in collection { ... }`-Blöcken gerendert werden.
-  Routenautorisierung, `Database`-Capability, Parameterbindung, generische
-  Fehlergrenzen und HTML-Escaping werden erzwungen; Option-aware Feld-Ausdrücke
-  und reichere View-Komposition bleiben geplant.
-- [~] Typisierte CRUD-Filteroperatoren (`eq`, Textsuche, Zahlenvergleiche und
-  NULL-Prüfungen) werden in sichere serverseitige SQL-Abfragen kompiliert.
-- [~] Erzeugte CRUD-Filtersteuerungen bewahren Operator- und Wertzustand in
-  URLs; deterministische Filterreihenfolge, semantische Fieldsets sowie
-  getrennte Operator-/Wertbeschriftungen sind verfügbar, weitergehende
-  Barrierefreiheitsverbesserungen bleiben offen.
-- [~] Die einheitliche typisierte View-Pipeline umfasst deklarative
-  `tableview`-Steuerungen, explizites seitenlokales Laden einzelner Datensätze
-  und typisierte Collection-Schleifen; Filter, Sortierung, Suche und Pagination
-  sind für deklarierte Seiten-Collections verfügbar, reichere Daten für
-  beliebige Views bleiben geplant.
-- [~] Seitenlokale typisierte Query-Eingaben (`input { search: String? }`) werden
-  geprüft, sicher an natives SQL gebunden, für HTML-Interpolationen verfügbar
-  gemacht und bei fehlenden Pflichtwerten oder ungültigen skalaren Werten mit
-  kontrolliertem HTTP 400 abgelehnt. Automatisch erzeugte Steuerungen decken
-  deklarierte Seiten-Collections ab; reine input-Seiten bleiben bewusst manuell.
-- [~] Seitenlokale Collection-Pagination über `paginated <size>` ist verfügbar.
-  Ein positiver URL-Wert `page` wird geprüft, als `UInt` bereitgestellt und als
-  parametrisierter `LIMIT`-/`OFFSET`-Wrapper angewendet; erzeugte Steuerungen
-  und sichere Gesamt-/Seitenzahlen sind für deklarierte Collections verfügbar.
-- [~] Seitenlokale Collection-Sortierung über `sort { field ... }` ist verfügbar.
-  Nur vom Compiler geprüfte Ergebnisfelder sowie `asc`/`desc` werden akzeptiert;
-  erzeugte Sortiersteuerungen bewahren den URL-Zustand.
-- [~] Seitenlokale Collection-Suche über `search { field ... }` ist verfügbar.
-  Suchbegriffe werden parametrisiert und mit serverseitigen `LIKE`-Bedingungen
-  auf compiler-geprüfte Felder angewendet; erzeugte Suchsteuerungen bewahren
-  den URL-Zustand.
-- [~] Seitenlokale typisierte Filter über `filter { field ... }` sind verfügbar.
-  Operatoren werden aus den deklarierten Ergebnistypen abgeleitet, Werte als
-  Parameter gebunden und unbekannte Felder oder nicht unterstützte Operatoren
-  abgelehnt; erzeugte Filtersteuerungen bewahren den URL-Zustand.
-- [ ] Zusammensetzbare Filterausdrücke mit typisierten Operatoren für
-  Datumswerte, Booleans, Beziehungen und Volltextsuche.
-- [ ] Wiederverwendbare Navigation, Tabellen, Formulare, Dialoge, Hinweise,
-  Pagination und Validierungsfehler-Komponenten.
-- [~] CRUD-View-Überschreibungen für Listen unterstützen sicher die Modi
-  `table`/`cards` und eine eigene Leerzustandsmeldung bei Erhalt der
-  generierten Abfrage-, Auth- und Aktionsprüfungen.
-- [~] Gemeinsame schema-basierte CRUD-View-Felder können erzeugte Liste,
-  Detailansicht und Create-/Edit-Formulare steuern; explizite Listenauswahl
-  bleibt eine lokale Überschreibung.
-- [~] CRUD-View-Überschreibungen für Details unterstützen sicher die Modi
-  `standard`/`cards` und eine eigene Überschrift bei Erhalt der generierten
-  Aktions-, CSRF-, Auth- und Escaping-Prüfungen.
-- [~] CRUD-View-Überschreibungen für Formulare unterstützen sicher die Modi
-  `standard`/`cards` sowie eigene Überschriften und Absende-Beschriftungen bei
-  Erhalt der Validierungs-, CSRF-, Parameter- und Berechtigungsprüfungen.
-- [~] CRUD-View-Überschreibungen für Löschbestätigungen unterstützen eigene
-  Überschriften, Warnungen und Absende-Beschriftungen bei Erhalt der POST-only-,
-  CSRF- und Berechtigungsprüfungen.
-- [~] CRUD-Lademetadaten und konfigurierbare Fehleransichten erhalten Escaping
-  und generische Datenbankfehlergrenzen; eine clientseitige Ladeanzeige bleibt
-  offen.
-- [~] Eigene CRUD-Aktionen können parametrisiertes, POST-only-Geschäfts-SQL mit
-  CSRF-, Datenbank-Capability-, Authentifizierungs- und Berechtigungsprüfung
-  ausführen; eigene Beschriftungen und Browser-Bestätigungen sind verfügbar,
-  aktionsspezifische Views bleiben offen.
-- [~] Ein erstes Design-Token-System stellt Farben, Schriftfamilie, Karten- und
-  Steuerungsrundung sowie Inhaltsbreite bereit; Abstände, Breakpoints, Dichte
-  und die Abdeckung weiterer Komponenten bleiben offen.
-- [~] Optionale projektlokale `zelyra.theme.css` wird nach dem eingebauten
-  Design geladen, auf 128 KiB begrenzt und von erzeugten Dockerfiles kopiert.
-  Eine vollständige Theme-Engine/-Erstellung, Dark Mode, eingebaute
-  Designvarianten und eine benutzerwählbare Darstellung bleiben offen.
-- [ ] Scoped CSS, Asset-Pipeline, Cache-Busting, statische Dateien und CSP.
-- [~] Responsive erzeugte Rahmen, beschriftete Navigation, sichtbare
-  Tastaturfokusse und ein lokalisierter Sprunglink sind implementiert; eine
-  breitere semantische/ARIA-Prüfung und automatische Accessibility-Tests
-  bleiben offen.
-- [ ] Lokalisierung, Pluralisierung, Zeitzonen-/Locale-Formatierung und RTL.
-- [ ] Sicherer Raw-HTML-Escape-Hatch mit Diagnostik und Review-Markierung.
-- [ ] Progressive Enhancement: zuerst servergerendertes HTML, danach optional
-  Client-State und Hydration.
-- [ ] WebSocket-/SSE-Unterstützung und typisierte Client-Server-Events.
-- [~] Browser-Integrationstests decken jetzt MariaDB-basierte struct-Tableviews
-  ab; View-Snapshots und deterministische Rendering-Tests bleiben geplant.
-- [?] Optionale weitere Renderer (E-Mail, PDF, Text, Desktop).
-
-## 5. Formulare, CRUD und Businessanwendungen
-
-- [ ] Verschachtelte Formulare, wiederholbare Felder, Uploads, mehrstufige
-  Workflows und bedingte Felder.
-- [ ] Cross-Field- und datenbankgestützte Validierung mit klaren Transaktionen.
-- [ ] Optimistic Locking und konfliktbewusstes Bearbeiten.
-- [ ] Bulk-Aktionen, Im-/Export, gespeicherte Suchen, Spaltenpräferenzen und
-  serverseitige Reports.
-- [~] Eigene Aktionsbeschriftungen und Browser-Bestätigungen sind verfügbar.
-- [x] Typisierte Eingaben eigener Aktionen verwenden normale
-  Formularvalidierung und Parameterbindung; Beziehungsfelder werden als
-  geprüfte, MariaDB-gestützte Auswahlfelder dargestellt.
-- [x] Eigene Aktions-Icons und escaped Erfolgsmeldungen sind verfügbar.
-- [x] Serverseitige `confirm_page`-Ansichten mit frischer
-  CSRF-geschützter POST-Bestätigung sind verfügbar.
-- [x] Strukturierte `success_page`-Meldungen und sichere
-  aktionsspezifische `error_page`-Antworten sind verfügbar.
-- [x] Reversibles CRUD-Soft-Delete mit Archivlisten und CSRF-geschützten
-  Wiederherstellungsaktionen.
-- [x] Audit-fähige CRUD-Ereignisse für Erstellen/Ändern/Löschen/Archivieren/
-  Wiederherstellen und eigene Aktionen mit Feldänderungen und Redaction
-  sensibler Werte.
-- [ ] Endgültiges Bereinigen, Aufbewahrungsregeln, Archivexport und
-  Massenarchivierungs-Workflows.
-- [ ] Audit-fähige CRUD-Historie und Feldänderungs-Diffs.
-- [ ] Hintergrundjobs, geplante Tasks, Retries und transaktionale Outbox.
-- [ ] Benachrichtigungen, E-Mail-Vorlagen, SMTP und Provider-Abstraktion.
-- [ ] Grundbausteine für Multi-Tenancy und mandantenbewusste Autorisierung.
-
-## 6. Authentifizierung, Autorisierung und Audit
-
-- [x] Passwort-Login, persistente Sessions, CSRF, Account-Aktivierung und
-  Schutz des letzten Administrators.
-- [🧪] Auth-Definitionen können prozesslokale Fehlerfenster und Sperrdauern für
-  Login und Passwort-Reset konfigurieren. Dauerhafte oder verteilte
-  Ratenbegrenzungen bleiben offen.
-- [x] Direkte und rollenbasierte Berechtigungen.
-- [x] Browserverwaltung und CLI-Rollenverwaltung.
-- [x] Audit-Anzeige, begrenzter Export, strukturelle Prüfung und sicheres
-  Bereinigen.
-- [x] Kryptografisch verkettete Audit-Einträge mit dokumentiertem SHA-256-
-  Hashformat, kanonischer Serialisierung und transaktionsgesichertem Append.
-- [~] `audit verify` erkennt gebrochene Verbindungen und ungültige Entry-Hashes;
-  genaue Positionen des ersten Fehlers und unabhängige Diagnosen bleiben offen.
-- [ ] Unveränderliche bzw. Append-only-Datenbankrechte für Audit-Tabellen.
-- [ ] Konfigurierbare Aufbewahrung, geplantes Bereinigen und Archivexport.
-- [ ] Verschlüsselte Archive, Schlüsselrotation, Restore-Prüfung und Offline-
-  Integritätsprüfung.
-- [ ] Ausdrückliche, anwenderkontrollierte Audit-Exporte an Ziele wie Syslog,
-  Object Storage oder SIEM mit Zustellstatus und Retries; Nutzungs-Telemetrie
-  und versteckte externe Erfassung sind ausgeschlossen.
-- [🧪] Passwort-Reset und Sitzungsverwaltung sind im unveröffentlichten 0.4
-  teilweise umgesetzt. Eine verschlüsselte Datenbank-Outbox versucht nach
-  SMTP-Ausfall und Prozessneustart erneut; die mindestens einmalige Zustellung
-  kann nach einem Absturz vor Bestätigung Duplikate erzeugen. Persistente
-  Reset-Limits, Gerätemetadaten, MFA/WebAuthn und Login-Benachrichtigungen
-  bleiben offen.
-- [ ] Feingranulare Policy-Ausdrücke, Policy-Tests und Erklärungen effektiver
-  Berechtigungen.
-- [ ] Security Review, Threat Model, Dependency Audit und Penetrationstests.
-
-## 7. APIs und Integration
-
-- [x] Typisierte API-Routen, Request-Validierung, JSON, OpenAPI und TypeScript-
-  Clientgenerierung.
-- [x] Typisierte Maps mit String-Schlüsseln werden an der API-Grenze geprüft
-  und konsistent in JSON, OpenAPI und erzeugten TypeScript-Clients dargestellt.
-- [🧪] API-Request-IDs sowie Versions-, Deprecation- und prozesslokale
-  Kontingentmetadaten je Route sind im unveröffentlichten 0.4-Entwicklungsstand
-  umgesetzt. Kontingente nutzen die TCP-Peer-IP, eine begrenzte
-  In-Memory-Clienttabelle und keine vertrauten Forwarded-IP-Header; sie werden
-  beim Neustart zurückgesetzt. Persistente/verteilte Kontingente, Reset-Limits
-  und Kompatibilitätsnachweise bleiben offen. Login-Limits sind pro
-  Auth-Definition konfigurierbar; ihre In-Memory-Tabelle ist auf 4096 Schlüssel
-  begrenzt und lehnt neue Schlüssel bei voller Tabelle ab.
-- [ ] API Keys, OAuth2/OIDC und Service Accounts.
-- [ ] Webhooks, signierte Callbacks, Idempotency Keys und retry-sichere Handler.
-- [ ] GraphQL oder eine andere Query-API nur bei Erhalt der Zelyra-Typ- und
-  Capability-Garantien.
-- [ ] Weitere SDKs bei nachgewiesenem Bedarf.
-
-## 8. Verifikation, Nebenläufigkeit und Performance
-
-- [ ] Vollständigere Contracts für Collections, Records, Fehler und
-  datenbankunabhängige Geschäftsregeln.
-- [ ] Cache für Beweisergebnisse und explizite vertrauenswürdige Annahmen.
-- [ ] SMT-/SMT-LIB-Integration sowie Diagnose für Solver-Ressourcen und
-  Timeouts.
-- [~] Klare Trennung von `PROVEN`, `RUNTIME_CHECK`, `UNPROVEN` und `FAILED` ist
-  in CLI und Dokumentation vorhanden; IDE-Integration bleibt geplant.
-- [ ] Abbruch, Timeouts, Supervision und DB-Pool-Integration für Structured
-  Concurrency.
-- [ ] Regeln für Shared State, Channels, Actors und Race-Tests.
-- [ ] Benchmark-Suite für Compilezeit, Startup, Routing, SQL, Forms, CRUD und
-  Speicherverbrauch.
-- [ ] Lokales, ausdrücklich aktiviertes Profiling und Diagnostik ohne
-  versteckte Erfassung oder automatische externe Telemetrie.
-- [?] CP-SAT-, MILP- und SMT-Optimierung mit reproduzierbaren Solverinputs
-  und begrenzter Laufzeit.
-
-## 9. Qualität, Betrieb und Governance
-
-- [ ] Vollständige Integrationsmatrix für OS, Datenbanken, Browser und Runtime.
-- [~] Begrenzte deterministische Mutationsregressionen prüfen Lexer/Parser,
-  SQL-Binder, Template-Renderer und HTTP-Parser im normalen CI-Lauf (2.048
-  Eingaben je Pfad). Coverage-guided-Fuzzing fand einen Parser-Stack-Overflow;
-  rekursive Parser-Aufrufe haben nun eine 32-Frame-Grenze mit Diagnose,
-  gezielte Regressionen und einen aufbewahrten Crash-Seed. Vier lokale 60-Sekunden-Läufe bestanden
-  danach; der 15-Sekunden-CI-Lauf auf dem korrigierten Stand steht noch aus.
-- [~] Security-Regressionstests und Dependency-/Lizenzprüfung laufen in CI.
-  Die Abdeckung umfasst Secret-Redaction, Netzwerk-Capabilities,
-  CSRF-/Origin-/Host-Grenzen, Traversal- und Duplikatprüfung von Release-
-  Archiven, Prüfsummenvalidierung und atomaren Updater-Austausch. Ein eigener
-  Regressionstest gegen ungefragte Netzwerk-/Telemetrieaktivität und eine
-  unabhängige Sicherheitsprüfung bleiben offen.
-- [ ] Regressionstest gegen ungefragte Netzwerk- oder Telemetrieaktivität;
-  explizite Netzwerk-Capabilities der Anwendung und benutzerinitiierte
-  Update- oder Installationsbefehle müssen klar getrennt bleiben.
+  Host-Port-Be…6710 tokens truncated…Update- oder Installationsbefehle müssen klar getrennt bleiben.
 - [ ] Reproduzierbare Releases, SBOMs, Provenance-Nachweise und signierte Artefakte.
 - [x] Release-Artefakte für Linux und Windows können bei relevanten Pull
   Requests und manuell ohne Veröffentlichung gebaut werden; veröffentlicht
@@ -818,7 +409,8 @@ Das stabile `v0.4.0` ist veröffentlicht und die Artefakte wurden technisch
 geprüft. Der [Releaseplan 0.4.0](release-plans/0.4.0.de.md) bleibt dennoch
 offen: Die unabhängige menschliche Einsteigerabnahme wurde zuerst auf 0.5.0
 verschoben und ist durch die neuere Entscheidung des Projektverantwortlichen
-nun für 1.0.0 vorgesehen. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung mit dem veröffentlichten
+auf 1.0.0 verschoben. Sie wurde nicht durchgeführt. Eine manuelle Rückmeldung
+mit dem veröffentlichten
 0.4.0-CLI deckte außerdem eine falsche absolute Pfadangabe bei `setup` sowie
 unklare Erwartungen an `setup` für minimale `init`-Projekte auf. Die Diagnose
 und Dokumentation wurden für die 0.5.0-Vorbereitung korrigiert und Regressionen
@@ -827,26 +419,18 @@ nicht. Details und Grenzen stehen im zweisprachigen 0.5.0-
 [Studienprotokoll](release-readiness/0.5.0-onboarding-study.de.md). Es ist kein
 Nachweis menschlicher Abnahme.
 
-## Vorgeschlagener Release-Meilenstein 0.5.0
+## Release-Meilenstein 0.5.0 (veröffentlicht)
 
-Der zweisprachige [0.5.0-Roadmapplan](release-plans/0.5.0.de.md) führt die
-offene 0.4.0-Abnahme und deren Rückmeldungen weiter; er ist keine
-Releasezusage. Voraussetzung sind das finale 0.3.0-Release und die
-veröffentlichte 0.4.0-Basis. Der eingegrenzte
-0.5.0-Kandidat bietet experimentelle Docker-Bundles für eine statisch erkannte
-Teilmenge mit getrennten Schemas und Datenbankkonten mit minimalen Rechten.
-Vollständige Abhängigkeits-/Effektauflösung, gemeinsames Schemaeigentum und ein
-wiederverwendbares Mehrverbindungs-Datenbankmodul sind ausdrücklich vertagt.
-Bundles melden weiterhin eine unvollständige Schließung und erfordern eine
-Betreiberprüfung; Produktionsreife oder PostgreSQL-Runtime-Parität wird nicht
-behauptet.
-Die eingegrenzte Implementierung und die technischen Gates bestanden auf
-Kandidaten-Stand `56b2adcb` (CI 566 und Paketprüfung 276). Vor dem stabilen
-`v0.5.0` sind weiterhin ein veröffentlichter, unveränderlicher RC und dessen
-Installations-/Update-/Rollback-Probe erforderlich. Auf ausdrückliche
-Entscheidung des Projektverantwortlichen ist für 0.5.0 keine menschliche Studie
-erforderlich; alle unabhängigen menschlichen Abnahmen sind ein verpflichtendes
-Gate für 1.0.0.
+Das stabile `v0.5.0` ist auf Commit `6c0c0e6` veröffentlicht. Es liefert
+experimentelle Docker-Bundles für eine statisch erkannte Teilmenge,
+getrennte Schemas und Datenbankkonten mit minimalen Rechten sowie einen
+modularen Kunden-/Auftragsablauf. Vollständige Abhängigkeits-/Effektauflösung,
+gemeinsames Schemaeigentum und ein wiederverwendbares Mehrverbindungs-
+Datenbankmodul sind nicht enthalten. Die technischen Release-Gates,
+Artefaktprüfungen und der Installations-/Update-/Rollback-Smoke bestanden.
+Menschliche Abnahme fand nicht statt und ist auf 1.0.0 verschoben. Siehe
+[Release-Notizen](release-notes/0.5.0.de.md) und
+[Verifikationsnachweis](release-readiness/0.5.0-candidate-verification.md).
 
 - [🧪] Im unveröffentlichten 0.4-Zweig erzeugt `zelyra module bundle` nun auf
   Wunsch ein commit-gepinntes Dockerfile, eine Compose-App und ein
@@ -916,9 +500,33 @@ Gate für 1.0.0.
   wegwerfbare MariaDB-11-Fixture begrenzt; vollständige Modulschließung und
   Schemaeigentumsdurchsetzung bleiben offen.
 
-## Großer Release-Meilenstein 1.0.0
+## Vorgeschlagener Release-Meilenstein 0.6.0
 
-`v1.0.0` ist die erste große Veröffentlichung und das verpflichtende Ziel für
+Die eingegrenzte [0.6.0-Roadmap](release-plans/0.6.0.de.md) ergänzt einen
+nativen, gepoolten PostgreSQL-16-Pfad für direkte SQL-Abfragen mit begrenzten
+Parametertypen und Transaktionen. Vollständige PostgreSQL-Parität und
+generierte Web-/CRUD-Unterstützung werden nicht versprochen. Ergänzt werden
+eine deterministische Routenübersicht samt Kollisionsfehlern sowie
+`zelyra db map`: eine schreibgeschützte Zuordnung von Tabellen und
+Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
+Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
+Die menschliche Abnahme ist auf 1.0.0 verschoben und keine Voraussetzung für
+0.6.0.
+
+Nach 0.6 sind ein echter MySQL-Serverpfad, begrenzter Mandantenkontext,
+lokales Entwicklungsstudio und das Rechnungstutorial in 0.7 geplant. 0.8
+ergänzt dauerhafte Aufgaben, Outbox, kontrollierte Studio-Bearbeitung und
+Textänderungen mit benannten Regex-Mustern, Vorschau und ausdrücklichem
+Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und PostgreSQL und kann
+optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert Funktionen ein;
+danach bleiben bis zur ersten produktiven Version 1.0.0 nur die unabhängigen
+menschlichen Abnahmetests. Vollständige SQL-Parität,
+allgemeine visuelle Bearbeitung, beliebige Client-Hydration, Compiler-
+Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
+Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
+## Erste produktive Veröffentlichung 1.0.0
+
+`v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für
 alle unabhängigen menschlichen Einsteiger- und Abnahmestudien, die aus 0.3.0,
 0.4.0 und 0.5.0 verschoben wurden. Kein früheres Release darf behaupten, diese
 Studien seien abgeschlossen. Vor dem stabilen `v1.0.0` muss nach bestandenen

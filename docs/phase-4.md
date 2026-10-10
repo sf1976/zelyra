@@ -91,6 +91,10 @@ transaction. An error prevents the commit.
 SQL query checking and MariaDB interpreter execution are integrated. SELECT
 results are currently returned as a typed row collection whose values are
 strings; full deserialization into domain-specific Zelyra records follows.
-SQLite and PostgreSQL runtime adapters are not wired yet. Complex SQL
-expressions will be expanded incrementally; the original SQL remains
-available and is not rewritten into an ORM chain.
+On the 0.6.0 development branch, direct SQL and transaction batches also
+dispatch to an experimental pooled PostgreSQL adapter. It currently supports
+only a bounded scalar result subset and has local PostgreSQL 16 integration
+evidence; generated web/CRUD paths and CI verification remain open. SQLite
+runtime support is not wired. Complex SQL expressions will be expanded
+incrementally; the original SQL remains available and is not rewritten into an
+ORM chain.

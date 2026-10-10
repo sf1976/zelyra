@@ -1,6 +1,12 @@
 use mysql::prelude::Queryable;
 use mysql::{Conn, OptsBuilder, SslOpts, Value};
 use r2d2::{ManageConnection, Pool};
+use r2d2_postgres::postgres::config::{Host as PostgresHost, SslMode};
+use r2d2_postgres::postgres::{
+    types::{ToSql as PostgresToSql, Type as PostgresType},
+    Client as PostgresClient, Config as PostgresConfig, NoTls,
+};
+use r2d2_postgres::PostgresConnectionManager;
 use sha2::{Digest, Sha256};
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
@@ -9,6 +15,7 @@ use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use zelyra_ast::*;
@@ -2322,6 +2329,247 @@ pub fn execute_mariadb_query(
     Ok(results.pop().unwrap_or_default())
 }
 
+/// Executes one parameterized PostgreSQL query using the process-wide pool.
+/// Boolean, integer, floating-point, and text results are returned as strings
+/// to match the existing MariaDB query API. Other result types are rejected.
+pub fn execute_postgres_query(
+    database_url: &str,
+    sql: &str,
+    params: Vec<(String, QueryValue)>,
+) -> Result<QueryResult, DatabaseError> {
+    let query = Query {
+        sql: sql.into(),
+        params,
+    };
+    let (sql, params) = prepare_postgres_query(&query)?;
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    execute_postgres_batch(database_url, settings, tls, &[(sql, params)], false)
+        .map(|mut results| results.pop().unwrap_or_default())
+}
+
+/// Executes a PostgreSQL batch on one connection. When `transaction` is true,
+/// the batch is committed only after all statements succeed.
+pub fn execute_postgres_queries(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let prepared = queries
+        .iter()
+        .map(prepare_postgres_query)
+        .collect::<Result<Vec<_>, _>>()?;
+    if prepared.is_empty() && !transaction {
+        return Ok(Vec::new());
+    }
+    let settings = MariaDbTimeouts::from_env()?;
+    let tls = MariaDbTlsSettings::from_env()?;
+    execute_postgres_batch(database_url, settings, tls, &prepared, transaction)
+}
+
+fn execute_postgres_batch(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
+    prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    let pool = postgres_pool(database_url, settings, tls)?;
+    let pool_wait = postgres_pool_wait_timeout(settings)?;
+    match &pool {
+        PostgresPool::Plain(pool) => {
+            let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
+            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
+        }
+        PostgresPool::Tls(pool) => {
+            let mut client = pool.get_timeout(pool_wait).map_err(postgres_pool_error)?;
+            execute_postgres_prepared_batch(&mut client, settings, prepared, transaction)
+        }
+    }
+}
+
+fn postgres_pool_wait_timeout(settings: MariaDbTimeouts) -> Result<Duration, DatabaseError> {
+    let configured = Duration::from_secs(u64::from(settings.pool_wait_seconds));
+    remaining_query_budget()
+        .map(|budget| budget.map_or(configured, |remaining| configured.min(remaining)))
+}
+
+fn postgres_statement_timeout_millis(settings: MariaDbTimeouts) -> Result<u32, DatabaseError> {
+    let configured = settings.query_seconds.saturating_mul(1000);
+    let Some(remaining) = remaining_query_budget()? else {
+        return Ok(configured);
+    };
+    let remaining_millis = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
+    let timeout = configured.min(remaining_millis);
+    if timeout == 0 {
+        return Err(DatabaseError {
+            message: "request deadline exceeded before database statement".into(),
+        });
+    }
+    Ok(timeout)
+}
+
+fn execute_postgres_prepared_batch(
+    client: &mut PostgresClient,
+    settings: MariaDbTimeouts,
+    prepared: &[(String, Vec<Box<dyn PostgresToSql + Sync>>)],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    if transaction {
+        client
+            .batch_execute("BEGIN")
+            .map_err(postgres_driver_error)?;
+    }
+    let mut results = Vec::with_capacity(prepared.len());
+    for (sql, params) in prepared {
+        let timeout_millis = match postgres_statement_timeout_millis(settings) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                if transaction {
+                    let _ = client.batch_execute("ROLLBACK");
+                }
+                return Err(error);
+            }
+        };
+        if let Err(error) =
+            client.batch_execute(&format!("SET statement_timeout = {timeout_millis}"))
+        {
+            if transaction {
+                let _ = client.batch_execute("ROLLBACK");
+            }
+            return Err(postgres_driver_error(error));
+        }
+        match execute_prepared_postgres_query(&mut *client, sql, params) {
+            Ok(result) => results.push(result),
+            Err(error) => {
+                if transaction {
+                    let _ = client.batch_execute("ROLLBACK");
+                }
+                return Err(error);
+            }
+        }
+    }
+    if transaction {
+        client
+            .batch_execute("COMMIT")
+            .map_err(postgres_driver_error)?;
+    }
+    Ok(results)
+}
+
+fn prepare_postgres_query(
+    query: &Query,
+) -> Result<(String, Vec<Box<dyn PostgresToSql + Sync>>), DatabaseError> {
+    let (postgres_sql, parameter_order) = bind_named_parameters_for(&query.sql, true)?;
+    let parameters = parameter_order
+        .iter()
+        .map(|parameter_name| {
+            query
+                .params
+                .iter()
+                .find(|(name, _)| name == parameter_name)
+                .map(|(_, value)| postgres_parameter_value(value))
+                .ok_or_else(|| DatabaseError {
+                    message: format!("missing SQL parameter `:{parameter_name}`"),
+                })
+                .and_then(|value| value)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((postgres_sql, parameters))
+}
+
+fn postgres_parameter_value(
+    value: &QueryValue,
+) -> Result<Box<dyn PostgresToSql + Sync>, DatabaseError> {
+    match value {
+        QueryValue::Null => Ok(Box::new(Option::<String>::None)),
+        QueryValue::Int(value) => Ok(Box::new(*value)),
+        QueryValue::UInt(value) => i64::try_from(*value)
+            .map(|value| Box::new(value) as Box<dyn PostgresToSql + Sync>)
+            .map_err(|_| DatabaseError {
+                message: "PostgreSQL integer parameters cannot exceed 9223372036854775807 in this runtime slice".into(),
+            }),
+        QueryValue::Float(value) if value.is_finite() => Ok(Box::new(*value)),
+        QueryValue::Float(_) => Err(DatabaseError {
+            message: "PostgreSQL floating-point parameters must be finite".into(),
+        }),
+        QueryValue::Bool(value) => Ok(Box::new(*value)),
+        QueryValue::String(value) => Ok(Box::new(value.clone())),
+    }
+}
+
+fn execute_prepared_postgres_query(
+    client: &mut PostgresClient,
+    sql: &str,
+    params: &[Box<dyn PostgresToSql + Sync>],
+) -> Result<QueryResult, DatabaseError> {
+    let params = params
+        .iter()
+        .map(|parameter| parameter.as_ref() as &(dyn PostgresToSql + Sync))
+        .collect::<Vec<_>>();
+    let statement = client.prepare(sql).map_err(postgres_driver_error)?;
+    if !statement.columns().is_empty() {
+        let columns = statement
+            .columns()
+            .iter()
+            .map(|column| column.name().to_owned())
+            .collect();
+        let rows = client
+            .query(&statement, &params)
+            .map_err(postgres_driver_error)?;
+        let rows = rows
+            .iter()
+            .map(postgres_row_strings)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(QueryResult { columns, rows })
+    } else {
+        client
+            .execute(&statement, &params)
+            .map_err(postgres_driver_error)?;
+        Ok(QueryResult::default())
+    }
+}
+
+fn postgres_row_strings(row: &r2d2_postgres::postgres::Row) -> Result<Vec<String>, DatabaseError> {
+    row.columns()
+        .iter()
+        .enumerate()
+        .map(|(index, column)| {
+            macro_rules! value {
+                ($type:ty) => {
+                    row.try_get::<_, Option<$type>>(index)
+                        .map(|value| value.map(|value| value.to_string()).unwrap_or_else(|| "\\N".into()))
+                        .map_err(postgres_driver_error)
+                };
+            }
+            match *column.type_() {
+                PostgresType::BOOL => value!(bool),
+                PostgresType::INT2 => value!(i16),
+                PostgresType::INT4 => value!(i32),
+                PostgresType::INT8 => value!(i64),
+                PostgresType::FLOAT4 => value!(f32),
+                PostgresType::FLOAT8 => value!(f64),
+                PostgresType::TEXT | PostgresType::VARCHAR | PostgresType::BPCHAR | PostgresType::NAME => value!(String),
+                _ => Err(DatabaseError {
+                    message: format!("PostgreSQL result type `{}` is not supported by the bounded runtime query API", column.type_()),
+                }),
+            }
+        })
+        .collect()
+}
+
+fn postgres_driver_error(error: impl std::fmt::Display) -> DatabaseError {
+    DatabaseError {
+        message: error.to_string(),
+    }
+}
+
+fn postgres_pool_error(error: r2d2::Error) -> DatabaseError {
+    DatabaseError {
+        message: format!("could not acquire a PostgreSQL connection: {error}"),
+    }
+}
+
 pub fn execute_mariadb_queries(
     database_url: &str,
     queries: &[Query],
@@ -2333,6 +2581,38 @@ pub fn execute_mariadb_queries(
     } else {
         Ok(results)
     }
+}
+
+/// Executes a query using the database engine selected by the connection URL.
+/// PostgreSQL support is currently limited to the types and SQL subset accepted
+/// by [`execute_postgres_query`]; all other URLs retain MariaDB behavior.
+pub fn execute_query(
+    database_url: &str,
+    sql: &str,
+    params: Vec<(String, QueryValue)>,
+) -> Result<QueryResult, DatabaseError> {
+    if is_postgres_url(database_url) {
+        execute_postgres_query(database_url, sql, params)
+    } else {
+        execute_mariadb_query(database_url, sql, params)
+    }
+}
+
+/// Executes a statement batch using the engine selected by the connection URL.
+pub fn execute_queries(
+    database_url: &str,
+    queries: &[Query],
+    transaction: bool,
+) -> Result<Vec<QueryResult>, DatabaseError> {
+    if is_postgres_url(database_url) {
+        execute_postgres_queries(database_url, queries, transaction)
+    } else {
+        execute_mariadb_queries(database_url, queries, transaction)
+    }
+}
+
+fn is_postgres_url(database_url: &str) -> bool {
+    database_url.starts_with("postgres://") || database_url.starts_with("postgresql://")
 }
 
 /// Executes a batch and returns each query result, including when the batch is
@@ -2582,11 +2862,21 @@ fn mariadb_driver_error(error: mysql::Error) -> DatabaseError {
 }
 
 fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseError> {
+    bind_named_parameters_for(sql, false)
+}
+
+fn bind_named_parameters_for(
+    sql: &str,
+    postgres: bool,
+) -> Result<(String, Vec<String>), DatabaseError> {
     let bytes = sql.as_bytes();
     let mut bound = String::with_capacity(sql.len());
     let mut parameters = Vec::new();
     let mut index = 0;
     let mut quote = None;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    let mut dollar_quote: Option<Vec<u8>> = None;
     while index < bytes.len() {
         let byte = bytes[index];
         if byte >= 0x80 {
@@ -2595,8 +2885,49 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
             index += character.len_utf8();
             continue;
         }
+        if line_comment {
+            bound.push(byte as char);
+            index += 1;
+            if byte == b'\n' {
+                line_comment = false;
+            }
+            continue;
+        }
+        if block_comment {
+            bound.push(byte as char);
+            if byte == b'*' && bytes.get(index + 1) == Some(&b'/') {
+                bound.push('/');
+                index += 2;
+                block_comment = false;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+        if let Some(delimiter) = &dollar_quote {
+            if bytes[index..].starts_with(delimiter) {
+                bound.push_str(std::str::from_utf8(delimiter).unwrap_or("$$"));
+                index += delimiter.len();
+                dollar_quote = None;
+            } else {
+                bound.push(byte as char);
+                index += 1;
+            }
+            continue;
+        }
         if let Some(active_quote) = quote {
             bound.push(byte as char);
+            if byte == b'\\' && (active_quote == b'\'' || active_quote == b'"') {
+                if let Some(next) = bytes.get(index + 1) {
+                    if next.is_ascii() {
+                        bound.push(*next as char);
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
+                    continue;
+                }
+            }
             if byte == active_quote {
                 if bytes.get(index + 1) == Some(&active_quote) {
                     bound.push(active_quote as char);
@@ -2608,10 +2939,35 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
             index += 1;
             continue;
         }
-        if byte == b'\'' || byte == b'"' {
+        if postgres && byte == b'$' {
+            let mut end = index + 1;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if bytes.get(end) == Some(&b'$') {
+                let delimiter = bytes[index..=end].to_vec();
+                bound.push_str(std::str::from_utf8(&delimiter).unwrap_or("$$"));
+                dollar_quote = Some(delimiter);
+                index = end + 1;
+                continue;
+            }
+        }
+        if byte == b'\'' || byte == b'"' || byte == b'`' {
             quote = Some(byte);
             bound.push(byte as char);
             index += 1;
+            continue;
+        }
+        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            bound.push_str("--");
+            index += 2;
+            line_comment = true;
+            continue;
+        }
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            bound.push_str("/*");
+            index += 2;
+            block_comment = true;
             continue;
         }
         if byte == b':' {
@@ -2620,14 +2976,22 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
             while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
                 end += 1;
             }
-            if end == start {
-                return Err(DatabaseError {
-                    message: "SQL contains a colon without a parameter name".into(),
-                });
+            if end == start
+                || bytes.get(start) == Some(&b':')
+                || bytes.get(index.wrapping_sub(1)) == Some(&b':')
+            {
+                bound.push(':');
+                index += 1;
+                continue;
             }
             let name = sql[start..end].to_owned();
             parameters.push(name);
-            bound.push('?');
+            if postgres {
+                bound.push('$');
+                bound.push_str(&parameters.len().to_string());
+            } else {
+                bound.push('?');
+            }
             index = end;
             continue;
         }
@@ -2635,6 +2999,11 @@ fn bind_named_parameters(sql: &str) -> Result<(String, Vec<String>), DatabaseErr
         index += 1;
     }
     Ok((bound, parameters))
+}
+
+/// Returns named SQL parameters while ignoring quoted text, comments, and casts.
+pub fn sql_parameter_names(sql: &str) -> Result<Vec<String>, DatabaseError> {
+    bind_named_parameters_for(sql, true).map(|(_, names)| names)
 }
 
 /// Exposes the named-parameter scanner only to the dedicated fuzz target.
@@ -2855,6 +3224,149 @@ impl MariaDbPoolRegistry {
 }
 
 static MARIADB_POOLS: OnceLock<Mutex<MariaDbPoolRegistry>> = OnceLock::new();
+
+type PostgresPlainPool = Pool<PostgresConnectionManager<NoTls>>;
+type PostgresTlsPool = Pool<PostgresConnectionManager<tokio_postgres_rustls::MakeRustlsConnect>>;
+
+#[derive(Clone)]
+enum PostgresPool {
+    Plain(PostgresPlainPool),
+    Tls(PostgresTlsPool),
+}
+
+struct PostgresPoolEntry {
+    settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
+    pool: PostgresPool,
+}
+
+#[derive(Default)]
+struct PostgresPoolRegistry {
+    entries: HashMap<[u8; 32], PostgresPoolEntry>,
+}
+
+impl PostgresPoolRegistry {
+    fn get_or_build(
+        &mut self,
+        database_url: &str,
+        settings: MariaDbTimeouts,
+        tls: MariaDbTlsSettings,
+    ) -> Result<PostgresPool, DatabaseError> {
+        let fingerprint: [u8; 32] = Sha256::digest(database_url.as_bytes()).into();
+        if let Some(entry) = self.entries.get(&fingerprint) {
+            if entry.settings != settings || entry.tls != tls {
+                return Err(DatabaseError {
+                    message: "PostgreSQL pool settings changed while the process is running; restart the process to apply them".into(),
+                });
+            }
+            return Ok(entry.pool.clone());
+        }
+        if self.entries.len() >= MARIADB_MAX_CACHED_POOLS {
+            return Err(DatabaseError {
+                message: format!("this process already owns the maximum number of distinct PostgreSQL pools ({MARIADB_MAX_CACHED_POOLS})"),
+            });
+        }
+        let pool = build_postgres_pool(database_url, settings, &tls)?;
+        self.entries.insert(
+            fingerprint,
+            PostgresPoolEntry {
+                settings,
+                tls,
+                pool: pool.clone(),
+            },
+        );
+        Ok(pool)
+    }
+}
+
+static POSTGRES_POOLS: OnceLock<Mutex<PostgresPoolRegistry>> = OnceLock::new();
+
+fn postgres_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+    tls: MariaDbTlsSettings,
+) -> Result<PostgresPool, DatabaseError> {
+    let registry = POSTGRES_POOLS.get_or_init(|| Mutex::new(PostgresPoolRegistry::default()));
+    let mut registry = registry.lock().map_err(|_| DatabaseError {
+        message: "PostgreSQL connection-pool state is unavailable".into(),
+    })?;
+    registry.get_or_build(database_url, settings, tls)
+}
+
+fn build_postgres_pool(
+    database_url: &str,
+    settings: MariaDbTimeouts,
+    tls: &MariaDbTlsSettings,
+) -> Result<PostgresPool, DatabaseError> {
+    let mut config = PostgresConfig::from_str(database_url).map_err(postgres_driver_error)?;
+    if config.get_hosts().is_empty() {
+        return Err(DatabaseError {
+            message: "PostgreSQL DATABASE_URL must include a host".into(),
+        });
+    }
+    config.connect_timeout(Duration::from_secs(u64::from(settings.connect_seconds)));
+    let use_tls = tls.mode == MariaDbTlsMode::Required
+        || (tls.mode == MariaDbTlsMode::Auto
+            && (tls.ca_cert_file.is_some()
+                || config.get_hosts().iter().any(|host| match host {
+                    PostgresHost::Tcp(host) => !is_local_database_host(host),
+                    #[cfg(unix)]
+                    PostgresHost::Unix(_) => false,
+                })));
+    if !use_tls {
+        config.ssl_mode(SslMode::Disable);
+        let manager = PostgresConnectionManager::new(config, NoTls);
+        return build_postgres_pool_inner(manager, settings).map(PostgresPool::Plain);
+    }
+    config.ssl_mode(SslMode::Require);
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if let Some(path) = &tls.ca_cert_file {
+        let file = std::fs::File::open(path).map_err(|_| DatabaseError {
+            message:
+                "ZELYRA_DB_TLS_CA_CERT_FILE must be an absolute path to a readable certificate file"
+                    .into(),
+        })?;
+        let certificates = rustls_pemfile::certs(&mut std::io::BufReader::new(file))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE must contain PEM-encoded certificates".into(),
+            })?;
+        for certificate in certificates {
+            roots.add(certificate).map_err(|_| DatabaseError {
+                message: "ZELYRA_DB_TLS_CA_CERT_FILE contains an invalid certificate".into(),
+            })?;
+        }
+    }
+    let tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    let manager = PostgresConnectionManager::new(
+        config,
+        tokio_postgres_rustls::MakeRustlsConnect::new(tls_config),
+    );
+    build_postgres_pool_inner(manager, settings).map(PostgresPool::Tls)
+}
+
+fn build_postgres_pool_inner<M>(
+    manager: M,
+    settings: MariaDbTimeouts,
+) -> Result<Pool<M>, DatabaseError>
+where
+    M: ManageConnection<Connection = PostgresClient> + Send + Sync + 'static,
+    M::Error: std::fmt::Display,
+{
+    Pool::builder()
+        .max_size(settings.pool_max_size)
+        .min_idle(Some(0))
+        .connection_timeout(Duration::from_secs(u64::from(settings.pool_wait_seconds)))
+        .test_on_check_out(true)
+        .error_handler(Box::new(r2d2::NopErrorHandler))
+        .build(manager)
+        .map_err(|_| DatabaseError {
+            message: "could not initialize the PostgreSQL connection pool".into(),
+        })
+}
 
 fn mariadb_pool(
     database_url: &str,
@@ -3466,6 +3978,19 @@ mod tests {
     include!("../../tests/support/bounded_mutations.rs");
 
     #[test]
+    fn sql_binder_keeps_utf8_after_backslash_in_quoted_text() {
+        let mut input = b"SELECT '\\".to_vec();
+        input.push(0xd7);
+        input.extend_from_slice(b"', :value");
+        let sql = String::from_utf8_lossy(&input).into_owned();
+
+        let (bound, names) = bind_named_parameters(&sql).unwrap();
+
+        assert_eq!(bound, sql.replace(":value", "?"));
+        assert_eq!(names, ["value"]);
+    }
+
+    #[test]
     fn mariadb_sql_binder_handles_reproducible_mutated_queries() {
         let seeds = [
             "SELECT ':literal', value FROM items WHERE id = :id",
@@ -3491,6 +4016,145 @@ mod tests {
                 _ => panic!("SQL binder result changed between identical inputs"),
             }
         }
+    }
+
+    #[test]
+    fn postgres_binder_preserves_literals_comments_and_casts() {
+        let (sql, names) = bind_named_parameters_for(
+            "SELECT :value::bigint, ':ignored?', $$:also_ignored$$ -- :comment\n/* :block */",
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            sql,
+            "SELECT $1::bigint, ':ignored?', $$:also_ignored$$ -- :comment\n/* :block */"
+        );
+        assert_eq!(names, ["value"]);
+        assert_eq!(
+            sql_parameter_names(
+                "SELECT :value::bigint, ':ignored', `:identifier`, $$:dollar$$ -- :line\n/* :block */"
+            )
+            .unwrap(),
+            ["value"]
+        );
+        let (sql, names) =
+            bind_named_parameters_for("SELECT value FROM items WHERE key=:key", true).unwrap();
+        assert_eq!(sql, "SELECT value FROM items WHERE key=$1");
+        assert_eq!(names, ["key"]);
+    }
+
+    #[test]
+    fn postgres_runtime_executes_a_parameterized_transaction_when_configured() {
+        let Ok(database_url) = env::var("ZELYRA_POSTGRES_RUNTIME_TEST_URL") else {
+            return;
+        };
+        let queries = [
+            Query {
+                sql: "CREATE TEMP TABLE zelyra_runtime_probe (value BIGINT)".into(),
+                params: Vec::new(),
+            },
+            Query {
+                sql: "INSERT INTO zelyra_runtime_probe (value) VALUES (:value) RETURNING value".into(),
+                params: vec![("value".into(), QueryValue::Int(42))],
+            },
+            Query {
+                sql: "WITH selected AS (SELECT value FROM zelyra_runtime_probe WHERE value = :value) SELECT value::bigint, true AS active, 'ok'::text AS label FROM selected".into(),
+                params: vec![("value".into(), QueryValue::Int(42))],
+            },
+            Query {
+                sql: "UPDATE zelyra_runtime_probe SET value = 43 WHERE value = :value RETURNING value".into(),
+                params: vec![("value".into(), QueryValue::Int(42))],
+            },
+            Query {
+                sql: "SELECT value FROM zelyra_runtime_probe WHERE value = 99".into(),
+                params: Vec::new(),
+            },
+            Query {
+                sql: "DELETE FROM zelyra_runtime_probe WHERE value = :value RETURNING value".into(),
+                params: vec![("value".into(), QueryValue::Int(43))],
+            },
+            Query {
+                sql: "SELECT count(*)::bigint AS count FROM zelyra_runtime_probe".into(),
+                params: Vec::new(),
+            },
+        ];
+        let results = execute_postgres_queries(&database_url, &queries, true).unwrap();
+        assert_eq!(results.len(), 7);
+        assert_eq!(results[1].rows, [vec!["42".to_owned()]]);
+        assert_eq!(results[2].columns, ["value", "active", "label"]);
+        assert_eq!(
+            results[2].rows,
+            [vec!["42".to_owned(), "true".into(), "ok".into()]]
+        );
+        assert_eq!(results[3].rows, [vec!["43".to_owned()]]);
+        assert_eq!(results[4].columns, ["value"]);
+        assert!(results[4].rows.is_empty());
+        assert_eq!(results[5].rows, [vec!["43".to_owned()]]);
+        assert_eq!(results[6].rows, [vec!["0".to_owned()]]);
+
+        let rollback_table = format!("zelyra_runtime_rollback_{}", std::process::id());
+        let failed = execute_postgres_queries(
+            &database_url,
+            &[
+                Query {
+                    sql: format!("CREATE TEMP TABLE {rollback_table} (value BIGINT)"),
+                    params: Vec::new(),
+                },
+                Query {
+                    sql: format!("INSERT INTO {rollback_table} (missing) VALUES (1)"),
+                    params: Vec::new(),
+                },
+            ],
+            true,
+        );
+        assert!(failed.is_err());
+        let absent = execute_postgres_query(
+            &database_url,
+            &format!("SELECT to_regclass('pg_temp.{rollback_table}') IS NULL AS absent"),
+            Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(absent.rows, [vec!["true".to_owned()]]);
+
+        let timeout = execute_postgres_query(&database_url, "SELECT pg_sleep(2)", Vec::new());
+        assert!(
+            timeout.is_err(),
+            "the configured statement timeout must interrupt a long query"
+        );
+
+        let started = Instant::now();
+        let request_deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+        let deadline_result =
+            execute_postgres_query(&database_url, "SELECT pg_sleep(2)", Vec::new());
+        drop(request_deadline);
+        assert!(deadline_result.is_err());
+        assert!(started.elapsed() < Duration::from_millis(900));
+
+        let pool_settings =
+            MariaDbTimeouts::parse(Some("5"), Some("1"), Some("1"), Some("1")).unwrap();
+        let no_tls = MariaDbTlsSettings::parse("disabled", None).unwrap();
+        let pool = match build_postgres_pool(&database_url, pool_settings, &no_tls).unwrap() {
+            PostgresPool::Plain(pool) => pool,
+            PostgresPool::Tls(_) => panic!("TLS was disabled for this pool exhaustion check"),
+        };
+        let held = pool.get().unwrap();
+        {
+            let request_deadline = set_query_deadline(Instant::now() + Duration::from_millis(300));
+            let wait = postgres_pool_wait_timeout(pool_settings).unwrap();
+            let started = Instant::now();
+            assert!(pool.get_timeout(wait).is_err());
+            assert!(started.elapsed() < Duration::from_millis(900));
+            drop(request_deadline);
+        }
+        let started = Instant::now();
+        let saturated = match pool.get() {
+            Ok(_) => panic!("a size-one PostgreSQL pool returned a second connection"),
+            Err(error) => error,
+        };
+        assert!(saturated.to_string().contains("timed out"));
+        assert!(started.elapsed() >= Duration::from_millis(900));
+        drop(held);
+        assert!(pool.get().is_ok(), "the pool must recover after release");
     }
     use zelyra_lexer::lex;
     use zelyra_parser::parse;

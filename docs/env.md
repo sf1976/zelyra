@@ -227,11 +227,12 @@ die Host-Allowlist; sie deaktiviert weder CSRF- noch Origin-Prüfungen.
 Jede angenommene HTTP-Verbindung hat im 0.4-Entwicklungszweig eine feste
 30-Sekunden-Frist für das vollständige Lesen der Anfrage und das Schreiben der
 Antwort. Ein Timeout schließt die Verbindung; es gibt keinen konfigurierbaren
-Retry. Während der Anfrageverarbeitung verwenden MariaDB-Poolabruf und jedes
-Statement den kleineren Wert aus konfigurierter Frist und verbleibender
-Request-Frist. MariaDB bricht ein Statement bei Fristablauf ab;
-transaktionale Abfragen werden zurückgerollt und die Verbindung nach einem
-Fehler verworfen. Danach läuft der synchrone Handler regulär aus. CPU-lastiger
+Retry. Während der Anfrageverarbeitung verwenden MariaDB und die begrenzte
+PostgreSQL-SQL-Runtime den kleineren Wert aus konfigurierter Pool-/Statement-
+Frist und verbleibender Request-Frist. Die Datenbank bricht ein Statement bei
+Fristablauf ab; Transaktionen werden bei Fehlern zurückgerollt. Ein
+Clientabbruch unterbricht den Handler nicht. Danach läuft der synchrone Handler
+regulär aus. CPU-lastiger
 oder anderer blockierender Anwendungscode wird nicht unterbrochen; eine
 verspätete Antwort wird verworfen und der Handler kann bis zu seiner Rückkehr
 einen Worker belegen. Externe TLS-Proxys sollten zusätzlich eigene Fristen und
@@ -368,22 +369,25 @@ Neustart nötig, damit er neue Prozesswerte erhält.
 
 | Variable | Standard | Zulässig | Vorrang / Quelle | Secret | Betroffene Pfade und Tests |
 |---|---:|---:|---|---|---|
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Verbindungsaufbau bei Datenbank- und Runtime-Aufrufen; Grenzen in `database/src/lib.rs` |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Runtime-Statements und Leseabfragen; nicht `db apply`/DDL; Unit- und MariaDB-Matrixtest |
-| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale Poolgröße pro Zelyra-Prozess; Unit- und MariaDB-Pooltest |
-| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie Poolverbindung; Unit- und MariaDB-Pooltest |
-| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled` oder `required` | Prozessumgebung; sonst `auto` | nein, aber sicherheitskritisch | TLS-Richtlinie für Runtime-Pool und MariaDB-CLI; Neustart zum Wechseln |
-| `ZELYRA_DB_TLS_CA_CERT_FILE` | nicht gesetzt | absoluter Pfad zu lesbarer PEM-/DER-CA-Datei | Prozessumgebung; optional; mit `disabled` unzulässig | nein; Zertifikat ist öffentlich, Vertrauensanker aber sicherheitskritisch | Zusätzliche vertrauenswürdige CA für Runtime-Pool und MariaDB-CLI |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB- und PostgreSQL-Poolverbindungen; PostgreSQL-Einstellung gilt für die begrenzte Runtime-API in 0.6.0 |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB- und PostgreSQL-Runtime-Statements; nicht `db apply`/DDL; PostgreSQL gilt für die begrenzte Runtime-API in 0.6.0 |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale MariaDB- und PostgreSQL-Poolgröße pro Zelyra-Prozess |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie MariaDB- oder PostgreSQL-Poolverbindung |
+| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled` oder `required` | Prozessumgebung; sonst `auto` | nein, aber sicherheitskritisch | TLS-Richtlinie für Runtime-Pools und MariaDB-CLI; Neustart zum Wechseln |
+| `ZELYRA_DB_TLS_CA_CERT_FILE` | nicht gesetzt | absoluter Pfad zu lesbarer PEM-/DER-CA-Datei; PostgreSQL Runtime-API erwartet PEM | Prozessumgebung; optional; mit `disabled` unzulässig | nein; Zertifikat ist öffentlich, Vertrauensanker aber sicherheitskritisch | Zusätzliche vertrauenswürdige CA für Runtime-Pools und MariaDB-CLI |
 
 Ungültige Werte führen zu einer geheimnisfreien Konfigurationsdiagnose; der
 übergebene Wert wird nicht ausgegeben. Im Modus `auto` verlangt Zelyra für
 nicht lokale Hosts TLS und prüft Zertifikatskette sowie Hostnamen; `localhost`,
 Namen unter `.localhost` und Loopback-IP-Adressen bleiben für lokale Entwicklung
-ohne TLS. `required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
+ohne TLS. Für den PostgreSQL-Runtime-Pool prüft rustls bei TLS die Zertifikatskette
+und den Hostnamen; Mozilla-Web-PKI-Wurzeln werden durch die optionale PEM-CA ergänzt.
+`required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
 schaltet TLS ausdrücklich ab und ist nur für isolierte lokale Netze gedacht;
 bei TLS-Fehlern gibt es keinen unsicheren Rückfall. Ohne eigene CA verwendet der
-Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine optionale
-CA-Datei muss als absoluter, im Prozess lesbarer PEM-/DER-Pfad angegeben sein.
+Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine
+PostgreSQL-CA-Datei muss absolut, lesbar und PEM-kodiert sein; der
+MariaDB-Client unterstützt PEM/DER.
 Für Schema-Inspektion und DDL erhält der MariaDB-Client dieselben TLS-Vorgaben
 mit `--ssl` und `--ssl-verify-server-cert` sowie optional `--ssl-ca`.
 In Docker muss eine private CA in den Container eingebunden und dort unter dem
@@ -396,8 +400,8 @@ verbindet sich dagegen mit einer externen Datenbank und startet deshalb mit
 
 Der MariaDB-Client erhält außerdem `--skip-reconnect`, damit ein
 Verbindungsverlust nicht unbemerkt zu einem Wiederverbinden oder automatischen
-Wiederholen führt. Der Runtime-SQL-Pfad verwendet im 0.4-Entwicklungszweig einen
-prozessweiten, begrenzten Pool. Beim Checkout wird die Verbindung geprüft; nach
+Wiederholen führt. MariaDB-Runtime-SQL und die begrenzte PostgreSQL-API verwenden
+prozessweite, begrenzte Pools. Beim Checkout wird die Verbindung geprüft; nach
 Statementfehlern wird sie verworfen, und innerhalb einer Transaktion wird ein
 Rollback versucht. Es gibt keine automatischen Retries. Ein Prozess kann nur
 eine Datenbank-URL und eine Poolkonfiguration verwenden; Änderungen erfordern
