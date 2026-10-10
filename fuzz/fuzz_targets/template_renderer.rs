@@ -43,6 +43,8 @@ fuzz_target!(|input: &[u8]| {
         audit_event: None,
         audit_chain: false,
         layout_html: None,
+        tenant_column: None,
+        tenant_membership_table: None,
     };
     let values = HashMap::from([("comment".to_owned(), text.clone())]);
     let errors = [FieldError {

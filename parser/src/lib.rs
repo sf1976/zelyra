@@ -407,6 +407,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace, "opening brace after authentication name")?;
         self.skip_newlines();
         let mut table = None;
+        let mut membership_table = None;
         let mut session_table = None;
         let mut permissions_table = None;
         let mut roles_table = None;
@@ -436,6 +437,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LoginRateLimit => "login_rate_limit",
                 TokenKind::LoginBlockSeconds => "login_block_seconds",
                 TokenKind::ResetTokens => "reset_tokens",
+                TokenKind::Ident(name) if name == "memberships" => "memberships",
                 TokenKind::ResetRateLimit => "reset_rate_limit",
                 TokenKind::ResetBlockSeconds => "reset_block_seconds",
                 _ => return self.error("expected authentication option"),
@@ -521,6 +523,7 @@ impl<'a> Parser<'a> {
             };
             match field {
                 "table" => table = Some(value),
+                "memberships" => membership_table = Some(value),
                 "sessions" => session_table = Some(value),
                 "permissions" => permissions_table = Some(value),
                 "roles" => roles_table = Some(value),
@@ -544,6 +547,7 @@ impl<'a> Parser<'a> {
         Ok(AuthDef {
             name,
             table,
+            membership_table,
             session_table,
             permissions_table,
             roles_table,
@@ -567,6 +571,7 @@ impl<'a> Parser<'a> {
         let (name, _) = self.ident("CRUD resource name")?;
         self.expect(TokenKind::Arrow, "`->` after CRUD resource name")?;
         let (table, table_span) = self.ident("table name after `->`")?;
+        let mut tenant_column = None;
         let mut title = None;
         let mut layout = None;
         let mut layout_slots = Vec::new();
@@ -587,6 +592,11 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
             while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                 match self.current().kind.clone() {
+                    TokenKind::Ident(name) if name == "tenant" => {
+                        self.advance();
+                        self.expect(TokenKind::Colon, "colon after CRUD tenant")?;
+                        tenant_column = Some(self.ident("tenant key column")?.0);
+                    }
                     TokenKind::Title => {
                         self.advance();
                         self.expect(TokenKind::Colon, "colon after CRUD title")?;
@@ -666,6 +676,7 @@ impl<'a> Parser<'a> {
             return Ok(CrudDef {
                 name,
                 table,
+                tenant_column,
                 title,
                 layout,
                 layout_slots,
@@ -687,6 +698,7 @@ impl<'a> Parser<'a> {
         Ok(CrudDef {
             name,
             table,
+            tenant_column,
             title,
             layout,
             layout_slots,
@@ -3035,6 +3047,28 @@ mod tests {
         assert_eq!(program.cruds.len(), 1);
         assert_eq!(program.cruds[0].name, "Machine");
         assert_eq!(program.cruds[0].table, "machines");
+    }
+
+    #[test]
+    fn parses_tenant_membership_and_crud_scope_declarations() {
+        let program = parse(
+            &lex(r#"auth users {
+                    table: users
+                    sessions: auth_sessions
+                    memberships: tenant_memberships
+                }
+                crud Invoice -> invoices {
+                    tenant: tenant_id
+                    requires auth
+                }"#)
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            program.auth[0].membership_table.as_deref(),
+            Some("tenant_memberships")
+        );
+        assert_eq!(program.cruds[0].tenant_column.as_deref(), Some("tenant_id"));
     }
 
     #[test]

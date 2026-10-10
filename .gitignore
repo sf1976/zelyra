@@ -1,4 +1,5 @@
 /target/
+/editor/node_modules/
 __pycache__/
 /.idea/
 .DS_Store

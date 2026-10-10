@@ -242,6 +242,8 @@ pub struct CrudActionNoticeDef {
 pub struct CrudDef {
     pub name: String,
     pub table: String,
+    /// Enables request-scoped tenant isolation on this generated CRUD resource.
+    pub tenant_column: Option<String>,
     pub title: Option<String>,
     /// Optional named view used as the outer layout for generated CRUD pages.
     pub layout: Option<String>,
@@ -375,6 +377,8 @@ pub struct CrudErrorViewDef {
 pub struct AuthDef {
     pub name: String,
     pub table: String,
+    /// Optional table with active `(user_id, tenant_id, active)` membership rows.
+    pub membership_table: Option<String>,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,

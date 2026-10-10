@@ -93,8 +93,10 @@ Schemainspektion verwenden weiterhin externe Werkzeuge. Der unveränderliche Tag
 
 ## Was damit nicht nachgewiesen wird
 
-- Kompatibilität mit MySQL Server. Die Annahme einer `mysql://`-URL bedeutet
-  nicht, dass MySQL Teil dieser Testmatrix ist.
+- MySQL-Kompatibilität jenseits des begrenzten parametrisierten
+  SQL-Runtime-Tests aus 0.7 mit MySQL 8.4.11. Das weist keine
+  Schemainspektion, Migrationen, generiertes Web-/CRUD, Authentifizierung oder
+  Datenbankadministration nach.
 - Unterstützung anderer MariaDB-Versionen oder nicht aufgeführter
   Patch-Releases.
 - PostgreSQL- oder SQL-Server-Laufzeitparität.
@@ -109,3 +111,16 @@ Laufzeitverhalten ein verifiziertes Backup erstellen und den resultierenden
 Plan mit einer wegwerfbaren Kopie des echten Schemas und repräsentativen Daten
 prüfen. Ein ausführlicher Betreiberablauf steht in
 [MariaDB-Backup und Wiederherstellung](database-operations.de.md).
+
+## Experimentelle MySQL-Runtime-Teilmenge
+
+Der 0.7-Branch ergänzt einen ausdrücklich deklarierten `engine: mysql`-Pfad
+für typisierte, parametrisierte SQL-Abfragen mit einer `mysql://`-URL. Der
+CI-Job verwendet das offizielle Image `mysql:8.4.11`, prüft die Serverversion
+und startet `tests/mysql-runtime-e2e.sh`. MySQL 8.4.11 ist ein exakt geprüfter
+Stand und keine allgemeine MySQL-Kompatibilitätszusage. Schema- und
+Administrationsbefehle von `zelyra db` brechen mit `E-DB-019` sicher ab;
+Migrationen, Schemainspektion, generierte CRUD-/Web-Routen und ungeprüfte
+SQL-Funktionen sind ausgeschlossen. Siehe die
+[MySQL-8.4-Release-Notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-11.html)
+und das [offizielle MySQL-Container-Image](https://hub.docker.com/_/mysql).

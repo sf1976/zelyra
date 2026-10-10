@@ -1,6 +1,6 @@
 # MariaDB compatibility matrix
 
-**Scope:** Zelyra 0.3.0 database and CRUD runtime paths | **Matrix reviewed:** 2026-09-21 | **Evidence:** exact official MariaDB Docker image tags below; Linux x86_64
+**Scope:** Zelyra 0.3.0 database and CRUD runtime paths | **Matrix reviewed:** 2026-10-10 | **Evidence:** exact official MariaDB Docker image tags below; Linux x86_64
 
 This matrix records tested Zelyra behavior. It is not a MariaDB certification,
 a promise that every SQL feature works on every server, or a MySQL compatibility
@@ -85,8 +85,9 @@ The immutable `v0.6.0-rc.1` tag passed full CI and published package validation 
 
 ## What this does not establish
 
-- MySQL Server compatibility. Accepting a `mysql://` connection URL does not
-  mean MySQL is part of this tested matrix.
+- MySQL compatibility beyond the bounded 0.7 parameterized SQL runtime test
+  against MySQL 8.4.11. This does not establish schema inspection, migrations,
+  generated web/CRUD, authentication, or database administration support.
 - Support for MariaDB versions or patch releases not listed above.
 - Runtime parity for PostgreSQL or SQL Server.
 - Compatibility of every MariaDB-specific SQL feature, plugins, Galera,
@@ -99,3 +100,15 @@ Before upgrading MariaDB or changing Zelyra's schema/runtime behavior, take a
 verified backup and test the resulting plan against a disposable copy of the
 real schema and representative data. See the operator steps in
 [MariaDB backup and recovery](database-operations.en.md).
+
+## Experimental MySQL runtime slice
+
+The 0.7 branch adds an explicitly declared `engine: mysql` path for typed,
+parameterized SQL queries using a `mysql://` URL. The CI job uses the official
+`mysql:8.4.11` image, checks the server version, and runs
+`tests/mysql-runtime-e2e.sh`. MySQL 8.4.11 is an exact tested point, not a
+general MySQL compatibility promise. `zelyra db` schema and administration
+commands fail closed with `E-DB-019`; this slice excludes migrations, schema
+inspection, generated CRUD/web routes, and untested SQL features. See the
+[MySQL 8.4 release notes](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/news-8-4-11.html)
+and [official MySQL container image](https://hub.docker.com/_/mysql).

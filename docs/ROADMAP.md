@@ -250,7 +250,18 @@ architecture requirement for every phase, not a provider-specific feature.
 
 ## 2. Language and compiler
 
-- [ ] Stable grammar specification and versioned compatibility rules.
+- [🧪] **Language compatibility:** the initial enforcement in 0.7 accepts
+  `zelyra = "0.1"`, rejects unsupported explicit lines with `E-LANG-001`, and
+  preserves older projects without the field. The language line remains `0.1` through 0.99.0; compiler
+  release numbers do not change it automatically. 0.7 now includes the first
+  runnable accepted/rejected/runtime corpus. Version 0.8 expands grammar,
+  typing, and formatter coverage; 0.9 adds runtime, module, effect, contract,
+  and SQL fixtures; 0.95 audits reference and corpus gaps. Version 0.99 freezes
+  grammar and semantics as a release candidate and allows only documented
+  corrections. Only 1.0.0, after its independent human acceptance gate, makes
+  the contract production-ready.
+  See the [language compatibility guide](language-compatibility.en.md) for the
+  rules and acceptance criteria.
 - [~] Experimental function/type/record/table/view/component imports and project-wide database
   configuration in the current development
   branch support project-root-relative imports, `pub` declarations, qualified
@@ -535,15 +546,51 @@ relationships to source modules that shows differences from the live database.
 Module ownership remains advisory and changes neither schema nor permissions.
 Independent human acceptance remains deferred to 1.0.0.
 
-After 0.6, 0.7 plans a real MySQL server path, bounded tenant context, local
-developer studio, and the invoice tutorial. Version 0.8 adds durable tasks,
-outbox, controlled studio editing, and text changes with named regex patterns,
-preview, and explicit application. Version 0.9 verifies core workflows for
-MariaDB, MySQL, and PostgreSQL and may add optional MFA/WebAuthn and OIDC.
-Version 0.99 freezes features; only independent human acceptance remains before
-1.0.0, the first productive release. Complete SQL parity, broad visual editing, arbitrary client hydration, compiler
-self-hosting, native backend, mandatory cloud/AI services, telemetry, and
-unsupported performance claims remain excluded.
+## Release 0.7.0
+
+- [🧪] **Experimental release:** local Studio, bounded typed MySQL 8.4.11 SQL,
+  invoice tutorial, initial language-0.1 corpus, and a MariaDB tenant CRUD path
+  for one declared table. The maintainer security review and mutation rollback
+  E2E are recorded in the 0.7 plan. No tenant migration or backfill is added.
+  Independent security review and human acceptance remain pre-production gates
+  for 0.99.0/1.0.0. See the [0.7.0 plan](release-plans/0.7.0.en.md).
+
+## Release 0.8.0
+
+- [🗺️] Add a read-only visual database map and guided CRUD builder. A developer
+  selects a connection and table, inspects fields and relationships, previews
+  compiler-checked source, and explicitly applies the change. Expand language
+  fixtures across grammar, typing, and formatting. Include the bounded local
+  MariaDB transactional outbox already under review, with explicit worker
+  invocation and at-least-once delivery semantics. See the
+  [0.8.0 plan](release-plans/0.8.0.en.md).
+
+## Release 0.9.0
+
+- [🗺️] Add guided business workflows and help for extending generated apps.
+  Verify the promised MariaDB, MySQL, and PostgreSQL workflows on real servers;
+  expand runtime, module, effect, contract, and SQL language fixtures. See the
+  [0.9.0 plan](release-plans/0.9.0.en.md).
+
+## Release 0.95.0
+
+- [🗺️] Stabilize the planned production scope: close technical, security,
+  upgrade, rollback, dependency, release-artifact, and documentation gaps. Audit
+  the language reference and corpus without adding a large subsystem. See the
+  [0.95.0 plan](release-plans/0.95.0.en.md).
+
+## Release 0.99.0
+
+- [🗺️] Freeze product and language features, verify all technical gates on an
+  immutable candidate, and prepare the exact 1.0.0 human-study materials. Only
+  independent human acceptance remains before the first productive release.
+  See the [0.99.0 plan](release-plans/0.99.0.en.md).
+
+A general queue platform remains beyond 1.0.0. The 0.8 outbox is a bounded,
+local MariaDB feature and does not imply a scheduler, distributed workers, or
+exactly-once delivery. Complete SQL parity, arbitrary client hydration,
+compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
+and unsupported performance claims remain excluded.
 ## First productive release 1.0.0
 
 `v1.0.0` is the first productive publication and the mandatory target for all

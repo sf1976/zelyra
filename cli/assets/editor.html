@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Zelyra Studio</title>
+  <link rel="stylesheet" href="/__zelyra/editor/assets/editor.css">
+  <script type="module" src="/__zelyra/editor/assets/editor.js"></script>
+</head>
+<body data-project="">
+  <div class="studio-shell">
+    <header class="topbar">
+      <div class="brand-lockup"><div class="brand-mark">Z</div><div><strong>Zelyra Studio</strong><small data-i18n="subtitle">Lokale Entwicklungsumgebung</small></div></div>
+      <div class="project-switcher"><span class="project-glyph">⌂</span><span id="project-name">Projekt</span><span class="project-branch" data-i18n="local">LOCAL</span></div>
+      <div class="top-actions">
+        <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
+        <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
+        <button class="icon-button language-button" id="language-button" aria-label="Sprache wechseln" title="Sprache wechseln" data-i18n-title="switchLanguage" data-i18n-aria="switchLanguage">DE</button>
+        <button class="icon-button" id="theme-button" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button>
+        <a class="icon-button help-link" href="https://siedelmann.com/handbuch" target="_blank" rel="noreferrer" aria-label="Handbuch" data-i18n-aria="handbook">?</a>
+      </div>
+    </header>
+    <div class="workspace">
+      <aside class="explorer" id="explorer">
+        <div class="panel-heading"><span data-i18n="files">DATEIEN</span><div class="panel-actions"><button id="new-file-button" title="Neue Datei" data-i18n-title="newFile">＋</button><button id="refresh-button" title="Aktualisieren" data-i18n-title="refresh">↻</button></div></div>
+        <label class="tree-search"><span>⌕</span><input id="tree-filter" type="search" placeholder="Dateien filtern" data-i18n-placeholder="filterFiles" autocomplete="off"></label>
+        <div class="project-root"><span>▾</span><strong id="project-name-side">PROJEKT</strong></div>
+        <nav id="file-tree" class="file-tree" aria-label="Projektdateien" data-i18n-aria="projectFiles"></nav>
+        <footer class="explorer-footer"><span class="online-dot"></span><span id="file-count" data-i18n="loadingFiles">Dateien werden geladen</span></footer>
+      </aside>
+      <main class="main-column">
+        <div class="toolbar">
+          <div class="breadcrumbs"><span class="breadcrumb-home">⌂</span><span id="active-file">Kein Dokument geöffnet</span></div>
+          <div class="toolbar-actions">
+          <button class="toolbar-button" id="save-all-button" disabled title="Alle Dateien speichern" data-i18n="saveAll">Alle speichern</button>
+            <button class="toolbar-button" id="save-button" disabled title="Speichern (Strg+S)" data-i18n-title="save"><span class="button-icon">▣</span><span data-i18n="save">Speichern</span></button>
+            <button class="toolbar-button" id="format-button" title="Aktive Zelyra-Datei formatieren" data-i18n="format">Formatieren</button>
+            <button class="primary-button" id="check-button" title="Projekt prüfen" data-i18n-title="check"><span>✓</span> <span data-i18n="check">Projekt prüfen</span></button>
+          </div>
+        </div>
+        <div class="tabbar" id="tabs" role="tablist" aria-label="Geöffnete Dateien"></div>
+        <section class="editor-stage">
+          <div id="editor-root" class="editor-root"></div>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-mark">Z</div><h1 data-i18n="welcome">Willkommen in Zelyra Studio</h1>
+            <p data-i18n="welcomeHint">Öffne links eine Datei und entwickle direkt in deinem Projekt.</p>
+            <div class="shortcut-grid"><span><kbd>Ctrl</kbd> <kbd>S</kbd><small data-i18n="save">Speichern</small></span><span><kbd>Ctrl</kbd> <kbd>F</kbd><small data-i18n="search">Suchen</small></span><span><kbd>Ctrl</kbd> <kbd>P</kbd><small data-i18n="openFile">Datei öffnen</small></span><span><kbd>Ctrl</kbd> <kbd>Space</kbd><small data-i18n="complete">Vervollständigen</small></span></div>
+          </div>
+        </section>
+        <section class="problems-panel" id="problems-panel" hidden>
+          <div class="problems-heading"><div><strong data-i18n="problems">Probleme</strong><span id="problems-count" class="count-badge">0</span></div><button id="problems-close" aria-label="Panel schließen" data-i18n-aria="close">×</button></div>
+          <div id="problems-list" class="problems-list"></div>
+          <p id="problems-empty" class="problems-empty" data-i18n="noProblems">Keine Probleme gefunden. Dein Projekt ist bereit.</p>
+        </section>
+        <footer class="statusbar">
+          <div class="status-left"><button id="problems-toggle" class="status-problems" title="Probleme anzeigen" data-i18n-title="problems">◇ <span id="problems-count-status">0</span></button><span class="status-message" id="status-message" data-i18n="ready">Bereit</span></div>
+          <div class="status-right"><span id="language-label">Zelyra</span><span>UTF-8</span><span>CRLF</span><span data-i18n="localMode">Lokaler Modus</span></div>
+        </footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

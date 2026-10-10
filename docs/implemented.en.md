@@ -1,9 +1,9 @@
-# Implemented in Zelyra 0.6.0
+# Implemented in Zelyra 0.7.0
 
-**Snapshot:** stable 0.6.0 · language compatibility line `0.1` · 2026-10-10
+**Snapshot:** stable 0.7.0 · language compatibility line `0.1` · 2026-10-10
 **Maturity:** experimental; not approved for production use
 
-This is an inventory of capabilities implemented in the stable Zelyra 0.6.0
+This is an inventory of capabilities implemented in the stable Zelyra 0.7.0
 release. It does not claim human acceptance; that remains scheduled for 1.0.0. It records delivered scope, not the full language vision
 or future plans. The [roadmap](ROADMAP.md) remains the source for unfinished
 work; the [changelog](../CHANGELOG.md) records what changed in each release.
@@ -57,7 +57,9 @@ See the [formal specification](specification.md),
   inspection/planning and selected safety checks are tested. 0.6.0 adds an
   experimental native PostgreSQL 16 runtime slice for direct parameterized SQL
   and transactions. It does not establish full PostgreSQL parity; generated
-  web/CRUD paths do not use this runtime yet.
+  web/CRUD paths do not use this runtime yet. 0.7.0 adds typed MySQL queries
+  tested only against MySQL Server 8.4.11; schema/administration commands,
+  migrations, generated CRUD/web paths, and authentication are not included.
 - 🧪 Schema planning classifies selected changes as safe, requiring review,
   destructive, or unsupported. Destructive and unsupported changes fail
   closed; selected populated-table and nullability changes receive read-only
@@ -92,9 +94,26 @@ The exact backend boundaries and tested MariaDB versions are in the
 - ✅ Generated MariaDB starters include minimal, CRUD, authentication, and
   business-application variants; the machine-management starter includes an
   optional fictional-data fixture.
+- 🧪 0.7.0 adds a tenant-aware CRUD path for exactly one explicitly declared
+  MariaDB table. Session, membership, permission, and generated queries are
+  checked in the supported path. This is not full multi-tenancy; relations,
+  custom SQL actions, TableViews, exports, migrations, and backfills are not
+  supported.
 
 For usage details see the [web and database quickstart](getting-started.md),
 [setup guide](setup-web.md), and [web chapters](handbook/en/handbook.md).
+
+## Zelyra Studio and invoice tutorial
+
+- 🧪 `zelyra editor [directory] [--port <port>]` starts local Studio on
+  `127.0.0.1` with a project tree, tabs, search/replace, completion, compiler
+  diagnostics, and formatting. Writes require a session token and same browser
+  origin; it uses no shell or external services.
+- ✅ `zelyra --tutorial invoice` guides users through customers, items, a
+  dashboard, and invoice creation. It is a learning path, not production or
+  deployment approval.
+- Studio is not yet a complete IDE and has no visual database browser or CRUD
+  designer.
 
 ## APIs, authentication, permissions, and audit
 

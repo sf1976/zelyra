@@ -346,6 +346,9 @@ pub struct FormRoute {
     pub form: FormDef,
     pub table: Option<TableDef>,
     pub schema: Option<Schema>,
+    /// Tenant key for generated CRUD forms; resolved from the authenticated request.
+    pub tenant_column: Option<String>,
+    pub tenant_membership_table: Option<String>,
     pub requires_auth: bool,
     pub permissions: Vec<String>,
     pub csrf: CsrfProtection,
@@ -369,6 +372,7 @@ pub struct CrudRoute {
     pub path: String,
     pub title: String,
     pub table: String,
+    pub tenant_column: Option<String>,
     pub list_columns: Vec<String>,
     pub search_columns: Vec<String>,
     pub filter_columns: Vec<String>,
@@ -431,6 +435,7 @@ pub struct TableViewFilter {
 #[derive(Clone, Debug)]
 pub struct AuthRoute {
     pub table: String,
+    pub membership_table: Option<String>,
     pub session_table: Option<String>,
     pub permissions_table: Option<String>,
     pub roles_table: Option<String>,
@@ -455,6 +460,238 @@ struct Session {
     permissions: Vec<String>,
     expires_at: Instant,
     device: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct TenantContext {
+    user_id: i64,
+    tenant_id: i64,
+    membership_table: String,
+}
+
+struct CrudMutationContext<'a> {
+    database_url: Option<&'a str>,
+    audit_table: Option<&'a str>,
+    audit_chain: bool,
+    actor_user_id: Option<i64>,
+    tenant_context: Option<&'a TenantContext>,
+}
+
+struct FormExecutionContext<'a> {
+    actor_user_id: Option<i64>,
+    expected_snapshot: Option<&'a [u8]>,
+    tenant_context: Option<&'a TenantContext>,
+}
+
+fn tenant_selector(request: &Request) -> Result<Option<String>, u16> {
+    let header_tenant = request
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("x-zelyra-tenant"))
+        .map(|(_, value)| value.clone());
+    let query_string = request
+        .target
+        .split_once('?')
+        .map_or("", |(_, query)| query);
+    let query_tenant_count = query_string
+        .split('&')
+        .filter(|pair| {
+            pair.split_once('=')
+                .and_then(|(name, _)| percent_decode(name).ok())
+                .is_some_and(|name| name == "tenant_id")
+        })
+        .count();
+    if query_tenant_count > 1 {
+        return Err(400);
+    }
+    let query_tenant = parse_urlencoded(query_string)
+        .map_err(|_| 400u16)?
+        .remove("tenant_id");
+    if header_tenant.is_some()
+        && query_tenant.is_some()
+        && header_tenant.as_deref() != query_tenant.as_deref()
+    {
+        return Err(400);
+    }
+    Ok(header_tenant.or(query_tenant))
+}
+
+fn resolve_tenant_context(
+    app: &WebApp,
+    tenant_column: Option<&str>,
+    request: &Request,
+    database_url: Option<&str>,
+) -> Result<Option<TenantContext>, u16> {
+    if tenant_column.is_none() {
+        return Ok(None);
+    }
+    let Some(auth) = app.auth_route.as_ref() else {
+        return Err(403);
+    };
+    let Some(membership_table) = auth.membership_table.as_deref() else {
+        return Err(403);
+    };
+    let Some(database_url) = database_url else {
+        return Err(503);
+    };
+    let Some(user_id) =
+        session_from_request(app, request, Some(database_url)).and_then(|session| session.user_id)
+    else {
+        return Err(403);
+    };
+    let selected_tenant = tenant_selector(request)?;
+    let selected_tenant_id = match selected_tenant {
+        Some(value) => match value.trim().parse::<i64>() {
+            Ok(id) if id > 0 => Some(id),
+            _ => return Err(400),
+        },
+        None => None,
+    };
+    let mut query = format!(
+        "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND active = true",
+        quote_identifier(membership_table),
+    );
+    let mut params = vec![("zelyra_user_id".into(), QueryValue::Int(user_id))];
+    if let Some(tenant_id) = selected_tenant_id {
+        query.push_str(" AND tenant_id = :zelyra_selected_tenant_id");
+        params.push((
+            "zelyra_selected_tenant_id".into(),
+            QueryValue::Int(tenant_id),
+        ));
+    }
+    query.push_str(" ORDER BY tenant_id LIMIT 2");
+    let result =
+        zelyra_database::execute_mariadb_query(database_url, &query, params).map_err(|error| {
+            eprintln!("zelyra web: tenant membership lookup failed: {error}");
+            503u16
+        })?;
+    let tenant_ids = result
+        .rows
+        .iter()
+        .filter_map(|row| row.first()?.parse::<i64>().ok())
+        .filter(|tenant_id| *tenant_id > 0)
+        .collect::<Vec<_>>();
+    let tenant_id = match (selected_tenant_id, tenant_ids.as_slice()) {
+        (Some(selected), [matched]) if selected == *matched => selected,
+        (None, [only]) => *only,
+        _ => return Err(403),
+    };
+    Ok(Some(TenantContext {
+        user_id,
+        tenant_id,
+        membership_table: membership_table.to_owned(),
+    }))
+}
+
+fn tenant_resolution_error(status: u16) -> Response {
+    let title = match status {
+        400 => "400 Bad Request",
+        403 => "403 Forbidden",
+        _ => "503 Service Unavailable",
+    };
+    Response::html(status, format!("<h1>{title}</h1>"))
+}
+
+fn tenant_membership_predicate(context: &TenantContext) -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM {} AS zelyra_membership WHERE zelyra_membership.user_id = :zelyra_user_id AND zelyra_membership.tenant_id = :zelyra_tenant_id AND zelyra_membership.active = true)",
+        quote_identifier(&context.membership_table)
+    )
+}
+
+fn tenant_query_params(context: &TenantContext) -> Vec<(String, QueryValue)> {
+    vec![
+        ("zelyra_user_id".into(), QueryValue::Int(context.user_id)),
+        (
+            "zelyra_tenant_id".into(),
+            QueryValue::Int(context.tenant_id),
+        ),
+    ]
+}
+
+fn append_tenant_selector(url: &str, tenant_id: i64) -> String {
+    if !url.starts_with('/') || url.contains("tenant_id=") {
+        return url.to_owned();
+    }
+    let separator = if url.contains('?') { "&" } else { "?" };
+    format!("{url}{separator}tenant_id={tenant_id}")
+}
+
+fn preserve_tenant_selector_in_html(html: &str, tenant_id: i64) -> String {
+    let mut output = html.to_owned();
+    for attribute in ["href=\"", "action=\""] {
+        let mut search_from = 0;
+        while let Some(relative_start) = output[search_from..].find(attribute) {
+            let value_start = search_from + relative_start + attribute.len();
+            let Some(relative_end) = output[value_start..].find('"') else {
+                break;
+            };
+            let value_end = value_start + relative_end;
+            let current = &output[value_start..value_end];
+            let updated = append_tenant_selector(current, tenant_id);
+            output.replace_range(value_start..value_end, &updated);
+            search_from = value_start + updated.len() + 1;
+        }
+    }
+    output
+}
+
+fn tenant_cache_policy(mut response: Response, tenant_context: Option<&TenantContext>) -> Response {
+    if let Some(tenant_context) = tenant_context {
+        response.body = preserve_tenant_selector_in_html(&response.body, tenant_context.tenant_id);
+        if let Some(location) = response.location.as_mut() {
+            *location = append_tenant_selector(location, tenant_context.tenant_id);
+        }
+        response.with_header("Cache-Control", "private, no-store")
+    } else {
+        response
+    }
+}
+
+fn execute_crud_mutation(
+    database_url: &str,
+    queries: &[zelyra_database::Query],
+    tenant_context: Option<&TenantContext>,
+    scoped_record_check: Option<&zelyra_database::Query>,
+) -> Result<(), zelyra_database::DatabaseError> {
+    let Some(tenant_context) = tenant_context else {
+        zelyra_database::execute_mariadb_queries(database_url, queries, true)?;
+        return Ok(());
+    };
+    let Some((mutation, audit)) = queries.split_first() else {
+        return Err(zelyra_database::DatabaseError {
+            message: "CRUD mutation transaction has no statement".into(),
+        });
+    };
+    zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        let membership_check = zelyra_database::Query {
+            sql: format!(
+                "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
+                quote_identifier(&tenant_context.membership_table)
+            ),
+            params: tenant_query_params(tenant_context),
+        };
+        if transaction.execute(&membership_check)?.rows.is_empty() {
+            return Err(zelyra_database::DatabaseError {
+                message: "ZELYRA_TENANT_DENIED: membership is no longer active".into(),
+            });
+        }
+        let Some(scoped_record_check) = scoped_record_check else {
+            return Err(zelyra_database::DatabaseError {
+                message: "tenant-scoped CRUD mutation has no record check".into(),
+            });
+        };
+        if transaction.execute(scoped_record_check)?.rows.is_empty() {
+            return Err(zelyra_database::DatabaseError {
+                message: "ZELYRA_TENANT_DENIED: record is not available in this tenant".into(),
+            });
+        }
+        transaction.execute(mutation)?;
+        for query in audit {
+            transaction.execute(query)?;
+        }
+        Ok(())
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -1005,17 +1242,39 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return apply_generated_layout(
-                    dispatch_form_with_language(
-                        form,
-                        request,
-                        &path_params,
-                        self.database_url.as_deref(),
-                        session_from_request(self, request, self.database_url.as_deref())
-                            .and_then(|session| session.user_id),
-                        self.ui_language,
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    form.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    apply_generated_layout(
+                        dispatch_form_with_language(
+                            form,
+                            request,
+                            &path_params,
+                            self.database_url.as_deref(),
+                            tenant_context
+                                .as_ref()
+                                .map(|context| context.user_id)
+                                .or_else(|| {
+                                    session_from_request(
+                                        self,
+                                        request,
+                                        self.database_url.as_deref(),
+                                    )
+                                    .and_then(|session| session.user_id)
+                                }),
+                            tenant_context.as_ref(),
+                            self.ui_language,
+                        ),
+                        form.layout_html.as_deref(),
                     ),
-                    form.layout_html.as_deref(),
+                    tenant_context.as_ref(),
                 );
             }
         }
@@ -1033,15 +1292,28 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return apply_generated_layout(
-                    dispatch_crud(
-                        crud,
-                        request,
-                        self.database_url.as_deref(),
-                        crud_ui_actions(crud, request, self),
-                        self.ui_language,
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    apply_generated_layout(
+                        dispatch_crud(
+                            crud,
+                            request,
+                            self.database_url.as_deref(),
+                            crud_ui_actions(crud, request, self),
+                            tenant_context.as_ref(),
+                            self.ui_language,
+                        ),
+                        crud.layout_html.as_deref(),
                     ),
-                    crud.layout_html.as_deref(),
+                    tenant_context.as_ref(),
                 );
             }
             for action in &crud.actions {
@@ -1059,17 +1331,39 @@ impl WebApp {
                     ) {
                         return response;
                     }
-                    return apply_generated_layout(
-                        dispatch_form_with_language(
-                            &action.form,
-                            request,
-                            &path_params,
-                            self.database_url.as_deref(),
-                            session_from_request(self, request, self.database_url.as_deref())
-                                .and_then(|session| session.user_id),
-                            self.ui_language,
+                    let tenant_context = match resolve_tenant_context(
+                        self,
+                        action.form.tenant_column.as_deref(),
+                        request,
+                        self.database_url.as_deref(),
+                    ) {
+                        Ok(context) => context,
+                        Err(status) => return tenant_resolution_error(status),
+                    };
+                    return tenant_cache_policy(
+                        apply_generated_layout(
+                            dispatch_form_with_language(
+                                &action.form,
+                                request,
+                                &path_params,
+                                self.database_url.as_deref(),
+                                tenant_context
+                                    .as_ref()
+                                    .map(|context| context.user_id)
+                                    .or_else(|| {
+                                        session_from_request(
+                                            self,
+                                            request,
+                                            self.database_url.as_deref(),
+                                        )
+                                        .and_then(|session| session.user_id)
+                                    }),
+                                tenant_context.as_ref(),
+                                self.ui_language,
+                            ),
+                            action.form.layout_html.as_deref(),
                         ),
-                        action.form.layout_html.as_deref(),
+                        tenant_context.as_ref(),
                     );
                 }
             }
@@ -1087,22 +1381,43 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return apply_generated_layout(
-                    dispatch_crud_restore(
-                        crud,
-                        request,
-                        &path_params,
-                        self.database_url.as_deref(),
-                        self.auth_route
-                            .as_ref()
-                            .and_then(|auth| auth.audit_table.as_deref()),
-                        self.auth_route
-                            .as_ref()
-                            .is_some_and(|auth| auth.audit_chain),
-                        session_from_request(self, request, self.database_url.as_deref())
-                            .and_then(|session| session.user_id),
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    apply_generated_layout(
+                        dispatch_crud_restore(
+                            crud,
+                            request,
+                            &path_params,
+                            CrudMutationContext {
+                                database_url: self.database_url.as_deref(),
+                                audit_table: self
+                                    .auth_route
+                                    .as_ref()
+                                    .and_then(|auth| auth.audit_table.as_deref()),
+                                audit_chain: self
+                                    .auth_route
+                                    .as_ref()
+                                    .is_some_and(|auth| auth.audit_chain),
+                                actor_user_id: session_from_request(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .and_then(|session| session.user_id),
+                                tenant_context: tenant_context.as_ref(),
+                            },
+                        ),
+                        crud.layout_html.as_deref(),
                     ),
-                    crud.layout_html.as_deref(),
+                    tenant_context.as_ref(),
                 );
             }
             let delete_path = format!("{}/{{id}}/delete", crud.path.trim_end_matches('/'));
@@ -1119,22 +1434,43 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return apply_generated_layout(
-                    dispatch_crud_delete(
-                        crud,
-                        request,
-                        &path_params,
-                        self.database_url.as_deref(),
-                        self.auth_route
-                            .as_ref()
-                            .and_then(|auth| auth.audit_table.as_deref()),
-                        self.auth_route
-                            .as_ref()
-                            .is_some_and(|auth| auth.audit_chain),
-                        session_from_request(self, request, self.database_url.as_deref())
-                            .and_then(|session| session.user_id),
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    apply_generated_layout(
+                        dispatch_crud_delete(
+                            crud,
+                            request,
+                            &path_params,
+                            CrudMutationContext {
+                                database_url: self.database_url.as_deref(),
+                                audit_table: self
+                                    .auth_route
+                                    .as_ref()
+                                    .and_then(|auth| auth.audit_table.as_deref()),
+                                audit_chain: self
+                                    .auth_route
+                                    .as_ref()
+                                    .is_some_and(|auth| auth.audit_chain),
+                                actor_user_id: session_from_request(
+                                    self,
+                                    request,
+                                    self.database_url.as_deref(),
+                                )
+                                .and_then(|session| session.user_id),
+                                tenant_context: tenant_context.as_ref(),
+                            },
+                        ),
+                        crud.layout_html.as_deref(),
                     ),
-                    crud.layout_html.as_deref(),
+                    tenant_context.as_ref(),
                 );
             }
             let detail_path = format!("{}/{{id}}", crud.path.trim_end_matches('/'));
@@ -1151,16 +1487,29 @@ impl WebApp {
                 ) {
                     return response;
                 }
-                return apply_generated_layout(
-                    dispatch_crud_detail(
-                        crud,
-                        request,
-                        &path_params,
-                        self.database_url.as_deref(),
-                        crud_ui_actions(crud, request, self),
-                        self.ui_language,
+                let tenant_context = match resolve_tenant_context(
+                    self,
+                    crud.tenant_column.as_deref(),
+                    request,
+                    self.database_url.as_deref(),
+                ) {
+                    Ok(context) => context,
+                    Err(status) => return tenant_resolution_error(status),
+                };
+                return tenant_cache_policy(
+                    apply_generated_layout(
+                        dispatch_crud_detail(
+                            crud,
+                            request,
+                            &path_params,
+                            self.database_url.as_deref(),
+                            crud_ui_actions(crud, request, self),
+                            tenant_context.as_ref(),
+                            self.ui_language,
+                        ),
+                        crud.layout_html.as_deref(),
                     ),
-                    crud.layout_html.as_deref(),
+                    tenant_context.as_ref(),
                 );
             }
         }
@@ -3590,6 +3939,7 @@ fn render_auth_sessions(
 fn account_sessions_test_auth() -> AuthRoute {
     AuthRoute {
         table: "users".into(),
+        membership_table: None,
         session_table: None,
         permissions_table: None,
         roles_table: None,
@@ -4007,6 +4357,7 @@ fn dispatch_form(
         path_params,
         database_url,
         actor_user_id,
+        None,
         UiLanguage::English,
     )
 }
@@ -4017,8 +4368,12 @@ fn dispatch_form_with_language(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     actor_user_id: Option<i64>,
+    tenant_context: Option<&TenantContext>,
     language: UiLanguage,
 ) -> Response {
+    if form.tenant_column.is_some() && tenant_context.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     let confirmation_view = form
         .form
         .actions
@@ -4047,7 +4402,12 @@ fn dispatch_form_with_language(
             Err(error) => return relation_options_error(database_url, error),
         };
         let values = if rendered_form.form.name.ends_with("Edit") {
-            match load_existing_form_values(&rendered_form, path_params, database_url) {
+            match load_existing_form_values(
+                &rendered_form,
+                path_params,
+                database_url,
+                tenant_context,
+            ) {
                 Ok(Some(values)) => values,
                 Ok(None) => return Response::html(404, "<h1>404 Not Found</h1>"),
                 Err(error) => return relation_options_error(database_url, error),
@@ -4144,10 +4504,16 @@ fn dispatch_form_with_language(
             &values,
             path_params,
             database_url,
-            actor_user_id,
-            expected_snapshot.as_deref(),
+            FormExecutionContext {
+                actor_user_id,
+                expected_snapshot: expected_snapshot.as_deref(),
+                tenant_context,
+            },
         ) {
             eprintln!("zelyra web: form action failed: {error}");
+            if error.starts_with("ZELYRA_TENANT_DENIED:") {
+                return Response::html(404, "<h1>404 Not Found</h1>");
+            }
             if error.starts_with("ZELYRA_CONFLICT:") {
                 return action_error_response(
                     action,
@@ -4277,6 +4643,7 @@ fn load_existing_form_values(
     form: &FormRoute,
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
+    tenant_context: Option<&TenantContext>,
 ) -> Result<Option<HashMap<String, String>>, String> {
     let Some(database_url) = database_url else {
         return Err("DATABASE_URL is required for edit forms".into());
@@ -4298,22 +4665,32 @@ fn load_existing_form_values(
         .and_then(|schema| schema.tables.iter().find(|table| table.name == table_name))
         .ok_or_else(|| format!("edit form table `{table_name}` is missing from schema"))?;
     let columns = form_value_columns(form, schema_table);
+    let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
+        (Some(column), Some(context)) => format!(
+            " AND {} = :zelyra_tenant_id AND {}",
+            quote_identifier(column),
+            tenant_membership_predicate(context)
+        ),
+        (Some(_), None) => return Err("tenant context is required for this form".into()),
+        _ => String::new(),
+    };
     let query = format!(
-        "SELECT {} FROM {} WHERE {} = :id",
+        "SELECT {} FROM {} WHERE {} = :id{}",
         columns
             .iter()
             .map(|column| quote_identifier(column))
             .collect::<Vec<_>>()
             .join(", "),
         quote_identifier(table_name),
-        quote_identifier("id")
+        quote_identifier("id"),
+        tenant_condition
     );
-    let result = zelyra_database::execute_mariadb_query(
-        database_url,
-        &query,
-        vec![("id".into(), zelyra_database::QueryValue::Int(id))],
-    )
-    .map_err(|error| error.to_string())?;
+    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
+    let result = zelyra_database::execute_mariadb_query(database_url, &query, params)
+        .map_err(|error| error.to_string())?;
     let Some(row) = result.rows.first() else {
         return Ok(None);
     };
@@ -4643,6 +5020,7 @@ fn dispatch_crud(
     request: &Request,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
+    tenant_context: Option<&TenantContext>,
     language: UiLanguage,
 ) -> Response {
     if request.method != "GET" {
@@ -4691,6 +5069,7 @@ fn dispatch_crud(
     let all_columns = table
         .columns
         .iter()
+        .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
     if all_columns.is_empty() {
@@ -4893,6 +5272,18 @@ fn dispatch_crud(
             if archived { "NOT NULL" } else { "NULL" }
         ));
     }
+    if let (Some(tenant_column), Some(tenant_context)) =
+        (crud.tenant_column.as_deref(), tenant_context)
+    {
+        conditions.push(format!(
+            "{}.{} = :zelyra_tenant_id AND {}",
+            quote_identifier("base"),
+            quote_identifier(tenant_column),
+            tenant_membership_predicate(tenant_context)
+        ));
+    } else if crud.tenant_column.is_some() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
     if !conditions.is_empty() {
         query.push_str(" WHERE ");
         query.push_str(&conditions.join(" AND "));
@@ -4912,6 +5303,9 @@ fn dispatch_crud(
             zelyra_database::QueryValue::Int(offset as i64),
         ),
     ];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
     if !search.is_empty() && !search_columns.is_empty() {
         params.push((
             "search".into(),
@@ -5451,6 +5845,7 @@ fn dispatch_crud_detail(
     path_params: &HashMap<String, String>,
     database_url: Option<&str>,
     ui_actions: CrudUiActions,
+    tenant_context: Option<&TenantContext>,
     language: UiLanguage,
 ) -> Response {
     if request.method != "GET" {
@@ -5488,6 +5883,7 @@ fn dispatch_crud_detail(
     let columns = table
         .columns
         .iter()
+        .filter(|column| crud.tenant_column.as_deref() != Some(column.name.as_str()))
         .map(|column| column.name.as_str())
         .collect::<Vec<_>>();
     let soft_delete_condition = crud
@@ -5501,8 +5897,18 @@ fn dispatch_crud_detail(
             )
         })
         .unwrap_or_default();
+    let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
+        (Some(tenant_column), Some(context)) => format!(
+            " AND {}.{} = :zelyra_tenant_id AND {}",
+            quote_identifier("base"),
+            quote_identifier(tenant_column),
+            tenant_membership_predicate(context)
+        ),
+        (Some(_), None) => return Response::html(403, "<h1>403 Forbidden</h1>"),
+        (None, _) => String::new(),
+    };
     let query = format!(
-        "SELECT {} FROM {} WHERE {} = :id{}",
+        "SELECT {} FROM {} WHERE {} = :id{}{}",
         columns
             .iter()
             .map(|column| {
@@ -5521,13 +5927,14 @@ fn dispatch_crud_detail(
             crud_relation_joins(&crud.schema, table)
         ),
         format_args!("{}.{}", quote_identifier("base"), quote_identifier("id")),
-        soft_delete_condition
+        soft_delete_condition,
+        tenant_condition
     );
-    let result = match zelyra_database::execute_mariadb_query(
-        database_url,
-        &query,
-        vec![("id".into(), zelyra_database::QueryValue::Int(id))],
-    ) {
+    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        params.extend(tenant_query_params(tenant_context));
+    }
+    let result = match zelyra_database::execute_mariadb_query(database_url, &query, params) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("zelyra web: CRUD detail query failed: {error}");
@@ -5552,11 +5959,15 @@ fn dispatch_crud_delete(
     crud: &CrudRoute,
     request: &Request,
     path_params: &HashMap<String, String>,
-    database_url: Option<&str>,
-    audit_table: Option<&str>,
-    audit_chain: bool,
-    actor_user_id: Option<i64>,
+    context: CrudMutationContext<'_>,
 ) -> Response {
+    let CrudMutationContext {
+        database_url,
+        audit_table,
+        audit_chain,
+        actor_user_id,
+        tenant_context,
+    } = context;
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -5587,23 +5998,57 @@ fn dispatch_crud_delete(
     ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
+    if crud.tenant_column.is_some() && tenant_context.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+    let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
+        (Some(column), Some(context)) => format!(
+            " AND {} = :zelyra_tenant_id AND {}",
+            quote_identifier(column),
+            tenant_membership_predicate(context)
+        ),
+        _ => String::new(),
+    };
+    let scoped_record_check = match (crud.tenant_column.as_deref(), tenant_context) {
+        (Some(tenant_column), Some(context)) => {
+            let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+            params.extend(tenant_query_params(context));
+            Some(zelyra_database::Query {
+                sql: format!(
+                    "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_tenant_id AND {}{} FOR UPDATE",
+                    quote_identifier("id"),
+                    quote_identifier(&crud.table),
+                    quote_identifier("id"),
+                    quote_identifier(tenant_column),
+                    tenant_membership_predicate(context),
+                    crud.soft_delete.as_ref().map_or_else(String::new, |soft_delete| {
+                        format!(" AND {} IS NULL", quote_identifier(&soft_delete.column))
+                    })
+                ),
+                params,
+            })
+        }
+        _ => None,
+    };
     let (query, success_message) = if let Some(soft_delete) = &crud.soft_delete {
         (
             format!(
-                "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {} IS NULL",
+                "UPDATE {} SET {} = CURRENT_TIMESTAMP WHERE {} = :id AND {} IS NULL{}",
                 quote_identifier(&crud.table),
                 quote_identifier(&soft_delete.column),
                 quote_identifier("id"),
-                quote_identifier(&soft_delete.column)
+                quote_identifier(&soft_delete.column),
+                tenant_condition
             ),
             "Record archived.",
         )
     } else {
         (
             format!(
-                "DELETE FROM {} WHERE {} = :id",
+                "DELETE FROM {} WHERE {} = :id{}",
                 quote_identifier(&crud.table),
-                quote_identifier("id")
+                quote_identifier("id"),
+                tenant_condition
             ),
             "Record deleted.",
         )
@@ -5613,15 +6058,22 @@ fn dispatch_crud_delete(
     } else {
         "crud.delete"
     };
-    let details = format!(
+    let mut details = format!(
         "table={};operation={};record_id={}",
         audit_component(&crud.table),
         event,
         id
     );
+    if let Some(tenant_context) = tenant_context {
+        details.push_str(&format!(";tenant_id={}", tenant_context.tenant_id));
+    }
+    let mut delete_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        delete_params.extend(tenant_query_params(tenant_context));
+    }
     let mut queries = vec![zelyra_database::Query {
         sql: query,
-        params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+        params: delete_params,
     }];
     if let Some(audit_table) = audit_table {
         queries.extend(audit_insert_queries(
@@ -5633,8 +6085,16 @@ fn dispatch_crud_delete(
             &details,
         ));
     }
-    if let Err(error) = zelyra_database::execute_mariadb_queries(database_url, &queries, true) {
+    if let Err(error) = execute_crud_mutation(
+        database_url,
+        &queries,
+        tenant_context,
+        scoped_record_check.as_ref(),
+    ) {
         eprintln!("zelyra web: CRUD delete failed: {error}");
+        if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
+            return Response::html(404, "<h1>404 Not Found</h1>");
+        }
         return crud_error_response(
             crud,
             500,
@@ -5653,11 +6113,15 @@ fn dispatch_crud_restore(
     crud: &CrudRoute,
     request: &Request,
     path_params: &HashMap<String, String>,
-    database_url: Option<&str>,
-    audit_table: Option<&str>,
-    audit_chain: bool,
-    actor_user_id: Option<i64>,
+    context: CrudMutationContext<'_>,
 ) -> Response {
+    let CrudMutationContext {
+        database_url,
+        audit_table,
+        audit_chain,
+        actor_user_id,
+        tenant_context,
+    } = context;
     if request.method != "POST" {
         return Response::html(405, "<h1>405 Method Not Allowed</h1>");
     }
@@ -5691,21 +6155,59 @@ fn dispatch_crud_restore(
     ) {
         return Response::html(403, "<h1>403 Forbidden</h1><p>Invalid CSRF token.</p>");
     }
+    if crud.tenant_column.is_some() && tenant_context.is_none() {
+        return Response::html(403, "<h1>403 Forbidden</h1>");
+    }
+    let tenant_condition = match (crud.tenant_column.as_deref(), tenant_context) {
+        (Some(column), Some(context)) => format!(
+            " AND {} = :zelyra_tenant_id AND {}",
+            quote_identifier(column),
+            tenant_membership_predicate(context)
+        ),
+        _ => String::new(),
+    };
+    let scoped_record_check = match (crud.tenant_column.as_deref(), tenant_context) {
+        (Some(tenant_column), Some(context)) => {
+            let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+            params.extend(tenant_query_params(context));
+            Some(zelyra_database::Query {
+                sql: format!(
+                    "SELECT {} FROM {} WHERE {} = :id AND {} = :zelyra_tenant_id AND {} AND {} IS NOT NULL FOR UPDATE",
+                    quote_identifier("id"),
+                    quote_identifier(&crud.table),
+                    quote_identifier("id"),
+                    quote_identifier(tenant_column),
+                    tenant_membership_predicate(context),
+                    quote_identifier(&soft_delete.column)
+                ),
+                params,
+            })
+        }
+        _ => None,
+    };
     let query = format!(
-        "UPDATE {} SET {} = NULL WHERE {} = :id AND {} IS NOT NULL",
+        "UPDATE {} SET {} = NULL WHERE {} = :id AND {} IS NOT NULL{}",
         quote_identifier(&crud.table),
         quote_identifier(&soft_delete.column),
         quote_identifier("id"),
-        quote_identifier(&soft_delete.column)
+        quote_identifier(&soft_delete.column),
+        tenant_condition
     );
-    let details = format!(
+    let mut details = format!(
         "table={};operation=crud.restore;record_id={}",
         audit_component(&crud.table),
         id
     );
+    if let Some(tenant_context) = tenant_context {
+        details.push_str(&format!(";tenant_id={}", tenant_context.tenant_id));
+    }
+    let mut restore_params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+    if let Some(tenant_context) = tenant_context {
+        restore_params.extend(tenant_query_params(tenant_context));
+    }
     let mut queries = vec![zelyra_database::Query {
         sql: query,
-        params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+        params: restore_params,
     }];
     if let Some(audit_table) = audit_table {
         queries.extend(audit_insert_queries(
@@ -5717,8 +6219,16 @@ fn dispatch_crud_restore(
             &details,
         ));
     }
-    if let Err(error) = zelyra_database::execute_mariadb_queries(database_url, &queries, true) {
+    if let Err(error) = execute_crud_mutation(
+        database_url,
+        &queries,
+        tenant_context,
+        scoped_record_check.as_ref(),
+    ) {
         eprintln!("zelyra web: CRUD restore failed: {error}");
+        if error.message.starts_with("ZELYRA_TENANT_DENIED:") {
+            return Response::html(404, "<h1>404 Not Found</h1>");
+        }
         return crud_error_response(
             crud,
             500,
@@ -6835,10 +7345,17 @@ fn execute_form_action(
     values: &HashMap<String, String>,
     path_params: &HashMap<String, String>,
     database_url: &str,
-    actor_user_id: Option<i64>,
-    expected_snapshot: Option<&[u8]>,
+    context: FormExecutionContext<'_>,
 ) -> Result<(), String> {
+    let FormExecutionContext {
+        actor_user_id,
+        expected_snapshot,
+        tenant_context,
+    } = context;
     let mut parameters = form_query_parameters(form, values)?;
+    if let Some(tenant_context) = tenant_context {
+        parameters.extend(tenant_query_params(tenant_context));
+    }
     for (name, value) in path_params {
         let parsed = value
             .parse::<i64>()
@@ -6864,6 +7381,25 @@ fn execute_form_action(
         return Err("form action must contain at least one SQL statement".into());
     }
     zelyra_database::with_mariadb_transaction(database_url, |transaction| {
+        if form.tenant_column.is_some() && tenant_context.is_none() {
+            return Err(zelyra_database::DatabaseError {
+                message: "tenant context is required for this form".into(),
+            });
+        }
+        if let Some(tenant_context) = tenant_context {
+            let membership_check = zelyra_database::Query {
+                sql: format!(
+                    "SELECT tenant_id FROM {} WHERE user_id = :zelyra_user_id AND tenant_id = :zelyra_tenant_id AND active = true FOR UPDATE",
+                    quote_identifier(&tenant_context.membership_table)
+                ),
+                params: tenant_query_params(tenant_context),
+            };
+            if transaction.execute(&membership_check)?.rows.is_empty() {
+                return Err(zelyra_database::DatabaseError {
+                    message: "ZELYRA_TENANT_DENIED: membership is no longer active".into(),
+                });
+            }
+        }
         let before_values = if let Some(expected_snapshot) = expected_snapshot {
             let table_name =
                 form.form
@@ -6886,23 +7422,47 @@ fn execute_form_action(
                     message: "edit form path parameter `id` is not an integer".into(),
                 })?;
             let columns = form_value_columns(form, table);
+            let tenant_condition = match (form.tenant_column.as_deref(), tenant_context) {
+                (Some(column), Some(context)) => format!(
+                    " AND {} = :zelyra_tenant_id AND {}",
+                    quote_identifier(column),
+                    tenant_membership_predicate(context)
+                ),
+                (Some(_), None) => {
+                    return Err(zelyra_database::DatabaseError {
+                        message: "tenant context is required for this form".into(),
+                    })
+                }
+                _ => String::new(),
+            };
             let query = zelyra_database::Query {
                 sql: format!(
-                    "SELECT {} FROM {} WHERE {} = :id FOR UPDATE",
+                    "SELECT {} FROM {} WHERE {} = :id{} FOR UPDATE",
                     columns
                         .iter()
                         .map(|column| quote_identifier(column))
                         .collect::<Vec<_>>()
                         .join(", "),
                     quote_identifier(table_name),
-                    quote_identifier("id")
+                    quote_identifier("id"),
+                    tenant_condition
                 ),
-                params: vec![("id".into(), zelyra_database::QueryValue::Int(id))],
+                params: {
+                    let mut params = vec![("id".into(), zelyra_database::QueryValue::Int(id))];
+                    if let Some(tenant_context) = tenant_context {
+                        params.extend(tenant_query_params(tenant_context));
+                    }
+                    params
+                },
             };
             let result = transaction.execute(&query)?;
             let Some(row) = result.rows.first() else {
                 return Err(zelyra_database::DatabaseError {
-                    message: "ZELYRA_CONFLICT: edited record no longer exists".into(),
+                    message: if tenant_context.is_some() {
+                        "ZELYRA_TENANT_DENIED: record is not available in this tenant".into()
+                    } else {
+                        "ZELYRA_CONFLICT: edited record no longer exists".into()
+                    },
                 });
             };
             let current_values = form
@@ -6929,13 +7489,16 @@ fn execute_form_action(
         if let (Some(audit_table), Some(audit_event)) =
             (form.audit_table.as_deref(), form.audit_event.as_deref())
         {
-            let (record_id, details) = form_audit_details(
+            let (record_id, mut details) = form_audit_details(
                 form,
                 audit_event,
                 path_params,
                 before_values.as_ref(),
                 values,
             );
+            if let Some(tenant_context) = tenant_context {
+                details.push_str(&format!(";tenant_id={}", tenant_context.tenant_id));
+            }
             for query in audit_insert_queries(
                 audit_table,
                 form.audit_chain,

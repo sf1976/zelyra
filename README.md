@@ -11,24 +11,22 @@ for database-backed business and web applications. It brings schema-aware SQL,
 forms, CRUD, views, and application logic together while keeping ordinary code
 and native SQL available.
 
-> **Current stable compiler release: 0.6.0 · language compatibility line: 0.1 · experimental**
+> **Current stable compiler release: 0.7.0 · language compatibility line: 0.1 · experimental**
 >
-> Zelyra 0.6.0 is not approved for production use. “Prove correctness” is a
+> Zelyra 0.7.0 is not approved for production use. “Prove correctness” is a
 > design goal: the current verifier covers a bounded subset and does not prove
 > arbitrary applications correct.
 
-The stable [`v0.6.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.6.0) was published on 2026-10-10. It remains experimental, not production-approved. Independent human acceptance for earlier releases is deferred to the first productive release, 1.0.0; this README is not acceptance evidence. See the [0.6.0 release notes](docs/release-notes/0.6.0.en.md) and [0.5.0 acceptance decision](docs/release-readiness/0.5.0-human-acceptance.en.md).
+The stable [`v0.7.0` release](https://github.com/sf1976/zelyra/releases/tag/v0.7.0) is experimental and not production-approved. Independent human acceptance for earlier releases is deferred to the first productive release, 1.0.0; this README is not acceptance evidence. See the [0.7.0 release notes](docs/release-notes/0.7.0.en.md) and [1.0.0 release plan](docs/release-plans/1.0.0.en.md).
 
-## What changed in 0.6.0
+## What changed in 0.7.0
 
-Zelyra 0.6.0 adds `zelyra routes <entry.zyl>` for a deterministic route
-inventory with source locations and duplicate-route diagnostics, and
-`zelyra db map <file.zyl>` for a read-only comparison of declared tables with
-the live database. It also includes a bounded experimental PostgreSQL 16
-runtime for direct parameterized SQL and transactions. This is not full
-PostgreSQL parity, and generated web/CRUD paths are not covered. Linux and
-Windows x86_64 release artifacts include checksums, SPDX SBOMs, and GitHub
-attestations. See the [release notes](docs/release-notes/0.6.0.en.md).
+Zelyra 0.7.0 adds the local browser Studio (`zelyra editor`), a guided invoice
+tutorial, parameterized MySQL 8.4.11 queries, and a limited experimental tenant
+CRUD path for MariaDB. MySQL does not provide schema changes or generated CRUD;
+the tenant path is not full multi-tenancy. Linux and Windows x86_64 release
+artifacts include checksums, SPDX SBOMs, and GitHub attestations. See the
+[release notes](docs/release-notes/0.7.0.en.md).
 
 The [roadmap](docs/ROADMAP.md) tracks implementation status and limitations.
 This README is a project overview, not a second handbook or changelog.
@@ -74,7 +72,7 @@ excluded from Git and Docker build contexts; Zelyra sets newly created files to
 owner-only permissions (`0600`) on Unix. On Windows, the file inherits the
 directory's ACL, and existing `.env` files are not re-permissioned. Do not
 commit or share the file. For production, use an appropriate secrets manager
-and deployment-specific credentials; 0.6.0 is not production-approved.
+and deployment-specific credentials; 0.7.0 is not production-approved.
 
 The generated MariaDB project defaults to German and learn mode. Set
 `ZELYRA_LANGUAGE=de|en` and `ZELYRA_LEVEL=learn|work` in its `.env` to change
@@ -86,11 +84,11 @@ other settings.
 | If you want to… | Read |
 | --- | --- |
 | Learn Zelyra step by step | [Getting started](docs/getting-started.md) · [English handbook](docs/handbook/en/handbook.md) · [Deutsches Handbuch](docs/handbook/de/handbuch.md) |
-| See what works in compiler 0.6.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
+| See what works in compiler 0.7.0 | [Implemented capabilities](docs/implemented.en.md) · [Deutsch](docs/implemented.de.md) |
 | Check what the language specifies | [Language specification](docs/specification.md) · [Source authority and validation guide](docs/source-authority.md) |
 | Configure a project or its environment | [Environment and configuration reference](docs/env.en.md) · [Deutsche Referenz](docs/env.md) |
 | Understand database support | [Database compatibility matrix](docs/database-compatibility.en.md) · [German](docs/database-compatibility.de.md) |
-| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.6.0 release plan](docs/release-plans/0.6.0.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
+| Review current and planned work | [Roadmap](docs/ROADMAP.md) · [0.7.0 release plan](docs/release-plans/0.7.0.en.md) · [1.0.0 release plan](docs/release-plans/1.0.0.en.md) |
 | Read the design direction | [Manifesto](docs/MANIFESTO.md) · [AI-native architecture](docs/architecture/ai-native-development.md) |
 | See exact release changes | [Changelog](CHANGELOG.md) · [GitHub releases](https://github.com/sf1976/zelyra/releases) |
 

@@ -512,17 +512,58 @@ Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
 Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
 Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
-Nach 0.6 sind ein echter MySQL-Serverpfad, begrenzter Mandantenkontext,
-lokales Entwicklungsstudio und das Rechnungstutorial in 0.7 geplant. 0.8
-ergänzt dauerhafte Aufgaben, Outbox, kontrollierte Studio-Bearbeitung und
-Textänderungen mit benannten Regex-Mustern, Vorschau und ausdrücklichem
-Anwenden. 0.9 prüft die Kernabläufe für MariaDB, MySQL und PostgreSQL und kann
-optionale MFA/WebAuthn sowie OIDC aufnehmen. 0.99 friert Funktionen ein;
-danach bleiben bis zur ersten produktiven Version 1.0.0 nur die unabhängigen
-menschlichen Abnahmetests. Vollständige SQL-Parität,
-allgemeine visuelle Bearbeitung, beliebige Client-Hydration, Compiler-
-Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
-Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
+## Release 0.7.0
+
+- [🧪] **Experimentelles Release:** lokales Studio, begrenztes typisiertes
+  MySQL-8.4.11-SQL, Rechnungstutorial, erstes Sprachkorpus für 0.1 und ein
+  MariaDB-Mandanten-CRUD-Pfad für eine deklarierte Tabelle. Maintainer-
+  Sicherheitsprüfung und Mutation-Rollback-E2E sind im 0.7-Plan dokumentiert.
+  Es gibt keine Mandantenmigration oder Backfill. Unabhängiges Sicherheitsreview
+  und menschliche Abnahme bleiben Gates vor Produktiveinsatz in 0.99.0/1.0.0.
+  Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
+
+## Release 0.8.0
+
+- [🗺️] Eine schreibgeschützte visuelle Datenbankkarte und einen geführten
+  CRUD-Assistenten ergänzen. Entwickler wählen Verbindung und Tabelle, prüfen
+  Felder und Beziehungen, sehen compilergeprüften Quelltext und übernehmen die
+  Änderung ausdrücklich. Sprach-Fixtures für Grammatik, Typprüfung und Formatter
+  ausbauen. Dazu kommt die bereits in Prüfung befindliche begrenzte lokale
+  MariaDB-Outbox mit ausdrücklich gestartetem Worker und At-least-once-Zustellung.
+  Siehe [0.8.0-Plan](release-plans/0.8.0.de.md).
+
+## Release 0.9.0
+
+- [🗺️] Geführte Geschäftsabläufe und Hilfe zum Erweitern erzeugter Anwendungen
+  ergänzen. Die zugesagten MariaDB-, MySQL- und PostgreSQL-Abläufe auf echten
+  Servern prüfen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und SQL-Fixtures
+  ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
+
+## Release 0.95.0
+
+- [🗺️] Den geplanten Produktumfang stabilisieren: technische, Sicherheits-,
+  Upgrade-, Rollback-, Abhängigkeits-, Artefakt- und Dokumentationslücken
+  schließen. Sprachreferenz und Korpus prüfen, ohne ein großes Teilsystem
+  hinzuzufügen. Siehe [0.95.0-Plan](release-plans/0.95.0.de.md).
+
+## Release 0.99.0
+
+- [🗺️] Produkt- und Sprachfunktionen einfrieren, alle technischen Gates am
+  unveränderlichen Kandidaten prüfen und Materialien für die menschliche
+  Abnahme an genau diesem Stand vorbereiten. Vor dem ersten Produktivrelease
+  bleibt nur die unabhängige menschliche Abnahme offen. Siehe
+  [0.99.0-Plan](release-plans/0.99.0.de.md).
+
+Eine allgemeine Queue-Plattform bleibt hinter 1.0.0. Die Outbox in 0.8 ist
+lokal und auf MariaDB begrenzt; sie bietet weder Scheduler noch verteilte
+Worker oder Exactly-once-Zustellung. Vollständige SQL-Parität, beliebige
+Client-Hydration, Compiler-Self-Hosting, natives Backend, verpflichtende
+Cloud-/KI-Dienste, Telemetrie und unbelegte Leistungsversprechen bleiben
+ausgeschlossen.
+
+Die detaillierten Abnahmekriterien stehen in den Plänen für [0.8.0](release-plans/0.8.0.de.md),
+[0.9.0](release-plans/0.9.0.de.md), [0.95.0 Stabilisierung](release-plans/0.95.0.de.md),
+[0.99.0 Freeze](release-plans/0.99.0.de.md) und [1.0.0](release-plans/1.0.0.de.md).
 ## Erste produktive Veröffentlichung 1.0.0
 
 `v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für

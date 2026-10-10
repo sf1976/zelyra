@@ -1,9 +1,9 @@
-# In Zelyra 0.6.0 umgesetzt
+# In Zelyra 0.7.0 umgesetzt
 
-**Stand:** stabiles Release 0.6.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-10
+**Stand:** stabiles Release 0.7.0 · Sprachkompatibilitätslinie `0.1` · 2026-10-10
 **Reifegrad:** experimentell; nicht für den Produktiveinsatz freigegeben
 
-Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.6.0
+Diese Übersicht führt Funktionen auf, die im stabilen Release Zelyra 0.7.0
 tatsächlich implementiert sind. Eine menschliche Abnahme wird nicht behauptet;
 sie bleibt bis 1.0.0 offen. Sie beschreibt den ausgelieferten Umfang,
 nicht die gesamte Sprachvision oder zukünftige Vorhaben. Die
@@ -63,7 +63,9 @@ Siehe die [formale Sprachspezifikation](specification.de.md), die
   getestet. 0.6.0 ergänzt eine experimentelle native PostgreSQL-16-Runtime-
   Teilmenge für direkte parametrisierte SQL-Abfragen und Transaktionen. Sie
   belegt keine vollständige PostgreSQL-Parität; generierte Web-/CRUD-Pfade
-  nutzen sie noch nicht.
+  nutzen sie noch nicht. 0.7.0 ergänzt getestete typisierte MySQL-Abfragen
+  ausschließlich auf MySQL Server 8.4.11; Schema-/Administrationsbefehle,
+  Migrationen, generiertes CRUD/Web und Authentifizierung sind nicht enthalten.
 - 🧪 Der Schema-Planer stuft ausgewählte Änderungen als sicher,
   prüfungsbedürftig, destruktiv oder nicht unterstützt ein. Destruktive und
   nicht unterstützte Änderungen werden fail-closed behandelt; ausgewählte
@@ -103,10 +105,27 @@ Die genauen Backend-Grenzen und getesteten MariaDB-Versionen stehen in der
 - ✅ Erzeugte MariaDB-Starter umfassen Minimal-, CRUD-, Authentifizierungs- und
   Businessvarianten; die Maschinenverwaltung enthält optionale fiktionale
   Beispieldaten.
+- 🧪 0.7.0 ergänzt einen mandantenbewussten CRUD-Pfad für genau eine
+  ausdrücklich deklarierte MariaDB-Tabelle. Sitzung, Membership, Berechtigung
+  und generierte Abfragen werden im unterstützten Pfad geprüft. Das ist keine
+  vollständige Multi-Tenancy; Beziehungen, eigene SQL-Aktionen, TableViews,
+  Exporte, Migrationen und Backfills sind nicht unterstützt.
 
 Details stehen im [Schnelleinstieg für Web und Datenbank](getting-started.de.md),
 der [Setup-Anleitung](setup-web.de.md) und den
 [Webkapiteln des Handbuchs](handbook/de/handbuch.md).
+
+## Zelyra Studio und Rechnungstutorial
+
+- 🧪 `zelyra editor [directory] [--port <port>]` startet ein lokales Studio
+  auf `127.0.0.1` mit Dateibaum, Tabs, Suche/Ersetzen, Vervollständigung,
+  Compilerdiagnosen und Formatierung. Schreibzugriffe benötigen Sitzungstoken
+  und denselben Browser-Origin; Shell und externe Dienste werden nicht genutzt.
+- ✅ `zelyra --tutorial invoice` führt Schritt für Schritt durch Kunden,
+  Artikel, Dashboard und Rechnungserstellung. Es ist ein Lernpfad, keine
+  Produktions- oder Deploymentfreigabe.
+- Studio ist noch keine vollständige IDE und enthält keinen visuellen
+  Datenbankbrowser oder CRUD-Designer.
 
 ## APIs, Authentifizierung, Berechtigungen und Audit
 

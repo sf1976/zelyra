@@ -161,6 +161,31 @@ REQUIRED_CANDIDATE_RECORD_040 = (
     "rollback smoke:",
 )
 
+# Later pre-production milestones use bilingual, reviewable checklists. Every
+# item must be completed before a stable tag is allowed to publish.
+RELEASE_PLAN_CHECKLISTS = {
+    "0.7.0": (
+        ("docs/release-plans/0.7.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.7.0.de.md", "## Release-Gates"),
+    ),
+    "0.8.0": (
+        ("docs/release-plans/0.8.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.8.0.de.md", "## Release-Gates"),
+    ),
+    "0.9.0": (
+        ("docs/release-plans/0.9.0.en.md", "## Release gates"),
+        ("docs/release-plans/0.9.0.de.md", "## Release-Gates"),
+    ),
+    "0.95.0": (
+        ("docs/release-plans/0.95.0.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.95.0.de.md", "## Abschlusskriterien"),
+    ),
+    "0.99.0": (
+        ("docs/release-plans/0.99.0.en.md", "## Exit criteria"),
+        ("docs/release-plans/0.99.0.de.md", "## Abschlusskriterien"),
+    ),
+}
+
 
 def _checkbox_is_checked(text: str, marker: str) -> bool:
     for line in text.splitlines():
@@ -169,9 +194,47 @@ def _checkbox_is_checked(text: str, marker: str) -> bool:
     return False
 
 
+def _unfinished_release_plan_checklist(root: Path, relative_path: str, heading: str) -> list[str]:
+    path = root / relative_path
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return [f"release plan missing or unreadable ({relative_path})"]
+
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == heading)
+    except StopIteration:
+        return [f"release gate section missing ({relative_path})"]
+
+    section: list[tuple[int, str]] = []
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("## "):
+            break
+        if lines[index].lstrip().startswith("- "):
+            section.append((index + 1, lines[index].lstrip()))
+
+    if not section:
+        return [f"release gate checklist is empty ({relative_path})"]
+
+    failures = []
+    for line_number, item in section:
+        match = re.match(r"^- \[([ xX])\] .+", item)
+        if match is None:
+            failures.append(f"release gate is not a checklist item ({relative_path}:{line_number})")
+        elif match.group(1).casefold() != "x":
+            failures.append(f"release gate is incomplete ({relative_path}:{line_number})")
+    return failures
+
+
 def unfinished_gates(
     root: Path, version: str, candidate_commit: str | None = None
 ) -> list[str]:
+    if version in RELEASE_PLAN_CHECKLISTS:
+        failures = []
+        for relative_path, heading in RELEASE_PLAN_CHECKLISTS[version]:
+            failures.extend(_unfinished_release_plan_checklist(root, relative_path, heading))
+        return failures
+
     if version not in {"0.3.0", "0.4.0", "0.5.0", "1.0.0"}:
         return []
 
@@ -357,7 +420,7 @@ def main() -> int:
         return 1
 
     if failures:
-        print(f"final {args.version} release is blocked by unfinished gates:", file=sys.stderr)
+        print(f"release {args.version} is blocked by unfinished gates:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
