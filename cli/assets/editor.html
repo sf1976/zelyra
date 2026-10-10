@@ -16,6 +16,7 @@
       <div class="top-actions">
         <button class="icon-button" id="sidebar-toggle" aria-label="Dateiübersicht umschalten" title="Dateiübersicht umschalten" data-i18n-title="toggleExplorer" data-i18n-aria="toggleExplorer">☰</button>
         <button class="toolbar-button" id="open-search" title="Suchen (Strg+F)" data-i18n-title="search">⌕ <span data-i18n="search">Suchen</span></button>
+        <button class="toolbar-button" id="database-button" title="Datenbankübersicht öffnen" data-i18n-title="database">▤ <span data-i18n="database">Datenbank</span></button>
         <button class="icon-button language-button" id="language-button" aria-label="Sprache wechseln" title="Sprache wechseln" data-i18n-title="switchLanguage" data-i18n-aria="switchLanguage">DE</button>
         <button class="icon-button" id="theme-button" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button>
         <a class="icon-button help-link" href="https://siedelmann.com/handbuch" target="_blank" rel="noreferrer" aria-label="Handbuch" data-i18n-aria="handbook">?</a>
@@ -46,6 +47,48 @@
             <div class="empty-mark">Z</div><h1 data-i18n="welcome">Willkommen in Zelyra Studio</h1>
             <p data-i18n="welcomeHint">Öffne links eine Datei und entwickle direkt in deinem Projekt.</p>
             <div class="shortcut-grid"><span><kbd>Ctrl</kbd> <kbd>S</kbd><small data-i18n="save">Speichern</small></span><span><kbd>Ctrl</kbd> <kbd>F</kbd><small data-i18n="search">Suchen</small></span><span><kbd>Ctrl</kbd> <kbd>P</kbd><small data-i18n="openFile">Datei öffnen</small></span><span><kbd>Ctrl</kbd> <kbd>Space</kbd><small data-i18n="complete">Vervollständigen</small></span></div>
+          </div>
+        </section>
+        <section class="database-workbench" id="database-workbench" hidden aria-label="Datenbank Studio">
+          <header class="database-header">
+            <div><span class="database-eyebrow" data-i18n="databaseStudio">DATENBANK STUDIO</span><h1 data-i18n="databaseTitle">Datenbank verstehen</h1><p data-i18n="databaseIntro">Schemaüberblick und compilergeprüfte CRUD-Vorschau.</p></div>
+            <div class="database-header-actions"><span class="database-connection-state" id="database-state" data-i18n="databaseNotLoaded">Noch nicht verbunden</span><button class="toolbar-button" id="database-refresh" data-i18n="refreshSchema">Schema laden</button><button class="primary-button" id="code-button" data-i18n="backToCode">Zurück zum Code</button></div>
+          </header>
+          <div class="database-layout">
+            <aside class="database-table-rail">
+              <label class="tree-search"><span>⌕</span><input id="database-filter" type="search" placeholder="Tabellen filtern" data-i18n-placeholder="filterTables" autocomplete="off"></label>
+              <div class="database-count" id="database-count"></div>
+              <nav id="database-tables" class="database-tables" aria-label="Datenbanktabellen"></nav>
+            </aside>
+            <div class="database-detail" id="database-detail">
+              <section class="database-graph-panel" id="database-graph-panel" hidden>
+                <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="databaseStudio">DATABASE STUDIO</span><h3 data-i18n="relationshipMap">Tabellenbeziehungen</h3><p data-i18n="relationshipMapHint">Wähle eine Tabelle in der Karte, um ihre Felder zu öffnen.</p></div><span id="database-graph-count" class="database-legend"></span></div>
+                <div class="database-graph-scroller"><svg id="database-graph" class="database-graph" role="img" aria-label="Tabellenbeziehungen"></svg></div>
+                <div class="database-graph-legend"><span data-state="matched" data-i18n="relationMatched">Durchgezogen · Quelle und Live</span><span data-state="source-only" data-i18n="relationSourceOnly">Gestrichelt · nur Quelle</span><span data-state="database-only" data-i18n="relationDatabaseOnly">Gepunktet · nur Datenbank</span></div>
+              </section>
+              <div class="database-welcome" id="database-welcome"><div class="empty-mark">▤</div><h2 data-i18n="databaseChooseTable">Wähle links eine Tabelle</h2><p data-i18n="databaseChooseHint">Studio zeigt Spalten, Schlüssel, Beziehungen und Quellcode-Abweichungen.</p><button class="primary-button" id="database-start" data-i18n="loadSchema">Datenbankschema laden</button></div>
+              <article id="database-table-view" hidden>
+                <header class="database-table-heading"><div><span class="database-eyebrow" id="database-module"></span><h2 id="database-table-name"></h2><p id="database-table-status"></p></div><span class="schema-badge" id="database-status-badge"></span></header>
+                <div class="database-section-heading"><div><h3 data-i18n="columnsAndRelations">Spalten und Beziehungen</h3><p data-i18n="schemaCompareHint">Deklarierte und live vorhandene Merkmale im Vergleich.</p></div><span class="database-legend" data-i18n="schemaLegend">Quelle · Datenbank</span></div>
+                <div id="database-columns" class="database-columns"></div>
+                <section class="crud-builder" id="crud-builder" hidden>
+                  <div class="database-section-heading"><div><span class="database-eyebrow" data-i18n="guidedBuilder">GEFÜHRTER ASSISTENT</span><h3 data-i18n="crudBuilderTitle">CRUD für diese Tabelle erstellen</h3><p data-i18n="crudBuilderHint">Felder auswählen, Zelyra-Code prüfen und erst danach ausdrücklich übernehmen.</p></div></div>
+                  <div class="crud-builder-controls">
+                    <label><span data-i18n="sourceFile">Quelldatei</span><select id="crud-target-file"></select></label>
+                    <label><span data-i18n="resourceName">Ressourcenname</span><input id="crud-resource-name" maxlength="80" autocomplete="off"></label>
+                    <label><span data-i18n="displayTitle">Anzeigetitel</span><input id="crud-title" maxlength="120" autocomplete="off"></label>
+                  </div>
+                  <div class="crud-fields-heading"><strong data-i18n="visibleFields">Sichtbare Felder</strong><span data-i18n="chooseFieldsHint">Mindestens ein Feld auswählen</span></div>
+                  <div id="crud-fields" class="crud-fields"></div>
+                  <div class="crud-actions"><button class="primary-button" id="crud-preview-button" data-i18n="previewCrud">Code prüfen und Vorschau zeigen</button><button class="toolbar-button" id="crud-apply-button" disabled data-i18n="applyCrud">Änderung übernehmen</button><span id="crud-preview-state" class="crud-preview-state"></span></div>
+                  <div class="crud-preview-grid" id="crud-preview-grid" hidden>
+                    <section><div class="crud-preview-heading" data-i18n="generatedSource">ERZEUGTER ZELYRA-CODE</div><pre id="crud-source-preview"></pre></section>
+                    <section><div class="crud-preview-heading" data-i18n="sourceDiff">QUELLTEXTÄNDERUNG</div><pre id="crud-diff-preview"></pre></section>
+                  </div>
+                  <div class="crud-diagnostics" id="crud-diagnostics" hidden></div>
+                </section>
+              </article>
+            </div>
           </div>
         </section>
         <section class="problems-panel" id="problems-panel" hidden>

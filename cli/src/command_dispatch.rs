@@ -43,6 +43,9 @@ pub(super) fn run() -> ExitCode {
     if command == "audit" {
         return audit_command(args);
     }
+    if command == "outbox" {
+        return outbox_cli::outbox_command(args);
+    }
     if command == "editor" {
         return editor::command(args);
     }

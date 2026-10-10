@@ -569,7 +569,8 @@ Independent human acceptance remains deferred to 1.0.0.
 
 - [🗺️] Add guided business workflows and help for extending generated apps.
   Verify the promised MariaDB, MySQL, and PostgreSQL workflows on real servers;
-  expand runtime, module, effect, contract, and SQL language fixtures. See the
+  add preview-first readable regex text editing from a named plan; expand
+  runtime, module, effect, contract, and SQL language fixtures. See the
   [0.9.0 plan](release-plans/0.9.0.en.md).
 
 ## Release 0.95.0

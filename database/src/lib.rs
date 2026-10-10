@@ -20,6 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use zelyra_ast::*;
 
+pub mod outbox;
 pub mod sql;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

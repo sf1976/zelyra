@@ -36,6 +36,12 @@ let editor = null;
 let diagnostics = [];
 let treeFiles = [];
 let activeFilter = "";
+let databaseMap = null;
+let databaseTables = [];
+let selectedDatabaseTable = null;
+let databaseFilter = "";
+let crudPreviewValid = false;
+let lastCrudPreviewRequest = null;
 const editorRoot = $("editor-root");
 const messages = {
   de: {
@@ -52,7 +58,35 @@ const messages = {
     problemsFound: "{0} Problem(e) gefunden", formatRunning: "Formatiere …", formatted: "{0} formatiert",
     createPrompt: "Neuer Dateipfad im Projekt (zum Beispiel src/customer.zyl)",
     closeUnsaved: "{0} enthält ungespeicherte Änderungen. Tab trotzdem schließen?",
-    filesCount: "{0} Dateien", chooseFile: "Datei öffnen"
+    filesCount: "{0} Dateien", chooseFile: "Datei öffnen", database: "Datenbank",
+    databaseStudio: "DATENBANK STUDIO", databaseTitle: "Datenbank verstehen",
+    databaseIntro: "Leseübersicht für DATABASE_URL mit compilergeprüfter CRUD-Vorschau.", databaseNotLoaded: "Noch nicht verbunden",
+    refreshSchema: "Schema laden", backToCode: "Zurück zum Code", filterTables: "Tabellen filtern",
+    databaseChooseTable: "Wähle links eine Tabelle", databaseChooseHint: "Studio zeigt Spalten, Schlüssel, Beziehungen und Quellcode-Abweichungen.",
+    loadSchema: "Datenbankschema laden", columnsAndRelations: "Spalten und Beziehungen",
+    schemaCompareHint: "Deklarierte und live vorhandene Merkmale im Vergleich.", schemaLegend: "Quelle · Datenbank",
+    relationshipMap: "Tabellenbeziehungen", relationshipMapHint: "Wähle eine Tabelle in der Karte, um ihre Felder zu öffnen.", relationshipCount: "{0} Beziehungen", schemaMapLabel: "Datenbankschema mit Tabellenbeziehungen",
+    relationMatched: "Durchgezogen · Quelle und Live", relationSourceOnly: "Gestrichelt · nur Quelle", relationDatabaseOnly: "Gepunktet · nur Datenbank",
+    guidedBuilder: "GEFÜHRTER ASSISTENT", crudBuilderTitle: "CRUD für diese Tabelle erstellen",
+    crudBuilderHint: "Felder auswählen, Zelyra-Code prüfen und erst danach ausdrücklich übernehmen.",
+    sourceFile: "Quelldatei", resourceName: "Ressourcenname", displayTitle: "Anzeigetitel", sourceColumn: "QUELLE", databaseColumn: "DATENBANK", saveBeforePreview: "Speichere die Quelldatei vor der Vorschau.", noTargetFiles: "Keine importierte Zelyra-Quelldatei gefunden",
+    visibleFields: "Sichtbare Felder", chooseFieldsHint: "Mindestens ein Feld auswählen",
+    previewCrud: "Code prüfen und Vorschau zeigen", applyCrud: "Änderung übernehmen",
+    generatedSource: "ERZEUGTER ZELYRA-CODE", sourceDiff: "QUELLTEXTÄNDERUNG",
+    schemaLoading: "Lade Datenbankschema …", schemaLoaded: "Schema geladen · nur lesend",
+    schemaLoadFailed: "Datenbankschema konnte nicht geladen werden", tablesCount: "{0} Tabellen",
+    matched: "Live-Tabelle vorhanden", schemaDrift: "Schemaabweichung", declaredMissingLive: "In Datenbank nicht gefunden", liveUnmapped: "Nur live vorhanden",
+    noTables: "Keine Tabellen gefunden", noTableMatch: "Keine passende Tabelle gefunden",
+    noColumns: "Keine Spalten verfügbar", primaryKey: "Primärschlüssel", nullable: "NULL erlaubt",
+    required: "Pflichtfeld", autoIncrement: "Automatische ID", unique: "Eindeutig",
+    relation: "Beziehung", relationTo: "Verweist auf", declaredOnly: "Nur in Quelle",
+    liveOnly: "Nur in Datenbank", typeMismatch: "Abweichender Typ", noRelationships: "Keine Beziehungen deklariert",
+    tableNotDeclared: "Diese Live-Tabelle ist noch nicht in Zelyra deklariert. Lege zuerst eine geprüfte Tabellendeklaration an.",
+    existingCrud: "Für diese Tabelle existiert bereits eine CRUD-Ressource.",
+    previewRunning: "Prüfe erzeugten Code …", previewPassed: "Compilerprüfung bestanden · Änderung noch nicht übernommen",
+    previewFailed: "Compilerprüfung fehlgeschlagen", previewRequired: "Erstelle zuerst eine gültige Vorschau.",
+    applySuccess: "CRUD-Änderung übernommen", selectOneField: "Wähle mindestens ein Feld.",
+    table: "Tabelle", field: "Feld", moduleUnknown: "Quellmodul unbekannt", selectTarget: "Quelldatei auswählen"
   },
   en: {
     subtitle: "Local development environment", local: "LOCAL", files: "FILES", newFile: "New file",
@@ -68,7 +102,35 @@ const messages = {
     problemsFound: "Found {0} problem(s)", formatRunning: "Formatting …", formatted: "Formatted {0}",
     createPrompt: "New project file path (for example src/customer.zyl)",
     closeUnsaved: "{0} has unsaved changes. Close this tab anyway?",
-    filesCount: "{0} files", chooseFile: "Open file"
+    filesCount: "{0} files", chooseFile: "Open file", database: "Database",
+    databaseStudio: "DATABASE STUDIO", databaseTitle: "Understand your data",
+    databaseIntro: "Read-only DATABASE_URL schema overview with a compiler-checked CRUD preview.", databaseNotLoaded: "Not connected",
+    refreshSchema: "Load schema", backToCode: "Back to code", filterTables: "Filter tables",
+    databaseChooseTable: "Choose a table on the left", databaseChooseHint: "Studio shows columns, keys, relations, and source drift.",
+    loadSchema: "Load database schema", columnsAndRelations: "Columns and relations",
+    schemaCompareHint: "Compare declared fields with the live database.", schemaLegend: "Source · database",
+    relationshipMap: "Table relationships", relationshipMapHint: "Choose a table in the map to open its fields.", relationshipCount: "{0} relationships", schemaMapLabel: "Database schema and table relationships",
+    relationMatched: "Solid · source and live", relationSourceOnly: "Dashed · source only", relationDatabaseOnly: "Dotted · database only",
+    guidedBuilder: "GUIDED BUILDER", crudBuilderTitle: "Create CRUD for this table",
+    crudBuilderHint: "Choose fields, check generated Zelyra code, then explicitly apply it.",
+    sourceFile: "Source file", resourceName: "Resource name", displayTitle: "Display title", sourceColumn: "SOURCE", databaseColumn: "DATABASE", saveBeforePreview: "Save the source file before previewing.", noTargetFiles: "No imported Zelyra source file found",
+    visibleFields: "Visible fields", chooseFieldsHint: "Choose at least one field",
+    previewCrud: "Check code and preview", applyCrud: "Apply change",
+    generatedSource: "GENERATED ZELYRA SOURCE", sourceDiff: "SOURCE CHANGE",
+    schemaLoading: "Loading database schema …", schemaLoaded: "Schema loaded · read only",
+    schemaLoadFailed: "Could not load database schema", tablesCount: "{0} tables",
+    matched: "Table exists", schemaDrift: "Schema drift", declaredMissingLive: "Missing from database", liveUnmapped: "Live only",
+    noTables: "No tables found", noTableMatch: "No matching table",
+    noColumns: "No columns available", primaryKey: "Primary key", nullable: "Nullable",
+    required: "Required", autoIncrement: "Auto increment", unique: "Unique",
+    relation: "Relation", relationTo: "References", declaredOnly: "Source only",
+    liveOnly: "Database only", typeMismatch: "Type differs", noRelationships: "No declared relations",
+    tableNotDeclared: "This live table is not declared in Zelyra yet. Add a reviewed table declaration first.",
+    existingCrud: "A CRUD resource already exists for this table.",
+    previewRunning: "Checking generated source …", previewPassed: "Compiler check passed · change not yet applied",
+    previewFailed: "Compiler check failed", previewRequired: "Create a valid preview first.",
+    applySuccess: "CRUD change applied", selectOneField: "Choose at least one field.",
+    table: "Table", field: "Field", moduleUnknown: "Source module unknown", selectTarget: "Choose source file"
   }
 };
 let language = localStorage.getItem("zelyra-editor-language") === "en" ? "en" : "de";
@@ -83,6 +145,11 @@ function setLanguage(next) {
   for (const element of document.querySelectorAll("[data-i18n-aria]")) element.setAttribute("aria-label", messages[language][element.dataset.i18nAria] || element.getAttribute("aria-label"));
   localStorage.setItem("zelyra-editor-language", language);
   renderTree();
+  if (databaseMap) {
+    renderDatabaseTables();
+    if (selectedDatabaseTable) selectDatabaseTable(selectedDatabaseTable.name);
+    else renderDatabaseGraph();
+  }
 }
 
 const keywords = new Set((
@@ -327,6 +394,404 @@ async function refreshTree() {
   catch (error) { announce(error.message, "error"); }
 }
 
+function flattenDatabaseMap(map) {
+  const declared = (map.modules || []).flatMap((module) => (module.tables || []).map((table) => ({ ...table, module: table.module || module.source_module })));
+  const liveOnly = (map.unmapped_live_tables || []).map((table) => ({ ...table, status: "live_unmapped" }));
+  return [...declared, ...liveOnly].sort((left, right) => String(left.name).localeCompare(String(right.name)));
+}
+
+async function loadDatabaseSchema() {
+  const state = $("database-state");
+  state.textContent = t("schemaLoading");
+  state.dataset.kind = "pending";
+  try {
+    databaseMap = await api("database-schema");
+    databaseTables = flattenDatabaseMap(databaseMap);
+    state.textContent = `${t("schemaLoaded")} · ${databaseMap.backend || ""}`;
+    state.dataset.kind = "success";
+    renderDatabaseTables();
+    renderDatabaseGraph();
+    if (databaseTables.length) selectDatabaseTable(selectedDatabaseTable?.name || databaseTables[0].name);
+    else showDatabaseWelcome(t("noTables"));
+    announce(t("schemaLoaded"), "success");
+  } catch (error) {
+    databaseMap = null;
+    databaseTables = [];
+    state.textContent = t("schemaLoadFailed");
+    state.dataset.kind = "error";
+    renderDatabaseGraph();
+    showDatabaseWelcome(error.message);
+    renderDatabaseTables();
+    announce(error.message, "error");
+  }
+}
+
+function statusLabel(status) {
+  return ({ matched: t("matched"), schema_drift: t("schemaDrift"), declared_missing_live: t("declaredMissingLive"), live_unmapped: t("liveUnmapped") })[status] || status;
+}
+
+function tableStatus(table) {
+  if (table.status !== "matched") return table.status;
+  const declared = new Map((table.declared_columns || []).map((column) => [column.name, column]));
+  const live = new Map((table.live_columns || []).map((column) => [column.name, column]));
+  if (declared.size !== live.size || [...declared].some(([name, column]) => !live.has(name) || columnSignature(column) !== columnSignature(live.get(name)))) return "schema_drift";
+  if (relationSets(table).some((relation) => relation.state !== "matched")) return "schema_drift";
+  return "matched";
+}
+
+function renderDatabaseTables() {
+  const container = $("database-tables");
+  if (!container) return;
+  container.replaceChildren();
+  const filtered = databaseTables.filter((table) => String(table.name).toLowerCase().includes(databaseFilter.toLowerCase()));
+  $("database-count").textContent = t("tablesCount", filtered.length);
+  if (!filtered.length) {
+    const empty = document.createElement("p"); empty.className = "database-empty";
+    empty.textContent = databaseTables.length ? t("noTableMatch") : t("noTables"); container.append(empty); return;
+  }
+  for (const table of filtered) {
+    const row = document.createElement("button");
+    row.className = `database-table-item${selectedDatabaseTable?.name === table.name ? " selected" : ""}`;
+    row.type = "button";
+    const status = tableStatus(table);
+    const icon = document.createElement("span"); icon.className = "database-table-icon"; icon.textContent = status === "matched" ? "▤" : "◌";
+    const copy = document.createElement("span"); copy.className = "database-table-copy";
+    const name = document.createElement("strong"); name.textContent = table.name;
+    const sub = document.createElement("small"); sub.textContent = `${statusLabel(status)} · ${(table.live_columns || table.declared_columns || []).length} ${t("field")}`;
+    copy.append(name, sub); row.append(icon, copy);
+    row.addEventListener("click", () => selectDatabaseTable(table.name));
+    container.append(row);
+  }
+}
+
+function renderDatabaseGraph() {
+  const panel = $("database-graph-panel");
+  const svg = $("database-graph");
+  if (!panel || !svg) return;
+  panel.hidden = !databaseTables.length;
+  svg.replaceChildren();
+  if (!databaseTables.length) return;
+
+  const namespace = "http://www.w3.org/2000/svg";
+  const nodeWidth = 190;
+  const nodeHeight = 72;
+  const columnGap = 225;
+  const rowGap = 112;
+  const columns = 3;
+  const positions = new Map(databaseTables.map((table, index) => [table.name, {
+    x: 16 + (index % columns) * columnGap,
+    y: 35 + Math.floor(index / columns) * rowGap,
+  }]));
+  const width = 16 + (columns - 1) * columnGap + nodeWidth + 16;
+  const height = 35 + Math.ceil(databaseTables.length / columns) * rowGap + 15;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  svg.setAttribute("aria-label", t("schemaMapLabel"));
+  $("database-graph-count").textContent = t("relationshipCount", databaseTables.reduce((count, table) => count + relationSets(table).length, 0));
+
+  const defs = document.createElementNS(namespace, "defs");
+  const marker = document.createElementNS(namespace, "marker");
+  marker.id = "database-arrow";
+  marker.setAttribute("viewBox", "0 0 10 10");
+  marker.setAttribute("refX", "9");
+  marker.setAttribute("refY", "5");
+  marker.setAttribute("markerWidth", "6");
+  marker.setAttribute("markerHeight", "6");
+  marker.setAttribute("orient", "auto-start-reverse");
+  const arrow = document.createElementNS(namespace, "path");
+  arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+  arrow.setAttribute("class", "database-graph-arrow");
+  marker.append(arrow);
+  defs.append(marker);
+  svg.append(defs);
+
+  const edges = document.createElementNS(namespace, "g");
+  edges.setAttribute("class", "database-graph-edges");
+  for (const table of databaseTables) {
+    const source = positions.get(table.name);
+    for (const { relation, state } of relationSets(table)) {
+      const target = positions.get(relation.references_table);
+      if (!target) continue;
+      const sx = source.x + nodeWidth;
+      const sy = source.y + nodeHeight / 2;
+      const tx = target.x;
+      const ty = target.y + nodeHeight / 2;
+      const curve = document.createElementNS(namespace, "path");
+      const bend = Math.max(32, Math.abs(tx - sx) / 2);
+      curve.setAttribute("d", `M ${sx} ${sy} C ${sx + bend} ${sy}, ${tx - bend} ${ty}, ${tx} ${ty}`);
+      curve.setAttribute("class", `database-graph-edge${selectedDatabaseTable?.name === table.name || selectedDatabaseTable?.name === relation.references_table ? " related" : ""}`);
+      curve.dataset.state = state;
+      curve.setAttribute("marker-end", "url(#database-arrow)");
+      curve.setAttribute("aria-label", `${table.name}.${relation.column} → ${relation.references_table}.${relation.references_column}`);
+      edges.append(curve);
+    }
+  }
+  svg.append(edges);
+
+  const nodes = document.createElementNS(namespace, "g");
+  nodes.setAttribute("class", "database-graph-nodes");
+  for (const table of databaseTables) {
+    const position = positions.get(table.name);
+    const relations = relationSets(table);
+    const group = document.createElementNS(namespace, "g");
+    const status = tableStatus(table);
+    group.setAttribute("class", `database-graph-node${selectedDatabaseTable?.name === table.name ? " selected" : ""}${status === "matched" ? "" : " drift"}`);
+    group.setAttribute("transform", `translate(${position.x} ${position.y})`);
+    group.setAttribute("tabindex", "0");
+    group.setAttribute("role", "button");
+    group.setAttribute("aria-label", `${table.name}, ${statusLabel(status)}`);
+    const card = document.createElementNS(namespace, "rect");
+    card.setAttribute("width", nodeWidth);
+    card.setAttribute("height", nodeHeight);
+    card.setAttribute("rx", "8");
+    const title = document.createElementNS(namespace, "text");
+    title.setAttribute("x", "12"); title.setAttribute("y", "27"); title.setAttribute("class", "database-graph-title");
+    title.textContent = table.name.length > 24 ? `${table.name.slice(0, 21)}…` : table.name;
+    const subtitle = document.createElementNS(namespace, "text");
+    subtitle.setAttribute("x", "12"); subtitle.setAttribute("y", "49"); subtitle.setAttribute("class", "database-graph-subtitle");
+    subtitle.textContent = `${statusLabel(status)} · ${(table.live_columns || table.declared_columns || []).length} ${t("field")} · ${relations.length} ↗`;
+    group.append(card, title, subtitle);
+    const open = () => { selectDatabaseTable(table.name); $("database-table-view").scrollIntoView({ behavior: "smooth", block: "start" }); };
+    group.addEventListener("click", open);
+    group.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+    nodes.append(group);
+  }
+  svg.append(nodes);
+}
+
+function showDatabaseWelcome(message = t("databaseChooseHint")) {
+  $("database-welcome").hidden = false;
+  $("database-table-view").hidden = true;
+  $("database-welcome").querySelector("p").textContent = message;
+  selectedDatabaseTable = null;
+  renderDatabaseTables();
+  renderDatabaseGraph();
+}
+
+function selectDatabaseTable(name) {
+  selectedDatabaseTable = databaseTables.find((table) => table.name === name) || null;
+  if (!selectedDatabaseTable) return showDatabaseWelcome();
+  $("database-welcome").hidden = true;
+  $("database-table-view").hidden = false;
+  $("database-module").textContent = selectedDatabaseTable.module || t("moduleUnknown");
+  $("database-table-name").textContent = selectedDatabaseTable.name;
+  $("database-table-status").textContent = statusLabel(tableStatus(selectedDatabaseTable));
+  const badge = $("database-status-badge");
+  badge.textContent = statusLabel(tableStatus(selectedDatabaseTable));
+  badge.dataset.state = tableStatus(selectedDatabaseTable);
+  renderDatabaseColumns(selectedDatabaseTable);
+  renderCrudBuilder(selectedDatabaseTable);
+  renderDatabaseTables();
+  renderDatabaseGraph();
+}
+
+function columnSignature(column) {
+  return [column.type, column.nullable, column.primary_key, column.auto_increment, column.unique]
+    .map((value) => String(value ?? "").toLowerCase()).join("|");
+}
+
+function columnDescription(column) {
+  const flags = [];
+  if (column.primary_key) flags.push("PK");
+  if (column.auto_increment) flags.push("AUTO");
+  if (column.unique) flags.push("UNIQUE");
+  if (!column.nullable) flags.push("REQUIRED");
+  return `${column.type || "?"}${column.nullable ? "?" : ""}${flags.length ? ` · ${flags.join(" · ")}` : ""}`;
+}
+
+function relationSets(table) {
+  const source = table.foreign_keys || [];
+  const live = table.live_foreign_keys || [];
+  const key = (relation) => `${relation.column}|${relation.references_table}|${relation.references_column}`;
+  const sourceByKey = new Map(source.map((relation) => [key(relation), relation]));
+  const liveByKey = new Map(live.map((relation) => [key(relation), relation]));
+  return [...new Set([...sourceByKey.keys(), ...liveByKey.keys()])].map((signature) => ({
+    relation: sourceByKey.get(signature) || liveByKey.get(signature),
+    state: sourceByKey.has(signature) && liveByKey.has(signature) ? "matched" : sourceByKey.has(signature) ? "source-only" : "database-only",
+  }));
+}
+
+function renderDatabaseColumns(table) {
+  const container = $("database-columns");
+  container.replaceChildren();
+  const declared = new Map((table.declared_columns || []).map((column) => [column.name, column]));
+  const live = new Map((table.live_columns || []).map((column) => [column.name, column]));
+  const names = [...new Set([...declared.keys(), ...live.keys()])].sort((a, b) => a.localeCompare(b));
+  if (!names.length) {
+    const empty = document.createElement("p"); empty.className = "database-empty"; empty.textContent = t("noColumns"); container.append(empty); return;
+  }
+  const heading = document.createElement("div"); heading.className = "database-column-row database-column-head";
+  for (const label of [t("field"), t("sourceColumn"), t("databaseColumn")]) { const cell = document.createElement("span"); cell.textContent = label; heading.append(cell); }
+  container.append(heading);
+  for (const name of names) {
+    const source = declared.get(name); const database = live.get(name);
+    const row = document.createElement("div"); row.className = "database-column-row";
+    const identity = document.createElement("div"); identity.className = "database-column-identity";
+    const field = document.createElement("strong"); field.textContent = name;
+    identity.append(field);
+    const sourceType = document.createElement("code"); sourceType.textContent = source ? columnDescription(source) : t("declaredOnly");
+    const dbType = document.createElement("code"); dbType.textContent = database ? columnDescription(database) : t("liveOnly");
+    row.append(identity, sourceType, dbType);
+    if (!source || !database) row.dataset.state = source ? "source-only" : "database-only";
+    else if (columnSignature(source) !== columnSignature(database)) row.dataset.state = "changed";
+    container.append(row);
+  }
+  const relations = relationSets(table);
+  const relationPanel = document.createElement("div"); relationPanel.className = "database-relations";
+  const relationTitle = document.createElement("strong"); relationTitle.textContent = t("relation"); relationPanel.append(relationTitle);
+  if (!relations.length) { const empty = document.createElement("span"); empty.textContent = t("noRelationships"); relationPanel.append(empty); }
+  for (const { relation, state } of relations) {
+    const item = document.createElement("span"); item.className = "database-relation-chip"; item.dataset.state = state;
+    item.textContent = `${relation.column}  →  ${relation.references_table}.${relation.references_column} · ${state === "matched" ? t("matched") : state === "source-only" ? t("declaredOnly") : t("liveOnly")}`; relationPanel.append(item);
+  }
+  container.append(relationPanel);
+}
+
+function renderCrudBuilder(table) {
+  const builder = $("crud-builder");
+  const resources = databaseMap?.crud_resources || [];
+  const existing = resources.find((resource) => resource.table === table.name);
+  const usable = table.status === "matched" && !existing;
+  builder.hidden = !usable;
+  $("crud-preview-grid").hidden = true;
+  $("crud-diagnostics").hidden = true;
+  $("crud-apply-button").disabled = true;
+  crudPreviewValid = false;
+  if (!usable) {
+    const status = table.status === "matched" ? t("existingCrud") : t("tableNotDeclared");
+    const hint = document.createElement("div"); hint.className = "database-builder-hint"; hint.textContent = status;
+    const old = $("database-table-view").querySelector(".database-builder-hint"); old?.remove();
+    $("database-table-view").append(hint); return;
+  }
+  $("database-table-view").querySelector(".database-builder-hint")?.remove();
+  const targetSelect = $("crud-target-file"); targetSelect.replaceChildren();
+  const sourceFiles = (databaseMap?.crud_targets || []).filter((file) => treeFiles.includes(file));
+  if (!sourceFiles.length) {
+    const option = document.createElement("option"); option.value = ""; option.textContent = t("noTargetFiles"); targetSelect.append(option);
+  }
+  for (const path of sourceFiles) { const option = document.createElement("option"); option.value = path; option.textContent = path; targetSelect.append(option); }
+  if (sourceFiles.includes("main.zyl")) targetSelect.value = "main.zyl";
+  targetSelect.disabled = sourceFiles.length === 0;
+  const resource = table.name.split("_").filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join("");
+  $("crud-resource-name").value = resource;
+  $("crud-title").value = resource;
+  const fields = $("crud-fields"); fields.replaceChildren();
+  const columns = table.declared_columns || [];
+  const liveColumns = new Set((table.live_columns || []).map((column) => column.name));
+  for (const column of columns) {
+    const label = document.createElement("label"); label.className = "crud-field-option";
+    const input = document.createElement("input"); input.type = "checkbox"; input.value = column.name;
+    input.disabled = !liveColumns.has(column.name);
+    input.checked = !input.disabled && !column.primary_key && !column.auto_increment;
+    input.addEventListener("change", invalidateCrudPreview);
+    const name = document.createElement("strong"); name.textContent = column.name;
+    const type = document.createElement("small"); type.textContent = `${column.type}${column.nullable ? " · NULL" : ""}`;
+    label.append(input, name, type); fields.append(label);
+  }
+  if (!fields.querySelector("input:checked") && fields.querySelector("input:not(:disabled)")) fields.querySelector("input:not(:disabled)").checked = true;
+  $("crud-target-file").onchange = invalidateCrudPreview;
+  $("crud-resource-name").oninput = invalidateCrudPreview;
+  $("crud-title").oninput = invalidateCrudPreview;
+}
+
+function invalidateCrudPreview() {
+  crudPreviewValid = false;
+  lastCrudPreviewRequest = null;
+  $("crud-apply-button").disabled = true;
+  $("crud-preview-state").textContent = "";
+}
+
+function selectedCrudFields() {
+  return [...$("crud-fields").querySelectorAll("input:checked")].map((input) => input.value);
+}
+
+async function currentCrudRequest() {
+  const path = $("crud-target-file").value;
+  if (!path) throw new Error(t("selectTarget"));
+  if (!selectedCrudFields().length) throw new Error(t("selectOneField"));
+  const tab = tabs.get(path);
+  if (tab && isDirty(tab)) throw new Error(t("saveBeforePreview"));
+  const file = await api(`file?path=${encodeURIComponent(path)}`);
+  return {
+    path,
+    baseHash: file.hash,
+    table: selectedDatabaseTable.name,
+    fields: selectedCrudFields(),
+    resourceName: $("crud-resource-name").value.trim(),
+    title: $("crud-title").value.trim(),
+  };
+}
+
+function showCrudDiagnostics(items) {
+  const panel = $("crud-diagnostics"); panel.replaceChildren(); panel.hidden = !items.length;
+  for (const item of items) {
+    const row = document.createElement("div"); row.className = "crud-diagnostic";
+    const code = document.createElement("strong"); code.textContent = item.code || "Compiler";
+    const message = document.createElement("span"); message.textContent = item.message || "";
+    row.append(code, message); panel.append(row);
+  }
+}
+
+async function previewCrud() {
+  invalidateCrudPreview();
+  $("crud-preview-state").textContent = t("previewRunning");
+  try {
+    const request = await currentCrudRequest();
+    const result = await api("crud-preview", { method: "POST", body: JSON.stringify(request) });
+    $("crud-source-preview").textContent = result.snippet || "";
+    $("crud-diff-preview").textContent = result.diff || "";
+    $("crud-preview-grid").hidden = false;
+    showCrudDiagnostics(result.diagnostics || []);
+    crudPreviewValid = Boolean(result.success);
+    lastCrudPreviewRequest = crudPreviewValid ? request : null;
+    $("crud-apply-button").disabled = !crudPreviewValid;
+    $("crud-preview-state").textContent = crudPreviewValid ? t("previewPassed") : t("previewFailed");
+    $("crud-preview-state").dataset.kind = crudPreviewValid ? "success" : "error";
+  } catch (error) {
+    showCrudDiagnostics([]);
+    $("crud-preview-state").textContent = error.message;
+    $("crud-preview-state").dataset.kind = "error";
+  }
+}
+
+async function applyCrud() {
+  if (!crudPreviewValid) { announce(t("previewRequired"), "warning"); return; }
+  try {
+    const request = lastCrudPreviewRequest;
+    if (!request) throw new Error(t("previewRequired"));
+    const result = await api("crud-apply", { method: "POST", body: JSON.stringify(request) });
+    const tab = tabs.get(result.path);
+    if (tab) {
+      tab.saved = result.content; tab.hash = result.hash;
+      tab.state = EditorState.create({ doc: result.content });
+      if (activePath === result.path && editor) { editor.setState(tab.state); tab.state = editor.state; }
+      renderTabs();
+    } else await openFile(result.path);
+    invalidateCrudPreview();
+    await refreshTree();
+    announce(t("applySuccess"), "success");
+  } catch (error) {
+    $("crud-preview-state").textContent = error.message;
+    $("crud-preview-state").dataset.kind = "error";
+    announce(error.message, "error");
+  }
+}
+
+function openDatabaseWorkbench() {
+  $("editor-stage").hidden = true;
+  $("database-workbench").hidden = false;
+  $("database-button").classList.add("active");
+  if (!databaseMap) void loadDatabaseSchema();
+}
+
+function openCodeWorkbench() {
+  $("database-workbench").hidden = true;
+  $("editor-stage").hidden = false;
+  $("database-button").classList.remove("active");
+  if (editor) editor.focus();
+}
+
 function renderDiagnostics(items, success) {
   diagnostics = items.map((item) => {
     const start = item.span?.start || {};
@@ -396,6 +861,13 @@ $("save-button").addEventListener("click", saveActive);
 $("save-all-button").addEventListener("click", saveAll);
 $("check-button").addEventListener("click", checkProject);
 $("format-button").addEventListener("click", formatActive);
+$("database-button").addEventListener("click", openDatabaseWorkbench);
+$("code-button").addEventListener("click", openCodeWorkbench);
+$("database-refresh").addEventListener("click", loadDatabaseSchema);
+$("database-start").addEventListener("click", loadDatabaseSchema);
+$("database-filter").addEventListener("input", (event) => { databaseFilter = event.target.value; renderDatabaseTables(); });
+$("crud-preview-button").addEventListener("click", previewCrud);
+$("crud-apply-button").addEventListener("click", applyCrud);
 $("new-file-button").addEventListener("click", createFile);
 $("refresh-button").addEventListener("click", refreshTree);
 $("tree-filter").addEventListener("input", (event) => { activeFilter = event.target.value; renderTree(); });

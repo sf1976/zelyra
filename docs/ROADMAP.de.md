@@ -536,8 +536,9 @@ Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
 - [🗺️] Geführte Geschäftsabläufe und Hilfe zum Erweitern erzeugter Anwendungen
   ergänzen. Die zugesagten MariaDB-, MySQL- und PostgreSQL-Abläufe auf echten
-  Servern prüfen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und SQL-Fixtures
-  ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
+  Servern prüfen, Vorschau-basierte lesbare Regex-Textbearbeitung aus einem
+  benannten Plan ergänzen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und
+  SQL-Fixtures ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
 
 ## Release 0.95.0
 

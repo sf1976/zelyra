@@ -2695,68 +2695,71 @@ zelyra serve src/main.zyl 0.0.0.0:8080
 
 ---
 
-<a id="kapitel-41-die-zelyra-roadmap-von-030-bis-10"></a>
+<a id="kapitel-41-die-zelyra-roadmap-von-080-bis-10"></a>
 
-## Kapitel 41: Die Zelyra-Roadmap (Von 0.3.0 bis 1.0)
+## Kapitel 41: Die Zelyra-Roadmap (Von 0.8.0 bis 1.0)
 
 ### 1. Was lerne ich in diesem Kapitel?
-- Die Entwicklung von Zelyra: Was das experimentelle Release 0.3.0 liefert und was als Nächstes kommt.
-- Geplante nächste Meilensteine: vollständige Module, Package-Management und WebAssembly.
-- Wie Abwärtskompatibilität und Stabilitätsgarantien bis Version 1.0 gewährleistet werden.
+- Den experimentellen Stand von Zelyra 0.8.0 und die nächsten Entwicklungsschritte.
+- Wie die Sprachkompatibilitätslinie 0.1 von den Compiler-Releases getrennt bleibt.
+- Welche technischen Nachweise und menschliche Abnahme für 1.0.0 noch erforderlich sind.
 
 ### 2. Warum ist das Thema wichtig?
 Eine Programmiersprache ist ein lebendiges Ökosystem. Wer heute Zeit investiert, um Zelyra zu lernen, möchte sicher sein, dass die Sprache eine klare Zukunft hat, professionell weiterentwickelt wird und bestehender Code auch in kommenden Versionen lauffähig bleibt.
 
 ### 3. Verständliche Erklärung: Die Roadmap im Überblick
-Die Entwicklung von Zelyra gliedert sich in Implementierungsphasen und
-Release-Meilensteine:
-- **Phase 1 bis 3 (Fundament):** Lexer, Parser, AST, Typsystem, Kontrollstrukturen, Funktionen und Verträge (`requires`, `ensures`). *(Abgeschlossen)*
-- **Phase 4 bis 6 (Datenbank & Daten):** MariaDB/SQLite-Engine, typisiertes `sql<T>`, Migrationen, Transaktionen, Dateisystem- und Zeit-Capabilities. *(Abgeschlossen)*
-- **Phase 7 bis 9 (Web & Sicherheit):** `page`, `html`, `form` mit CSRF/XSS-Schutz, `crud`-Views, `auth` mit Argon2, `api` mit OpenAPI-Generierung, Typed Holes, JSON-Compilerdiagnostik. *(Abgeschlossen)*
-- **0.3.0 (aktuelles experimentelles Release):** geprüfte Compiler- und
-  Datenbankpfade, Installer und Update-Check, generierte Businessanwendungen
-  sowie Linux- und Windows-x86_64-Release-Artefakte. Die menschliche
-  Einsteigerabnahme wurde auf das verpflichtende 0.4.0-Gate verschoben.
-- **0.2.0 (vorheriges Release):** Typisierte Maps, deklarative Suche,
-  Filterung und Pagination, wiederverwendbare Views und Slots, erzeugtes CRUD,
-  Authentifizierung und Berechtigungen, Audit-Unterstützung, Setup-/Doctor-
-  Werkzeuge sowie maschinenlesbare Compiler-Schnittstellen.
-- **0.4.0 (vorgeschlagen):** Module, Datenbank-Lebenszyklus, sichere
-  Konto-/API-Abläufe und unabhängige menschliche Einsteigerabnahme. Siehe den
-  [Releaseplan](../../release-plans/0.4.0.de.md).
-- **Spätere Meilensteine:** Paketmanager, WebAssembly und jede LTS-Zusage
-  bleiben zukünftige Arbeiten. Der aktuelle Entwicklungszweig enthält
-  experimentelle Imports für Funktionen, Typen, Records, Tabellen, Views,
-  Komponenten und projektweite Datenbankkonfiguration. Sie sind nicht in
-  0.3.0 enthalten und bilden noch kein vollständiges, stabiles Modulmodell.
+Zelyra verwendet Compiler-Releases wie `0.8.0` und eine getrennte
+Sprachkompatibilitätslinie wie `0.1`. Ein Upgrade des Compilers ändert die
+Sprachlinie eines Projekts nicht automatisch.
 
-### 4. Zelyras Versprechen an Entwickler
-- **Keine Breaking Changes ohne Deprecation:** Änderungen an der Syntax werden mit klaren Übergangsfristen und Compiler-Hinweisen eingeführt.
-- **Verlässliche Spezifikation:** Jedes Sprachmerkmal ist in der formalen Grammatik festgeschrieben.
+- **0.8.0 (experimentell):** Das lokale Zelyra Studio zeigt eine anklickbare,
+  schreibgeschützte Datenbank-Beziehungskarte für unterstützte MariaDB- und
+  PostgreSQL-Pfade. Ein CRUD-Assistent erzeugt Quelltext, prüft ihn mit dem
+  Compiler und verlangt das ausdrückliche Anwenden. MySQL-Live-Introspektion
+  und visuelle Datenbankänderungen sind nicht enthalten. Die begrenzte lokale
+  MariaDB-Outbox bietet keine allgemeine Queue.
+- **0.9.0 (geplant):** Geführte Geschäftsabläufe, geprüfte MariaDB-/MySQL-/
+  PostgreSQL-Abläufe und ein Vorschau-zuerst-Befehl für lesbare Regex-
+  Textänderungen.
+- **0.95.0 (geplant):** Technische Stabilisierung, Sicherheits-, Upgrade-,
+  Rollback-, Abhängigkeits- und Dokumentationslücken schließen.
+- **0.99.0 (geplant):** Sprach- und Funktionsumfang einfrieren und einen
+  unveränderlichen Release Candidate technisch prüfen.
+- **1.0.0:** Die erste produktive Version erscheint erst nach bestandenen
+  technischen Gates und unabhängiger menschlicher Abnahme des exakten
+  Kandidaten. Diese Abnahme wurde nicht durch CI oder interne Tests ersetzt.
+
+Die [Roadmap](../../ROADMAP.de.md) und die
+[Sprachkompatibilitätsrichtlinie](../../language-compatibility.de.md) führen
+Umfang und Grenzen detailliert auf. Paketmanager, WebAssembly und LTS-Zusagen
+sind nicht für 1.0.0 versprochen.
+
+### 4. Kompatibilität und Grenzen
+- Die Linie 0.1 soll gültige Programme innerhalb der dokumentierten Unterstützung erhalten; vor 1.0 bleibt sie experimentell.
+- Compiler-Version und Sprachlinie sind unabhängig. Unterstützte Datenbankpfade, CLI-Verträge und Webverhalten besitzen eigene Grenzen.
+- Zelyra verspricht keine vollständige PostgreSQL-Parität, universelle SQL-Portabilität oder korrekte Verifikation beliebiger Programme.
 
 ### 5. Typische Missverständnisse
-- **Missverständnis:** „Zelyra 0.3.0 ist produktionsreif, weil die Kernpfade funktionieren.“
-  *Richtigstellung:* Zelyra 0.3.0 ist ein experimenteller, getesteter Umfang.
-  Unterstützte Pfade und Restrisiken sind dokumentiert; eine Freigabe für
-  Produktion wird nicht behauptet.
-- **Missverständnis:** Annehmen, dass Imports sich in allen Zelyra-Versionen wie in anderen Sprachen verhalten.
-  *Richtigstellung:* Das veröffentlichte 0.3.0 hat keine Modul-Imports. Der aktuelle Entwicklungszweig unterstützt statische, projektlokale Imports einer begrenzten Auswahl von Deklarationen über `check`, `build`, `run`, `serve`, `context`, `verify` und `impact`. Vollständiges Packaging, Sichtbarkeit und die Integration aller Werkzeuge bleiben geplant.
+- **Missverständnis:** „Das Studio kann jedes Datenbankschema bearbeiten.“
+  *Richtigstellung:* Die Karte liest Schema-Metadaten. Der CRUD-Assistent
+  erzeugt compilergeprüften Quelltext und ändert weder Schema noch Datensätze.
+- **Missverständnis:** „0.8.0 ist produktionsreif, weil CI grün ist.“
+  *Richtigstellung:* 0.8.0 bleibt experimentell. CI belegt automatisierte
+  Prüfungen, ersetzt aber nicht die geplante menschliche Abnahme für 1.0.0.
 
 ### 6. Merksätze
-1. Zelyra besitzt einen klaren, transparenten Entwicklungsplan vom aktuellen
-   Release 0.3.0 zu späteren Meilensteinen.
-2. Datenbank, Web, Typsicherheit und KI-native Werkzeuge besitzen getestete
-   experimentelle Pfade, sind aber heute nicht für Produktion freigegeben.
-3. Ein vollständiges Modulmodell, Paketverteilung und WebAssembly bleiben
-   zukünftige Arbeiten; der aktuelle Entwicklungszweig enthält einen
-   begrenzten, experimentellen Mehrdatei-Compilerpfad.
+1. 0.8.0 ist ein experimentelles Compiler-Release; die Sprachlinie bleibt 0.1.
+2. Das Studio liest Schema-Metadaten und prüft erzeugten CRUD-Quelltext, bevor
+   es eine Änderung ausdrücklich übernimmt.
+3. 1.0.0 wird erst nach technischen Nachweisen und menschlicher Abnahme
+   veröffentlicht.
 
 ### 7. Übungsaufgaben
 - **Stufe 1 (Leicht):** Lies das offizielle `CHANGELOG.md` im Zelyra-Repository.
-- **Stufe 2 (Mittel):** Vergleiche die Features von Phase 9 mit den Planungen für Phase 11.
-- **Stufe 3 (Anspruchsvoll):** Schreibe ein kurzes Konzept für ein zukünftiges Zelyra-Paket, das du in Phase 12 veröffentlichen möchtest.
+- **Stufe 2 (Mittel):** Vergleiche die in `docs/ROADMAP.de.md` dokumentierten Ziele für 0.9.0 und 0.95.0.
+- **Stufe 3 (Anspruchsvoll):** Wähle eine Tabelle in Studio, untersuche eine Schemaabweichung und prüfe, wie die CRUD-Vorschau Änderungen bis zum ausdrücklichen Anwenden behandelt.
 
-### 8. Praxisaufgabe: Zelyra-Version und Umgebung auditieren
+### 8. Praxisaufgabe: Zelyra-Version und Umgebung prüfen
 Überprüfe die installierte Version und den Zustand deines Systems:
 ```bash
 zelyra --version
@@ -2764,13 +2767,13 @@ zelyra doctor
 ```
 
 ### 9. Zusammenfassung
-- Zelyra schreitet zielstrebig auf Version 1.0 zu.
-- Das modulare Phasenkonzept garantiert kontinuierliche, stabile Weiterentwicklung.
+- Zelyra entwickelt die experimentelle Linie 0.1 schrittweise bis zum geplanten 1.0.0-Release weiter.
+- Roadmap-Einträge sind Ziele und keine Garantie, dass ein Feature bereits verfügbar ist.
 
 ### 10. Kontrollfragen zur Selbstprüfung
-1. Welche Kernbausteine sind im getesteten Umfang von 0.3.0 implementiert?
-2. Für welchen zukünftigen Meilenstein sind feingliedrige `import`-Anweisungen geplant?
-3. Warum ist der experimentelle Status vor einem Produktiveinsatz wichtig?
+1. Welche Studio-Funktionen sind in 0.8.0 enthalten und welche Datenbankänderungen führt die visuelle Ansicht ausdrücklich nicht aus?
+2. Was unterscheidet Compiler-Version und Sprachkompatibilitätslinie?
+3. Welche Abnahme ist vor der produktiven Veröffentlichung 1.0.0 noch offen?
 
 ---
 

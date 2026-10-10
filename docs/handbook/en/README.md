@@ -19,7 +19,7 @@ program and ending with a database-backed web application.
 Create a new local learning project for customers, items, and invoices with
 [`zelyra --tutorial invoice`](../../tutorials/invoice.en.md).
 
-> **Project status:** Zelyra 0.6.0 is stably published, remains experimental,
+> **Project status:** Zelyra 0.8.0 is stably published, remains experimental,
 > and is not approved for production use. Independent human acceptance for
 > earlier releases is deferred to 1.0.0. See the
 > [roadmap](../../ROADMAP.md) and
@@ -121,10 +121,10 @@ Rust or Cargo. The installer downloads the selected archive over HTTPS and
 verifies its SHA-256 checksum:
 
 ~~~bash
-./install.sh --release v0.3.0
+./install.sh --release v0.8.0
 ~~~
 
-On Windows, use `-Release v0.3.0` with `install.ps1` in PowerShell. macOS
+On Windows, use `-Release v0.8.0` with `install.ps1` in PowerShell. macOS
 currently uses the source installer.
 
 If the shell cannot find Zelyra:

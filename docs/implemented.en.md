@@ -108,12 +108,16 @@ For usage details see the [web and database quickstart](getting-started.md),
 - 🧪 `zelyra editor [directory] [--port <port>]` starts local Studio on
   `127.0.0.1` with a project tree, tabs, search/replace, completion, compiler
   diagnostics, and formatting. Writes require a session token and same browser
-  origin; it uses no shell or external services.
+  origin; it uses no shell or external services. Version 0.8.0 adds a
+  read-only clickable relationship map for supported MariaDB/PostgreSQL
+  schemas and a guided CRUD source builder. It compiler-checks a candidate,
+  shows the diff, and writes only after explicit apply with a fresh hash check.
+  MySQL live introspection and schema or record changes are out of scope here.
+  See the [Studio guide](studio.en.md).
 - ✅ `zelyra --tutorial invoice` guides users through customers, items, a
   dashboard, and invoice creation. It is a learning path, not production or
   deployment approval.
-- Studio is not yet a complete IDE and has no visual database browser or CRUD
-  designer.
+- Studio is not yet a complete IDE or unrestricted database designer.
 
 ## APIs, authentication, permissions, and audit
 
