@@ -860,6 +860,12 @@ PostgreSQL runtime for one narrow, end-to-end tested CRUD path. It depends on
 published 0.5.0 passing human acceptance. Complete PostgreSQL parity,
 MySQL/SQL Server support, and universal SQL are not 0.6.0 promises.
 
+Implementation has started in `release/0.6.0`: direct SQL queries and
+transaction batches in the synchronous language runtime now dispatch to a
+bounded Rustls PostgreSQL pool. The scalar result subset and PostgreSQL 16
+local integration test are experimental; generated web/CRUD paths, broader
+type coverage, CI evidence, and release gates remain open.
+
 The later direction assigns tenant context to 0.7.0, a local durable task
 interface and outbox to 0.8.0, optional WebAuthn/OAuth2/OIDC authentication to
 0.9.0, and stabilization plus another human acceptance to 1.0.0. Mandatory

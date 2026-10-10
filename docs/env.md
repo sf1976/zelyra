@@ -368,18 +368,20 @@ Neustart nötig, damit er neue Prozesswerte erhält.
 
 | Variable | Standard | Zulässig | Vorrang / Quelle | Secret | Betroffene Pfade und Tests |
 |---|---:|---:|---|---|---|
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Verbindungsaufbau bei Datenbank- und Runtime-Aufrufen; Grenzen in `database/src/lib.rs` |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB-Runtime-Statements und Leseabfragen; nicht `db apply`/DDL; Unit- und MariaDB-Matrixtest |
-| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale Poolgröße pro Zelyra-Prozess; Unit- und MariaDB-Pooltest |
-| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie Poolverbindung; Unit- und MariaDB-Pooltest |
-| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled` oder `required` | Prozessumgebung; sonst `auto` | nein, aber sicherheitskritisch | TLS-Richtlinie für Runtime-Pool und MariaDB-CLI; Neustart zum Wechseln |
-| `ZELYRA_DB_TLS_CA_CERT_FILE` | nicht gesetzt | absoluter Pfad zu lesbarer PEM-/DER-CA-Datei | Prozessumgebung; optional; mit `disabled` unzulässig | nein; Zertifikat ist öffentlich, Vertrauensanker aber sicherheitskritisch | Zusätzliche vertrauenswürdige CA für Runtime-Pool und MariaDB-CLI |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | MariaDB- und PostgreSQL-Poolverbindungen; PostgreSQL-Einstellung gilt für die begrenzte Runtime-API in 0.6.0 |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` Sekunden | Ganzzahl `1`–`3600` | Prozessumgebung; sonst Standardwert | nein | MariaDB- und PostgreSQL-Runtime-Statements; nicht `db apply`/DDL; PostgreSQL gilt für die begrenzte Runtime-API in 0.6.0 |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` Verbindungen | Ganzzahl `1`–`64` | Prozessumgebung; sonst Standardwert | nein | Harte maximale MariaDB- und PostgreSQL-Poolgröße pro Zelyra-Prozess |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` Sekunden | Ganzzahl `1`–`300` | Prozessumgebung; sonst Standardwert | nein | Maximale Wartezeit auf eine freie MariaDB- oder PostgreSQL-Poolverbindung |
+| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled` oder `required` | Prozessumgebung; sonst `auto` | nein, aber sicherheitskritisch | TLS-Richtlinie für Runtime-Pools und MariaDB-CLI; Neustart zum Wechseln |
+| `ZELYRA_DB_TLS_CA_CERT_FILE` | nicht gesetzt | absoluter Pfad zu lesbarer PEM-/DER-CA-Datei; PostgreSQL Runtime-API erwartet PEM | Prozessumgebung; optional; mit `disabled` unzulässig | nein; Zertifikat ist öffentlich, Vertrauensanker aber sicherheitskritisch | Zusätzliche vertrauenswürdige CA für Runtime-Pools und MariaDB-CLI |
 
 Ungültige Werte führen zu einer geheimnisfreien Konfigurationsdiagnose; der
 übergebene Wert wird nicht ausgegeben. Im Modus `auto` verlangt Zelyra für
 nicht lokale Hosts TLS und prüft Zertifikatskette sowie Hostnamen; `localhost`,
 Namen unter `.localhost` und Loopback-IP-Adressen bleiben für lokale Entwicklung
-ohne TLS. `required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
+ohne TLS. Für den PostgreSQL-Runtime-Pool prüft rustls bei TLS die Zertifikatskette
+und den Hostnamen; Mozilla-Web-PKI-Wurzeln werden durch die optionale PEM-CA ergänzt.
+`required` erzwingt geprüfte TLS-Verbindungen auch lokal. `disabled`
 schaltet TLS ausdrücklich ab und ist nur für isolierte lokale Netze gedacht;
 bei TLS-Fehlern gibt es keinen unsicheren Rückfall. Ohne eigene CA verwendet der
 Rustls-Treiber die mitgelieferten öffentlichen Stammzertifikate. Eine optionale

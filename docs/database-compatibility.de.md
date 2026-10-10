@@ -79,6 +79,17 @@ werden anhand ihrer generierten Namen als verwaltet erkannt; unbekannte Indizes
 bleiben erhalten. `--allow-destructive` genehmigt keine `REVIEW`-Änderungen;
 dafür ist nach Prüfung des Plans `--allow-risky` erforderlich.
 
+## Experimentelle PostgreSQL-Runtime-Teilmenge
+
+Auf `release/0.6.0` entsteht eine experimentelle direkte PostgreSQL-Runtime-
+Teilmenge. Sie deckt derzeit PostgreSQL 16 mit rohen SQL-Abfragen, benannten
+Parametern, skalaren Ergebnissen, Transaktionen, Statement-Timeouts und
+geprüftem TLS mit Test-CA ab. Die lokalen PostgreSQL-16-Tests bestanden; der
+CI-Schritt ist konfiguriert, wurde aber noch nicht ausgeführt. Die Teilmenge
+gehört nicht zur geprüften Kompatibilitätsmatrix und umfasst weder generierte
+Web-/CRUD-Pfade noch Backup/Restore, vollständige Schemawerkzeuge oder alle
+PostgreSQL-Ergebnistypen.
+
 ## Was damit nicht nachgewiesen wird
 
 - Kompatibilität mit MySQL Server. Die Annahme einer `mysql://`-URL bedeutet

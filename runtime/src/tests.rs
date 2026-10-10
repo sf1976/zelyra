@@ -369,6 +369,38 @@ fn enforces_runtime_database_capability_before_connecting() {
 }
 
 #[test]
+fn postgres_casts_are_not_treated_as_named_parameters() {
+    let parameters = query_parameters(
+        "SELECT count(*)::bigint, 1::int4",
+        &Environment::new(),
+        Span {
+            start: 0,
+            end: 0,
+            line: 1,
+            column: 1,
+            source_id: 0,
+        },
+    )
+    .unwrap();
+    assert!(parameters.is_empty());
+}
+
+#[test]
+fn postgres_runtime_dispatches_queries_by_connection_url() {
+    let Ok(database_url) = std::env::var("ZELYRA_POSTGRES_RUNTIME_TEST_URL") else {
+        return;
+    };
+    let program = parse(
+        &lex(
+            "fn main() uses Database { name = \"before\" transaction { sql { CREATE TEMP TABLE zelyra_runtime_language_probe (name TEXT) } sql { INSERT INTO zelyra_runtime_language_probe (name) VALUES (:name) } sql { UPDATE zelyra_runtime_language_probe SET name = 'after' WHERE name = :name } sql { DELETE FROM zelyra_runtime_language_probe WHERE name = 'after' } } rows = sql<Int> { SELECT count(*)::bigint FROM zelyra_runtime_language_probe } }",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    execute_with_database(&program, &database_url).unwrap();
+}
+
+#[test]
 fn enforces_scoped_database_grants_before_connecting() {
     let program =
         parse(&lex("fn main() uses Database(read) { rows = sql<Int> { SELECT 1 } }").unwrap())

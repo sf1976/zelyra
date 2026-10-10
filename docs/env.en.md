@@ -342,18 +342,19 @@ values.
 
 | Variable | Default | Allowed | Precedence / source | Secret | Affected paths and tests |
 |---|---:|---:|---|---|---|
-| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | MariaDB connection establishment for database and runtime calls; bounds in `database/src/lib.rs` |
-| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` seconds | integer `1`–`3600` | process environment; otherwise default | no | MariaDB runtime statements and read-only queries; not `db apply`/DDL; unit and MariaDB matrix test |
-| `ZELYRA_DB_POOL_MAX_SIZE` | `8` connections | integer `1`–`64` | process environment; otherwise default | no | Hard maximum pool size per Zelyra process; unit and MariaDB pool tests |
-| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | Maximum wait for an available pooled connection; unit and MariaDB pool tests |
-| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled`, or `required` | process environment; otherwise `auto` | no, but security-critical | TLS policy for runtime pool and MariaDB CLI; restart to change |
-| `ZELYRA_DB_TLS_CA_CERT_FILE` | unset | absolute path to readable PEM/DER CA file | process environment; optional; invalid with `disabled` | no; certificate is public, trust anchor is security-critical | Additional trusted CA for runtime pool and MariaDB CLI |
+| `ZELYRA_DB_CONNECT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | MariaDB and PostgreSQL pool connections; PostgreSQL applies to the bounded 0.6.0 runtime API |
+| `ZELYRA_DB_QUERY_TIMEOUT_SECS` | `30` seconds | integer `1`–`3600` | process environment; otherwise default | no | MariaDB and PostgreSQL runtime statements; not `db apply`/DDL; PostgreSQL applies to the bounded 0.6.0 runtime API |
+| `ZELYRA_DB_POOL_MAX_SIZE` | `8` connections | integer `1`–`64` | process environment; otherwise default | no | Hard maximum MariaDB and PostgreSQL pool size per Zelyra process |
+| `ZELYRA_DB_POOL_WAIT_TIMEOUT_SECS` | `10` seconds | integer `1`–`300` | process environment; otherwise default | no | Maximum wait for an available MariaDB or PostgreSQL pooled connection |
+| `ZELYRA_DB_TLS_MODE` | `auto` | `auto`, `disabled`, or `required` | process environment; otherwise `auto` | no, but security-critical | TLS policy for runtime pools and MariaDB CLI; restart to change |
+| `ZELYRA_DB_TLS_CA_CERT_FILE` | unset | absolute path to readable PEM/DER CA file; PostgreSQL runtime API expects PEM | process environment; optional; invalid with `disabled` | no; certificate is public, trust anchor is security-critical | Additional trusted CA for runtime pools and MariaDB CLI |
 
 Invalid values produce a secret-free configuration diagnostic; the supplied
 value is not echoed. In `auto` mode, Zelyra requires TLS for non-local hosts and
 verifies both the certificate chain and hostname; `localhost`, names under
 `.localhost`, and loopback IP addresses remain plaintext for local development.
-`required` enforces verified TLS even locally. `disabled` explicitly turns TLS
+For the PostgreSQL runtime pool, rustls verifies the certificate chain and host
+name using the Mozilla Web PKI roots plus the optional PEM CA. `required` enforces verified TLS even locally. `disabled` explicitly turns TLS
 off and is intended only for isolated local networks; TLS failures never fall
 back to an insecure connection. Without a custom CA, the Rustls driver uses its
 bundled public roots. An optional CA file must be an absolute PEM/DER path

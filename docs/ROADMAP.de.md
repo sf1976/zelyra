@@ -934,6 +934,13 @@ CRUD-Pfad vor. Voraussetzung ist die veröffentlichte und menschlich abgenommene
 Version 0.5.0. Vollständige PostgreSQL-Parität, MySQL-/SQL-Server-Unterstützung
 und universelles SQL sind keine 0.6.0-Zusagen.
 
+Die Umsetzung hat auf `release/0.6.0` begonnen: Direkte SQL-Abfragen und
+Transaktionsbatches der synchronen Sprach-Runtime werden an einen begrenzten
+PostgreSQL-Pool mit Rustls weitergeleitet. Die skalare Ergebnis-Teilmenge und
+der lokale PostgreSQL-16-Integrationstest sind experimentell; generierte
+Web-/CRUD-Pfade, breitere Typabdeckung, CI-Nachweis und Releasekriterien sind
+noch offen.
+
 Die spätere Richtung ordnet Mandantenkontext 0.7.0, eine lokale dauerhafte
 Aufgabenschnittstelle und Outbox 0.8.0, optionale WebAuthn-/OAuth2-/OIDC-
 Anmeldung 0.9.0 und die Stabilisierung samt erneuter menschlicher Abnahme

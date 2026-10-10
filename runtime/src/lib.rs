@@ -6206,9 +6206,9 @@ impl Interpreter {
                     unreachable!();
                 };
                 let queries = transaction_queries(body, env, *span)?;
-                zelyra_database::execute_mariadb_queries(&database_url, &queries, true).map_err(
+                zelyra_database::execute_queries(&database_url, &queries, true).map_err(
                     |error| {
-                        self.runtime_error(*span, format!("MariaDB transaction failed: {error}"))
+                        self.runtime_error(*span, format!("database transaction failed: {error}"))
                     },
                 )?;
                 Ok(Flow::Continue)
@@ -7117,10 +7117,11 @@ impl Interpreter {
                     );
                 };
                 let params = query_parameters(query, env, expr.span)?;
-                let result = zelyra_database::execute_mariadb_query(&database_url, query, params)
-                    .map_err(|error| {
-                    self.runtime_error(expr.span, format!("MariaDB query failed: {error}"))
-                })?;
+                let result = zelyra_database::execute_query(&database_url, query, params).map_err(
+                    |error| {
+                        self.runtime_error(expr.span, format!("database query failed: {error}"))
+                    },
+                )?;
                 Ok(Value::Rows {
                     columns: result.columns,
                     rows: result.rows,
@@ -7207,7 +7208,10 @@ fn query_parameters(
             index += 1;
             continue;
         }
-        if byte == b':' {
+        if byte == b':'
+            && bytes.get(index.wrapping_sub(1)) != Some(&b':')
+            && bytes.get(index + 1) != Some(&b':')
+        {
             let start = index + 1;
             let mut end = start;
             while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
