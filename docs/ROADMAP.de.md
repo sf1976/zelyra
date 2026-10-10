@@ -512,34 +512,53 @@ Beziehungen zum Quellmodul, die Abweichungen zur Live-Datenbank zeigt.
 Modulzuordnung bleibt ein Hinweis und ändert weder Schema noch Berechtigungen.
 Die menschliche Abnahme bleibt auf 1.0.0 verschoben.
 
-Der [0.7-Releaseplan](release-plans/0.7.0.de.md) umfasst einen echten
-MySQL-Serverpfad, begrenzten Mandantenkontext, lokales Entwicklungsstudio und
-das Rechnungstutorial. Für Editor, begrenzte MySQL-Abfragen und Tutorial gibt
-es lokale Implementierungsnachweise im Feature-Branch. Zusätzlich erzwingt es
-die erklärte Sprachkompatibilitätslinie. Für die Sprachlinienprüfung gibt es
-ebenfalls lokale Nachweise; exakte Branch-CI und Release-Builds sind grün.
-Die Linie bleibt bis 0.99.0 `0.1`; Compiler-Versionsnummern wechseln sie nicht
-automatisch. 0.8 baut den versionierten Korpus für Lexing, Parsing, Typprüfung
-und Formatter auf, 0.9 ergänzt Laufzeit-, Modul-, Effekt-, Vertrags- und
-SQL-Fixtures. 0.99 friert Grammatik und Semantik als Release-Kandidat ein und
-erlaubt nur dokumentierte Korrekturen. Erst 1.0.0 erklärt den nach unabhängiger
-menschlicher Abnahme geprüften Vertrag produktiv; Details stehen im
-[Leitfaden zur Sprachkompatibilität](language-compatibility.de.md).
-Migrations-/Rollback-Review und unabhängiges Sicherheitsreview sind noch offen. 0.8
-priorisiert eine visuelle Datenbanklandkarte und einen geführten CRUD-Assistenten:
-Verbindung/Tabelle auswählen, Felder und Beziehungen ansehen, Zelyra-Quelltext
-anzeigen und eine compilergeprüfte Änderung ausdrücklich übernehmen. Die erste
-Datenansicht bleibt schreibgeschützt. 0.9 ergänzt geführte Geschäftsabläufe und
-Hilfe zum Erweitern erzeugter Anwendungen und prüft die unterstützten
-MariaDB-, MySQL- und PostgreSQL-Pfade Ende-zu-Ende. Optionale MFA/WebAuthn und
-OIDC benötigen weiterhin ein Sicherheitsreview. Eine allgemeine Queue und
-transaktionale Outbox werden hinter 1.0.0 verschoben, damit Editor und die drei
-geforderten Datenbankpfade fokussierte Releases erhalten. 0.99 friert Funktionen ein;
-danach bleiben bis zur ersten produktiven Version 1.0.0 nur die unabhängigen
-menschlichen Abnahmetests. Vollständige SQL-Parität,
-beliebige Client-Hydration, Compiler-
-Self-Hosting, ein natives Backend, verpflichtende Cloud-/KI-Dienste,
-Telemetrie und unbelegte Leistungsversprechen bleiben ausgeschlossen.
+## Release 0.7.0
+
+- [🧪] **Umfang:** echter MySQL-Serverpfad, begrenzter Mandantenkontext,
+  lokales Entwicklungsstudio, Rechnungstutorial und Durchsetzung der erklärten
+  Sprachkompatibilitätslinie. Für Editor, begrenzte MySQL-Abfragen, Linienprüfung,
+  erstes Sprachkorpus und Tutorial gibt es lokale Implementierungsnachweise.
+- [🗺️] **Offene Release-Gates:** Migrations-/Backfill-/Rollback-Review und
+  unabhängiges Sicherheitsreview. Details im [0.7.0-Plan](release-plans/0.7.0.de.md).
+
+## Release 0.8.0
+
+- [🗺️] Eine schreibgeschützte visuelle Datenbankkarte und einen geführten
+  CRUD-Assistenten ergänzen. Entwickler wählen Verbindung und Tabelle, prüfen
+  Felder und Beziehungen, sehen compilergeprüften Quelltext und übernehmen die
+  Änderung ausdrücklich. Sprach-Fixtures für Grammatik, Typprüfung und Formatter
+  ausbauen. Siehe [0.8.0-Plan](release-plans/0.8.0.de.md).
+
+## Release 0.9.0
+
+- [🗺️] Geführte Geschäftsabläufe und Hilfe zum Erweitern erzeugter Anwendungen
+  ergänzen. Die zugesagten MariaDB-, MySQL- und PostgreSQL-Abläufe auf echten
+  Servern prüfen sowie Laufzeit-, Modul-, Effekt-, Vertrags- und SQL-Fixtures
+  ausbauen. Siehe [0.9.0-Plan](release-plans/0.9.0.de.md).
+
+## Release 0.95.0
+
+- [🗺️] Den geplanten Produktumfang stabilisieren: technische, Sicherheits-,
+  Upgrade-, Rollback-, Abhängigkeits-, Artefakt- und Dokumentationslücken
+  schließen. Sprachreferenz und Korpus prüfen, ohne ein großes Teilsystem
+  hinzuzufügen. Siehe [0.95.0-Plan](release-plans/0.95.0.de.md).
+
+## Release 0.99.0
+
+- [🗺️] Produkt- und Sprachfunktionen einfrieren, alle technischen Gates am
+  unveränderlichen Kandidaten prüfen und Materialien für die menschliche
+  Abnahme an genau diesem Stand vorbereiten. Vor dem ersten Produktivrelease
+  bleibt nur die unabhängige menschliche Abnahme offen. Siehe
+  [0.99.0-Plan](release-plans/0.99.0.de.md).
+
+Eine allgemeine Queue und transaktionale Outbox bleiben hinter 1.0.0.
+Vollständige SQL-Parität, beliebige Client-Hydration, Compiler-Self-Hosting,
+natives Backend, verpflichtende Cloud-/KI-Dienste, Telemetrie und unbelegte
+Leistungsversprechen bleiben ausgeschlossen.
+
+Die detaillierten Abnahmekriterien stehen in den Plänen für [0.8.0](release-plans/0.8.0.de.md),
+[0.9.0](release-plans/0.9.0.de.md), [0.95.0 Stabilisierung](release-plans/0.95.0.de.md),
+[0.99.0 Freeze](release-plans/0.99.0.de.md) und [1.0.0](release-plans/1.0.0.de.md).
 ## Erste produktive Veröffentlichung 1.0.0
 
 `v1.0.0` ist die erste produktive Veröffentlichung und das verpflichtende Ziel für

@@ -52,17 +52,18 @@ Der Ausbau erfolgt in prüfbaren Stufen:
 
 | Release | Sprachvertrag und Nachweis |
 | --- | --- |
-| `0.7.0` | Deklaration `zelyra = "0.1"` durchsetzen, `E-LANG-001` für nicht unterstützte explizite Linien ausgeben und ältere Projekte ohne Feld erhalten. |
-| `0.8.0` | Ein versionierter Konformitätskorpus mit gültigen und ungültigen Quelltexten einführen. Lexer, Parser, Typprüfung und Formatter müssen die festgehaltenen Ergebnisse reproduzieren. |
-| `0.9.0` | Laufzeit- und Modul-Fixtures ergänzen: definierte Operator- und Built-in-Semantik, Fehlerpfade, Effekte, Verträge, Imports und SQL-Typprüfung. Jede unterstützte Datenbank wird für die von ihr zugesagte Teilmenge separat geprüft. |
-| `0.99.0` | Sprach-Feature-Freeze. Die Grammatik und Semantik von `0.1` werden als Release-Kandidat dokumentiert; nur Korrekturen, Sicherheitskorrekturen und für die Freigabe notwendige Kompatibilitätsfehlerbehebungen sind zulässig. Jede Ausnahme braucht einen dokumentierten Grund und Regressionstest. |
+| `0.7.0` | Deklaration `zelyra = "0.1"` durchsetzen, `E-LANG-001` für nicht unterstützte explizite Linien ausgeben, ältere Projekte ohne Feld erhalten und ein erstes ausführbares Korpus für gültige, ungültige und laufzeitgeprüfte Beispiele anlegen. |
+| `0.8.0` | Korpus für Lexer, Parser, Typprüfung und Formatter systematisch ausbauen. Jede Grammatikfamilie erhält positive und negative Fixtures; Formatter-Ausgaben werden auf Idempotenz geprüft. |
+| `0.9.0` | Laufzeit- und Modul-Fixtures ergänzen: Operator- und Built-in-Semantik, Fehlerpfade, Effekte, Verträge, Imports und SQL-Typprüfung. Jede unterstützte Datenbank wird für die zugesagte Teilmenge separat geprüft. |
+| `0.95.0` | Sprachreferenz und Korpus vollständig gegen den geplanten 1.0-Umfang abgleichen. Offene Semantik, bekannte Abweichungen und Migrationsfälle dokumentieren; keine ungeprüften Sprachbereiche als stabil bezeichnen. |
+| `0.99.0` | Sprach-Feature-Freeze. Grammatik, Typregeln und Semantik von `0.1` als Release-Kandidat einfrieren; nur Korrekturen, Sicherheitskorrekturen und notwendige Kompatibilitätsfehlerbehebungen zulassen. Jede Ausnahme braucht Begründung und Regressionstest. |
 | `1.0.0` | Nach unabhängiger menschlicher Abnahme den geprüften Vertrag, das Korpus und die Supportmatrix gemeinsam als erste produktive Sprachveröffentlichung markieren. |
 
 Diese Stufen sind Abnahmekriterien und keine Behauptung, dass geplante Arbeit
-bereits implementiert ist. Der 0.7-Compiler erzwingt die deklarierte Linie,
-enthält aber noch keinen vollständigen releaseübergreifenden Korpus und friert
-den Sprachvertrag nicht für den Produktiveinsatz ein. Das 1.0-Release muss
-unterstützte Grammatik, Kompatibilitätsversprechen und geprüfte
+bereits implementiert ist. 0.7 enthält den ersten ausführbaren, bewusst kleinen
+Korpus. Er ist noch keine vollständige releaseübergreifende Konformitätssammlung
+und friert den Sprachvertrag nicht für den Produktiveinsatz ein. Das 1.0-Release
+muss unterstützte Grammatik, Kompatibilitätsversprechen und geprüfte
 Konformitätssammlung gemeinsam veröffentlichen.
 
 ## Was Kompatibilität bedeutet

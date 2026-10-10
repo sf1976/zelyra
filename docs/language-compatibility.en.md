@@ -50,17 +50,19 @@ The work proceeds through verifiable stages:
 
 | Release | Language contract and evidence |
 | --- | --- |
-| `0.7.0` | Enforce `zelyra = "0.1"`, report `E-LANG-001` for unsupported explicit lines, and retain projects that omit the field. |
-| `0.8.0` | Add a versioned conformance corpus of accepted and rejected source. The lexer, parser, type checker, and formatter must reproduce its recorded results. |
-| `0.9.0` | Add runtime and module fixtures for defined operator and built-in semantics, error paths, effects, contracts, imports, and SQL typing. Check each database separately for the subset it claims to support. |
-| `0.99.0` | Freeze language features. Document the grammar and semantics of `0.1` as a release candidate; allow only fixes, security corrections, and compatibility fixes needed for release. Document and regression-test every exception. |
+| `0.7.0` | Enforce `zelyra = "0.1"`, report `E-LANG-001` for unsupported explicit lines, retain projects that omit the field, and add a first runnable corpus for accepted, rejected, and runtime-checked examples. |
+| `0.8.0` | Systematically expand the corpus for lexing, parsing, type checking, and formatting. Each grammar family gets positive and negative fixtures; formatter output is checked for idempotence. |
+| `0.9.0` | Add runtime and module fixtures for operator and built-in semantics, error paths, effects, contracts, imports, and SQL typing. Check each supported database separately for the subset it claims. |
+| `0.95.0` | Audit the language reference and corpus against the planned 1.0 scope. Document unresolved semantics, known gaps, and migration cases; do not label unchecked areas stable. |
+| `0.99.0` | Freeze language features. Freeze the grammar, type rules, and semantics of `0.1` as a release candidate; allow only fixes, security corrections, and required compatibility fixes. Document and regression-test every exception. |
 | `1.0.0` | After independent human acceptance, publish the checked contract, corpus, and support matrix together as the first production language release. |
 
 These stages are acceptance criteria, not claims that planned work is already
-implemented. The 0.7 compiler enforces the declared line, but it does not yet
-ship a complete cross-release corpus or freeze the language contract for
-production. The 1.0 release must publish the supported grammar, compatibility
-guarantees, and tested conformance set together.
+implemented. Version 0.7 contains the first runnable, intentionally small
+corpus. It is not yet a complete cross-release conformance set and does not
+freeze the language contract for production. The 1.0 release must publish the
+supported grammar, compatibility guarantees, and tested conformance set
+together.
 
 ## What compatibility means
 
