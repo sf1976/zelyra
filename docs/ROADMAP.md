@@ -551,10 +551,22 @@ The 0.8 branch implements an experimental local MariaDB transactional outbox:
 transaction-bound enqueue, leased delivery with bounded retries, and explicit
 setup, metadata inspection, recovery, and worker commands. Exact-head CI,
 crash/concurrency acceptance, and independent security review remain open; see
-the [0.8 roadmap](release-plans/0.8.0.en.md). The planned next milestone is
-optional local TOTP MFA with recovery codes in 0.9. WebAuthn/passkeys and
-OAuth2/OIDC are deferred for separate protocol and security reviews, followed
-by contract stabilization and independent human acceptance for 1.0.0.
+the [0.8 roadmap](release-plans/0.8.0.en.md).
+
+The [0.9 branch](release-plans/0.9.0.en.md) now implements optional local TOTP
+MFA, encrypted factor storage, password-plus-MFA login, replay protection,
+throttling, and one-time recovery codes. Local locked compile checks pass. CI
+run #549 and release validation #262 are queued for head
+`e76615c389cacbd30e232b5e9df596cbcf0f8f93`; integration coverage, a rehearsed
+operator recovery procedure, independent security review, and candidate
+acceptance remain open. WebAuthn/passkeys and OAuth2/OIDC are deferred for
+separate protocol and security reviews, followed by contract stabilization and
+independent human acceptance for 1.0.0.
+
+Complete SQL parity, broad visual editing, arbitrary client hydration,
+compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
+and unsupported performance claims remain excluded; see the 0.6 roadmap for
+scope and limits.
 Complete SQL parity, broad visual editing, arbitrary client hydration,
 compiler self-hosting, native backend, mandatory cloud/AI services, telemetry,
 and unsupported performance claims remain excluded; see the 0.6 roadmap for
