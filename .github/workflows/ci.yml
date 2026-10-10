@@ -287,7 +287,6 @@ jobs:
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_tableview_ci
           ZELYRA_BIN: target/debug/zelyra
-          ZELYRA_TABLEVIEW_E2E_ADDRESS: 127.0.0.1:38515
         run: ./tests/mariadb-tableview-e2e.sh
       - name: Create isolated customer-order test database
         env:
@@ -297,7 +296,6 @@ jobs:
         env:
           DATABASE_URL: mariadb://root:root@127.0.0.1:3306/zelyra_customer_orders_ci
           ZELYRA_BIN: target/debug/zelyra
-          ZELYRA_TABLEVIEW_E2E_ADDRESS: 127.0.0.1:38516
           ZELYRA_TABLEVIEW_E2E_PROJECT: examples/customer_orders.zyl
           ZELYRA_TABLEVIEW_E2E_PATH: /views/customerorderoverview
           ZELYRA_TABLEVIEW_E2E_EXPECT_CUSTOM_APP: "1"
