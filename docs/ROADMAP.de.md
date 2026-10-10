@@ -736,9 +736,11 @@ Arbeiten abgeschlossen sind.
   schemaabhängiger HTTP-Seiten, unveränderter Zugangsdaten, geheimnisfreier
   Setup-Ausgabe, Portzuordnungen und Bereinigung. Setup erklärt außerdem, dass
   minimale `init`-Projekte keine Datenbank benötigen, und schlägt bei einem
-  fehlenden absoluten Pfad einen wahrscheinlichen relativen Pfad vor. Prüfungen
-  auf sauberen Hosts und Wiederherstellungsfälle über diesen Docker-Ablauf
-  hinaus bleiben offen.
+  fehlenden absoluten Pfad einen wahrscheinlichen relativen Pfad vor. Generierte
+  Docker-Builds können einen veröffentlichten Tag, Branch oder Commit festlegen;
+  die Referenz wird geholt und detached ausgecheckt. Prüfungen auf sauberen
+  Hosts und Wiederherstellungsfälle über diesen Docker-Ablauf hinaus bleiben
+  offen.
 - [~] **Datenbanksicherheit:** MariaDB ist die Runtime-Referenz; für SQLite
   gibt es End-to-End-Pfade. Der Schema-Sicherheitstest prüft auf beiden
   Backends: destruktive Löschungen benötigen Freigabe; Pflichtspalten ohne

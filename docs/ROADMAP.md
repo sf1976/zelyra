@@ -679,8 +679,9 @@ remaining roadmap items below.
   schema-backed HTTP pages, unchanged credentials, secret-free setup output,
   ports, and cleanup. Setup also explains that minimal `init` projects need no
   database and suggests a likely relative path when an absolute path is
-  missing. Clean-host installation and recovery coverage across supported
-  platforms remain open.
+  missing. Generated Docker builds can pin a published tag, branch, or commit;
+  the exact reference is fetched and checked out detached. Clean-host
+  installation and recovery coverage across supported platforms remain open.
 - [~] **Database safety:** MariaDB is the reference runtime and SQLite has
   end-to-end paths. The schema-safety test exercises both backends: destructive
   drops require approval; required columns without defaults, new unique

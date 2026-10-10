@@ -24,7 +24,7 @@ for command in docker curl; do
     fi
 done
 if [[ -n "${zelyra_ref}" && ( ! "${zelyra_ref}" =~ ^[A-Za-z0-9._/-]+$ || "${zelyra_ref}" == *..* ) ]]; then
-    echo "error: ZELYRA_DOCKER_E2E_REF must be a simple Git branch or tag name" >&2
+    echo "error: ZELYRA_DOCKER_E2E_REF must be a simple Git branch, tag, or commit ref" >&2
     exit 1
 fi
 

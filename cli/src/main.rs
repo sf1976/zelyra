@@ -794,7 +794,10 @@ ARG ZELYRA_REF=__ZELYRA_DEFAULT_REF__
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch __ZELYRA_REF__ https://github.com/sf1976/zelyra.git /zelyra
+RUN git init /zelyra \
+    && git -C /zelyra remote add origin https://github.com/sf1976/zelyra.git \
+    && git -C /zelyra fetch --depth=1 origin "$ZELYRA_REF" \
+    && git -C /zelyra checkout --detach FETCH_HEAD
 RUN cargo install --locked --path /zelyra/cli --root /out
 
 FROM debian:bookworm-slim
