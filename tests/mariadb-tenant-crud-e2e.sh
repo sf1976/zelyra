@@ -17,6 +17,8 @@ tenant_a_title="Tenant A invoice ${suffix}"
 tenant_b_title="Tenant B invoice ${suffix}"
 created_title="Created invoice ${suffix}"
 edited_title="Edited invoice ${suffix}"
+rollback_title="Rollback blocked ${suffix}"
+rollback_trigger="zelyra_tenant_fail_${suffix}"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/zelyra-mariadb-tenant-e2e.XXXXXX")"
 server_pid=""
 
@@ -45,18 +47,25 @@ client() {
 }
 
 cleanup() {
+    local status=$?
     if [[ -n "${server_pid}" ]]; then
         kill "${server_pid}" 2>/dev/null || true
         wait "${server_pid}" 2>/dev/null || true
     fi
-    client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
-DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${created_title}', '${edited_title}');
+    if [[ "${status}" -ne 0 && -f "${temp_dir}/server.log" ]]; then
+        cat "${temp_dir}/server.log" >&2
+    fi
+client --batch --skip-column-names <<SQL >/dev/null 2>&1 || true
+DROP TRIGGER IF EXISTS ${rollback_trigger};
+DELETE FROM invoices WHERE title IN ('${tenant_a_title}', '${tenant_b_title}', '${created_title}', '${edited_title}', '${rollback_title}');
+DELETE FROM auth_audit_log WHERE actor_user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
 DELETE FROM user_permissions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
 DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
 DELETE FROM tenant_memberships WHERE user_id IN (SELECT id FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}'));
 DELETE FROM users WHERE email IN ('${email}', '${permissionless_email}', '${membershipless_email}');
 SQL
     rm -rf "${temp_dir}"
+    return "${status}"
 }
 trap cleanup EXIT
 
@@ -213,6 +222,35 @@ edit_success="$(curl --silent --show-error --output "${temp_dir}/edit-success.ht
     "${base_url}/invoices/${tenant_a_id}/edit?tenant_id=10")"
 [[ "${edit_success}" == "303" ]]
 [[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM invoices WHERE id = ${tenant_a_id} AND title = '${edited_title}' AND tenant_id = 10")" == "1" ]]
+
+client <<SQL
+DELIMITER //
+CREATE TRIGGER ${rollback_trigger}
+BEFORE INSERT ON auth_audit_log FOR EACH ROW
+BEGIN
+  IF NEW.event = 'crud.update' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced tenant rollback test failure';
+  END IF;
+END//
+DELIMITER ;
+SQL
+rollback_form_status="$(curl --silent --show-error --output "${temp_dir}/rollback-form.html" \
+    --write-out '%{http_code}' --cookie "${cookie}" \
+    "${base_url}/invoices/${tenant_a_id}/edit?tenant_id=10")"
+[[ "${rollback_form_status}" == "200" ]]
+rollback_csrf="$(sed -n 's/.*name="_zelyra_csrf" value="\([^"]*\)".*/\1/p' "${temp_dir}/rollback-form.html")"
+rollback_snapshot="$(sed -n 's/.*name="_zelyra_snapshot" value="\([^"]*\)".*/\1/p' "${temp_dir}/rollback-form.html")"
+rollback_status="$(curl --silent --show-error --output "${temp_dir}/rollback-response.html" \
+    --write-out '%{http_code}' --header "Origin: ${base_url}" --cookie "${cookie}" \
+    --data-urlencode "_zelyra_csrf=${rollback_csrf}" \
+    --data-urlencode "_zelyra_snapshot=${rollback_snapshot}" \
+    --data-urlencode "title=${rollback_title}" \
+    "${base_url}/invoices/${tenant_a_id}/edit?tenant_id=10")"
+[[ "${rollback_status}" == "500" ]]
+grep -Fq 'The action could not be completed.' "${temp_dir}/rollback-response.html"
+! grep -Fq 'forced tenant rollback test failure' "${temp_dir}/rollback-response.html"
+[[ "$(client --batch --skip-column-names -e "SELECT COUNT(*) FROM invoices WHERE id = ${tenant_a_id} AND title = '${edited_title}' AND tenant_id = 10")" == "1" ]]
+client -e "DROP TRIGGER ${rollback_trigger}"
 
 tenant_b_edit_status="$(curl --silent --show-error --output "${temp_dir}/edit-b.html" \
     --write-out '%{http_code}' --cookie "${cookie}" \

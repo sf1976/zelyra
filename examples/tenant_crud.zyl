@@ -3,6 +3,7 @@ auth users {
     sessions: auth_sessions
     permissions: user_permissions
     memberships: tenant_memberships
+    audit: auth_audit_log
 }
 
 table users {
@@ -31,6 +32,15 @@ table tenant_memberships {
     user_id: Int required
     tenant_id: Int required
     active: Bool required
+}
+
+table auth_audit_log {
+    id: Id primary auto
+    actor_user_id: Int?
+    event: String(100) required
+    target_user_id: Int?
+    details: String(1000) required
+    created_at: Timestamp default now
 }
 
 table invoices {
